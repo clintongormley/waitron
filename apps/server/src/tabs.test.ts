@@ -57,7 +57,7 @@ import { createTable } from "./testing/live-table.js";
 import {
   advanceTicketItem,
   createOpenOrder,
-  fireCourse,
+  fireOrderLines,
   fireLines,
   listExpoQueue,
   listStationQueue,
@@ -1352,7 +1352,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     expect(state.map((line) => line.ticket?.quantity ?? null)).toEqual([2000, null]);
   });
 
-  it("stamps neither line of a held course until the course fires, then both", async () => {
+  it("stamps neither held dish until selected line release, then both", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
     await routeToNoPreparation(cfg, aguaId);
     const course = await asApp(cfg, (tx) =>
@@ -1367,11 +1367,37 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     );
     expect((await sentState(tabId)).map((line) => line.sentAt)).toEqual([null, null]);
 
-    await asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, course.id, { personId: OPERATOR }));
+    await asApp(cfg, (tx) => fireTabLines(tx, cfg, tabId, [1, 2]));
 
     const fired = await sentState(tabId);
     expect(fired.map((line) => line.sentAt !== null)).toEqual([true, true]);
     expect(fired[0]!.ticket).toMatchObject({ quantity: 1000 });
+  });
+
+  it("releases only the selected held dish among two sharing a course", async () => {
+    const { cfg, tableId, cafeOffer, aguaOffer } = await setupVenue();
+    const course = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Mains", displayOrder: 3 }),
+    );
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: cafeOffer, quantity: "1", courseId: course.id, hold: true },
+        { menuItemId: aguaOffer, quantity: "1", courseId: course.id, hold: true },
+      ]),
+    );
+    expect(await firedByLine(tabId)).toEqual([
+      [1, false],
+      [2, false],
+    ]);
+
+    await asApp(cfg, (tx) => fireTabLines(tx, cfg, tabId, [1]));
+
+    expect(await firedByLine(tabId)).toEqual([
+      [1, true],
+      [2, false],
+    ]);
+    expect((await sentState(tabId)).map((line) => line.sentAt !== null)).toEqual([true, false]);
   });
 
   it("stamps a held course's no-route line when its routed line is sent by sendLines", async () => {
@@ -1850,7 +1876,7 @@ describe("a line with no fired ticket whose product sold out cannot be sent", ()
     expect(state!.ticket!.firedAt).toBeNull();
   });
 
-  it("refuses to fire a held course whose line sold out, and one whose extra did", async () => {
+  it("refuses selected held line release when its extra sold out", async () => {
     const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
     const course = await asApp(cfg, (tx) =>
@@ -1870,9 +1896,7 @@ describe("a line with no fired ticket whose product sold out cannot be sent", ()
     );
     await db.execute(sql`update products set available = 0 where id = ${aguaId}`);
 
-    await expect(
-      asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, course.id, { personId: OPERATOR })),
-    ).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => fireTabLines(tx, cfg, tabId, [1]))).rejects.toMatchObject({
       code: "product.unavailable",
       params: { productId: aguaId },
     });
@@ -2425,6 +2449,29 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   });
 });
 
+async function fireTabLines(
+  tx: Transaction,
+  cfg: OriginConfig,
+  orderId: string,
+  lineNos: number[],
+): Promise<void> {
+  const lines = await tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, orderId),
+        inArray(workingOrderLines.lineNo, lineNos),
+      ),
+    );
+  await fireOrderLines(
+    tx,
+    cfg,
+    orderId,
+    lines.map((line) => line.id),
+  );
+}
+
 /** Each line's number and whether its ticket item has fired; `null` for a line with no item. */
 async function firedByLine(orderId: string): Promise<[number, boolean | null][]> {
   return (await sentState(orderId)).map((line) => [
@@ -2433,8 +2480,6 @@ async function firedByLine(orderId: string): Promise<[number, boolean | null][]>
   ]);
 }
 
-/** A tab whose water (starters, the earliest course) fired at its round and whose café (mains, a
- * later course) was then fired with `fireCourse`: the café is the only fired dish of its course. */
 async function tabWithFiredMains() {
   const venue = await setupVenue();
   const { cfg, cafeId, aguaId, tableId, cafeOffer, aguaOffer } = venue;
@@ -2457,7 +2502,7 @@ async function tabWithFiredMains() {
     [1, true],
     [2, false],
   ]);
-  await asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, mains.id, { personId: OPERATOR }));
+  await asApp(cfg, (tx) => fireTabLines(tx, cfg, tabId, [2]));
   const [water, cafe] = await db
     .select({ id: workingOrderLines.id })
     .from(workingOrderLines)
@@ -2656,11 +2701,7 @@ describe("every write to an open order's lines counts on its revision, a served 
     ["a void", (tx, t) => cancelLine(tx, t.cfg, t.tabId, 1, "1"), ["tab"]],
     ["a recall", (tx, t) => recallLines(tx, t.cfg, t.tabId, [1]), ["tab"]],
     ["a send", (tx, t) => sendLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
-    [
-      "a course fired",
-      (tx, t) => fireCourse(tx, t.cfg, t.tabId, t.courseId, { personId: OPERATOR }),
-      ["tab"],
-    ],
+    ["selected held lines fired", (tx, t) => fireTabLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
     ["a course change", (tx, t) => setLineCourse(tx, t.cfg, t.tabId, 2, null), ["tab"]],
     [
       "a transfer",
@@ -2823,11 +2864,7 @@ describe("a line write on an order whose card payment is in flight is refused, a
     ["a part void", (tx, t) => cancelLine(tx, t.cfg, t.tabId, 1, "1"), ["tab"]],
     ["a recall", (tx, t) => recallLines(tx, t.cfg, t.tabId, [1]), ["tab"]],
     ["a send", (tx, t) => sendLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
-    [
-      "a course fired",
-      (tx, t) => fireCourse(tx, t.cfg, t.tabId, t.courseId, { personId: OPERATOR }),
-      ["tab"],
-    ],
+    ["selected held lines fired", (tx, t) => fireTabLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
     ["a course change", (tx, t) => setLineCourse(tx, t.cfg, t.tabId, 2, null), ["tab"]],
     [
       "a transfer",

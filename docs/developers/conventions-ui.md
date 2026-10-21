@@ -466,15 +466,15 @@ the server checks each at the route, never trusting the till's copy:
   top of `apps/server/src/till-api.profile-zones.test.ts`. A new till route adds a row to each and a
   refusing case. Weaker than that sounds: both maps are comments, and nothing fails when a new
   route has no row.
-- **A kitchen display may only prepare, fire, move dishes and hand over.** A `kds` profile is a shared display
+- **A kitchen display's preparation and movement use device authority.** A `kds` profile is a shared display
   with nobody signed in: `profileAllows` (`packages/layouts/src/device-profile.ts`) refuses it
   every action but `prepare-orders`, `take-orders` and `hand-over-orders`, even one its stored
   list names, and with nobody signed in a till route that needs a session answers
-  `session.required`. Payment and the drawer always need a named person. Its pass screen's Fire,
-  Ready and Away go through the device's own routes (`apps/server/src/device-levers.ts`), which
-  serve only a kitchen display, check the action each one takes (Fire `take-orders`, Ready
-  `prepare-orders`, Away `hand-over-orders`) and the order's zone against its pass screen, and a
-  Fire records the device as the one who fired. Its station screen's Move to station goes through
+  `session.required`. Payment and the drawer always need a named person. Its pass screen's course
+  and group Ready routes (`apps/server/src/device-levers.ts`) serve only a kitchen display, check
+  `prepare-orders` and the order's zone against its pass screen. The former device Fire and Away
+  routes are retired. Waiter group Fire uses the signed-in person's session.
+  Its station screen's Move to station goes through
   `POST /api/device/working-orders/:id/lines/move-station` (`apps/server/src/device-api.ts`), which
   serves only a kitchen display, checks `take-orders`, refuses a dish at a station its station
   screen does not work (`device.forbidden_station`), and records the device, and the signed-in
@@ -507,7 +507,7 @@ the server checks each at the route, never trusting the till's copy:
   `packages/venue-service/src/kitchen-screens.ts`): a kitchen display runs exactly one
   (`kitchen_screen.required` without one); a till or handheld may choose none, or a station screen
   and one of a pass screen or a pass monitor, which then narrow its Station and Pass screens. A
-  pass screen draws Fire, Ready and Away only when its profile has "Run the pass"
+  pass screen draws Ready only when its profile has "Run the pass"
   (`run-the-pass`, a screen setting, not an action). A kitchen display's station screen draws
   Move to station on each waiting dish only when its profile has `take-orders`; a till's own
   Station screen draws none (A439). What reaches a station still comes from the
@@ -517,8 +517,8 @@ the server checks each at the route, never trusting the till's copy:
   to the profile gives it back to a device nobody has re-picked on since. Permanent station Delete
   refuses explicit effective KDS bindings, including off devices, and unfinished food. Removing
   the last station from a profile or device scope keeps its parent with an empty station list;
-  removing the whole screen kind records a different no-longer-available state. Done marks on a
-  pass screen belong to the device, with the signed-in person when there is one (`pass_item_marks`).
+  removing the whole screen kind records a different no-longer-available state. The former pass
+  Done/Undo route is retired; legacy `pass_item_marks` rows do not hide food from either board.
 - **Who may sign in.** `GET /api/staff` with a device lists only the people its profile admits
   (`listStaffAdmittedTo`, `@waitron/identity`); a list of colleagues that is not a sign-in list,
   such as the schedule's, asks with `everyone=true`. A switch to another approved profile checks
@@ -870,7 +870,7 @@ native event is composed: measured 2026-09-28 with a standalone Playwright 1.63 
 outside, delivered `input` with `composed: true`, which a listener on the document saw, and `change`
 with `composed: false`, which a listener inside the shadow root saw and the one on the document did
 not. App screens and app-owned components may name their local action events plainly, as the till
-screens do with events such as `fire-course` and `mark-collected`.
+screens do with events such as `advance-ticket-item` and `mark-collected`.
 
 **Printing and hardware**
 
@@ -1515,8 +1515,8 @@ stops it" in the same file.
 `servers`, and `setupRevision`, a hash of every field but `servers` (`setupRevisionOf`).
 `/api/menu-state` names the same revision. When a poll names one the till has not applied,
 `#noteSetupRevision` reads `/api/till` again and `#applyVenueSetup` applies the venue's values:
-receipt languages and invoice language, venue name and tax id, onboarding intent, bump mode, fire
-control, courses, card provider, card readers and the default reader, tips, the simplified-invoice
+receipt languages and invoice language, venue name and tax id, onboarding intent, bump mode,
+courses, card provider, card readers and the default reader, tips, the simplified-invoice
 limit and full invoices. Every read of the setup is numbered when sent, and an answer is skipped
 once a read sent after it has been applied. A draft line keeps the course it was given, name
 included, after a refresh deletes that course. `themeHash`, the hash `/api/theme` answers for
@@ -1554,7 +1554,7 @@ Fixed until the till starts again (a reload, or a server switch, which runs `#bo
   no poll (backlog A785); it takes the theme in use when it starts.
 
 Pinned by `apps/till/src/till-app-setup-refresh.test.ts` ("A768 the till follows the venue's setup
-revision"): courses reach an open table, bump mode and fire control reach the station screen, the
+revision"): courses reach an open table, bump mode reaches the station screen, the
 same revision reads nothing, a failed read is tried again, and an older read never undoes a newer
 one across a poll, a profile switch, a change of zones and a server switch. The default reader is
 checked only beside a profile switch. No test checks the refresh of the other values in the list

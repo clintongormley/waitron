@@ -24,7 +24,6 @@ import { ownPasswordChanges } from "./own-password-ahead.js";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
   floorZones,
-  fireControlMode,
   pagePrinters,
   printers,
   readNodeMembership,
@@ -88,18 +87,15 @@ import {
   createCourse,
   createStation,
   getBumpMode,
-  getFireControl,
   listCourses,
   moveCourse,
   listStations,
   setBumpMode,
   setDefaultStation,
-  setFireControl,
   setProductCourse,
   updateCourse,
   updateStation,
   type BumpMode,
-  type FireControl,
 } from "./kitchen.js";
 import { parseProfileKitchenScreens } from "./device.js";
 import type { NarrowedDevice, TableRemoval } from "@waitron/module";
@@ -1868,34 +1864,6 @@ export function mountManagementApi(
         throw new AppError("course.not_found", { courseId });
       }
       await withVenueAuth(deps, sessionId, (tx) => setProductCourse(tx, cfg, id, courseId));
-      return c.body(null, 204);
-    }),
-  );
-
-  app.get("/management-api/fire-control", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
-      const mode = await withVenueReadAuth(deps, sessionId, (tx) => getFireControl(tx, cfg));
-      return c.json({ mode });
-    }),
-  );
-
-  // The valid set is read from the schema's `fireControlMode.enumValues`, not a literal list: a stale
-  // list missing a member would refuse a valid mode, and the type check cannot catch a missing member.
-  app.put("/management-api/fire-control", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
-      const body = await readJsonBody<{ mode?: unknown }>(c);
-      if (
-        typeof body.mode !== "string" ||
-        !(fireControlMode.enumValues as readonly string[]).includes(body.mode)
-      ) {
-        throw new AppError("management.request_invalid", { field: "mode" });
-      }
-      const mode = body.mode as FireControl;
-      await withVenueAuth(deps, sessionId, (tx) => setFireControl(tx, cfg, mode));
       return c.body(null, 204);
     }),
   );

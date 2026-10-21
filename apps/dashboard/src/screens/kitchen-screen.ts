@@ -17,7 +17,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import type { BumpMode, DashboardApi, FireControl, KitchenTimingDefaults } from "../api/client.js";
+import type { BumpMode, DashboardApi, KitchenTimingDefaults } from "../api/client.js";
 
 const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
 type TimingField = (typeof TIMING_FIELDS)[number];
@@ -97,7 +97,6 @@ export class KitchenScreen extends LitElement {
   #leave?: LeaveCoordinator;
 
   @state() private bumpMode: BumpMode = "line";
-  @state() private fireControl: FireControl = "waiter";
   @state() private errorKey: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
@@ -170,11 +169,6 @@ export class KitchenScreen extends LitElement {
       this.#queries
         .watch("getBumpMode", [], (bump) => {
           this.bumpMode = bump.mode;
-        })
-        .catch((error: unknown) => this.#showReadError(error)),
-      this.#queries
-        .watch("getFireControl", [], (fire) => {
-          this.fireControl = fire.mode;
         })
         .catch((error: unknown) => this.#showReadError(error)),
     ]);
@@ -387,16 +381,6 @@ export class KitchenScreen extends LitElement {
     }
   }
 
-  async #setFire(mode: FireControl): Promise<void> {
-    this.#showError(null);
-    this.fireControl = mode;
-    try {
-      await this.api.setFireControl(mode);
-    } catch (error) {
-      this.#showError(codeOf(error));
-    }
-  }
-
   #bumpOption(mode: BumpMode, label: string): TemplateResult {
     return html`<wt-button
       variant=${this.bumpMode === mode ? "primary" : "secondary"}
@@ -407,29 +391,12 @@ export class KitchenScreen extends LitElement {
     >`;
   }
 
-  #fireOption(mode: FireControl, label: string): TemplateResult {
-    return html`<wt-button
-      variant=${this.fireControl === mode ? "primary" : "secondary"}
-      size="sm"
-      data-test="fire-${mode}"
-      @click=${() => void this.#setFire(mode)}
-      >${label}</wt-button
-    >`;
-  }
-
   override render(): TemplateResult {
     return html`
       <section class="bump" role="group" aria-label=${t("kitchen.bump_mode")}>
         <span class="panel-title">${t("kitchen.bump_mode")}</span>
         <div class="bump-options">
           ${this.readOnly ? (this.bumpMode === "line" ? t("kitchen.bump_line") : t("kitchen.bump_ticket")) : html`${this.#bumpOption("line", t("kitchen.bump_line"))}${this.#bumpOption("ticket", t("kitchen.bump_ticket"))}`}
-        </div>
-      </section>
-
-      <section class="bump" role="group" aria-label=${t("kitchen.fire_mode")}>
-        <span class="panel-title">${t("kitchen.fire_mode")}</span>
-        <div class="bump-options">
-          ${this.readOnly ? t(this.fireControl === "waiter" ? "kitchen.fire_waiter" : this.fireControl === "kitchen" ? "kitchen.fire_kitchen" : "kitchen.fire_expo") : html`${this.#fireOption("waiter", t("kitchen.fire_waiter"))}${this.#fireOption("kitchen", t("kitchen.fire_kitchen"))}${this.#fireOption("expo", t("kitchen.fire_expo"))}`}
         </div>
       </section>
 

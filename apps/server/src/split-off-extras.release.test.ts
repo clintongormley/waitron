@@ -12,7 +12,7 @@ import { createCourse, setProductCourse } from "./kitchen.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { OPERATOR } from "./testing/party-venue.js";
-import { bumpCourseReady, fireCourse, markCourseAway, markServed } from "./working-order.js";
+import { bumpCourseReady, markServed } from "./working-order.js";
 import { fireGroup, readCurrentOrders } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -84,7 +84,7 @@ async function laterCourse(venue: Venue, ...products: ("burger" | "water")[]) {
 }
 
 describe("releasing split-off extras", () => {
-  it("fires both held records by course, then readies and sends them away together", async () => {
+  it("sends both held records by line and readies them together without dispatch", async () => {
     const venue = await setupSplitExtrasVenue();
     const courseId = await laterCourse(venue, "burger");
     await withTransaction(db, async (tx) => {
@@ -95,7 +95,7 @@ describe("releasing split-off extras", () => {
         null,
         null,
       ]);
-      await fireCourse(tx, venue.cfg, venue.party.tabId, courseId, { personId: OPERATOR });
+      await sendLines(tx, venue.cfg, venue.party.tabId, []);
       const fired = await rows(tx, venue.party.tabId);
       expect(fired.items).toHaveLength(2);
       expect(fired.items.every((item) => item.firedAt !== null)).toBe(true);
@@ -105,8 +105,7 @@ describe("releasing split-off extras", () => {
         "ready",
         "ready",
       ]);
-      await markCourseAway(tx, venue.cfg, venue.party.tabId, courseId);
-      expect((await rows(tx, venue.party.tabId)).items.every((item) => item.awayAt !== null)).toBe(
+      expect((await rows(tx, venue.party.tabId)).items.every((item) => item.awayAt === null)).toBe(
         true,
       );
     });
@@ -240,7 +239,7 @@ describe("releasing split-off extras", () => {
     });
   });
 
-  it("releases water's held chips by course and stamps the water sent", async () => {
+  it("sends water's held chips by line and stamps the water sent", async () => {
     const venue = await setupSplitExtrasVenue();
     const courseId = await laterCourse(venue, "water");
     await withTransaction(db, async (tx) => {
@@ -248,7 +247,7 @@ describe("releasing split-off extras", () => {
         { ...pick(venue, "water"), courseId, hold: true },
       ]);
       expect((await rows(tx, venue.party.tabId)).items[0]!.firedAt).toBeNull();
-      await fireCourse(tx, venue.cfg, venue.party.tabId, courseId, { personId: OPERATOR });
+      await sendLines(tx, venue.cfg, venue.party.tabId, []);
       const result = await rows(tx, venue.party.tabId);
       expect(result.items[0]!.firedAt).not.toBeNull();
       expect(result.lines.find((line) => line.parentLineId === null)!.sentAt).not.toBeNull();
@@ -283,7 +282,7 @@ describe("releasing split-off extras", () => {
         })
         .returning({ id: workingOrderLines.id });
       expect((await rows(tx, venue.party.tabId)).items).toEqual([]);
-      await fireCourse(tx, venue.cfg, venue.party.tabId, courseId, { personId: OPERATOR });
+      await sendLines(tx, venue.cfg, venue.party.tabId, []);
       const result = await rows(tx, venue.party.tabId);
       expect(result.items).toEqual([
         expect.objectContaining({
@@ -312,14 +311,22 @@ describe("releasing split-off extras", () => {
     });
   });
 
-  it("opens one routing snapshot across the course and held group release", async () => {
+  it("opens one routing snapshot for a group with routed and undecided extras", async () => {
     const venue = await setupSplitExtrasVenue();
     const courseId = await laterCourse(venue, "water", "burger");
     await withTransaction(db, async (tx) => {
-      await addTabRound(tx, venue.cfg, venue.party.tabId, [
-        { ...pick(venue, "water", false), courseId, hold: true },
-        { ...pick(venue, "burger"), courseId, hold: true },
-      ]);
+      const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [
+          {
+            release: "hold",
+            lines: [
+              { ...pick(venue, "water", false), courseId },
+              { ...pick(venue, "burger"), courseId },
+            ],
+          },
+        ],
+      });
       const water = (await rows(tx, venue.party.tabId)).lines.find(
         (line) => line.productId === venue.products.water,
       )!;
@@ -336,9 +343,10 @@ describe("releasing split-off extras", () => {
         lineTotal: 100,
         courseId,
         parentLineId: water.id,
+        groupId: placed.groups[0]!.id,
         extraListId: venue.lists.water,
       });
-      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+      const other = await placeGroups(tx, venue.cfg, venue.party.partyId, {
         operatorId: OPERATOR,
         groups: [{ lines: [{ ...pick(venue, "water"), courseId }], release: "hold" }],
       });
@@ -346,10 +354,32 @@ describe("releasing split-off extras", () => {
       const makers = vi.spyOn(VENUE_SERVICE, "resolveMakers");
       const extraMakers = vi.spyOn(VENUE_SERVICE, "resolveExtraMakers");
       try {
-        await fireCourse(tx, venue.cfg, venue.party.tabId, courseId, { personId: OPERATOR });
+        await fireGroup(tx, venue.cfg, venue.party.partyId, placed.groups[0]!.id, {
+          operatorId: OPERATOR,
+          submissionId: randomUUID(),
+          expectedPartyRevision: other.revision,
+        });
         expect(snapshot).toHaveBeenCalledTimes(1);
         expect(makers).not.toHaveBeenCalled();
         expect(extraMakers).not.toHaveBeenCalled();
+        const releasedLines = await tx
+          .select({ id: workingOrderLines.id })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.groupId, placed.groups[0]!.id));
+        const releasedItems = (await rows(tx, venue.party.tabId)).items.filter((item) =>
+          releasedLines.some((line) => line.id === item.lineId),
+        );
+        expect(releasedItems).toHaveLength(3);
+        expect(releasedItems.every((item) => item.firedAt !== null)).toBe(true);
+        const otherLines = await tx
+          .select({ id: workingOrderLines.id })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.groupId, other.groups[0]!.id));
+        const otherItems = (await rows(tx, venue.party.tabId)).items.filter((item) =>
+          otherLines.some((line) => line.id === item.lineId),
+        );
+        expect(otherItems).toHaveLength(1);
+        expect(otherItems.every((item) => item.firedAt === null)).toBe(true);
       } finally {
         snapshot.mockRestore();
         makers.mockRestore();
@@ -358,7 +388,7 @@ describe("releasing split-off extras", () => {
     });
   });
 
-  it("does not open routing when a course releases only routed work", async () => {
+  it("does not open routing when sending only routed work", async () => {
     const venue = await setupSplitExtrasVenue();
     const courseId = await laterCourse(venue, "burger");
     await withTransaction(db, async (tx) => {
@@ -367,7 +397,7 @@ describe("releasing split-off extras", () => {
       ]);
       const snapshot = vi.spyOn(VENUE_SERVICE, "routingAt");
       try {
-        await fireCourse(tx, venue.cfg, venue.party.tabId, courseId, { personId: OPERATOR });
+        await sendLines(tx, venue.cfg, venue.party.tabId, []);
         expect(snapshot).not.toHaveBeenCalled();
       } finally {
         snapshot.mockRestore();

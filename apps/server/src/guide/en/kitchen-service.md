@@ -52,3 +52,38 @@ from the instructions you confirm for that send.
 A reprint repeats the original allergy block. It does not issue another correction notice, so
 check the station's outstanding notices separately. Splitting dishes between bills keeps the
 copies with the resulting kitchen work; it does not replace the guest's instructions.
+
+## Keep food visible until service ends {#service-lifetime}
+
+A paid bill can still have food waiting for its guests. The pass and its monitor keep that food
+visible until you mark it served or finish the table's service. The pass has no separate Done or Away action. Ready dishes keep their Ready label and late flags while they wait to be served. If tables have joined another
+party, their paid bills stay visible until the surviving party finishes.
+
+On the table, a ready dish stays **Ready** in its detail window until you mark it served.
+The Sent list keeps showing how long it has been ready so you can see what still needs serving.
+
+In a table's details on the floor, every unserved ready dish counts as ready. When the station
+chips show those counts, the progress line leaves them out so you see each dish counted once.
+The floor's table card also keeps every unserved ready dish in its ready count. A station's ready
+chip replaces that count on the card, so you see it once while deciding what to serve.
+
+When you serve one of two dishes on a line, the pass shows the one still to serve. Undo restores
+the served quantity without restarting the kitchen's preparation or ready time. A cancelled
+quantity no longer counts as food to serve, even when its charge stays on the bill.
+
+A counter order stays visible after payment until you collect or close it. Each pass still shows
+only the stations and service zones assigned to it.
+
+You choose when to request cooking from the till. In **Venue settings**, the **Kitchen** tab
+lets you choose whether to mark preparation ready by line or by whole ticket, and set the default
+late flags. You no longer choose a venue-wide firing mode there.
+
+## Request cooking from the till {#request-cooking}
+
+Request held food from the table's order screen. Station queues and the pass show held courses and groups
+without a Fire button. Held dishes stay dimmed and cannot be advanced by tapping them.
+Once released, a dish can move through preparation to Ready at its station.
+
+Confirm allergy instructions in the table's allergy window before requesting cooking. At a
+station or the pass, read the copy already attached to each dish. The kitchen screens do not open
+the table's allergy editor. At the station, acknowledge any corrections.

@@ -36,7 +36,7 @@ function today(): TableToday {
   };
 }
 
-function table(over: Partial<TableState> = {}): TableState {
+function table(over: Partial<TableState> & { enRoute?: number } = {}): TableState {
   return {
     id: "t1",
     label: "1",
@@ -47,7 +47,6 @@ function table(over: Partial<TableState> = {}): TableState {
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "fresh",
     nextReservation: null,
     today: null,
@@ -159,13 +158,16 @@ describe("till-floor-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-ready]")).toBeNull();
   });
 
-  it("shows the en-camino badge with the enRoute count (KDS-3 §3c, 'en camino')", async () => {
+  it("keeps dispatched food in the complete ready count", async () => {
     const { el } = await mount({
-      tables: [table({ id: "t1", state: "open-tab", hasOpenTab: true, enRoute: 2 })],
+      tables: [
+        table({ id: "t1", state: "open-tab", hasOpenTab: true, readyToServe: 2, enRoute: 2 }),
+      ],
     });
-    const enRoute = el.shadowRoot!.querySelector("[data-en-route]")!;
-    expect(enRoute.textContent).toContain("2");
-    expect(enRoute.textContent).toContain(t("floor.en_route"));
+    expect(el.shadowRoot!.querySelector("[data-en-route]")).toBeNull();
+    const ready = el.shadowRoot!.querySelector("[data-ready]")!;
+    expect(ready?.textContent).toContain("2");
+    expect(ready?.textContent).toContain(t("floor.ready"));
   });
 
   it("renders no en-camino badge when enRoute is 0", async () => {
@@ -175,9 +177,7 @@ describe("till-floor-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-en-route]")).toBeNull();
   });
 
-  it("renders ONLY the most-advanced hint per table: en camino wins over listos and por servir", async () => {
-    // A table with all three signals positive (a dispatched item is still ready + unserved, so all three
-    // counts can be non-zero at once) shows en camino only — the other two hints are suppressed.
+  it("shows the complete ready count ahead of the pending count despite old dispatch stamps", async () => {
     const { el } = await mount({
       tables: [
         table({
@@ -190,9 +190,18 @@ describe("till-floor-screen", () => {
         }),
       ],
     });
-    expect(el.shadowRoot!.querySelector("[data-en-route]")!.textContent).toContain("1");
-    expect(el.shadowRoot!.querySelector("[data-ready]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-en-route]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-ready]")?.textContent).toContain("2");
     expect(el.shadowRoot!.querySelector("[data-to-serve]")).toBeNull();
+  });
+
+  it.each([1, 50])("ignores an old dispatch count of %i when no food is ready", async (enRoute) => {
+    const { el } = await mount({
+      tables: [table({ state: "open-tab", hasOpenTab: true, pendingToServe: 3, enRoute })],
+    });
+    expect(el.shadowRoot!.querySelector("[data-en-route]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-ready]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-to-serve]")?.textContent).toContain("3");
   });
 
   it("shows listos (not por servir) when ready but nothing dispatched", async () => {
@@ -204,7 +213,6 @@ describe("till-floor-screen", () => {
           hasOpenTab: true,
           pendingToServe: 3,
           readyToServe: 2,
-          enRoute: 0,
         }),
       ],
     });
@@ -222,7 +230,6 @@ describe("till-floor-screen", () => {
           hasOpenTab: true,
           pendingToServe: 3,
           readyToServe: 0,
-          enRoute: 0,
         }),
       ],
     });

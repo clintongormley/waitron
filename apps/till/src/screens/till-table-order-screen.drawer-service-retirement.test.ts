@@ -30,7 +30,7 @@ it.each(["held", "fired"] as const)(
     });
     const { el } = await mount({
       orderId: "wo-4",
-      fireControl: "waiter",
+      ...{ fireControl: "waiter" },
       groups: [orderGroup("group", 1, state)],
       currentOrders: current({
         groups: [currentGroup("group", 1, state, [dish])],

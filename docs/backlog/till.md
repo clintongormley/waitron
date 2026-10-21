@@ -602,6 +602,9 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
   3's plan makes a kitchen display's "Close for today" take a manager's PIN because nobody is
   signed in; a signed-in manager could skip it.
 
+**2026-10-20, A773-2:** the pass's Done/Undo HTTP route is retired. The sign-in work must use
+the remaining preparation actions and planned pass release rather than extend those former marks.
+
 ## Task 7 (#789, each person's draft kept on the server)
 
 **2026-10-19, A773-1:** the [per-bill ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
@@ -2460,28 +2463,20 @@ check. No legacy move assertion was changed to hide this result.
 ## A773. Courses, groups and the pass
 
 **A773-2**, firing and the pass, has a [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
-from the [approved design](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md).
-The build remains: service lifetime and waiter authority, Requested and scoped pass release,
-station configuration, then tickets and schema retirement. Recheck A756's settings and current
-lane reservations before each working slice. A803's station/pass additions follow it. The plan
-records A797's completed Q42 amendments; A797's design was revised on 2026-10-21, and its redrawn
-pictures and owner FYI remain a UI prerequisite.
-This plan adds no runtime behavior. The table panel and per-bill editing contracts belong to
-[A773-1's plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and the
-[ownership amendment](../superpowers/specs/2026-10-17-a773-one-editor-design.md).
+with PRs B–D remaining. Old nonempty stamps remain in regression fixtures, outside the till's
+public contracts. Physical schema and configuration-transfer fields remain for Task 12.
 
-Two physical-till trials remain separate from browser and API checks:
+PRs B–D add Requested and scoped pass release, integrate the agreed columns and display policy,
+expose station settings and coverage warnings, finish tickets, then remove the retired schema and
+configuration fields. Preserve separately routed extras and the allergy snapshot child when
+rebuilding ticket items. Recheck current main, A756 and other lanes' actual reservations before
+each slice. A797's completed Q42 design revision, pictures and FYI landed on 2026-10-21; no new
+Q42 answer is required. New copy still follows the plan's wording-review gate.
 
-- Try long-press dragging of New order lines and held headings. If it does not work reliably,
-  keep Move to… and the heading's Move earlier/later actions.
-- Try serving part of a line through the dish window during service before deciding whether
-  the interaction needs to change.
-
-[Course mockups](mockups/a773-courses-and-groups/),
-[panel mockups](mockups/a773-order-panel/), [ownership pictures](mockups/a773-one-editor/).
-A758 owns its later reason rules, starter list, reports, filled refund form, refund links and
-counter-collection path. Its [section 10](../superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md#10-for-other-lanes)
-defines the cancellation and Finish-table handoff built by A773-1.
+The [A773-1 plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and
+[ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md) govern the landed
+Sent/New order and bill ownership behavior. Physical dragging and partial-serving trials remain
+separate backlog entries. A803 owns its bill naming and pass/station presentation tail.
 
 ## A678. Two readers answer "where is this order"
 

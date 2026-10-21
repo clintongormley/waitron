@@ -1,7 +1,7 @@
 import "./errors.js";
-import { and, eq, gte, inArray, isNull, notExists, type SQL } from "drizzle-orm";
-import { AppError, worstBand } from "@waitron/shared";
-import { passItemMarks, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import { and, eq, gte, inArray, type SQL } from "drizzle-orm";
+import { worstBand } from "@waitron/shared";
+import { ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { ResolvedKitchenScreen } from "@waitron/module";
 import type { TillConfig } from "./till-config.js";
@@ -48,30 +48,15 @@ export function passScopeOf(screen: ResolvedKitchenScreen): PassScope {
   };
 }
 
-/** The pass screen: dishes kept until this device marks them Done. */
+/** The pass retains unserved food until service ends, independently of device marks. */
 export async function listPassScreen(
   tx: Transaction,
   cfg: TillConfig,
   deviceId: string,
   scope: PassScope,
 ): Promise<{ orders: PassOrder[] }> {
-  const kept = await scopedItems(tx, cfg, scope, (stationScope) =>
-    and(
-      isNull(workingOrderLines.servedAt),
-      stationScope,
-      notExists(
-        tx
-          .select({ id: passItemMarks.ticketItemId })
-          .from(passItemMarks)
-          .where(
-            and(
-              eq(passItemMarks.deviceId, deviceId),
-              eq(passItemMarks.ticketItemId, ticketItems.id),
-            ),
-          ),
-      ),
-    ),
-  );
+  void deviceId;
+  const kept = await scopedItems(tx, cfg, scope);
   if (!kept.length) return { orders: [] };
   const ids = new Set(kept.map((item) => item.id));
   const orders = await readPassBoard(
@@ -99,21 +84,23 @@ export async function listPassScreen(
   };
 }
 
-/** The pass monitor: the every-station read narrowed to the scope; no marks. With
- *  no Done to clear them, a section whose dishes here are all away drops off. */
+/** The monitor shares the pass's service lifetime and cannot mark work complete. */
 export async function listPassMonitor(
   tx: Transaction,
   cfg: TillConfig,
   scope: PassScope,
 ): Promise<{ orders: ExpoOrder[] }> {
-  const kept = await scopedItems(tx, cfg, scope, (stationScope) => stationScope);
-  const waiting = new Set(kept.filter((item) => item.awayAt === null).map((item) => item.orderId));
-  if (!waiting.size) return { orders: [] };
+  const kept = await scopedItems(tx, cfg, scope);
+  if (!kept.length) return { orders: [] };
   const ids = new Set(kept.map((item) => item.id));
-  const orders = await readPassBoard(tx, cfg.locationId, inArray(workingOrders.id, [...waiting]));
+  const orders = await readPassBoard(
+    tx,
+    cfg.locationId,
+    inArray(workingOrders.id, [...new Set(kept.map((item) => item.orderId))]),
+  );
   const section = <T extends ExpoCourse | ExpoGroup>(part: T): T | null => {
     const items = part.items.filter((item) => ids.has(item.id));
-    return items.some((item) => item.awayAt === null) ? { ...part, items } : null;
+    return items.length ? { ...part, items } : null;
   };
   return {
     orders: orders.map((order) =>
@@ -126,84 +113,18 @@ export async function listPassMonitor(
   };
 }
 
-/** Marks or unmarks the device's Done; a dish at another location, or one the scope does not see,
- *  refuses the whole request. */
-export async function markPassItems(
-  tx: Transaction,
-  cfg: TillConfig,
-  by: { deviceId: string; personId: string | null },
-  scope: PassScope,
-  ticketItemIds: readonly string[],
-  done: boolean,
-  at: Date,
-): Promise<void> {
-  const rows = await tx
-    .select({
-      id: ticketItems.id,
-      locationId: workingOrders.locationId,
-      stationId: ticketItems.stationId,
-      orderId: workingOrders.id,
-      partyId: workingOrders.partyId,
-      deliveryTableId: workingOrders.deliveryTableId,
-    })
-    .from(ticketItems)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    // The item has a denormalised order id; both paths must name the same order before we write.
-    .innerJoin(
-      workingOrders,
-      and(
-        eq(workingOrders.id, workingOrderLines.workingOrderId),
-        eq(workingOrders.id, ticketItems.workingOrderId),
-      ),
-    )
-    .where(inArray(ticketItems.id, [...ticketItemIds]));
-  const zones =
-    scope.zoneIds === null ? new Map<string, string | null>() : await rowsWatchZones(tx, cfg, rows);
-  if (
-    rows.some(
-      (row) =>
-        row.locationId !== cfg.locationId ||
-        !passSees(scope, { stationId: row.stationId, zoneId: zones.get(row.orderId) ?? null }),
-    )
-  ) {
-    throw new AppError("management.request_invalid", { field: "ticketItemIds" });
-  }
-  const localIds = rows.map(({ id }) => id);
-  if (!localIds.length) return;
-  if (!done) {
-    await tx
-      .delete(passItemMarks)
-      .where(
-        and(eq(passItemMarks.deviceId, by.deviceId), inArray(passItemMarks.ticketItemId, localIds)),
-      );
-    return;
-  }
-  await tx
-    .insert(passItemMarks)
-    .values(
-      localIds.map((id) => ({
-        deviceId: by.deviceId,
-        ticketItemId: id,
-        doneAt: at.toISOString(),
-        doneByPersonId: by.personId,
-      })),
-    )
-    .onConflictDoNothing({ target: [passItemMarks.deviceId, passItemMarks.ticketItemId] });
-}
-
 /** A live kitchen dish at this location. `scopedItems` and `firedPassDishes` both read it, so the
  *  dark-pass alert counts only dishes a pass board would list. */
 function liveKitchenDishAt(cfg: TillConfig): SQL | undefined {
   return and(eq(workingOrders.locationId, cfg.locationId), liveKitchenDish());
 }
 
-/** The live kitchen dishes the scope sees, filtered further by `where`. */
+/** The live kitchen dishes the scope sees. */
 async function scopedItems(
   tx: Transaction,
   cfg: TillConfig,
   scope: PassScope,
-  where: (stationScope: SQL | undefined) => SQL | undefined,
-): Promise<{ id: string; orderId: string; awayAt: string | null }[]> {
+): Promise<{ id: string; orderId: string }[]> {
   if (scope.stationIds?.length === 0 || scope.zoneIds?.length === 0) return [];
   const candidates = await tx
     .select({
@@ -212,7 +133,6 @@ async function scopedItems(
       partyId: workingOrders.partyId,
       deliveryTableId: workingOrders.deliveryTableId,
       stationId: ticketItems.stationId,
-      awayAt: ticketItems.awayAt,
     })
     .from(ticketItems)
     .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
@@ -220,11 +140,9 @@ async function scopedItems(
     .where(
       and(
         liveKitchenDishAt(cfg),
-        where(
-          scope.stationIds === null
-            ? undefined
-            : inArray(ticketItems.stationId, [...scope.stationIds]),
-        ),
+        scope.stationIds === null
+          ? undefined
+          : inArray(ticketItems.stationId, [...scope.stationIds]),
       ),
     );
   if (scope.zoneIds === null) return candidates;
@@ -246,8 +164,6 @@ export async function firedPassDishes(
     id: string;
     stationId: string;
     zoneId: string | null;
-    servedAt: string | null;
-    awayAt: string | null;
   }[]
 > {
   const rows = await tx
@@ -257,20 +173,16 @@ export async function firedPassDishes(
       partyId: workingOrders.partyId,
       deliveryTableId: workingOrders.deliveryTableId,
       stationId: ticketItems.stationId,
-      servedAt: workingOrderLines.servedAt,
-      awayAt: ticketItems.awayAt,
     })
     .from(ticketItems)
     .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(and(liveKitchenDishAt(cfg), gte(ticketItems.firedAt, firedSince)));
   const zones = withZones ? await rowsWatchZones(tx, cfg, rows) : new Map<string, string>();
-  return rows.map(({ id, orderId, stationId, servedAt, awayAt }) => ({
+  return rows.map(({ id, orderId, stationId }) => ({
     id,
     stationId,
     zoneId: zones.get(orderId) ?? null,
-    servedAt,
-    awayAt,
   }));
 }
 
@@ -300,6 +212,6 @@ function withSections<C extends ExpoCourse, G extends ExpoGroup>(
     ...order,
     courses,
     groups,
-    worstBand: worstBand(visible.filter((item) => item.awayAt === null).map((item) => item.band)),
+    worstBand: worstBand(visible.map((item) => item.band)),
   };
 }

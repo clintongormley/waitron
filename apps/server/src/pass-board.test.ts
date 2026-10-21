@@ -1,5 +1,6 @@
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
+import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
@@ -21,13 +22,7 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import {
-  listPassMonitor,
-  listPassScreen,
-  markPassItems,
-  passSees,
-  type PassScope,
-} from "./pass-board.js";
+import { listPassMonitor, listPassScreen, passSees, type PassScope } from "./pass-board.js";
 import {
   carveOffLines,
   createOpenOrder,
@@ -35,6 +30,9 @@ import {
   fireLines,
   listExpoQueue,
 } from "./working-order.js";
+import { mountDeviceApi } from "./device-api.js";
+import { createPairingMode } from "./pairing-mode.js";
+import { DEVICE_COOKIE } from "./device-session.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -226,7 +224,7 @@ describe("pass screen", () => {
     expect(await orderIds()).toEqual({ screen: [], monitor: [] });
   });
 
-  it("Done on one device leaves the dish on another, and undoing removes only that device's mark", async () => {
+  it("legacy Done marks stay device-specific but never hide food from either pass", async () => {
     const { v, grill, outside } = await terraceVenue();
     const [a, b] = await passDevices(v, 2);
     const [burger] = await inTx(v, (tx) =>
@@ -241,14 +239,24 @@ describe("pass screen", () => {
     const expoBefore = await inTx(v, (tx) => listExpoQueue(tx, v.cfg));
     const at = new Date("2026-10-01T12:00:00.000Z");
     await inTx(v, (tx) =>
-      markPassItems(tx, v.cfg, { deviceId: a!, personId: null }, EVERY, [burger!.id], true, at),
+      tx.insert(passItemMarks).values({
+        deviceId: a!,
+        ticketItemId: burger!.id,
+        doneAt: at.toISOString(),
+        doneByPersonId: null,
+      }),
     );
-    expect(ids(await read(a!))).not.toContain(burger!.id);
+    expect(ids(await read(a!))).toContain(burger!.id);
     expect(ids(await read(b!))).toContain(burger!.id);
     expect(await inTx(v, (tx) => listExpoQueue(tx, v.cfg))).toEqual(expoBefore);
     const person = randomUUID();
     await inTx(v, (tx) =>
-      markPassItems(tx, v.cfg, { deviceId: b!, personId: person }, EVERY, [burger!.id], true, at),
+      tx.insert(passItemMarks).values({
+        deviceId: b!,
+        ticketItemId: burger!.id,
+        doneAt: at.toISOString(),
+        doneByPersonId: person,
+      }),
     );
     const both = await inTx(v, (tx) =>
       tx.select().from(passItemMarks).where(eq(passItemMarks.ticketItemId, burger!.id)),
@@ -261,18 +269,12 @@ describe("pass screen", () => {
       ]),
     );
     await inTx(v, (tx) =>
-      markPassItems(
-        tx,
-        v.cfg,
-        { deviceId: a!, personId: randomUUID() },
-        EVERY,
-        [burger!.id],
-        false,
-        at,
-      ),
+      tx
+        .delete(passItemMarks)
+        .where(and(eq(passItemMarks.deviceId, a!), eq(passItemMarks.ticketItemId, burger!.id))),
     );
     expect(ids(await read(a!))).toContain(burger!.id);
-    expect(ids(await read(b!))).not.toContain(burger!.id);
+    expect(ids(await read(b!))).toContain(burger!.id);
     expect(
       await inTx(v, (tx) =>
         tx.select().from(passItemMarks).where(eq(passItemMarks.ticketItemId, burger!.id)),
@@ -282,7 +284,7 @@ describe("pass screen", () => {
     ]);
   });
 
-  it("keeps a device's Done mark on a ticket item copied by a quantity split", async () => {
+  it("A773 no dispatch state: splitting keeps the source mark without copying it or hiding food", async () => {
     const v = await setupPartyVenue(suite.db);
     const [device, other] = await passDevices(v, 2);
     const party = await seat(v, await v.table("Split table"));
@@ -296,15 +298,11 @@ describe("pass screen", () => {
         .set({ quantity: 2000 })
         .where(eq(workingOrderLines.id, item!.workingOrderLineId));
       await tx.update(ticketItems).set({ quantity: 2000 }).where(eq(ticketItems.id, item!.id));
-      await markPassItems(
-        tx,
-        v.cfg,
-        { deviceId: device!, personId: null },
-        EVERY,
-        [item!.id],
-        true,
-        new Date(),
-      );
+      await tx.insert(passItemMarks).values({
+        deviceId: device!,
+        ticketItemId: item!.id,
+        doneAt: new Date().toISOString(),
+      });
       await carveOffLines(tx, v.cfg, party.tabId, party.tabId, [{ lineNo: 1, quantity: "1" }], {
         refuseHeld: false,
       });
@@ -321,8 +319,11 @@ describe("pass screen", () => {
     const marks = await inTx(v, (tx) =>
       tx.select().from(passItemMarks).where(eq(passItemMarks.deviceId, device!)),
     );
-    expect(new Set(marks.map((mark) => mark.ticketItemId))).toEqual(new Set(itemIds));
-    expect((await inTx(v, (tx) => listPassScreen(tx, v.cfg, device!, EVERY))).orders).toEqual([]);
+    expect(marks).toHaveLength(1);
+    expect(marks[0]!.ticketItemId).toBe(item!.id);
+    expect(ids(await inTx(v, (tx) => listPassScreen(tx, v.cfg, device!, EVERY))).sort()).toEqual(
+      [...itemIds].sort(),
+    );
     expect(ids(await inTx(v, (tx) => listPassScreen(tx, v.cfg, other!, EVERY))).sort()).toEqual(
       [...itemIds].sort(),
     );
@@ -358,7 +359,7 @@ describe("a pass's sections", () => {
     });
   });
 
-  it("a pass monitor drops a course whose dishes are all away and keeps the order's waiting course", async () => {
+  it("a pass monitor keeps both courses after a legacy Away stamp", async () => {
     const { v, grill, counterId } = await twoSectionVenue();
     const counterItems = await inTx(v, (tx) =>
       tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, counterId)),
@@ -371,33 +372,43 @@ describe("a pass's sections", () => {
         .where(eq(ticketItems.id, starter.id)),
     );
     const board = await inTx(v, (tx) => listPassMonitor(tx, v.cfg, EVERY));
-    expect(sections(board)[counterId]).toEqual({ courses: [["Mains", ["BURG"]]], groups: [] });
+    expect(sections(board)[counterId]).toEqual({
+      courses: [
+        ["Starters", ["CANA"]],
+        ["Mains", ["BURG"]],
+      ],
+      groups: [],
+    });
   });
 });
 
-describe("markPassItems", () => {
-  it("writes and refuses nothing for an id that names no dish", async () => {
+describe("retired pass completion", () => {
+  it("refuses Done and Undo for an id that names no dish without writing marks", async () => {
     const v = await setupPartyVenue(suite.db);
     const [device] = await passDevices(v, 1);
+    const app = new Hono();
+    mountDeviceApi(
+      app,
+      { db: suite.db, cfg: v.cfg, secureCookies: false, pairingMode: createPairingMode() },
+      () => {},
+    );
     for (const done of [true, false]) {
-      await inTx(v, (tx) =>
-        markPassItems(
-          tx,
-          v.cfg,
-          { deviceId: device!, personId: null },
-          { stationIds: null, zoneIds: [v.counter.zoneId] },
-          [randomUUID()],
-          done,
-          new Date(),
-        ),
-      );
+      const response = await app.request("/api/device/pass-screen/done", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${DEVICE_COOKIE}=${device}.invalid`,
+        },
+        body: JSON.stringify({ ticketItemIds: [randomUUID()], done }),
+      });
+      expect(response.status).toBe(404);
     }
     expect(await inTx(v, (tx) => tx.select().from(passItemMarks))).toEqual([]);
   });
 });
 
 describe("pass monitor", () => {
-  it("lists its scope's dishes, keeps no marks, and drops a section whose dishes are all away", async () => {
+  it("lists its scoped dishes independently of legacy Done and Away stamps", async () => {
     const { v, grill, terrace, outside, inside, counterId } = await terraceVenue();
     const [device] = await passDevices(v, 1);
     const grillOnly: PassScope = { stationIds: [grill], zoneIds: null };
@@ -423,15 +434,11 @@ describe("pass monitor", () => {
         ),
     );
     await inTx(v, (tx) =>
-      markPassItems(
-        tx,
-        v.cfg,
-        { deviceId: device!, personId: null },
-        EVERY,
-        [burger!.id],
-        true,
-        new Date(),
-      ),
+      tx.insert(passItemMarks).values({
+        deviceId: device!,
+        ticketItemId: burger!.id,
+        doneAt: new Date().toISOString(),
+      }),
     );
     expect(await read(grillOnly)).toEqual(before);
 
@@ -445,7 +452,7 @@ describe("pass monitor", () => {
       outside.tabId,
     );
     expect((await read(grillOnly)).orders.map((o) => o.orderId).sort()).toEqual(
-      [inside.tabId, counterId].sort(),
+      [outside.tabId, inside.tabId, counterId].sort(),
     );
     expect(ids(await read(EVERY))).toContain(burger!.id);
   });

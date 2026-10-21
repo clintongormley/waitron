@@ -137,6 +137,7 @@ describe("rest of the order read", () => {
         vatClass: "general",
         lineTotal: 100,
         servedAt: "served" in item && item.served ? nowIso() : null,
+        servedQuantity: "served" in item && item.served ? 9000 : 0,
       });
       await db.insert(ticketItems).values({
         nodeId,
@@ -175,6 +176,13 @@ describe("rest of the order read", () => {
         held: false,
       },
       {
+        name: "Away",
+        stationName: "Fryer",
+        quantity: "5.000",
+        state: "ready",
+        held: false,
+      },
+      {
         name: "Kitchen burger",
         stationName: "Grill",
         quantity: "2.000",
@@ -190,10 +198,21 @@ describe("rest of the order read", () => {
       sql`update kitchen_stations set name = case name when 'Fryer' then 'barra' else 'Ásador' end`,
     );
     const renamed = await withTransaction(db, (tx) => readRestOfOrder(tx, [orderId]));
-    expect(renamed.get(orderId)?.map(({ stationName, name }) => [stationName, name])).toEqual([
+    expect(
+      renamed
+        .get(orderId)
+        ?.filter((row) => row.name !== "Away")
+        .map(({ stationName, name }) => [stationName, name]),
+    ).toEqual([
       ["Ásador", "Kitchen burger"],
       ["barra", "Kitchen fish"],
       ["barra", "Kitchen chips"],
+    ]);
+    expect(renamed.get(orderId)?.map(({ name }) => name)).toEqual([
+      "Kitchen burger",
+      "Kitchen fish",
+      "Kitchen chips",
+      "Away",
     ]);
   });
 

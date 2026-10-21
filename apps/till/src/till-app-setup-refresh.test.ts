@@ -183,7 +183,6 @@ function table(id: string, label: string, tableParty: TableParty | null): TableS
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "fresh",
     nextReservation: null,
     today: null,
@@ -374,8 +373,7 @@ async function mountWithRouter(): Promise<{ el: TillApp; switchServer: () => Pro
   return { el, switchServer };
 }
 
-const venue = (el: TillApp) =>
-  el as unknown as { courses: { id: string }[]; bumpMode: string; fireControl: string };
+const venue = (el: TillApp) => el as unknown as { courses: { id: string }[]; bumpMode: string };
 
 const courseIds = (list: { id: string }[]) => list.map((each) => each.id);
 
@@ -458,7 +456,7 @@ describe("A768 the till follows the venue's setup revision", () => {
     expect(courseIds(venue(el).courses)).toEqual(["drinks", "mains", "desserts"]);
   });
 
-  it("bump mode and fire control reach the station screen", async () => {
+  it("A773 waiter authority: refresh keeps bump mode and drops the retired station control", async () => {
     const stationTill = {
       ...till(drillFormFactor),
       onboardingIntent: "prepare" as const,
@@ -484,7 +482,7 @@ describe("A768 the till follows the venue's setup revision", () => {
     api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
     await poll(el);
     expect(station().bumpMode).toBe("ticket");
-    expect(station().fireControl).toBe("kitchen");
+    expect("fireControl" in station()).toBe(false);
   });
 
   it("a settings read that answers after a server switch applies nothing", async () => {

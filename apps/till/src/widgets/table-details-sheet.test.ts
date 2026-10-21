@@ -3,11 +3,13 @@ import { page, userEvent } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
+import { en, es } from "../i18n/strings.js";
 import "./table-details-sheet.js";
 import type { TillTableDetailsSheet } from "./table-details-sheet.js";
 import type { TableParty, TableState } from "../api/client.js";
 
 afterEach(cleanupWidgets);
+afterEach(() => setLocale("en"));
 beforeEach(() => setLocale("en"));
 
 function party(over: Partial<TableParty> = {}): TableParty {
@@ -34,7 +36,7 @@ function party(over: Partial<TableParty> = {}): TableParty {
   };
 }
 
-function table(over: Partial<TableState> = {}): TableState {
+function table(over: Partial<TableState> & { enRoute?: number } = {}): TableState {
   return {
     id: "t1",
     label: "1",
@@ -45,7 +47,6 @@ function table(over: Partial<TableState> = {}): TableState {
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "fresh",
     nextReservation: null,
     today: null,
@@ -233,7 +234,7 @@ describe("till-table-details-sheet", () => {
     );
     expect(find(el, "[data-paid]")).toBeNull();
     expect(text(el, "[data-bills]")).toBe("Bills: 2");
-    expect(text(el, "[data-kitchen]")).toBe("3 to serve · 2 ready · 1 en route");
+    expect(text(el, "[data-kitchen]")).toBe("3 to serve · 3 ready");
     expect(find(el, "[data-free]")).toBeNull();
   });
 
@@ -280,11 +281,73 @@ describe("till-table-details-sheet", () => {
     expect(text(el, "[data-kitchen]")).toBe("1 por servir · 1 listo");
     el.table = table({ ...seated, pendingToServe: 3, readyToServe: 2, enRoute: 1, party: party() });
     await el.updateComplete;
-    expect(text(el, "[data-kitchen]")).toBe("1 por servir · 1 listo · 1 en camino");
+    expect(text(el, "[data-kitchen]")).toBe(
+      `1 ${es["floor.to_serve"]} · ${es["table.flash_ready"].replace("{n}", "2")}`,
+    );
     setLocale("en");
     el.table = table({ ...seated, pendingToServe: 2, readyToServe: 1, party: party() });
     await el.updateComplete;
     expect(text(el, "[data-kitchen]")).toBe("1 to serve · 1 ready");
+  });
+
+  describe.each(["en", "es"] as const)("A773 no dispatch state (%s)", (locale) => {
+    const strings = locale === "en" ? en : es;
+
+    it("keeps every ready dish when the server omits dispatch, including after Serve and Undo", async () => {
+      setLocale(locale);
+      const shown = table({
+        ...seated,
+        pendingToServe: 6,
+        readyToServe: 3,
+        party: party(),
+      });
+      Reflect.deleteProperty(shown, "enRoute");
+      const el = await mount({ table: shown });
+      const initial = `3 ${strings["floor.to_serve"]} · ${strings["table.flash_ready"].replace("{n}", "3")}`;
+      expect(text(el, "[data-kitchen]")).toBe(initial);
+
+      el.table = { ...shown, pendingToServe: 4, readyToServe: 1 };
+      await el.updateComplete;
+      expect(text(el, "[data-kitchen]")).toBe(
+        `3 ${strings["floor.to_serve"]} · ${strings["table.flash_ready_one"]}`,
+      );
+
+      el.table = { ...shown };
+      await el.updateComplete;
+      expect(text(el, "[data-kitchen]")).toBe(initial);
+    });
+
+    it("does not subtract or display legacy dispatch beside a station's ready chip", async () => {
+      setLocale(locale);
+      const el = await mount({
+        table: table({
+          ...seated,
+          pendingToServe: 6,
+          readyToServe: 3,
+          enRoute: 2,
+          party: party(),
+          signals: [
+            {
+              kind: "ready",
+              byStation: [{ stationId: "s1", stationName: "Kitchen", count: 3 }],
+            },
+          ],
+        }),
+      });
+      expect(text(el, "[data-kitchen]")).toBe(`3 ${strings["floor.to_serve"]}`);
+      expect(text(el, "[data-chip='ready']")).toBe(
+        strings["signal.ready_at"].replace("{station}", "Kitchen").replace("{n}", "3"),
+      );
+    });
+
+    it("never invents an in-transit dish from a legacy dispatch count", async () => {
+      setLocale(locale);
+      const el = await mount({
+        table: table({ ...seated, pendingToServe: 1, enRoute: 2, party: party() }),
+      });
+      expect(text(el, "[data-kitchen]")).toBe(`1 ${strings["floor.to_serve"]}`);
+      expect(find(el, "[data-chip='ready']")).toBeNull();
+    });
   });
 
   it("says Paid when the party owes nothing", async () => {

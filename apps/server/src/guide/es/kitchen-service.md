@@ -58,3 +58,45 @@ Una reimpresión repite el bloque de alergias original. No genera otro aviso de 
 comprueba por separado los avisos pendientes de la estación. Dividir los platos entre cuentas
 conserva las copias con el trabajo de cocina resultante; no sustituye las instrucciones de la
 persona.
+
+## Mantén la comida visible hasta terminar el servicio {#service-lifetime}
+
+Una cuenta cobrada puede tener comida pendiente de servir. El pase y su monitor conservan esa
+comida hasta que la marques como servida o termines el servicio de la mesa. El pase no tiene una
+acción Hecho ni En camino aparte. Los platos listos conservan su estado Listo y los avisos de
+retraso mientras esperan a que los sirvas. Si las mesas se han
+unido a otro grupo de comensales, sus cuentas cobradas siguen visibles hasta que termine el grupo
+que las reúne.
+
+En la mesa, un plato listo sigue como **Listo** en su ventana de detalle hasta que lo marques
+como servido. La lista Enviado conserva el tiempo que lleva listo para que veas qué falta servir.
+
+La tarjeta de la mesa en la sala también cuenta como listo cada plato listo que aún no has servido.
+Si una etiqueta de estación muestra ese recuento, sustituye al de la tarjeta para que lo veas una
+sola vez al decidir qué servir.
+
+En los detalles de una mesa en el plano, cada plato listo pendiente de servir cuenta como listo.
+Cuando las etiquetas de las estaciones muestran esas cantidades, la línea de progreso las omite
+para que cada plato se cuente una sola vez.
+
+Cuando sirves uno de los dos platos de una línea, el pase muestra el que queda por servir.
+Deshacer restaura la cantidad servida sin reiniciar el tiempo de preparación ni el que lleva listo.
+Una cantidad anulada deja de contar como comida pendiente, aunque se conserve su importe en la
+cuenta.
+
+Un pedido de mostrador sigue visible después del cobro hasta que lo entregues o cierres. Cada
+pase sigue mostrando solo las estaciones y zonas de servicio que tiene asignadas.
+
+Tú decides cuándo pedir la preparación desde el terminal. En **Configuración del local**, la
+pestaña **Cocina** permite elegir si se marca como listo cada plato o la comanda completa y fijar
+los avisos de retraso predeterminados. Ya no se elige allí un modo de marcha para todo el local.
+
+## Pide la preparación desde el terminal {#request-cooking}
+
+Pide los platos en espera desde el pedido de la mesa. Las colas de las estaciones y el pase muestran los pases
+y grupos en espera sin botón Marchar. Esos platos se muestran atenuados y no avanzan al tocarlos.
+Una vez enviados a preparar, puedes avanzar los platos hasta Listo en su estación.
+
+Confirma las instrucciones de alergia en la ventana de alergias de la mesa antes de pedir la
+preparación. En una estación o en el pase, lee la copia que acompaña a cada plato. Las pantallas de cocina
+no abren el editor de alergias de la mesa. En la estación, confirma las correcciones.

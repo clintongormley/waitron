@@ -8,7 +8,7 @@ import type { AllergyCommand, AllergyPatch } from "@waitron/module";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { readBillEditState } from "./bill-editing.js";
 import { fireGroup, fireHeldLine } from "./order-groups.js";
-import { addTabRound, fireCourse, fireLines, fireOrderLines, sendLines } from "./working-order.js";
+import { addTabRound, fireLines, fireOrderLines, sendLines } from "./working-order.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import {
@@ -101,10 +101,9 @@ async function run(p: Fixture, path: string, ask?: AllergyCommand) {
   const groupAsk = { ...(ask ?? (await command(p))), operatorId: OPERATOR };
   return inTx(v, async (tx) => {
     const authority = { operatorId: OPERATOR, expectedEdit: await readBillEditState(tx, p.tabId) };
-    if (path === "group") return fireGroup(tx, v.cfg, p.partyId, p.groupId, groupAsk);
+    if (path === "group" || path === "cross-bill-group")
+      return fireGroup(tx, v.cfg, p.partyId, p.groupId, groupAsk);
     if (path === "held-line") return fireHeldLine(tx, v.cfg, p.partyId, p.lineId, groupAsk);
-    if (path === "course")
-      return fireCourse(tx, v.cfg, p.tabId, mains, { personId: OPERATOR }, undefined, ask);
     if (path === "lower") return fireOrderLines(tx, v.cfg, p.tabId, [p.lineId]);
     return sendLines(
       tx,
@@ -119,8 +118,8 @@ async function run(p: Fixture, path: string, ask?: AllergyCommand) {
 }
 
 describe("A669 release matrix", () => {
-  it("saves an explicit answer when a course has no remaining work and replays it once", async () => {
-    const p = await seat(v, await v.table(`Empty course ${randomUUID().slice(0, 8)}`));
+  it("saves an explicit answer when a bill has no remaining work and replays it once", async () => {
+    const p = await seat(v, await v.table(`Empty bill ${randomUUID().slice(0, 8)}`));
     const ask: AllergyCommand = {
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(v, p.partyId),
@@ -134,8 +133,19 @@ describe("A669 release matrix", () => {
     };
     const before = frozen();
     const fire = (input: AllergyCommand) =>
-      inTx(v, (tx) =>
-        fireCourse(tx, v.cfg, p.tabId, mains, { personId: OPERATOR }, undefined, input),
+      inTx(v, async (tx) =>
+        sendLines(
+          tx,
+          v.cfg,
+          p.tabId,
+          [],
+          {
+            operatorId: OPERATOR,
+            expectedEdit: await readBillEditState(tx, p.tabId),
+          },
+          undefined,
+          input,
+        ),
       );
     await fire(ask);
     const saved = await inTx(v, (tx) => VENUE_SERVICE.readPartyAllergy(tx, p.partyId));
@@ -231,17 +241,20 @@ describe("A669 release matrix", () => {
     expect(frozen()).toEqual(before);
   });
 
-  for (const path of ["line", "all", "group", "course", "held-line", "lower"]) {
+  for (const path of ["line", "all", "group", "cross-bill-group", "held-line", "lower"]) {
     it(`${path} refuses unanswered with no database writes`, async () => {
-      const p = await fixture(["line", "all", "lower"].includes(path), path === "group");
+      const p = await fixture(
+        ["line", "all", "lower"].includes(path),
+        path === "group" || path === "cross-bill-group",
+      );
       const before = frozen();
       await expect(run(p, path)).rejects.toMatchObject({ code: "allergy.unanswered" });
       expect(frozen()).toEqual(before);
     });
   }
-  for (const path of ["line", "all", "group", "held-line", "course"]) {
+  for (const path of ["line", "all", "group", "held-line", "cross-bill-group"]) {
     it(`${path} saves answer and ticks atomically and exact replay writes nothing`, async () => {
-      const p = await fixture(path === "line" || path === "all");
+      const p = await fixture(path === "line" || path === "all", path === "cross-bill-group");
       const ask = await command(p, {
         party: {
           answer: "allergies",
@@ -266,25 +279,32 @@ describe("A669 release matrix", () => {
     });
   }
   for (const shape of ["grouped", "ungrouped", "mixed"]) {
-    it(`course owns exactly one party revision for ${shape} work`, async () => {
+    it(`waiter release owns exactly one party revision for ${shape} work`, async () => {
       const p = await fixture(shape === "ungrouped");
       if (shape === "mixed")
         await v.db
           .update(workingOrderLines)
           .set({ groupId: null })
           .where(eq(workingOrderLines.id, p.otherLineId));
+      const path = shape === "grouped" ? "group" : "all";
       const ask = await command(p, none);
-      await run(p, "course", ask);
+      await run(p, path, ask);
       expect(await revisionOf(v, p.partyId)).toBe(ask.expectedPartyRevision + 1);
+      const sent = async (id: string) =>
+        (await v.db.select().from(workingOrderLines).where(eq(workingOrderLines.id, id)))[0]!
+          .sentAt !== null;
+      expect([await sent(p.lineId), await sent(p.otherLineId)]).toEqual(
+        shape === "mixed" ? [false, true] : [true, true],
+      );
       const after = frozen();
-      await run(p, "course", ask);
+      await run(p, path, ask);
       expect(frozen()).toEqual(after);
     });
   }
-  it.each(["group", "course"])(
+  it.each(["group", "line"])(
     "rejects a tick outside the complete %s action and rolls back its answer",
     async (path) => {
-      const p = await fixture(false, true);
+      const p = await fixture(path === "line", path === "group");
       const other = await fixture();
       const ask = await command(p, {
         ...none,
@@ -300,7 +320,9 @@ describe("A669 release matrix", () => {
     const ask = await command(p, none);
     ask.expectedPartyRevision--;
     const before = frozen();
-    await expect(run(p, "course", ask)).rejects.toMatchObject({ code: "party.out_of_date" });
+    await expect(run(p, "cross-bill-group", ask)).rejects.toMatchObject({
+      code: "party.out_of_date",
+    });
     expect(frozen()).toEqual(before);
   });
   it("sold-out work on a later bill rolls back the whole group and allergy patch", async () => {
@@ -332,7 +354,7 @@ describe("A669 release matrix", () => {
         .where(eq(products.id, v.productId("Burger")));
     }
   });
-  it("course preflight accepts ticks across both bills and multiple qualifying groups before release", async () => {
+  it("group preflight accepts ticks across both bills and refuses ticks from another same-course group", async () => {
     const p = await fixture(false, true);
     await inTx(v, (tx) =>
       VENUE_SERVICE.writePartyAllergy(tx, p.partyId, { answer: "none", guests: [] }, OPERATOR),
@@ -356,15 +378,28 @@ describe("A669 release matrix", () => {
         guestIndex: 0,
       })),
     };
-    const ask = await command(p, allergy);
-    await run(p, "course", ask);
+    const outside = await command(p, allergy);
+    const before = frozen();
+    await expect(run(p, "group", outside)).rejects.toMatchObject({ code: "allergy.invalid" });
+    expect(frozen()).toEqual(before);
+    const ask = await command(p, {
+      ...allergy,
+      ticks: allergy.ticks.filter(
+        (tick) => tick.line.kind === "working" && tick.line.id !== secondId,
+      ),
+    });
+    await run(p, "group", ask);
+    expect(
+      (await v.db.select().from(workingOrderLines).where(eq(workingOrderLines.id, secondId)))[0]!
+        .sentAt,
+    ).toBeNull();
     const snapshot = await inTx(v, (tx) => VENUE_SERVICE.readPartyAllergy(tx, p.partyId));
     expect(snapshot.ticks.map((tick) => tick.workingLineId).sort()).toEqual(
-      [p.lineId, p.otherLineId, secondId].sort(),
+      [p.lineId, p.otherLineId].sort(),
     );
     expect(await revisionOf(v, p.partyId)).toBe(ask.expectedPartyRevision + 1);
     const after = frozen();
-    await run(p, "course", ask);
+    await run(p, "group", ask);
     expect(frozen()).toEqual(after);
   });
   it("a stale bill editor rolls back the line send without saving its allergy answer", async () => {
@@ -389,9 +424,20 @@ describe("A669 release matrix", () => {
     await run(p, "all");
     expect(frozen()).toEqual(after);
   });
-  it("counter course needs no party answer and line send preserves its table-only refusal", async () => {
+  it("counter line release needs no party answer and line send preserves its table-only refusal", async () => {
     const id = await counterOrder(v, "Burger");
-    await inTx(v, (tx) => fireCourse(tx, v.cfg, id, mains, { personId: OPERATOR }));
+    const rows = await v.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    await inTx(v, (tx) =>
+      fireOrderLines(
+        tx,
+        v.cfg,
+        id,
+        rows.map((row) => row.id),
+      ),
+    );
     await expect(
       inTx(v, (tx) => sendLines(tx, v.cfg, id, [], { operatorId: OPERATOR, expectedEdit: null })),
     ).rejects.toMatchObject({ code: "tab.not_open" });

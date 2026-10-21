@@ -182,7 +182,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
   it("has no violations with the round grid, the per-line course picker and the open tab drawer", async () => {
     const { el, host } = await mountWidget<TillTableOrderScreen>(
       "till-table-order-screen",
-      { products, menus, lines, courses, fireControl: "waiter", orderId: "wo-1" },
+      { products, menus, lines, courses, ...{ fireControl: "waiter" }, orderId: "wo-1" },
       theme,
     );
     // Ring a café into the current round so the per-line COURSE PICKER renders and is scanned.
@@ -422,7 +422,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       pendingDeliveries: 0,
       pendingToServe: 0,
       readyToServe: 0,
-      enRoute: 0,
       timingBand: "fresh",
       nextReservation: null,
       today: null,
@@ -606,7 +605,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
           lines: groupLines,
           groups,
           courses,
-          fireControl: "waiter",
+          ...{ fireControl: "waiter" },
           orderId: "wo-1",
         },
         theme,
@@ -669,7 +668,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
                 movable: false,
                 state: "queued",
                 firedAt: null,
-                awayAt: null,
               },
             }),
           ]),
@@ -826,7 +824,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       pendingDeliveries: 0,
       pendingToServe: 0,
       readyToServe: 0,
-      enRoute: 0,
       timingBand: "fresh",
       nextReservation: null,
       today: null,

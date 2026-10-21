@@ -62,7 +62,6 @@ const detail = {
       state: "preparing",
       note: "Collect at deli / Recoger en mostrador",
       firedAt: null,
-      awayAt: null,
       courseId: null,
     },
   ],

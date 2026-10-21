@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { kitchenStations, ticketItems } from "@waitron/db";
+import { kitchenStations, passItemMarks, ticketItems } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
@@ -16,7 +16,7 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { listExpoQueue, listStationQueue, markCollected } from "./working-order.js";
-import { listPassScreen, markPassItems, type PassScope } from "./pass-board.js";
+import { listPassScreen, type PassScope } from "./pass-board.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import { serveLine } from "./testing/serve-line.js";
 import "./errors.js";
@@ -71,27 +71,18 @@ describe("what takes a paid table bill's dishes off today's kitchen screens", ()
         .where(eq(ticketItems.workingOrderId, tabId)),
     );
     await inTx(v, (tx) =>
-      markPassItems(
-        tx,
-        v.cfg,
-        { deviceId, personId: OPERATOR },
-        EVERY,
-        [item!.id],
-        true,
-        new Date(),
-      ),
+      tx.insert(passItemMarks).values({
+        deviceId,
+        ticketItemId: item!.id,
+        doneAt: new Date().toISOString(),
+        doneByPersonId: OPERATOR,
+      }),
     );
-    expect(await onPassScreen(v, deviceId, tabId)).toBe(false);
+    expect(await onPassScreen(v, deviceId, tabId)).toBe(true);
     await inTx(v, (tx) =>
-      markPassItems(
-        tx,
-        v.cfg,
-        { deviceId, personId: OPERATOR },
-        EVERY,
-        [item!.id],
-        false,
-        new Date(),
-      ),
+      tx
+        .delete(passItemMarks)
+        .where(and(eq(passItemMarks.deviceId, deviceId), eq(passItemMarks.ticketItemId, item!.id))),
     );
     expect(await onPassScreen(v, deviceId, tabId)).toBe(true);
     await inTx(v, (tx) => serveLine(tx, v.cfg, tabId, 1));

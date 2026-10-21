@@ -37,9 +37,8 @@ import { eq } from "drizzle-orm";
 import { republishMenus } from "./testing/publish-menu.js";
 import { mountManagementApi } from "./management-api.js";
 import { readDrafts, submitDraft } from "./order-drafts.js";
-import { listOrderGroups } from "./order-groups.js";
+import { fireGroup, listOrderGroups } from "./order-groups.js";
 import {
-  fireCourse,
   bumpCourseReady,
   readTabLines,
   listExpoQueue,
@@ -51,6 +50,7 @@ import {
   setupPartyVenue,
   seatWithNoAllergies as seat,
   OPERATOR,
+  commandFor,
 } from "./testing/party-venue.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
@@ -195,7 +195,13 @@ it("keeps retained draft, group, course and ready station history through manage
   expect(await refused.json()).toEqual({
     error: { code: "station.work_in_progress", params: { stationId: station.id, count: 1 } },
   });
-  await inTx(v, (tx) => fireCourse(tx, v.cfg, submitted.tabId, course.id, { personId: OPERATOR }));
+  const fire = await commandFor(v, seated.partyId);
+  await inTx(v, (tx) =>
+    fireGroup(tx, v.cfg, seated.partyId, submitted.groups[0]!.id, {
+      ...fire,
+      submissionId: randomUUID(),
+    }),
+  );
   const [preparingTicket] = await v.db.select().from(ticketItems);
   await inTx(v, (tx) => advanceTicketItem(tx, v.cfg, preparingTicket!.id, "preparing"));
   const preparing = await remove("stations", station.id);

@@ -33,7 +33,7 @@ function collect(el: TillTableOrderScreen, type: string) {
   el.addEventListener(type, (event) => events.push(event as CustomEvent));
   return events;
 }
-async function sent(over: Partial<TillTableOrderScreen> = {}) {
+async function sent(over: Partial<TillTableOrderScreen> & { fireControl?: string } = {}) {
   const mounted = await mount({ currentOrders: current(), groups, now, ...over });
   mounted.el.style.width = "1280px";
   await resized(mounted.el);

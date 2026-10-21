@@ -3,7 +3,6 @@ import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError, compareStationNames } from "@waitron/shared";
 import {
-  fireControlMode,
   isUniqueViolation,
   kitchenCourses,
   products,
@@ -252,25 +251,6 @@ export async function getBumpMode(tx: Transaction, cfg: TillConfig): Promise<Bum
     sql`select bump_mode from locations where id = ${cfg.locationId}`,
   );
   return rows[0]!.bump_mode;
-}
-
-/** Which surface shows the per-course fire action. It governs only the UI. The dashboard and till keep hand-written copies of this union, because the
- *  browser bundle cannot import `@waitron/db` — add a mode to each by hand. */
-export type FireControl = (typeof fireControlMode.enumValues)[number];
-
-export async function getFireControl(tx: Transaction, cfg: TillConfig): Promise<FireControl> {
-  const { rows } = await tx.execute<{ fire_control: FireControl }>(
-    sql`select fire_control from locations where id = ${cfg.locationId}`,
-  );
-  return rows[0]!.fire_control;
-}
-
-export async function setFireControl(
-  tx: Transaction,
-  cfg: TillConfig,
-  mode: FireControl,
-): Promise<void> {
-  await tx.execute(sql`update locations set fire_control = ${mode} where id = ${cfg.locationId}`);
 }
 
 // ── Kitchen courses ──────────────────────────────────────────────────────────────────────────────

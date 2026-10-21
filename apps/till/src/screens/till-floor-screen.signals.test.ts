@@ -49,7 +49,7 @@ function today(): TableToday {
   };
 }
 
-function table(over: Partial<TableState> = {}): TableState {
+function table(over: Partial<TableState> & { enRoute?: number } = {}): TableState {
   return {
     id: "t2",
     label: "Mesa 2",
@@ -62,7 +62,6 @@ function table(over: Partial<TableState> = {}): TableState {
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "fresh",
     nextReservation: null,
     today: null,
@@ -185,7 +184,7 @@ describe("till-floor-screen: the signals at a table", () => {
     expect(words(card(el, "t2").querySelectorAll("[data-forgotten]"))).toEqual(["Forgotten"]);
   });
 
-  it("lets the stations' ready chips stand for the ready count, while en route still shows", async () => {
+  it("lets station-ready chips show the full count without a separate dispatch badge", async () => {
     const readyOnly = table({ readyToServe: 2, signals: [ready(["bar", "Bar", 2])] });
     const enRoute = table({
       id: "t3",
@@ -198,7 +197,8 @@ describe("till-floor-screen: the signals at a table", () => {
     const el = await mountFloor([readyOnly, enRoute]);
     expect(card(el, "t2").querySelector("[data-ready]")).toBeNull();
     expect(chips(card(el, "t2"))).toEqual(["Bar: 2 ready"]);
-    expect(card(el, "t3").querySelector("[data-en-route]")).not.toBeNull();
+    expect(card(el, "t3").querySelector("[data-en-route]")).toBeNull();
+    expect(card(el, "t3").querySelector("[data-ready]")).toBeNull();
     expect(chips(card(el, "t3"))).toEqual(["Bar: 1 ready"]);
   });
 

@@ -160,14 +160,12 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       state: "open-tab",
       hasOpenTab: true,
       pendingToServe: 1,
-      // The item is `ready` and the line unserved, so it counts here and not in `enRoute` (no
-      // `away_at`).
       readyToServe: 1,
-      enRoute: 0,
       pendingDeliveries: 0,
       // Three minutes queued against the station's five-minute warm threshold.
       timingBand: "fresh",
     });
+    expect(table).not.toHaveProperty("enRoute");
   });
 
   it("lists the station queue with the item's age classified", async () => {
@@ -236,8 +234,8 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       .update(ticketItems)
       .set({ state: "ready", awayAt: nowIso() })
       .where(eq(ticketItems.id, burger!.id));
-    const afterHandover = await withTransaction(db, (tx) => listExpoQueue(tx, cfg));
-    expect(afterHandover.map((order) => order.orderId)).not.toContain(order!.id);
+    const afterLegacyAway = await withTransaction(db, (tx) => listExpoQueue(tx, cfg));
+    expect(afterLegacyAway.map((order) => order.orderId)).toContain(order!.id);
   });
 
   it("removes an order with only a made-here item from expo", async () => {

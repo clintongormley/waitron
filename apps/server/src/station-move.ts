@@ -152,18 +152,14 @@ export async function rerouteHeldAtRelease(
   return rerouted;
 }
 
-/** A held or fired record may move while queued, still at the kitchen, with no part served.
+/** A held or fired record may move while queued, with no part served.
  * Made-here records are always fired and ready, and stay at their sending till's station. */
 export function stillMovable(
-  item: { state: TicketState; awayAt: string | null; madeHere: boolean },
+  item: { state: TicketState; madeHere: boolean },
   line: { servedAt: string | null; servedQuantity: number },
 ): boolean {
   return (
-    item.state === "queued" &&
-    item.awayAt === null &&
-    !item.madeHere &&
-    line.servedAt === null &&
-    line.servedQuantity === 0
+    item.state === "queued" && !item.madeHere && line.servedAt === null && line.servedQuantity === 0
   );
 }
 
@@ -265,7 +261,6 @@ export async function moveDishesToStation(
                 stationId: ticketItems.stationId,
                 state: ticketItems.state,
                 firedAt: ticketItems.firedAt,
-                awayAt: ticketItems.awayAt,
                 madeHere: ticketItems.madeHere,
                 quantity: firedQuantity,
               })
@@ -283,7 +278,7 @@ export async function moveDishesToStation(
           throw new AppError("ticket.not_sent", { workingOrderId: orderId, lineId });
         if (row.madeHere)
           throw new AppError("ticket.made_here", { ticketItemId: row.ticketItemId });
-        if (!stillMovable({ state: row.state!, awayAt: row.awayAt, madeHere: false }, row))
+        if (!stillMovable({ state: row.state!, madeHere: false }, row))
           throw new AppError("ticket.already_started", { ticketItemId: row.ticketItemId });
       }
       if (options.assertFrom) {

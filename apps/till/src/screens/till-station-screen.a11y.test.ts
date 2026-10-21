@@ -36,9 +36,6 @@ const DEFAULT_THRESHOLDS: StationThresholds = {
   forgottenAfterMinutes: 15,
 };
 
-// One order with a line in each kitchen state + a second order carrying a HELD later course, so axe sees
-// every cell state, a course header, a greyed (held) line and — under `fire_control = 'kitchen'` — the
-// fire button, all in a single mount.
 const groups: StationQueueGroup[] = [
   {
     kitchenNote: null,
@@ -203,10 +200,10 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on the kitchen-fire RAIL (held course greyed, the Empezar curso button shown)", async () => {
+  it("has no violations on the rail with held food and no station Fire button", async () => {
     const { el, host } = await mountWidget<TillStationScreen>(
       "till-station-screen",
-      { api: stubApi(), fireControl: "kitchen" },
+      { api: stubApi(), ...{ fireControl: "kitchen" } },
       theme,
     );
     await flush(el);
@@ -271,12 +268,13 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations while the table-changed notice shows", async () => {
+  it("has no violations or firing refusal after an obsolete group event", async () => {
+    const fireGroup = vi.fn().mockRejectedValue({ code: "party.out_of_date" });
     const { el, host } = await mountWidget<TillStationScreen>(
       "till-station-screen",
       {
-        api: stubApi({ fireGroup: vi.fn().mockRejectedValue({ code: "party.out_of_date" }) }),
-        fireControl: "kitchen",
+        api: stubApi({ fireGroup }),
+        ...{ fireControl: "kitchen" },
       },
       theme,
     );
@@ -289,7 +287,8 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
       }),
     );
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-table-changed]")).not.toBeNull();
+    expect(fireGroup).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-table-changed], [role=alert]")).toBeNull();
     await expectNoA11yViolations(host);
   });
 

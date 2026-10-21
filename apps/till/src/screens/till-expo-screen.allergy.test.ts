@@ -19,7 +19,7 @@ describe("A669 boards pass", () => {
         const [ticked, unticked] = order.courses[0]!.items;
         if (kind === "courses") {
           order.courses = [
-            { ...order.courses[0]!, away: true, items: [ticked!] },
+            { ...order.courses[0]!, ...{ away: true }, items: [ticked!] },
             { ...order.courses[0]!, courseId: "visible-course", away: false, items: [unticked!] },
           ];
         } else {
@@ -32,7 +32,7 @@ describe("A669 boards pass", () => {
             numberPartyId: "party-1",
             state: "fired",
             fired: true,
-            away,
+            ...{ away },
             items: [away ? ticked! : unticked!],
           }));
         }
@@ -64,10 +64,8 @@ describe("A669 boards pass", () => {
         await vi.waitFor(() =>
           expect(el.shadowRoot!.querySelector('[data-item="unticked"]')).not.toBeNull(),
         );
-        expect(el.shadowRoot!.querySelectorAll("[data-allergy-marker]")).toHaveLength(
-          mode === "pass" ? 1 : 0,
-        );
-        expect(el.shadowRoot!.querySelector('[data-item="ticked"]') !== null).toBe(mode === "pass");
+        expect(el.shadowRoot!.querySelectorAll("[data-allergy-marker]")).toHaveLength(1);
+        expect(el.shadowRoot!.querySelector('[data-item="ticked"]')).not.toBeNull();
       });
 
   for (const mode of ["all", "pass", "monitor"] as const)

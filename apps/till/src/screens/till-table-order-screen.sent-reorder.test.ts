@@ -85,7 +85,7 @@ it.each(["waiter", "kitchen", "expo"] as const)(
     for (const group of orders.groups) for (const row of group.rows) row.billStatus = "settled";
     const { el, button } = await open({
       draftStore: draft,
-      fireControl,
+      ...{ fireControl },
       editSentLines: false,
       currentOrders: orders,
     });

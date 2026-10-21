@@ -105,7 +105,6 @@ it("offers a movable Sent dish once and dispatches its bill, line and station", 
             movable: true,
             state: "queued",
             firedAt: sent.firedAt,
-            awayAt: null,
           },
         }),
       ],
@@ -133,7 +132,6 @@ it("offers the sent-read dish with empty editable bill lines", async () => {
       movable: true,
       state: "queued",
       firedAt: sent.firedAt,
-      awayAt: null,
     },
   });
   const { el } = await mount({
@@ -189,7 +187,6 @@ it("moves a presented bill's queued dish through Sent with no editable line copy
             movable: true,
             state: "queued",
             firedAt: sent.firedAt,
-            awayAt: null,
           },
         }),
       ],
@@ -229,7 +226,6 @@ it.each([
         movable: true,
         state: "queued",
         firedAt: sent.firedAt,
-        awayAt: null,
       },
     });
     const { el } = await mount({

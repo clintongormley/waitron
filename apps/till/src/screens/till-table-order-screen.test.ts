@@ -139,7 +139,7 @@ function servedMenu(
   return servedMenus([{ id, name, isDefault, versionId: `${id}-v1` }], offers)[0]!;
 }
 
-const mount = async (over: Partial<TillTableOrderScreen> = {}) => {
+const mount = async (over: Partial<TillTableOrderScreen> & { fireControl?: string } = {}) => {
   const draftStore = new DraftStore();
   const mounted = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
     products,
@@ -224,7 +224,6 @@ async function recallControl(el: TillTableOrderScreen, lineNo: number) {
               movable: line.movable,
               state: line.state,
               firedAt: line.firedAt,
-              awayAt: null,
             },
       note: line.note,
     });
@@ -1675,7 +1674,9 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
     }
 
-    async function mountSentGroups(over: Partial<TillTableOrderScreen> = {}) {
+    async function mountSentGroups(
+      over: Partial<TillTableOrderScreen> & { fireControl?: string } = {},
+    ) {
       const lines = over.lines ?? tabLines;
       const known = over.groups ?? groups;
       const mounted = await mount({
@@ -1709,7 +1710,6 @@ describe("till-table-order-screen", () => {
                             state: line.state,
                             movable: line.movable,
                             firedAt: line.firedAt,
-                            awayAt: null,
                           },
                   }),
                 ),
@@ -2282,7 +2282,6 @@ describe("till-table-order-screen", () => {
                     movable: false,
                     state: "queued",
                     firedAt,
-                    awayAt: null,
                   },
                   ...over,
                 }),
@@ -2318,7 +2317,7 @@ describe("till-table-order-screen", () => {
         expect(state(panel, "l-beer")).toBe(t("table.row_ready_ago").replace("{n}", "6"));
       });
 
-      it("retains the pass's en-route fact in the dish window while Sent keeps its ready age", async () => {
+      it("keeps the dish ready in its window and retains its ready age despite a legacy Away stamp", async () => {
         const { el, panel } = await mountProgress(
           {
             readyAt: "2026-09-27T10:14:00.000Z",
@@ -2327,7 +2326,7 @@ describe("till-table-order-screen", () => {
               movable: false,
               state: "ready",
               firedAt,
-              awayAt: "2026-09-27T10:16:00.000Z",
+              ...{ awayAt: "2026-09-27T10:16:00.000Z" },
             },
           },
           { now: minutesLater(20) },
@@ -2335,7 +2334,7 @@ describe("till-table-order-screen", () => {
         expect(state(panel, "l-beer")).toBe(t("table.row_ready_ago").replace("{n}", "6"));
         await openSentDish(el, "l-beer");
         expect(text(el.shadowRoot!.querySelector("[data-sent-line-status]")!)).toBe(
-          t("table.group_away"),
+          t("table.group_ready"),
         );
       });
 
@@ -2830,7 +2829,6 @@ describe("till-table-order-screen", () => {
                   movable: false,
                   state: "queued",
                   firedAt: null,
-                  awayAt: null,
                 },
               }),
             ]),
@@ -2884,7 +2882,6 @@ describe("till-table-order-screen", () => {
                   movable: false,
                   state: "queued",
                   firedAt: null,
-                  awayAt: null,
                 },
               }),
             ]),
@@ -4095,7 +4092,6 @@ describe("till-table-order-screen", () => {
       pendingDeliveries: 0,
       pendingToServe: 0,
       readyToServe: 0,
-      enRoute: 0,
       timingBand: "fresh",
       nextReservation: null,
       today: null,

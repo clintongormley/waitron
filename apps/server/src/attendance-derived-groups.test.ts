@@ -24,7 +24,7 @@ import { createCourse, createStation } from "./kitchen.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";
 import { mountTillApi } from "./till-api.js";
-import { fireCourse } from "./working-order.js";
+import { fireGroup } from "./order-groups.js";
 import {
   provisionBillVenue,
   seatedWith,
@@ -56,7 +56,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-type Action = "course-fire" | "empty-move";
+type Action = "empty-move";
 function api(attendance?: AttendanceRecorder) {
   const app = new Hono();
   mountTillApi(
@@ -101,12 +101,7 @@ async function prepare() {
     submissionId: newId(),
   };
 }
-function command(app: Hono, action: Action, p: Awaited<ReturnType<typeof prepare>>) {
-  if (action === "course-fire")
-    return send(app, v.cookie, "POST", `/api/orders/${p.tabId}/courses/${courseId}/fire`, {
-      operatorId: v.adminId,
-      at: "2026-01-06T22:00:00Z",
-    });
+function command(app: Hono, _action: Action, p: Awaited<ReturnType<typeof prepare>>) {
   return send(app, v.cookie, "POST", `/api/parties/${p.partyId}/groups/move`, {
     submissionId: p.submissionId,
     expectedPartyRevision: p.revision,
@@ -139,7 +134,20 @@ async function factsAt(locationId: string = v.cfg.locationId) {
   );
 }
 describe("group events derived from accepted commands", () => {
-  it.each(["course-fire", "empty-move"] as const)(
+  it("retired course Fire cannot change groups or create human activity", async () => {
+    const p = await prepare();
+    const before = await state();
+    const app = api(recordAttendanceFact);
+    const response = await app.request(`/api/orders/${p.tabId}/courses/${courseId}/fire`, {
+      method: "POST",
+      headers: { cookie: v.cookie, "content-type": "application/json" },
+      body: JSON.stringify({ operatorId: v.adminId, at: "2026-01-06T22:00:00Z" }),
+    });
+    expect(response.status).toBe(404);
+    expect(await state()).toEqual(before);
+  });
+
+  it.each(["empty-move"] as const)(
     "%s uses one trusted instant for the whole accepted command",
     async (action) => {
       const p = await prepare();
@@ -154,16 +162,14 @@ describe("group events derived from accepted commands", () => {
       ]);
     },
   );
-  it.each(["course-fire", "empty-move"] as const)(
+  it.each(["empty-move"] as const)(
     "%s snapshots every derived event at the admitted instant",
     async (action) => {
       const p = await prepare();
       expect(await command(api(recordAttendanceFact), action, p)).toMatchObject({ status: 200 });
       const saved = await state();
       const events = saved.events.filter((e) => e.actorId === v.operatorId);
-      expect(events.map((e) => e.kind).sort()).toEqual(
-        action === "course-fire" ? ["fired", "fired"] : ["lines_moved", "removed"],
-      );
+      expect(events.map((e) => e.kind).sort()).toEqual(["lines_moved", "removed"]);
       expect(saved.facts.map((f) => [f.key, f.personId, f.locationId, f.at]).sort()).toEqual(
         events
           .map((e) => [`group:${e.id}`, v.operatorId, v.cfg.locationId, "2026-01-05T16:40:00.000Z"])
@@ -182,7 +188,7 @@ describe("group events derived from accepted commands", () => {
       expect(await state()).toEqual(saved);
     },
   );
-  it.each(["course-fire", "empty-move"] as const)(
+  it.each(["empty-move"] as const)(
     "%s keeps all derived events in the original location after bills move",
     async (action) => {
       const p = await prepare();
@@ -213,7 +219,7 @@ describe("group events derived from accepted commands", () => {
       ).toEqual([]);
     },
   );
-  it.each(["course-fire", "empty-move"] as const)(
+  it.each(["empty-move"] as const)(
     "%s rolls back the command when a later derived snapshot is refused",
     async (action) => {
       const p = await prepare(),
@@ -231,18 +237,29 @@ describe("group events derived from accepted commands", () => {
       expect(await state()).toEqual(before);
     },
   );
-  it("a device course release creates no human fact", async () => {
+  it("historical device-attributed group releases create no human fact", async () => {
     const p = await prepare();
-    await withTransaction(suite.db, (tx) =>
-      fireCourse(
-        tx,
-        v.cfg,
-        p.tabId,
-        courseId,
-        { deviceId: v.deviceId },
-        { recorder: recordAttendanceFact, clock: v.clock },
-      ),
-    );
+    for (const groupId of [p.groupId, p.otherGroupId]) {
+      await withTransaction(suite.db, async (tx) => {
+        const [party] = await tx
+          .select({ revision: parties.revision })
+          .from(parties)
+          .where(eq(parties.id, p.partyId));
+        await fireGroup(
+          tx,
+          v.cfg,
+          p.partyId,
+          groupId,
+          {
+            submissionId: newId(),
+            expectedPartyRevision: party!.revision,
+            operatorId: v.deviceId,
+          },
+          { deviceId: v.deviceId },
+          { recorder: recordAttendanceFact, clock: v.clock },
+        );
+      });
+    }
     const saved = await state();
     expect(saved.groups.map((g) => [g.state, g.firedBy, g.firedByDeviceId])).toEqual([
       ["fired", null, v.deviceId],
@@ -250,14 +267,12 @@ describe("group events derived from accepted commands", () => {
     ]);
     expect(saved.facts).toEqual([]);
   });
-  it.each(["course-fire", "empty-move"] as const)(
+  it.each(["empty-move"] as const)(
     "%s without capture changes groups without workforce rows",
     async (action) => {
       const p = await prepare();
       expect(await command(api(), action, p)).toMatchObject({ status: 200 });
-      expect((await state()).groups.filter((g) => g.state !== "held")).toHaveLength(
-        action === "course-fire" ? 2 : 1,
-      );
+      expect((await state()).groups.filter((g) => g.state !== "held")).toHaveLength(1);
       expect((await state()).facts).toEqual([]);
     },
   );

@@ -36,7 +36,7 @@ function party(over: Partial<TableParty> = {}): TableParty {
   };
 }
 
-function table(over: Partial<TableState> = {}): TableState {
+function table(over: Partial<TableState> & { enRoute?: number } = {}): TableState {
   return {
     id: "t2",
     label: "Table 2",
@@ -49,7 +49,6 @@ function table(over: Partial<TableState> = {}): TableState {
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "fresh",
     nextReservation: null,
     today: null,
@@ -114,10 +113,10 @@ describe("tableStates", () => {
     expect(tableStates(table(over), now)).toEqual(kinds);
   });
 
-  it("ready counts a ready signal, a ready count or an en route count", () => {
+  it("ready counts a ready signal or count, ignoring retired dispatch", () => {
     expect(tableStates(table({ signals: [ready] }), now)).toEqual(["ready"]);
     expect(tableStates(table({ readyToServe: 2 }), now)).toEqual(["ready"]);
-    expect(tableStates(table({ enRoute: 1 }), now)).toEqual(["ready"]);
+    expect(tableStates(table({ enRoute: 1 }), now)).toEqual(["nothing-needed"]);
   });
 
   it("held is calm while it counts down and gives way to Time to fire when due", () => {

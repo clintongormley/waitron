@@ -34,7 +34,6 @@ function table(id: string, zoneId: string, today: Partial<TableToday> | null): T
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "fresh",
     nextReservation: null,
     today:

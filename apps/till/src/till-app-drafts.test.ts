@@ -178,7 +178,6 @@ function table(id: string, label: string, tableParty: TableParty | null): TableS
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "fresh",
     nextReservation: null,
     today: null,
@@ -8227,7 +8226,6 @@ describe("recalled draft source splitting", () => {
                   movable: true,
                   state: "queued",
                   firedAt: "2026-10-17T08:00:00Z",
-                  awayAt: null,
                 },
                 extras: reference().source.extras.map((extra) => ({
                   lineId: extra.id,

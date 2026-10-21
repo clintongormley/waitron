@@ -50,7 +50,6 @@ const detail: DepartmentTransferDetail = {
       state: "preparing",
       note: "No salt / Sin sal",
       firedAt: null,
-      awayAt: null,
       courseId: null,
     },
   ],

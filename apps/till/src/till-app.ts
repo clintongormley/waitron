@@ -281,7 +281,7 @@ import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js"
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
 import { mergeMembersOf, nextFloorMoment, shownUnder, tableSentence } from "./state/floor-today.js";
-import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
+import type { BumpMode } from "./widgets/station-queue.js";
 import type {
   AdjustmentAsk,
   AdjustmentCommand,
@@ -2831,8 +2831,6 @@ export class TillApp extends LitElement {
   @state() private stationQueue: StationQueueGroup[] = [];
   /** Defaults to per-line, which is always correct, until boot answers. */
   @state() private bumpMode: BumpMode = "line";
-  /** Defaults to `waiter`, so an unresolved boot never shows the display's fire action. */
-  @state() private fireControl: FireControlMode = "waiter";
   @state() private courses: TillCourse[] = [];
   /** The ticket's lines come from this filed result, never the client basket. */
   @state() private result?: TillSaleResult;
@@ -9297,7 +9295,6 @@ export class TillApp extends LitElement {
     this.onboardingIntent = till.onboardingIntent;
     this.issuer = { venueName: till.venueName, nif: till.nif };
     this.bumpMode = till.bumpMode;
-    this.fireControl = till.fireControl;
     this.courses = till.courses;
     this.cardProvider = till.cardProvider;
     this.tipsEnabled = till.tipsEnabled;
@@ -17381,7 +17378,6 @@ export class TillApp extends LitElement {
       .selectedFilters=${this.selectedFilters}
       .courses=${this.courses}
       .stations=${this.stations}
-      .fireControl=${this.fireControl}
       .tables=${this.tables}
       .zones=${this.zones}
       .orderId=${this.activeTabId}
@@ -17442,7 +17438,6 @@ export class TillApp extends LitElement {
           .operatorSession=${this.#operatorSession}
           embedded
           .api=${this.api}
-          .fireControl=${this.fireControl}
           .runsPass=${this.capabilities.includes("run-the-pass")}
           .deviceMode=${this.deviceMode}
           .deviceName=${this.deviceName}
@@ -17453,7 +17448,6 @@ export class TillApp extends LitElement {
           embedded
           .api=${this.api}
           .bumpMode=${this.bumpMode}
-          .fireControl=${this.fireControl}
           .deviceMode=${this.deviceMode}
           .initialDeviceStation=${this.initialDeviceStation}
           .deviceId=${this.deviceId}
@@ -17518,7 +17512,6 @@ export class TillApp extends LitElement {
           .selectedFilters=${this.selectedFilters}
           .courses=${this.courses}
           .stations=${this.stations}
-          .fireControl=${this.fireControl}
           .tables=${this.tables}
           .zones=${this.zones}
           .orderId=${this.activeTabId}
@@ -17659,7 +17652,6 @@ export class TillApp extends LitElement {
           .canMoveStation=${this.capabilities.includes("take-orders")}
           .canEditKitchenNote=${this.capabilities.includes("take-orders")}
           .bumpMode=${this.bumpMode}
-          .fireControl=${this.fireControl}
           .deviceMode=${this.deviceMode}
           .initialDeviceStation=${this.initialDeviceStation}
           .deviceId=${this.deviceId}
@@ -17669,7 +17661,6 @@ export class TillApp extends LitElement {
           .operatorSession=${this.#operatorSession}
           slot="drill"
           .api=${this.api}
-          .fireControl=${this.fireControl}
           .runsPass=${this.capabilities.includes("run-the-pass")}
         ></till-expo-screen>`;
       case undefined:

@@ -29,19 +29,15 @@ export function partyPaid(table: TableState): boolean {
   );
 }
 
-/** Each dish counted once: the server's to-serve count includes the ready dishes, and its ready
- * count the dishes en route (`apps/server/src/working-order.ts`). A station's ready chip stands in
- * for the ready count. */
+/** A station's ready chip replaces the summary's ready count, so each dish appears once. */
 function kitchenProgress(table: TableState): string {
-  const ready =
-    signalOf(table.signals, "ready") === undefined ? table.readyToServe - table.enRoute : 0;
+  const ready = signalOf(table.signals, "ready") === undefined ? table.readyToServe : 0;
   return [
     [
       table.pendingToServe - table.readyToServe,
       (n: number) => `${n} ${t("floor.to_serve")}`,
     ] as const,
     [ready, readyText] as const,
-    [table.enRoute, (n: number) => `${n} ${t("floor.en_route")}`] as const,
   ]
     .filter(([count]) => count > 0)
     .map(([count, words]) => words(count))

@@ -1767,29 +1767,6 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     });
   });
 
-  it("getFireControl GETs /management-api/fire-control and returns { mode }", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ mode: "kitchen" }));
-    const api = new DashboardApi("", fetchImpl);
-    expect(await api.getFireControl()).toEqual({ mode: "kitchen" });
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/fire-control", {
-      method: "GET",
-      credentials: "include",
-      signal: expect.any(AbortSignal),
-    });
-  });
-
-  it("setFireControl PUTs { mode } to /management-api/fire-control (empty 204 body)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.setFireControl("kitchen")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/fire-control", {
-      method: "PUT",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ mode: "kitchen" }),
-    });
-  });
-
   it("createCourse rejects with { code } on a non-2xx (name already taken)", async () => {
     const fetchImpl = vi
       .fn()

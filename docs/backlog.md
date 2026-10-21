@@ -1889,14 +1889,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - KDS-4 follow-up: device-mode reprint behind `requireDevice`.
 
-- **A908. Dishes left on the pass after Record unpaid departure (left open by A758's Q43 revision,
-  2026-10-19).** Record unpaid departure closes the party without asking about dishes not served
-  (`closeParty`, `apps/server/src/unpaid-departure.ts`); it refuses only dishes not fired, so fired
-  dishes not yet served stay on every pass screen until each screen marks them Done (the mark is per
-  device, `apps/server/src/pass-board.ts`). Finish table no longer leaves any (A758 §3.8), and the
-  paid receipt's "Cancel items…" that used to be the way back was dropped. Decide how the departure
-  clears them — most likely the same per-dish question as Finish table, with nothing to refund —
-  and bring it to the owner with a worked example.
+- **A908. Kitchen cancellation on Record unpaid departure (left open by A758's Q43 revision,
+  2026-10-19).** Decide whether departure should ask about each unserved dish and send kitchen
+  cancellation slips before closing the party, using Finish table's choices without a refund.
+  A773-2 retires the pass's per-device Done action; assess this decision against its service
+  lifetime rather than adding another manual clearing action. Bring the owner a worked example.
 
 - **A930. The manager's overdue report counts a held dish as late (left open by A757 slice 3).**
   `computeOverdueOrders` (`packages/reporting/src/overdue-orders.ts`) never checks `fired_at`, so a
@@ -1940,12 +1937,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
     line, because nothing records a unit's kind (a unit field would need a migration).
   - The kitchen-ticket grouping setting sits on Venue settings' **Kitchen** tab, and so does "Print
     held groups in advance", which is not about sent work at all.
-  - `fireHeldGroupsOfCourse` (`apps/server/src/order-groups.ts`), through which a course Fire still
-    fires a party's held groups, is to be removed in a follow-up.
   - Setting up a venue from an imported configuration deletes every kitchen station, and the
     `kitchen_print_jobs` station key has no delete rule; whether that venue can already hold link
     rows at that point was not tested (read, not run).
-  - The pass's Ready and Away record no `order_group_events` row, so who pressed them is recorded
+  - The pass's Ready records no `order_group_events` row, so who pressed them is recorded
     nowhere readable; a new kind changes that append-only table's check, which is a core migration.
 
 - **A809. The table screen reads its printing problems in the groups read (owner, 2026-10-17).**
@@ -2037,10 +2032,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   to the kitchen ("cook this now, don't hold it") under every release setting; the owner would like
   a way to add urgency to it too, so the kitchen sees it flagged. Nothing like it exists today.
   [Detail](backlog/kitchen.md#mark-a-new-dish-as-urgent)
-
-- **Keep pass screen Done marks through a `ticket_items` rebuild — OPEN (3d).** — left open by the
-  product folders work. `pass_item_marks` cascades from `ticket_items`, so a rebuild empties those
-  marks.
 
 - **Three follow-ups 3c-1 left:** — left open by the product folders work. the kitchen screen's
   column view has no per-order card, so it does not show the rest of the order…
@@ -2359,7 +2350,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `apps/till/src/screens/till-table-order-screen.ts` (`#sentDetails` and `#sentLineDialog`).
 
 - **A785. A kitchen screen in device mode keeps its start-up settings until reload (left open by
-  A768, 2026-10-17).** Its bump mode and fire control never refresh: the menu-state poll that
+  A768, 2026-10-17).** Its bump mode never refreshes: the menu-state poll that
   carries the setup revision starts only when someone signs in, and a kitchen screen in device mode
   has nobody signed in. Its station queue read could name the revision, as `/api/menu-state` does.
 
@@ -2419,10 +2410,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Decision](backlog/till.md#decisions-and-deliberate-limits)
 
 - **A773-2. Firing and the pass.** The [reviewed implementation plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
-  is ready; the build remains. Add Requested and pass release, remove Away/Done, and finish the
-  station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before
-  each slice. The plan carries A797's completed Q42 amendments; A797's design was revised on
-  2026-10-21 (§7 there splits the work), and its redrawn pictures and owner FYI remain a UI prerequisite. A803's pass/station tail follows this build.
+  leaves PRs B–D: Requested, scoped pass release, station
+  settings and coverage warnings, ticket presentation and physical schema/configuration retirement.
+  Recheck A756 and other lanes' reservations before each slice. A797's revised design, pictures
+  and FYI landed on 2026-10-21; A803's pass/station tail follows this build.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held

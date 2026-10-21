@@ -1213,6 +1213,39 @@ const coursedOrder: StationQueueGroup = {
 };
 
 describe("till-station-queue — KDS-2 courses & fire", () => {
+  it.each([
+    ["waiter", "rail"],
+    ["kitchen", "rail"],
+    ["expo", "rail"],
+    ["waiter", "kanban"],
+    ["kitchen", "kanban"],
+    ["expo", "kanban"],
+  ] as const)(
+    "A773 waiter authority: legacy %s mode cannot start held food in %s",
+    async (fireControl, view) => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [coursedOrder, partyOrder],
+        view,
+        ...{ fireControl },
+        stationId: "st-1",
+      });
+      const fire = vi.fn();
+      const advance = vi.fn();
+      el.addEventListener("fire-course", fire);
+      el.addEventListener("fire-kitchen-group", fire);
+      el.addEventListener("advance-ticket-item", advance);
+      expect(el.shadowRoot!.querySelectorAll("[data-fire], [data-fire-group]")).toHaveLength(0);
+      for (const id of ["it-main", "it-steak", "it-fish", "it-flan"]) {
+        const held = el.shadowRoot!.querySelector<HTMLElement>(`[data-item="${id}"]`)!;
+        expect(held.tagName).toBe("SPAN");
+        expect(held.classList.contains("held")).toBe(true);
+        held.click();
+      }
+      expect(fire).not.toHaveBeenCalled();
+      expect(advance).not.toHaveBeenCalled();
+    },
+  );
+
   it("rail: groups a card's lines by course, header per named course, ordered null-course-first then by displayOrder", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
@@ -1263,32 +1296,34 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
     expect(spy).toHaveBeenCalledWith({ itemId: "it-start", stationId: "st-1", to: "ready" });
   });
 
-  it("kitchen fire: a held course shows the Empezar curso button; clicking it emits fire-course, composed + bubbling", async () => {
+  it("A773 waiter authority: a held course cannot request cooking from the station", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
       view: "rail",
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
     });
-    const fire = el.shadowRoot!.querySelector<HTMLElement>('[data-fire="co-main"]')!;
-    expect(fire).not.toBeNull();
-    expect(fire.textContent).toContain(t("station.fire_course"));
-    let captured: CustomEvent | undefined;
-    el.addEventListener("fire-course", (e) => (captured = e as CustomEvent));
-    fire.click();
-    expect(captured!.detail).toEqual({ orderId: "wo-c", courseId: "co-main" });
-    expect(captured!.composed).toBe(true);
-    expect(captured!.bubbles).toBe(true);
+    const fire = vi.fn();
+    const advance = vi.fn();
+    el.addEventListener("fire-course", fire);
+    el.addEventListener("advance-ticket-item", advance);
+    expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
+    const held = el.shadowRoot!.querySelector<HTMLElement>('[data-item="it-main"]')!;
+    expect(held.tagName).toBe("SPAN");
+    expect(held.classList.contains("held")).toBe(true);
+    held.click();
+    expect(fire).not.toHaveBeenCalled();
+    expect(advance).not.toHaveBeenCalled();
   });
 
-  it("kitchen fire: a FIRED course and the null course show no fire button (nothing to release)", async () => {
+  it("A773 waiter authority: released and unassigned courses have no Fire button", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
       view: "rail",
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
     });
-    expect(el.shadowRoot!.querySelectorAll("[data-fire]")).toHaveLength(1);
+    expect(el.shadowRoot!.querySelectorAll("[data-fire]")).toHaveLength(0);
     expect(el.shadowRoot!.querySelector('[data-fire="co-start"]')).toBeNull();
     expect(el.shadowRoot!.querySelector('[data-fire="none"]')).toBeNull();
   });
@@ -1298,7 +1333,7 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
       groups: [coursedOrder],
       view: "rail",
       stationId: "st-1",
-      fireControl: "waiter", // the default; the held course is still greyed, just not fireable here
+      ...{ fireControl: "waiter" },
     });
     expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
     expect(el.shadowRoot!.querySelector('[data-item="it-main"]')!.classList.contains("held")).toBe(
@@ -1316,25 +1351,24 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
     expect(el.shadowRoot!.querySelector('button[data-item="it-main"]')).toBeNull();
   });
 
-  it("kanban: no fire button (the fire is a per-order rail-card action, like the collect handover)", async () => {
+  it("kanban: held food has no Fire button", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
       stationId: "st-1",
-      fireControl: "kitchen", // even in kitchen mode, kanban has no per-order card to host the action
+      ...{ fireControl: "kitchen" },
     });
     expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
   });
 
-  it("advanceOnly: suppresses the kitchen-fire button on a held course (device mode has no fire route, §3d)", async () => {
+  it("advanceOnly: held food has no Fire button and stays non-advanceable", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups: [coursedOrder], // Principales (co-main) is held → normally fireable under kitchen
+      groups: [coursedOrder],
       view: "rail",
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
       advanceOnly: true,
     });
     expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
-    // The held line is still greyed + non-advanceable — advanceOnly hides the FIRE button, not the greying.
     expect(el.shadowRoot!.querySelector('[data-item="it-main"]')!.classList.contains("held")).toBe(
       true,
     );
@@ -1883,15 +1917,13 @@ describe("till-station-queue — a seated party's groups", () => {
       ],
       view: "rail",
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
     });
     expect(sections(el).map((s) => s.dataset.groupSection)).toEqual(["none", "g-4", "g-2", "g-3"]);
     expect(sections(el)[1]!.querySelector(".course-head")!.textContent).toContain(
       `${t("table.group_n").replace("{n}", "4")} · Terrace 7`,
     );
-    expect(
-      el.shadowRoot!.querySelector('[data-fire-group="g-4"]')?.getAttribute("aria-label"),
-    ).toContain(`${t("table.group_n").replace("{n}", "4")} · Terrace 7`);
+    expect(el.shadowRoot!.querySelector('[data-fire-group="g-4"]')).toBeNull();
   });
 
   it("rail: sections a party's card by group position, the lines with no group first, and no course headers", async () => {
@@ -1928,26 +1960,26 @@ describe("till-station-queue — a seated party's groups", () => {
     expect(el.shadowRoot!.querySelector('button[data-item="it-steak"]')).toBeNull();
   });
 
-  it("kitchen fire: Fire on each held group emits fire-kitchen-group with the card's party and revision", async () => {
+  it("A773 waiter authority: held groups cannot request cooking from the station", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [partyOrder],
       view: "rail",
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
     });
-    const fires = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-fire-group]")];
-    expect(fires.map((b) => b.dataset.fireGroup)).toEqual(["g-3", "g-4"]);
-    expect(fires[0]!.textContent).toContain(t("station.fire_group"));
-    expect(fires[0]!.getAttribute("aria-label")).toBe(
-      `${t("station.fire_group")} ${t("table.group_n").replace("{n}", "3")}`,
-    );
-    expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
-    let captured: CustomEvent | undefined;
-    el.addEventListener("fire-kitchen-group", (e) => (captured = e as CustomEvent));
-    fires[0]!.click();
-    expect(captured!.detail).toEqual({ partyId: "v-4", groupId: "g-3", expectedPartyRevision: 12 });
-    expect(captured!.composed).toBe(true);
-    expect(captured!.bubbles).toBe(true);
+    const fire = vi.fn();
+    const advance = vi.fn();
+    el.addEventListener("fire-kitchen-group", fire);
+    el.addEventListener("advance-ticket-item", advance);
+    expect(el.shadowRoot!.querySelectorAll("[data-fire-group], [data-fire]")).toHaveLength(0);
+    for (const id of ["it-steak", "it-fish", "it-flan"]) {
+      const held = el.shadowRoot!.querySelector<HTMLElement>(`[data-item="${id}"]`)!;
+      expect(held.tagName).toBe("SPAN");
+      expect(held.classList.contains("held")).toBe(true);
+      held.click();
+    }
+    expect(fire).not.toHaveBeenCalled();
+    expect(advance).not.toHaveBeenCalled();
   });
 
   it.each(["waiter", "expo"] as const)(
@@ -1957,7 +1989,7 @@ describe("till-station-queue — a seated party's groups", () => {
         groups: [partyOrder],
         view: "rail",
         stationId: "st-1",
-        fireControl,
+        ...{ fireControl },
       });
       expect(el.shadowRoot!.querySelector("[data-fire-group]")).toBeNull();
     },
@@ -1968,7 +2000,7 @@ describe("till-station-queue — a seated party's groups", () => {
       groups: [partyOrder],
       view: "rail",
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
       advanceOnly: true,
     });
     expect(el.shadowRoot!.querySelector("[data-fire-group]")).toBeNull();
@@ -1978,7 +2010,7 @@ describe("till-station-queue — a seated party's groups", () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [partyOrder],
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
     });
     expect(el.shadowRoot!.querySelector("[data-fire-group]")).toBeNull();
   });
@@ -1988,14 +2020,14 @@ describe("till-station-queue — a seated party's groups", () => {
       groups: [coursedOrder, partyOrder],
       view: "rail",
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
     });
     const counter = el.shadowRoot!.querySelector('[data-order="7"]')!;
     expect(
       [...counter.querySelectorAll<HTMLElement>("[data-course]")].map((s) => s.dataset.course),
     ).toEqual(["none", "co-start", "co-main"]);
     expect(counter.querySelector("[data-group-section]")).toBeNull();
-    expect(counter.querySelector('[data-fire="co-main"]')).not.toBeNull();
+    expect(counter.querySelector('[data-fire="co-main"]')).toBeNull();
   });
 });
 

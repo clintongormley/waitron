@@ -1,4 +1,3 @@
-import { KitchenAllergySend } from "../state/kitchen-allergy-send.js";
 import {
   LitElement,
   type PropertyValues,
@@ -25,12 +24,7 @@ import "../widgets/station-queue.js";
 import "../widgets/station-today.js";
 import "../widgets/station-choice-dialog.js";
 import { TABLE_REQUEST_LIMIT_MS, limited, resendUnanswered } from "../state/draft-sync.js";
-import type {
-  BumpMode,
-  FireControlMode,
-  FireKitchenGroupDetail,
-  MergedQueueGroup,
-} from "../widgets/station-queue.js";
+import type { BumpMode, MergedQueueGroup } from "../widgets/station-queue.js";
 import type {
   BillEditExpected,
   DeviceStationScreen,
@@ -157,13 +151,11 @@ export class TillStationScreen extends LitElement {
         margin: 0;
       }
 
-      .table-changed,
       .printer-down {
         margin: 0;
       }
 
       .stale[data-stale],
-      .table-changed,
       .printer-down {
         flex-basis: 100%;
         padding: var(--wt-space-2) var(--wt-space-3);
@@ -212,12 +204,7 @@ export class TillStationScreen extends LitElement {
 
   @property({ attribute: false }) api!: TillApi;
   @property({ attribute: false }) operatorSession = 0;
-  readonly #allergy = new KitchenAllergySend(this, () =>
-    JSON.stringify([this.operatorSession, this.deviceMode, this.activeStationId, this.fireControl]),
-  );
-  @state() private fireErrorCode?: string;
   @property() bumpMode: BumpMode = "line";
-  @property() fireControl: FireControlMode = "waiter";
   /**
    * An always-on ENROLLED display: no login, its kitchen screen's stations, no picker and no
    * Back-to-counter. A 401 on its probe emits `device-unauthorized` so the app re-boots through the
@@ -253,15 +240,12 @@ export class TillStationScreen extends LitElement {
   @state() private view: "kanban" | "rail" = "kanban";
   @state() private merged = false;
   /**
-   * UNLIKE the advance/collect/fire levers, a failed reprint is not swallowed: it changes no order state,
+   * UNLIKE the advance/collect levers, a failed reprint is not swallowed: it changes no order state,
    * so a reload reconciles nothing and a silent failure would leave the operator no feedback.
    */
   @state() private reprintErrorCode?: string;
   @state() private acknowledgeFailed = false;
   @state() private stale = false;
-  /** The card whose group command was refused because its party changed since the queue was read:
-   * shown by the next successful read, and gone at the one after. */
-  @state() private tableChanged: string | null = null;
   @state() private moving: DishMove | null = null;
   /** Why the last Move could not read the stations; its own field, so a queue read never clears it. */
   @state() private moveErrorCode?: string;
@@ -269,7 +253,6 @@ export class TillStationScreen extends LitElement {
   #moveGeneration = 0;
   #collectGeneration = 0;
   readonly #collecting = new Set<string>();
-  #tableChangedNext: string | null = null;
   #lastGoodAt = new Date();
   #initialConsumed = false;
   #refreshTimer?: ReturnType<typeof setInterval>;
@@ -398,8 +381,6 @@ export class TillStationScreen extends LitElement {
   #readSucceeded(): void {
     this.#lastGoodAt = new Date();
     this.stale = false;
-    this.tableChanged = this.#tableChangedNext;
-    this.#tableChangedNext = null;
   }
 
   /** A failure of a read older than the answer on screen says nothing about that answer. */
@@ -681,78 +662,6 @@ export class TillStationScreen extends LitElement {
     }
   }
 
-  async #onFireCourse(event: Event): Promise<void> {
-    event.stopPropagation();
-    // Same device-mode guard as #onMarkCollected.
-    if (this.deviceMode) return;
-    const { orderId, courseId } = (event as CustomEvent<{ orderId: string; courseId: string }>)
-      .detail;
-    this.fireErrorCode = undefined;
-    try {
-      const api = this.api;
-      if (
-        await this.#allergy.run(
-          { kind: "course", orderId, courseId },
-          null,
-          undefined,
-          (command) =>
-            command
-              ? api.fireCourse(orderId, courseId, command)
-              : api.fireCourse(orderId, courseId),
-        )
-      )
-        await this.#reload();
-    } catch (error) {
-      this.fireErrorCode = (error as { code?: string }).code ?? "table.error";
-      await this.#reload();
-    }
-  }
-
-  /** Refused `party.out_of_date`, the queue is read again and the cook decides; nothing is resent. */
-  async #onFireKitchenGroup(event: Event): Promise<void> {
-    event.stopPropagation();
-    if (this.deviceMode) return;
-    const { partyId, groupId, expectedPartyRevision } = (
-      event as CustomEvent<FireKitchenGroupDetail>
-    ).detail;
-    const card = this.#cardOfGroup(partyId, groupId);
-    this.tableChanged = null;
-    this.#tableChangedNext = null;
-    this.fireErrorCode = undefined;
-    try {
-      const api = this.api;
-      const sent = await this.#allergy.run(
-        { kind: "group", groupId },
-        partyId,
-        expectedPartyRevision,
-        (command) => api.fireGroup(partyId, groupId, command!),
-      );
-      if (!sent) return;
-    } catch (error) {
-      if ((error as { code?: string }).code === "party.out_of_date") this.#tableChangedNext = card;
-      else this.fireErrorCode = (error as { code?: string }).code ?? "table.error";
-    }
-    await this.#reload();
-  }
-
-  #tableChangedMessage(card: string): string {
-    const changed =
-      card === ""
-        ? t("station.table_changed_unnamed")
-        : t("station.table_changed_named").replace("{table}", () => card);
-    return `${changed} ${t("station.table_changed")}`;
-  }
-
-  /** What the card holding the group is called on screen: its label, else its order number. */
-  #cardOfGroup(partyId: string, groupId: string): string {
-    const card =
-      this.groups.find(
-        (group) =>
-          group.party?.id === partyId && group.items.some((item) => item.group?.id === groupId),
-      ) ?? this.groups.find((group) => group.party?.id === partyId);
-    return card === undefined ? "" : (card.label ?? `#${card.orderNumber}`);
-  }
-
   async #onReprintOrder(event: Event): Promise<void> {
     event.stopPropagation();
     if (this.deviceMode) return;
@@ -923,7 +832,7 @@ export class TillStationScreen extends LitElement {
   override render() {
     return html`${this.deviceMode ? this.#renderDevice() : this.#renderOperator()}${
       this.moving === null ? nothing : this.#renderMoveDialog(this.moving)
-    }${this.fireErrorCode ? html`<p class="error" role="alert">${codeMessage(this.fireErrorCode)}</p>` : nothing}${this.#allergy.render()}`;
+    }`;
   }
 
   #renderOperator(): TemplateResult {
@@ -999,7 +908,6 @@ export class TillStationScreen extends LitElement {
         .stationNames=${new Map(drawn.map((station) => [station.id, station.name]))}
         .view=${this.view}
         .bumpMode=${this.bumpMode}
-        .fireControl=${this.fireControl}
         .advanceOnly=${true}
         .canMove=${this.#canMove()}
       ></till-station-queue>`;
@@ -1066,8 +974,6 @@ export class TillStationScreen extends LitElement {
         @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
         @advance-ticket=${(event: Event) => void this.#onAdvanceTicket(event)}
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
-        @fire-course=${(event: Event) => void this.#onFireCourse(event)}
-        @fire-kitchen-group=${(event: Event) => void this.#onFireKitchenGroup(event)}
         @reprint-order=${(event: Event) => void this.#onReprintOrder(event)}
         @acknowledge-notice=${(event: Event) => void this.#onAcknowledgeNotice(event)}
         @move-station=${(event: Event) => void this.#onMoveStation(event)}
@@ -1123,13 +1029,6 @@ export class TillStationScreen extends LitElement {
                 : nothing
             }
           </p>
-          ${
-            this.tableChanged === null
-              ? nothing
-              : html`<p class="table-changed" role="status" data-table-changed>
-                  ${this.#tableChangedMessage(this.tableChanged)}
-                </p>`
-          }
         </div>
         ${
           this.reprintErrorCode
@@ -1197,7 +1096,6 @@ export class TillStationScreen extends LitElement {
         .notices=${station.notices}
         .view=${this.view}
         .bumpMode=${this.bumpMode}
-        .fireControl=${this.fireControl}
         .stationId=${station.id}
         .advanceOnly=${advanceOnly}
         .showReprint=${!advanceOnly}

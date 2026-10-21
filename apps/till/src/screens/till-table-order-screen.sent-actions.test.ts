@@ -72,7 +72,7 @@ it.each(["waiter", "kitchen", "expo"] as const)(
     const el = await openLine("held", {
       currentOrders: orders,
       bills: [bill("settled")],
-      fireControl,
+      ...{ fireControl },
       editSentLines: false,
     });
     const events = capture(el, "fire-held-line");

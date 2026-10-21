@@ -20,7 +20,7 @@ import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveBill, type MoveBillOptions, type MoveTarget } from "./testing/move-bill-fixture.js";
 import { createCourse } from "./kitchen.js";
-import { bumpGroupReady, markGroupAway } from "./order-groups.js";
+import { bumpGroupReady } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { finishTable } from "./testing/party-close-fixture.js";
 import { moveGuests } from "./testing/table-action-fixture.js";
@@ -797,8 +797,12 @@ describe("kitchen groups when a bill leaves its party", () => {
     });
     const readyArgs = await args();
     await inTx(v, (tx) => bumpGroupReady(tx, v.cfg, ana.partyId, vino!.groupId!, readyArgs));
-    const awayArgs = await args();
-    await inTx(v, (tx) => markGroupAway(tx, v.cfg, ana.partyId, vino!.groupId!, awayArgs));
+    await inTx(v, (tx) =>
+      tx
+        .update(ticketItems)
+        .set({ awayAt: "2026-10-20T12:01:00.000Z" })
+        .where(eq(ticketItems.workingOrderId, second)),
+    );
     const servedArgs = await args();
     await inTx(v, (tx) =>
       markServed(tx, v.cfg, ana.partyId, [{ lineId: vino!.id, quantity: "1" }], servedArgs),

@@ -965,8 +965,6 @@ export interface PairingModeState {
   deviceAddress: string;
 }
 
-export type FireControl = "waiter" | "kitchen" | "expo";
-
 // ── Shift-planning types ──────────────────────────────────────────────────────────────────────────
 
 export interface RosterVersion {
@@ -3248,14 +3246,6 @@ export class DashboardApi {
 
   moveCourse(id: string, to: number): Promise<Course[]> {
     return this.#request<Course[]>(`/management-api/courses/${id}/position`, "PUT", { to });
-  }
-
-  getFireControl(): Promise<{ mode: FireControl }> {
-    return this.#request<{ mode: FireControl }>("/management-api/fire-control", "GET");
-  }
-
-  setFireControl(mode: FireControl): Promise<void> {
-    return this.#request<void>("/management-api/fire-control", "PUT", { mode });
   }
 
   // ── Devices ────────────────────────────────────────────────────────────────────────────────────

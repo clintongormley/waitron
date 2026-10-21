@@ -57,7 +57,6 @@ import type { OriginConfig, TillConfig } from "./till-config.js";
 import {
   checkAndBumpParty,
   partyFamily,
-  partyRevisionOfOrder,
   requireBillOfParty,
   runServiceCommand,
 } from "./parties.js";
@@ -71,7 +70,6 @@ import {
   isReleased,
   priceTabRound,
   routingOnce,
-  type RoutingOnce,
   refusePaymentInFlight,
   splitLinesWithinOrder,
   splitUnitsWithinOrder,
@@ -144,12 +142,9 @@ export interface OrderGroup {
   firedAt: string | null;
   remindAt: string | null;
   /**
-   * Present only when a person has recorded every fired kitchen item of the group ready (a station's
-   * advance or the pass's Ready); a group with no kitchen item is never ready.
+   * Present while released dishes remain and every component is ready to serve.
    */
   ready?: true;
-  /** Present only when every fired kitchen item of the group has been sent away from the pass. */
-  away?: true;
   /** Dishes with active service, excluding recalled sources. */
   lineIds: string[];
   courseIds: string[];
@@ -627,47 +622,12 @@ export async function bumpGroupReady(
   );
 }
 
-/** The pass's Away for a group: stamps `away_at` on its ready items not yet away, on every bill. */
-export async function markGroupAway(
-  tx: Transaction,
-  cfg: TillConfig,
-  partyId: string,
-  groupId: string,
-  args: PartyCommandArgs,
-  firer: Firer = { personId: args.operatorId },
-  attendance?: OrderAttendance,
-): Promise<{ revision: number }> {
-  void cfg;
-  return passStep(
-    tx,
-    partyId,
-    groupId,
-    args,
-    "group.away",
-    async () => {
-      return tx
-        .update(ticketItems)
-        .set({ awayAt: nowIso() })
-        .where(
-          and(
-            inArray(ticketItems.workingOrderLineId, groupLinesOf(tx, groupId)),
-            eq(ticketItems.state, "ready"),
-            isNull(ticketItems.awayAt),
-          ),
-        )
-        .returning({ orderId: ticketItems.workingOrderId });
-    },
-    attendance,
-    "personId" in firer ? firer.personId : undefined,
-  );
-}
-
 async function passStep(
   tx: Transaction,
   partyId: string,
   groupId: string,
   args: PartyCommandArgs,
-  kind: "group.ready" | "group.away",
+  kind: "group.ready",
   apply: () => Promise<{ orderId: string }[]>,
   attendance: OrderAttendance | undefined,
   personId: string | undefined,
@@ -699,75 +659,6 @@ function groupLinesOf(tx: Transaction, groupId: string) {
     .select({ id: workingOrderLines.id })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.groupId, groupId));
-}
-
-/**
- * The course Fire: on an order of a party, release every held group of the party that holds a dish
- * of this course on this order, whole and in position order, as {@link fireGroup} does. It touches
- * nothing when the order is on no party or no held group qualifies. It carries no submission id, so
- * it records no replay: each group's `fired` event names the course and the order.
- */
-export async function fireHeldGroupsOfCourse(
-  tx: Transaction,
-  cfg: OriginConfig,
-  orderId: string,
-  courseId: string,
-  firer: Firer,
-  routing?: RoutingOnce,
-  attendance?: OrderAttendance,
-  options: { partyRevisionOwner?: "caller" } = {},
-): Promise<void> {
-  const party = await partyRevisionOfOrder(tx, orderId);
-  if (party === null) return;
-  const partyId = party.id;
-  const groups = await tx
-    .selectDistinct({
-      id: orderGroups.id,
-      position: orderGroups.position,
-      createdAt: orderGroups.createdAt,
-    })
-    .from(orderGroups)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.groupId, orderGroups.id))
-    .where(
-      and(
-        eq(orderGroups.partyId, partyId),
-        eq(orderGroups.state, "held"),
-        eq(workingOrderLines.workingOrderId, orderId),
-        eq(workingOrderLines.courseId, courseId),
-        isNull(workingOrderLines.parentLineId),
-      ),
-    )
-    .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
-  if (groups.length === 0) return;
-  if (options.partyRevisionOwner !== "caller")
-    await checkAndBumpParty(tx, partyId, party.revision, "open");
-  await prepareAllergyRelease(
-    tx,
-    cfg,
-    partyId,
-    { kind: "course", orderId, courseId },
-    undefined,
-    null,
-  );
-  const snapshot =
-    attendance === undefined || "deviceId" in firer
-      ? undefined
-      : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() };
-  for (const group of groups) {
-    await releaseGroup(
-      tx,
-      cfg,
-      partyId,
-      group.id,
-      firer,
-      {
-        courseId,
-        workingOrderId: orderId,
-      },
-      routing,
-      snapshot,
-    );
-  }
 }
 
 /**
@@ -1463,12 +1354,13 @@ async function readGroups(
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(and(eq(orderGroups.partyId, partyId), isNull(workingOrderLines.parentLineId), ...scope))
     .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
+  const remaining = gt(firedQuantity, workingOrderLines.servedQuantity);
+  const ready = or(eq(ticketItems.madeHere, true), eq(ticketItems.state, "ready"));
   const kitchen = await tx
     .select({
       groupId: workingOrderLines.groupId,
-      fired: sql<number>`count(*)`,
-      ready: sql<number>`sum(${ticketItems.state} = 'ready')`,
-      away: sql<number>`sum(${ticketItems.awayAt} is not null)`,
+      remaining: sql<number>`count(*) filter (where ${remaining})`,
+      ready: sql<number>`count(*) filter (where ${remaining} and ${ready})`,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
@@ -1476,10 +1368,9 @@ async function readGroups(
     .where(and(eq(orderGroups.partyId, partyId), isNotNull(ticketItems.firedAt), ...scope))
     .groupBy(workingOrderLines.groupId);
   const readyGroups = new Set(
-    kitchen.filter((row) => row.ready === row.fired).map((row) => row.groupId!),
-  );
-  const awayGroups = new Set(
-    kitchen.filter((row) => row.away === row.fired).map((row) => row.groupId!),
+    kitchen
+      .filter((row) => row.remaining > 0 && row.ready === row.remaining)
+      .map((row) => row.groupId!),
   );
   const linesByGroup = new Map<string, typeof lines>();
   const cancellations = await readLineCancellations(
@@ -1511,7 +1402,6 @@ async function readGroups(
       ...(numberLabels.has(group.id) ? { numberPartyLabel: numberLabels.get(group.id)! } : {}),
       state: group.state as "held" | "fired",
       ...(readyGroups.has(group.id) ? { ready: true as const } : {}),
-      ...(awayGroups.has(group.id) ? { away: true as const } : {}),
       lineIds: active.map((line) => line.id),
       courseIds: [
         ...new Set(own.flatMap((line) => (line.courseId === null ? [] : [line.courseId]))),
@@ -1688,8 +1578,6 @@ export interface CurrentOrderKitchen {
   movable: boolean;
   /** Null while the item is held, or since it was recalled. */
   firedAt: string | null;
-  /** When the pass sent it away, if it recorded that. */
-  awayAt: string | null;
 }
 
 /** An extra picked with a dish; it is served with its dish, never on its own. */
@@ -1848,7 +1736,6 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       ticketFiredAt: ticketItems.firedAt,
       ticketReadyAt: ticketItems.readyAt,
       ticketMadeHere: ticketItems.madeHere,
-      awayAt: ticketItems.awayAt,
       stationId: ticketItems.stationId,
     })
     .from(workingOrderLines)
@@ -1974,10 +1861,9 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
           : {
               state: line.ticketState,
               firedAt: line.ticketFiredAt,
-              awayAt: line.awayAt,
               stationId: line.stationId!,
               movable: stillMovable(
-                { state: line.ticketState, awayAt: line.awayAt, madeHere: line.ticketMadeHere! },
+                { state: line.ticketState, madeHere: line.ticketMadeHere! },
                 line,
               ),
             },

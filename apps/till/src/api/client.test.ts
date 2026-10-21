@@ -1735,31 +1735,20 @@ describe("TillApi", () => {
     },
   );
 
-  it("fireCourse POSTs an empty object to the order+course fire route — the kitchen-fire release (empty 200 body)", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
-
-    await expect(new TillApi("", fetchStub).fireCourse("wo1", "co2")).resolves.toBeUndefined();
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/orders/wo1/courses/co2/fire",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
-      }),
-    );
+  it("A773 client does not offer course Fire", () => {
+    const fetchStub = vi.fn();
+    const api = new TillApi("", fetchStub);
+    expect("fireCourse" in api).toBe(false);
+    expect(fetchStub).not.toHaveBeenCalled();
   });
 
-  it("fireCourse surfaces { code } when the course is unknown or retired", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: { code: "course.not_found" } }), {
-        status: 404,
-      }),
-    );
-
-    await expect(new TillApi("", fetchStub).fireCourse("wo1", "co2")).rejects.toMatchObject({
+  it("A773 retained course Ready surfaces an unknown course refusal", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "course.not_found" } }, 404));
+    await expect(new TillApi("", fetchStub).bumpCourseReady("wo1", "co2")).rejects.toMatchObject({
       code: "course.not_found",
+      status: 404,
     });
   });
 
@@ -1775,7 +1764,6 @@ describe("TillApi", () => {
             courseName: "Entrantes",
             displayOrder: 0,
             fired: true,
-            away: false,
             items: [
               {
                 allergy: null,
@@ -1785,7 +1773,6 @@ describe("TillApi", () => {
                 stationName: "Cocina",
                 state: "ready",
                 firedAt: "2026-08-17T10:00:00.000Z",
-                awayAt: null,
               },
             ],
           },
@@ -1803,7 +1790,7 @@ describe("TillApi", () => {
     expect(r).toEqual(queue);
   });
 
-  it("reads the device's pass screen, then sends a Done mark and takes it back", async () => {
+  it("A773 client reads the device pass without a Done writer", async () => {
     const screen = {
       orders: [],
       stations: [{ id: "st-1", name: "Parrilla", available: false }],
@@ -1817,22 +1804,11 @@ describe("TillApi", () => {
     const api = new TillApi("", fetchStub);
     const signal = new AbortController().signal;
     expect(await api.getDevicePassScreen({ signal })).toEqual(screen);
-    await api.markDevicePassDone(["ti-1"], true);
-    await api.markDevicePassDone(["ti-1"], false);
+    expect("markDevicePassDone" in api).toBe(false);
     expect(fetchStub.mock.calls.map(([url, init]) => [url, init.method])).toEqual([
       ["/api/device/pass-screen", "GET"],
-      ["/api/device/pass-screen/done", "POST"],
-      ["/api/device/pass-screen/done", "POST"],
     ]);
     expect(fetchStub.mock.calls[0]![1].signal).toBe(signal);
-    expect(JSON.parse(fetchStub.mock.calls[1]![1].body)).toEqual({
-      ticketItemIds: ["ti-1"],
-      done: true,
-    });
-    expect(JSON.parse(fetchStub.mock.calls[2]![1].body)).toEqual({
-      ticketItemIds: ["ti-1"],
-      done: false,
-    });
   });
 
   it("reads the device's pass monitor with the caller's signal", async () => {
@@ -1866,31 +1842,21 @@ describe("TillApi", () => {
     );
   });
 
-  it("markCourseAway POSTs an empty object to the order+course /away route (empty 200 body)", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
-
-    await expect(new TillApi("", fetchStub).markCourseAway("wo1", "co2")).resolves.toBeUndefined();
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/orders/wo1/courses/co2/away",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
-      }),
-    );
+  it("A773 client does not offer course Away", () => {
+    const fetchStub = vi.fn();
+    expect("markCourseAway" in new TillApi("", fetchStub)).toBe(false);
+    expect(fetchStub).not.toHaveBeenCalled();
   });
 
-  it("markCourseAway surfaces { code } when the course is unknown or retired", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: { code: "course.not_found" } }), {
-        status: 404,
-      }),
-    );
-
-    await expect(new TillApi("", fetchStub).markCourseAway("wo1", "co2")).rejects.toMatchObject({
+  it("A773 retained device Ready surfaces an unknown course refusal", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "course.not_found" } }, 404));
+    await expect(
+      new TillApi("", fetchStub).bumpDeviceCourseReady("wo1", "co2"),
+    ).rejects.toMatchObject({
       code: "course.not_found",
+      status: 404,
     });
   });
 
@@ -2186,7 +2152,11 @@ describe("TillApi", () => {
     expect("setTableStatus" in TillApi.prototype).toBe(false);
   });
 
-  it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe + readyToServe + enRoute + timingBand and the tab fields", async () => {
+  it("keeps dispatch out of the floor read contract", () => {
+    expectTypeOf<TableState>().not.toHaveProperty("enRoute");
+  });
+
+  it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe + readyToServe + timingBand and the tab fields", async () => {
     const rows: TableState[] = [
       {
         id: "t1",
@@ -2200,7 +2170,6 @@ describe("TillApi", () => {
         pendingDeliveries: 0,
         pendingToServe: 2,
         readyToServe: 3,
-        enRoute: 1,
         timingBand: "forgotten",
         nextReservation: { time: "20:30" },
         today: {
@@ -2228,7 +2197,6 @@ describe("TillApi", () => {
         pendingDeliveries: 0,
         pendingToServe: 0,
         readyToServe: 0,
-        enRoute: 0,
         timingBand: "fresh",
         nextReservation: null,
         today: null,
@@ -2249,7 +2217,6 @@ describe("TillApi", () => {
       zoneId: "z1",
       pendingToServe: 2,
       readyToServe: 3,
-      enRoute: 1,
       today: {
         placement: { x: 2, y: 3, width: 8, height: 8, shape: "round", rotation: 15 },
         seats: 4,
@@ -4128,7 +4095,7 @@ describe("TillApi: a seated party", () => {
               servedQuantity: "2.000",
               servedAt: null,
               released: true,
-              kitchen: { state: "queued", firedAt: "2026-09-28T19:50:00.000Z", awayAt: null },
+              kitchen: { state: "queued", firedAt: "2026-09-28T19:50:00.000Z" },
               note: null,
               extras: [],
             },
@@ -4211,9 +4178,14 @@ describe("TillApi: a seated party", () => {
     ["bumpGroupReady", "ready"],
     ["markGroupAway", "away"],
   ] as const)(
-    "%s POSTs the submission and revision to the group's /%s route and returns the party's revision",
+    "keeps retired %s absent or sends the group's /%s request with its revision",
     async (method, step) => {
       const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 11 }));
+      if (step === "away") {
+        expect(method in new TillApi("", fetchStub)).toBe(false);
+        expect(fetchStub).not.toHaveBeenCalled();
+        return;
+      }
 
       await expect(
         new TillApi("", fetchStub)[method]("v1", "g2", {
@@ -4234,9 +4206,14 @@ describe("TillApi: a seated party", () => {
     ["bumpDeviceCourseReady", "ready"],
     ["markDeviceCourseAway", "away"],
   ] as const)(
-    "%s POSTs to the kitchen display's course /%s route (empty 200 body)",
+    "keeps retired %s absent or sends the kitchen display's course /%s request",
     async (method, step) => {
       const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+      if (step !== "ready") {
+        expect(method in new TillApi("", fetchStub)).toBe(false);
+        expect(fetchStub).not.toHaveBeenCalled();
+        return;
+      }
 
       await expect(new TillApi("", fetchStub)[method]("wo1", "co2")).resolves.toBeUndefined();
 
@@ -4252,9 +4229,14 @@ describe("TillApi: a seated party", () => {
     ["bumpDeviceGroupReady", "ready"],
     ["markDeviceGroupAway", "away"],
   ] as const)(
-    "%s POSTs the submission and revision to the kitchen display's group /%s route",
+    "keeps retired %s absent or sends the kitchen display's group /%s request with its revision",
     async (method, step) => {
       const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 11 }));
+      if (step !== "ready") {
+        expect(method in new TillApi("", fetchStub)).toBe(false);
+        expect(fetchStub).not.toHaveBeenCalled();
+        return;
+      }
 
       await expect(
         new TillApi("", fetchStub)[method]("v1", "g2", {
@@ -4270,13 +4252,13 @@ describe("TillApi: a seated party", () => {
     },
   );
 
-  it("markGroupAway surfaces a stale revision as { code }", async () => {
+  it("A773 retained group Ready surfaces a stale revision as { code }", async () => {
     const fetchStub = vi
       .fn()
       .mockResolvedValue(jsonResponse({ error: { code: "party.out_of_date" } }, 409));
 
     await expect(
-      new TillApi("", fetchStub).markGroupAway("v1", "g2", {
+      new TillApi("", fetchStub).bumpGroupReady("v1", "g2", {
         submissionId: "sub-10",
         expectedPartyRevision: 3,
       }),

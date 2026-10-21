@@ -16,7 +16,6 @@ const DEFAULT_THRESHOLDS: StationThresholds = {
 };
 
 // A single mount that exercises every visual branch axe should sweep, including — under
-// `fire_control = 'expo'` — each of the three per-course levers.
 const queue: ExpoOrder[] = [
   {
     kitchenNote: null,
@@ -31,7 +30,6 @@ const queue: ExpoOrder[] = [
         courseName: null,
         displayOrder: null,
         fired: true,
-        away: false,
         items: [
           {
             allergy: null,
@@ -50,7 +48,6 @@ const queue: ExpoOrder[] = [
             stationName: "Barra",
             state: "ready",
             firedAt: FIRED,
-            awayAt: null,
             modifiers: [{ descriptions: { "es-ES": "Sin gluten" } }],
             asServed: { allergens: { milk: {} }, pending: false },
             asServedDiet: { vegan: "no", vegetarian: "yes", contains: [], halal: "yes" },
@@ -65,7 +62,6 @@ const queue: ExpoOrder[] = [
         courseName: "Entrantes",
         displayOrder: 0,
         fired: true,
-        away: false,
         items: [
           {
             allergy: null,
@@ -76,7 +72,6 @@ const queue: ExpoOrder[] = [
             stationName: "Cocina",
             state: "ready", // all-ready → the En camino (away) lever
             firedAt: FIRED,
-            awayAt: null,
             queuedAt: FIRED,
             thresholds: DEFAULT_THRESHOLDS,
             band: "fresh",
@@ -88,7 +83,6 @@ const queue: ExpoOrder[] = [
         courseName: "Principales",
         displayOrder: 1,
         fired: false, // held → the Fire lever + a greyed item
-        away: false,
         items: [
           {
             allergy: null,
@@ -99,7 +93,6 @@ const queue: ExpoOrder[] = [
             stationName: "Parrilla",
             state: "queued",
             firedAt: null,
-            awayAt: null,
             // A contains-meat chip + the NEUTRAL "not reviewed" diet note, swept here (a held/greyed item).
             asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: ["meat"] },
             note: "poco hecho por dentro",
@@ -123,7 +116,6 @@ const queue: ExpoOrder[] = [
         courseName: "Postres",
         displayOrder: 2,
         fired: true,
-        away: false,
         items: [
           {
             allergy: null,
@@ -133,7 +125,6 @@ const queue: ExpoOrder[] = [
             stationName: "Cocina",
             state: "preparing", // fired, not-all-ready → the Curso listo lever
             firedAt: FIRED,
-            awayAt: null,
             // Own allergens unreviewed (null base) ⇒ pending — the "not reviewed" warning, swept here.
             asServed: { allergens: {}, pending: true },
             queuedAt: FIRED,
@@ -155,7 +146,6 @@ function passItem(id: string, name: string, over: Partial<ExpoItem> = {}): ExpoI
     stationName: "Cocina",
     state: "queued",
     firedAt: FIRED,
-    awayAt: null,
     queuedAt: FIRED,
     thresholds: DEFAULT_THRESHOLDS,
     band: "fresh",
@@ -176,7 +166,6 @@ function section(
     numberPartyId: groupId === null ? null : "v-4",
     state,
     fired: state !== "held",
-    away: false,
     items,
   };
 }
@@ -218,11 +207,11 @@ async function flush(el: TillExpoScreen): Promise<void> {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (theme) => {
-  it("has no violations on a kitchen display's pass screen with its lost lines, levers, a refusal and Undo notice", async () => {
+  it("has no violations on a kitchen display's pass screen with its lost lines, levers and a refusal without Done", async () => {
     const board = {
       orders: queue.map((order) => ({
         ...order,
-        courses: order.courses.map((course) => ({ ...course, allReady: true })),
+        courses: order.courses.map((course) => ({ ...course, allReady: false })),
         groups: [],
       })),
       stations: [
@@ -238,8 +227,8 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
       ...stubApi(),
       getDevicePassScreen: vi.fn().mockResolvedValue(board),
       markDevicePassDone: vi.fn().mockResolvedValue(undefined),
-      fireDeviceCourse: vi.fn().mockRejectedValue({ code: "device.forbidden_action" }),
-      bumpDeviceCourseReady: vi.fn().mockResolvedValue(undefined),
+      fireDeviceCourse: vi.fn().mockResolvedValue(undefined),
+      bumpDeviceCourseReady: vi.fn().mockRejectedValue({ code: "device.forbidden_action" }),
       markDeviceCourseAway: vi.fn().mockResolvedValue(undefined),
     } as unknown as TillApi;
     const { el, host } = await mountWidget<TillExpoScreen>(
@@ -249,7 +238,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
         deviceMode: true,
         deviceName: "Pantalla Pase",
         runsPass: true,
-        fireControl: "expo",
+        ...{ fireControl: "expo" },
         initialDevicePass: board,
       },
       theme,
@@ -257,14 +246,13 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     await flush(el);
     expect(el.shadowRoot!.querySelector(".lever")).not.toBeNull();
     await expectNoA11yViolations(host);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-fire]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-ready]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
-    el.shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!.click();
-    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-done], [data-all-done], [data-undo]")).toBeNull();
     await expectNoA11yViolations(host);
   });
-  it("has no violations on a till's pass screen with its lost lines, levers and Undo notice", async () => {
+  it("has no violations on a till's pass screen with its lost lines and levers without Done", async () => {
     const stations = [
       { id: "st-1", name: "Parrilla", available: true },
       { id: "st-2", name: "Freidora", available: false },
@@ -297,16 +285,17 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     } as unknown as TillApi;
     const { el, host } = await mountWidget<TillExpoScreen>(
       "till-expo-screen",
-      { api, fireControl: "expo", runsPass: true },
+      { api, ...{ fireControl: "expo" }, runsPass: true },
       theme,
     );
     await flush(el);
     expect(el.shadowRoot!.querySelectorAll("[data-unavailable]")).toHaveLength(2);
     expect(el.shadowRoot!.querySelector(".lever")).not.toBeNull();
     await expectNoA11yViolations(host);
-    el.shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!.click();
-    await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-undo]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-done], [data-all-done], [data-undo]")).toBeNull();
+    expect(
+      (api as TillApi & { markDevicePassDone: ReturnType<typeof vi.fn> }).markDevicePassDone,
+    ).not.toHaveBeenCalled();
     await expectNoA11yViolations(host);
   });
 
@@ -327,10 +316,10 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on a populated pass board (all three levers, both age extremes)", async () => {
+  it("has no violations on a populated pass board (Fire and Ready, both age extremes)", async () => {
     const { el, host } = await mountWidget<TillExpoScreen>(
       "till-expo-screen",
-      { api: stubApi(), fireControl: "expo", runsPass: true },
+      { api: stubApi(), ...{ fireControl: "expo" }, runsPass: true },
       theme,
     );
     await flush(el);
@@ -341,7 +330,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     const moved = queue.map((order) => ({ ...order, formerNumbers: [28, 30] }));
     const { el, host } = await mountWidget<TillExpoScreen>(
       "till-expo-screen",
-      { api: stubApi(moved), fireControl: "expo", runsPass: true },
+      { api: stubApi(moved), ...{ fireControl: "expo" }, runsPass: true },
       theme,
     );
     await flush(el);
@@ -352,16 +341,16 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
   it("has no violations on a party's groups with the table-changed notice", async () => {
     const api = {
       getExpoQueue: vi.fn().mockResolvedValue([partyOrder]),
-      markGroupAway: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
+      bumpGroupReady: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
       reprintOrder: vi.fn().mockResolvedValue(undefined),
     } as unknown as TillApi;
     const { el, host } = await mountWidget<TillExpoScreen>(
       "till-expo-screen",
-      { api, fireControl: "expo", runsPass: true },
+      { api, ...{ fireControl: "expo" }, runsPass: true },
       theme,
     );
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-ready="g-2"]')!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-table-changed]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-group-held]")).not.toBeNull();
@@ -393,7 +382,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
           monitor: true,
           deviceName: "Pared del pase",
           runsPass: true,
-          fireControl: "expo",
+          ...{ fireControl: "expo" },
           initialDevicePassMonitor: board,
         },
         theme,

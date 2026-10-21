@@ -86,6 +86,7 @@ import {
   and,
   eq,
   exists,
+  gt,
   inArray,
   isNotNull,
   isNull,
@@ -153,7 +154,6 @@ import {
   ticketItems,
   partyTables,
   parties,
-  passItemMarks,
   ticketItemMoves,
   partyTableLabels,
   withTransaction,
@@ -225,7 +225,6 @@ import type { UnsentDraft } from "./order-drafts.js";
 import {
   correctHoldTickets,
   correctJoin,
-  fireHeldGroupsOfCourse,
   onShownBill,
   printedHeldGroups,
   printHoldTickets,
@@ -1901,8 +1900,8 @@ export async function fireLines(
   orderId: string,
   // The dish decides first; an extra may get a separate record after its destination is known.
   // `quantity` is the line's stored thousandths, which the kitchen is asked to make.
-  // `hold: true` inserts the line unfired whatever its course unless it is made here, and
-  // `release: true` fires it whatever its course; neither is stored.
+  // For table work, `hold` defers cooking unless made here, and `release` overrides the course.
+  // Counter work always releases. Neither flag is stored.
   lines: (FireableLine & { hold?: boolean; release?: boolean })[],
   options: {
     unroutable?: "skip";
@@ -2063,6 +2062,7 @@ export async function fireLines(
       const maker = outcome?.kind === "made" ? outcome.route : null;
       const courseId = courseByLine.get(line.id) ?? null;
       const courseFired =
+        partyId === null ||
         line.release === true ||
         (line.hold !== true &&
           (courseId === null ||
@@ -2336,95 +2336,6 @@ export async function isOpenOrder(tx: Transaction, orderId: string): Promise<boo
   return order?.status === "open";
 }
 
-/**
- * Release held items of a course by stamping fired_at and queued_at. Require the course to exist
- * in this venue, including a deleted course whose food still needs release.
- *
- * On a party's order, the held groups holding the course's dishes fire whole first
- * ({@link fireHeldGroupsOfCourse}); `firer` is who fired them. The course's lines still held
- * outside a held group, such as one recalled from a fired group, are then released.
- */
-export async function fireCourse(
-  tx: Transaction,
-  cfg: OriginConfig,
-  orderId: string,
-  courseId: string,
-  firer: Firer,
-  attendance?: OrderAttendance,
-  command?: AllergyCommand,
-): Promise<void> {
-  const routing = routingOnce(tx, cfg, new Date());
-  await requireCourse(tx, cfg, courseId);
-  const partyId = await partyOfOrder(tx, orderId);
-  if (command !== undefined && partyId !== null) {
-    const allergy =
-      command.allergy === undefined ? undefined : normaliseAllergyPatch(command.allergy);
-    await runServiceCommand(
-      tx,
-      { kind: "party", partyId },
-      command.submissionId,
-      "course.fire",
-      {
-        orderId,
-        courseId,
-        firer,
-        ...(allergy === undefined ? {} : { allergy }),
-      },
-      async () => {
-        await checkAndBumpParty(tx, partyId, command.expectedPartyRevision, "open");
-        await prepareAllergyRelease(
-          tx,
-          cfg,
-          partyId,
-          { kind: "course", orderId, courseId },
-          allergy,
-          "personId" in firer ? firer.personId : null,
-        );
-        await release(true);
-        return null;
-      },
-      cfg.madeHereSink,
-    );
-    return;
-  }
-  await release(false);
-  async function release(ownsRevision: boolean) {
-    await fireHeldGroupsOfCourse(
-      tx,
-      cfg,
-      orderId,
-      courseId,
-      firer,
-      routing,
-      attendance,
-      ownsRevision ? { partyRevisionOwner: "caller" } : {},
-    );
-    const released = await releaseHeld(
-      tx,
-      cfg,
-      orderId,
-      eq(ticketItems.courseId, courseId),
-      {
-        courseIds: [courseId],
-        lineIds: [],
-      },
-      undefined,
-      routing,
-    );
-    if (released > 0)
-      await captureKitchenActivity(
-        tx,
-        attendance,
-        "personId" in firer ? firer.personId : undefined,
-        [orderId],
-      );
-  }
-}
-
-/**
- * Release these held dish lines of one order, as {@link fireCourse} releases a course: a line
- * already fired or sent is left as it is. `mark` heads the ticket printed for them.
- */
 export async function fireOrderLines(
   tx: Transaction,
   cfg: OriginConfig,
@@ -2492,13 +2403,7 @@ async function releaseHeld(
   return firedItems.length + noRoute.lines.length;
 }
 
-/**
- * The end of {@link fireCourse} and {@link sendLines}: refuse a sold-out line when
- * `refuseSoldOut`, stamp the released lines sent, print the items that fired now (with the old
- * station's name for a re-routed dish), and count the
- * write if anything was released. `fired` must be exactly the items this release fired (an
- * update's `RETURNING` over `fired_at IS NULL`), so a re-send prints nothing.
- */
+// Only the items released by this write may print, so a retry cannot print them again.
 async function finishRelease(
   tx: Transaction,
   cfg: TillConfig,
@@ -2851,40 +2756,6 @@ export async function bumpCourseReady(
         eq(ticketItems.courseId, courseId),
         ne(ticketItems.state, "ready"),
         isNotNull(ticketItems.firedAt),
-      ),
-    )
-    .returning({ orderId: ticketItems.workingOrderId });
-  await captureKitchenActivity(
-    tx,
-    attendance,
-    firer && "personId" in firer ? firer.personId : undefined,
-    changed.map((row) => row.orderId),
-  );
-}
-
-/**
- * Dispatch ready items of a course by stamping away_at once. Require an existing
- * course in this venue, including deleted courses with plated food remaining.
- * Items still cooking and items already away are unchanged.
- */
-export async function markCourseAway(
-  tx: Transaction,
-  cfg: TillConfig,
-  orderId: string,
-  courseId: string,
-  firer?: Firer,
-  attendance?: OrderAttendance,
-): Promise<void> {
-  await requireCourse(tx, cfg, courseId);
-  const changed = await tx
-    .update(ticketItems)
-    .set({ awayAt: nowIso() })
-    .where(
-      and(
-        eq(ticketItems.workingOrderId, orderId),
-        eq(ticketItems.courseId, courseId),
-        eq(ticketItems.state, "ready"),
-        isNull(ticketItems.awayAt),
       ),
     )
     .returning({ orderId: ticketItems.workingOrderId });
@@ -4074,7 +3945,6 @@ export async function readTabLines(
       firedAt: ticketItems.firedAt,
       state: ticketItems.state,
       stationId: ticketItems.stationId,
-      awayAt: ticketItems.awayAt,
       madeHere: ticketItems.madeHere,
       groupId: workingOrderLines.groupId,
       note: workingOrderLines.note,
@@ -4131,8 +4001,7 @@ export async function readTabLines(
       state: row.state,
       stationId: row.stationId,
       movable:
-        row.state !== null &&
-        stillMovable({ state: row.state, awayAt: row.awayAt, madeHere: row.madeHere! }, row),
+        row.state !== null && stillMovable({ state: row.state, madeHere: row.madeHere! }, row),
       groupId: row.groupId,
       note: row.note,
       listId: row.listId,
@@ -4796,13 +4665,6 @@ async function splitTicketItem(
     quantity: movedThousandths,
   });
   await VENUE_SERVICE.copyTicketAllergy(tx, ticketItemId, id);
-  const passMarks = await tx
-    .select()
-    .from(passItemMarks)
-    .where(eq(passItemMarks.ticketItemId, ticketItemId));
-  if (passMarks.length) {
-    await tx.insert(passItemMarks).values(passMarks.map((mark) => ({ ...mark, ticketItemId: id })));
-  }
   const moves = await tx
     .select()
     .from(ticketItemMoves)
@@ -7128,7 +6990,6 @@ export async function listCounterWaiting(
               lineId: workingOrderLines.id,
               stationId: ticketItems.stationId,
               state: ticketItems.state,
-              awayAt: ticketItems.awayAt,
               madeHere: ticketItems.madeHere,
               servedAt: workingOrderLines.servedAt,
               servedQuantity: workingOrderLines.servedQuantity,
@@ -7846,7 +7707,6 @@ export interface ExpoItem {
   stationName: string;
   state: TicketState;
   firedAt: string | null;
-  awayAt: string | null;
   note: string | null;
   modifiers: QueueModifier[];
   crossRefs?: QueueCrossRef[];
@@ -7860,19 +7720,16 @@ export interface ExpoItem {
   band: TimingBand;
 }
 
-/** One course of an expo order; the null course sorts earliest. `fired` and `away` are true only once
- *  EVERY item of the course carries that stamp. */
+/** One course of an expo order; the null course sorts earliest. */
 export interface ExpoCourse {
   courseId: string | null;
   courseName: string | null;
   displayOrder: number | null;
   fired: boolean;
-  away: boolean;
   items: ExpoItem[];
 }
 
-/** One group of a seated party's bill on the expo board; the section of lines with no group has
- *  every group field `null` and sorts first. `fired` and `away` roll up as {@link ExpoCourse}'s do. */
+/** One group of a seated party's bill on the expo board; ungrouped lines sort first. */
 export interface ExpoGroup {
   groupId: string | null;
   position: number | null;
@@ -7881,7 +7738,6 @@ export interface ExpoGroup {
   numberPartyLabel?: string;
   state: QueueGroup["state"] | null;
   fired: boolean;
-  away: boolean;
   items: ExpoItem[];
 }
 
@@ -7902,37 +7758,34 @@ export interface ExpoOrder {
   worstBand: TimingBand;
 }
 
-/**
- * The cross-station expo read: every order in the venue that is not abandoned, not collected, and
- * has at least one kitchen item not yet away (open, placed and settled orders alike), its kitchen items gathered
- * across all stations and sectioned by group in position order for a seated party's bill, by course
- * for any other. A surviving order carries all its kitchen items, away ones included, so a per-section `away`
- * flag can be rolled up. `locationId` scopes only the table found for an order of no party.
- */
+/** The venue's remaining kitchen work, with each party retained through its surviving family. */
 export async function listExpoQueue(
   tx: Transaction,
   cfg: TillConfig,
   locationId?: string,
 ): Promise<ExpoOrder[]> {
-  const loc = locationId ?? cfg.locationId;
-  return readPassBoard(
-    tx,
-    loc,
-    sql`exists (
-      select 1 from ${ticketItems} tix
-      where tix.working_order_id = ${workingOrders.id}
-        and tix.made_here = 0
-        and tix.away_at is null)`,
-  );
+  return readPassBoard(tx, locationId ?? cfg.locationId, sql`1 = 1`);
 }
 
-/** Not made at the till, of an order neither abandoned nor collected, at any location. Whether the
- *  dish is away or served is the caller's filter. */
+/** Ticket quantities already exclude service cancellations; serving consumes only that active work. */
 export function liveKitchenDish(): SQL | undefined {
   return and(
     eq(ticketItems.madeHere, false),
     ne(workingOrders.status, "abandoned"),
     isNull(workingOrders.collectedAt),
+    gt(firedQuantity, workingOrderLines.servedQuantity),
+    or(
+      isNull(workingOrders.partyId),
+      sql`exists (
+        with recursive service_family(id, state, next) as (
+          select id, state, merged_into_party_id from parties where id = ${workingOrders.partyId}
+          union
+          select p.id, p.state, p.merged_into_party_id
+          from parties p join service_family f on p.id = f.next
+        )
+        select 1 from service_family where state = 'open'
+      )`,
+    ),
   );
 }
 
@@ -7949,14 +7802,13 @@ export async function readPassBoard(
       lineId: ticketItems.workingOrderLineId,
       state: ticketItems.state,
       firedAt: ticketItems.firedAt,
-      awayAt: ticketItems.awayAt,
       note: ticketItems.note,
       name: workingOrderLines.name,
       kitchenName: workingOrderLines.kitchenName,
       variantName: workingOrderLines.variantName,
       variantKitchenName: workingOrderLines.variantKitchenName,
       optionSnapshots: workingOrderLines.optionSnapshots,
-      quantity: firedQuantity,
+      quantity: sql<number>`${firedQuantity} - ${workingOrderLines.servedQuantity}`,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
       lineNo: workingOrderLines.lineNo,
@@ -8079,7 +7931,6 @@ export async function readPassBoard(
             : { numberPartyLabel: group.numberPartyLabel }),
           state: group?.state ?? null,
           fired: true,
-          away: true,
           items: [],
         };
         order.groups.push(expoGroup);
@@ -8090,7 +7941,6 @@ export async function readPassBoard(
           courseName: row.courseId === null ? null : row.courseName!,
           displayOrder: row.courseId === null ? null : row.courseDisplayOrder!,
           fired: true,
-          away: true,
           items: [],
         };
         order.courses.push(course);
@@ -8121,7 +7971,6 @@ export async function readPassBoard(
       stationName: row.stationName,
       state: row.state,
       firedAt: row.firedAt,
-      awayAt: row.awayAt,
       note: row.note,
       modifiers: modifiersByParent.get(row.lineId) ?? [],
       ...optional("crossRefs", crossRefsByLine.get(row.lineId)),
@@ -8140,7 +7989,6 @@ export async function readPassBoard(
       band,
     });
     if (row.firedAt === null) section.fired = false;
-    if (row.awayAt === null) section.away = false;
     if (row.servedAt === null) order.worstBand = worstBand([order.worstBand, band]);
   }
   for (const order of orders.values()) {
@@ -8242,8 +8090,6 @@ export interface TableState {
   pendingToServe: number;
   /** Those unserved lines whose ticket item is `ready`. */
   readyToServe: number;
-  /** Those unserved lines the pass has sent away. Such a line counts in `readyToServe` too. */
-  enRoute: number;
   /**
    * The worst age band over those unserved lines that were fired; a counter delivery does not feed
    * it.
@@ -8284,7 +8130,6 @@ export async function listTablesWithState(
     tab_total: string | null;
     pending_to_serve: number;
     ready_to_serve: number;
-    en_route: number;
     // Classified in JS, never in SQL, so server and client share one classifier.
     tab_unserved_lines: string;
     pending_deliveries: number;
@@ -8304,7 +8149,6 @@ export async function listTablesWithState(
       tab.tab_total,
       cast(coalesce(tab.pending_to_serve, 0) as int) as pending_to_serve,
       cast(coalesce(tab.ready_to_serve, 0) as int) as ready_to_serve,
-      cast(coalesce(tab.en_route, 0) as int) as en_route,
       coalesce(tab.unserved_lines, '[]') as tab_unserved_lines,
       cast(coalesce(del.pending, 0) as int) as pending_deliveries
     from dining_tables dt
@@ -8324,12 +8168,6 @@ export async function listTablesWithState(
              -- neither multiplies wol rows (line_count / tab_total stay correct) nor double-counts. An
              -- unfired, made-here or not-yet-ready line has ti.state null or != 'ready' and is excluded by the filter.
              cast(count(*) filter (where ti.state = 'ready' and wol.served_at is null) as int) as ready_to_serve,
-             -- KDS-3 section 3c "en camino": lines the pass has DISPATCHED (ti.away_at is not null, set by
-             -- markCourseAway) that the waiter has not yet carried out (served_at is null). Same 1:1
-             -- ti-on-line join as ready_to_serve, so no wol multiplication; an away item is still ready
-             -- and unserved, so it counts here AND in ready_to_serve until served -- the client applies the
-             -- en-camino > listos precedence off the two counts.
-             cast(count(*) filter (where ti.away_at is not null and wol.served_at is null) as int) as en_route,
              -- A count of whole cents read raw, cast to text and converted by rawCentsToDecimal in
              -- the mapping below -- see its doc comment for why it is text and not an integer cast.
              cast(coalesce(sum(wol.line_total) filter (where wo.status = 'open'), 0) as text) as tab_total,
@@ -8413,7 +8251,6 @@ export async function listTablesWithState(
       }),
       pendingToServe: Number(r.pending_to_serve),
       readyToServe: Number(r.ready_to_serve),
-      enRoute: Number(r.en_route),
       timingBand,
       pendingDeliveries,
       today: today.get(r.id)!,

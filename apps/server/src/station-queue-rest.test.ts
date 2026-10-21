@@ -146,6 +146,7 @@ describe("station queue rest of the order", () => {
         vatClass: "general",
         lineTotal: 121,
         servedAt: "served" in item ? nowIso() : null,
+        servedQuantity: "served" in item ? 1000 : 0,
       });
       const [ticket] = await db
         .insert(ticketItems)
@@ -224,6 +225,17 @@ describe("station queue rest of the order", () => {
         soldInEach: false,
         stationName: "A Freidora",
         state: "preparing",
+        held: false,
+      },
+      {
+        id: ids.get(6),
+        name: "Kitchen away",
+        quantity: "1.000",
+        unitName: null,
+        unitPrecision: null,
+        soldInEach: false,
+        stationName: cases[4].station,
+        state: "ready",
         held: false,
       },
       {

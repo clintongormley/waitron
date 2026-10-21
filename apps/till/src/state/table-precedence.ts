@@ -43,7 +43,7 @@ export function tableStates(table: TableState, now: number): TableStateKind[] {
   if (has("held_unavailable")) active.add("unavailable");
   if (fire) active.add("fire");
   if (has("bill_requested")) active.add("bill");
-  if (has("ready") || table.readyToServe > 0 || table.enRoute > 0) active.add("ready");
+  if (has("ready") || table.readyToServe > 0) active.add("ready");
   if (has("take_order")) active.add("step");
   if ((table.party?.unsentDrafts.length ?? 0) > 0) active.add("not-sent");
   if (band === "warm") active.add("waiting");

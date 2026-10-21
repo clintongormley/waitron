@@ -922,7 +922,7 @@ describe("the tab routes that release lines, on a party with groups", () => {
     expect(await snapshot(party)).toEqual(before);
   });
 
-  it("fires the held group holding a course's dish through the course Fire route, as the signed-in operator", async () => {
+  it("fires the held group holding a course's dish through waiter group Fire, as the signed-in operator", async () => {
     const [tarta] = await inTx(venue, (tx) =>
       tx
         .select({ id: products.id, courseId: products.courseId })
@@ -941,7 +941,11 @@ describe("the tab routes that release lines, on a party with groups", () => {
       const party = await withGroups();
       const revision = await revisionOf(party.partyId);
 
-      const fired = await call("POST", `/api/orders/${party.tabId}/courses/${courseId}/fire`);
+      const fired = await call(
+        "POST",
+        `/api/parties/${party.partyId}/groups/${party.tarta.id}/fire`,
+        { submissionId: randomUUID(), expectedPartyRevision: revision },
+      );
 
       expect(fired.status).toBe(200);
       expect(await revisionOf(party.partyId)).toBe(revision + 1);
@@ -963,7 +967,7 @@ describe("the tab routes that release lines, on a party with groups", () => {
       );
       expect(event).toEqual({
         actorId: venue.operatorId,
-        detail: { courseId, workingOrderId: party.tabId },
+        detail: {},
       });
     } finally {
       // The venue is shared by the whole file.
@@ -1483,7 +1487,7 @@ async function passSnapshot(party: { partyId: string; tabId: string }, groupId: 
   return { ...(await snapshot(party)), tickets: await groupTickets(groupId) };
 }
 
-describe.each(["ready", "away"] as const)("POST /api/parties/:id/groups/:gid/%s", (step) => {
+describe.each(["ready"] as const)("POST /api/parties/:id/groups/:gid/%s", (step) => {
   const path = (partyId: string, groupId: string) =>
     `/api/parties/${partyId}/groups/${groupId}/${step}`;
 
@@ -1591,7 +1595,64 @@ describe.each(["ready", "away"] as const)("POST /api/parties/:id/groups/:gid/%s"
 });
 
 describe("the pass routes, one after the other", () => {
-  it("bumps the fired Caña ready, then sends it away, each answering the party's revision", async () => {
+  it.each(["queued", "ready", "held", "stale", "reused", "unknown"] as const)(
+    "retired group Away cannot write or replay for %s work",
+    async (state) => {
+      const party = await withGroups();
+      const submissionId = randomUUID();
+      if (state === "ready" || state === "reused") {
+        const readied = await call(
+          "POST",
+          `/api/parties/${party.partyId}/groups/${party.fired.id}/ready`,
+          { submissionId, expectedPartyRevision: await revisionOf(party.partyId) },
+        );
+        expect(readied.status).toBe(200);
+      }
+      const groupId =
+        state === "held" ? party.tarta.id : state === "unknown" ? randomUUID() : party.fired.id;
+      const body = {
+        submissionId,
+        expectedPartyRevision: state === "stale" ? 0 : await revisionOf(party.partyId),
+      };
+      const stored = () =>
+        inTx(venue, async (tx) => ({
+          party: await tx.select().from(parties).where(eq(parties.id, party.partyId)),
+          groups: await tx.select().from(orderGroups).where(eq(orderGroups.partyId, party.partyId)),
+          items: await tx
+            .select()
+            .from(ticketItems)
+            .where(eq(ticketItems.workingOrderId, party.tabId)),
+          events: await tx
+            .select()
+            .from(orderGroupEvents)
+            .where(eq(orderGroupEvents.partyId, party.partyId)),
+          commands: await tx
+            .select()
+            .from(serviceCommands)
+            .where(eq(serviceCommands.scopeId, party.partyId)),
+        }));
+      const before = await stored();
+
+      for (const cookie of [venue.cookie, ""]) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const response = await venue.app.request(
+            `/api/parties/${party.partyId}/groups/${groupId}/away`,
+            {
+              method: "POST",
+              headers: { cookie, "content-type": "application/json" },
+              body: JSON.stringify(body),
+            },
+          );
+
+          expect(response.status).toBe(404);
+          expect(await response.text()).toBe("404 Not Found");
+          expect(await stored()).toEqual(before);
+        }
+      }
+    },
+  );
+
+  it("bumps fired food ready, then refuses retired Away without changing the party", async () => {
     const party = await withGroups();
     const before = await groupTickets(party.fired.id);
     expect(before.length).toBeGreaterThan(0);
@@ -1616,14 +1677,22 @@ describe("the pass routes, one after the other", () => {
     };
     expect(listed.groups.map((group) => group.ready ?? false)).toEqual([true, false, false]);
 
-    const sent = await call("POST", `/api/parties/${party.partyId}/groups/${party.fired.id}/away`, {
-      submissionId: randomUUID(),
-      expectedPartyRevision: party.revision + 2,
-    });
+    const beforeAway = await passSnapshot(party, party.fired.id);
+    const sent = await venue.app.request(
+      `/api/parties/${party.partyId}/groups/${party.fired.id}/away`,
+      {
+        method: "POST",
+        headers: { cookie: venue.cookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          submissionId: randomUUID(),
+          expectedPartyRevision: party.revision + 2,
+        }),
+      },
+    );
 
-    expect(sent.status).toBe(200);
-    expect(sent.json).toEqual({ revision: party.revision + 3 });
-    expect((await groupTickets(party.fired.id)).every((item) => item.awayAt !== null)).toBe(true);
+    expect(sent.status).toBe(404);
+    expect(await passSnapshot(party, party.fired.id)).toEqual(beforeAway);
+    expect((await groupTickets(party.fired.id)).every((item) => item.awayAt === null)).toBe(true);
   });
 });
 

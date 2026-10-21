@@ -1,3 +1,4 @@
+import { createTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -27,7 +28,7 @@ import {
   madeHereAnswer,
   madeHereSinkFor,
 } from "./made-here.js";
-import { createOpenOrder, fireCourse, fireLines, listStationQueue } from "./working-order.js";
+import { createOpenOrder, fireOrderLines, fireLines, listStationQueue } from "./working-order.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { routeProductTo } from "./testing/zone-offers.js";
@@ -121,7 +122,7 @@ describe("device made-here stations", () => {
     });
   });
 
-  it("releases a made-here later-course drink immediately and never prints it on course fire or reprint", async () => {
+  it("releases a made-here later-course drink immediately and never prints it on line release or reprint", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const grill = await createStation(tx, venue.cfg, { name: "Grill" });
@@ -147,9 +148,9 @@ describe("device made-here stations", () => {
         .select()
         .from(printJobs)
         .where(eq(printJobs.printerId, barPrinter));
-      await fireCourse(tx, { ...venue.cfg, origin: deviceOrigin(deviceId) }, orderId, second.id, {
-        personId: randomUUID(),
-      });
+      await fireOrderLines(tx, { ...venue.cfg, origin: deviceOrigin(deviceId) }, orderId, [
+        drink.id,
+      ]);
       await reprintOrderTickets(tx, venue.cfg, orderId);
       expect(
         await tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinter)),
@@ -422,8 +423,7 @@ describe("device made-here stations", () => {
       const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
       const second = await createCourse(tx, venue.cfg, { name: "Second", displayOrder: 2 });
       const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
-      const orderId = randomUUID();
-      await createOpenOrder(tx, venue.cfg, orderId, [], null);
+      const orderId = await createTableKitchenOrder(tx, venue.cfg);
       const drink = await rawLine(tx, orderId, venue.cafeId, 1, first.id);
       const burger = await rawLine(tx, orderId, venue.aguaId, 2, second.id);
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [drink, burger]);
@@ -440,9 +440,9 @@ describe("device made-here stations", () => {
       expect(
         await tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinter)),
       ).toHaveLength(0);
-      await fireCourse(tx, { ...venue.cfg, origin: deviceOrigin(deviceId) }, orderId, second.id, {
-        personId: randomUUID(),
-      });
+      await fireOrderLines(tx, { ...venue.cfg, origin: deviceOrigin(deviceId) }, orderId, [
+        burger.id,
+      ]);
       const [released] = await tx
         .select()
         .from(ticketItems)
@@ -465,8 +465,7 @@ describe("device made-here stations", () => {
       const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
       const second = await createCourse(tx, venue.cfg, { name: "Second", displayOrder: 2 });
       const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
-      const orderId = randomUUID();
-      await createOpenOrder(tx, venue.cfg, orderId, [], null);
+      const orderId = await createTableKitchenOrder(tx, venue.cfg);
       const burger = await rawLine(tx, orderId, venue.aguaId, 1, first.id);
       const drink = await rawLine(tx, orderId, venue.cafeId, 2, second.id);
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [burger, drink]);

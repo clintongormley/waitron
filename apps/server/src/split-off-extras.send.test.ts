@@ -1,3 +1,4 @@
+import { createTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
@@ -87,14 +88,15 @@ async function sendWithHold(
   extraId: string,
   hold: boolean,
 ) {
-  const orderId = randomUUID();
-  await createOfferedOrder(tx, cfg, orderId, [
+  const input = [
     {
       productId,
       quantity: "1",
       extras: [{ listId, picks: [{ productId: extraId, quantity: 1 }] }],
     },
-  ]);
+  ];
+  const orderId = hold ? await createTableKitchenOrder(tx, cfg, input) : randomUUID();
+  if (!hold) await createOfferedOrder(tx, cfg, orderId, input);
   const lines = await tx
     .select({
       id: workingOrderLines.id,

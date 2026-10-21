@@ -73,7 +73,6 @@ const openTable: TableState = {
   pendingDeliveries: 0,
   pendingToServe: 1,
   readyToServe: 0,
-  enRoute: 0,
   timingBand: "fresh",
   nextReservation: null,
   today: null,

@@ -42,7 +42,7 @@ import { saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { advanceTicketItem, fireLines, listTablesWithState } from "./working-order.js";
-import { openPartyTab, serveLine } from "./testing/serve-line.js";
+import { openPartyTab, serveLine, unserveLine } from "./testing/serve-line.js";
 import "./errors.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -506,9 +506,8 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
   });
 });
 
-// `enRoute` counts lines the pass has sent away (`away_at` set) that the waiter has not yet served.
-describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
-  it("counts away-not-served lines, reports enRoute + readyToServe together, and clears enRoute on serve", async () => {
+describe("listTablesWithState — A773 no dispatch state", () => {
+  it("reports ready food without a dispatch field and keeps service and Undo counts", async () => {
     const { cfg, cafeId, aguaId, tableId, offers } = await setupTabVenue();
 
     const { tabId } = await asApp(cfg, (tx) =>
@@ -539,7 +538,8 @@ describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
     let row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
       (t) => t.id === tableId,
     )!;
-    expect(row).toMatchObject({ enRoute: 0, readyToServe: 0, pendingToServe: 2 });
+    expect(row).toMatchObject({ readyToServe: 0, pendingToServe: 2 });
+    expect(row).not.toHaveProperty("enRoute");
 
     const items = await asApp(cfg, (tx) =>
       tx
@@ -552,19 +552,28 @@ describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
       await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item.id, "ready"));
     }
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
-    expect(row).toMatchObject({ enRoute: 0, readyToServe: 2, pendingToServe: 2 });
+    expect(row).toMatchObject({ readyToServe: 2, pendingToServe: 2 });
+    expect(row).not.toHaveProperty("enRoute");
 
-    // Away and still ready: a table reports both, so the client can rank en camino above listos.
     const away = items.find((i) => i.lineId === lines[0]!.id)!;
     await asApp(cfg, (tx) =>
       tx.update(ticketItems).set({ awayAt: nowIso() }).where(eq(ticketItems.id, away.id)),
     );
+    const ready = row;
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
-    expect(row).toMatchObject({ enRoute: 1, readyToServe: 2, pendingToServe: 2 });
+    expect(row).toEqual(ready);
+    expect(row).toMatchObject({ readyToServe: 2, pendingToServe: 2 });
+    expect(row).not.toHaveProperty("enRoute");
 
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
-    expect(row).toMatchObject({ enRoute: 0, readyToServe: 1, pendingToServe: 1 });
+    expect(row).toMatchObject({ readyToServe: 1, pendingToServe: 1 });
+    expect(row).not.toHaveProperty("enRoute");
+
+    await asApp(cfg, (tx) => unserveLine(tx, cfg, tabId, 1));
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    expect(row).toMatchObject({ readyToServe: 2, pendingToServe: 2 });
+    expect(row).not.toHaveProperty("enRoute");
   });
 });
 

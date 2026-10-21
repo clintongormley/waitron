@@ -57,13 +57,7 @@ import { readStationQueueMoves } from "./station-queue-moves.js";
 import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import { stillMovable } from "./station-move.js";
 import { withStationDishes } from "./station-closing.js";
-import {
-  carveOffLines,
-  createOpenOrder,
-  listStationQueue,
-  readTabLines,
-  fireCourse,
-} from "./working-order.js";
+import { carveOffLines, createOpenOrder, listStationQueue, readTabLines } from "./working-order.js";
 
 let venue: PartyVenue;
 let bar: string;
@@ -271,19 +265,18 @@ describe("stillMovable", () => {
   const line = { servedAt: null, servedQuantity: 0 };
 
   it("offers a queued kitchen item still at its station", () => {
-    expect(stillMovable({ state: "queued", awayAt: null, madeHere: false }, line)).toBe(true);
+    expect(stillMovable({ state: "queued", madeHere: false }, line)).toBe(true);
   });
 
   it.each([
-    [{ state: "preparing", awayAt: null, madeHere: false }, line],
-    [{ state: "ready", awayAt: null, madeHere: false }, line],
-    [{ state: "queued", awayAt: "2026-10-02T12:00:00Z", madeHere: false }, line],
-    [{ state: "queued", awayAt: null, madeHere: true }, line],
+    [{ state: "preparing", madeHere: false }, line],
+    [{ state: "ready", madeHere: false }, line],
+    [{ state: "queued", madeHere: true }, line],
     [
-      { state: "queued", awayAt: null, madeHere: false },
+      { state: "queued", madeHere: false },
       { servedAt: null, servedQuantity: 1000 },
     ],
-  ] as const)("hides an item already started, away, made here, or served %#", (item, served) => {
+  ] as const)("hides an item already started, made here, or served %#", (item, served) => {
     expect(stillMovable(item, served)).toBe(false);
   });
 });
@@ -619,12 +612,11 @@ describe("release", () => {
     expect(alerts.filter((alert) => alert.params.workingOrderId === group.tabId)).toEqual([]);
   });
 
-  it("fires a course at the replacement station without correcting an unprinted HOLD", async () => {
+  it("fires a held course group at the replacement station without correcting an unprinted HOLD", async () => {
     await inTx(venue, (tx) => writePrintHeldWork(tx, false));
-    const courseId = await inTx(venue, async (tx) => {
+    await inTx(venue, async (tx) => {
       const course = await createCourse(tx, venue.cfg, { name: `Course ${randomUUID()}` });
       await setProductCourse(tx, venue.cfg, venue.productId("Burger"), course.id);
-      return course.id;
     });
     const group = await heldBurger();
     const at = new Date("2026-10-02T18:45:00.000Z");
@@ -640,9 +632,7 @@ describe("release", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(at);
     try {
-      await inTx(venue, (tx) =>
-        fireCourse(tx, venue.cfg, group.tabId, courseId, { personId: OPERATOR }),
-      );
+      await fireHeldBurger(group);
       const [item] = await inTx(venue, (tx) =>
         tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
       );
@@ -2036,7 +2026,7 @@ describe("moveDishesToStation", () => {
     expect(await snapshot(tabId, item.id)).toEqual(before);
   });
 
-  it("refuses a record marked away without writing", async () => {
+  it("A773 no dispatch state: moves queued legacy-Away work without changing its billed line", async () => {
     const { tabId, item } = await burger();
     await inTx(venue, (tx) =>
       tx
@@ -2044,7 +2034,9 @@ describe("moveDishesToStation", () => {
         .set({ awayAt: new Date().toISOString() })
         .where(eq(ticketItems.id, item.id)),
     );
-    const before = await snapshot(tabId, item.id);
+    const before = await inTx(venue, (tx) =>
+      tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, item.workingOrderLineId)),
+    );
     await expect(
       inTx(venue, (tx) =>
         moveDishesToStation(
@@ -2059,8 +2051,14 @@ describe("moveDishesToStation", () => {
           mover(),
         ),
       ),
-    ).rejects.toMatchObject({ code: "ticket.already_started" });
-    expect(await snapshot(tabId, item.id)).toEqual(before);
+    ).resolves.toMatchObject({
+      moved: [{ workingOrderLineId: item.workingOrderLineId, fromStationId: bar }],
+    });
+    expect((await snapshot(tabId, item.id)).item?.stationId).toBe(grill);
+    const after = await inTx(venue, (tx) =>
+      tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, item.workingOrderLineId)),
+    );
+    expect(after).toEqual(before.map((line) => ({ ...line, makeAtStationId: grill })));
   });
 
   it("returns an empty move at the same station without changing the order", async () => {

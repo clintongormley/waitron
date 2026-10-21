@@ -9,8 +9,8 @@ Order routing is built (item→station, station→printer, receipt→printer). G
 view (a routing cell keeps no record of who changed it or when — the most useful to close); no
 station `type`/`kind`; single-target only (no fan-out or per-modifier rules; period choices came
 with A366 slice 4). Venue-made table statuses were retired by A757 slice 2 (2026-10-19); kitchen
-statuses are partial — `bump_mode` and `fire_control` are configurable fixed enums, but a
-user-definable kitchen-status list does not exist.
+statuses are partial — preparation mode is a fixed enum, and a user-definable kitchen-status list
+does not exist.
 
 ## Task 5 (#750, kitchen, pass and table screen by group; printing problems)
 
@@ -51,18 +51,15 @@ user-definable kitchen-status list does not exist.
     by line, because nothing records a unit's kind (a unit field would need a migration).
   - The kitchen-ticket grouping setting sits on Venue settings' **Kitchen** tab,
     and so does "Print held groups in advance", which is not about sent work at all.
-  - `fireHeldGroupsOfCourse` (`apps/server/src/order-groups.ts`), through which a course Fire
-    still fires a party's held groups, is to be removed in a follow-up.
   - Every pass press moves the party's revision, so a waiter's open Tab drawer meets
     `party.out_of_date` after it and reads again.
   - Setting up a venue from an imported configuration deletes every kitchen station, and the
     `kitchen_print_jobs` station key has no delete rule; whether that venue can already hold
     link rows at that point was not tested (read, not run).
-  - The pass's Ready and Away record no `order_group_events` row, so who pressed them is
+  - The pass's Ready records no `order_group_events` row, so who pressed them is
     recorded nowhere readable; a new kind changes that append-only table's check, which is a
     core migration.
-  - The table screen's second request for printing problems is A809; which held groups the
-    kitchen and pass screens offer Fire on is A773's (owner, 2026-10-17).
+  - The table screen's second request for printing problems is A809.
 
 ## Task 6 (#761, HOLD tickets in advance)
 
@@ -79,8 +76,7 @@ user-definable kitchen-status list does not exist.
   status — the ticket must travel with the line, not re-fire (`moveTabLines`, which dropped it, was
   deleted by service plan Task 13; whether this still holds for the paths that move lines now is not
   checked); hold-on-send without courses plus a venue disable setting; FP-1's empty-named
-  child-modifier row; a device-scoped collect route (a kitchen display's Fire already has a device
-  route, `apps/server/src/device-levers.ts`). Then the low-priority KDS list under
+  child-modifier row; a device-scoped collect route. Then the low-priority KDS list under
   [KDS operations](../backlog/kitchen.md#kds-operations--low-priority-a9).
 
 ## Mark a new dish as urgent
@@ -89,8 +85,7 @@ user-definable kitchen-status list does not exist.
   to the kitchen ("cook this now, don't hold it") under every release setting; the owner would like
   a way to add urgency to it too, so the kitchen sees it flagged. Nothing like it exists today. Not
   designed: what the flag looks like on the kitchen screen, the pass and a printed ticket, and who
-  may set it. Releasing an ALREADY-held group stays with whoever the venue's `fire_control` setting
-  names — the waiter asks the kitchen or pass when that is not the waiter.
+  may set it. A773 assigns requests to cook held work to the waiter.
 
 ## Three follow-ups 3c-1 left
 

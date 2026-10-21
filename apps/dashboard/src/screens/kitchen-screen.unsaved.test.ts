@@ -39,9 +39,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
     liveData,
     listCourses: async () => [],
     getBumpMode: async () => ({ mode: "line" }),
-    getFireControl: async () => ({ mode: "waiter" }),
     setBumpMode: async () => {},
-    setFireControl: async () => {},
     getKitchenTimingDefaults: async () => ({ ...stored }),
     setKitchenTimingDefaults: async (body: KitchenTimingDefaults) => {
       writes.push({ ...body });
@@ -332,46 +330,42 @@ it("a departed timing refusal cannot replace a new opening's error or release it
   expect(unload()).toBe(false);
 });
 
-for (const kind of ["bump", "fire"] as const) {
-  for (const result of ["stored", "refused"] as const) {
-    it(`the immediate ${kind} choice stays exempt while writing and after ${result}`, async () => {
-      const pending = deferred();
-      const values: string[] = [];
-      const write = async (value: string) => {
-        values.push(value);
-        await pending.promise;
-      };
-      const { app, screen } = await mount(
-        kind === "bump" ? { setBumpMode: write } : { setFireControl: write },
-      );
-      const value = kind === "bump" ? "ticket" : "kitchen";
-      click(screen, `${kind}-${value}`);
-      await screen.updateComplete;
-      expect(values).toEqual([value]);
-      expect(unload()).toBe(false);
-      expect(await leave(app)).toBe("proceeded");
-      if (result === "stored") pending.resolve();
-      else pending.reject({ code: "connection.failed" });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await screen.updateComplete;
-      if (result === "refused")
-        expect(
-          screen.shadowRoot!.querySelector("[data-test=kitchen-error]")!.textContent!.trim(),
-        ).not.toBe("");
-      expect(unload()).toBe(false);
-      expect(await leave(app)).toBe("proceeded");
-      expect(values).toEqual([value]);
-    });
-  }
+for (const result of ["stored", "refused"] as const) {
+  it(`the immediate bump choice stays exempt while writing and after ${result}`, async () => {
+    const pending = deferred();
+    const values: string[] = [];
+    const write = async (value: string) => {
+      values.push(value);
+      await pending.promise;
+    };
+    const { app, screen } = await mount({ setBumpMode: write });
+    const value = "ticket";
+    click(screen, `bump-${value}`);
+    await screen.updateComplete;
+    expect(values).toEqual([value]);
+    expect(unload()).toBe(false);
+    expect(await leave(app)).toBe("proceeded");
+    if (result === "stored") pending.resolve();
+    else pending.reject({ code: "connection.failed" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await screen.updateComplete;
+    if (result === "refused")
+      expect(
+        screen.shadowRoot!.querySelector("[data-test=kitchen-error]")!.textContent!.trim(),
+      ).not.toBe("");
+    expect(unload()).toBe(false);
+    expect(await leave(app)).toBe("proceeded");
+    expect(values).toEqual([value]);
+  });
 }
 
 it("an immediate kitchen choice leaves a separate late-flags question and its edited values intact", async () => {
-  const { app, screen } = await mount({ setFireControl: async () => {} });
+  const { app, screen } = await mount({ setBumpMode: async () => {} });
   await change(screen, "4");
   const request = leave(app);
   const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await expect.poll(() => warning.open).toBe(true);
-  click(screen, "fire-kitchen");
+  click(screen, "bump-ticket");
   await screen.updateComplete;
   expect(warning.open).toBe(true);
   expect(input(screen).value).toBe("4");

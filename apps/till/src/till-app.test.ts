@@ -154,7 +154,6 @@ const freeTable: TableState = {
   pendingDeliveries: 0,
   pendingToServe: 0,
   readyToServe: 0,
-  enRoute: 0,
   timingBand: "fresh",
   nextReservation: null,
   today: null,
@@ -174,7 +173,6 @@ const openTable: TableState = {
   pendingDeliveries: 0,
   pendingToServe: 1,
   readyToServe: 0,
-  enRoute: 0,
   timingBand: "fresh",
   nextReservation: null,
   today: null,
@@ -9083,7 +9081,7 @@ describe("till-app", () => {
         ]);
       });
 
-      it("boots the venue courses + fire mode and threads them to the table-order screen", async () => {
+      it("boots the venue courses without the retired table Fire-control setting", async () => {
         const courses = [{ id: "c1", name: "Entrantes", displayOrder: 0 }];
         const { el } = await mountApp({
           getTill: vi.fn().mockResolvedValue({ ...till, courses, fireControl: "waiter" }),
@@ -9092,7 +9090,7 @@ describe("till-app", () => {
         });
         const screen = await toTableOrder(el, openTable);
         expect(screen.courses).toEqual(courses);
-        expect(screen.fireControl).toBe("waiter");
+        expect("fireControl" in screen).toBe(false);
       });
 
       const heldCourseLine: TabLine = {
@@ -12820,20 +12818,15 @@ describe("till-app", () => {
       expect(screen.bumpMode).toBe("ticket");
     });
 
-    it("threads the venue fire_control from boot to the station screen (a kitchen-fire venue gets the fire action)", async () => {
-      // The default `till` fixture is `waiter`; a venue configured `kitchen` must reach the station
-      // screen's `.fireControl` so its per-course fire affordance turns on — proving #boot reads
-      // `TillInfo.fireControl` rather than leaving the hardcoded `waiter` default.
+    it("A773 waiter authority: boot leaves the retired control out of the station screen", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, fireControl: "kitchen" }),
       });
       const c = await toCounter(el);
       emit(c, "show-station");
       await flush(el);
-      const screen = el.shadowRoot!.querySelector("till-station-screen") as unknown as {
-        fireControl: string;
-      };
-      expect(screen.fireControl).toBe("kitchen");
+      const screen = el.shadowRoot!.querySelector("till-station-screen")!;
+      expect("fireControl" in screen).toBe(false);
     });
 
     it("show-expo: the counter nav switches to the expo/pass screen (basket-preserving)", async () => {
@@ -12858,9 +12851,7 @@ describe("till-app", () => {
       expect(counter(el)!.store.lines).toHaveLength(1);
     });
 
-    it("threads the venue fire_control from boot to the expo screen (an expo-fire venue gets the fire lever)", async () => {
-      // A venue configured `expo` must reach the expo screen's `.fireControl` so its held-course Fire
-      // lever turns on — proving #boot's `fireControl` threads here too, not just to the station screen.
+    it("A773 boot leaves the retired Fire-control property off the pass", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, fireControl: "expo" }),
       });
@@ -12870,7 +12861,7 @@ describe("till-app", () => {
       const screen = el.shadowRoot!.querySelector("till-expo-screen") as unknown as {
         fireControl: string;
       };
-      expect(screen.fireControl).toBe("expo");
+      expect("fireControl" in screen).toBe(false);
     });
   });
 

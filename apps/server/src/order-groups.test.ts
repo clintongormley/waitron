@@ -4,6 +4,7 @@ import { updateHeldOrder } from "./working-order.js";
 import {
   recallLines,
   sendLines,
+  setLineCourse,
   updateHeldOrder as updateHeldOrderForTest,
   updateOrderLine,
 } from "./testing/order-writer-fixture.js";
@@ -51,7 +52,7 @@ import { createPrinter } from "@waitron/printing";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
 import { deviceRequestCfg, seedSessionDevice } from "./testing/session-device.js";
-import { createCourse, setProductCourse, setFireControl } from "./kitchen.js";
+import { createCourse, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { createTable } from "./testing/live-table.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -62,7 +63,6 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   createOpenOrder,
-  fireCourse,
   listExpoQueue,
   listStationQueue,
   parkOrder,
@@ -83,7 +83,6 @@ import {
   fireHeldLine,
   listOrderGroups,
   readCurrentOrders,
-  markGroupAway,
   moveLinesToGroup,
   splitHeldLineIntoUnits,
   reorderHeldGroups,
@@ -2770,17 +2769,12 @@ describe("a device as the firer", () => {
     return { id, label: row!.label };
   }
 
-  it("records the device, not a person, when a course fires its held groups, and shows it as the sender", async () => {
+  it("records the device, not a person, on a historical group release, and shows it as the sender", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const device = await firingDevice(v);
-    const [steak] = await db
-      .select({ courseId: workingOrderLines.courseId })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.productId, v.productId.steak))
-      .limit(1);
-
-    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, steak!.courseId!, { deviceId: device.id }));
+    const command = await args(s.partyId, { operatorId: device.id });
+    await inTx((tx) => fireGroup(tx, v.cfg, s.partyId, s.mains, command, { deviceId: device.id }));
 
     const [group] = await db.select().from(orderGroups).where(eq(orderGroups.id, s.mains));
     expect(group).toMatchObject({ state: "fired", firedBy: null, firedByDeviceId: device.id });
@@ -2824,26 +2818,15 @@ describe("a device as the firer", () => {
   });
 });
 
-describe("the course Fire of the station and the pass, on a party", () => {
-  async function courseIdOf(v: Venue, dish: Dish): Promise<string> {
-    const [row] = await db
-      .select({ courseId: workingOrderLines.courseId })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.productId, v.productId[dish]))
-      .limit(1);
-    return row!.courseId!;
-  }
-
-  it("fires the held group holding the course's lines, as fireGroup does", async () => {
+describe("waiter group and recalled-line release", () => {
+  it("fires the selected held group and records the waiter", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const [steak, fish] = await linesIn(s.partyId, s.mains);
     const revision = await revisionOf(s.partyId);
     const jobsBefore = (await printed(v)).length;
 
-    await inTx(async (tx) =>
-      fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), { personId: MIA }),
-    );
+    await fire(v, s.partyId, s.mains, { operatorId: MIA });
 
     expect(await revisionOf(s.partyId)).toBe(revision + 1);
     const states = Object.fromEntries(
@@ -2870,7 +2853,7 @@ describe("the course Fire of the station and the pass, on a party", () => {
     });
   });
 
-  it("fires every held group holding the course, whole and in position order", async () => {
+  it("fires selected groups whole in waiter order, leaving the other same-course group held", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     const made = await submit(v, s.partyId, [
@@ -2881,9 +2864,11 @@ describe("the course Fire of the station and the pass, on a party", () => {
     const [steakGroup, fishGroup, warmGroup] = made.groups.map((group) => group.id);
     await reorder(s.partyId, [fishGroup!, warmGroup!, steakGroup!]);
 
-    await inTx(async (tx) =>
-      fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), { personId: ALEX }),
-    );
+    await fire(v, s.partyId, fishGroup!, { operatorId: ALEX });
+
+    expect((await groupsOf(s.partyId)).groups.find((g) => g.id === steakGroup)!.state).toBe("held");
+    expect((await linesIn(s.partyId, steakGroup!))[0]!.sentAt).toBeNull();
+    await fire(v, s.partyId, steakGroup!, { operatorId: ALEX });
 
     const fired = (await eventsOf(s.partyId)).filter((event) => event.kind === "fired");
     expect(fired.map((event) => event.groupId)).toEqual([fishGroup, steakGroup]);
@@ -2894,11 +2879,10 @@ describe("the course Fire of the station and the pass, on a party", () => {
     expect((await groupsOf(s.partyId)).groups.find((g) => g.id === warmGroup)!.state).toBe("held");
   });
 
-  it("keeps a Steak added held after the mains fired held until the next course Fire, which fires its group", async () => {
+  it("keeps a Steak added held after the mains fired held until the waiter fires its group", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
-    const mains = await courseIdOf(v, "steak");
-    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, mains, { personId: ALEX }));
+    await fire(v, s.partyId, s.mains, { operatorId: ALEX });
 
     const later = await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak")] }]);
     const laterGroup = later.groups[0]!.id;
@@ -2906,7 +2890,7 @@ describe("the course Fire of the station and the pass, on a party", () => {
     expect(steak!.sentAt).toBeNull();
     expect(await firedTicketLineIds(s.partyId)).not.toContain(steak!.id);
 
-    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, mains, { personId: ALEX }));
+    await fire(v, s.partyId, laterGroup, { operatorId: ALEX });
 
     expect((await linesIn(s.partyId, laterGroup))[0]!.sentAt).not.toBeNull();
     expect(await firedTicketLineIds(s.partyId)).toContain(steak!.id);
@@ -2915,7 +2899,7 @@ describe("the course Fire of the station and the pass, on a party", () => {
     );
   });
 
-  it("fires a held group of the course and sends a recalled line of that course again", async () => {
+  it("fires a selected held group and separately sends a recalled line of the same course", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     const first = await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "steak")] }]);
@@ -2926,9 +2910,8 @@ describe("the course Fire of the station and the pass, on a party", () => {
     expect(await firedTicketLineIds(s.partyId)).not.toContain(steak!.id);
     const jobsBefore = (await printed(v)).length;
 
-    await inTx(async (tx) =>
-      fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), { personId: ALEX }),
-    );
+    await fire(v, s.partyId, held.groups[0]!.id, { operatorId: ALEX });
+    await inTx((tx) => sendLines(tx, v.cfg, s.tabId, [steak!.lineNo]));
 
     expect(await firedTicketLineIds(s.partyId)).toEqual([steak!.id, fish!.id].sort());
     expect((await groupsOf(s.partyId)).groups.map((group) => group.state)).toEqual([
@@ -2940,7 +2923,7 @@ describe("the course Fire of the station and the pass, on a party", () => {
     expect(slips).toContain(DISHES.fish.kitchen);
   });
 
-  it("sends a recalled line of the course again when no held group holds the course", async () => {
+  it("sends a recalled line again without a held group", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     const first = await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "steak")] }]);
@@ -2949,9 +2932,7 @@ describe("the course Fire of the station and the pass, on a party", () => {
     expect(await firedTicketLineIds(s.partyId)).toEqual([]);
     const jobsBefore = (await printed(v)).length;
 
-    await inTx(async (tx) =>
-      fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), { personId: ALEX }),
-    );
+    await inTx((tx) => sendLines(tx, v.cfg, s.tabId, [steak!.lineNo]));
 
     expect(await firedTicketLineIds(s.partyId)).toEqual([steak!.id]);
     expect((await printed(v)).slice(jobsBefore).join("\n")).toContain(DISHES.steak.kitchen);
@@ -2960,31 +2941,31 @@ describe("the course Fire of the station and the pass, on a party", () => {
   it("refuses a held group holding a sold-out Steak (product.unavailable), firing none of it", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
-    const courseId = await courseIdOf(v, "steak");
     await db.run(sql`update products set available = 0 where id = ${v.productId.steak}`);
 
     await expectRefusedWithNothingWritten(
       v,
       s.partyId,
-      () => inTx((tx) => fireCourse(tx, v.cfg, s.tabId, courseId, { personId: ALEX })),
+      () => fire(v, s.partyId, s.mains, { operatorId: ALEX }),
       { code: "product.unavailable", params: { productId: v.productId.steak } },
     );
   });
 
-  it("does nothing for a course no held group holds, and refuses a course the venue lacks", async () => {
+  it("re-sending a sent line changes nothing, and course editing refuses a course the venue lacks", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
-    const drinks = await courseIdOf(v, "beer");
+    const [drink] = await linesIn(s.partyId, s.drinks);
+    const [steak] = await linesIn(s.partyId, s.mains);
     const before = await snapshot(v, s.partyId);
 
-    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, drinks, { personId: ALEX }));
+    await inTx((tx) => sendLines(tx, v.cfg, s.tabId, [drink!.lineNo]));
     expect(await snapshot(v, s.partyId)).toEqual(before);
 
     const missing = randomUUID();
     await expectRefusedWithNothingWritten(
       v,
       s.partyId,
-      () => inTx((tx) => fireCourse(tx, v.cfg, s.tabId, missing, { personId: ALEX })),
+      () => inTx((tx) => setLineCourse(tx, v.cfg, s.tabId, steak!.lineNo, missing)),
       { code: "course.not_found", params: { courseId: missing } },
     );
   });
@@ -3499,11 +3480,6 @@ async function ready(v: Venue, partyId: string, groupId: string, opts: CommandOp
   return inTx((tx) => bumpGroupReady(tx, v.cfg, partyId, groupId, command));
 }
 
-async function away(v: Venue, partyId: string, groupId: string, opts: CommandOptions = {}) {
-  const command = await args(partyId, opts);
-  return inTx((tx) => markGroupAway(tx, v.cfg, partyId, groupId, command));
-}
-
 /** The kitchen's items for a group's dishes, whichever bill they sit on. */
 async function groupTickets(groupId: string) {
   return db
@@ -3550,8 +3526,167 @@ async function specExampleOnTwoBills(v: Venue) {
   return { ...s, checkId };
 }
 
+describe("A773 no dispatch state — group readiness", () => {
+  it.each([false, true])(
+    "keeps readiness independent of legacy Away stamps (ready=%s)",
+    async (isReady) => {
+      const v = await setupVenue();
+      const s = await specExampleOnTwoBills(v);
+      const items = await groupTickets(s.cold);
+      expect(new Set(items.map((item) => item.workingOrderId)).size).toBe(2);
+      if (isReady) await ready(v, s.partyId, s.cold);
+      await db
+        .update(ticketItems)
+        .set({ awayAt: "2026-10-20T12:01:00.000Z" })
+        .where(
+          inArray(
+            ticketItems.id,
+            items.map((item) => item.id),
+          ),
+        );
+      const before = await snapshot(v, s.partyId);
+
+      const group = (await groupsOf(s.partyId)).groups.find((row) => row.id === s.cold)!;
+
+      expect(group.ready === true).toBe(isReady);
+      expect(group).not.toHaveProperty("away");
+      expect(group.lineIds).toHaveLength(2);
+      expect(await snapshot(v, s.partyId)).toEqual(before);
+    },
+  );
+
+  it.each([
+    { name: "live queued food", kitchenQuantity: 2000, served: 0, madeHere: false, ready: false },
+    {
+      name: "fully served food",
+      kitchenQuantity: 2000,
+      served: 2000,
+      madeHere: false,
+      ready: true,
+    },
+    {
+      name: "partly served food",
+      kitchenQuantity: 2000,
+      served: 1000,
+      madeHere: false,
+      ready: false,
+    },
+    { name: "fully cancelled food", kitchenQuantity: 0, served: 0, madeHere: false, ready: true },
+    {
+      name: "partly cancelled food",
+      kitchenQuantity: 1000,
+      served: 0,
+      madeHere: false,
+      ready: false,
+    },
+    {
+      name: "served active remainder",
+      kitchenQuantity: 1000,
+      served: 1000,
+      madeHere: false,
+      ready: true,
+    },
+    {
+      name: "legacy quantity with served food",
+      kitchenQuantity: null,
+      served: 2000,
+      madeHere: false,
+      ready: true,
+    },
+    {
+      name: "legacy quantity with live food",
+      kitchenQuantity: null,
+      served: 1000,
+      madeHere: false,
+      ready: false,
+    },
+    { name: "made-here food", kitchenQuantity: 2000, served: 0, madeHere: true, ready: true },
+  ])(
+    "ignores $name only when no kitchen work remains",
+    async ({ kitchenQuantity, served, madeHere, ready: expectedReady }) => {
+      const v = await setupVenue();
+      const s = await seated(v);
+      const group = (
+        await submit(v, s.partyId, [
+          {
+            release: "fire",
+            lines: [line(v, "steak"), line(v, "fish", "2")],
+          },
+        ])
+      ).groups[0]!;
+      const rows = await linesIn(s.partyId, group.id);
+      const steak = rows.find((row) => row.productId === v.productId.steak)!;
+      const fish = rows.find((row) => row.productId === v.productId.fish)!;
+      await db
+        .update(ticketItems)
+        .set({ state: "ready", readyAt: "2026-10-20T12:00:00.000Z" })
+        .where(eq(ticketItems.workingOrderLineId, steak.id));
+      await db
+        .update(ticketItems)
+        .set({ quantity: kitchenQuantity, madeHere, awayAt: "2026-10-20T12:01:00.000Z" })
+        .where(eq(ticketItems.workingOrderLineId, fish.id));
+      await db
+        .update(workingOrderLines)
+        .set({ servedQuantity: served, servedAt: null })
+        .where(eq(workingOrderLines.id, fish.id));
+      if (kitchenQuantity !== null && kitchenQuantity < 2000) {
+        await db.insert(lineServiceCancellations).values({
+          lineId: fish.id,
+          quantity: 2000 - kitchenQuantity,
+          cancelledAt: "2026-10-20T12:02:00.000Z",
+          wasStarted: false,
+          actorId: ALEX,
+        });
+      }
+      const before = await snapshot(v, s.partyId);
+
+      const read = (await groupsOf(s.partyId)).groups.find((row) => row.id === group.id)!;
+
+      expect(read.ready === true).toBe(expectedReady);
+      expect(read.lineIds).toContain(steak.id);
+      expect(await snapshot(v, s.partyId)).toEqual(before);
+    },
+  );
+
+  it.each(["served", "cancelled"] as const)(
+    "does not report a wholly %s group ready",
+    async (completion) => {
+      const v = await setupVenue();
+      const s = await seated(v);
+      const group = (
+        await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "steak", "2")] }])
+      ).groups[0]!;
+      const [dish] = await linesIn(s.partyId, group.id);
+      await db
+        .update(ticketItems)
+        .set({ state: "ready", quantity: completion === "cancelled" ? 0 : 2000 })
+        .where(eq(ticketItems.workingOrderLineId, dish!.id));
+      if (completion === "served") {
+        await db
+          .update(workingOrderLines)
+          .set({ servedQuantity: 2000, servedAt: null })
+          .where(eq(workingOrderLines.id, dish!.id));
+      } else {
+        await db.insert(lineServiceCancellations).values({
+          lineId: dish!.id,
+          quantity: 2000,
+          cancelledAt: "2026-10-20T12:02:00.000Z",
+          wasStarted: false,
+          actorId: ALEX,
+        });
+      }
+      const before = await snapshot(v, s.partyId);
+
+      const read = (await groupsOf(s.partyId)).groups.find((row) => row.id === group.id)!;
+
+      expect(read.ready).toBeUndefined();
+      expect(await snapshot(v, s.partyId)).toEqual(before);
+    },
+  );
+});
+
 describe("the pass by group (D1)", () => {
-  it("bumps the fired cold starters ready on both bills, then sends them away, leaving every other group as it was", async () => {
+  it("bumps the fired cold starters ready on both bills, leaving every other group as it was", async () => {
     const v = await setupVenue();
     const s = await specExampleOnTwoBills(v);
     const cold = await groupTickets(s.cold);
@@ -3570,22 +3705,6 @@ describe("the pass by group (D1)", () => {
     expect(coldReady.every((item) => item.readyAt !== null)).toBe(true);
     expect(await groupTickets(s.drinks)).toEqual(drinksBefore);
     expect(await groupTickets(s.warm)).toEqual(warmBefore);
-
-    const sent = await away(v, s.partyId, s.cold);
-
-    expect(sent).toEqual({ revision: await revisionOf(s.partyId) });
-    expect((await groupTickets(s.cold)).every((item) => item.awayAt !== null)).toBe(true);
-    expect(await groupTickets(s.drinks)).toEqual(drinksBefore);
-  });
-
-  it("sends away only what is ready: a group still cooking gets no away stamp", async () => {
-    const v = await setupVenue();
-    const s = await specExample(v);
-    const before = await groupTickets(s.drinks);
-
-    await away(v, s.partyId, s.drinks);
-
-    expect(await groupTickets(s.drinks)).toEqual(before);
   });
 
   it("changes no kitchen item for a held group, yet records the command and moves the party on", async () => {
@@ -3595,16 +3714,13 @@ describe("the pass by group (D1)", () => {
     expect(before.every((item) => item.firedAt === null)).toBe(true);
     const revision = await revisionOf(s.partyId);
     const readyId = randomUUID();
-    const awayId = randomUUID();
 
     await ready(v, s.partyId, s.warm, { submissionId: readyId });
-    await away(v, s.partyId, s.warm, { submissionId: awayId });
 
     expect(await groupTickets(s.warm)).toEqual(before);
-    expect(await revisionOf(s.partyId)).toBe(revision + 2);
-    expect((await commandsOf(s.partyId)).slice(-2)).toEqual([
+    expect(await revisionOf(s.partyId)).toBe(revision + 1);
+    expect((await commandsOf(s.partyId)).slice(-1)).toEqual([
       { kind: "group.ready", submissionId: readyId },
-      { kind: "group.away", submissionId: awayId },
     ]);
   });
 
@@ -3626,28 +3742,25 @@ describe("the pass by group (D1)", () => {
     expect(await readyOf(s.warm)).toBe(false);
   });
 
-  // Fails if a group sent away still reads only "ready", or reads away before every bill's items left.
-  it("reads a group away only once every fired kitchen item of it has left the pass", async () => {
+  it("keeps a partially stamped group ready across both bills without a dispatch state", async () => {
     const v = await setupVenue();
     const s = await specExampleOnTwoBills(v);
-    const groupOf = async (groupId: string) =>
-      (await groupsOf(s.partyId)).groups.find((group) => group.id === groupId)!;
     await ready(v, s.partyId, s.cold);
-    expect((await groupOf(s.cold)).away).toBeUndefined();
-
-    // One of the two bills' items gone is not the whole group.
     const [first, ...rest] = await groupTickets(s.cold);
     expect(rest.some((item) => item.workingOrderId !== first!.workingOrderId)).toBe(true);
     await db
       .update(ticketItems)
-      .set({ awayAt: new Date().toISOString() })
+      .set({ awayAt: "2026-10-20T12:01:00.000Z" })
       .where(eq(ticketItems.id, first!.id));
-    expect((await groupOf(s.cold)).away).toBeUndefined();
+    const before = await snapshot(v, s.partyId);
 
-    await away(v, s.partyId, s.cold);
-    expect(await groupOf(s.cold)).toMatchObject({ ready: true, away: true });
-    expect((await groupOf(s.drinks)).away).toBeUndefined();
-    expect((await groupOf(s.warm)).away).toBeUndefined();
+    const groups = (await groupsOf(s.partyId)).groups;
+
+    expect(groups.find((group) => group.id === s.cold)).toMatchObject({ ready: true });
+    expect(groups.every((group) => !("away" in group))).toBe(true);
+    expect(groups.find((group) => group.id === s.drinks)!.ready).toBeUndefined();
+    expect(groups.find((group) => group.id === s.warm)!.ready).toBeUndefined();
+    expect(await snapshot(v, s.partyId)).toEqual(before);
   });
 
   it("never reads ready a fired group with nothing for the kitchen, since nobody recorded it", async () => {
@@ -3663,20 +3776,6 @@ describe("the pass by group (D1)", () => {
 });
 
 describe("pass retries (D8, D19)", () => {
-  it("records an away resent with its submission id once, answering the first answer", async () => {
-    const v = await setupVenue();
-    const s = await specExample(v);
-    await ready(v, s.partyId, s.cold);
-    const opts = { submissionId: randomUUID(), revision: await revisionOf(s.partyId) };
-
-    const first = await away(v, s.partyId, s.cold, opts);
-    const before = await snapshot(v, s.partyId);
-    const second = await away(v, s.partyId, s.cold, opts);
-
-    expect(second).toEqual(first);
-    expect(await snapshot(v, s.partyId)).toEqual(before);
-  });
-
   it("records a ready resent with its submission id once", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
@@ -3695,7 +3794,6 @@ describe("pass retries (D8, D19)", () => {
     const s = await specExample(v);
     const submissionId = randomUUID();
     await ready(v, s.partyId, s.cold, { submissionId });
-    await away(v, s.partyId, s.drinks, { submissionId: randomUUID() });
 
     await expectRefusedWithNothingWritten(
       v,
@@ -3703,41 +3801,31 @@ describe("pass retries (D8, D19)", () => {
       () => ready(v, s.partyId, s.drinks, { submissionId }),
       { code: "submission.id_reused", params: { submissionId } },
     );
-    await expectRefusedWithNothingWritten(
-      v,
-      s.partyId,
-      () => away(v, s.partyId, s.cold, { submissionId }),
-      { code: "submission.id_reused", params: { submissionId } },
-    );
   });
 
-  it("refuses a ready or an away sent with a stale party revision (party.out_of_date), writing nothing", async () => {
+  it("refuses a ready sent with a stale party revision (party.out_of_date), writing nothing", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const stale = await revisionOf(s.partyId);
     await fire(v, s.partyId, s.warm);
 
-    for (const step of [ready, away]) {
-      await expectRefusedWithNothingWritten(
-        v,
-        s.partyId,
-        () => step(v, s.partyId, s.cold, { revision: stale }),
-        { code: "party.out_of_date", params: { partyId: s.partyId, revision: stale + 1 } },
-      );
-    }
+    await expectRefusedWithNothingWritten(
+      v,
+      s.partyId,
+      () => ready(v, s.partyId, s.cold, { revision: stale }),
+      { code: "party.out_of_date", params: { partyId: s.partyId, revision: stale + 1 } },
+    );
   });
 
-  it("refuses a ready or an away on a closed party (party.not_open), writing nothing", async () => {
+  it("refuses a ready on a closed party (party.not_open), writing nothing", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     await closeParty(s.partyId);
 
-    for (const step of [ready, away]) {
-      await expectRefusedWithNothingWritten(v, s.partyId, () => step(v, s.partyId, s.cold), {
-        code: "party.not_open",
-        params: { partyId: s.partyId },
-      });
-    }
+    await expectRefusedWithNothingWritten(v, s.partyId, () => ready(v, s.partyId, s.cold), {
+      code: "party.not_open",
+      params: { partyId: s.partyId },
+    });
   });
 
   it("refuses a group the party does not have, or another party's (group.not_found), writing nothing", async () => {
@@ -3748,17 +3836,15 @@ describe("pass retries (D8, D19)", () => {
       await submit(v, other.partyId, [{ release: "fire", lines: [line(v, "steak")] }])
     ).groups[0]!.id;
 
-    for (const step of [ready, away]) {
-      for (const groupId of [randomUUID(), theirs]) {
-        await expectRefusedWithNothingWritten(v, s.partyId, () => step(v, s.partyId, groupId), {
-          code: "group.not_found",
-          params: { groupId },
-        });
-      }
+    for (const groupId of [randomUUID(), theirs]) {
+      await expectRefusedWithNothingWritten(v, s.partyId, () => ready(v, s.partyId, groupId), {
+        code: "group.not_found",
+        params: { groupId },
+      });
     }
   });
 
-  it("refuses a ready or an away on a removed group (group.not_found), writing nothing", async () => {
+  it("refuses a ready on a removed group (group.not_found), writing nothing", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const fishOnly = (await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "fish")] }]))
@@ -3766,12 +3852,10 @@ describe("pass retries (D8, D19)", () => {
     const [fish] = await linesIn(s.partyId, fishOnly);
     await move(v, s.partyId, [{ lineId: fish!.id, quantity: "1" }], { groupId: s.mains });
 
-    for (const step of [ready, away]) {
-      await expectRefusedWithNothingWritten(v, s.partyId, () => step(v, s.partyId, fishOnly), {
-        code: "group.not_found",
-        params: { groupId: fishOnly },
-      });
-    }
+    await expectRefusedWithNothingWritten(v, s.partyId, () => ready(v, s.partyId, fishOnly), {
+      code: "group.not_found",
+      params: { groupId: fishOnly },
+    });
   });
 });
 
@@ -3867,7 +3951,7 @@ describe("the kitchen and the pass read a party's groups", () => {
       numberPartyId: s.partyId,
       state: "fired",
     });
-    expect(order.groups.every((group) => !group.away)).toBe(true);
+    expect(order.groups.every((group) => !("away" in group))).toBe(true);
   });
 
   // Fails if the pass orders groups by course (the rows' own order) rather than by position.
@@ -3911,21 +3995,32 @@ describe("the kitchen and the pass read a party's groups", () => {
     ]);
   });
 
-  it("shows a group split across two bills under its own number on each bill, and rolls its away up", async () => {
+  it("keeps a split group visible on both bills after legacy Away stamps", async () => {
     const v = await setupVenue();
     const s = await specExampleOnTwoBills(v);
     await ready(v, s.partyId, s.cold);
-    await away(v, s.partyId, s.cold);
+    await db
+      .update(ticketItems)
+      .set({ awayAt: "2026-10-20T12:01:00.000Z" })
+      .where(
+        inArray(
+          ticketItems.id,
+          (await groupTickets(s.cold)).map((item) => item.id),
+        ),
+      );
 
     const board = await inTx((tx) => listExpoQueue(tx, v.cfg));
     const tab = board.find((row) => row.orderId === s.tabId)!;
     expect(tab.groups.find((group) => group.groupId === s.cold)).toMatchObject({
       position: 2,
       fired: true,
-      away: true,
     });
-    // The check holds only the away croquette, so it has left the pass.
-    expect(board.find((row) => row.orderId === s.checkId)).toBeUndefined();
+    expect(board.find((row) => row.orderId === s.checkId)!.groups).toMatchObject([
+      { groupId: s.cold, position: 2, fired: true },
+    ]);
+    for (const bill of [tab, board.find((row) => row.orderId === s.checkId)!]) {
+      expect(bill.groups.find((group) => group.groupId === s.cold)).not.toHaveProperty("away");
+    }
   });
 
   it("puts a fired line in no group in one section with no group, first", async () => {
@@ -4447,13 +4542,12 @@ describe("advance HOLD tickets (Task 6)", () => {
       expect(linkedBefore).toEqual((await jobIds(v)).slice(0, 5));
     });
 
-    it("prints a FIRE slip through the course Fire too", async () => {
+    it("prints a FIRE slip for a waiter-released group", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
       const s = await specExample(v);
-      const steak = await lineOf(s, s.mains, "steak", v);
 
-      await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, steak.courseId!, { personId: MIA }));
+      await fire(v, s.partyId, s.mains, { operatorId: MIA });
 
       expect(await printedSince(v, 5)).toEqual([
         [
@@ -5322,7 +5416,10 @@ describe("Fire now on one held dish", () => {
     async (mode) => {
       const { v, s, steak, fish } = await fixture(false);
       await inTx(async (tx) => {
-        await setFireControl(tx, v.cfg, mode);
+        await tx
+          .update(locations)
+          .set({ fireControl: mode })
+          .where(eq(locations.id, v.cfg.locationId));
         await writeEditSentLines(tx, false);
       });
       const command = await args(s.partyId);

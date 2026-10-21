@@ -104,16 +104,12 @@ export function readyText(n: number): string {
 
 function readyCount(table: TableState): number {
   if (table.readyToServe > 0) return table.readyToServe;
-  const atStations = table.signals
+  return table.signals
     .flatMap((signal) => (signal.kind === "ready" ? signal.byStation : []))
     .reduce((sum, { count }) => sum + count, 0);
-  return atStations > 0 ? atStations : table.enRoute;
 }
 
-// A merge's ready count comes from one member, never a sum: every table a party sits at carries its
-// signals (packages/shared/src/table-signals.ts:4-5) and its whole family's ready and on-the-way
-// counts (the `tab` subquery joins each table to the party's bills, `listTablesWithState`,
-// `apps/server/src/working-order.ts`).
+// Joined tables carry the same party's ready quantity; adding their counts would repeat its dishes.
 const largestReady = (members: readonly TableState[]): number =>
   Math.max(0, ...members.map(readyCount));
 

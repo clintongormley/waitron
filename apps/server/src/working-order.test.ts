@@ -1,3 +1,4 @@
+import { fireTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { abandonHeldOrder, addTabRound } from "./testing/order-writer-fixture.js";
 import {
   recallLines,
@@ -65,13 +66,12 @@ import {
   bumpCourseReady,
   createOpenOrder,
   splitLinesWithinOrder,
-  fireCourse,
+  fireOrderLines,
   fireLines,
   getHeldOrder,
   listExpoQueue,
   listHeldOrders,
   listStationQueue,
-  markCourseAway,
   parkOrder,
   readStoredOrder,
   priceStoredOrderForIssuance,
@@ -3325,7 +3325,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     });
   });
 
-  it("releases a held no-preparation dish on an order with no service zone", async () => {
+  it("sends a no-preparation counter dish without a service zone despite a holding flag", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const drinks = await createCategory(tx, { name: "Bottles" });
@@ -3349,12 +3349,22 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
             .where(eq(workingOrderLines.workingOrderId, id))
         )[0]!.sentAt;
       expect(await ticketItemsFor(tx, id)).toEqual([]);
-      expect(await stamp()).toBeNull();
-      await fireCourse(tx, cfg, id, course.id, { personId: OPERATOR });
+      expect(await stamp()).toEqual(expect.any(String));
+      await fireOrderLines(
+        tx,
+        cfg,
+        id,
+        (await fireableLines(tx, id)).map((row) => row.id),
+      );
       const sentAt = await stamp();
       expect(sentAt).toEqual(expect.any(String));
       expect(await ticketItemsFor(tx, id)).toEqual([]);
-      await fireCourse(tx, cfg, id, course.id, { personId: OPERATOR });
+      await fireOrderLines(
+        tx,
+        cfg,
+        id,
+        (await fireableLines(tx, id)).map((row) => row.id),
+      );
       expect(await stamp()).toBe(sentAt);
     });
   });
@@ -4205,7 +4215,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     expect(items[0]!.state).toBe("queued");
   });
 
-  it("parking stamps no line sent; placing stamps every line, one its course still holds included", async () => {
+  it("parking stamps no line sent; placing sends every counter course", async () => {
     const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
     const { cafe, postre } = await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -4232,19 +4242,19 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR);
 
     expect(await sentAt()).toEqual([true, true]);
-    // The dessert's course is held: it has a ticket that has not fired.
+    // Counter Send releases both recorded courses.
     const items = await db
       .select({ firedAt: ticketItems.firedAt })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
       .where(eq(ticketItems.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
-    expect(items.map((item) => item.firedAt !== null)).toEqual([true, false]);
+    expect(items.map((item) => item.firedAt !== null)).toEqual([true, true]);
   });
 
-  it("places and fires a counter order by its courses, putting no line in a group", async () => {
+  it("places and fires every counter course, putting no line in a group", async () => {
     const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
-    const { cafe, postre, desserts } = await withTransaction(db, async (tx) => {
+    const { cafe, postre } = await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const starters = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 1 });
       const desserts = await createCourse(tx, cfg, { name: "Postres", displayOrder: 3 });
@@ -4252,7 +4262,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
       const postre = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, cafe, starters.id);
       await setProductCourse(tx, cfg, postre, desserts.id);
-      return { cafe, postre, desserts };
+      return { cafe, postre };
     });
     const id = randomUUID();
     await parkProducts(cfg, { id, lines: [line(cafe), line(postre)] });
@@ -4267,8 +4277,15 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
       ).map((item) => item.firedAt !== null);
 
     await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR);
-    expect(await fired()).toEqual([true, false]);
-    await withTransaction(db, (tx) => fireCourse(tx, cfg, id, desserts.id, { personId: OPERATOR }));
+    expect(await fired()).toEqual([true, true]);
+    await withTransaction(db, async (tx) =>
+      fireOrderLines(
+        tx,
+        cfg,
+        id,
+        (await fireableLines(tx, id)).map((row) => row.id),
+      ),
+    );
 
     expect(await fired()).toEqual([true, true]);
     const lines = await db
@@ -4280,9 +4297,9 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     expect(await db.select().from(orderGroupEvents)).toEqual([]);
   });
 
-  it("releases a placed order's held course whose product has since sold out: its lines can no longer be removed", async () => {
+  it("keeps a placed counter's released dishes after a sold-out change and repeated line release", async () => {
     const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
-    const { cafe, postre, desserts } = await withTransaction(db, async (tx) => {
+    const { cafe, postre } = await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const starters = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 1 });
       const desserts = await createCourse(tx, cfg, { name: "Postres", displayOrder: 3 });
@@ -4290,7 +4307,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
       const postre = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, cafe, starters.id);
       await setProductCourse(tx, cfg, postre, desserts.id);
-      return { cafe, postre, desserts };
+      return { cafe, postre };
     });
     const id = randomUUID();
     await parkProducts(cfg, { id, lines: [line(cafe), line(postre)] });
@@ -4305,7 +4322,14 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
       )[0]!.revision;
     const placedAt = await revision();
 
-    await withTransaction(db, (tx) => fireCourse(tx, cfg, id, desserts.id, { personId: OPERATOR }));
+    await withTransaction(db, async (tx) =>
+      fireOrderLines(
+        tx,
+        cfg,
+        id,
+        (await fireableLines(tx, id)).map((row) => row.id),
+      ),
+    );
 
     // Only an open order's revision counts writes: a placed order's lines cannot be edited.
     expect(await revision()).toBe(placedAt);
@@ -4926,8 +4950,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   });
 });
 
-// Course hold/fire decisions, held-item refusal and fireCourse idempotency.
-
 /** The order's ticket items joined to their line, carrying the fields the hold-and-fire tests read:
  *  the item id (the bump target), its product (to key by line), its snapshotted course and
  *  `fired_at` (NULL = held). */
@@ -4940,7 +4962,6 @@ async function courseItemsFor(
     productId: string | null;
     courseId: string | null;
     firedAt: string | null;
-    // KDS-3: the pass's dispatch marker (`null` = not away), read by the expo-verb tests.
     awayAt: string | null;
     state: string;
   }[]
@@ -4962,8 +4983,8 @@ async function courseItemsFor(
 const byLine = <T extends { productId: string | null }>(items: T[], productId: string): T =>
   items.find((i) => i.productId === productId)!;
 
-describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance guard)", () => {
-  it("auto-fires the earliest course, holds later ones, and fireCourse releases a held course", async () => {
+describe("waiter line release / hold-and-fire", () => {
+  it("auto-fires the earliest course, holds later ones, and waiter line release keeps its same-course sibling held", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -4971,10 +4992,16 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
       const soup = await makeProduct(tx, cfg, catalogueId, {});
       const steak = await makeProduct(tx, cfg, catalogueId, {});
+      const sibling = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, soup, ent.id);
       await setProductCourse(tx, cfg, steak, pri.id);
+      await setProductCourse(tx, cfg, sibling, pri.id);
 
-      const { id: orderId } = await placeOrderWith(tx, cfg, [line(soup), line(steak)]);
+      const orderId = await fireTableKitchenOrder(tx, cfg, [
+        line(soup),
+        line(steak),
+        line(sibling),
+      ]);
       const items = await courseItemsFor(tx, orderId);
       expect(byLine(items, soup).firedAt).not.toBeNull(); // earliest course auto-fired
       expect(byLine(items, steak).firedAt).toBeNull(); // later course held
@@ -4984,9 +5011,10 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
         advanceTicketItem(tx, cfg, byLine(items, steak).id, "preparing"),
       ).rejects.toMatchObject({ code: "ticket.item_held" });
 
-      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
+      await fireProductLine(tx, cfg, orderId, steak);
       const afterFire = await courseItemsFor(tx, orderId);
       expect(byLine(afterFire, steak).firedAt).not.toBeNull();
+      expect(byLine(afterFire, sibling).firedAt).toBeNull();
 
       await advanceTicketItem(tx, cfg, byLine(afterFire, steak).id, "preparing");
       const advanced = await courseItemsFor(tx, orderId);
@@ -5008,7 +5036,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       await setProductCourse(tx, cfg, starter, ent.id);
       await setProductCourse(tx, cfg, main, pri.id);
 
-      const { id: orderId } = await placeOrderWith(tx, cfg, [
+      const orderId = await fireTableKitchenOrder(tx, cfg, [
         line(loose),
         line(starter),
         line(main),
@@ -5020,7 +5048,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
     });
   });
 
-  it("fireCourse is idempotent — re-firing an already-fired course leaves its timestamps untouched", async () => {
+  it("line release is idempotent — re-firing an already-fired dish leaves its timestamps untouched", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -5031,19 +5059,18 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       await setProductCourse(tx, cfg, starter, ent.id);
       await setProductCourse(tx, cfg, main, pri.id);
 
-      const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
+      const orderId = await fireTableKitchenOrder(tx, cfg, [line(starter), line(main)]);
 
       // The earliest course (Entrantes) auto-fired; re-firing it must NOT restamp — its WHERE
       // (`fired_at IS NULL`) matches nothing already-fired.
       const beforeEnt = byLine(await courseItemsFor(tx, orderId), starter).firedAt;
-      await fireCourse(tx, cfg, orderId, ent.id, { personId: OPERATOR });
+      await fireProductLine(tx, cfg, orderId, starter);
       expect(byLine(await courseItemsFor(tx, orderId), starter).firedAt).toBe(beforeEnt);
 
-      // Fire the held course, capture its stamp, then fire it AGAIN — the second call is a no-op.
-      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
+      await fireProductLine(tx, cfg, orderId, main);
       const firstStamp = byLine(await courseItemsFor(tx, orderId), main).firedAt;
       expect(firstStamp).not.toBeNull();
-      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
+      await fireProductLine(tx, cfg, orderId, main);
       expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).toBe(firstStamp);
     });
   });
@@ -5084,7 +5111,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       expect(byLine(items, dessert).firedAt).toBeNull();
 
       // Release Principales explicitly — now fired for the order though it is not the earliest course.
-      await fireCourse(tx, cfg, tabId, pri.id, { personId: OPERATOR });
+      await fireProductLine(tx, cfg, tabId, main);
       expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).not.toBeNull();
 
       // Round 3: another main. Principales is already fired for this order, so this new item joins the
@@ -5113,7 +5140,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       await setProductCourse(tx, cfg, starter, ent.id);
       await setProductCourse(tx, cfg, main, pri.id);
 
-      const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
+      const orderId = await fireTableKitchenOrder(tx, cfg, [line(starter), line(main)]);
       const before = await courseItemsFor(tx, orderId);
       expect(byLine(before, starter).firedAt).not.toBeNull(); // Entrantes auto-fired
       expect(byLine(before, main).firedAt).toBeNull(); // Principales held
@@ -5139,29 +5166,33 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       await setProductCourse(tx, cfg, starter, ent.id);
       await setProductCourse(tx, cfg, main, pri.id);
 
-      const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
+      const orderId = await fireTableKitchenOrder(tx, cfg, [line(starter), line(main)]);
       expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).toBeNull(); // Principales held
 
       await deleteCourse(tx, cfg, pri.id);
-      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
+      await fireProductLine(tx, cfg, orderId, main);
       expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).not.toBeNull(); // released
     });
   });
 
-  it("fireCourse rejects an unknown course with course.not_found", async () => {
+  it("course editing rejects an unknown course with course.not_found", async () => {
     const { cfg, catalogueId } = await setupVenue();
-    await withTransaction(db, async (tx) => {
-      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const cafe = await makeProduct(tx, cfg, catalogueId, {});
-      const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe)]);
-
-      const missing = randomUUID();
-      await expect(
-        fireCourse(tx, cfg, orderId, missing, { personId: OPERATOR }),
-      ).rejects.toMatchObject({
-        code: "course.not_found",
-        params: { courseId: missing },
-      });
+    const orderId = await withTransaction(db, async (tx) => {
+      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, cfg, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, cfg, { name: "Mains", displayOrder: 1 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      const main = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, starterCourse.id);
+      await setProductCourse(tx, cfg, main, mainCourse.id);
+      return fireTableKitchenOrder(tx, cfg, [line(starter), line(main)]);
+    });
+    const missing = randomUUID();
+    await expect(
+      withTransaction(db, (tx) => setLineCourse(tx, cfg, orderId, 2, missing)),
+    ).rejects.toMatchObject({
+      code: "course.not_found",
+      params: { courseId: missing },
     });
   });
 });
@@ -5569,16 +5600,16 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter)]);
 
-      // Cook it through to READY, then dispatch it to the floor (away). markCourseAway stamps away_at ONLY
-      // on state='ready' items, so an away line is state='ready' — caught by the started-check's `ready`
-      // disjunct (NOT a no-op: a dispatched/served line cannot be cleanly recalled).
       const item = byLine(await courseItemsFor(tx, tabId), starter);
       await advanceTicketItem(tx, cfg, item.id, "preparing");
       await advanceTicketItem(tx, cfg, item.id, "ready");
-      await markCourseAway(tx, cfg, tabId, ent.id);
+      await tx
+        .update(ticketItems)
+        .set({ awayAt: "2026-10-20T12:00:00.000Z" })
+        .where(eq(ticketItems.id, item.id));
       const away = byLine(await courseItemsFor(tx, tabId), starter);
       expect(away.state).toBe("ready");
-      expect(away.awayAt).not.toBeNull(); // actually dispatched to the floor
+      expect(away.awayAt).not.toBeNull();
 
       await expect(recallLines(tx, cfg, tabId, [1])).rejects.toMatchObject({
         code: "ticket.already_started",
@@ -5817,7 +5848,7 @@ describe("correction slips on recall & void (A6)", () => {
 // Coursing editing — `hold` on send. A round line may carry `hold: true`; `addTabRound` correlates
 // that marker onto the priced PARENT row (parents come out of `priceOrderLines` in input order) and hands
 // it to `fireLines`, which inserts the held line with `fired_at NULL` REGARDLESS of its course — greyed on
-// the KDS, no kitchen print — until a later `sendLines`/`fireCourse` releases it. Transient: read at fire
+// the KDS, no kitchen print — until a later `sendLines`/`fireOrderLines` releases it. Transient: read at fire
 // time, never stored. These cases prove the hold short-circuit and the parent
 // correlation under modifier expansion.
 // ---------------------------------------------------------------------------------------------------
@@ -5905,13 +5936,6 @@ describe("addTabRound hold-on-send (A3)", () => {
   });
 });
 
-// The cross-station expo/pass read. `listExpoQueue` aggregates every order that is not abandoned or
-// collected and has an item not yet away (open, placed or settled), gathers its ticket items ACROSS
-// stations, and groups them by course in display_order with per-course fired/away roll-ups. Unlike
-// `listStationQueue` (one station, no station name) it joins `kitchen_stations` to label each
-// item's station. These cases prove the join, the collected/abandoned/fully-away exclusions, the
-// course grouping and the roll-ups.
-// ---------------------------------------------------------------------------------------------------
 describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
   it("aggregates one order's two-station single-course lines into one course with station names, excluding collected/abandoned orders", async () => {
     const { cfg, catalogueId } = await setupVenue();
@@ -5931,20 +5955,19 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       expect(expo).toHaveLength(1);
       const order = expo[0]!;
       expect(order.orderId).toBe(orderId);
-      // A single earliest course, both items auto-fired, neither away.
       expect(order.courses).toHaveLength(1);
       const course = order.courses[0]!;
       expect(course.courseId).toBe(ent.id);
       expect(course.courseName).toBe("Entrantes");
       expect(course.displayOrder).toBe(0);
       expect(course.fired).toBe(true);
-      expect(course.away).toBe(false);
+      expect(course).not.toHaveProperty("away");
       // Both lines under the one course, each labelled with its OWN station — the join listStationQueue omits.
       expect(course.items).toHaveLength(2);
       expect(course.items.map((i) => i.stationName).sort()).toEqual(["Barra", "Cocina"]);
       expect(course.items.every((i) => i.state === "queued")).toBe(true);
       expect(course.items.every((i) => i.firedAt !== null)).toBe(true);
-      expect(course.items.every((i) => i.awayAt === null)).toBe(true);
+      expect(course.items.every((i) => !("awayAt" in i))).toBe(true);
       // The display snapshot rides through: `name` is the resolved kitchen label, `qty` the
       // quantity as a three-place decimal string.
       const soupItem = course.items.find((i) => i.stationName === "Cocina")!;
@@ -5969,7 +5992,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
     });
   });
 
-  it("groups by course in display_order; a held later course reads fired:false, and the away roll-up follows per course", async () => {
+  it("keeps counter course labels in display order and releases every course independently of legacy Away", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -5986,13 +6009,11 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       expect(order.courses.map((c) => c.courseName)).toEqual(["Entrantes", "Principales"]);
       const [c0, c1] = order.courses;
       expect(c0!.fired).toBe(true); // earliest course auto-fired
-      expect(c0!.away).toBe(false);
-      expect(c1!.fired).toBe(false); // later course HELD — fired_at null on its item
-      expect(c1!.items.every((i) => i.firedAt === null)).toBe(true);
+      expect(c0).not.toHaveProperty("away");
+      expect(c1!.fired).toBe(true); // Counter Send releases every course.
+      expect(c1!.items.every((i) => i.firedAt !== null)).toBe(true);
 
-      // Fire the held course, and mark the earliest course AWAY (KDS-3's dispatch marker). The per-course
-      // roll-ups follow: Entrantes now `away`, Principales now `fired`; the order stays (main not away).
-      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
+      await fireProductLine(tx, cfg, orderId, main);
       const items = await courseItemsFor(tx, orderId);
       const entItem = items.find((i) => i.courseId === ent.id)!;
       await tx.update(ticketItems).set({ awayAt: nowIso() }).where(eq(ticketItems.id, entItem.id));
@@ -6001,14 +6022,14 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       expect(after).toHaveLength(1);
       const c0b = after[0]!.courses.find((c) => c.courseId === ent.id)!;
       const c1b = after[0]!.courses.find((c) => c.courseId === pri.id)!;
-      expect(c0b.away).toBe(true);
-      expect(c0b.items[0]!.awayAt).not.toBeNull();
+      expect(c0b).not.toHaveProperty("away");
+      expect(c0b.items[0]).not.toHaveProperty("awayAt");
       expect(c1b.fired).toBe(true); // released
-      expect(c1b.away).toBe(false);
+      expect(c1b).not.toHaveProperty("away");
     });
   });
 
-  it("drops a FULLY-away order but keeps one that still has a not-yet-away item", async () => {
+  it("keeps every unserved item after partial and whole-order legacy Away stamps", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -6021,19 +6042,21 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(a), line(b)]);
       const items = await courseItemsFor(tx, orderId);
 
-      // One item away → the order stays (a not-yet-away item remains).
       await tx
         .update(ticketItems)
         .set({ awayAt: nowIso() })
         .where(eq(ticketItems.id, items[0]!.id));
       expect((await listExpoQueue(tx, cfg)).map((o) => o.orderId)).toEqual([orderId]);
 
-      // The last item away → the whole order is fully dispatched and leaves the pass.
       await tx
         .update(ticketItems)
         .set({ awayAt: nowIso() })
         .where(eq(ticketItems.id, items[1]!.id));
-      expect(await listExpoQueue(tx, cfg)).toEqual([]);
+      const board = await listExpoQueue(tx, cfg);
+      expect(board.map((order) => order.orderId)).toEqual([orderId]);
+      expect(
+        board[0]!.courses.flatMap((course) => course.items.map((item) => item.id)).sort(),
+      ).toEqual(items.map((item) => item.id).sort());
     });
   });
 
@@ -6186,15 +6209,6 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
   });
 });
 
-// The pass's two coordination verbs. `bumpCourseReady` is the whole-course "it's all
-// plated" bump: {@link advanceTicket}'s set-based shape keyed on COURSE (order + course_id) not station,
-// advancing every FIRED, not-yet-ready item across ALL its stations straight to `ready` (skipping HELD
-// items and no-op when none match). `markCourseAway` stamps `away_at` on every READY item of the
-// course (dispatch what is plated), gated on the course EXISTING (`requireCourse` → course.not_found),
-// idempotent via `away_at IS NULL`. These cases prove the set-based logic, the held-skip and the
-// ready-only dispatch.
-// ---------------------------------------------------------------------------------------------------
-
 /** Fire ONE course of an order across TWO stations — two products in the SAME (earliest, so auto-fired)
  *  course routed to DIFFERENT stations, placed so both items fire and sit `queued`. The cross-station
  *  shape `bumpCourseReady` must sweep in one UPDATE (`listStationQueue` would need two reads to see both). */
@@ -6214,8 +6228,8 @@ async function firedCourseAcrossTwoStations(
   return { orderId, courseId: ent.id };
 }
 
-describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)", () => {
-  it("bumps a whole course ready across stations, then marks it away", async () => {
+describe("bumpCourseReady — course preparation without dispatch", () => {
+  it("bumps a whole course ready across stations without dispatching it", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const { orderId, courseId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
@@ -6231,13 +6245,11 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
       items = await courseItemsFor(tx, orderId);
       expect(items.every((i) => i.state === "ready")).toBe(true);
 
-      await markCourseAway(tx, cfg, orderId, courseId);
-      items = await courseItemsFor(tx, orderId);
-      expect(items.every((i) => i.awayAt !== null)).toBe(true);
+      expect(items.every((i) => i.awayAt === null)).toBe(true);
     });
   });
 
-  it("bumpCourseReady skips held items; markCourseAway only aways ready items", async () => {
+  it("skips held items and leaves ready and newly fired items undispatched", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -6247,7 +6259,7 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
       const main = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, starter, ent.id);
       await setProductCourse(tx, cfg, main, pri.id);
-      const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
+      const orderId = await fireTableKitchenOrder(tx, cfg, [line(starter), line(main)]);
 
       // Principales is HELD (later course, fired_at null). bumpCourseReady on it advances NOTHING — the
       // `fired_at IS NOT NULL` predicate skips held items.
@@ -6262,55 +6274,45 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
       items = await courseItemsFor(tx, orderId);
       expect(byLine(items, starter).state).toBe("ready");
 
-      // markCourseAway dispatches only PLATED (ready) items: Entrantes' item is ready → away.
-      await markCourseAway(tx, cfg, orderId, ent.id);
-      items = await courseItemsFor(tx, orderId);
-      expect(byLine(items, starter).awayAt).not.toBeNull();
+      expect(byLine(items, starter).awayAt).toBeNull();
 
-      // Now the ready-only guard: fire Principales (so its main is fired, still `queued`) and dispatch it.
-      // The main is fired but NOT ready, so it does NOT go away.
-      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
-      await markCourseAway(tx, cfg, orderId, pri.id);
+      await fireProductLine(tx, cfg, orderId, main);
       items = await courseItemsFor(tx, orderId);
-      expect(byLine(items, main).state).toBe("queued"); // fired but not plated
-      expect(byLine(items, main).awayAt).toBeNull(); // only ready items go away
+      expect(byLine(items, main).state).toBe("queued");
+      expect(byLine(items, main).awayAt).toBeNull();
     });
   });
 
-  it("markCourseAway rejects an unknown course with course.not_found (requireCourse existence check)", async () => {
+  it("leaves every item unchanged for an unknown course", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const cafe = await makeProduct(tx, cfg, catalogueId, {});
-      const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe)]);
-
-      const missing = randomUUID();
-      await expect(markCourseAway(tx, cfg, orderId, missing)).rejects.toMatchObject({
-        code: "course.not_found",
-        params: { courseId: missing },
-      });
+      const { orderId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
+      const before = await courseItemsFor(tx, orderId);
+      await bumpCourseReady(tx, cfg, orderId, randomUUID());
+      expect(await courseItemsFor(tx, orderId)).toEqual(before);
+      expect(before.every((i) => i.state === "queued")).toBe(true);
     });
   });
 
-  it("markCourseAway is idempotent (already-away untouched); bumpCourseReady no-ops on an unknown course", async () => {
+  it("keeps original ready timestamps and item facts on a repeated bump", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const { orderId, courseId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
-
-      // bumpCourseReady on an UNKNOWN course is a no-op (no throw, no rows) — the bulk-bump convenience,
-      // unlike markCourseAway which requires the course. The order's items are untouched.
-      await bumpCourseReady(tx, cfg, orderId, randomUUID());
-      expect((await courseItemsFor(tx, orderId)).every((i) => i.state === "queued")).toBe(true);
-
       await bumpCourseReady(tx, cfg, orderId, courseId);
-      await markCourseAway(tx, cfg, orderId, courseId);
-      const first = new Map((await courseItemsFor(tx, orderId)).map((i) => [i.id, i.awayAt]));
-      expect([...first.values()].every((a) => a !== null)).toBe(true);
-
-      // Re-dispatch — the `away_at IS NULL` predicate matches nothing already-away, so no stamp moves.
-      await markCourseAway(tx, cfg, orderId, courseId);
-      const second = new Map((await courseItemsFor(tx, orderId)).map((i) => [i.id, i.awayAt]));
-      for (const [id, away] of first) expect(second.get(id)).toBe(away);
+      const read = () =>
+        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId));
+      const readied = await read();
+      expect(readied).toHaveLength(2);
+      expect(
+        readied.every((i) => i.state === "ready" && i.readyAt !== null && i.awayAt === null),
+      ).toBe(true);
+      await tx
+        .update(ticketItems)
+        .set({ readyAt: "2026-10-20T12:00:00.000Z" })
+        .where(eq(ticketItems.workingOrderId, orderId));
+      const first = await read();
+      await bumpCourseReady(tx, cfg, orderId, courseId);
+      expect(await read()).toEqual(first);
     });
   });
 });
@@ -8871,6 +8873,22 @@ async function fireableLines(tx: Transaction, orderId: string) {
     .orderBy(workingOrderLines.lineNo);
 }
 
+async function fireProductLine(
+  tx: Transaction,
+  cfg: Parameters<typeof fireOrderLines>[1],
+  orderId: string,
+  productId: string,
+) {
+  const lines = (await fireableLines(tx, orderId)).filter((row) => row.productId === productId);
+  expect(lines.length).toBeGreaterThan(0);
+  await fireOrderLines(
+    tx,
+    cfg,
+    orderId,
+    lines.map((row) => row.id),
+  );
+}
+
 async function insertRoute(
   tx: Transaction,
   cfg: DeviceRequestConfig,
@@ -9928,7 +9946,7 @@ describe("pricing a stored order to pay it refuses a line never sent whose produ
   });
 });
 
-describe("fireCourse on an order with no service context", () => {
+describe("line release on an order with no service context", () => {
   it("releases the held course and stamps its line sent", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { id } = await withTransaction(db, async (tx) => {
@@ -9945,7 +9963,12 @@ describe("fireCourse on an order with no service context", () => {
         set course_id = case line_no when 1 then ${starters.id} else ${desserts.id} end
         where working_order_id = ${id}`);
       await fireLines(tx, cfg, id, await fireableLines(tx, id));
-      await fireCourse(tx, cfg, id, desserts.id, { personId: OPERATOR });
+      await fireOrderLines(
+        tx,
+        cfg,
+        id,
+        (await fireableLines(tx, id)).map((row) => row.id),
+      );
       return { id };
     });
 

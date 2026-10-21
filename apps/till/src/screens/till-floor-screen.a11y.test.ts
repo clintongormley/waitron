@@ -40,8 +40,6 @@ const zones: FloorZone[] = [
   },
 ];
 
-// A spread of occupancy states + a zoneless table, plus one card for EACH of the three service hints
-// (t1, t5, t6), so axe sees every card variant in one mount. All UNPLACED, so the LIST view shows.
 const tables: TableState[] = [
   {
     id: "t1",
@@ -53,11 +51,8 @@ const tables: TableState[] = [
     tabLineCount: 3,
     tabTotal: "47.50",
     pendingDeliveries: 0,
-    // All three counts positive — a dispatched line is still ready + unserved — so en camino wins and
-    // its filled-primary chip is what axe scans.
     pendingToServe: 2,
     readyToServe: 1,
-    enRoute: 1,
     timingBand: "fresh",
     nextReservation: { time: "20:30" },
     today: null,
@@ -74,7 +69,6 @@ const tables: TableState[] = [
     pendingDeliveries: 1,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "warm",
     nextReservation: null,
     today: null,
@@ -91,7 +85,6 @@ const tables: TableState[] = [
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "fresh",
     nextReservation: null,
     today: null,
@@ -108,7 +101,6 @@ const tables: TableState[] = [
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "fresh",
     nextReservation: null,
     today: null,
@@ -127,7 +119,6 @@ const tables: TableState[] = [
     pendingDeliveries: 0,
     pendingToServe: 2,
     readyToServe: 2,
-    enRoute: 0,
     timingBand: "overdue",
     nextReservation: null,
     today: null,
@@ -146,7 +137,6 @@ const tables: TableState[] = [
     pendingDeliveries: 0,
     pendingToServe: 3,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "forgotten",
     nextReservation: null,
     today: null,
@@ -210,7 +200,6 @@ const partyTables: TableState[] = [
     tabTotal: undefined,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     nextReservation: null,
     state: "free",
     condition: "needs_clearing",
@@ -399,7 +388,6 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
       ...owing,
       pendingToServe: 0,
       readyToServe: 0,
-      enRoute: 0,
       signals: [
         { kind: "bill_requested", requestedAt: "2026-09-29T20:00:00.000Z" },
         { kind: "long_wait", band: "warm" },
@@ -445,7 +433,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
 
   it("has no violations with a calm table, a held one and a reserved one, on the list", async () => {
     const [owing] = partyTables as [TableState];
-    const quiet: TableState = { ...owing, pendingToServe: 0, readyToServe: 0, enRoute: 0 };
+    const quiet: TableState = { ...owing, pendingToServe: 0, readyToServe: 0 };
     const tables: TableState[] = [
       quiet,
       {
@@ -471,7 +459,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
 
   it("has no violations with a paid table that needs nothing, on the list", async () => {
     const [, paid] = partyTables as [TableState, TableState];
-    const quiet: TableState = { ...paid, pendingToServe: 0, readyToServe: 0, enRoute: 0 };
+    const quiet: TableState = { ...paid, pendingToServe: 0, readyToServe: 0 };
     const list = await mountWidget<TillFloorScreen>(
       "till-floor-screen",
       { zones, tables: [quiet] },
@@ -686,7 +674,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
           { signals: [{ kind: "bill_requested", requestedAt: "2026-09-29T19:55:00.000Z" }] },
         ],
         ["Ready", { readyToServe: 2 }],
-        ["Step", { readyToServe: 0, enRoute: 0, signals: [{ kind: "take_order" }] }],
+        ["Step", { readyToServe: 0, signals: [{ kind: "take_order" }] }],
       ];
       const familyZones: FloorZone[] = [
         zones[0]!,

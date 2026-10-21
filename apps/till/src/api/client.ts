@@ -171,11 +171,6 @@ export interface TillInfo {
    * offers a whole-ticket bump).
    */
   bumpMode: "line" | "ticket";
-  /**
-   * Which surface offers the course fire action: `waiter` (the tab), `kitchen` (the station display) or
-   * `expo` (the pass).
-   */
-  fireControl: "waiter" | "kitchen" | "expo";
   /** The venue's ACTIVE kitchen courses, by `displayOrder`; `[]` for a venue with none. */
   courses: TillCourse[];
   cardProvider: "none" | "stripe_terminal" | "stripe_on_device" | "sumup_cloud" | "simulator";
@@ -588,8 +583,6 @@ export interface OrderGroup {
   remindAt: string | null;
   /** Present only when a person recorded every fired kitchen item of the group ready. */
   ready?: true;
-  /** Present only when every fired kitchen item of the group has left the pass. */
-  away?: true;
   lineIds: string[];
   courseIds: string[];
   summary: string;
@@ -605,7 +598,6 @@ export interface ReleaseReminder {
 export interface CurrentOrderKitchen {
   state: TicketState;
   firedAt: string | null;
-  awayAt: string | null;
   stationId: string | null;
   movable: boolean;
 }
@@ -1855,8 +1847,6 @@ export interface ExpoItem {
   state: TicketState;
   /** `null` while the item's course is HELD; a timestamp once fired. */
   firedAt: string | null;
-  /** `null` until the expediter dispatches it; a timestamp once away to the floor. */
-  awayAt: string | null;
   /** Absent on a bill with no party, and on a line moved in from another bill. */
   group?: QueueGroup;
   /** The kitchen note as frozen at fire, as {@link StationQueueItem.note}. */
@@ -1882,21 +1872,19 @@ export interface ExpoItem {
 
 /**
  * One course section of an expo order; a null course has `courseId`/`courseName`/`displayOrder` null
- * and sorts EARLIEST. `fired` is true once EVERY item carries `firedAt`; `away` once every item carries
- * `awayAt`.
+ * and sorts EARLIEST. `fired` is true once EVERY item carries `firedAt`.
  */
 export interface ExpoCourse {
   courseId: string | null;
   courseName: string | null;
   displayOrder: number | null;
   fired: boolean;
-  away: boolean;
   items: ExpoItem[];
 }
 
 /**
  * One group section of a seated party's bill on the expo board. The section of lines with no group
- * has every group field `null` and sorts first. `fired` and `away` roll up as {@link ExpoCourse}'s.
+ * has every group field `null` and sorts first.
  */
 export interface ExpoGroup {
   groupId: string | null;
@@ -1906,16 +1894,12 @@ export interface ExpoGroup {
   numberPartyLabel?: string;
   state: QueueGroup["state"] | null;
   fired: boolean;
-  away: boolean;
   items: ExpoItem[];
 }
 
 /**
  * One order on the cross-station expo/pass board, its items grouped BY COURSE, or by group for a
- * seated party's bill. `tableLabel` is omitted
- * when the order maps to no table. The server excludes abandoned, collected and FULLY-away orders; a
- * surviving order still carries its away items, so the SCREEN hides fully-away courses and groups
- * (via {@link ExpoCourse.away} and {@link ExpoGroup.away}).
+ * seated party's bill. `tableLabel` is omitted when the order maps to no table.
  */
 export interface ExpoOrder {
   kitchenNote: string | null;
@@ -1948,15 +1932,12 @@ export interface WatcherOrder extends Omit<ExpoOrder, "courses" | "groups"> {
   courses: WatcherCourse[];
   groups: WatcherGroup[];
 }
-/** `GET /api/device/pass-screen`: dishes stay until this device marks them Done. */
 export interface DevicePassScreen {
   orders: WatcherOrder[];
   stations: ScreenSlot[];
   /** null: no zone filter. */
   zones: ScreenSlot[] | null;
 }
-/** `GET /api/device/pass-monitor`: what All stations shows, narrowed to the monitor's stations and
- *  zones; no Done marks. */
 export interface DevicePassMonitor {
   orders: ExpoOrder[];
   stations: ScreenSlot[];
@@ -2188,15 +2169,6 @@ export interface FloorAnswer {
   revision: number;
 }
 
-/**
- * One row of the live-floor occupancy read-model from `GET /api/tables/state`. A table is
- * `"open-tab"` while a party holds it, paid or not. `hasOpenTab` says the party has an open bill,
- * and `tabLineCount`/`tabTotal` are present exactly then: the line count and gross draft total of
- * the party's open bills, the total as a two-place decimal string. `pendingToServe` counts the
- * lines still to deliver, `readyToServe` those the kitchen has bumped `ready` but the waiter has
- * not served, and `enRoute` those the pass has dispatched but the waiter has not acknowledged; all
- * three are DISTINCT from `pendingDeliveries` (uncollected counter deliveries).
- */
 export interface TableState {
   id: string;
   label: string;
@@ -2211,7 +2183,6 @@ export interface TableState {
   pendingDeliveries: number;
   pendingToServe: number;
   readyToServe: number;
-  enRoute: number;
   /**
    * The worst age band across the unserved lines fired to a kitchen station (not made here) of
    * every bill of the party's family that is not abandoned, paid ones included (a held dish does not
@@ -2484,7 +2455,6 @@ export interface DepartmentTransferDetail {
     state: TicketState;
     note: string | null;
     firedAt: string | null;
-    awayAt: string | null;
     courseId: string | null;
   }[];
 }
@@ -3412,22 +3382,6 @@ export class TillApi {
     );
   }
 
-  /** Marks dishes Done on the device's pass screen, or takes the mark back with `done: false`. */
-  async markDevicePassDone(ticketItemIds: string[], done: boolean): Promise<void> {
-    await this.#request<void>("/api/device/pass-screen/done", "POST", { ticketItemIds, done });
-  }
-
-  /**
-   * A kitchen display's course levers → `POST /api/device/orders/:id/courses/:courseId/fire`,
-   * `/ready` and `/away`. Kitchen displays only; each checks the device's profile action
-   * (`device.forbidden_action`) and the order's zone against its pass screen
-   * (`kitchen_screen.zone_not_allowed`), and a device that no longer has a pass screen
-   * (`kitchen_screen.not_allowed`).
-   */
-  async fireDeviceCourse(orderId: string, courseId: string): Promise<void> {
-    await this.#request<void>(`/api/device/orders/${orderId}/courses/${courseId}/fire`, "POST", {});
-  }
-
   async bumpDeviceCourseReady(orderId: string, courseId: string): Promise<void> {
     await this.#request<void>(
       `/api/device/orders/${orderId}/courses/${courseId}/ready`,
@@ -3436,34 +3390,12 @@ export class TillApi {
     );
   }
 
-  async markDeviceCourseAway(orderId: string, courseId: string): Promise<void> {
-    await this.#request<void>(`/api/device/orders/${orderId}/courses/${courseId}/away`, "POST", {});
-  }
-
-  /** A kitchen display's group levers → `POST /api/device/parties/:id/groups/:gid/fire`, `/ready`
-   * and `/away`, refused as {@link fireDeviceCourse} is, plus the command refusals. */
-  fireDeviceGroup(
-    partyId: string,
-    groupId: string,
-    command: GroupCommand,
-  ): Promise<{ revision: number }> {
-    return this.#request(`/api/device/parties/${partyId}/groups/${groupId}/fire`, "POST", command);
-  }
-
   bumpDeviceGroupReady(
     partyId: string,
     groupId: string,
     command: GroupCommand,
   ): Promise<{ revision: number }> {
     return this.#request(`/api/device/parties/${partyId}/groups/${groupId}/ready`, "POST", command);
-  }
-
-  markDeviceGroupAway(
-    partyId: string,
-    groupId: string,
-    command: GroupCommand,
-  ): Promise<{ revision: number }> {
-    return this.#request(`/api/device/parties/${partyId}/groups/${groupId}/away`, "POST", command);
   }
 
   /**
@@ -3586,26 +3518,6 @@ export class TillApi {
   }
 
   /**
-   * FIRE a HELD course of an order → `POST /api/orders/:id/courses/:courseId/fire`. On a seated
-   * party's order, each held group holding a dish of that course on that order fires whole; the
-   * course's lines held outside a group are released. NON-FISCAL; idempotent — a course with nothing held is a 200 no-op. A malformed or unknown course id rejects
-   * `course.not_found`; a malformed order id `working_order.not_found`.
-   */
-  async fireCourse(
-    orderId: string,
-    courseId: string,
-    command?: AllergyCommand,
-    options: ReadOptions = {},
-  ): Promise<void> {
-    await this.#request<void>(
-      `/api/orders/${orderId}/courses/${courseId}/fire`,
-      "POST",
-      command ?? {},
-      options.signal,
-    );
-  }
-
-  /**
    * The cross-station expo/pass queue → `GET /api/expo/queue`: orders aggregated into courses, or
    * into groups for a seated party's bill, ACROSS all stations, oldest first. See {@link ExpoOrder}
    * for what the server excludes.
@@ -3622,16 +3534,6 @@ export class TillApi {
    */
   async bumpCourseReady(orderId: string, courseId: string): Promise<void> {
     await this.#request<void>(`/api/orders/${orderId}/courses/${courseId}/ready`, "POST", {});
-  }
-
-  /**
-   * DISPATCH a plated course to the floor → `POST /api/orders/:id/courses/:courseId/away`: stamps
-   * `away_at` on every `ready` item of the order and course, skipping already-away ones. NON-FISCAL.
-   * UNLIKE {@link bumpCourseReady} it existence-checks the course, so a malformed or unknown course id
-   * rejects `course.not_found` (404); a malformed order id `working_order.not_found`.
-   */
-  async markCourseAway(orderId: string, courseId: string): Promise<void> {
-    await this.#request<void>(`/api/orders/${orderId}/courses/${courseId}/away`, "POST", {});
   }
 
   /**
@@ -4073,16 +3975,6 @@ export class TillApi {
     command: GroupCommand,
   ): Promise<{ revision: number }> {
     return this.#request(`/api/parties/${partyId}/groups/${groupId}/ready`, "POST", command);
-  }
-
-  /** The pass sends a group's ready items to the floor → `POST /api/parties/:partyId/groups/:groupId/away`.
-   * Rejects `group.not_found` and the command refusals. */
-  markGroupAway(
-    partyId: string,
-    groupId: string,
-    command: GroupCommand,
-  ): Promise<{ revision: number }> {
-    return this.#request(`/api/parties/${partyId}/groups/${groupId}/away`, "POST", command);
   }
 
   /**

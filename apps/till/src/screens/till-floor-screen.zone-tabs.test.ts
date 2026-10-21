@@ -71,7 +71,6 @@ function free(id: string, zoneId: string, over: Partial<TableState> = {}): Table
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "fresh",
     nextReservation: null,
     today: today(Number(id.slice(1)) * 3),

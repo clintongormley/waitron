@@ -18,7 +18,6 @@ const order: ExpoOrder = {
       courseName: null,
       displayOrder: null,
       fired: true,
-      away: false,
       items: [
         {
           allergy: null,
@@ -28,7 +27,6 @@ const order: ExpoOrder = {
           stationName: "Grill",
           state: "queued",
           firedAt: new Date().toISOString(),
-          awayAt: null,
           queuedAt: new Date().toISOString(),
           note: "No onions",
           thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },

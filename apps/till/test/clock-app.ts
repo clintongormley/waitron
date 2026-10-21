@@ -83,7 +83,6 @@ export async function clockApp(
     venueName: "Clock venue",
     nif: "B10101010",
     bumpMode: "line",
-    fireControl: "waiter",
     courses: [],
     cardProvider: "none",
     activeReaders: [],
