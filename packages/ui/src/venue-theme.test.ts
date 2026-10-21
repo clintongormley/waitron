@@ -240,6 +240,8 @@ describe("startVenueTheme", () => {
       startVenueTheme(document.documentElement, { fetchImpl: answering(JSON.stringify(GREEN)) }),
     ).not.toThrow();
     await vi.waitFor(() => expect(bg()).toBe(GREEN_LIGHT_BG));
+    expect(() => applyVenueTheme({ ...LEMON, hash: "other" })).not.toThrow();
+    expect(bg()).toBe(LEMON_LIGHT_BG);
   });
 
   it("the sheet is adopted once, after the token sheet", () => {

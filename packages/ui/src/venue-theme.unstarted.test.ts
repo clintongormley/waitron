@@ -11,8 +11,8 @@ const GREEN = {
 
 it("before start nothing is adopted or applied", () => {
   localStorage.removeItem(VENUE_THEME_STORAGE_KEY);
-  const sheets = document.adoptedStyleSheets;
+  const before = [...document.adoptedStyleSheets];
   applyVenueTheme(GREEN);
-  expect(document.adoptedStyleSheets).toEqual(sheets);
+  expect([...document.adoptedStyleSheets]).toEqual(before);
   expect(localStorage.getItem(VENUE_THEME_STORAGE_KEY)).toBeNull();
 });

@@ -1,13 +1,12 @@
 import { createHash } from "node:crypto";
 import type { ThemeInUse } from "@waitron/layouts";
-import { deriveThemeFrom, themeSheet, type ThemeChoices } from "@waitron/ui-core/theme";
+import {
+  deriveThemeFrom,
+  themeSheet,
+  type ThemeChoices,
+  type VenueThemeAnswer,
+} from "@waitron/ui-core/theme";
 import { SERVER_THEME_DEFAULTS } from "./theme-defaults.js";
-
-export interface VenueThemeAnswer {
-  readonly hash: string;
-  readonly css: string;
-  readonly logo: null;
-}
 
 export function themeHashOf(css: string, logo: null): string {
   return createHash("sha256").update(JSON.stringify({ css, logo })).digest("hex");

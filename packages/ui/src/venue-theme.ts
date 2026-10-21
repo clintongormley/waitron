@@ -49,7 +49,7 @@ async function fetchAnswer(fetchImpl: typeof fetch | undefined, timeLimitMs: num
     if (controller.signal.aborted) return;
     applyVenueTheme(answer);
   } catch {
-    // A failed, refused or unreadable answer leaves the sheet as it is.
+    // A failed request, a cancelled one, or a body that is not JSON leaves the sheet as it is.
   } finally {
     clearTimeout(timer);
   }
@@ -72,6 +72,6 @@ export function applyVenueTheme(answer: unknown): void {
   try {
     window.localStorage.setItem(VENUE_THEME_STORAGE_KEY, JSON.stringify(answer));
   } catch {
-    // A refused write only costs the next start its early paint.
+    // The copy stored before stays, and the next start paints it until an answer arrives.
   }
 }
