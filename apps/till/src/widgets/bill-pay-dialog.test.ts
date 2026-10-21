@@ -1,9 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./bill-pay-dialog.js";
+import { pendingCard } from "../../test/bill-pay-fixtures.js";
+import {
+  LECTOR_2,
+  LECTOR_3,
+  twoReaderEquipment as equipmentWith,
+} from "../../test/pay-equipment-fixtures.js";
 import type { PayLine, PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
 import type { AllocationPreview, BillBalance, BillPaymentView } from "../api/client.js";
 
@@ -1056,6 +1063,129 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
   });
 });
 
+describe("till-bill-pay-dialog: a card already in progress", () => {
+  const holding = balanceOf({
+    reserved: "20.00",
+    outstanding: "100.00",
+    payments: [pendingCard],
+  });
+
+  async function chosen(method: "cash" | "card", over: Partial<TillBillPayDialog> = {}) {
+    const el = await mount({ way: "contribution", balance: holding, ...over });
+    await type(el, "amount", "40");
+    await pick(el, "method", method);
+    if (method === "cash") await type(el, "tendered", "40");
+    return el;
+  }
+  const ask = (el: TillBillPayDialog) => root(el).querySelector("[data-pay-card-ask]");
+
+  for (const cardReader of ["stripe_terminal", "none"] as const) {
+    it(`asks before another card, sending nothing, with cardReader ${cardReader}`, async () => {
+      const el = await chosen("card", { cardReader });
+      const asked = capture<PayRequest>(el, "bill-pay-preview");
+      await click(el, "[data-pay-continue]");
+
+      expect(asked).toEqual([]);
+      expect(text(ask(el))).toContain(t("bill_pay.card_in_progress_ask"));
+      expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+      await click(el, "[data-pay-continue]");
+      expect(asked).toEqual([]);
+    });
+  }
+
+  it("takes another card when asked to, once", async () => {
+    const el = await chosen("card", { cardReader: "stripe_terminal" });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    await click(el, "[data-pay-continue]");
+    await click(el, "[data-pay-card-ask-take]");
+
+    expect(asked).toEqual([
+      {
+        choice: { kind: "contribution", amount: "40" },
+        pay: { method: "card" },
+        card: { entry: "reader" },
+      },
+    ]);
+    expect(ask(el)).toBeNull();
+  });
+
+  it("goes back to the form without sending anything", async () => {
+    const el = await chosen("card");
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    await click(el, "[data-pay-continue]");
+    await click(el, "[data-pay-card-ask-back]");
+
+    expect(ask(el)).toBeNull();
+    expect(asked).toEqual([]);
+    expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+  });
+
+  it("does not press Continue from the keyboard while it asks", async () => {
+    const el = await chosen("card");
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    await click(el, "[data-pay-continue]");
+    const enter = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    field(el, "amount")!.shadowRoot!.querySelector("input")!.dispatchEvent(enter);
+    await el.updateComplete;
+
+    expect(enter.defaultPrevented).toBe(false);
+    expect(asked).toEqual([]);
+    expect(ask(el)).not.toBeNull();
+  });
+
+  it("puts the keyboard on Take another when it asks, and back on Continue after Back", async () => {
+    const el = await chosen("card");
+    await click(el, "[data-pay-continue]");
+    await expect.poll(() => root(el).activeElement).toBe(button(el, "[data-pay-card-ask-take]"));
+
+    await click(el, "[data-pay-card-ask-back]");
+    await expect.poll(() => root(el).activeElement).toBe(button(el, "[data-pay-continue]"));
+  });
+
+  it("stops asking once the form is changed", async () => {
+    const el = await chosen("card");
+    await click(el, "[data-pay-continue]");
+    await pick(el, "method", "cash");
+
+    expect(ask(el)).toBeNull();
+  });
+
+  it("asks nothing before cash", async () => {
+    const el = await chosen("cash");
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    await click(el, "[data-pay-continue]");
+
+    expect(asked).toHaveLength(1);
+    expect(ask(el)).toBeNull();
+  });
+
+  it("asks nothing before a card when no card is in progress", async () => {
+    const el = await chosen("card", {
+      balance: balanceOf({ payments: [{ ...pendingCard, state: "received" }] }),
+    });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    await click(el, "[data-pay-continue]");
+
+    expect(asked).toHaveLength(1);
+    expect(ask(el)).toBeNull();
+  });
+
+  it("asks nothing before a card when the payment in progress is cash", async () => {
+    const el = await chosen("card", {
+      balance: balanceOf({ payments: [{ ...pendingCard, method: "cash", entry: null }] }),
+    });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    await click(el, "[data-pay-continue]");
+
+    expect(asked).toHaveLength(1);
+  });
+});
+
 describe("till-bill-pay-dialog: the bill's payments", () => {
   function paymentOf(over: Partial<BillPaymentView> = {}): BillPaymentView {
     return {
@@ -1468,5 +1598,1465 @@ describe("till-bill-pay-dialog: the receipt's guests field", () => {
     await click(el, "[data-pay-confirm]");
 
     expect(confirmed).toEqual([{}]);
+  });
+});
+
+describe("till-bill-pay-dialog: on a handheld", () => {
+  const handheld = (over: Partial<TillBillPayDialog> = {}) =>
+    mount({
+      handheld: true,
+      way: undefined,
+      cardReader: "stripe_terminal",
+      takesReaderCard: true,
+      takesCash: true,
+      takesManualCard: true,
+      equipment: equipmentWith(LECTOR_2),
+      ...over,
+    });
+  const radios = (el: TillBillPayDialog, name: string) =>
+    [...root(el).querySelectorAll<HTMLInputElement>(`input[name="${name}"]`)].map((radio) => ({
+      value: radio.value,
+      label: text(radio.closest("label")),
+      checked: radio.checked,
+      disabled: radio.disabled,
+    }));
+
+  it("offers Whole bill first and chosen, then today's three ways, in Spanish as drawn", async () => {
+    setLocale("es");
+    const el = await handheld();
+
+    expect(radios(el, "way").map(({ value, label, checked }) => [value, label, checked])).toEqual([
+      ["whole", "Toda la cuenta", true],
+      ["items", "Pagar artículos", false],
+      ["contribution", "Aportar una cantidad", false],
+      ["share", "Dividir a partes iguales", false],
+    ]);
+    expect(radios(el, "method").map(({ value, label }) => [value, label])).toEqual([
+      ["card", "Tarjeta"],
+      ["cash", "Efectivo"],
+      ["manual", "Otro datáfono"],
+    ]);
+  });
+
+  it("titles itself with the table", async () => {
+    setLocale("es");
+    const el = await handheld({ tableName: "Mesa 4" });
+    expect(root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!.heading).toBe(
+      "Cobrar · Mesa 4",
+    );
+  });
+
+  it("keeps Whole bill, and Continue, disabled until the balance has been read", async () => {
+    const el = await handheld({ balance: null });
+    const whole = radios(el, "way")[0]!;
+    expect(whole).toMatchObject({ value: "whole", checked: true, disabled: true });
+    expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+
+    el.balance = balanceOf({ outstanding: "62.40" });
+    await el.updateComplete;
+    expect(radios(el, "way")[0]!.disabled).toBe(false);
+    expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+  });
+
+  it("asks for what is left, read when Continue is pressed, on the card reader", async () => {
+    const el = await handheld({ balance: balanceOf({ outstanding: "80.00" }) });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    el.balance = balanceOf({ outstanding: "62.40" });
+    await el.updateComplete;
+    await click(el, "[data-pay-continue]");
+
+    expect(asked).toEqual([
+      {
+        choice: { kind: "contribution", amount: "62.40" },
+        pay: { method: "card" },
+        card: { entry: "reader" },
+      },
+    ]);
+  });
+
+  it("starts on the way it was opened with", async () => {
+    const el = await handheld({ way: "share" });
+    expect(radios(el, "way").find((radio) => radio.checked)!.value).toBe("share");
+  });
+
+  it.each([
+    [true, true, true, ["card", "cash", "manual"], "card"],
+    [true, true, false, ["card", "cash"], "card"],
+    [true, false, true, ["card", "manual"], "card"],
+    [true, false, false, ["card"], "card"],
+    [false, true, true, ["cash", "manual"], "cash"],
+    [false, true, false, ["cash"], "cash"],
+    [false, false, true, ["manual"], "manual"],
+    [false, false, false, [], null],
+  ] as const)(
+    "with reader card %s, cash %s and another card machine %s offers %j, chosen %s",
+    async (card, cash, manual, offeredMethods, chosen) => {
+      const el = await handheld({
+        takesReaderCard: card,
+        takesCash: cash,
+        takesManualCard: manual,
+      });
+      const methods = radios(el, "method");
+      expect(methods.map((radio) => radio.value)).toEqual(offeredMethods);
+      expect(methods.find((radio) => radio.checked)?.value ?? null).toBe(chosen);
+      const none = root(el).querySelector("[data-pay-no-method]");
+      if (chosen === null) {
+        expect(text(none)).toBe(t("bill_pay.no_method"));
+        expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+        const asked = capture<PayRequest>(el, "bill-pay-preview");
+        await click(el, "[data-pay-continue]");
+        expect(asked).toEqual([]);
+      } else {
+        expect(none).toBeNull();
+        expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+      }
+    },
+  );
+
+  it("offers and chooses a reader card where the profile takes one but no reader is held yet", async () => {
+    const el = await handheld({ cardReader: "none", takesCash: false });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    expect(radios(el, "method").map(({ value, checked }) => [value, checked])).toEqual([
+      ["card", true],
+      ["manual", false],
+    ]);
+    expect(field(el, "externalRef")).toBeNull();
+    await click(el, "[data-pay-continue]");
+
+    expect(asked).toEqual([
+      {
+        choice: { kind: "contribution", amount: "120.00" },
+        pay: { method: "card" },
+        card: { entry: "reader" },
+      },
+    ]);
+  });
+
+  it("keeps Continue disabled on Whole bill while nothing is left to pay", async () => {
+    const el = await handheld({ balance: balanceOf({ outstanding: "0.00" }) });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+    await click(el, "[data-pay-continue]");
+    expect(asked).toEqual([]);
+
+    await pick(el, "way", "contribution");
+    await type(el, "amount", "5");
+    expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+  });
+
+  it("marks no field for a refused amount on Whole bill, which shows none, and says it at the bottom", async () => {
+    const el = await handheld({
+      refusal: { code: "management.request_invalid", field: "amount" },
+    });
+    expect(actions(el).error).toBe(codeMessage("management.request_invalid"));
+
+    await pick(el, "way", "contribution");
+    el.refusal = { code: "management.request_invalid", field: "amount" };
+    await el.updateComplete;
+    expect(field(el, "amount")!.error).not.toBe("");
+  });
+
+  it("takes another card machine with its operation number, as a hand-keyed card", async () => {
+    const el = await handheld();
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    expect(field(el, "externalRef")).toBeNull();
+    await pick(el, "method", "manual");
+    expect(field(el, "externalRef")).not.toBeNull();
+    await type(el, "externalRef", " 000123 ");
+    await click(el, "[data-pay-continue]");
+
+    expect(asked).toEqual([
+      {
+        choice: { kind: "contribution", amount: "120.00" },
+        pay: { method: "card" },
+        card: { entry: "manual", externalRef: "000123" },
+      },
+    ]);
+  });
+
+  it("asks before another card machine while a card is in progress on the bill", async () => {
+    const el = await handheld({ balance: balanceOf({ payments: [pendingCard] }) });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    await pick(el, "method", "manual");
+    await click(el, "[data-pay-continue]");
+
+    expect(asked).toEqual([]);
+    expect(text(root(el).querySelector("[data-pay-card-ask]"))).toContain(
+      t("bill_pay.card_in_progress_ask"),
+    );
+    await click(el, "[data-pay-card-ask-take]");
+    expect(asked).toEqual([
+      {
+        choice: { kind: "contribution", amount: "120.00" },
+        pay: { method: "card" },
+        card: { entry: "manual" },
+      },
+    ]);
+  });
+
+  it("on a counter till offers today's three ways and two methods, with no table title", async () => {
+    // The two methods are also pinned by "offers cash by default, with no line about taking it at
+    // a till" above.
+    const el = await mount({ takesManualCard: true, tableName: "Mesa 4" });
+    expect(radios(el, "way").map((radio) => radio.value)).toEqual([
+      "items",
+      "contribution",
+      "share",
+    ]);
+    expect(radios(el, "method").map((radio) => radio.value)).toEqual(["cash", "card"]);
+    expect(root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!.heading).toBe(
+      t("bill_pay.title"),
+    );
+  });
+});
+
+describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
+  const handheld = (over: Partial<TillBillPayDialog> = {}) =>
+    mount({
+      handheld: true,
+      way: undefined,
+      cardReader: "stripe_terminal",
+      takesReaderCard: true,
+      takesCash: true,
+      takesManualCard: true,
+      balance: balanceOf({ total: "20.80", outstanding: "20.80" }),
+      equipment: equipmentWith(LECTOR_2),
+      ...over,
+    });
+  const row = (el: TillBillPayDialog) =>
+    root(el).querySelector<HTMLElement & { open: boolean; updateComplete: Promise<unknown> }>(
+      "till-pay-equipment",
+    );
+  const summary = async (el: TillBillPayDialog) => {
+    await row(el)!.updateComplete;
+    return text(row(el)!.shadowRoot!.querySelector("[data-pay-equipment-summary]"));
+  };
+  const cardPreview: AllocationPreview = {
+    kind: "allocated",
+    choice: null,
+    applied: "20.80",
+    tip: "0.00",
+    change: null,
+    charged: "20.80",
+  };
+
+  it("names Lector 2 and Barra in the closed row, and Take payment names the reader it charges", async () => {
+    setLocale("es");
+    const el = await handheld();
+    const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+
+    expect(row(el)!.open).toBe(false);
+    expect(await summary(el)).toBe("Lector 2 · ticket en Barra");
+    await previewed(el, cardPreview);
+    expect(row(el)).not.toBeNull();
+    expect(text(button(el, "[data-pay-confirm]"))).toBe(
+      `Cobrar ${money("20.80")} en Lector 2`.replace(/\s+/g, " "),
+    );
+
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([{ readerId: "r2" }]);
+  });
+
+  it("charges the reader picked while the confirmation is shown", async () => {
+    setLocale("es");
+    const el = await handheld();
+    const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+    await previewed(el, cardPreview);
+
+    el.equipment = equipmentWith(LECTOR_3);
+    await el.updateComplete;
+    expect(text(button(el, "[data-pay-confirm]"))).toBe(
+      `Cobrar ${money("20.80")} en Lector 3`.replace(/\s+/g, " "),
+    );
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([{ readerId: "r3" }]);
+  });
+
+  it("opens the row and holds Continue while Card has no reader; cash needs none", async () => {
+    const el = await handheld({ equipment: equipmentWith(null) });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+
+    expect(row(el)!.open).toBe(true);
+    expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+    await click(el, "[data-pay-continue]");
+    expect(asked).toEqual([]);
+
+    await pick(el, "method", "cash");
+    await type(el, "tendered", "25");
+    expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+    await pick(el, "method", "manual");
+    expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+  });
+
+  it("holds Continue on Card until the equipment has been read, without opening the row", async () => {
+    const el = await handheld({ equipment: null });
+    expect(row(el)!.open).toBe(false);
+    expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+
+    el.equipment = equipmentWith(LECTOR_2);
+    await el.updateComplete;
+    expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+  });
+
+  it("holds Continue and Take payment while an equipment change is out, whatever the method", async () => {
+    const el = await handheld({ equipmentBusy: true });
+    const confirmed = capture<unknown>(el, "bill-pay-confirm");
+    expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+    await pick(el, "method", "manual");
+    expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+
+    el.equipmentBusy = false;
+    await el.updateComplete;
+    await previewed(el, cardPreview);
+    el.equipmentBusy = true;
+    await el.updateComplete;
+    expect(button(el, "[data-pay-confirm]").disabled).toBe(true);
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([]);
+  });
+
+  it("sends nothing when a change goes out between the drawing and the press", async () => {
+    const el = await handheld();
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    const confirmed = capture<unknown>(el, "bill-pay-confirm");
+    el.equipmentBusy = true;
+    button(el, "[data-pay-continue]").click();
+    await el.updateComplete;
+    expect(asked).toEqual([]);
+
+    el.equipmentBusy = false;
+    await el.updateComplete;
+    await previewed(el, cardPreview);
+    el.equipment = equipmentWith(null);
+    button(el, "[data-pay-confirm]").click();
+    await el.updateComplete;
+    expect(confirmed).toEqual([]);
+  });
+
+  it("opens the row by itself once the reader is lost, and leaves it to the waiter after", async () => {
+    const el = await handheld();
+    expect(row(el)!.open).toBe(false);
+    el.equipment = equipmentWith(null);
+    await el.updateComplete;
+    expect(row(el)!.open).toBe(true);
+
+    el.equipment = equipmentWith(LECTOR_3);
+    await el.updateComplete;
+    expect(row(el)!.open).toBe(true);
+  });
+
+  it("keeps the row closed while the reader is being picked up by itself, then opens it only if none came", async () => {
+    const picked = await handheld({ equipment: equipmentWith(null), autoPicking: true });
+    expect(row(picked)!.open).toBe(false);
+    picked.equipment = equipmentWith(LECTOR_2);
+    picked.autoPicking = false;
+    await picked.updateComplete;
+    expect(row(picked)!.open).toBe(false);
+    picked.remove();
+
+    const refused = await handheld({ equipment: equipmentWith(null), autoPicking: true });
+    expect(row(refused)!.open).toBe(false);
+    refused.autoPicking = false;
+    await refused.updateComplete;
+    expect(row(refused)!.open).toBe(true);
+  });
+
+  it("opens the row on Cambiar", async () => {
+    const el = await handheld();
+    await row(el)!.updateComplete;
+    row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-equipment-change]")!.click();
+    await el.updateComplete;
+    expect(row(el)!.open).toBe(true);
+  });
+
+  it("starts closed again when the dialog is opened again with a ready reader", async () => {
+    const first = await handheld({ equipment: equipmentWith(null) });
+    expect(row(first)!.open).toBe(true);
+    const closed = capture<unknown>(first, "bill-pay-close");
+    await click(first, "[data-pay-close]");
+    await expect.poll(() => closed.length).toBe(1);
+    first.remove();
+
+    const again = await handheld();
+    expect(row(again)!.open).toBe(false);
+  });
+
+  it("on a practice venue charges the fixed demo reader, with no reader or outcome to choose", async () => {
+    const el = await handheld({
+      cardReader: "simulator",
+      equipment: null,
+      fixedReader: { id: "demo-1", name: "Demo reader" },
+    });
+    const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+    expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+    expect(root(el).querySelector("[data-pay-reader]")).toBeNull();
+    expect(root(el).querySelector("[data-pay-simulation]")).toBeNull();
+
+    await previewed(el, cardPreview);
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([{ readerId: "demo-1" }]);
+
+    el.equipment = equipmentWith(null);
+    el.asked = null;
+    el.preview = null;
+    await el.updateComplete;
+    row(el)!.open = true;
+    await row(el)!.updateComplete;
+    const combobox = row(el)!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      'wt-combobox[name="cardReaderId"]',
+    )!;
+    expect(combobox.disabled).toBe(true);
+  });
+
+  describe("the row's QR", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    async function scanning() {
+      vi.spyOn(navigator.mediaDevices, "getUserMedia").mockReturnValue(new Promise(() => {}));
+      const el = await handheld({ canScan: true, way: "contribution" });
+      await type(el, "amount", "10");
+      await pick(el, "method", "cash");
+      await type(el, "tendered", "20");
+      await row(el)!.updateComplete;
+      row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-qr]")!.click();
+      await el.updateComplete;
+      return el;
+    }
+    const scanner = (el: TillBillPayDialog) => root(el).querySelector("till-equipment-scanner");
+    const radios = (el: TillBillPayDialog, name: string) => [
+      ...root(el).querySelectorAll<HTMLInputElement>(`input[name="${name}"]`),
+    ];
+
+    it("opens the camera in place of the form, for either kind of sticker", async () => {
+      setLocale("es");
+      const el = await scanning();
+
+      expect(scanner(el)).not.toBeNull();
+      expect(scanner(el)!.getAttribute("kind")).toBe("any");
+      expect(text(root(el).querySelector("[data-pay-scan-heading]"))).toBe("Escanear código QR");
+      expect(text(button(el, "[data-pay-scan-back]"))).toBe("Volver");
+      expect(root(el).querySelector("[data-pay-way]")).toBeNull();
+      expect(row(el)).toBeNull();
+      expect(root(el).querySelector("[data-pay-continue]")).toBeNull();
+    });
+
+    it("Back brings the form back as it was: way, amount and method kept", async () => {
+      const el = await scanning();
+
+      await click(el, "[data-pay-scan-back]");
+
+      expect(scanner(el)).toBeNull();
+      expect(radios(el, "way").find((radio) => radio.checked)!.value).toBe("contribution");
+      expect(field(el, "amount")!.value).toBe("10");
+      expect(radios(el, "method").find((radio) => radio.checked)!.value).toBe("cash");
+      expect(field(el, "tendered")!.value).toBe("20");
+    });
+
+    it("from the confirmation, Back brings the confirmation back", async () => {
+      vi.spyOn(navigator.mediaDevices, "getUserMedia").mockReturnValue(new Promise(() => {}));
+      const el = await handheld({ canScan: true });
+      await previewed(el, cardPreview);
+      await row(el)!.updateComplete;
+      row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-qr]")!.click();
+      await el.updateComplete;
+      expect(root(el).querySelector("[data-pay-confirm]")).toBeNull();
+
+      await click(el, "[data-pay-scan-back]");
+
+      expect(text(button(el, "[data-pay-confirm]"))).toBe(
+        t("bill_pay.take_on_reader")
+          .replace("{amount}", () => money("20.80"))
+          .replace("{reader}", () => "Lector 2")
+          .replace(/\s+/g, " "),
+      );
+    });
+
+    it("a sticker read sends its kind and id, and the form comes back", async () => {
+      const el = await scanning();
+      const stickers = capture<unknown>(el, "pay-equipment-sticker");
+
+      scanner(el)!.dispatchEvent(
+        new CustomEvent("equipment-scanned", {
+          detail: { id: "r3", kind: "reader" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+
+      expect(stickers).toEqual([{ kind: "reader", id: "r3" }]);
+      expect(scanner(el)).toBeNull();
+      expect(radios(el, "way").find((radio) => radio.checked)!.value).toBe("contribution");
+      expect(field(el, "amount")!.value).toBe("10");
+    });
+
+    it("the scanner's own event stops at the sheet, which sends only the sticker", async () => {
+      const el = await scanning();
+      const scanned = capture<unknown>(el, "equipment-scanned");
+
+      scanner(el)!.dispatchEvent(
+        new CustomEvent("equipment-scanned", {
+          detail: { id: "r3", kind: "reader" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+
+      expect(scanned).toEqual([]);
+    });
+  });
+
+  it("shows none of this on a counter till", async () => {
+    const el = await mount({ cardReader: "stripe_terminal", equipment: equipmentWith(null) });
+    const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+    expect(row(el)).toBeNull();
+    await pick(el, "method", "card");
+    await pick(el, "line", "1");
+    expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+    await previewed(el, cardPreview);
+    expect(text(button(el, "[data-pay-confirm]"))).toBe(t("bill_pay.take"));
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([{}]);
+  });
+});
+
+describe("till-bill-pay-dialog: the locked confirmation (A796 default 7)", () => {
+  const box = (el: TillBillPayDialog) => root(el).querySelector("[data-pay-unanswered]");
+  const title = (el: TillBillPayDialog) =>
+    text(root(el).querySelector("[data-pay-unanswered-title]"));
+  const confirm = (el: TillBillPayDialog) =>
+    root(el).querySelector<HTMLElement & { disabled: boolean; loading: boolean }>(
+      "[data-pay-confirm]",
+    )!;
+
+  async function locked(over: Partial<TillBillPayDialog> = {}) {
+    const el = await mount(over);
+    await pick(el, "line", "1");
+    await type(el, "tendered", "40");
+    await previewed(el, cashPreview("35.00", "5.00"));
+    el.confirmationLocked = true;
+    el.refusal = { code: "network" };
+    await el.updateComplete;
+    return el;
+  }
+
+  it("titles a locked confirmation 'No connection to the server' and says the message once, under the form", async () => {
+    const el = await locked();
+
+    expect(box(el)!.getAttribute("role")).toBe("status");
+    expect(title(el)).toBe(t("bill_pay.unanswered_title"));
+    expect(actions(el).error).toBe(t("bill_pay.unconfirmed"));
+    expect(text(box(el))).not.toContain(t("bill_pay.unconfirmed"));
+  });
+
+  for (const locale of ["es", "en"] as const) {
+    it(`labels the locked resend Check again, and keeps Back disabled (${locale})`, async () => {
+      setLocale(locale);
+      const el = await locked();
+
+      expect(text(confirm(el))).toBe(t("bill_pay.recheck"));
+      if (locale === "es") expect(text(confirm(el))).toBe("Comprobar de nuevo");
+      expect(confirm(el).disabled).toBe(false);
+      expect(button(el, "[data-pay-back]").disabled).toBe(true);
+    });
+  }
+
+  it("titles a payment still out 'Waiting for the server' and holds its button", async () => {
+    const el = await locked();
+    el.refusal = { code: "sending" };
+    el.busy = true;
+    await el.updateComplete;
+
+    expect(title(el)).toBe(t("bill_pay.sending_title"));
+    expect(actions(el).error).toBe(t("bill_pay.sending"));
+    expect(text(box(el))).not.toContain(t("bill_pay.sending"));
+    expect(confirm(el).disabled).toBe(true);
+    expect(confirm(el).loading).toBe(true);
+  });
+
+  it("shows no box and today's label when not locked", async () => {
+    const el = await mount();
+    expect(box(el)).toBeNull();
+    await pick(el, "line", "1");
+    await type(el, "tendered", "40");
+    await previewed(el, cashPreview("35.00", "5.00"));
+    el.refusal = { code: "network" };
+    await el.updateComplete;
+
+    expect(box(el)).toBeNull();
+    expect(text(confirm(el))).toBe(t("bill_pay.take"));
+  });
+
+  it("puts the box at the top of a locked form too", async () => {
+    const el = await mount({ confirmationLocked: true, refusal: { code: "network" } });
+    expect(title(el)).toBe(t("bill_pay.unanswered_title"));
+    expect(actions(el).error).toBe(t("bill_pay.unconfirmed"));
+  });
+
+  it("on a handheld, a locked resend names no reader, disables the row, and is not held by the equipment", async () => {
+    setLocale("es");
+    const el = await mount({
+      handheld: true,
+      way: undefined,
+      cardReader: "stripe_terminal",
+      takesReaderCard: true,
+      takesCash: true,
+      takesManualCard: true,
+      balance: balanceOf({ total: "20.80", outstanding: "20.80" }),
+      equipment: equipmentWith(LECTOR_2),
+    });
+    const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+    await previewed(el, {
+      kind: "allocated",
+      choice: null,
+      applied: "20.80",
+      tip: "0.00",
+      change: null,
+      charged: "20.80",
+    });
+    el.confirmationLocked = true;
+    el.refusal = { code: "network" };
+    el.equipment = null;
+    await el.updateComplete;
+
+    const row = root(el).querySelector<HTMLElement & { disabled: boolean }>("till-pay-equipment")!;
+    expect(row.disabled).toBe(true);
+    expect(confirm(el).disabled).toBe(false);
+    expect(text(confirm(el))).toBe("Comprobar de nuevo");
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([{}]);
+
+    el.equipment = equipmentWith(LECTOR_2);
+    el.equipmentBusy = true;
+    await el.updateComplete;
+    expect(confirm(el).disabled).toBe(false);
+    expect(text(confirm(el))).toBe("Comprobar de nuevo");
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([{}, {}]);
+  });
+
+  it("asks nothing about a card in progress while locked", async () => {
+    const el = await mount({
+      way: "contribution",
+      cardReader: "stripe_terminal",
+      balance: balanceOf({ reserved: "20.00", outstanding: "100.00", payments: [pendingCard] }),
+    });
+    await type(el, "amount", "40");
+    await pick(el, "method", "card");
+    el.confirmationLocked = true;
+    el.refusal = { code: "network" };
+    await el.updateComplete;
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+
+    await click(el, "[data-pay-continue]");
+    expect(asked).toHaveLength(1);
+    expect(root(el).querySelector("[data-pay-card-ask]")).toBeNull();
+  });
+
+  it.each(["sending", "not_checked", "payment_failed"] as const)(
+    "says the app's %s refusal in its own words",
+    async (code) => {
+      const el = await mount({ refusal: { code } });
+      expect(actions(el).error).toBe(t(`bill_pay.${code}`));
+    },
+  );
+});
+
+describe("till-bill-pay-dialog: the card at the table (A796)", () => {
+  const cardPreview: AllocationPreview = {
+    kind: "allocated",
+    choice: null,
+    applied: "20.80",
+    tip: "0.00",
+    change: null,
+    charged: "20.80",
+  };
+  const waiting = (el: TillBillPayDialog) => root(el).querySelector("till-card-waiting");
+  const inWaiting = (el: TillBillPayDialog, selector: string) =>
+    text(waiting(el)?.shadowRoot?.querySelector(selector) ?? null);
+  const waitingOn = (reader: string) =>
+    t("bill_pay.waiting_on")
+      .replace("{amount}", () => money("20.80"))
+      .replace("{reader}", () => reader)
+      .replace(/\s+/g, " ");
+  const since = (time: string) => t("bill_pay.waiting_since").replace("{time}", time);
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A handheld's card confirmation for 20,80 € on Lector 2, Take payment pressed and the send
+   * out. */
+  async function sent(over: Partial<TillBillPayDialog> = {}) {
+    const el = await mount({
+      handheld: true,
+      way: undefined,
+      cardReader: "stripe_terminal",
+      takesReaderCard: true,
+      takesCash: true,
+      takesManualCard: true,
+      balance: balanceOf({ total: "20.80", outstanding: "20.80" }),
+      equipment: equipmentWith(LECTOR_2),
+      ...over,
+    });
+    const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+    await previewed(el, cardPreview);
+    vi.useFakeTimers();
+    await click(el, "[data-pay-confirm]");
+    el.busy = true;
+    await el.updateComplete;
+    await waiting(el)?.updateComplete;
+    return { el, confirmed };
+  }
+
+  it("while the card is at the reader, the sheet is one panel: the card, the amount on the reader, and the time waited, with no buttons", async () => {
+    const { el } = await sent();
+
+    expect(waiting(el)).not.toBeNull();
+    expect(inWaiting(el, "[data-pay-collecting]")).toBe(t("card.collecting"));
+    expect(inWaiting(el, "[data-pay-waiting-on]")).toBe(waitingOn("Lector 2"));
+    expect(inWaiting(el, "[data-pay-waiting-since]")).toBe(since("0:00"));
+    expect(root(el).querySelector("wt-button")).toBeNull();
+    expect(root(el).querySelector("[data-pay-balance]")).toBeNull();
+    expect(root(el).querySelector("till-pay-equipment")).toBeNull();
+    expect(
+      root(el).querySelector<HTMLElement & { dismissible: boolean }>("wt-dialog")!.dismissible,
+    ).toBe(false);
+  });
+
+  it("counts each second it waits", async () => {
+    const { el } = await sent();
+
+    await vi.advanceTimersByTimeAsync(12_000);
+    await waiting(el)!.updateComplete;
+    expect(inWaiting(el, "[data-pay-waiting-since]")).toBe(since("0:12"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    await waiting(el)!.updateComplete;
+    expect(inWaiting(el, "[data-pay-waiting-since]")).toBe(since("1:12"));
+  });
+
+  it("keeps naming the reader the payment was sent to when the phone's reader changes", async () => {
+    const { el } = await sent();
+
+    el.equipment = equipmentWith(LECTOR_3);
+    await el.updateComplete;
+    await waiting(el)!.updateComplete;
+    expect(inWaiting(el, "[data-pay-waiting-on]")).toBe(waitingOn("Lector 2"));
+  });
+
+  it("stops its clock when the send ends, and when the sheet goes", async () => {
+    const { el } = await sent();
+    expect(vi.getTimerCount()).toBe(1);
+
+    el.busy = false;
+    await el.updateComplete;
+    expect(waiting(el)).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+
+    const again = await sent();
+    expect(vi.getTimerCount()).toBe(1);
+    again.el.remove();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("after a decline, keeps today's words and retries on the phone's reader now, as Try again on Lector 3", async () => {
+    const { el, confirmed } = await sent();
+    el.equipment = equipmentWith(LECTOR_3);
+    el.busy = false;
+    el.refusal = { code: "declined" };
+    await el.updateComplete;
+
+    expect(waiting(el)).toBeNull();
+    expect(actions(el).error).toBe(t("bill_pay.card_declined"));
+    expect(text(button(el, "[data-pay-confirm]"))).toBe(
+      t("bill_pay.retry_on_reader").replace("{reader}", () => "Lector 3"),
+    );
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([{ readerId: "r2" }, { readerId: "r3" }]);
+  });
+
+  it("shows a tap's notice under the panel while the card is at the reader", async () => {
+    const { el } = await sent();
+    el.notice = { message: t("equipment.picked_up").replace("{item}", "Lector 3"), tone: "info" };
+    await el.updateComplete;
+
+    expect(waiting(el)).not.toBeNull();
+    expect(text(root(el).querySelector("[data-pay-notice]"))).toBe(
+      t("equipment.picked_up").replace("{item}", "Lector 3"),
+    );
+  });
+
+  it("a retry after a decline shows the panel again, naming the reader it was sent to", async () => {
+    const { el } = await sent();
+    el.equipment = equipmentWith(LECTOR_3);
+    el.busy = false;
+    el.refusal = { code: "declined" };
+    await el.updateComplete;
+
+    await click(el, "[data-pay-confirm]");
+    el.busy = true;
+    await el.updateComplete;
+    await waiting(el)?.updateComplete;
+    expect(inWaiting(el, "[data-pay-waiting-on]")).toBe(waitingOn("Lector 3"));
+  });
+
+  it("a send that gets no answer leaves the panel for the locked confirmation, as today", async () => {
+    const { el } = await sent();
+    el.confirmationLocked = true;
+    el.refusal = { code: "sending" };
+    await el.updateComplete;
+
+    expect(waiting(el)).toBeNull();
+    expect(text(root(el).querySelector("[data-pay-unanswered-title]"))).toBe(
+      t("bill_pay.sending_title"),
+    );
+    expect(button(el, "[data-pay-confirm]").disabled).toBe(true);
+  });
+
+  it("a counter till keeps today's muted line and its buttons while the card is at the reader", async () => {
+    const el = await mount({ way: "contribution", cardReader: "stripe_terminal" });
+    await type(el, "amount", "20.80");
+    await pick(el, "method", "card");
+    await previewed(el, cardPreview);
+    await click(el, "[data-pay-confirm]");
+    el.busy = true;
+    await el.updateComplete;
+
+    expect(waiting(el)).toBeNull();
+    expect(text(root(el).querySelector("[data-pay-collecting]"))).toBe(t("card.collecting"));
+    expect(button(el, "[data-pay-confirm]")).not.toBeNull();
+    expect(button(el, "[data-pay-back]")).not.toBeNull();
+
+    el.busy = false;
+    el.refusal = { code: "declined" };
+    await el.updateComplete;
+    expect(text(button(el, "[data-pay-confirm]"))).toBe(t("bill_pay.take"));
+  });
+});
+
+describe("till-bill-pay-dialog: the next guest on a handheld", () => {
+  const handheld = (over: Partial<TillBillPayDialog> = {}) =>
+    mount({
+      handheld: true,
+      way: undefined,
+      cardReader: "stripe_terminal",
+      takesReaderCard: true,
+      takesCash: true,
+      takesManualCard: true,
+      equipment: equipmentWith(LECTOR_2),
+      balance: balanceOf({ total: "62.40", outstanding: "62.40" }),
+      ...over,
+    });
+  const card = (applied: string): AllocationPreview => ({
+    kind: "allocated",
+    choice: null,
+    applied,
+    tip: "0.00",
+    change: null,
+    charged: applied,
+  });
+  const next = (el: TillBillPayDialog) => root(el).querySelector<HTMLElement>("[data-pay-next]");
+  const nextShare = (n: number, m: number) =>
+    t("bill_pay.next_share").replace("{n}", String(n)).replace("{m}", String(m));
+
+  /** A card payment confirmed and answered as the app answers it: the request, then the taken
+   * payment with the bill's new balance. */
+  async function pay(
+    el: TillBillPayDialog,
+    outstanding: string,
+    taken: TillBillPayDialog["taken"] = { change: null },
+  ): Promise<PayRequest> {
+    const asked = await previewed(el, card("20.80"));
+    const confirmed = capture(el, "bill-pay-confirm");
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toHaveLength(1);
+    el.busy = true;
+    await el.updateComplete;
+    el.busy = false;
+    el.asked = null;
+    el.preview = null;
+    el.balance = balanceOf({ total: "62.40", outstanding });
+    el.taken = taken;
+    await el.updateComplete;
+    return asked;
+  }
+
+  async function share(el: TillBillPayDialog, people: string): Promise<void> {
+    await pick(el, "way", "share");
+    await type(el, "people", people);
+  }
+
+  it("after the first of three shares, shows the payment taken and offers the second of three, with no form", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+
+    expect(text(next(el))).toBe(nextShare(2, 3));
+    expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+    expect(root(el).querySelector("[data-pay-close]")).not.toBeNull();
+    expect(root(el).querySelector("[data-pay-continue]")).toBeNull();
+    expect(root(el).querySelector("[data-pay-way]")).toBeNull();
+  });
+
+  it("the next guest's form keeps the equal share among one fewer, so its preview is a share among two", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+    await click(el, "[data-pay-next]");
+
+    expect(root(el).querySelector<HTMLInputElement>('input[name="way"]:checked')!.value).toBe(
+      "share",
+    );
+    expect(field(el, "people")!.value).toBe("2");
+    expect(next(el)).toBeNull();
+    const asked = await pay(el, "20.80");
+    expect(asked.choice).toEqual({ kind: "share", shareOf: 2 });
+
+    expect(text(next(el))).toBe(nextShare(3, 3));
+    await click(el, "[data-pay-next]");
+    expect(field(el, "people")!.value).toBe("1");
+  });
+
+  it("a count the waiter edits by hand starts a new run from that count", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+    await click(el, "[data-pay-next]");
+    await type(el, "people", "4");
+    await pay(el, "20.80");
+
+    expect(text(next(el))).toBe(nextShare(2, 4));
+    await click(el, "[data-pay-next]");
+    expect(field(el, "people")!.value).toBe("3");
+  });
+
+  it("a change of way starts a new run", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+    await click(el, "[data-pay-next]");
+    await pick(el, "way", "contribution");
+    await share(el, "2");
+    await pay(el, "20.80");
+
+    expect(text(next(el))).toBe(nextShare(2, 2));
+  });
+
+  it("a change of way and back, with the count left as shown, starts a new run from that count", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+    await click(el, "[data-pay-next]");
+    await pick(el, "way", "contribution");
+    await pick(el, "way", "share");
+    expect(field(el, "people")!.value).toBe("2");
+    await pay(el, "20.80");
+
+    expect(text(next(el))).toBe(nextShare(2, 2));
+  });
+
+  it("the app's own call to paymentAccepted, made while the last payment is still shown, counts no share", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+    await click(el, "[data-pay-next]");
+    await previewed(el, card("20.80"));
+    await click(el, "[data-pay-confirm]");
+    el.paymentAccepted();
+    el.asked = null;
+    el.preview = null;
+    el.balance = balanceOf({ total: "62.40", outstanding: "20.80" });
+    el.taken = { change: null };
+    await el.updateComplete;
+
+    expect(text(next(el))).toBe(nextShare(3, 3));
+  });
+
+  it("a refund made from the next view ends the run: no next guest, and the next share starts afresh", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+    el.taken = null;
+    el.refunded = { state: "completed", amount: "20.80", method: "card", terminal: false };
+    el.balance = balanceOf({ total: "62.40", outstanding: "62.40" });
+    await el.updateComplete;
+
+    expect(next(el)).toBeNull();
+    expect(root(el).querySelector("[data-pay-continue]")).not.toBeNull();
+    expect(field(el, "people")!.value).toBe("");
+    await type(el, "people", "3");
+    el.refunded = null;
+    await pay(el, "41.60");
+    expect(text(next(el))).toBe(nextShare(2, 3));
+  });
+
+  it("a later read that shows nothing owing ends the next-guest offer", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+    expect(next(el)).not.toBeNull();
+
+    el.balance = balanceOf({ total: "62.40", received: "62.40", outstanding: "0.00" });
+    await el.updateComplete;
+
+    expect(next(el)).toBeNull();
+    expect(root(el).querySelector("[data-pay-continue]")).not.toBeNull();
+  });
+
+  it("keeps the count of the next share on one line", async () => {
+    setLocale("es");
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+
+    const count = next(el)!.querySelector("[data-pay-next-count]")!;
+    expect(text(count)).toBe("(2 de 3)");
+    expect(getComputedStyle(count).whiteSpace).toBe("nowrap");
+  });
+
+  it("a counter till that takes an equal share keeps today's form, with no next guest", async () => {
+    const el = await mount({ way: "share", takesCash: false, cardReader: "stripe_terminal" });
+    await type(el, "people", "3");
+    await previewed(el, card("40.00"));
+    const confirmed = capture(el, "bill-pay-confirm");
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toHaveLength(1);
+    el.busy = true;
+    await el.updateComplete;
+    el.busy = false;
+    el.asked = null;
+    el.preview = null;
+    el.balance = balanceOf({ received: "40.00", outstanding: "80.00" });
+    el.taken = { change: null };
+    await el.updateComplete;
+
+    expect(next(el)).toBeNull();
+    expect(root(el).querySelector("[data-pay-continue]")).not.toBeNull();
+    expect(field(el, "people")!.value).toBe("");
+    expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+  });
+
+  it("after a contribution, offers the next guest and starts again on Contribution with the amount empty", async () => {
+    const el = await handheld();
+    await pick(el, "way", "contribution");
+    await type(el, "amount", "20.80");
+    await pay(el, "41.60");
+
+    expect(text(next(el))).toBe(t("bill_pay.next"));
+    await click(el, "[data-pay-next]");
+    expect(root(el).querySelector<HTMLInputElement>('input[name="way"]:checked')!.value).toBe(
+      "contribution",
+    );
+    expect(field(el, "amount")!.value).toBe("");
+  });
+
+  it("names the reader a card was charged on, under the payment taken", async () => {
+    setLocale("es");
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60", { change: null, reader: "Lector 2", charged: "20.80" });
+
+    expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+    expect(text(root(el).querySelector("[data-pay-taken-reader]"))).toBe(
+      "20,80 € con tarjeta en Lector 2",
+    );
+  });
+
+  it("says the change to give for cash, with no reader line", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60", { change: "4.20" });
+
+    expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(
+      t("bill_pay.taken_change").replace("{amount}", money("4.20")),
+    );
+    expect(root(el).querySelector("[data-pay-taken-reader]")).toBeNull();
+    expect(text(next(el))).toBe(nextShare(2, 3));
+  });
+
+  it("a card still in progress warns not to take that guest's money another way, and offers the next guest with no count", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60", { change: null, pending: "20.80" });
+
+    const warning = root(el).querySelector("[data-pay-uncertain]");
+    expect(text(warning!.querySelector("[data-pay-uncertain-title]"))).toBe(
+      t("bill_pay.uncertain_title"),
+    );
+    expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(
+      t("bill_pay.uncertain").replace("{amount}", money("20.80")),
+    );
+    expect(text(root(el).querySelector("[data-pay-pending-manager]"))).toBe(
+      t("bill_pay.pending_where"),
+    );
+    expect(text(next(el))).toBe(t("bill_pay.next"));
+    expect(root(el).querySelector("[data-pay-continue]")).toBeNull();
+
+    await click(el, "[data-pay-next]");
+    expect(root(el).querySelector<HTMLInputElement>('input[name="way"]:checked')!.value).toBe(
+      "share",
+    );
+    expect(field(el, "people")!.value).toBe("2");
+  });
+
+  it("a card in progress that is then received shows it taken, and the count of the next share again", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60", { change: null, pending: "20.80" });
+
+    el.taken = { change: null, settled: true };
+    await el.updateComplete;
+
+    expect(root(el).querySelector("[data-pay-uncertain]")).toBeNull();
+    expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+    expect(text(next(el))).toBe(nextShare(2, 3));
+  });
+
+  it.each(["declined", "payment_failed"] as const)(
+    "a card in progress that is then %s says so on the form and ends the run of shares",
+    async (code) => {
+      const el = await handheld();
+      await share(el, "3");
+      await pay(el, "41.60", { change: null, pending: "20.80" });
+
+      el.taken = null;
+      el.balance = balanceOf({ total: "62.40", outstanding: "62.40" });
+      el.refusal = { code };
+      await el.updateComplete;
+
+      expect(next(el)).toBeNull();
+      expect(root(el).querySelector("[data-pay-uncertain]")).toBeNull();
+      expect(root(el).querySelector("[data-pay-continue]")).not.toBeNull();
+      expect(actions(el).error).toBe(
+        t(code === "declined" ? "bill_pay.card_declined" : "bill_pay.payment_failed"),
+      );
+      expect(field(el, "people")!.value).toBe("");
+    },
+  );
+
+  it("a counter till keeps today's sentence for a card still in progress, with no warning", async () => {
+    const el = await mount({ taken: { change: null, pending: "40.00" } });
+    expect(root(el).querySelector("[data-pay-uncertain]")).toBeNull();
+    expect(root(el).querySelector("[data-pay-pending-manager]")).toBeNull();
+    expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(
+      t("bill_pay.card_pending").replace("{amount}", money("40.00")),
+    );
+  });
+
+  it("a handheld whose card is still in progress names the manager once, not again in its payments row", async () => {
+    const el = await handheld({
+      taken: { change: null, pending: "20.00" },
+      balance: balanceOf({
+        total: "62.40",
+        reserved: "20.00",
+        outstanding: "42.40",
+        payments: [pendingCard],
+      }),
+    });
+
+    expect(root(el).querySelectorAll("[data-pay-pending-manager]")).toHaveLength(1);
+    expect(root(el).querySelector("[data-payment-pending]")).toBeNull();
+    expect(text(root(el).querySelector(`[data-payment="${pendingCard.id}"]`))).toContain(
+      t("bill_pay.state_pending"),
+    );
+  });
+
+  it("a handheld with no warning of its own still says, in the row, where a manager clears another card", async () => {
+    const el = await handheld({
+      balance: balanceOf({
+        total: "62.40",
+        reserved: "20.00",
+        outstanding: "42.40",
+        payments: [pendingCard],
+      }),
+    });
+
+    expect(text(root(el).querySelector("[data-payment-pending]"))).toBe(
+      t("bill_pay.pending_where"),
+    );
+  });
+
+  it("a counter till keeps the row's manager line beside today's sentence for a card in progress", async () => {
+    const el = await mount({
+      taken: { change: null, pending: "20.00" },
+      balance: balanceOf({ reserved: "20.00", outstanding: "100.00", payments: [pendingCard] }),
+    });
+
+    expect(text(root(el).querySelector("[data-payment-pending]"))).toBe(
+      t("bill_pay.pending_where"),
+    );
+  });
+
+  it("still shows the payment taken until Take the next is pressed", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60", { change: null, pending: "20.80" });
+    expect(el.showsTaken).toBe(true);
+
+    await click(el, "[data-pay-next]");
+
+    expect(el.showsTaken).toBe(false);
+  });
+
+  it("no longer shows the payment taken once its form is changed", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "0.00", { change: null, pending: "20.80" });
+    expect(next(el)).toBeNull();
+    expect(el.showsTaken).toBe(true);
+
+    await type(el, "people", "5");
+
+    expect(el.showsTaken).toBe(false);
+  });
+
+  it("a card in progress not charged after the sheet moved on ends the run, clearing the count the form will open on", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    const pending = { change: null, pending: "20.80" };
+    await pay(el, "41.60", pending);
+
+    el.cardEnded(pending, false);
+    await el.updateComplete;
+
+    expect(next(el)).not.toBeNull();
+    await click(el, "[data-pay-next]");
+    expect(field(el, "people")!.value).toBe("");
+  });
+
+  it("a card in progress not charged leaves the count in a form already open", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    const pending = { change: null, pending: "20.80" };
+    await pay(el, "41.60", pending);
+    await click(el, "[data-pay-next]");
+
+    el.cardEnded(pending, false);
+    await el.updateComplete;
+
+    expect(field(el, "people")!.value).toBe("2");
+  });
+
+  it("a card not charged ends no run that did not count it in progress", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+
+    el.cardEnded({ change: null, pending: "20.80" }, false);
+    await el.updateComplete;
+
+    expect(text(next(el))).toBe(nextShare(2, 3));
+  });
+
+  it("a card counted in progress that is not charged ends the run, though a later card was received since", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    const first = { change: null, pending: "20.80" };
+    await pay(el, "41.60", first);
+    await click(el, "[data-pay-next]");
+    await pay(el, "20.80", { change: null, pending: "20.80" });
+    el.taken = { change: null, settled: true };
+    await el.updateComplete;
+    expect(text(next(el))).toBe(nextShare(3, 3));
+
+    el.cardEnded(first, false);
+    await el.updateComplete;
+
+    expect(text(next(el))).toBe(t("bill_pay.next"));
+    await click(el, "[data-pay-next]");
+    expect(field(el, "people")!.value).toBe("");
+  });
+
+  it("a card in progress outside a run of shares that is then declined says so on the form", async () => {
+    const el = await handheld();
+    await pay(el, "41.60", { change: null, pending: "20.80" });
+    expect(next(el)).not.toBeNull();
+
+    el.taken = null;
+    el.refusal = { code: "declined" };
+    await el.updateComplete;
+
+    expect(next(el)).toBeNull();
+    expect(actions(el).error).toBe(t("bill_pay.card_declined"));
+  });
+
+  it("a card counted in progress and then charged no longer ends the run on a later decline", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    const pending = { change: null, pending: "20.80" };
+    await pay(el, "41.60", pending);
+
+    el.cardEnded(pending, true);
+    el.refusal = { code: "declined" };
+    await el.updateComplete;
+
+    expect(next(el)).not.toBeNull();
+  });
+
+  it("the sheet's notice shows beside the next-guest offer too", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+    el.notice = { message: "Something to know", tone: "info" };
+    await el.updateComplete;
+
+    expect(next(el)).not.toBeNull();
+    expect(text(root(el).querySelector("[data-pay-notice]"))).toBe("Something to know");
+  });
+
+  it("a payment that leaves nothing owing offers no next guest", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "0.00");
+
+    expect(next(el)).toBeNull();
+    expect(root(el).querySelector("[data-pay-continue]")).not.toBeNull();
+  });
+
+  it("a counter till keeps today's form after a share, with the count empty and no reader line", async () => {
+    const el = await mount({ way: "share" });
+    await type(el, "people", "3");
+    el.taken = { change: null, reader: "Lector 2", charged: "40.00" };
+    await el.updateComplete;
+
+    expect(next(el)).toBeNull();
+    expect(root(el).querySelector("[data-pay-continue]")).not.toBeNull();
+    expect(field(el, "people")!.value).toBe("");
+    expect(root(el).querySelector("[data-pay-taken-reader]")).toBeNull();
+    expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+  });
+});
+
+describe("till-bill-pay-dialog: the buttons stay in view at the sheet's foot", () => {
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await page.viewport(1280, 900);
+  });
+
+  const received = (n: number): BillPaymentView => ({
+    ...pendingCard,
+    id: `pay-${n}`,
+    submissionId: `sub-${n}`,
+    method: "cash",
+    entry: null,
+    applied: "5.00",
+    tendered: "5.00",
+    change: "0.00",
+    state: "received",
+    receivedAt: pendingCard.createdAt,
+  });
+  const longBill = () =>
+    balanceOf({
+      received: "60.00",
+      outstanding: "60.00",
+      payments: Array.from({ length: 12 }, (_, n) => received(n + 1)),
+    });
+
+  /** With the body at its top, `selector` sits inside the dialog's visible box, in a row the
+   * dialog shows in its footer, and the body scrolls when `scrolls`. */
+  async function expectInView(
+    el: TillBillPayDialog,
+    selector: string,
+    scrolls = true,
+  ): Promise<void> {
+    const dialog = root(el).querySelector("wt-dialog")!;
+    await dialog.updateComplete;
+    const native = dialog.shadowRoot!.querySelector("dialog")!;
+    const body = dialog.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    expect(window.innerWidth).toBe(390);
+    if (scrolls) expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    body.scrollTop = 0;
+    const target = button(el, selector);
+    const box = target.getBoundingClientRect();
+    const frame = native.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(frame.top);
+    expect(box.bottom).toBeLessThanOrEqual(frame.bottom);
+    expect(target.closest("wt-form-actions")!.assignedSlot?.name).toBe("footer");
+  }
+
+  it("the form's Continue, under a long bill and a refusal in Spanish", async () => {
+    setLocale("es");
+    await page.viewport(390, 900);
+    const el = await mount({
+      balance: longBill(),
+      way: "contribution",
+      refusal: { code: "bill.unsent_dishes", unsent: { billId: "wo-4" }, billLabel: "Terraza" },
+    });
+
+    await expectInView(el, "[data-pay-continue]");
+  });
+
+  it("the confirmation's Take, under a long bill", async () => {
+    setLocale("es");
+    await page.viewport(390, 900);
+    const el = await mount({ balance: longBill(), way: "contribution" });
+    await type(el, "amount", "10");
+    await pick(el, "method", "cash");
+    await type(el, "tendered", "20");
+    await previewed(el, cashPreview("10.00", "10.00"));
+
+    await expectInView(el, "[data-pay-confirm]");
+  });
+
+  it("the choices' Back, under a long bill", async () => {
+    setLocale("es");
+    await page.viewport(390, 900);
+    const steak: PayLine = {
+      lineNo: 4,
+      name: "Steak",
+      quantity: "1",
+      total: "25.00",
+      unitTotal: null,
+    };
+    const el = await mount({
+      lines: [...lines, steak],
+      balance: { ...longBill(), outstanding: "15.00" },
+    });
+    await pick(el, "line", "4");
+    await type(el, "tendered", "30");
+    await previewed(el, {
+      kind: "choose",
+      options: [{ choice: "use_pool", applied: "15.00", tip: "0.00" }],
+    });
+
+    await expectInView(el, "[data-pay-back]");
+  });
+
+  it("the next guest's Next, under a long bill on a handheld", async () => {
+    setLocale("es");
+    await page.viewport(390, 900);
+    const el = await mount({
+      handheld: true,
+      way: undefined,
+      takesCash: true,
+      balance: longBill(),
+    });
+    el.taken = { change: null };
+    await el.updateComplete;
+
+    await expectInView(el, "[data-pay-next]");
+  });
+
+  it("the camera's Back", async () => {
+    await page.viewport(390, 900);
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockReturnValue(new Promise(() => {}));
+    const el = await mount({
+      handheld: true,
+      way: undefined,
+      canScan: true,
+      cardReader: "stripe_terminal",
+      takesReaderCard: true,
+      takesCash: true,
+      equipment: equipmentWith(LECTOR_2),
+    });
+    const equipmentRow = root(el).querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "till-pay-equipment",
+    )!;
+    await equipmentRow.updateComplete;
+    equipmentRow.shadowRoot!.querySelector<HTMLElement>("[data-pay-qr]")!.click();
+    await el.updateComplete;
+
+    await expectInView(el, "[data-pay-scan-back]", false);
   });
 });

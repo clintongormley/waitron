@@ -16,6 +16,7 @@ import type { PaymentState } from "./provider.js";
 import { DEMO_READER_ID } from "./simulator.js";
 import { insertAttempting } from "./store.js";
 import {
+  appendReaderToProfiles,
   clearUnlistedReaderChoice,
   readProfileReaderList,
   readReaderRole,
@@ -227,6 +228,79 @@ describe("a profile's reader list", () => {
       readerIds: [s.r1],
       defaultReaderId: null,
     });
+  });
+});
+
+describe("appending a new reader to profiles", () => {
+  async function rows(profileId: string) {
+    return suite.db
+      .select({
+        readerId: deviceProfileCardReaders.readerId,
+        position: deviceProfileCardReaders.position,
+        isDefault: deviceProfileCardReaders.isDefault,
+      })
+      .from(deviceProfileCardReaders)
+      .where(eq(deviceProfileCardReaders.deviceProfileId, profileId))
+      .orderBy(deviceProfileCardReaders.position);
+  }
+
+  it("appends at the end of an existing list, not as its default", async () => {
+    const s = await seed();
+    await inTx((tx) =>
+      setProfileReaderList(tx, s.profileId, { readerIds: [s.r1, s.r2], defaultReaderId: s.r1 }),
+    );
+    await inTx((tx) => appendReaderToProfiles(tx, s.r3, [s.profileId]));
+    expect(await rows(s.profileId)).toEqual([
+      { readerId: s.r1, position: 0, isDefault: true },
+      { readerId: s.r2, position: 1, isDefault: false },
+      { readerId: s.r3, position: 2, isDefault: false },
+    ]);
+  });
+
+  it("gives a profile with no list the reader at position 0, and appends to every profile named", async () => {
+    const s = await seed();
+    await inTx((tx) =>
+      setProfileReaderList(tx, s.profileId, { readerIds: [s.r1], defaultReaderId: null }),
+    );
+    await inTx((tx) => appendReaderToProfiles(tx, s.r3, [s.profileId, s.otherProfileId]));
+    expect(await rows(s.otherProfileId)).toEqual([
+      { readerId: s.r3, position: 0, isDefault: false },
+    ]);
+    expect(await rows(s.profileId)).toEqual([
+      { readerId: s.r1, position: 0, isDefault: false },
+      { readerId: s.r3, position: 1, isDefault: false },
+    ]);
+  });
+
+  it("leaves a profile already listing the reader unchanged", async () => {
+    const s = await seed();
+    await inTx((tx) =>
+      setProfileReaderList(tx, s.profileId, { readerIds: [s.r3, s.r1], defaultReaderId: s.r3 }),
+    );
+    await inTx((tx) => appendReaderToProfiles(tx, s.r3, [s.profileId]));
+    expect(await rows(s.profileId)).toEqual([
+      { readerId: s.r3, position: 0, isDefault: true },
+      { readerId: s.r1, position: 1, isDefault: false },
+    ]);
+  });
+
+  it("names no profile and writes nothing", async () => {
+    const s = await seed();
+    await inTx((tx) => appendReaderToProfiles(tx, s.r3, []));
+    expect(await rows(s.profileId)).toEqual([]);
+  });
+
+  it("leaves a device on Use default paying on the default it holds, acquiring nothing new", async () => {
+    const s = await seed();
+    await inTx((tx) =>
+      setProfileReaderList(tx, s.profileId, { readerIds: [s.r1], defaultReaderId: s.r1 }),
+    );
+    await inTx((tx) => settleDeviceReader(tx, s.deviceA, { acquire: true }));
+    expect(await holders(s.r1)).toEqual({ [s.r1]: s.deviceA });
+    await inTx((tx) => appendReaderToProfiles(tx, s.r2, [s.profileId]));
+    expect(await chosen(s.deviceA)).toBeNull();
+    expect(await holders(s.r1, s.r2)).toEqual({ [s.r1]: s.deviceA });
+    expect(await inTx((tx) => resolveDeviceReaderId(tx, s.deviceA))).toBe(s.r1);
   });
 });
 

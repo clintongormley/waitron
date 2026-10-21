@@ -187,6 +187,10 @@ scan button on the folded row and the till's background NFC pick-up updating the
 none is open, and the build is to be planned as its own item:
 [2026-10-19-a796-handheld-payments-design.md](../superpowers/specs/2026-10-19-a796-handheld-payments-design.md)._
 
+_2026-10-20: the handheld payment flow is built as A796, on branch `feat/a796-handheld-payments`
+([#1921](https://github.com/clintongormley/waitron/pull/1921)). What it left open, Tap-to-Pay
+included, is in [backlog.md](../backlog.md), _Payments and card readers_._
+
 ## Check NFC pick-up on the box's address
 
 On the OnePlus 13, open the installed till at `https://waitron.local`. In Equipment, press

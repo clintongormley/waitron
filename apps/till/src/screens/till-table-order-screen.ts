@@ -1130,7 +1130,8 @@ export class TillTableOrderScreen extends LitElement {
   /** The app's answer to a guest count the server refused: the count sent, and why. */
   @property({ attribute: false }) guestsRefusal: { value: string; message: string } | null = null;
   @property({ attribute: false }) splitRefusal: SplitRefusal | null = null;
-  /** A handheld form factor, whose menu browser shows the menu's handheld display. */
+  /** A handheld form factor, whose menu browser shows the menu's handheld display and whose pay
+   * section opens the pay sheet. */
   @property({ type: Boolean }) handheld = false;
   /** The visible half of the app's guard against a second group command while one runs. */
   @property({ type: Boolean }) groupCommandBusy = false;
@@ -3837,7 +3838,8 @@ export class TillTableOrderScreen extends LitElement {
       this.paymentConfirmation === undefined && shown !== undefined && paidInPart(shown)
         ? shown
         : undefined;
-    if (partlyPaid === undefined)
+    const sheet = this.#paysOnSheet(shown);
+    if (partlyPaid === undefined && !sheet)
       return html`<section
         class="pay"
         @confirm-payment=${(event: Event) => this.#onTenderConfirm(event)}
@@ -3855,6 +3857,12 @@ export class TillTableOrderScreen extends LitElement {
         ></till-tender-pay>
         ${this.paymentConfirmation === undefined ? html`${this.#billChoices(shown)} ${this.#payWays()}` : nothing}
       </section>`;
+    if (partlyPaid === undefined)
+      return html`<section class="pay">
+        <h2>${t("table.pay_title")}</h2>
+        ${this.#paySheetButton(shown)}
+        ${this.paymentConfirmation === undefined ? this.#billChoices(shown) : nothing}
+      </section>`;
     const received = this.#balanceShown()?.received;
     return html`<section class="pay" data-bill-payments>
       <h2>${t("table.pay_title")}</h2>
@@ -3866,16 +3874,46 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : html`<p data-bill-received>${t("bill_pay.received")}: ${this.#money(received)}</p>`
       }
-      <wt-button
-        variant="primary"
-        data-pay-rest
-        .disabled=${this.busy}
-        @click=${() => this.#payPart("contribution", partlyPaid.outstanding)}
-      >
-        ${t("bill.pay_with_bill_payments")}
-      </wt-button>
-      ${this.#billChoices(shown)} ${this.#payWays()}
+      ${
+        sheet
+          ? html`${this.#paySheetButton(shown)} ${this.#billChoices(shown)}`
+          : html`<wt-button
+                variant="primary"
+                data-pay-rest
+                .disabled=${this.busy}
+                @click=${() => this.#payPart("contribution", partlyPaid.outstanding)}
+              >
+                ${t("bill.pay_with_bill_payments")}
+              </wt-button>
+              ${this.#billChoices(shown)} ${this.#payWays()}`
+      }
     </section>`;
+  }
+
+  /** A handheld pays an open bill, and a presented bill not yet paid in part, through a pay sheet;
+   * a whole payment A773-1 holds keeps the pay card, except on a presented bill, whose sheet shows
+   * it locked. */
+  #paysOnSheet(shown: PartyBill | undefined): boolean {
+    if (!this.handheld) return false;
+    if (this.paymentConfirmation !== undefined) return shown?.status === "placed";
+    return (
+      shown === undefined ||
+      shown.status === "open" ||
+      (shown.status === "placed" && !paidInPart(shown))
+    );
+  }
+
+  #paySheetButton(shown: PartyBill | undefined): TemplateResult {
+    return html`<wt-button
+      variant="primary"
+      data-pay-sheet
+      .disabled=${this.busy}
+      @click=${() =>
+        shown?.status === "placed"
+          ? this.#dispatch("pay-presented", { workingOrderId: shown.workingOrderId })
+          : this.#payPart("whole")}
+      >${t("action.pay")}</wt-button
+    >`;
   }
 
   /** Full invoice while full invoices are on, and the receipt's language when several are offered, for a

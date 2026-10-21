@@ -42,11 +42,32 @@ export const PAY_WAYS = [
   { way: "share", label: "bill_pay.way_share" },
 ] as const satisfies readonly { way: PayChoice["kind"]; label: StringKey }[];
 
+/** The ways a handheld offers: the whole of what is left in one go, then the three above. */
+export const HANDHELD_PAY_WAYS = [
+  { way: "whole", label: "bill_pay.way_whole" },
+  ...PAY_WAYS,
+] as const satisfies readonly { way: PayChoice["kind"] | "whole"; label: StringKey }[];
+
+/** A payment's state, as its row names it. */
+export const PAYMENT_STATES: Record<BillPaymentView["state"], StringKey> = {
+  received: "bill_pay.state_received",
+  pending: "bill_pay.state_pending",
+  failed: "bill_pay.state_failed",
+  declined: "bill_pay.state_declined",
+};
+
 const TYPED_AMOUNT = /^\d{1,9}(\.\d{1,2})?$/;
 
 export function typedAmount(value: string): string | null {
   const typed = parseDecimalInput(value);
   return typed !== null && TYPED_AMOUNT.test(typed) ? typed.replace(/^0+(?=\d)/, "") : null;
+}
+
+/** A typed amount at the money scale, so two spellings of one amount compare equal; null when it
+ * is not an amount. */
+export function typedMoney(value: string): Decimal | null {
+  const amount = typedAmount(value);
+  return amount === null ? null : toScale(decimal(amount), MONEY_SCALE);
 }
 
 /** Two amounts added, at the money scale. */
@@ -185,6 +206,16 @@ export function unansweredAfter<S extends { unconfirmed?: boolean }>(
   if (typeof code === "string" && FRESH_ID_AFTER.has(code)) return null;
   if ("billId" in sent && paymentNotRecorded(error)) return null;
   return isNetworkFailure(error) ? { ...sent, unconfirmed: true } : sent;
+}
+
+/** Whether `turn` is still the latest send on the bill: an answer to a send a newer one replaced
+ * changes nothing. */
+export function isLatestSend(
+  turns: ReadonlyMap<string, number>,
+  billId: string,
+  turn: number,
+): boolean {
+  return turns.get(billId) === turn;
 }
 
 /** A refusal's code and the request field it names, as the refund and unpaid departure dialogs

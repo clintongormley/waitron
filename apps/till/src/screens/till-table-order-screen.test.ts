@@ -645,7 +645,7 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector("section.pay")).not.toBeNull();
   });
 
-  it("renders the embedded pay widget with the Card button (a handheld settles cash or manual card)", async () => {
+  it("renders the embedded pay widget with the Card button", async () => {
     // The table-order screen threads no `cashOnly`/`cardProvider`, so the embedded pay widget offers
     // BOTH tenders — cash and the manual (datáfono) card.
     const { el } = await mount({ lines: [pendingLine], canSettle: true });

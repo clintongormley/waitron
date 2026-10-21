@@ -1,43 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import qrcode from "qrcode-generator";
 import { formatEquipmentCode } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./equipment-scanner.js";
+import { cameraFilming } from "../../test/qr-camera.js";
 import type { TillEquipmentScanner } from "./equipment-scanner.js";
 
 const PRINTER = "6f1c3a52-0000-4000-8000-000000000001";
 const READER = "6f1c3a52-0000-4000-8000-000000000002";
-
-/** A camera that films `text` as a QR code, drawn onto a canvas again every 50 ms so the stream
- * keeps sending frames. In Chromium only: this is not evidence about a real camera. */
-function cameraFilming(text: string): { stream: MediaStream; stop: () => void } {
-  const qr = qrcode(0, "M");
-  qr.addData(text);
-  qr.make();
-  const cell = 6;
-  const margin = 4;
-  const size = (qr.getModuleCount() + margin * 2) * cell;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const context = canvas.getContext("2d")!;
-  const draw = () => {
-    context.fillStyle = "#fff";
-    context.fillRect(0, 0, size, size);
-    context.fillStyle = "#000";
-    for (let row = 0; row < qr.getModuleCount(); row++) {
-      for (let col = 0; col < qr.getModuleCount(); col++) {
-        if (qr.isDark(row, col))
-          context.fillRect((col + margin) * cell, (row + margin) * cell, cell, cell);
-      }
-    }
-  };
-  draw();
-  const redraw = setInterval(draw, 50);
-  const stream = canvas.captureStream(20);
-  return { stream, stop: () => clearInterval(redraw) };
-}
 
 let filming: { stop: () => void } | undefined;
 
@@ -56,7 +26,7 @@ function film(text: string): MediaStream {
   return camera.stream;
 }
 
-async function mountScanner(kind: "printer" | "reader") {
+async function mountScanner(kind: "printer" | "reader" | "any") {
   const scanned: string[] = [];
   const { el } = await mountWidget<TillEquipmentScanner>("till-equipment-scanner", { kind });
   el.addEventListener("equipment-scanned", (event) =>
@@ -91,6 +61,38 @@ describe("till-equipment-scanner", () => {
     const { scanned } = await mountScanner("reader");
 
     await expect.poll(() => scanned, { timeout: 10_000 }).toEqual([READER]);
+  });
+
+  it("on either kind, a printer label emits its id and kind", async () => {
+    film(formatEquipmentCode("printer", PRINTER));
+    const { el } = await mountScanner("any");
+    const details: unknown[] = [];
+    el.addEventListener("equipment-scanned", (event) =>
+      details.push((event as CustomEvent).detail),
+    );
+
+    await expect
+      .poll(() => details, { timeout: 10_000 })
+      .toEqual([{ id: PRINTER, kind: "printer" }]);
+  });
+
+  it("on either kind, a reader label emits its id and kind", async () => {
+    film(formatEquipmentCode("reader", READER));
+    const { el } = await mountScanner("any");
+    const details: unknown[] = [];
+    el.addEventListener("equipment-scanned", (event) =>
+      details.push((event as CustomEvent).detail),
+    );
+
+    await expect.poll(() => details, { timeout: 10_000 }).toEqual([{ id: READER, kind: "reader" }]);
+  });
+
+  it("on either kind, a foreign QR still says it is not ours", async () => {
+    film("https://example.com");
+    const { el, scanned } = await mountScanner("any");
+
+    await expect.poll(() => message(el), { timeout: 10_000 }).toBe(t("equipment.scan_not_ours"));
+    expect(scanned).toEqual([]);
   });
 
   it("a foreign QR emits nothing, says so, and keeps the camera on", async () => {

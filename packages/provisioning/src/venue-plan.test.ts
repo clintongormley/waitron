@@ -112,7 +112,10 @@ describe("planVenue", () => {
           formFactor: "phone-portrait",
           capabilities: [
             "take-orders",
+            "take-cash",
+            "integrated-card-payment",
             "hand-keyed-card-payment",
+            "print-receipt",
             "prepare-orders",
             "hand-over-orders",
             "clock-in",

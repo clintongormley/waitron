@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { BillPaymentView, TabLine } from "../api/client.js";
 import {
   confirmationOf,
+  isLatestSend,
   paidQuantities,
   payLines,
   paymentAsk,
@@ -13,6 +14,20 @@ import {
   unansweredAfter,
   type Submission,
 } from "./bill-payment.js";
+
+describe("isLatestSend", () => {
+  it("is true for the bill's current turn", () => {
+    expect(isLatestSend(new Map([["wo-4", 2]]), "wo-4", 2)).toBe(true);
+  });
+
+  it("is false for an older turn of the bill", () => {
+    expect(isLatestSend(new Map([["wo-4", 2]]), "wo-4", 1)).toBe(false);
+  });
+
+  it("does not count another bill's turn", () => {
+    expect(isLatestSend(new Map([["wo-9", 1]]), "wo-4", 1)).toBe(false);
+  });
+});
 
 describe("paymentAsk", () => {
   it("asks for whole lines without a quantity, and for units of a line as a whole-number quantity", () => {

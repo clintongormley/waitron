@@ -124,8 +124,7 @@ come after the list above:
   [ui-review.md](ui-review.md), and the first physical print since #327.
 - **Smaller, independent pieces**, in no fixed order: refusing requests from a device that is not
   enrolled; Logging Slice 2, the one-touch bug report; the first real Bluetooth pairing at the box
-  through the dashboard; paying at the table from a handheld (Slice 2, designed as A796; every
-  owner question answered, Revision 4; the build is to be planned).
+  through the dashboard.
 - Then the on-prem mirror and failover — slices 3 to 5 of the storage design — then the cloud
   primary, under _Replication, failover and the cloud_.
 
@@ -3879,31 +3878,56 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   auth. Gated on the deli having a Stripe account, which it does not.
 
 
-- **Slice 2 — the handheld NFC/QR link: paying at the table from a handheld (A796).** Design
-  decided (Revision 4, 2026-10-19; no questions open); the build is to be planned as its own item,
-  in the design's §5 slices. The payment form carries the phone's card reader and receipt printer —
-  its Equipment settings, one setting each, which A790 follows too — last chosen on that phone and
-  folded away; the folded row and the charge button name the reader. A QR button on the folded row
-  scans a reader's or a printer's sticker, and the till's existing NFC listener keeps working while
-  the form is open, with the form updating at once. A phone with no usable reader opens the row
-  with the reader empty (a profile with exactly one free reader picks it automatically); a printer
-  that has gone never holds up a payment. Taking another phone's reader from the list still asks:
-  [design](superpowers/specs/2026-10-19-a796-handheld-payments-design.md),
-  [mockups](backlog/mockups/a796-handheld-payments/). Restoring `stripe_on_device` (Tap-to-Pay)
-  remains open; it waits for the one-time native-app decision
-  ([native app capabilities](superpowers/specs/2026-08-30-native-app-capabilities.md), N1/N2).
-  [Detail](backlog/payments.md#slice-2--the-handheld-nfcqr-link)
+- **Restore `stripe_on_device` (Tap-to-Pay) on the handheld** (left open by A796). It waits for
+  the one-time native-app decision
+  ([native app capabilities](superpowers/specs/2026-08-30-native-app-capabilities.md), N1/N2;
+  [A796 design §6](superpowers/specs/2026-10-19-a796-handheld-payments-design.md#6-tap-to-pay)).
 
-- **The next identical bill payment can be answered with an unanswered one** (read, not run; found
-  by A796's review). After a bill payment gets no answer, the till keeps its submission id keyed on
-  the bill and the confirmed request (`submissionFor`, `apps/till/src/state/bill-payment.ts`), so
-  the next identical payment on that bill from this phone reuses it. That covers a contribution of
-  the same amount, the same units of the same line, or the same cash handed over. The server then
-  replays the first payment (`beginBillPayment`, `apps/server/src/bill-payments.ts`): the second
-  guest's payment is never recorded (a card is never asked), and the dialog shows the first payment's state ("Pago cobrado" once
-  it was charged). An equal share escapes only when the number of people left is lowered. Fix:
-  while a payment is unanswered, offer only the resend (A796 design, default 7). First write the
-  failing till case: an unanswered contribution, then an identical one for the next guest.
+- **Name the printer on the paid screen's ticket line** (left open by A796, its default 12). The
+  route that answers the paid screen would have to return the print job's printer, which
+  `readOriginalReceiptPrints` (`apps/server/src/receipt-print.ts:437`) joins but does not hand back.
+
+- **Check paying at the table on the OnePlus 13 at the box's address** (left open by A796). A
+  reader card, a QR scan and an NFC tap from the pay sheet, and the NFC button's permission ask;
+  the browser tests use fakes for all four.
+
+- **A user guide for the till's payment sheet** (left open by A796). No guide under
+  `apps/server/src/guide/` covers it.
+
+- **The next identical bill payment can be answered with one that got a server error** (narrowed
+  by A796). A payment that got no answer, or is still being sent, now holds the bill on its locked
+  confirmation (A773-1, #1897, and A796). What is left: a first send answered with a 5xx or an
+  error with no code keeps its submission without holding the bill (`unansweredAfter`,
+  `apps/till/src/state/bill-payment.ts`), so if the server did record it, the next
+  identical payment on that bill from this phone reuses its id (`submissionFor`, same
+  file) and the server replays the first (`beginBillPayment`, `apps/server/src/bill-payments.ts`):
+  the second guest's payment is never recorded. A796's plan ran the scratch case (a contribution
+  refused `server.internal` with status 502 left the dialog unlocked) and chose not to hold the
+  bill, because a server that kept failing would hold it for good (plan, decision 1, B5).
+
+- **A796 does not hold a bill across phones while a payment is out.** The hold is the phone's own:
+  "no new payment … can be started on that bill from this phone" (A796 design §4, "The phone loses
+  Wi-Fi mid-payment", and default 7). The server is unchanged, so another phone can start a
+  payment on the same bill meanwhile.
+
+- **A payment whose read shows it settled the bill needs one press of Comprobar de nuevo to show
+  the ticket.** A bill read that lists a held payment frees the bill, except when that payment
+  settled it: the locked confirmation stays, and its Comprobar de nuevo replays the payment and
+  shows the ticket (`apps/till/src/till-app-bill-payments.test.ts`, "keeps the locked
+  confirmation when the payment settled the bill, and Comprobar de nuevo shows the ticket").
+
+- **Check first: on a venue with no fiscal module, replaying a settled bill may throw** (read, not
+  run; found by A796's Task 23 review). `readSettledTicket`, which rebuilds the ticket for a
+  replay, throws when the backend has no filed record (`apps/server/src/till-sale.ts:840-846`),
+  and the no-fiscal backend's `filedReceiptFor` always answers `undefined`
+  (`packages/fiscal-none/src/backend.ts:67`). First run a replay on such a venue to see whether it
+  is reached.
+
+- **On a venue with no fiscal module, a handheld shows the ticket view after a presented bill is
+  paid, not the paid screen** (known limit of A796; read, not run). The paid screen shows only for
+  an `F2` result (the `paid` check in `apps/till/src/till-app.ts`), and the presented path takes its invoice
+  type from `readReceiptIssuer`, which returns none when the backend has no filed record
+  (`apps/server/src/receipt-issuer.ts:8-9`).
 
 - **Loose ends left by W102 (NFC and equipment labels).**
   - **Check NFC pick-up on the box's address.** On the OnePlus 13, grant NFC at
@@ -6832,7 +6856,7 @@ partial scope; the detail for a live thread is in its area.
 | 1   | Design system                | `@waitron/ui` token layer + primitives (`--wt-*`); brand assets (#284); the till web-app manifest and its icons; the dashboard shell restyle — collapsible nav, account menu, profile modal (#333)                                                                                                                                                                                                                                | sorting `wt-combobox` options (_Users, sign-in and the dashboard shell_)                                                                                                      |
 | 2   | Sales spine                  | Immutable hash-chained sales, per-node series, catalogue, the one-taxpayer model                                                                                                                                                                                                                                                                                                                                                  | —                                                                                                                                                                             |
 | 3   | Fiscal layer                 | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`)                                                                                                                                                                                                                                                                                   | F3 asesor/XSD confirmations; the owner's real-certificate checks after A795 lands (A888); cert distribution to a promoted node; a foreign business customer's identifier type (A1a)      |
-| 4   | Payment layer                | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329)                                                                                                                                                                                                                                                    | webhook `recordSale` hand-off; reconcile remediation UI; the handheld NFC/QR link (_Payments and card readers_)                                                               |
+| 4   | Payment layer                | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329)                                                                                                                                                                                                                                                    | webhook `recordSale` hand-off; reconcile remediation UI; Tap-to-Pay on the handheld (_Payments and card readers_)                                                             |
 | 5   | Identity                     | persons/sessions, PIN (+ wrong-PIN back-off: per device at sign-in and for override PINs), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby                                                        | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce                                                                |
 | 6   | Locations                    | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297)                                                                                                                                                                                                                                                                                                                                       | multiple-location creation/editing/deactivation; then location-scope the by-id verb family                                                                                    |
 | 7   | Counter POS                  | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, receipt configuration, receipt/drawer printing, cash-drawer authorization — operable end to end                                                                                                                                                                                                                                                        | —                                                                                                                                                                             |

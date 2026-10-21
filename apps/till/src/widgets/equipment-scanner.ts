@@ -14,9 +14,9 @@ const DECODE_WIDTH = 640;
 type Message = "camera_unavailable" | "scan_not_ours" | "scan_not_printer" | "scan_not_reader";
 
 /**
- * Films with the rear camera and reads equipment labels until one of `kind` is seen, then stops
- * the camera and emits `equipment-scanned` with its id. Anything else is said and scanning goes
- * on. The camera stops when the scanner leaves the page.
+ * Films with the rear camera and reads equipment labels until one of `kind` (either, for `"any"`)
+ * is seen, then stops the camera and emits `equipment-scanned` with its id and kind. Anything
+ * else is said and scanning goes on. The camera stops when the scanner leaves the page.
  */
 @customElement("till-equipment-scanner")
 export class TillEquipmentScanner extends LitElement {
@@ -43,7 +43,7 @@ export class TillEquipmentScanner extends LitElement {
     `,
   ];
 
-  @property() kind: EquipmentKind = "printer";
+  @property() kind: EquipmentKind | "any" = "printer";
   @state() private message: Message | null = null;
   @state() private filming = false;
   @query("video") private video?: HTMLVideoElement;
@@ -120,13 +120,13 @@ export class TillEquipmentScanner extends LitElement {
     const code = parseEquipmentCode(decoded.data);
     if (code === null) {
       this.message = "scan_not_ours";
-    } else if (code.kind !== this.kind) {
+    } else if (this.kind !== "any" && code.kind !== this.kind) {
       this.message = this.kind === "printer" ? "scan_not_printer" : "scan_not_reader";
     } else {
       this.#stop();
       this.dispatchEvent(
-        new CustomEvent<{ id: string }>("equipment-scanned", {
-          detail: { id: code.id },
+        new CustomEvent<{ id: string; kind: EquipmentKind }>("equipment-scanned", {
+          detail: { id: code.id, kind: code.kind },
           bubbles: true,
           composed: true,
         }),

@@ -212,17 +212,22 @@ export const SUBMIT_RETRIES = 2;
 export const SUBMIT_RETRY_PAUSE_MS = 500;
 
 /** A request that got no answer is sent again unchanged after a pause, until `signal` ends the wait
- * or `live` turns false: the operator's session may have ended and the next person signed in. */
+ * or `live` turns false: the operator's session may have ended and the next person signed in.
+ * `onUnanswered` is called after each attempt that got no answer, before the pause or the rethrow,
+ * since only the last attempt's error is thrown and an earlier attempt may have been recorded. */
 export async function resendUnanswered<T>(
   send: (signal: AbortSignal) => Promise<T>,
   signal: AbortSignal,
   live: () => boolean,
+  onUnanswered?: () => void,
 ): Promise<T> {
   for (let attempt = 0; ; attempt += 1) {
     try {
       return await send(signal);
     } catch (error) {
-      if (!isNetworkFailure(error) || signal.aborted || attempt === SUBMIT_RETRIES) throw error;
+      if (!isNetworkFailure(error)) throw error;
+      onUnanswered?.();
+      if (signal.aborted || attempt === SUBMIT_RETRIES) throw error;
       await pause(signal, SUBMIT_RETRY_PAUSE_MS);
       if (signal.aborted || !live()) throw error;
     }

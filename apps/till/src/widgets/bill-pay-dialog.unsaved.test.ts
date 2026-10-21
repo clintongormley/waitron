@@ -13,11 +13,16 @@ class BillPayLeaveApp extends LitElement {
   edits = 0;
   confirms = 0;
   requests: PayRequest[] = [];
+  handheld = false;
   override render() {
     return html`<till-bill-pay-dialog
         .balance=${{ workingOrderId: "bill-1", status: "open", total: "30.00", received: "0.00", reserved: "0.00", outstanding: "30.00", tips: "0.00", payments: [], paidLines: [] }}
         .way=${"contribution"}
         .amount=${"10.00"}
+        .handheld=${this.handheld}
+        .cardReader=${this.handheld ? "stripe_terminal" : "none"}
+        .takesManualCard=${this.handheld}
+        .takesReaderCard=${this.handheld}
         @bill-pay-close=${() => this.closes++}
         @bill-pay-edit=${() => this.edits++}
         @bill-pay-confirm=${() => this.confirms++}
@@ -29,8 +34,8 @@ class BillPayLeaveApp extends LitElement {
 customElements.define("bill-pay-leave-test-app", BillPayLeaveApp);
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
-async function mount() {
-  const { el: app } = await mountWidget<BillPayLeaveApp>("bill-pay-leave-test-app", {});
+async function mount(props: Partial<BillPayLeaveApp> = {}) {
+  const { el: app } = await mountWidget<BillPayLeaveApp>("bill-pay-leave-test-app", props);
   const form = app.shadowRoot!.querySelector("till-bill-pay-dialog")!;
   await form.updateComplete;
   await form.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
@@ -303,4 +308,17 @@ it("untouched payment form Close stays exempt", async () => {
   expect((await question(app)).open).toBe(false);
   expect(app.requests).toEqual([]);
   expect(app.confirms).toBe(0);
+});
+it("on a handheld opens unchanged on its default method, and a change of method is a change", async () => {
+  const { form } = await mount({ handheld: true });
+  expect(
+    form.shadowRoot!.querySelector<HTMLInputElement>("input[name=method][value=card]")!.checked,
+  ).toBe(true);
+  expect(unload()).toBe(false);
+  click(form, "input[name=method][value=manual]");
+  await form.updateComplete;
+  expect(unload()).toBe(true);
+  click(form, "input[name=method][value=card]");
+  await form.updateComplete;
+  expect(unload()).toBe(false);
 });

@@ -1530,6 +1530,27 @@ changes.
 Nothing guards a new field: a new `/api/till` field moves the revision, but reaches an open till
 only once someone adds it to `#applyVenueSetup`.
 
+**The handheld's pay sheet.** Opening the sheet on a handheld reads the phone's equipment again,
+for an open bill and for a presented one; while the sheet shows a card payment of its own that the
+reader has not answered, it reads the bill again every 5 seconds (`PENDING_REREAD_MS`,
+`apps/till/src/till-app.ts`), never with a read still out, and stops once every card it watches has had its outcome shown, or
+the sheet closes; a read unanswered at the request limit is dropped and the next tick reads again.
+Pinned by `apps/till/src/till-app-handheld-pay.test.ts`: the
+open-time read under "till-app: paying a table from a handheld" and "a presented bill on a
+handheld", the 5-second read under "till-app: a card the reader has not answered, on a handheld".
+Neither read counts as activity for the idle logout: the till notes activity only from a
+`pointerdown` or `keydown` on the app (`#onInteraction`, `apps/till/src/till-app.ts`). Pinned by
+two cases under "the sheet's automatic re-reads never keep the till signed in" in the same file:
+"the 5-second re-reads of a pending card run on, and the till still logs out on time" and "the
+equipment read when the sheet opens does not move the logout past the tap that opened it". Each
+failed when its read was made to call `#onInteraction` (2026-10-20). Neither read is passive on
+the server: both GETs (`/api/working-orders/:id/payments`, `/api/device/equipment`) record the
+device's last-seen time when a minute has passed (`requireSession`, `apps/server/src/till-session.ts`;
+`readDeviceProof`, `apps/server/src/device-session.ts`), which is all `passive: true` skips. Nothing on the server
+ends a till session for want of requests — a session row holds only `opened_at` and `ended_at`, and
+every writer of `ended_at` is a logout, a device or profile change, or a credential change (read
+2026-10-20, not tested) — so neither read keeps a session open there.
+
 
 ## Public secure-connection repair
 

@@ -1,7 +1,7 @@
 // Side-effect only: loads this host's errors.ts augmentation for the codes these routes throw.
 import "./errors.js";
 // The registry of `device_profile.not_found` and `device_profile.invalid`, which these routes throw.
-import "@waitron/layouts";
+import { profileAllows } from "@waitron/layouts";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
@@ -22,6 +22,7 @@ import {
 } from "@waitron/db";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
+  appendReaderToProfiles,
   cardProviderById,
   cardReaders,
   DEMO_READER_ID,
@@ -211,6 +212,30 @@ async function requireDeviceProfile(tx: Transaction, profileId: string): Promise
     .from(deviceProfiles)
     .where(eq(deviceProfiles.id, profileId));
   if (profile === undefined) throw new AppError("device_profile.not_found", {});
+}
+
+/** A newly created reader joins every live profile that takes reader payments, never as default. */
+async function joinReaderTakingProfiles(tx: Transaction, readerId: string): Promise<void> {
+  const profiles = await tx
+    .select({
+      id: deviceProfiles.id,
+      formFactor: deviceProfiles.formFactor,
+      capabilities: deviceProfiles.capabilities,
+    })
+    .from(deviceProfiles)
+    .where(isNull(deviceProfiles.retiredAt));
+  await appendReaderToProfiles(
+    tx,
+    readerId,
+    profiles
+      .filter((profile) =>
+        profileAllows(
+          { formFactor: profile.formFactor, capabilities: profile.capabilities as string[] },
+          "integrated-card-payment",
+        ),
+      )
+      .map((profile) => profile.id),
+  );
 }
 
 /** `provider` with a `collect` that refuses, so a pay through it can file a payment already
@@ -530,6 +555,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
               set: { name, active: true, disabledAt: null, unpairedAt: null },
             })
             .returning({ id: cardReaders.id });
+          // A re-adopted reader keeps the lists it has: a manager may have taken it off one.
+          if (existing === undefined) await joinReaderTakingProfiles(tx, saved!.id);
           return saved!;
         });
         return c.json({ id: row.id, status: "paired" }, 201);
@@ -791,6 +818,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             name,
           })
           .returning({ id: cardReaders.id });
+        await joinReaderTakingProfiles(tx, row!.id);
         return row;
       });
       if (inserted === undefined) {

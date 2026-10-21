@@ -227,6 +227,98 @@ describe("till-table-order-screen: the ways to pay part of a bill", () => {
   });
 });
 
+describe("till-table-order-screen: Pay on a handheld (A796 default 2)", () => {
+  it("draws one Pay for an open bill in place of the pay card and the part-payment buttons", async () => {
+    const el = await mountScreen({ handheld: true });
+    const asked = capture<BillPayDetail>(el, "bill-pay");
+
+    const sheets = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-pay-sheet]");
+    expect(sheets).toHaveLength(1);
+    expect(text(sheets[0]!)).toBe(t("action.pay"));
+    expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-open-bill-pay]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-pay-rest]")).toBeNull();
+    await press(el, "[data-pay-sheet]");
+
+    expect(asked).toEqual([{ way: "whole", lines: offeredLines }]);
+  });
+
+  it("draws one Pay beside a partly paid bill's amount and bill choices", async () => {
+    const el = await mountScreen({
+      handheld: true,
+      bills: [partlyPaid],
+      billBalance: balance(),
+      fullInvoices: true,
+    });
+
+    expect(text(el.shadowRoot!.querySelector("[data-bill-payments] .amount"))).toContain(
+      money("39.00"),
+    );
+    expect(el.shadowRoot!.querySelector("[data-bill-received]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelectorAll("[data-pay-sheet]")).toHaveLength(1);
+    expect(el.shadowRoot!.querySelector("[data-pay-rest]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-open-bill-pay]")).toBeNull();
+  });
+
+  it("draws one Pay for a presented bill, which asks for the presented bill's sheet", async () => {
+    const el = await mountScreen({ handheld: true, bills: [{ ...untouched, status: "placed" }] });
+    const presented = capture<{ workingOrderId: string }>(el, "pay-presented");
+    const asked = capture<BillPayDetail>(el, "bill-pay");
+
+    expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
+    expect(el.shadowRoot!.querySelectorAll("[data-pay-sheet]")).toHaveLength(1);
+    await press(el, "[data-pay-sheet]");
+
+    expect(presented).toEqual([{ workingOrderId: "wo-4" }]);
+    expect(asked).toEqual([]);
+  });
+
+  it("draws one Pay for a presented bill's unanswered whole payment, which asks for its sheet", async () => {
+    const confirmation = {
+      tender: { method: "cash" as const, amount: "50.00" },
+      outstanding: "45.00",
+      guests: 3,
+    };
+    const el = await mountScreen({
+      handheld: true,
+      bills: [{ ...untouched, status: "placed" }],
+      paymentConfirmation: confirmation,
+      fullInvoices: true,
+    });
+    const presented = capture<{ workingOrderId: string }>(el, "pay-presented");
+
+    expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")).toBeNull();
+    expect(el.shadowRoot!.querySelectorAll("[data-pay-sheet]")).toHaveLength(1);
+    await press(el, "[data-pay-sheet]");
+
+    expect(presented).toEqual([{ workingOrderId: "wo-4" }]);
+  });
+
+  it("keeps the pay card's recovery for an unanswered whole payment", async () => {
+    const confirmation = {
+      tender: { method: "cash" as const, amount: "50.00" },
+      outstanding: "45.00",
+      guests: 3,
+    };
+    const el = await mountScreen({ handheld: true, paymentConfirmation: confirmation });
+
+    const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay");
+    expect(tender).not.toBeNull();
+    expect(tender!.confirmation).toBe(confirmation);
+    expect(el.shadowRoot!.querySelector("[data-pay-sheet]")).toBeNull();
+  });
+
+  it("draws no Pay without a handheld", async () => {
+    const el = await mountScreen();
+
+    expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-open-bill-pay]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-pay-sheet]")).toBeNull();
+  });
+});
+
 describe("till-table-order-screen: items already paid for", () => {
   const paidOf = (el: TillTableOrderScreen) => {
     const inList = (selector: string) =>

@@ -72,6 +72,10 @@ phone only by width (`apps/till/src/layout.ts:29-31`) (read). The seeded handhel
 may take orders, take hand-keyed card payments, prepare, hand over and clock in; it may not take cash,
 use an integrated card reader or print receipts; the tablet profile has no capabilities and is not
 seeded (`packages/layouts/src/device-profile.ts:110-117`, `:132-150`) (read).
+_2026-10-20: superseded for Móvil by A796's default 15 — Móvil takes reader cards and cash and
+prints receipts, never the drawer
+([2026-10-19-a796-handheld-payments-design.md](2026-10-19-a796-handheld-payments-design.md), §8);
+this paragraph is left as it was written._
 
 ### 2.2 The top bar
 

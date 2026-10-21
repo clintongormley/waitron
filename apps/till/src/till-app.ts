@@ -19,6 +19,17 @@ import "./widgets/device-zones-dialog.js";
 import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
 import { deviceZoneNavigation } from "./state/device-zones.js";
 import { heldViews, placeFor } from "./state/draft-place.js";
+import {
+  autoPickReader,
+  payReaderOf,
+  readerLoss,
+  readerReasonOf,
+  readyPayReader,
+  takenFrom,
+  type FixedReader,
+  type ReaderLoss,
+} from "./state/pay-equipment.js";
+import type { PayEquipmentPick, PayEquipmentRole } from "./widgets/pay-equipment.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
 import "./screens/till-find-bill-screen.js";
@@ -48,11 +59,9 @@ import {
   multiplyDecimal,
   resolveActiveLocale,
   sumDecimals,
-  tillProviderForReader,
   toScale,
 } from "@waitron/shared";
 import {
-  carriedText,
   countText,
   currentLocale,
   differentPeopleText,
@@ -120,6 +129,7 @@ import "./widgets/attendance-day-dialog.js";
 import type { FixEntryDetail } from "./widgets/attendance-day-dialog.js";
 import "./screens/till-counter-screen.js";
 import "./screens/till-ticket-view.js";
+import "./screens/till-paid-view.js";
 import "./screens/till-refund-acknowledgment.js";
 import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
@@ -176,6 +186,8 @@ import {
   type AdjustTarget,
 } from "./widgets/adjustment-dialog.js";
 import "./widgets/bill-pay-dialog.js";
+import "./widgets/presented-pay-dialog.js";
+import type { PresentedPayDetail, TillPresentedPayDialog } from "./widgets/presented-pay-dialog.js";
 import "./widgets/invoice-recipient-dialog.js";
 import type {
   InvoiceRecipientDetail,
@@ -185,6 +197,7 @@ import "./widgets/make-now.js";
 import "./widgets/dead-ends-dialog.js";
 import type { DeadEndsDecision } from "./widgets/dead-ends-dialog.js";
 import type {
+  BillPayConfirmDetail,
   TillBillPayDialog,
   PayLine,
   PayRefusal,
@@ -218,6 +231,7 @@ import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
 import type { CancelCreditDone, TillCancelCreditDialog } from "./widgets/cancel-credit-dialog.js";
 import {
   confirmationOf,
+  isLatestSend,
   isPaymentInFlight,
   isTakePaymentRefusal,
   moneyPlus,
@@ -240,7 +254,7 @@ import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/till-shell.js";
 import "./widgets/find-bill-dialog.js";
-import "./widgets/equipment-dialog.js";
+import { canScan } from "./widgets/equipment-dialog.js";
 import "./widgets/profile-dialog.js";
 import type { ProfileNotice } from "./widgets/profile-dialog.js";
 import type { FindBillPayDetail } from "./widgets/find-bill-dialog.js";
@@ -362,7 +376,6 @@ import type {
   DeviceEquipment,
   DeviceIdentity,
   EquipmentChange,
-  EquipmentHolder,
   ProfileChoice,
   ReadOptions,
   KitchenScreenKind,
@@ -374,7 +387,6 @@ import type {
   CollectCardDetail,
   ConfirmPaymentDetail,
   ParkOrderDetail,
-  ReceiptGuestsDetail,
 } from "./widgets/tender-pay.js";
 import { defaultReceiptGuests } from "./state/receipt-guests.js";
 
@@ -384,7 +396,7 @@ export { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
 
 type Screen = "lock" | "counter" | "floor" | "station";
 
-type Drill = { kind: "table-order" | "ticket" | TillDestination };
+type Drill = { kind: "table-order" | "ticket" | "paid" | TillDestination };
 
 type RefreshList = "held" | "station" | "waiting";
 
@@ -413,6 +425,8 @@ const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 const FLOOR_POLL_LIMIT_MS = 25_000;
 /** How often an open sale view re-reads a full invoice's delivery while an attempt waits or sends. */
 const DELIVERY_REREAD_MS = 5_000;
+/** How often a handheld's sheet re-reads the bill while its own card payment is still pending. */
+const PENDING_REREAD_MS = 5_000;
 /** How long the full-invoice dialog waits for the delivery options before opening without them. */
 const INVOICE_OPTIONS_LIMIT_MS = 5_000;
 
@@ -431,27 +445,11 @@ registerIcons({
 const MOVE_STATION_MAX_LINES = 100;
 
 /** The reader the device pays on now: switched on, and on a provider the till can pay through. */
-function payReaderOf(equipment: DeviceEquipment): TillActiveReader | null {
-  const resolved = equipment.roles.find((role) => role.role === "card_terminal")?.resolved;
-  const provider = resolved?.available ? tillProviderForReader(resolved.provider) : undefined;
-  return provider === undefined ? null : { id: resolved!.id, name: resolved!.name, provider };
-}
-
-/** What another device took between two reads: an item a role resolved to before, which it no
- * longer does, and which the newer read says another device carries. */
-function takenFrom(before: DeviceEquipment | null, after: DeviceEquipment): string | null {
-  for (const role of after.roles) {
-    const was = before?.roles.find((each) => each.role === role.role)?.resolved;
-    if (was == null || role.resolved?.id === was.id) continue;
-    const holder: EquipmentHolder | null | undefined = [
-      role.chosen,
-      role.default,
-      ...role.choices,
-    ].find((item) => item?.id === was.id)?.heldBy;
-    if (holder == null) continue;
-    return carriedText(was.name, holder, "equipment.taken", "equipment.taken_person");
-  }
-  return null;
+function activeReaderOf(equipment: DeviceEquipment): TillActiveReader | null {
+  const reader = payReaderOf(equipment);
+  return reader.kind === "ready"
+    ? { id: reader.id, name: reader.name, provider: reader.provider }
+    : null;
 }
 
 interface TableAllergyRead {
@@ -583,6 +581,28 @@ function billWriteError(error: unknown, lineChange = false): CounterError {
 function isPaymentsReceived(error: unknown): boolean {
   return (error as { code?: string } | undefined)?.code === "bill.payments_received";
 }
+
+/** What the pay card, and the presented bill's sheet, say of a refused whole payment. */
+function wholeTabErrorOf(error: unknown): CounterError {
+  return isPaymentsReceived(error)
+    ? "bill.pay_with_bill_payments"
+    : isPermanentSaleRefusal(error)
+      ? "sale.refused"
+      : isNetworkFailure(error)
+        ? "sale.unconfirmed"
+        : isTakePaymentRefusal(error)
+          ? "take_payment.not_permitted"
+          : isPaymentInFlight(error)
+            ? "sale.payment_in_flight"
+            : (settleRefusalOf(error) ?? "sale.error");
+}
+
+/** The sheet's words for a card the reader did not charge. */
+const PRESENTED_CARD_REFUSALS = {
+  declined: "declined",
+  network_unavailable: "card_network",
+  timeout: "card_timeout",
+} as const;
 
 /** The bill a seated party opens on when it has no main bill: its first unpaid, else its latest. */
 function billToOpen(bills: readonly PartyBill[]): string | undefined {
@@ -1004,6 +1024,15 @@ interface PayingOrder {
   visit: number;
 }
 
+/** The presented bill's sheet, open on `billId`. */
+interface PresentedPaying {
+  id: number;
+  billId: string;
+  visit: number;
+  session: number;
+  refusal: PayRefusal | null;
+}
+
 interface WholePayment {
   presented: boolean;
   invoiced: boolean;
@@ -1020,6 +1049,15 @@ interface PendingBillPayment extends Submission {
     preview: AllocationPreview;
     expectedEdit: BillEditExpected | null;
   };
+}
+
+/** The timed re-read of the card payments dialog `dialogId` sent that are still pending, each
+ * with the `taken` that showed it in progress, and whether a tick is out. */
+interface PendingReread {
+  dialogId: number;
+  pending: Map<string, PayTaken>;
+  timer: ReturnType<typeof setInterval>;
+  out: boolean;
 }
 
 /** The bill payment dialog: the order it pays, and what the server last answered it. */
@@ -1077,6 +1115,13 @@ interface CancelCrediting {
   busy: boolean;
   done: CancelCreditDone | null;
 }
+
+/** Refusals the server can raise before it looks the submission id up (`resolvePayReader`,
+ * `apps/server/src/till-api.ts`). */
+const READER_REFUSED_BEFORE_LOOKUP: ReadonlySet<unknown> = new Set([
+  "reader.not_held",
+  "reader.payment_in_progress",
+]);
 
 /** A card the reader did not charge: nothing was recorded on the bill. */
 const NOT_CHARGED_OUTCOMES = new Set<BillPaymentResult["outcome"]>([
@@ -1711,8 +1756,9 @@ export class TillApp extends LitElement {
     send: (signal: AbortSignal) => Promise<T>,
     signal: AbortSignal,
     live: () => boolean,
+    onUnanswered?: () => void,
   ): Promise<T> {
-    return this.#holdingReload(() => resendUnanswered(send, signal, live));
+    return this.#holdingReload(() => resendUnanswered(send, signal, live, onUnanswered));
   }
 
   sessionActivity: SessionActivity = new SessionActivity();
@@ -2020,6 +2066,7 @@ export class TillApp extends LitElement {
     this.#pendingNfc = undefined;
     this.#reloadAsked = false;
     this.#stopDeliveryReread();
+    this.#stopPendingReread();
     this.#stopDepartmentTransfers();
     this.#partylessScope?.dispose();
     this.#partylessScope = undefined;
@@ -2631,6 +2678,12 @@ export class TillApp extends LitElement {
     expectedEdit: BillEditExpected | null | undefined;
   };
   readonly #unansweredWholePayments = new Map<string, WholePayment>();
+  /** Bills where a card send ended with its outcome unknown: on the presented sheet, no answer or
+   * a reader that did not answer; on the bill path, a send left unanswered or answered `not_checked`.
+   * Neither path learns that card's fate later, so a bill stays marked for the page. */
+  readonly #unknownCardOutcome = new Set<string>();
+  @state() private presentedPaying: PresentedPaying | null = null;
+  #presentedPays = 0;
   @state() private findBillBusy = false;
   #invoiceRecoveryVisit = 0;
   #findBillRead?: AbortController;
@@ -2786,6 +2839,8 @@ export class TillApp extends LitElement {
   @state() private originalReceiptPrint?: OriginalReceiptPrint;
   @state() private originalReceiptBusy = false;
   @state() private originalReceiptReadFailed = false;
+  /** The settled bill's payments the paid screen lists; empty on the presented path. */
+  @state() private paidPayments: BillPaymentView[] = [];
   @state() private invoiceDeliveries?: InvoiceDeliveryStatus | null;
   @state() private invoiceDeliveriesReadFailed = false;
   @state() private invoiceDeliveryBusy = false;
@@ -2860,7 +2915,7 @@ export class TillApp extends LitElement {
       else {
         this.#onInteraction();
         if (this.operatorName === "" || this.#loginPending) this.#pendingNfc = code;
-        else void this.#pickUpNfc(code);
+        else void this.#pickUpSticker(code);
       }
     },
     () => {
@@ -2869,7 +2924,21 @@ export class TillApp extends LitElement {
     () => {
       this.nfcNotice = { message: t("equipment.nfc_unavailable"), tone: "error" };
     },
+    (state) => {
+      if (state === "granted" && this.#nfcAsked)
+        this.nfcNotice = { message: t("equipment.nfc_hint"), tone: "info" };
+      if (state !== "prompt") this.#nfcAsked = false;
+      this.nfcPermission = state;
+    },
   );
+  @state() private nfcPermission: PermissionState | null = null;
+  /** Set by a press of the sheet's NFC button, so only the grant it asked for shows the hint. */
+  #nfcAsked = false;
+
+  #askNfc(): void {
+    this.#nfcAsked = true;
+    void this.#equipmentNfc.requestScan();
+  }
 
   #syncEquipmentNfc(): void {
     if (this.isConnected && !this.equipmentOpen && document.visibilityState === "visible")
@@ -2877,7 +2946,7 @@ export class TillApp extends LitElement {
     else this.#equipmentNfc.stop();
   }
 
-  async #pickUpNfc(code: EquipmentCode): Promise<void> {
+  async #pickUpSticker(code: EquipmentCode): Promise<void> {
     const permitted = this.deviceEquipment?.roles.find(
       (role) =>
         (code.kind === "reader"
@@ -2889,6 +2958,10 @@ export class TillApp extends LitElement {
       this.nfcNotice = { message: t("equipment.scan_not_available"), tone: "error" };
       return;
     }
+    // The sticker is now the sheet field's latest pick, so no earlier pick's refusal shows under it.
+    const role: PayEquipmentRole = code.kind === "reader" ? "card_terminal" : "receipt";
+    this.#payEquipmentPicks[role]++;
+    this.#setPayEquipmentError(role, null);
     const context = {
       session: this.#operatorSession,
       name: permitted.choices.find((item) => item.id === code.id)!.name,
@@ -2900,7 +2973,28 @@ export class TillApp extends LitElement {
       context,
     );
   }
+  /** Equipment changes sent or queued and not yet ended; while any is out a handheld takes no
+   * payment. */
   #equipmentWaiting = 0;
+  /** Reads of the equipment sent because a change's answer was set aside or may be out of date;
+   * until one ends, what the device shows may not be what the server holds. */
+  #equipmentRereads = 0;
+  /** Either count above is not zero; the pay sheets hold charging on it. */
+  @state() private equipmentBusy = false;
+  /** The pay sheet's own latest pick, which its field shows as saving. */
+  @state() private payEquipmentSaving: { role: PayEquipmentRole; id: string } | null = null;
+  /** Why the pay sheet's own pick of a field was not saved, shown under that field. */
+  @state() private payEquipmentErrors: Partial<Record<PayEquipmentRole, string>> = {};
+  /** Each field's latest sheet pick; only that pick's failure is shown under the field. */
+  #payEquipmentPicks: Record<PayEquipmentRole, number> = { card_terminal: 0, receipt: 0 };
+  /** Whether the phone has had a reader in this page. Not stored and not reset by logout: it
+   * describes the page, not the person (design default 18). */
+  #hadReader = false;
+  /** What this page saw happen to the reader it last had; kept until it has a ready one again. */
+  #readerLoss: ReaderLoss | null = null;
+  #paySheetOpenings = 0;
+  /** The open sheet may pick up a reader by itself; its row stays closed until that is settled. */
+  @state() private payAutoPicking = false;
   /** A refusal is shown only in the dialog opening it was picked in. */
   #equipmentOpenings = 0;
   /** When a read of the equipment and a choice were out at once, either answer may be the older, so
@@ -2949,6 +3043,46 @@ export class TillApp extends LitElement {
   #billPays = 0;
   #unansweredPayments = new Map<string, PendingBillPayment>();
   #paymentSends = new Map<string, number>();
+  /** The bill payment being sent on each bill, and the dialog that sent it. */
+  #paymentsOut = new Map<string, { dialogId: number; shown: PendingBillPayment["shown"] }>();
+  /** One count for both balance reads sent and payment sends ended, so a read can tell whether it
+   * was sent after the bill's last send ended. */
+  #payTicks = 0;
+  #sendEndedAt = new Map<string, number>();
+  /** The tick of the newest balance read shown in the payment dialog. */
+  #shownBalanceAt = 0;
+  #pendingReread: PendingReread | null = null;
+
+  /** No payment may start on a bill while one is out on it, or one A773-1 holds has no answer. */
+  #billPaymentHeld(billId: string): boolean {
+    return (
+      this.#unansweredPayments.get(billId)?.unconfirmed === true || this.#paymentsOut.has(billId)
+    );
+  }
+
+  /** What a new payment on `billId` is refused with while a bill payment holds it: the button
+   * named to reopen that payment is the one this device draws on the bill. */
+  #holdRefusal(billId: string): StringKey | null {
+    if (!this.#billPaymentHeld(billId)) return null;
+    if (this.#paymentsOut.has(billId)) return "bill_pay.sending";
+    return this.handheldMode
+      ? "bill_pay.unconfirmed_elsewhere_handheld"
+      : "bill_pay.unconfirmed_elsewhere";
+  }
+
+  /** The presented sheet `open` shows the hold's refusal, answering whether one holds its bill. */
+  #presentedHeld(open: PresentedPaying): boolean {
+    const held = this.#holdRefusal(open.billId);
+    if (held === null) return false;
+    this.#showPresentedRefusal(open.id, { code: held, text: t(held) });
+    return true;
+  }
+
+  /** Out on the bill from a dialog other than `dialogId`. */
+  #paymentOutElsewhere(billId: string, dialogId: number): boolean {
+    const out = this.#paymentsOut.get(billId);
+    return out !== undefined && out.dialogId !== dialogId;
+  }
   @state() private departing: Departing | null = null;
   #departings = 0;
   /** The people who can approve the departure being recorded; set, their PIN prompt is open. */
@@ -3654,11 +3788,16 @@ export class TillApp extends LitElement {
       if (this.#counterMenuPending) this.#followDefault();
       if (this.#tableMenuPending) this.#followTableMenu();
     }
-    if (changed.has("nfcNotice") && this.nfcNotice !== null)
+    if (changed.has("nfcNotice") && this.nfcNotice !== null && !this.#paySheetOpen())
       this.renderRoot.querySelector<WtToast>("[data-nfc-notice]")!.show();
   }
 
   override willUpdate(changed: PropertyValues): void {
+    // A sheet shows only the notices of taps made while it is open, and the toast does not repeat
+    // them once it closes.
+    const sheetOpen = this.#paySheetOpen();
+    if (this.#paySheetWasOpen !== sheetOpen) this.nfcNotice = null;
+    this.#paySheetWasOpen = sheetOpen;
     if (this.finishRefunds !== null && !this.#finishRefundsCurrent(this.finishRefunds))
       this.finishRefunds = null;
     if (
@@ -4822,7 +4961,7 @@ export class TillApp extends LitElement {
       if (replaced()) return;
       const code = this.#pendingNfc;
       this.#pendingNfc = undefined;
-      if (code !== undefined) void this.#pickUpNfc(code);
+      if (code !== undefined) void this.#pickUpSticker(code);
     });
     const firstTab = this.#homeScreen();
     const landsOnFloor = firstTab !== undefined && this.#tabNeedsFloorData(firstTab);
@@ -7522,8 +7661,9 @@ export class TillApp extends LitElement {
   async #onFindBillPay(event: Event): Promise<void> {
     if (this.submitting) return;
     const { workingOrderId, tender, invoiced } = (event as CustomEvent<FindBillPayDetail>).detail;
-    if (this.#unansweredPayments.get(workingOrderId)?.unconfirmed === true) {
-      this.findBillError = "bill_pay.unconfirmed";
+    const held = this.#holdRefusal(workingOrderId);
+    if (held !== null) {
+      this.findBillError = held;
       return;
     }
     const observation = this.#collectionObservation;
@@ -8427,20 +8567,23 @@ export class TillApp extends LitElement {
       this.#receiptPrintVisit === visit &&
       this.ticketWorkingOrderId === id &&
       this.#operatorSession === session &&
-      this.drill?.kind === "ticket"
+      (this.drill?.kind === "ticket" || this.drill?.kind === "paid")
     );
   }
 
+  /** A full invoice's original and delivery, or the paid screen's ticket. */
   async #refreshReceiptPrint(): Promise<void> {
     const id = this.ticketWorkingOrderId;
-    if (id === undefined || this.result?.invoiceType !== "F1" || this.originalReceiptBusy) return;
+    const full = this.result?.invoiceType === "F1";
+    if (id === undefined || (!full && this.drill?.kind !== "paid") || this.originalReceiptBusy)
+      return;
     const session = this.#operatorSession;
     const visit = this.#receiptPrintVisit;
     this.originalReceiptBusy = true;
     try {
       await Promise.all([
         this.#readReceiptPrint(id, session, visit),
-        this.#readInvoiceDeliveries(id, session, visit),
+        ...(full ? [this.#readInvoiceDeliveries(id, session, visit)] : []),
       ]);
     } finally {
       if (this.#ticketIsCurrent(id, session, visit)) this.originalReceiptBusy = false;
@@ -8617,9 +8760,10 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const visit = this.#receiptPrintVisit;
     const full = this.result?.invoiceType === "F1";
+    const paid = this.drill?.kind === "paid";
     if (
       retry &&
-      (!full ||
+      (!(full || paid) ||
         this.originalReceiptPrint?.status !== "failed" ||
         !this.originalReceiptPrint.canRetry ||
         this.originalReceiptPrint.printerWithdrawn === true)
@@ -8633,11 +8777,11 @@ export class TillApp extends LitElement {
       else await this.api.printReceipt(id);
       if (!this.#ticketIsCurrent(id, session, visit)) return;
       this.originalReceiptAvailable = false;
-      if (full) {
+      if (full || paid) {
         this.originalReceiptPrint = undefined;
         await Promise.all([
           this.#readReceiptPrint(id, session, visit),
-          this.#readInvoiceDeliveries(id, session, visit),
+          ...(full ? [this.#readInvoiceDeliveries(id, session, visit)] : []),
         ]);
       }
     } catch {
@@ -8900,11 +9044,11 @@ export class TillApp extends LitElement {
   }
 
   /** Whether the device answered; either way the equipment held is shown. */
-  async #readEquipment(): Promise<boolean> {
+  async #readEquipment(signal?: AbortSignal): Promise<boolean> {
     const changed = this.#equipmentChanged;
     let answered = true;
     try {
-      const read = await this.api.getDeviceEquipment();
+      const read = await this.api.getDeviceEquipment({ signal });
       if (changed === this.#equipmentChanged) {
         this.#holdEquipment(read);
       } else {
@@ -8919,18 +9063,93 @@ export class TillApp extends LitElement {
     return answered;
   }
 
+  /** A read cut off after the request limit counts as failed, so a server that never answers can
+   * neither hold payments nor keep the sheet's row shut. */
+  async #readEquipmentBounded(): Promise<boolean> {
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      return await this.#readEquipment(limit.signal);
+    } finally {
+      limit.done();
+    }
+  }
+
   /** Cleared while the read is out, so a second caller does not read too. */
   async #rereadIfStale(): Promise<void> {
     if (this.#equipmentWaiting > 0 || !this.#equipmentStale) return;
     this.#equipmentStale = false;
-    if (!(await this.#readEquipment())) this.#equipmentStale = true;
+    this.#equipmentRereads++;
+    this.#equipmentCounted();
+    try {
+      if (!(await this.#readEquipmentBounded())) this.#equipmentStale = true;
+    } finally {
+      this.#equipmentRereads--;
+      this.#equipmentCounted();
+      this.#endSavingIfSettled();
+    }
+  }
+
+  /** While a pay sheet may be drawn, every count redraws it: a change's answer can move the reader
+   * line the sheet shows (#readerLoss), which is not state. */
+  #equipmentCounted(): void {
+    this.equipmentBusy = this.#equipmentWaiting > 0 || this.#equipmentRereads > 0;
+    if (this.billPaying !== null || this.presentedPaying !== null) this.requestUpdate();
+  }
+
+  /** Called after any follow-up read has been started, which counts itself before its first await. */
+  #endSavingIfSettled(): void {
+    if (this.#equipmentWaiting === 0 && this.#equipmentRereads === 0)
+      this.payEquipmentSaving = null;
   }
 
   #holdEquipment(equipment: DeviceEquipment): void {
     this.#equipmentReads++;
+    this.#readerLoss = readerLoss(this.deviceEquipment, equipment) ?? this.#readerLoss;
+    this.#noteReader(equipment);
     if (this.operatorName !== "")
       this.equipmentTaken = takenFrom(this.deviceEquipment, equipment) ?? this.equipmentTaken;
     this.deviceEquipment = equipment;
+  }
+
+  #noteReader(equipment: DeviceEquipment): void {
+    if (equipment.roles.some((role) => role.role === "card_terminal" && role.resolved !== null))
+      this.#hadReader = true;
+    if (payReaderOf(equipment).kind === "ready") this.#readerLoss = null;
+  }
+
+  /** The line above the sheet's row saying why it has no reader (design default 19). */
+  #payReaderReason(): { line: string; hint: string | null } | null {
+    if (this.#fixedPayReader() !== null) return null;
+    return readerReasonOf(payReaderOf(this.deviceEquipment), this.#readerLoss);
+  }
+
+  /** The sheet's opening read; once it answers, a phone that has had no reader picks up the one
+   * free reader it is offered, through the same request as a list pick (design default 18). */
+  async #readForSheet(): Promise<void> {
+    const opening = ++this.#paySheetOpenings;
+    const picks = this.#payEquipmentPicks.card_terminal;
+    this.payAutoPicking = this.#autoPickCandidate() !== null;
+    const answered = await this.#readEquipmentBounded();
+    if (opening !== this.#paySheetOpenings) return;
+    // A change out or a pick of the reader made since the opening has the waiter's say instead.
+    const id =
+      answered && this.#equipmentWaiting === 0 && picks === this.#payEquipmentPicks.card_terminal
+        ? this.#autoPickCandidate()
+        : null;
+    if (id === null) {
+      this.payAutoPicking = false;
+      return;
+    }
+    this.payAutoPicking = true;
+    await this.#onPayEquipmentPick({ role: "card_terminal", id, takeOver: false });
+    if (opening === this.#paySheetOpenings) this.payAutoPicking = false;
+  }
+
+  /** A practice venue charges its demo reader, so it never picks one up. */
+  #autoPickCandidate(): string | null {
+    return this.#fixedPayReader() === null
+      ? autoPickReader(this.deviceEquipment, this.#hadReader)
+      : null;
   }
 
   /** The pay screens follow the boot read before the equipment is read, and on a practice venue,
@@ -8942,18 +9161,18 @@ export class TillApp extends LitElement {
 
   #payReaders(): TillActiveReader[] {
     if (this.#paysFromBoot()) return this.activeReaders;
-    const reader = payReaderOf(this.deviceEquipment!);
+    const reader = activeReaderOf(this.deviceEquipment!);
     return reader === null ? [] : [reader];
   }
 
   #payDefaultReaderId(): string | undefined {
-    return this.#paysFromBoot() ? this.defaultReaderId : payReaderOf(this.deviceEquipment!)?.id;
+    return this.#paysFromBoot() ? this.defaultReaderId : activeReaderOf(this.deviceEquipment!)?.id;
   }
 
   #payCardProvider(): TillInfo["cardProvider"] {
     return this.#paysFromBoot()
       ? this.cardProvider
-      : (payReaderOf(this.deviceEquipment!)?.provider ?? "none");
+      : (activeReaderOf(this.deviceEquipment!)?.provider ?? "none");
   }
 
   /** Reads the device again; a failed read keeps the profiles last known. */
@@ -9144,10 +9363,12 @@ export class TillApp extends LitElement {
   #onEquipmentChange(
     event: CustomEvent<EquipmentChange>,
     nfc?: { session: number; name: string },
+    sheet?: { role: PayEquipmentRole; sheet: string; pick: number },
   ): Promise<void> {
     const opening = this.#equipmentOpenings;
     this.#equipmentWaiting++;
-    const step = () => this.#switchEquipment(event.detail, opening, nfc);
+    this.#equipmentCounted();
+    const step = () => this.#switchEquipment(event.detail, opening, nfc, sheet);
     const run = this.#equipmentQueue.then(step, step);
     this.#equipmentQueue = run;
     return run;
@@ -9159,13 +9380,16 @@ export class TillApp extends LitElement {
     change: EquipmentChange,
     opening: number,
     nfc?: { session: number; name: string },
+    sheet?: { role: PayEquipmentRole; sheet: string; pick: number },
   ): Promise<void> {
     const current = () =>
       nfc === undefined ||
       (this.isConnected && nfc.session === this.#operatorSession && this.operatorName !== "");
     if (!current()) {
       this.#equipmentWaiting--;
+      this.#equipmentCounted();
       void this.#rereadIfStale();
+      this.#endSavingIfSettled();
       return;
     }
     const reads = this.#equipmentReads;
@@ -9173,6 +9397,7 @@ export class TillApp extends LitElement {
     try {
       const stored = await this.api.setDeviceEquipment(change, { signal: limit.signal });
       this.#equipmentChanged++;
+      this.#noteReader(stored);
       if (!current()) {
         this.#equipmentStale = true;
         return;
@@ -9186,19 +9411,24 @@ export class TillApp extends LitElement {
       }
       if (nfc !== undefined) {
         const selection = change.selection;
-        const noPrinterRole =
-          "kind" in change &&
-          change.kind === "printer" &&
-          typeof selection === "object" &&
-          !stored.roles.some(
+        const printer =
+          "kind" in change && change.kind === "printer" && typeof selection === "object";
+        const printerFor = (name: "receipt" | "payment_slip") =>
+          printer &&
+          stored.roles.some(
             (role) =>
-              (role.role === "receipt" || role.role === "payment_slip") &&
+              role.role === name &&
               (role.chosenId === selection.id || role.resolved?.id === selection.id),
           );
+        const receipt = printerFor("receipt");
+        const slip = printerFor("payment_slip");
         this.nfcNotice = {
-          message: noPrinterRole
-            ? t("equipment.no_printer_role")
-            : t("equipment.picked_up").replace("{item}", () => nfc.name),
+          message:
+            printer && !receipt && !slip
+              ? t("equipment.no_printer_role")
+              : printer && !receipt
+                ? t("equipment.picked_up_slip_only").replace("{item}", () => nfc.name)
+                : t("equipment.picked_up").replace("{item}", () => nfc.name),
           tone: "info",
         };
       }
@@ -9235,11 +9465,24 @@ export class TillApp extends LitElement {
           message: codeMessage(typeof code === "string" ? code : "server.internal"),
           tone: "error",
         };
+      if (
+        sheet !== undefined &&
+        sheet.sheet === this.#paySheetKey() &&
+        sheet.pick === this.#payEquipmentPicks[sheet.role]
+      )
+        this.#setPayEquipmentError(
+          sheet.role,
+          typeof status !== "number"
+            ? t("pay_equipment.not_saved")
+            : codeMessage(typeof code === "string" ? code : "server.internal"),
+        );
     } finally {
       limit.done();
       this.#equipmentWaiting--;
+      this.#equipmentCounted();
       // The device can keep a choice after its operator leaves; refresh without their notice.
       void this.#rereadIfStale();
+      this.#endSavingIfSettled();
     }
   }
 
@@ -9352,6 +9595,7 @@ export class TillApp extends LitElement {
     const open = this.billPaying;
     if (open === null) return nothing;
     const pending = this.#unansweredPayments.get(open.billId);
+    const reason = this.#payReaderReason();
     return html`<till-bill-pay-dialog
         .balance=${open.balance}
         .lines=${open.lines}
@@ -9363,7 +9607,7 @@ export class TillApp extends LitElement {
         .taken=${open.taken}
         .refunded=${open.refunded}
         .busy=${open.busy}
-        .confirmationLocked=${pending?.unconfirmed === true}
+        .confirmationLocked=${pending?.unconfirmed === true || this.#paymentOutElsewhere(open.billId, open.id)}
         .tipsEnabled=${this.tipsEnabled}
         .cardReader=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
@@ -9371,6 +9615,26 @@ export class TillApp extends LitElement {
         .defaultReaderId=${this.#payDefaultReaderId()}
         .asksGuests=${this.#billPayingAsksGuests(open)}
         .receiptGuests=${pending?.unconfirmed === true ? (pending.request.guests ?? null) : open.surface === "table" ? defaultReceiptGuests(this.orderParty) : null}
+        .handheld=${this.handheldMode}
+        .notice=${this.nfcNotice}
+        .askNfc=${this.nfcPermission === "prompt"}
+        .takesReaderCard=${this.capabilities.includes("integrated-card-payment")}
+        .takesManualCard=${this.capabilities.includes("hand-keyed-card-payment")}
+        .tableName=${this.#payingTableName(open)}
+        .equipment=${this.deviceEquipment}
+        .canScan=${canScan()}
+        .fixedReader=${this.#fixedPayReader()}
+        .autoPicking=${this.payAutoPicking}
+        .readerReason=${reason?.line ?? null}
+        .readerHint=${reason?.hint ?? null}
+        .equipmentBusy=${this.equipmentBusy}
+        .equipmentSaving=${this.payEquipmentSaving}
+        .equipmentErrors=${this.payEquipmentErrors}
+        @pay-equipment-pick=${(event: CustomEvent<PayEquipmentPick>) =>
+          void this.#onPayEquipmentPick(event.detail)}
+        @pay-equipment-sticker=${(event: CustomEvent<EquipmentCode>) =>
+          void this.#pickUpSticker(event.detail)}
+        @pay-equipment-nfc=${() => this.#askNfc()}
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
         @bill-pay-confirm=${(event: Event) => void this.#onBillPayConfirm(event)}
         @bill-pay-edit=${() => this.#onBillPayEdit()}
@@ -9378,6 +9642,99 @@ export class TillApp extends LitElement {
         @bill-refund=${(event: Event) => this.#onBillRefund(event)}
       ></till-bill-pay-dialog>
       ${this.#renderBillRefunding()}`;
+  }
+
+  #renderPresentedPaying(): TemplateResult | typeof nothing {
+    const open = this.#presentedNow();
+    const bill =
+      open === null ? undefined : this.partyBills.find((row) => row.workingOrderId === open.billId);
+    if (open === null || bill === undefined) return nothing;
+    const reason = this.#payReaderReason();
+    return html`<till-presented-pay-dialog
+      .open=${true}
+      .amount=${bill.outstanding}
+      .tableName=${this.#activeTableTitle()}
+      .takesCash=${this.#takesCash()}
+      .takesManualCard=${this.capabilities.includes("hand-keyed-card-payment")}
+      .takesReaderCard=${this.capabilities.includes("integrated-card-payment")}
+      .asksGuests=${bill.invoiceType !== "F1"}
+      .receiptGuests=${defaultReceiptGuests(this.orderParty)}
+      .equipment=${this.deviceEquipment}
+      .canScan=${canScan()}
+      .notice=${this.nfcNotice}
+      .askNfc=${this.nfcPermission === "prompt"}
+      .fixedReader=${this.#fixedPayReader()}
+      .autoPicking=${this.payAutoPicking}
+      .readerReason=${reason?.line ?? null}
+      .readerHint=${reason?.hint ?? null}
+      .equipmentBusy=${this.equipmentBusy}
+      .equipmentSaving=${this.payEquipmentSaving}
+      .equipmentErrors=${this.payEquipmentErrors}
+      .busy=${this.submitting}
+      .refusal=${open.refusal}
+      .confirmation=${this.#unansweredWholePayments.get(open.billId)}
+      @pay-equipment-pick=${(event: CustomEvent<PayEquipmentPick>) =>
+        void this.#onPayEquipmentPick(event.detail)}
+      @pay-equipment-sticker=${(event: CustomEvent<EquipmentCode>) =>
+        void this.#pickUpSticker(event.detail)}
+      @pay-equipment-nfc=${() => this.#askNfc()}
+      @presented-pay=${(event: Event) => void this.#onPresentedPay(event)}
+      @presented-pay-resend=${() => void this.#onPresentedResend()}
+      @presented-pay-close=${() => this.#closePresented(open.id)}
+    ></till-presented-pay-dialog>`;
+  }
+
+  #paySheetWasOpen = false;
+
+  /** A pay sheet that draws a sticker's notice itself, so the toast beneath it stays closed. */
+  #paySheetOpen(): boolean {
+    return this.billPaying !== null ? this.handheldMode : this.#presentedNow() !== null;
+  }
+
+  /** The pay sheet open now: the bill payment dialog, else the presented bill's sheet. */
+  #paySheetKey(): string | undefined {
+    if (this.billPaying !== null) return `bill:${this.billPaying.id}`;
+    const presented = this.#presentedNow();
+    return presented === null ? undefined : `presented:${presented.id}`;
+  }
+
+  /** Puts `message` under the role's field in the pay sheet, or clears it when null. */
+  #setPayEquipmentError(role: PayEquipmentRole, message: string | null): void {
+    const errors = { ...this.payEquipmentErrors };
+    if (message === null) delete errors[role];
+    else errors[role] = message;
+    this.payEquipmentErrors = errors;
+  }
+
+  #onPayEquipmentPick({ role, id, takeOver }: PayEquipmentPick): Promise<void> {
+    const sheet = this.#paySheetKey();
+    if (sheet === undefined) return Promise.resolve();
+    this.payEquipmentSaving = { role, id };
+    this.#setPayEquipmentError(role, null);
+    return this.#onEquipmentChange(
+      new CustomEvent<EquipmentChange>("equipment-change", {
+        detail: { role, selection: { id }, via: "list", takeOver },
+      }),
+      undefined,
+      { role, sheet, pick: ++this.#payEquipmentPicks[role] },
+    );
+  }
+
+  #payingTableName(open: BillPaying): string {
+    return open.surface === "table" ? this.#activeTableTitle() : "";
+  }
+
+  #activeTableTitle(): string {
+    const label = this.tables.find((table) => table.id === this.activeTableId)?.label;
+    return label === undefined ? "" : t("floor.table_title").replace("{table}", () => label);
+  }
+
+  /** A practice venue's demo reader, which its handhelds charge whatever their equipment says. */
+  #fixedPayReader(): FixedReader | null {
+    if (this.cardProvider !== "simulator") return null;
+    const demo = this.activeReaders.filter((reader) => reader.provider === "simulator");
+    const reader = demo.find((shown) => shown.id === this.defaultReaderId) ?? demo[0];
+    return reader === undefined ? null : { id: reader.id, name: reader.name };
   }
 
   #billPayingAsksGuests(open: BillPaying): boolean {
@@ -14265,11 +14622,13 @@ export class TillApp extends LitElement {
       }
       if (code === "party.bill_outstanding") {
         this.finishRefused = true;
+        this.#leavePaidScreen();
         await this.#loadPartyBills();
         return;
       }
       if (isPaymentsReceived(error)) {
         this.errorKey = "table.finish_bill_holds_money";
+        this.#leavePaidScreen();
         await this.#loadPartyBills();
         return;
       }
@@ -14521,6 +14880,7 @@ export class TillApp extends LitElement {
         this.#closeFinishTable();
         if (code === "party.bill_outstanding") this.finishRefused = true;
         else this.errorKey = "table.finish_bill_holds_money";
+        this.#leavePaidScreen();
         await this.#loadPartyBills();
       } else if (code === "party.unserved_dishes") {
         const opening = { composition: asked, controller: new AbortController() };
@@ -15466,6 +15826,7 @@ export class TillApp extends LitElement {
     this.receiptLanguageAsking = null;
     this.#closeAdjust();
     this.#closeBillPaying();
+    this.#closePresented();
     this.#closeDeparting();
     this.#closeCancelCrediting();
     this.#cancelFindBillRead();
@@ -15491,21 +15852,31 @@ export class TillApp extends LitElement {
    * saves the counter basket, which is not the tab. Shares `submitting` with {@link #onConfirmPayment}.
    */
   async #onPayTab(event: Event): Promise<void> {
-    if (this.submitting || this.activeTabId === undefined) return;
+    await this.#payWholeTab((event as CustomEvent<ConfirmPaymentDetail>).detail);
+  }
+
+  /** {@link #onPayTab}'s send, answering true once the ticket shows. Given `refused`, a refusal is
+   * offered to it first, and goes to the screen only when it answers false. */
+  async #payWholeTab(
+    detail: ConfirmPaymentDetail,
+    refused?: (error: unknown) => boolean,
+  ): Promise<boolean> {
+    if (this.submitting || this.activeTabId === undefined) return false;
     const id = this.activeTabId;
-    if (this.#unansweredPayments.get(id)?.unconfirmed === true) {
-      this.errorKey = "bill_pay.unconfirmed";
-      return;
+    const held = this.#holdRefusal(id);
+    if (held !== null) {
+      this.errorKey = held;
+      return false;
     }
     const bill = this.partyBills.find((row) => row.workingOrderId === id);
     const key = id;
     const unanswered = this.#unansweredWholePayments.get(key);
     if (unanswered === undefined && bill !== undefined && paidInPart(bill)) {
       this.#sayBillPayments(bill.outstanding);
-      return;
+      return false;
     }
     this.submitting = true;
-    const { guests, ...tender } = (event as CustomEvent<ConfirmPaymentDetail>).detail;
+    const { guests, ...tender } = detail;
     const presented = bill?.status === "placed";
     this.errorKey = undefined;
     let paidMeanwhile = false;
@@ -15513,6 +15884,7 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const api = this.api;
     let payment = unanswered;
+    let paid = false;
     try {
       if (
         (unanswered === undefined && !(await this.#flushDraft())) ||
@@ -15526,7 +15898,7 @@ export class TillApp extends LitElement {
         api !== this.api ||
         id !== this.activeTabId
       )
-        return;
+        return false;
       if (payment === undefined) {
         const expectedEdit = this.#draftSync?.expectedEditFor(id);
         if (expectedEdit == null) throw { code: "draft.out_of_date" };
@@ -15550,9 +15922,10 @@ export class TillApp extends LitElement {
         api !== this.api ||
         id !== this.activeTabId
       )
-        return;
+        return false;
       this.result = result;
-      this.#showTicket(id, !payment.invoiced);
+      this.#showTicket(id, !payment.invoiced, []);
+      paid = true;
     } catch (error) {
       if (
         (unanswered === undefined || paymentNotRecorded(error)) &&
@@ -15566,25 +15939,210 @@ export class TillApp extends LitElement {
         api !== this.api ||
         id !== this.activeTabId
       )
-        return;
+        return false;
       paidMeanwhile = isPaymentsReceived(error);
-      this.errorKey = paidMeanwhile
-        ? "bill.pay_with_bill_payments"
-        : isPermanentSaleRefusal(error)
-          ? "sale.refused"
-          : isNetworkFailure(error)
-            ? "sale.unconfirmed"
-            : isTakePaymentRefusal(error)
-              ? "take_payment.not_permitted"
-              : isPaymentInFlight(error)
-                ? "sale.payment_in_flight"
-                : (settleRefusalOf(error) ?? "sale.error");
+      if (refused?.(error) !== true) this.errorKey = wholeTabErrorOf(error);
     } finally {
       this.submitting = false;
     }
     // Another device took a payment on the bill first: read again, the bill offers to take the rest
     // as a bill payment.
     if (paidMeanwhile && this.activeTabId === id) await this.#loadPartyBills();
+    return paid;
+  }
+
+  /** The presented bill's sheet, while it is still on the bill, visit and sign-in it opened on. */
+  #presentedNow(id?: number): PresentedPaying | null {
+    const open = this.presentedPaying;
+    return open !== null &&
+      (id === undefined || open.id === id) &&
+      open.billId === this.activeTabId &&
+      open.visit === this.#orderVisit &&
+      open.session === this.#operatorSession
+      ? open
+      : null;
+  }
+
+  /** The order screen's Pay (`action.pay`) on a presented bill: its sheet opens, unless a bill
+   * payment holds the bill, and the phone's equipment is read again. */
+  #onPayPresented(event: Event): void {
+    const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
+    if (workingOrderId !== this.activeTabId) return;
+    // The presented sheet cannot check a bill payment again, and the bill takes nothing while one
+    // holds it, so that payment's own sheet opens instead.
+    if (this.#billPaymentHeld(workingOrderId)) {
+      void this.#openBillPaying("whole", this.#payLinesOnScreen());
+      return;
+    }
+    this.presentedPaying = {
+      id: ++this.#presentedPays,
+      billId: workingOrderId,
+      visit: this.#orderVisit,
+      session: this.#operatorSession,
+      refusal: null,
+    };
+    if (this.handheldMode) void this.#readForSheet();
+  }
+
+  #closePresented(id?: number): void {
+    if (id !== undefined && this.presentedPaying?.id !== id) return;
+    this.presentedPaying = null;
+    this.payEquipmentErrors = {};
+  }
+
+  #showPresentedRefusal(id: number, refusal: PayRefusal): void {
+    const now = this.#presentedNow(id);
+    if (now !== null) this.presentedPaying = { ...now, refusal };
+  }
+
+  /** A refusal on the sheet in the pay card's words. */
+  #counterRefusal(error: CounterError): PayRefusal {
+    const text = errorText(
+      error,
+      this.tableMenus,
+      this.tables,
+      typeof error === "object" && "unsentBill" in error
+        ? this.#paymentBillLabel(error.unsentBill.billId)
+        : undefined,
+    );
+    return {
+      code: typeof error === "string" ? error : "code" in error ? error.code : "sale.error",
+      text: typeof text === "string" ? text : t("sale.error"),
+    };
+  }
+
+  /** The presented bill's sheet asks to take its whole amount: a card on the phone's reader through
+   * `POST /api/pay`, cash or another card machine through {@link #payWholeTab}. A send with no answer
+   * closes the sheet; it opens again locked on that payment. */
+  async #onPresentedPay(event: Event): Promise<void> {
+    const open = this.#presentedNow();
+    if (open === null || this.submitting) return;
+    const bill = this.partyBills.find((row) => row.workingOrderId === open.billId);
+    if (bill === undefined) return;
+    if (this.#presentedHeld(open)) return;
+    const detail = (event as CustomEvent<PresentedPayDetail>).detail;
+    this.presentedPaying = { ...open, refusal: null };
+    if (detail.method === "card") {
+      await this.#payPresentedOnReader(open.id, bill, detail.readerId, detail.guests);
+      return;
+    }
+    const guests = detail.guests === undefined ? {} : { guests: detail.guests };
+    const tender: ConfirmPaymentDetail =
+      detail.method === "cash"
+        ? { method: "cash", amount: detail.tendered, ...guests }
+        : {
+            method: "card",
+            amount: bill.outstanding,
+            ...(detail.externalRef === undefined ? {} : { externalRef: detail.externalRef }),
+            ...guests,
+          };
+    const paid = await this.#payWholeTab(tender, (error) => {
+      if (this.#presentedNow(open.id) === null) return false;
+      if (isNetworkFailure(error)) {
+        this.#closePresented(open.id);
+        return false;
+      }
+      this.#showPresentedRefusal(open.id, this.#counterRefusal(wholeTabErrorOf(error)));
+      return true;
+    });
+    if (paid) this.#closePresented(open.id);
+  }
+
+  /** The locked sheet's one action: {@link #payWholeTab} sends the payment it holds for the bill as
+   * it was first sent. With no answer again the sheet stays, still locked. */
+  async #onPresentedResend(): Promise<void> {
+    const open = this.#presentedNow();
+    if (open === null || this.submitting) return;
+    const held = this.#unansweredWholePayments.get(open.billId);
+    if (held === undefined || this.#presentedHeld(open)) return;
+    this.presentedPaying = { ...open, refusal: null };
+    const paid = await this.#payWholeTab(
+      { ...held.tender, ...(held.guests === undefined ? {} : { guests: held.guests }) },
+      (error) => {
+        if (this.#presentedNow(open.id) === null) return false;
+        if (!isNetworkFailure(error))
+          this.#showPresentedRefusal(open.id, this.#counterRefusal(wholeTabErrorOf(error)));
+        return true;
+      },
+    );
+    if (paid) this.#closePresented(open.id);
+  }
+
+  async #payPresentedOnReader(
+    id: number,
+    bill: PartyBill,
+    readerId: string,
+    guests: number | null | undefined,
+  ): Promise<void> {
+    if (this.submitting) return;
+    this.submitting = true;
+    this.errorKey = undefined;
+    const billId = bill.workingOrderId;
+    const visit = this.#orderVisit;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const left = () =>
+      visit !== this.#orderVisit ||
+      session !== this.#operatorSession ||
+      api !== this.api ||
+      billId !== this.activeTabId;
+    let paidMeanwhile = false;
+    let readerLost = false;
+    try {
+      if (!(await this.#flushDraft()) || left() || !(await this.#flushPartyKitchenNote()) || left())
+        return;
+      const expectedEdit = this.#draftSync?.expectedEditFor(billId);
+      if (expectedEdit == null) throw { code: "draft.out_of_date" };
+      const out = await this.#withReaderPayment(
+        true,
+        () =>
+          api
+            .pay({
+              expectedEdit,
+              id: billId,
+              lines: [],
+              readerId,
+              ...(guests === undefined ? {} : { guests }),
+            })
+            .then(
+              (answer) => {
+                if (answer.outcome === "timeout") this.#unknownCardOutcome.add(billId);
+                return answer;
+              },
+              (error: unknown) => {
+                if (isNetworkFailure(error)) this.#unknownCardOutcome.add(billId);
+                throw error;
+              },
+            ),
+        billId,
+      );
+      if (left()) return;
+      if (out.outcome === "captured") {
+        this.#closePresented(id);
+        this.result = out.ticket;
+        this.#showTicket(billId, bill.receiptAvailable !== true, []);
+        return;
+      }
+      this.#showPresentedRefusal(id, { code: PRESENTED_CARD_REFUSALS[out.outcome] });
+    } catch (error) {
+      if (left()) return;
+      paidMeanwhile = isPaymentsReceived(error);
+      readerLost =
+        this.handheldMode &&
+        this.#presentedNow(id) !== null &&
+        (error as { code?: unknown } | null)?.code === "reader.not_held";
+      if (!readerLost)
+        this.#showPresentedRefusal(
+          id,
+          this.#counterRefusal(
+            isReaderRefusal(error) ? "card_reader.not_set_up" : wholeTabErrorOf(error),
+          ),
+        );
+    } finally {
+      this.submitting = false;
+    }
+    if (readerLost) await this.#onReaderNotHeld("till-presented-pay-dialog", billId);
+    if (paidMeanwhile && this.activeTabId === billId) await this.#loadPartyBills();
   }
 
   /** Pay items, Contribute or Split equally pressed on the bill on screen: the dialog opens on the
@@ -15595,7 +16153,7 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const api = this.api;
     const id = this.activeTabId;
-    const unconfirmed = id !== undefined && this.#unansweredPayments.get(id)?.unconfirmed === true;
+    const unconfirmed = id !== undefined && this.#billPaymentHeld(id);
     if (
       (!unconfirmed && !(await this.#flushDraft())) ||
       visit !== this.#orderVisit ||
@@ -15705,6 +16263,7 @@ export class TillApp extends LitElement {
       return null;
     }
     const pending = this.#unansweredPayments.get(billId);
+    const out = this.#paymentsOut.get(billId);
     const open: BillPaying = {
       id: ++this.#billPays,
       ...order,
@@ -15720,9 +16279,11 @@ export class TillApp extends LitElement {
       taken: null,
       refunded: null,
       busy: false,
+      ...(out === undefined ? {} : { ...out.shown, busy: true, refusal: { code: "sending" } }),
     };
     this.billPaying = open;
-    await this.#rereadBillPaying(open.id, billId);
+    if (this.handheldMode) void this.#readForSheet();
+    await this.#rereadBillPaying(open.id, billId, order);
     return open;
   }
 
@@ -15732,20 +16293,212 @@ export class TillApp extends LitElement {
   }
 
   /** The bill's balance read again into the dialog `id` and the screen, and returned. A failed read
-   * says so above the dialog's action unless it already shows a refusal. */
-  async #rereadBillPaying(id: number, billId: string): Promise<BillBalance | undefined> {
+   * says so above the dialog's action unless it already shows a refusal. Given `order`, a read that
+   * frees the bill reads the order's amounts again too. */
+  async #rereadBillPaying(
+    id: number,
+    billId: string,
+    order?: PayingOrder,
+  ): Promise<BillBalance | undefined> {
+    const sentAt = ++this.#payTicks;
+    let balance: BillBalance;
     try {
-      const balance = await this.api.getBillBalance(billId);
-      if (this.activeTabId === billId) this.billBalance = balance;
-      const now = this.#billPayingNow(id);
-      if (now !== null) this.billPaying = { ...now, balance };
-      return balance;
+      balance = await this.api.getBillBalance(billId);
     } catch {
       const now = this.#billPayingNow(id);
       if (now !== null && now.refusal === null)
         this.billPaying = { ...now, refusal: { code: "unread" } };
       return undefined;
     }
+    await this.#showBillPayingBalance(id, billId, balance, sentAt, order);
+    return balance;
+  }
+
+  async #showBillPayingBalance(
+    id: number,
+    billId: string,
+    balance: BillBalance,
+    sentAt: number,
+    order?: PayingOrder,
+  ): Promise<void> {
+    if (this.activeTabId === billId) this.billBalance = balance;
+    const now = this.#billPayingNow(id);
+    if (now !== null) {
+      this.billPaying = { ...now, balance };
+      this.#shownBalanceAt = Math.max(this.#shownBalanceAt, sentAt);
+    }
+    const freed =
+      sentAt > (this.#sendEndedAt.get(billId) ?? 0) && this.#freeShownPayment(billId, balance);
+    if (freed && order !== undefined) await this.#rereadPayingOrder(order, balance);
+  }
+
+  /** On a handheld, the bill is read again every few seconds while any card payment dialog
+   * `dialogId` sent is pending; `paymentId` is the one it now shows as `taken`. */
+  #startPendingReread(dialogId: number, paymentId: string, taken: PayTaken): void {
+    if (!this.handheldMode) return;
+    const running = this.#pendingReread;
+    if (running?.dialogId === dialogId) {
+      running.pending.set(paymentId, taken);
+      return;
+    }
+    this.#stopPendingReread();
+    const reread: PendingReread = {
+      dialogId,
+      pending: new Map([[paymentId, taken]]),
+      out: false,
+      timer: setInterval(() => void this.#pendingTick(reread), PENDING_REREAD_MS),
+    };
+    this.#pendingReread = reread;
+  }
+
+  #stopPendingReread(): void {
+    if (this.#pendingReread !== null) clearInterval(this.#pendingReread.timer);
+    this.#pendingReread = null;
+  }
+
+  /**
+   * One timed read. It never counts as activity for the till's logout. A failed read, or one unanswered at the
+   * request limit, changes nothing and a later tick tries again; an answer older than the balance the dialog shows, or sent before the
+   * bill's last send ended, is dropped. A tick is out until every outcome it found is shown. Each
+   * watched payment no longer pending stops being watched once its outcome is shown; the reads
+   * stop when none is left.
+   */
+  async #pendingTick(reread: PendingReread): Promise<void> {
+    if (this.#pendingReread !== reread || reread.out) return;
+    const open = this.#billPayingNow(reread.dialogId);
+    if (open === null) {
+      this.#stopPendingReread();
+      return;
+    }
+    reread.out = true;
+    try {
+      await this.#pendingRead(reread, open.billId);
+    } finally {
+      reread.out = false;
+    }
+    if (this.#pendingReread === reread && reread.pending.size === 0) this.#stopPendingReread();
+  }
+
+  async #pendingRead(reread: PendingReread, billId: string): Promise<void> {
+    const sentAt = ++this.#payTicks;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    let balance: BillBalance;
+    try {
+      balance = await this.api.getBillBalance(billId, { signal: limit.signal });
+    } catch {
+      return;
+    } finally {
+      limit.done();
+    }
+    if (
+      this.#pendingReread !== reread ||
+      sentAt < this.#shownBalanceAt ||
+      sentAt <= (this.#sendEndedAt.get(billId) ?? 0)
+    )
+      return;
+    await this.#showBillPayingBalance(reread.dialogId, billId, balance, sentAt);
+    for (const [id, taken] of [...reread.pending]) {
+      const payment = balance.payments.find((shown) => shown.id === id);
+      if (payment?.state === "pending") continue;
+      if (payment === undefined || (await this.#onPendingEnded(reread, taken, payment, balance)))
+        reread.pending.delete(id);
+    }
+  }
+
+  /**
+   * A card the dialog sent, no longer pending, which `taken` showed in progress. While the dialog
+   * still shows that `taken`, it shows this outcome in its place: taken, refused, or for a card
+   * that settled the bill the ticket, as an answer at once would. Once the dialog has moved on —
+   * another send, or the next guest's form started — what it shows stays, and its notice says what
+   * became of the card. Answers false when the ticket could not be read, to try again.
+   */
+  async #onPendingEnded(
+    reread: PendingReread,
+    taken: PayTaken,
+    payment: BillPaymentView,
+    balance: BillBalance,
+  ): Promise<boolean> {
+    const dialog = () => this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog");
+    const own = () => {
+      const now = this.#billPayingNow(reread.dialogId);
+      return now?.taken === taken && dialog()?.showsTaken !== false ? now : null;
+    };
+    const before = own();
+    if (before !== null && payment.state === "received" && balance.status === "settled") {
+      let ticket: TillSaleResult;
+      try {
+        ticket = await this.api.getFiledTicket(before.billId);
+      } catch {
+        return false;
+      }
+      const now = own();
+      if (now !== null) {
+        dialog()?.paymentAccepted();
+        await this.#showPaidTicket(now, ticket, balance.payments);
+        return true;
+      }
+    }
+    const now = own();
+    if (now !== null) {
+      this.billPaying = {
+        ...now,
+        asked: null,
+        preview: null,
+        ...(payment.state === "received"
+          ? { taken: { change: payment.change, settled: true }, refusal: null }
+          : {
+              taken: null,
+              refusal: { code: payment.state === "declined" ? "declined" : "payment_failed" },
+            }),
+      };
+      return true;
+    }
+    const shown = this.#billPayingNow(reread.dialogId);
+    if (shown === null) return true;
+    if (shown.taken === taken) this.billPaying = { ...shown, taken: null };
+    const amount = formatMoney(payment.applied, currentLocale());
+    this.nfcNotice =
+      payment.state === "received"
+        ? { message: t("bill_pay.late_received").replace("{amount}", () => amount), tone: "info" }
+        : {
+            message: t("bill_pay.late_not_charged").replace("{amount}", () => amount),
+            tone: "error",
+          };
+    dialog()?.cardEnded(taken, payment.state === "received");
+    return true;
+  }
+
+  /**
+   * A payment A773-1 holds that a balance read shows frees its bill, answering true, and an open
+   * dialog on the bill goes to the form saying what the bill records of it. One that settled the
+   * bill stays held: its Check again replays it and shows the ticket. A read sent while a send was
+   * out may show the payment as it stood before that send settled it, so the caller passes only
+   * reads sent after.
+   */
+  #freeShownPayment(billId: string, balance: BillBalance): boolean {
+    const entry = this.#unansweredPayments.get(billId);
+    if (entry?.unconfirmed !== true || this.#paymentsOut.has(billId)) return false;
+    const payment = balance.payments.find(
+      (shown) => shown.submissionId === entry.request.submissionId,
+    );
+    if (payment === undefined) return false;
+    if (payment.state === "received" && balance.status === "settled") return false;
+    this.#unansweredPayments.delete(billId);
+    const open = this.billPaying;
+    if (open === null || open.billId !== billId) return true;
+    const pending = { change: null, pending: payment.applied };
+    if (payment.state === "pending") this.#startPendingReread(open.id, payment.id, pending);
+    const outcome: Pick<BillPaying, "taken" | "refusal"> =
+      payment.state === "received"
+        ? { taken: { change: payment.change }, refusal: null }
+        : payment.state === "pending"
+          ? { taken: pending, refusal: null }
+          : {
+              taken: null,
+              refusal: { code: payment.state === "declined" ? "declined" : "payment_failed" },
+            };
+    this.billPaying = { ...open, asked: null, preview: null, ...outcome };
+    return true;
   }
 
   async #onBillPayPreview(event: Event): Promise<void> {
@@ -15797,13 +16550,21 @@ export class TillApp extends LitElement {
     const open = this.billPaying!;
     if (open.busy) return;
     const asked = open.asked!;
-    const detail: ReceiptGuestsDetail =
-      (event as CustomEvent<ReceiptGuestsDetail | null>).detail ?? {};
+    const { readerId, ...detail }: BillPayConfirmDetail =
+      (event as CustomEvent<BillPayConfirmDetail | null>).detail ?? {};
     const confirmation = confirmationOf(
       paymentAsk(asked.choice, asked.pay, asked.allocation, open.expectedEdit),
       open.preview as Extract<AllocationPreview, { kind: "allocated" }>,
-      asked.card,
+      asked.card?.entry === "reader" && readerId !== undefined
+        ? { ...asked.card, readerId }
+        : asked.card,
     );
+    // Named now: a tap while the card is out may change the phone's reader before the answer.
+    const ready =
+      this.handheldMode && readerId !== undefined
+        ? readyPayReader(this.deviceEquipment, this.#fixedPayReader())
+        : null;
+    const readerName = ready?.id === readerId ? ready?.name : undefined;
     const key = open.billId;
     const previous = this.#unansweredPayments.get(key);
     const keyed = submissionFor(open.billId, { ...confirmation, ...detail }, previous ?? null);
@@ -15824,12 +16585,24 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const api = this.api;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    // The hold ends when the send settles, not after the reads that follow its answer, which have no
+    // time limit. The `finally` calls this too, in case `settle` throws; only the first call
+    // releases.
+    const release = () => {
+      if (!isLatestSend(this.#paymentSends, key, turn) || !this.#paymentsOut.delete(key)) return;
+      void this.#afterPaymentOut(open.id, key);
+    };
     const settle = (error?: unknown) => {
-      if (this.#paymentSends.get(key) !== turn) return;
+      if (!isLatestSend(this.#paymentSends, key, turn)) return;
+      this.#sendEndedAt.set(key, ++this.#payTicks);
       const unanswered = unansweredAfter(submission, error);
       if (unanswered === null) this.#unansweredPayments.delete(key);
       else this.#unansweredPayments.set(key, unanswered);
+      release();
     };
+    let noAnswer = false;
+    const card = asked.pay.method === "card";
+    this.#paymentsOut.set(key, { dialogId: open.id, shown: submission.shown });
     await this.#holdingReload(async () => {
       try {
         const result = await this.#withReaderPayment(asked.card?.entry === "reader", () =>
@@ -15837,17 +16610,45 @@ export class TillApp extends LitElement {
             (signal) => api.takeBillPayment(open.billId, submission.request, { signal }),
             limit.signal,
             () => session === this.#operatorSession,
+            () => {
+              noAnswer = true;
+            },
           ),
         );
+        if (card && result.outcome === "timeout") this.#unknownCardOutcome.add(key);
         settle();
-        await this.#onBillPaid(open, result);
+        await this.#onBillPaid(open, result, readerName);
       } catch (error) {
+        const notChecked =
+          (keyed === previous || noAnswer) &&
+          READER_REFUSED_BEFORE_LOOKUP.has((error as { code?: unknown } | null)?.code);
+        if (card && (noAnswer || previous?.unconfirmed === true)) this.#unknownCardOutcome.add(key);
         settle(error);
-        await this.#onBillPayRefused(open.id, error, asked, "take");
+        await this.#onBillPayRefused(
+          open.id,
+          notChecked ? { code: "not_checked" } : error,
+          asked,
+          "take",
+        );
       } finally {
         limit.done();
+        release();
       }
     });
+  }
+
+  /** A dialog another one's send held on the bill follows that send's end: still unanswered, it is
+   * the locked confirmation of that payment; otherwise the form, on the balance read again. */
+  async #afterPaymentOut(senderId: number, billId: string): Promise<void> {
+    const that = this.billPaying;
+    if (that === null || that.id === senderId || that.billId !== billId) return;
+    const entry = this.#unansweredPayments.get(billId);
+    if (entry?.unconfirmed === true) {
+      this.billPaying = { ...that, ...entry.shown, busy: false, refusal: { code: "network" } };
+      return;
+    }
+    this.billPaying = { ...that, busy: false, asked: null, preview: null, refusal: null };
+    await this.#rereadBillPaying(that.id, billId);
   }
 
   /**
@@ -15857,7 +16658,11 @@ export class TillApp extends LitElement {
    * a card still at the reader that it is in progress, with the bill's new balance, and the bill is
    * read again. An answer after a logout has closed the dialog changes nothing.
    */
-  async #onBillPaid(open: BillPaying, result: BillPaymentResult): Promise<void> {
+  async #onBillPaid(
+    open: BillPaying,
+    result: BillPaymentResult,
+    readerName?: string,
+  ): Promise<void> {
     const now = this.#billPayingNow(open.id);
     if (now === null) return;
     if (this.activeTabId === open.billId) this.billBalance = result.balance;
@@ -15872,27 +16677,47 @@ export class TillApp extends LitElement {
     }
     this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog")?.paymentAccepted();
     if (result.invoice !== undefined) {
-      this.#closeBillPaying();
-      this.result = result.invoice;
-      this.#showTicket(open.billId);
-      // The paid order drops off the held list.
-      if (open.surface === "counter")
-        await this.#refreshAfterWrite("held", "refresh.held_after_sale");
+      await this.#showPaidTicket(open, result.invoice, result.balance.payments);
       return;
     }
+    const taken: PayTaken =
+      result.payment.state === "pending"
+        ? { change: null, pending: result.payment.applied }
+        : {
+            change: result.payment.change,
+            ...(readerName === undefined || result.payment.entry !== "reader"
+              ? {}
+              : {
+                  reader: readerName,
+                  charged: moneyPlus(result.payment.applied, result.payment.tip),
+                }),
+          };
     this.billPaying = {
       ...now,
       balance: result.balance,
       asked: null,
       preview: null,
       refusal: null,
-      taken:
-        result.payment.state === "pending"
-          ? { change: null, pending: result.payment.applied }
-          : { change: result.payment.change },
+      taken,
       busy: false,
     };
+    if (result.payment.state === "pending")
+      this.#startPendingReread(open.id, result.payment.id, taken);
     await this.#rereadPayingOrder(open, result.balance);
+  }
+
+  /** A payment that issued the bill's invoice: the dialog closes and the ticket shows. */
+  async #showPaidTicket(
+    open: BillPaying,
+    invoice: TillSaleResult,
+    payments: BillPaymentView[],
+  ): Promise<void> {
+    this.#closeBillPaying();
+    this.result = invoice;
+    this.#showTicket(open.billId, true, payments);
+    // The paid order drops off the held list.
+    if (open.surface === "counter")
+      await this.#refreshAfterWrite("held", "refresh.held_after_sale");
   }
 
   /**
@@ -15914,6 +16739,8 @@ export class TillApp extends LitElement {
     if (refusal.unsent !== undefined)
       refusal.billLabel = this.#paymentBillLabel(refusal.unsent.billId);
     const { preview } = error as { preview?: unknown };
+    // A send that may have been recorded arrives here as `not_checked`, so this is a first send.
+    const readerLost = stage === "take" && this.handheldMode && refusal.code === "reader.not_held";
     if (refusal.code === "network") {
       this.billPaying = { ...now, refusal, busy: false };
     } else if (refusal.code === "bill.allocation_changed" && preview !== undefined) {
@@ -15925,8 +16752,17 @@ export class TillApp extends LitElement {
         busy: false,
       };
     } else {
-      this.billPaying = { ...now, asked: null, preview: null, refusal, busy: false };
+      this.billPaying = {
+        ...now,
+        asked: null,
+        preview: null,
+        refusal: readerLost ? null : refusal,
+        busy: false,
+      };
     }
+    const equipmentRead = readerLost
+      ? this.#onReaderNotHeld("till-bill-pay-dialog", now.billId)
+      : undefined;
     if (
       stage === "preview" &&
       refusal.code === "management.request_invalid" &&
@@ -15935,6 +16771,30 @@ export class TillApp extends LitElement {
       return;
     const balance = await this.#rereadBillPaying(id, now.billId);
     await this.#rereadPayingOrder(now, balance);
+    await equipmentRead;
+  }
+
+  /** A handheld's first send of a card refused `reader.not_held`: the server refuses that before it
+   * records anything, so the reader field can say no card was charged, unless an earlier card on
+   * the bill has an unknown outcome. The row opens at once, and the equipment is read again, bounded,
+   * for the reader the phone now has (design default 19). */
+  async #onReaderNotHeld(
+    sheet: "till-bill-pay-dialog" | "till-presented-pay-dialog",
+    billId: string,
+  ): Promise<void> {
+    this.#setPayEquipmentError(
+      "card_terminal",
+      t(
+        this.#unknownCardOutcome.has(billId)
+          ? "bill_pay.reader_not_held_unknown"
+          : "bill_pay.reader_not_held",
+      ),
+    );
+    // Opened now, not on the re-read's answer, which may never come.
+    this.shadowRoot!.querySelector<TillBillPayDialog | TillPresentedPayDialog>(
+      sheet,
+    )?.openEquipmentRow();
+    await this.#readEquipmentBounded();
   }
 
   #onBillPayEdit(): void {
@@ -15948,7 +16808,9 @@ export class TillApp extends LitElement {
   }
 
   #closeBillPaying(): void {
+    this.#stopPendingReread();
     this.billPaying = null;
+    this.payEquipmentErrors = {};
     this.#closeBillRefunding();
   }
 
@@ -16176,7 +17038,15 @@ export class TillApp extends LitElement {
     this.drill = undefined;
   }
 
-  #showTicket(workingOrderId: string, invoiceIssuedNow = true): void {
+  /**
+   * `settled` is the bill's payments when this payment settled it: on a handheld a simplified
+   * invoice then shows the paid screen, whose Finish table (`table.finish`) frees the table.
+   */
+  #showTicket(
+    workingOrderId: string,
+    invoiceIssuedNow = true,
+    settled: BillPaymentView[] | null = null,
+  ): void {
     this.historicalReceipt = null;
     this.ticketWorkingOrderId = workingOrderId;
     this.#receiptPrintVisit++;
@@ -16191,8 +17061,23 @@ export class TillApp extends LitElement {
     this.invoiceEmailRefusal = undefined;
     this.#stopDeliveryReread();
     this.originalReceiptAvailable = invoiceIssuedNow && this.receiptPrintMode !== "auto";
-    this.#pushDrill({ kind: "ticket" });
+    const paid = settled !== null && this.handheldMode && this.result?.invoiceType === "F2";
+    this.paidPayments = paid ? settled : [];
+    this.#pushDrill({ kind: paid ? "paid" : "ticket" });
     void this.#refreshReceiptPrint();
+  }
+
+  /** A handheld's order screen is a tab (`builtInScreensFor`), which the paid screen covers. */
+  #onBackToTable(): void {
+    if (this.drill?.kind !== "paid") return;
+    this.errorKey = undefined;
+    this.#leavePaidScreen();
+    void this.#loadPartyBills();
+  }
+
+  /** A refused Finish table (`table.finish`) is acted on from the order screen beneath. */
+  #leavePaidScreen(): void {
+    if (this.drill?.kind === "paid") this.#popDrill();
   }
 
   #onBackToCounter(): void {
@@ -16689,6 +17574,21 @@ export class TillApp extends LitElement {
           .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
           .simulated=${this.onboardingIntent === "demo" || this.onboardingIntent === "prepare"}
         ></till-ticket-view>`;
+      case "paid":
+        return html`<till-paid-view
+          slot="drill"
+          .tableName=${this.#activeTableTitle()}
+          .total=${this.result!.total}
+          .payments=${this.paidPayments}
+          .change=${this.paidPayments.length === 0 && this.result!.tender.method === "cash" ? this.result!.tender.change : null}
+          .receipt=${this.originalReceiptPrint ?? null}
+          .receiptReadFailed=${this.originalReceiptReadFailed}
+          .originalAvailable=${this.originalReceiptAvailable}
+          .canPrint=${this.deviceId === undefined || this.capabilities.includes("print-receipt")}
+          .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
+          .busy=${this.originalReceiptBusy}
+          @back-to-table=${() => this.#onBackToTable()}
+        ></till-paid-view>`;
       case "hours":
         return html`<till-hours-screen
           slot="drill"
@@ -16992,6 +17892,7 @@ export class TillApp extends LitElement {
         @reprint-kitchen-tickets=${(event: Event) => void this.#onReprintKitchenTickets(event)}
         @mark-cleared=${(event: Event) => void this.#onMarkCleared(event)}
         @pay-tab=${(event: Event) => void this.#onPayTab(event)}
+        @pay-presented=${(event: Event) => this.#onPayPresented(event)}
         @bill-pay=${(event: Event) => void this.#onBillPay(event)}
         @choose-bill-invoice=${(event: Event) => this.#onChooseBillInvoice(event)}
         @choose-bill-receipt-language=${(event: Event) => this.#onChooseBillReceiptLanguage(event)}
@@ -17140,7 +18041,7 @@ export class TillApp extends LitElement {
           class="equipment-toast"
           data-nfc-notice
           .tone=${this.nfcNotice?.tone ?? "info"}
-          .open=${this.nfcNotice !== null}
+          .open=${this.nfcNotice !== null && !this.#paySheetOpen()}
           .message=${this.nfcNotice?.message ?? ""}
           close-label=${t("equipment.close")}
           @wt-close=${() => (this.nfcNotice = null)}
@@ -17207,8 +18108,8 @@ export class TillApp extends LitElement {
             : nothing
         }
         ${this.#renderCancelItem()} ${this.#renderFinishTable()} ${this.#renderAdjusting()}
-        ${this.#renderBillPaying()} ${this.#renderDeparting()} ${this.#renderTenderRefund()}
-        ${this.#renderCancelCrediting()}
+        ${this.#renderBillPaying()} ${this.#renderPresentedPaying()} ${this.#renderDeparting()}
+        ${this.#renderTenderRefund()} ${this.#renderCancelCrediting()}
         ${this.movingStation === null ? nothing : this.#renderMoveStationDialog(this.movingStation)}
         ${this.makingAt === null ? nothing : this.#renderMakeAtDialog(this.makingAt)}
         ${this.#renderEditDeadEnds()} ${this.#renderDifferentPeopleConfirmation()}
