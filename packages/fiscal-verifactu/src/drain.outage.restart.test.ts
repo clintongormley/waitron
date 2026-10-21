@@ -144,12 +144,14 @@ it("does not mistake a pending cancellation or refusal-braked successor for a se
     deliveries: (await suite.db.execute(sql`select * from envios order by registro_id`)).rows,
     cases: (await suite.db.execute(sql`select * from filing_cases order by id`)).rows,
     incidents: (await suite.db.execute(sql`select * from incidents order by id`)).rows,
+    acks: (await suite.db.execute(sql`select * from acks order by registro_id`)).rows,
   };
   await resetInFlightClaims(suite.db, new Date(now.getTime() + 120_000));
   expect({
     deliveries: (await suite.db.execute(sql`select * from envios order by registro_id`)).rows,
     cases: (await suite.db.execute(sql`select * from filing_cases order by id`)).rows,
     incidents: (await suite.db.execute(sql`select * from incidents order by id`)).rows,
+    acks: (await suite.db.execute(sql`select * from acks order by registro_id`)).rows,
   }).toEqual(before);
   expect((await suite.db.execute(sql`select technical_incidence from envios`)).rows).toEqual(
     Array.from({ length: 5 }, () => ({ technical_incidence: 0 })),

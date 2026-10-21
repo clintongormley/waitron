@@ -450,3 +450,50 @@ it.each(["warning", "unknown"])(
     ]);
   },
 );
+
+it("flushes a concurrent failed metadata write before a delayed resolver may claim new work", async () => {
+  const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+  let entered!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const t = transport();
+  const delayed = drain(
+    {
+      ...t.deps,
+      resolveClient: async () => {
+        entered();
+        await gate;
+        return t.client;
+      },
+    },
+    at(1),
+  );
+  await waiting;
+  const failedTransport = transport(async () => {
+    throw new Error("network down");
+  });
+  await suite.db.execute(sql`create trigger outage_metadata_refusal before insert on envio_flujo
+    begin select raise(abort, 'test metadata unavailable'); end`);
+  let resumed: Awaited<ReturnType<typeof drain>>;
+  try {
+    expect((await drain(failedTransport.deps, at(1))).skipped).toHaveLength(1);
+    const { seedSecondChain } = await import("../test/drain-fixtures.js");
+    await seedSecondChain(suite.db, seeded, 2);
+    release();
+    resumed = await delayed;
+  } finally {
+    release();
+    await delayed;
+    await suite.db.execute(sql`drop trigger outage_metadata_refusal`);
+  }
+  const recovered = await drain(t.deps, at(7));
+  expect(resumed!.recordsSubmitted).toBe(0);
+  expect(recovered.recordsAccepted).toBe(2);
+  expect(t.xml).toHaveLength(1);
+  expect(t.xml[0]).toContain(flag);
+});

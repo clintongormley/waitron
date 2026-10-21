@@ -250,7 +250,12 @@ async function drainDue(
     };
     for (;;) {
       try {
+        let flushedFailure: TechnicalFailure | undefined;
         claimed = await countOnCommit(db, result, async (tx, counts) => {
+          flushedFailure = technicalFailures.get(db)?.get(environment);
+          if (flushedFailure !== undefined) {
+            await openTechnicalIncident(tx, environment, flushedFailure.now, flushedFailure.ids);
+          }
           const c = await claimBatch(
             tx,
             now,
@@ -290,6 +295,7 @@ async function drainDue(
             incidentToken,
           };
         });
+        if (flushedFailure !== undefined) forgetTechnicalFailure(db, environment, flushedFailure);
       } catch (error) {
         if (error !== deferredBatch) throw error;
         claimed = { sendable: [], rawCount: 0, deferred: true };
@@ -342,7 +348,7 @@ async function drainDue(
       // stop. A probe's next send is an hour after its stamped `enviado_en`, so it leaves the
       // count; the batch's ordinary rows stay counted, so the next sending slot is still reported
       // unless a retry instant `backoffBatch` recorded is earlier.
-      rememberTechnicalFailure(
+      const failure = rememberTechnicalFailure(
         db,
         environment,
         now,
@@ -357,7 +363,7 @@ async function drainDue(
         );
         await backoffBatch(tx, batch, now, counts);
       });
-      forgetTechnicalFailure(db, environment);
+      forgetTechnicalFailure(db, environment, failure);
       dueCount = Math.max(0, dueCount - batch.filter((row) => row.probe !== undefined).length);
       break;
     }
@@ -1167,24 +1173,32 @@ async function closeTechnicalIncident(
 
 // At most one failed metadata transaction per environment is retained: no more work is claimed
 // until it can commit. A process loss cannot preserve this uncommitted evidence.
-const technicalFailures = new WeakMap<Database, Map<Entorno, { now: Date; ids: string[] }>>();
+type TechnicalFailure = { now: Date; ids: string[] };
+const technicalFailures = new WeakMap<Database, Map<Entorno, TechnicalFailure>>();
 
 function rememberTechnicalFailure(
   db: Database,
   environment: Entorno,
   now: Date,
   ids: string[],
-): void {
+): TechnicalFailure {
   let failures = technicalFailures.get(db);
   if (failures === undefined) {
     failures = new Map();
     technicalFailures.set(db, failures);
   }
-  if (!failures.has(environment)) failures.set(environment, { now, ids });
+  const failure = failures.get(environment) ?? { now, ids };
+  failures.set(environment, failure);
+  return failure;
 }
 
-function forgetTechnicalFailure(db: Database, environment: Entorno): void {
-  technicalFailures.get(db)?.delete(environment);
+function forgetTechnicalFailure(
+  db: Database,
+  environment: Entorno,
+  failure: TechnicalFailure,
+): void {
+  const failures = technicalFailures.get(db);
+  if (failures?.get(environment) === failure) failures.delete(environment);
 }
 
 async function flushTechnicalFailure(db: Database, environment: Entorno): Promise<void> {
@@ -1193,7 +1207,7 @@ async function flushTechnicalFailure(db: Database, environment: Entorno): Promis
   await withTransaction(db, (tx) =>
     openTechnicalIncident(tx, environment, failure.now, failure.ids),
   );
-  forgetTechnicalFailure(db, environment);
+  forgetTechnicalFailure(db, environment, failure);
 }
 
 function toEnvioRegistro(row: RegistroRow): EnvioRegistro {

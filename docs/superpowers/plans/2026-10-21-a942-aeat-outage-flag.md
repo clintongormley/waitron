@@ -186,3 +186,24 @@ Validation limit: this plan ran no product tests. Repository workflow/fixture in
 fake-AEAT SOAP and local mTLS coverage, not a Waitron live AEAT qualification workflow. Those runs
 do not prove live acceptance. External verifactu live probes and endpoint credentials are outside
 A942 authorisation; report this limit instead of using them.
+
+## Implementation qualification, 2026-10-21
+
+Task 2 adds separate lifecycle and restart suites alongside the actual sale/void integrity suite.
+Restart eligibility reuses the existing claim, hold and probe operations inside a savepoint, then
+rolls that work back before recording an outage. This avoids a second eligibility query: an initial
+query failed the cancellation-plus-refusal-run control. The reset retains the signature and ordinary
+state/count fields. A saved environment is required for the pending-only inference. This is still an
+operational inference, not evidence of what stopped an earlier process.
+
+Process-local evidence is checked again inside the claim transaction: another pass can fail while
+this pass is resolving its client. A delayed-resolver test failed when only the earlier pre-resolver
+check existed. Metadata failures retain evidence for the next writable pass; uncommitted evidence
+cannot survive process loss.
+
+The new suites use serialized SOAP and the library's real parser against local fake AEAT services.
+They check capped/name-split tails, records added during recovery, clean later records, held probes,
+late concurrent replies, response persistence failures and populated predecessor migrations. The
+integrity suite creates actual sale and void records, compares full immutable rows and series/chain
+state across retries, recomputes hashes, compares repeated SOAP record fragments and completes a
+sale while transport is held. These are local qualifications, not live AEAT acceptance.
