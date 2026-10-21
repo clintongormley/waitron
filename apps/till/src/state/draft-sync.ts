@@ -29,6 +29,8 @@ export const DRAFT_REFUSALS: ReadonlySet<string> = new Set([
   "draft.already_submitted",
 ]);
 
+export const DRAFT_PERSON_REFUSAL = "draft.person_not_signed_in";
+
 /** A table draft: a tap adds into a line that orders the same thing, as the server's save does. */
 export class DraftStore extends WorkingOrderStore {
   #billStatus: WorkingOrderStatus = "open";
@@ -795,6 +797,7 @@ export class DraftSync {
           revision: this.#revision,
           expectedEdit,
           lines,
+          personId: this.personId,
         },
         { signal: limit.signal },
       );

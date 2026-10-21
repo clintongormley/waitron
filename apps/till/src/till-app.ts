@@ -100,6 +100,7 @@ import {
 import { deriveExtraSelections } from "./state/held-extras.js";
 import { deriveOptionSelections } from "./state/held-options.js";
 import {
+  DRAFT_PERSON_REFUSAL,
   DRAFT_REFUSALS,
   DraftSync,
   TABLE_REQUEST_LIMIT_MS,
@@ -10763,6 +10764,12 @@ export class TillApp extends LitElement {
   }
 
   #onDraftRefused(sync: DraftSync, refusal: DraftRefused): void {
+    if (refusal.refused === DRAFT_PERSON_REFUSAL) {
+      // The device's session belongs to someone else now; ending it would sign them out too.
+      if (sync.personId === this.#sessionPersonId && this.operatorName !== "")
+        void this.#onLogout(false);
+      return;
+    }
     if (sync !== this.#draftSync || refusal.refused === "session.required") return;
     this.errorKey = draftRefusalError(refusal);
     const zoneId = this.#tableZoneId;
@@ -17120,7 +17127,7 @@ export class TillApp extends LitElement {
   }
 
   /** Keeps the basket: it belongs to the till. */
-  async #onLogout(): Promise<void> {
+  async #onLogout(endServerSession = true): Promise<void> {
     // Lock locally first: a rejecting or hanging `api.logout()` (offline, failover) must never leave
     // the till unlocked. The server logout is best-effort.
     this.#tableToResume =
@@ -17172,11 +17179,12 @@ export class TillApp extends LitElement {
       for (const each of own) each.drop();
     }
     if (signIns !== this.#signIns || session !== this.#operatorSession || api !== this.api) return;
-    try {
-      await api.logout();
-    } catch {
-      // The device is already locked locally.
-    }
+    if (endServerSession)
+      try {
+        await api.logout();
+      } catch {
+        // The device is already locked locally.
+      }
     // After the round trip, so guarded: a detached till must not change a live sibling's module-global
     // locale.
     if (

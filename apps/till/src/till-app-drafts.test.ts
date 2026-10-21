@@ -8326,6 +8326,7 @@ describe("recalled draft source splitting", () => {
               afterGroupId: null,
             },
           ],
+          personId: "p1",
         },
         { signal: expect.any(AbortSignal) },
       );
@@ -9167,7 +9168,68 @@ describe("A773 retained bill candidates in the app", () => {
     expect(api.saveDraft).toHaveBeenCalledOnce();
   });
 
-  it.each(["idle callback", "expired-session save refusal"] as const)(
+  it("signs the order's person out on this screen, keeps their lines, and leaves the device's session alone, when a live order's save is refused for them", async () => {
+    const { el } = await mountApp({
+      saveDraft: vi.fn().mockRejectedValue({ code: "draft.person_not_signed_in", status: 409 }),
+    });
+    await openMesa(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const settleTimers = async (ms: number) => {
+        await vi.advanceTimersByTimeAsync(ms);
+        for (let i = 0; i < 3; i++) {
+          await vi.advanceTimersByTimeAsync(0);
+          await el.updateComplete;
+        }
+      };
+      // Replacing the API re-arms the 15 s bill refresh under the fake clock.
+      el.api = { ...api } as unknown as TillApi;
+      await settleTimers(0);
+      press(el, "Beer");
+      await settleTimers(DRAFT_SAVE_DELAY_MS);
+      expect(lock(el)).not.toBeNull();
+      expect(banner(el)).toBeNull();
+      expect(api.logout).not.toHaveBeenCalled();
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      await settleTimers(20_000);
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+    await reopen(el, "p2", "Luis");
+    expect(retainedCandidate(el)).toBeNull();
+    expect(rows(el)).toEqual([]);
+    emit(tableOrder(el)!, "logout");
+    await flush(el, 6);
+    await reopen(el, "p1", "Ana");
+    expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+  });
+
+  it("names the signed-in person in each save, and the next person in theirs", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 20));
+    await flush(el);
+    expect(api.saveDraft.mock.calls.at(-1)![1].personId).toBe("p1");
+    emit(tableOrder(el)!, "logout");
+    await flush(el, 6);
+    await signIn(el, "p2", "Luis");
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el, 6);
+    await tap(el, "Steak");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 20));
+    await flush(el);
+    expect(api.saveDraft.mock.calls.at(-1)![1].personId).toBe("p2");
+  });
+
+  it.each([
+    "idle callback",
+    "expired-session save refusal",
+    "save refused for another signed-in person",
+  ] as const)(
     "retains the complete local candidate after %s without exposing it to the next person",
     async (ending) => {
       const activity = {
@@ -9187,6 +9249,13 @@ describe("A773 retained bill candidates in the app", () => {
         api.saveDraft.mockRejectedValueOnce({ code: "session.required", status: 401 });
         await back(el);
         expect(api.saveDraft).toHaveBeenCalledOnce();
+      }
+      if (ending === "save refused for another signed-in person") {
+        api.saveDraft.mockRejectedValueOnce({ code: "draft.person_not_signed_in", status: 409 });
+        await back(el);
+        expect(api.saveDraft).toHaveBeenCalledOnce();
+        expect(lock(el)).not.toBeNull();
+        expect(api.logout).not.toHaveBeenCalled();
       }
       (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
       await flush(el, 6);

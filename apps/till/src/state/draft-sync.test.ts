@@ -338,6 +338,7 @@ describe("DraftSync: saving", () => {
         revision: 0,
         expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         lines: [expect.objectContaining({ menuItemId: "offer-beer", quantity: "3" })],
+        personId: "p1",
       },
       { signal: expect.any(AbortSignal) },
     );
@@ -366,10 +367,25 @@ describe("DraftSync: saving", () => {
           draftRevision: 1,
         },
         lines: [expect.anything(), expect.anything()],
+        personId: "p1",
       },
       { signal: expect.any(AbortSignal) },
     );
     expect(draft.revision).toBe(2);
+  });
+
+  it("names the sync's person in every save, whoever signs in later", async () => {
+    server.personId = "p7";
+    const draft = sync("p7");
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    await settle();
+    expect(server.saveDraft.mock.calls[0]![1].personId).toBe("p7");
+
+    draft.store.addProduct(steak, "1");
+    await settle();
+
+    expect(server.saveDraft.mock.calls[1]![1].personId).toBe("p7");
   });
 
   it("never has two saves out: edits made while one is out go in one save after it answers", async () => {
@@ -406,6 +422,7 @@ describe("DraftSync: saving", () => {
         expect.objectContaining({ menuItemId: "offer-beer", quantity: "1" }),
         expect.objectContaining({ menuItemId: "offer-steak", quantity: "2" }),
       ],
+      personId: "p1",
     });
   });
 
@@ -525,6 +542,29 @@ describe("DraftSync: saving", () => {
 });
 
 describe("DraftSync: a refused save", () => {
+  it("answers failed and says nothing when a refusal for the order's person lands after the order was dropped", async () => {
+    let reject!: () => void;
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockImplementationOnce(
+      () =>
+        new Promise<never>((_resolve, fail) => {
+          reject = () => fail({ code: "draft.person_not_signed_in", status: 409 });
+        }),
+    );
+    draft.store.addProduct(beer, "1");
+    const queued = draft.flush();
+    await vi.waitFor(() => expect(server.saveDraft).toHaveBeenCalledOnce());
+
+    draft.drop();
+    reject();
+    await settle();
+
+    expect(await queued).toBe("failed");
+    expect(refused).toEqual([]);
+    expect(server.listDrafts).toHaveBeenCalledOnce();
+  });
+
   it("re-reads the draft another device changed and shows it, never saving over it", async () => {
     const draft = sync();
     await draft.load();

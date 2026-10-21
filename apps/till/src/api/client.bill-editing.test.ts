@@ -94,6 +94,7 @@ describe("bill editing over the till client", () => {
         revision: 3,
         lines: [],
         expectedEdit: { billId: "bill-2", editorVersion: 6, draftId: "draft-2", draftRevision: 3 },
+        personId: "p1",
       }),
     ).rejects.toEqual({ ...params, code: "draft.taken_over", status: 409 });
   });

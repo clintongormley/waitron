@@ -830,6 +830,9 @@ export interface DraftSave {
   revision: number;
   expectedEdit: BillEditExpected;
   lines: DraftLineInput[];
+  /** The person whose order this is; the server refuses the save unless it is the person signed
+   * in on this device. */
+  personId: string;
 }
 
 export interface BillEditState {
