@@ -6,7 +6,7 @@ import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { page, userEvent } from "vitest/browser";
-import type { WtCombobox, WtRowActions } from "@waitron/ui";
+import type { WtCombobox, WtDialog, WtRowActions } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import {
   adjustmentStubs,
@@ -7801,7 +7801,17 @@ describe("till-app: Current orders", () => {
                 control(action === "row" ? '[data-serve-line="line-1"]' : "[data-serve-all]"),
               );
             }
-            await userEvent.dblClick(target);
+            if (action === "fire") {
+              // The confirm's first press closes its dialog, so a double click's second press
+              // lands on whatever the layout puts under it: the press repeated is Fire's own.
+              await userEvent.click(target);
+              await flush(el);
+              await userEvent.click(native(control('[data-group-fire="g2"]')), { force: true });
+              await flush(el);
+              expect(order.shadowRoot!.querySelector<WtDialog>("[data-fire-dialog]")!.open).toBe(
+                false,
+              );
+            } else await userEvent.dblClick(target);
             await flush(el);
             expect(send).toHaveBeenCalledExactlyOnceWith(
               "v1",
@@ -7971,7 +7981,8 @@ describe("till-app: Current orders", () => {
             await page.screenshot({
               path: `__screenshots__/a773-partial-serve-${locale}-${theme}-${width}.png`,
             });
-            await userEvent.dblClick(control("confirm"));
+            // One press: the dialog closes on it, so a second would land on whatever lies beneath.
+            await userEvent.click(control("confirm"));
             await expect.poll(() => markServed.mock.calls.length).toBe(1);
             await flush(el);
             expect(markServed).toHaveBeenCalledExactlyOnceWith(
@@ -7992,7 +8003,9 @@ describe("till-app: Current orders", () => {
               .querySelector<HTMLElement>("[data-undo-served]")!
               .shadowRoot!.querySelector<HTMLButtonElement>("button")!;
             await expect.element(undo).toHaveAccessibleName(locale === "es" ? "Deshacer" : "Undo");
-            await userEvent.dblClick(undo);
+            // One press: once the undo is answered the toast closes, and a second press would land
+            // on whatever lies beneath it.
+            await userEvent.click(undo);
             await flush(el, 6);
             expect(unmarkServed).toHaveBeenCalledExactlyOnceWith(
               "v1",
