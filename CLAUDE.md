@@ -121,7 +121,7 @@ hook, or how tests are scheduled:
 - **CI's test jobs measure coverage, never plain `test`**: `test:coverage`, or `test:shard` with
   the package's `-merge` job enforcing the bar. Verify that package’s coverage or merge job on the
   current head; run `pnpm --filter <pkg> test:coverage` locally when investigating a failure.
-  Vitest `--shard` splits by FILE COUNT, except `apps/server`, whose shards are packed by duration,
+  Vitest `--shard` splits by FILE COUNT (`apps/server` excepted: its shards are packed by duration),
   so `N` must never exceed a package's test-file count.
   Guard: the "run no more shards than the package has test files" case in
   `scripts/ci-workflow.test.mjs`, weaker than its name — it counts files named `*.test.ts` under the
@@ -130,9 +130,9 @@ hook, or how tests are scheduled:
   (`apps/server/test-durations.json`, read by `scripts/vitest-duration-sequencer.mjs`), not by
   Vitest's hash split.** A file missing from the table is packed at the table's mean and started
   first in its shard; refresh the table with `scripts/test-durations.mjs` when a server shard drifts
-  past 4 minutes. Cost: A938, the hash split held the slowest shard at 349–454 s. Guard:
+  past 4 minutes. Cost: A938, the hash split's slowest server job took 349–410 s on six `main` runs. Guard:
   `scripts/vitest-duration-sequencer.test.mjs`, weaker than its name — it checks the packing over a
-  walk of the tree's `*.test.ts` files, never a Vitest run, and never that the table is fresh. Receipt:
+  walk of `apps/server`'s `*.test.ts` files, never a Vitest run, and never that the table is fresh. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration).
 - **Every CI test job — one shard of one package — should finish in about 4 minutes** (owner,
   2026-10-09 and 2026-10-11). Fix a job over it at the cause: a slow file, too few shards, slow

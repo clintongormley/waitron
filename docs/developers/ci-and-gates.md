@@ -1119,12 +1119,12 @@ A file's time is the seconds on its `[file-progress] end` line in the job log, a
   cuts the list into equal counts (`BaseSequencer.shard`), so which files share a shard depends only
   on their names. `python3 -I replay2.py files.txt` in the model folder replays that split
   (`replay-verify.py` reproduces every file's shard in all six runs). It estimates a job as 0.262 ×
-  its shard's file-seconds + 48 s, which predicts 362 to 395 s for the slowest job against a
+  its shard's file-seconds + 48 s, which predicts 347 to 395 s for the slowest job against a
   measured 349 to 410 s. "Random p90" is the worst run's 90th percentile over 300 random orderings
   of each run's file names (A929's method):
 
-  | shards | slowest job, today's names / random p90 | the same, with the key cache below |
-  | ------ | --------------------------------------- | ---------------------------------- |
+  | shards | slowest job, today's names / random p90 | the same, with the scrypt memo's local savings |
+  | ------ | --------------------------------------- | ---------------------------------------------- |
   | 11     | 395 / 417 s                             | 371 / 386 s                        |
   | 14     | 333 / 357 s                             | 329 / 330 s                        |
   | 16     | 298 / 330 s                             | 298 / 302 s                        |
@@ -1132,8 +1132,11 @@ A file's time is the seconds on its `[file-progress] end` line in the job log, a
   | 20     | 269 / 293 s                             | 258 / 265 s                        |
   | 24     | 259 / 260 s                             | 259 / 240 s                        |
 
-  Even with the cache, the hash split reaches about 240 s only at about 24 shards, and today's names
-  at 24 still give 259 s, because heavy files fall together by hash.
+  Those savings are the earlier local memo's (0.45 of the time for the three hour-recovery files);
+  the shipped cache saved less on `hour-recovery-placement-1` locally (70.0 and 69.7 s against 95.2
+  and 111.8 s), so these figures are optimistic. Even with the memo, the hash split reaches about
+  240 s only at about 24 shards, and today's names at 24 still give 259 s, because heavy files fall
+  together by hash.
 
 **The change has two parts.**
 
@@ -1147,7 +1150,7 @@ A file's time is the seconds on its `[file-progress] end` line in the job log, a
    locally on `src/hour-recovery-placement-1.test.ts` with coverage, with the setup line in and out
    alternately at a load average of about 9 to 12: 70.0 and 69.7 s with it, 95.2 and 111.8 s
    without. That file asked for 164 keys, and 43 were derived. One N=2^17 derivation took about 175
-   to 182 ms on the Mac it ran on (Node v26.11.1). The product still derives the archive's key once
+   to 195 ms on the Mac it ran on (two measurements, Node v26.11.1: 175–182 ms and 186–193 ms). The product still derives the archive's key once
    in each of preview, validate and restore; deriving it once per restore is a behaviour change on
    the restore path, left in the backlog.
 2. **Packing by measured time.** `apps/server/vitest.config.ts` names
@@ -1156,12 +1159,12 @@ A file's time is the seconds on its `[file-progress] end` line in the job log, a
    Every shard computes the same packing and keeps its own part: files are taken longest estimate
    first (ties by path) and each goes into the shard whose estimates sum least so far. Each shard
    prints one line, `[duration-sequencer] shard i/n: <files> files, <seconds> estimated s, <k> absent
-   from the table`, followed by the absent files' names.
+   from the table`, followed, on the same line, by the absent files' names.
 
 **Why packing, and why 16.** `python3 -I balanced.py files.txt old.kv` and
 `python3 -I firsttable.py files.txt` in the model folder pack each run with a table built from the
 other five (leave one out), so the table never sees the run it is judged on, and judge the run on its
-own times with the cache's saving applied. "Sim" is a simulation of four files at a time
+own times with the local scrypt memo's savings applied (`memo` in the scripts). "Sim" is a simulation of four files at a time
 (`maxWorkers: 4`), longest first, plus 48 s:
 
 | shards | busiest file-seconds per run | slowest job (0.262 ×) | slowest job (sim) | median job (sim) |
@@ -1180,11 +1183,12 @@ file-seconds 57%. Sixteen gives 211 to 225 s with room to grow. The repository i
 no charge.
 
 **A file absent from the table is packed at the table's mean and started first in its shard.**
-`python3 -I stale.py` in the model folder judged a table taken from run 39169930434, from before
+`python3 -I stale.py files.txt old.kv` in the model folder judged a table taken from run 39169930434, from before
 A679, which lacks 137 of today's 872 files (2,541 file-seconds, a quarter of the suite). Worst shard
-job per run, simulated: at 16 shards, 292 to 332 s with the absent files started by their estimate,
+job per run, simulated: at 16 shards, 279 to 332 s with the absent files started by their estimate,
 230 to 260 s with them started first (at 15: 297 to 353 s against 249 to 267 s). So even a table
-missing a quarter of the suite does better than the hash split did (349 to 410 s). A stale table
+missing a quarter of the suite does better than a sixteen-way hash split would (298 s on today's
+names, 302 s at the random p90, modelled with the memo). A stale table
 makes the shards less even; it does not drop or repeat a file.
 
 **Refreshing the table.** When a server shard drifts past 4 minutes, or the `[duration-sequencer]`

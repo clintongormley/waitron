@@ -5461,12 +5461,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   A178 (#1010 to #1019), seen while building, not changed: the same parsing is on `main` before
   A178b (`#buildSchedule`'s `split(":")`); what the server does with it was not checked.
 
-- **A restore derives the archive's key three times.** `previewRecoveryArchive`,
-  `validateArtifact` and `restoreFromArtifact` each derive it (scrypt at N=2^17; the first and last
-  through `validateArtifact`, `apps/server/src/restore.ts`), so deriving it
-  once per restore would save CPU on the box. It is a behaviour change on the restore path and needs
-  its own tests. Left open by A938, which cached only the tests' derivations.
-  [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
+- **A restore from a backup file derives the archive's key three times**, each an N=2^17 scrypt:
+  at preview, at staging and again at the next start. Deriving it once would save CPU on the box;
+  it is a behaviour change on the restore path and needs its own tests. Left open by A938.
+  [Detail](backlog/box.md#a-restore-from-a-backup-file-derives-the-archives-key-three-times)
 
 ### Replication, failover and the cloud
 
@@ -5744,15 +5742,12 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   selection count and the screenshot before retrying.
   [Reproduction](developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
 
-- **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run** (run 39068745456), 119 s at
-  the median of six in A938. A938's local profile put its time in `width()`
-  (`apps/server/src/invoice-page.ts:47`): `wrap()` measures a growing string once per character, and
-  the file ran about 4.5 times slower under coverage. Caching the advance width per string is the
-  untried fix. Left open by A801.
-  [Receipt](developers/ci-and-gates.md#runners-come-in-two-speeds-and-the-busiest-shard-is-the-one-that-crosses-4-minutes),
-  [A938's profile](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
+- **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**, a median of 144 s over six
+  runs in A938. A938's profile put its time under `width()`; caching the advance width per string
+  is the untried fix. Left open by A801.
+  [Detail](backlog/ci.md#the-invoice-pdf-test-took-162-s-on-one-ci-run)
 
-- **`apps/server/src/first-fiscal-hour.e2e.test.ts` sets the floor under its shard** (197 s median
+- **`apps/server/src/first-fiscal-hour.e2e.test.ts` sets the floor under its shard** (208 s median
   and 255 s worst over six runs in A938), since no packing goes below one file. Split it once A733
   has landed, or find why each restart test boots the real entry point twice. Left open by A938.
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
@@ -5764,8 +5759,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   A938. [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 - **Nothing checks, on every CI run, that each server test file ran in exactly one shard.** The
-  guard checks the packing over a walk of the tree, and A938 counted the `[file-progress] end` lines
-  of one run. A standing check, for example in `test-server-merge` comparing the shards' `end`
+  guard checks the packing over a walk of the tree, and A938's pull request records one run's
+  `[file-progress] end` count. A standing check, for example in `test-server-merge` comparing the shards' `end`
   lines with the file list, is open. Left open by A938. [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 - **Other server test files still hash fixed PINs and passwords on every test.** A801 moved the
