@@ -2216,9 +2216,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   reasons (English only, owner 2026-10-19; their translation at setup is A918), and the till naming
   whose PIN it needs. **A758-2 built the page** ([plan](superpowers/plans/2026-10-20-a758-2-voids-and-comps-page.md)):
   Voids and comps under Service, with search, drag to reorder and a real Delete; A923–A926 are what
-  it left open. Left: A758-3 (the report),
+  it left open. **A758-3 built the report** ([plan](superpowers/plans/2026-10-21-a758-3-voids-and-comps-report.md)): Voids
+  and Comps in the totals, each entry's words, who asked for and approved each reason, and a Reason
+  filter on the list; A952–A959 are what it left open. Left:
   A758-4 ("Descuento 100%" on receipts), A758-5 (the till's Comp words), and the §3.8 and
-  "collect it at the counter" slices.
+  "collect it at the counter" slices. The §3.8 slice also makes the report's entries read
+  "Void, charged" («Cancelado, cobrado», design §3.6) for a cancel that kept the charge, deferred from
+  A758-3; most such rows are already told apart without a migration, because A773-1 writes a
+  still-charge cancel with before = after = the dish's charge and nothing off
+  (`apps/server/src/line-cancel.ts:331-333`), so `afterAmount > 0` marks them — all but a
+  still-charge cancel of a dish already comped to €0.00, which needs the slice's stored flag.
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),
   [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
   [mockups](backlog/mockups/a758-adjustment-reasons/)
@@ -2242,6 +2249,44 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   by A758-2).** The item and bill limits count earlier comps by the reason's id
   (`packages/adjustments/src/record.ts`), and a re-added reason has a new one, so on an open bill
   its limits start from nothing. Accepted for now (plan Decision 2); revisit if a venue meets it.
+
+- **A952. The report's totals are headed "By action", not "By kind" (left open by A758-3).** Its
+  rows are Voids and Comps («Por acción»), D10's names for both kinds and actions; design §3.6
+  says "By kind" («Por tipo»). Owner to choose; the other way changes eight heading checks.
+
+- **A953. By reason's column says "Requested by", not "Asked by" (left open by A758-3).** The
+  entries list beside it already says "Requested by" («Solicitado por») for the same person; design
+  §3.7 writes "Asked by". Owner to choose one word for both places.
+
+- **A954. How the report's Reason filter behaves (left open by A758-3).** It keeps its choice when
+  another person's list opens or the days change, and goes back to All reasons when the list
+  closes. A deleted reason re-added under the same name shows twice in the field, because the
+  report groups by the reason's id. Owner to confirm.
+
+- **A955. An amount comp reads "Comp 100%" only when it took the item's whole list value (left
+  open by A758-3).** An amount that takes what an earlier comp left reads "Comp €6.00". Owner to
+  confirm.
+
+- **A956. The report's new words, for the owner to read (left open by A758-3).** Voids / Comps («Cancelaciones» /
+  «Descuentos»), Void («Cancelado»), "Comp {amount}" («Descuento {amount}»), All reasons («Todos
+  los motivos») and the reworded intro, in `packages/adjustments/src/dashboard/strings.ts`. The
+  PR's pictures show them; owner to read them.
+
+- **A957. The Spanish report still says «anulado» beside «Cancelaciones» (left open by A758-3).**
+  The column «Valor de carta anulado» and the summary figure «Valor de carta de lo
+  anulado» (`packages/adjustments/src/dashboard/strings.ts`). D10 makes Void «Cancelar» and D22
+  asks for one word per meaning, but nothing gives these two phrases. The other way: «Valor de
+  carta cancelado» / «Valor de carta de lo cancelado». Owner to choose.
+
+- **A958. Choosing a reason narrows the list, not the totals below it (left open by A758-3).** With
+  Staff meal chosen, By action, By stage and By reason still count every reason for the person (or
+  everyone) shown. Owner to confirm, or the breakdowns follow the chosen reason too.
+
+- **A959. By reason's layout (left open by A758-3).** It now takes the whole row, so on a wide
+  window its numbers stand far apart and the last figure ("List value cancelled") sits right
+  against the Requested by names; on a phone the table scrolls sideways inside its box, with only
+  the cut-off last column to say so. Owner to look at the pictures and say whether either wants
+  changing.
 
 - **A909. A recalled draft's Discard asks for a refund PIN for a dish that may not have been
   started (left open by A758-1).** Cancel item… asks "Has preparation started?" and removes a dish

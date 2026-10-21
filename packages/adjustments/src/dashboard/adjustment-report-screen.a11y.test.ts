@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
-import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { AdjustmentsApi } from "./client.js";
 import type { AdjustmentReportScreen } from "./adjustment-report-screen.js";
@@ -99,6 +99,16 @@ describe.each(["light", "dark"] as const)("adjustment report accessibility (%s)"
     await settle(el);
     expect(el.shadowRoot!.querySelector('[data-test="more-error"]')).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[data-test="show-more"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("a list filtered by reason", async () => {
+    const el = await screen(theme, { listEntries: vi.fn().mockResolvedValue(onePage([])) });
+    await openAlex(el);
+    const field = el.shadowRoot!.querySelector('wt-combobox[name="reason"]');
+    expect(field).not.toBeNull();
+    await chooseOption(field!, "r-staff");
+    await settle(el);
     await expectNoA11yViolations(host);
   });
 

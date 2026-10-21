@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveData, setLocale, tableNoMatches } from "@waitron/dashboard-kit";
+import { formatMoney } from "@waitron/shared";
 import { applyTokens } from "@waitron/ui";
+import { page, userEvent } from "vitest/browser";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { AdjustmentsApi } from "./client.js";
-import { ADJUSTMENTS_STRINGS, tf } from "./strings.js";
+import { ADJUSTMENTS_STRINGS, kindTotalName, t, tf } from "./strings.js";
 import type { AdjustmentReportScreen } from "./adjustment-report-screen.js";
 import "./adjustment-report-screen.js";
 import {
@@ -10,6 +13,7 @@ import {
   alexEntries,
   emptyReport,
   fixtureReport,
+  MIA,
   onePage,
   samEntry,
   SAM,
@@ -151,7 +155,7 @@ describe("the adjustment report", () => {
   it("says which bills are counted and what the rate measures", async () => {
     const el = await mount(fakeApi());
     expect(text(part(el, "intro"))).toBe(
-      "Counts the cancellations, give-aways and discounts on the bills opened on these business days. A person's rate is what their own adjustments took off, as a share of the sales credited to them at prices before any adjustment.",
+      "Counts the voids and comps on the bills opened on these business days. A person's rate is what their own adjustments took off, as a share of the sales credited to them at prices before any adjustment.",
     );
   });
 
@@ -231,10 +235,8 @@ describe("the adjustment report", () => {
         [...tr.querySelectorAll("th, td")].map((cell) => text(cell)),
       );
     expect(lines("by-action")).toEqual([
-      ["Cancellations", "2", "€25.00", "€37.00"],
-      ["Give-aways", "1", "€12.00", "€0.00"],
-      ["Percentage discounts", "0", "€0.00", "€0.00"],
-      ["Amount discounts", "1", "€3.00", "€0.00"],
+      ["Voids", "2", "€25.00", "€37.00"],
+      ["Comps", "2", "€15.00", "€0.00"],
     ]);
     expect(lines("by-stage")).toEqual([
       ["Before firing", "0", "€0.00", "€0.00"],
@@ -243,10 +245,58 @@ describe("the adjustment report", () => {
       ["Whole bill", "1", "€3.00", "€0.00"],
     ]);
     expect(lines("by-reason")).toEqual([
-      ["Entry error", "2", "€25.00", "€37.00"],
-      ["Cold food", "1", "€12.00", "€0.00"],
-      ["Staff meal", "1", "€3.00", "€0.00"],
+      ["Entry error", "2", "€25.00", "€37.00", "Alex (2)", "—"],
+      ["Cold food", "1", "€12.00", "€0.00", "Alex (1)", "Mia (1)"],
+      ["Staff meal", "1", "€3.00", "€0.00", "Sam (1)", "—"],
     ]);
+  });
+
+  /** The people a By reason cell lists, one per line. */
+  function peopleIn(el: AdjustmentReportScreen, reasonRow: number, column: number): string[] {
+    const cell = part(el, "by-reason")!
+      .querySelectorAll("tbody tr")
+      [reasonRow]!.querySelectorAll("th, td")[column]!;
+    return [...cell.querySelectorAll("div")].map((line) => text(line));
+  }
+
+  it("lists a reason's guest requests after its people, and a person the directory no longer holds as unknown", async () => {
+    const gone = "3c4d5e6f-7a8b-4c2d-8e3f-4a5b6c7d8e9f";
+    const report = (from?: string, to?: string) => {
+      const read = fixtureReport(from, to);
+      read.overall.byReason = read.overall.byReason.map((reason) =>
+        reason.reasonId === "r-staff"
+          ? {
+              ...reason,
+              requesters: [...reason.requesters, { personId: gone, name: null, count: 1 }],
+              guestRequests: 1,
+              approvers: [{ personId: gone, name: null, count: 2 }],
+            }
+          : reason,
+      );
+      return read;
+    };
+    const el = await mount(
+      fakeApi({ getReport: vi.fn((range?: Range) => Promise.resolve(answer(report, range))) }),
+    );
+    expect(peopleIn(el, 2, 4)).toEqual(["Sam (1)", "Unknown person (1)", "Guests (1)"]);
+    expect(peopleIn(el, 2, 5)).toEqual(["Unknown person (2)"]);
+    expect(peopleIn(el, 1, 5)).toEqual(["Mia (1)"]);
+  });
+
+  it("heads By reason's two people columns in Spanish, and keeps By action and By stage to four columns", async () => {
+    setLocale("es-ES");
+    const el = await mount(fakeApi());
+    const headings = (test: string) =>
+      [...part(el, test)!.querySelectorAll("thead th")].map((th) => text(th));
+    expect(headings("by-reason").slice(4)).toEqual([
+      ADJUSTMENTS_STRINGS.es["adjustment_report.entries.requested_by"],
+      ADJUSTMENTS_STRINGS.es["adjustment_report.column.approved_by"],
+    ]);
+    expect(headings("by-action")).toHaveLength(4);
+    expect(headings("by-stage")).toHaveLength(4);
+    for (const test of ["by-action", "by-stage"]) {
+      for (const line of breakdown(el, test)) expect(line).toHaveLength(4);
+    }
   });
 
   it("breaks down only the open person's adjustments, under headings that name them", async () => {
@@ -256,10 +306,8 @@ describe("the adjustment report", () => {
     expect(text(part(el, "by-stage-heading"))).toBe("Alex's adjustments by stage");
     expect(text(part(el, "by-reason-heading"))).toBe("Alex's adjustments by reason");
     expect(breakdown(el, "by-action")).toEqual([
-      ["Cancellations", "2", "€25.00", "€37.00"],
-      ["Give-aways", "1", "€12.00", "€0.00"],
-      ["Percentage discounts", "0", "€0.00", "€0.00"],
-      ["Amount discounts", "0", "€0.00", "€0.00"],
+      ["Voids", "2", "€25.00", "€37.00"],
+      ["Comps", "1", "€12.00", "€0.00"],
     ]);
     expect(breakdown(el, "by-stage")).toEqual([
       ["Before firing", "0", "€0.00", "€0.00"],
@@ -268,19 +316,19 @@ describe("the adjustment report", () => {
       ["Whole bill", "0", "€0.00", "€0.00"],
     ]);
     expect(breakdown(el, "by-reason")).toEqual([
-      ["Entry error", "2", "€25.00", "€37.00"],
-      ["Cold food", "1", "€12.00", "€0.00"],
+      ["Entry error", "2", "€25.00", "€37.00", "Alex (2)", "—"],
+      ["Cold food", "1", "€12.00", "€0.00", "Alex (1)", "Mia (1)"],
     ]);
     await open(el, SAM);
     expect(text(part(el, "by-action-heading"))).toBe("Sam's adjustments by action");
     expect(breakdown(el, "by-action")).toEqual([
-      ["Cancellations", "0", "€0.00", "€0.00"],
-      ["Give-aways", "0", "€0.00", "€0.00"],
-      ["Percentage discounts", "0", "€0.00", "€0.00"],
-      ["Amount discounts", "1", "€3.00", "€0.00"],
+      ["Voids", "0", "€0.00", "€0.00"],
+      ["Comps", "1", "€3.00", "€0.00"],
     ]);
     expect(breakdown(el, "by-stage")[3]).toEqual(["Whole bill", "1", "€3.00", "€0.00"]);
-    expect(breakdown(el, "by-reason")).toEqual([["Staff meal", "1", "€3.00", "€0.00"]]);
+    expect(breakdown(el, "by-reason")).toEqual([
+      ["Staff meal", "1", "€3.00", "€0.00", "Sam (1)", "—"],
+    ]);
   });
 
   it("breaks down the guests' adjustments apart, and everyone's again once the list shows everyone or closes", async () => {
@@ -289,7 +337,7 @@ describe("the adjustment report", () => {
     expect(text(part(el, "by-action-heading"))).toBe("Guests' adjustments by action");
     expect(text(part(el, "by-stage-heading"))).toBe("Guests' adjustments by stage");
     expect(text(part(el, "by-reason-heading"))).toBe("Guests' adjustments by reason");
-    expect(breakdown(el, "by-action").map((line) => line[1])).toEqual(["0", "0", "0", "0"]);
+    expect(breakdown(el, "by-action").map((line) => line[1])).toEqual(["0", "0"]);
     expect(part(el, "no-reasons")).not.toBeNull();
     part(el, "show-all")!.click();
     await settle(el);
@@ -301,7 +349,7 @@ describe("the adjustment report", () => {
     expect(text(part(el, "by-action-heading"))).toBe("By action");
     expect(text(part(el, "by-stage-heading"))).toBe("By stage");
     expect(text(part(el, "by-reason-heading"))).toBe("By reason");
-    expect(breakdown(el, "by-action")[3]).toEqual(["Amount discounts", "1", "€3.00", "€0.00"]);
+    expect(breakdown(el, "by-action")[1]).toEqual(["Comps", "2", "€15.00", "€0.00"]);
   });
 
   it("breaks down nothing for an open person the range holds no row for", async () => {
@@ -313,8 +361,17 @@ describe("the adjustment report", () => {
     await open(el, ALEX);
     await pick(el, "from", "2026-09-01");
     expect(text(part(el, "by-action-heading"))).toBe("Alex's adjustments by action");
-    expect(breakdown(el, "by-action").map((line) => line[1])).toEqual(["0", "0", "0", "0"]);
+    expect(breakdown(el, "by-action").map((line) => line[1])).toEqual(["0", "0"]);
     expect(part(el, "no-reasons")).not.toBeNull();
+  });
+
+  it("names the Voids and Comps rows in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mount(fakeApi());
+    expect(breakdown(el, "by-action").map((line) => line[0])).toEqual([
+      kindTotalName("void", "es"),
+      kindTotalName("comp", "es"),
+    ]);
   });
 
   it("names the open person in Spanish breakdown headings", async () => {
@@ -358,6 +415,61 @@ describe("the adjustment report", () => {
     expect(alex[ADJUSTMENTS_STRINGS.es["adjustment_report.column.rate"]]).toBe("4,6 %");
     expect(alex[ADJUSTMENTS_STRINGS.es["adjustment_report.column.reduction"]]).toBe("37,00 €");
     expect(text(part(el, "heading"))).toBe(ADJUSTMENTS_STRINGS.es["adjustment_report.title"]);
+  });
+
+  async function atWidth(width: number, check: () => Promise<void>): Promise<void> {
+    const before = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(width, 800);
+    try {
+      expect(window.innerWidth).toBe(width);
+      await check();
+    } finally {
+      await page.viewport(...before);
+    }
+  }
+
+  it("gives By reason's six columns the whole row on a wide window", async () => {
+    await atWidth(1280, async () => {
+      const el = await mount(fakeApi());
+      const row = el.shadowRoot!.querySelector(".breakdowns")!.getBoundingClientRect();
+      const section = part(el, "by-reason")!.closest("section")!.getBoundingClientRect();
+      expect(section.width).toBeCloseTo(row.width, 0);
+      expect(part(el, "by-action")!.getBoundingClientRect().top).toBeLessThan(section.top);
+    });
+  });
+
+  it.each([1280, 390])(
+    "draws the Reason field as wide as its longest choice, uncut in Spanish, within %i pixels",
+    async (width) => {
+      await atWidth(width, async () => {
+        setLocale("es");
+        const el = await mount(fakeApi());
+        part(el, "show-all")!.click();
+        await settle(el);
+        const field = el.shadowRoot!.querySelector('wt-combobox[name="reason"]')!;
+        const shown = field.shadowRoot!.querySelector<HTMLElement>(".value")!;
+        expect(shown.textContent!.trim()).toBe(
+          ADJUSTMENTS_STRINGS.es["adjustment_report.entries.all_reasons"],
+        );
+        expect(shown.scrollWidth).toBeLessThanOrEqual(shown.clientWidth);
+        const box = field.getBoundingClientRect();
+        expect(box.right).toBeLessThanOrEqual(width + 0.5);
+        expect(box.width).toBeLessThan(part(el, "entries")!.getBoundingClientRect().width / 2);
+      });
+    },
+  );
+
+  it("keeps By reason on a phone's screen, its last column reached by scrolling the table", async () => {
+    await atWidth(390, async () => {
+      const el = await mount(fakeApi());
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+      const table = part(el, "by-reason")!;
+      const box = table.parentElement!;
+      box.scrollLeft = box.scrollWidth;
+      const last = [...table.querySelectorAll("thead th")].at(-1)!.getBoundingClientRect();
+      expect(last.right).toBeLessThanOrEqual(box.getBoundingClientRect().right + 0.5);
+      expect(box.getBoundingClientRect().right).toBeLessThanOrEqual(390.5);
+    });
   });
 });
 
@@ -539,7 +651,7 @@ describe("the drill-down", () => {
     expect(comp.Time).toBe(
       `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}`,
     );
-    expect(comp.Action).toBe("Give away");
+    expect(comp.Action).toBe("Comp 100%");
     expect(comp.When).toBe("After serving");
     expect(comp.Reason).toBe("Cold food");
     expect(comp.Note).toBe("Came out cold");
@@ -551,7 +663,7 @@ describe("the drill-down", () => {
     expect(comp["Approved by"]).toBe("Mia");
     expect(comp.Order).toBe("40");
     const cancel = list[1]!.cells;
-    expect(cancel.Action).toBe("Cancel");
+    expect(cancel.Action).toBe("Void");
     expect(cancel["Taken off"]).toBe("€0.00");
     expect(cancel["List value"]).toBe("€12.00");
     expect(cancel.Note).toBe("—");
@@ -576,18 +688,78 @@ describe("the drill-down", () => {
     expect(api.listEntries).toHaveBeenCalledWith("2026-09-29", "2026-09-29", "everyone");
     expect(text(part(el, "entries-heading"))).toBe("Every adjustment");
     const cells = row(part(el, "entries")!, "e4");
-    expect(cells.Action).toBe("Amount discount");
+    expect(cells.Action).toBe("Comp €3.00");
     expect(cells.When).toBe("Whole bill");
     expect(cells.Item).toBe("Whole bill");
     expect(cells.Quantity).toBe("—");
   });
 
-  it("writes a percentage discount's percentage beside its action", async () => {
+  it("writes a percentage comp's percentage after Comp", async () => {
     const entry = { ...samEntry(), action: "discount_percent" as const, percentBp: 1250 };
     const el = await mount(fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([entry])) }));
     part(el, "show-all")!.click();
     await settle(el);
-    expect(row(part(el, "entries")!, "e4").Action).toBe("Percentage discount (12.5%)");
+    expect(row(part(el, "entries")!, "e4").Action).toBe("Comp 12.5%");
+  });
+
+  it("calls an amount comp that took the item's whole list value Comp 100%, and one that took less by its amount", async () => {
+    const whole = {
+      ...samEntry(),
+      id: "whole",
+      beforeAmount: "12.00",
+      afterAmount: "0.00",
+      reduction: "12.00",
+      nominalValue: "12.00",
+    };
+    const rest = {
+      ...samEntry(),
+      id: "rest",
+      beforeAmount: "6.00",
+      afterAmount: "0.00",
+      reduction: "6.00",
+      nominalValue: "12.00",
+    };
+    const el = await mount(
+      fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([whole, rest])) }),
+    );
+    part(el, "show-all")!.click();
+    await settle(el);
+    expect(row(part(el, "entries")!, "whole").Action).toBe("Comp 100%");
+    expect(row(part(el, "entries")!, "rest").Action).toBe("Comp €6.00");
+  });
+
+  it("calls a 100% percentage comp Comp 100%", async () => {
+    const entry = { ...samEntry(), action: "discount_percent" as const, percentBp: 10000 };
+    const el = await mount(fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([entry])) }));
+    part(el, "show-all")!.click();
+    await settle(el);
+    expect(row(part(el, "entries")!, "e4").Action).toBe("Comp 100%");
+  });
+
+  it("writes each entry's words in Spanish", async () => {
+    setLocale("es-ES");
+    const percent = new Intl.NumberFormat("es", { style: "percent", maximumFractionDigits: 2 });
+    // The cells are read through `text`, which turns the formatters' non-breaking spaces into spaces.
+    const comp = (amount: string) =>
+      tf("adjustment_report.entries.comp", { amount }, "es").replace(/\s+/g, " ");
+    const percentage = {
+      ...samEntry(),
+      id: "e5",
+      action: "discount_percent" as const,
+      percentBp: 2000,
+    };
+    const el = await mount(
+      fakeApi({
+        listEntries: vi.fn().mockResolvedValue(onePage([...alexEntries(), samEntry(), percentage])),
+      }),
+    );
+    part(el, "show-all")!.click();
+    await settle(el);
+    const action = (key: string) => Object.values(row(part(el, "entries")!, key))[1];
+    expect(action("e3")).toBe(ADJUSTMENTS_STRINGS.es["adjustment_report.entries.void"]);
+    expect(action("e1")).toBe(comp(percent.format(1)));
+    expect(action("e4")).toBe(comp(formatMoney("3.00", "es")));
+    expect(action("e5")).toBe(comp(percent.format(0.2)));
   });
 
   it("lists the guests' adjustments, and says so in words when there are none", async () => {
@@ -1117,7 +1289,7 @@ describe("sorting and columns", () => {
     await settle(el);
     const orders: [string, string[]][] = [
       ["time", ["e1", "e2", "e3", "e4"]],
-      ["action", ["e4", "e3", "e2", "e1"]],
+      ["action", ["e4", "e1", "e3", "e2"]],
       ["reason", ["e1", "e3", "e2", "e4"]],
       ["reduction", ["e2", "e4", "e1", "e3"]],
       ["listValue", ["e2", "e1", "e4", "e3"]],
@@ -1127,6 +1299,17 @@ describe("sorting and columns", () => {
       await sortBy(el, "entries", key);
       expect(keys(part(el, "entries")!), key).toEqual(order);
     }
+  });
+
+  it("sorts the listed adjustments by the words in the Action column", async () => {
+    const [cancel, , comp] = alexEntries();
+    const el = await mount(
+      fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([cancel!, comp!])) }),
+    );
+    part(el, "show-all")!.click();
+    await settle(el);
+    await sortBy(el, "entries", "action");
+    expect(keys(part(el, "entries")!)).toEqual(["e1", "e3"]);
   });
 
   it("shows whom each adjustment's item was credited to once that column is chosen", async () => {
@@ -1237,5 +1420,207 @@ describe("live data", () => {
     expect(api.getReport).toHaveBeenCalledTimes(1);
     expect(api.listEntries).toHaveBeenCalledTimes(1);
     liveData.clear();
+  });
+});
+
+describe("the reason filter", () => {
+  type ReasonField = HTMLElement & {
+    value: string;
+    label: string;
+    options: { value: string; label: string }[];
+  };
+  const DAY = ["2026-09-29", "2026-09-29"] as const;
+  const staffMeal = () => ({
+    ...samEntry(),
+    approvedBy: { personId: MIA, name: "Mia" },
+  });
+
+  function reasonField(el: AdjustmentReportScreen): ReasonField {
+    return el.shadowRoot!.querySelector<ReasonField>('wt-combobox[name="reason"]')!;
+  }
+
+  async function chooseReason(el: AdjustmentReportScreen, value: string): Promise<void> {
+    await chooseOption(reasonField(el), value);
+    await settle(el);
+  }
+
+  async function showAll(el: AdjustmentReportScreen): Promise<void> {
+    part(el, "show-all")!.click();
+    await settle(el);
+  }
+
+  const entriesTable = (el: AdjustmentReportScreen) =>
+    part(el, "entries") as HTMLElement & { emptyMessage: string };
+
+  it("offers every reason the report counted, by name, after All reasons", async () => {
+    const el = await mount(fakeApi());
+    await showAll(el);
+    const field = reasonField(el);
+    expect(field).not.toBeNull();
+    expect(field.label).toBe("Reason");
+    expect(field.value).toBe("all");
+    expect(field.options.map((option) => option.label)).toEqual([
+      "All reasons",
+      "Cold food",
+      "Entry error",
+      "Staff meal",
+    ]);
+  });
+
+  it("Staff meal lists every staff meal with who gave it and who approved it", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await showAll(el);
+    api.listEntries.mockResolvedValue(onePage([staffMeal()]));
+    await chooseReason(el, "r-staff");
+    expect(api.listEntries).toHaveBeenLastCalledWith(...DAY, "everyone", { reasonId: "r-staff" });
+    const list = rows(part(el, "entries")!);
+    expect(list.map((each) => each.key)).toEqual(["e4"]);
+    expect(list[0]!.cells.Reason).toBe("Staff meal");
+    expect(list[0]!.cells["Requested by"]).toBe("Sam");
+    expect(list[0]!.cells["Approved by"]).toBe("Mia");
+  });
+
+  it("asks every further page, and every live read, for the chosen reason", async () => {
+    const liveData = new LiveData();
+    const refresh = fakeApi({
+      listEntries: vi.fn((_f: string, _t: string, _o: unknown, page?: { after?: string }) =>
+        Promise.resolve(
+          page?.after === "cx"
+            ? { entries: [staffMeal()], next: null }
+            : {
+                entries: [{ ...staffMeal(), id: "e6", createdAt: "2026-09-29T21:30:00.000Z" }],
+                next: "cx",
+              },
+        ),
+      ),
+    });
+    const api = fakeApi({
+      liveData,
+      listEntries: vi.fn((_f: string, _t: string, _o: unknown, page?: { after?: string }) =>
+        Promise.resolve(
+          page?.after === "c1" ? onePage([staffMeal()]) : { entries: alexEntries(), next: "c1" },
+        ),
+      ),
+    });
+    api.background = refresh;
+    const el = await mount(api);
+    await showAll(el);
+    await chooseReason(el, "r-staff");
+    part(el, "show-more")!.click();
+    await settle(el);
+    expect(api.listEntries).toHaveBeenLastCalledWith(...DAY, "everyone", {
+      after: "c1",
+      reasonId: "r-staff",
+    });
+    liveData.invalidate([{ type: "adjustments" }]);
+    await vi.waitFor(() => expect(refresh.listEntries).toHaveBeenCalledTimes(2));
+    await settle(el);
+    expect(refresh.listEntries.mock.calls).toEqual([
+      [...DAY, "everyone", { reasonId: "r-staff" }],
+      [...DAY, "everyone", { after: "cx", limit: 499, reasonId: "r-staff" }],
+    ]);
+    liveData.clear();
+  });
+
+  it("asks for every reason again, with no options, once All reasons is chosen", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await showAll(el);
+    await chooseReason(el, "r-staff");
+    await chooseReason(el, "all");
+    expect(api.listEntries.mock.lastCall).toEqual([...DAY, "everyone"]);
+    expect(reasonField(el).value).toBe("all");
+  });
+
+  it("keeps the choice for another person's list, and starts at All reasons once the list is closed", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await showAll(el);
+    await chooseReason(el, "r-staff");
+    await open(el, SAM);
+    expect(api.listEntries).toHaveBeenLastCalledWith(
+      ...DAY,
+      { personId: SAM },
+      { reasonId: "r-staff" },
+    );
+    expect(reasonField(el).value).toBe("r-staff");
+    part(el, "close-entries")!.click();
+    await settle(el);
+    await showAll(el);
+    expect(reasonField(el).value).toBe("all");
+    expect(api.listEntries.mock.lastCall).toEqual([...DAY, "everyone"]);
+  });
+
+  it("keeps a reason the new range does not hold, and says no row matches it", async () => {
+    const getReport = vi
+      .fn()
+      .mockImplementationOnce((range?: Range) => Promise.resolve(answer(fixtureReport, range)))
+      .mockImplementation((range?: Range) => Promise.resolve(answer(emptyReport, range)));
+    const api = fakeApi({ getReport });
+    const el = await mount(api);
+    await showAll(el);
+    await chooseReason(el, "r-staff");
+    api.listEntries.mockResolvedValue(onePage([]));
+    await pick(el, "from", "2026-09-01");
+    expect(api.listEntries).toHaveBeenLastCalledWith("2026-09-01", "2026-09-29", "everyone", {
+      reasonId: "r-staff",
+    });
+    expect(reasonField(el).value).toBe("r-staff");
+    expect(reasonField(el).options).toEqual([
+      { value: "all", label: "All reasons" },
+      { value: "r-staff", label: "Staff meal" },
+    ]);
+    expect(entriesTable(el).emptyMessage).toBe(tableNoMatches());
+    await chooseReason(el, "all");
+    expect(entriesTable(el).emptyMessage).toBe("No adjustments on these days.");
+  });
+
+  it("keeps the choice's change inside the screen", async () => {
+    const el = await mount(fakeApi());
+    await showAll(el);
+    const heard = vi.fn();
+    document.addEventListener("wt-change", heard);
+    try {
+      await chooseReason(el, "r-staff");
+    } finally {
+      document.removeEventListener("wt-change", heard);
+    }
+    expect(heard).not.toHaveBeenCalled();
+  });
+
+  it("names the field and All reasons in Spanish", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi());
+    await showAll(el);
+    expect(reasonField(el).label).toBe(ADJUSTMENTS_STRINGS.es["adjustment_report.column.reason"]);
+    expect(reasonField(el).options[0]!.label).toBe(
+      ADJUSTMENTS_STRINGS.es["adjustment_report.entries.all_reasons"],
+    );
+  });
+
+  it("words the search box of a long reason list, and its no-match line, in Spanish", async () => {
+    setLocale("es");
+    const manyReasons = (from?: string, to?: string) => {
+      const report = fixtureReport(from, to);
+      const model = report.overall.byReason[0]!;
+      for (const n of [1, 2, 3, 4, 5]) {
+        report.overall.byReason.push({ ...model, reasonId: `r-${n}`, reasonName: `Reason ${n}` });
+      }
+      return report;
+    };
+    const el = await mount(
+      fakeApi({ getReport: vi.fn((range?: Range) => Promise.resolve(answer(manyReasons, range))) }),
+    );
+    await showAll(el);
+    const field = reasonField(el) as ReasonField & { updateComplete: Promise<unknown> };
+    expect(field.options.length).toBeGreaterThan(7);
+    await userEvent.click(field);
+    await field.updateComplete;
+    const search = field.shadowRoot!.querySelector<HTMLInputElement>("input.search")!;
+    expect(search.placeholder).toBe(t("adjustments.search", "es"));
+    await userEvent.fill(search, "zzz");
+    await field.updateComplete;
+    expect(text(field.shadowRoot!.querySelector(".empty"))).toBe(t("adjustments.no_results", "es"));
   });
 });

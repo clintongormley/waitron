@@ -48,8 +48,22 @@ const alexTotals: AdjustmentTotals = {
     billDiscount: none,
   },
   byReason: [
-    { reasonId: "r-mistake", reasonName: "Entry error", ...tally(2, "25.00", "37.00") },
-    { reasonId: "r-cold", reasonName: "Cold food", ...tally(1, "12.00", "0.00") },
+    {
+      reasonId: "r-mistake",
+      reasonName: "Entry error",
+      ...tally(2, "25.00", "37.00"),
+      requesters: [{ personId: ALEX, name: "Alex", count: 2 }],
+      guestRequests: 0,
+      approvers: [],
+    },
+    {
+      reasonId: "r-cold",
+      reasonName: "Cold food",
+      ...tally(1, "12.00", "0.00"),
+      requesters: [{ personId: ALEX, name: "Alex", count: 1 }],
+      guestRequests: 0,
+      approvers: [{ personId: MIA, name: "Mia", count: 1 }],
+    },
   ],
 };
 
@@ -67,7 +81,16 @@ const samTotals: AdjustmentTotals = {
     afterServing: none,
     billDiscount: tally(1, "3.00", "0.00"),
   },
-  byReason: [{ reasonId: "r-staff", reasonName: "Staff meal", ...tally(1, "3.00", "0.00") }],
+  byReason: [
+    {
+      reasonId: "r-staff",
+      reasonName: "Staff meal",
+      ...tally(1, "3.00", "0.00"),
+      requesters: [{ personId: SAM, name: "Sam", count: 1 }],
+      guestRequests: 0,
+      approvers: [],
+    },
+  ],
 };
 
 export function fixtureReport(from = "2026-09-29", to = from): AdjustmentReport {

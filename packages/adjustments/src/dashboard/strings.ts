@@ -93,6 +93,7 @@ const en = {
     "A venue keeps at least one Void reason that asks for a note.",
   "adjustments.load_error": "The voids and comps could not be loaded.",
   "adjustments.no_matches": "Nothing matches your search.",
+  "adjustments.no_results": "No results",
   "adjustments.reorder_error": "The new order could not be saved.",
   "adjustments.limit.heading": "Limit on a bill's comps",
   "adjustments.limit.field": "Most comped on one bill",
@@ -106,7 +107,7 @@ const en = {
   "nav.adjustment_report": "Adjustment report",
   "adjustment_report.title": "Adjustment report",
   "adjustment_report.intro":
-    "Counts the cancellations, give-aways and discounts on the bills opened on these business days. A person's rate is what their own adjustments took off, as a share of the sales credited to them at prices before any adjustment.",
+    "Counts the voids and comps on the bills opened on these business days. A person's rate is what their own adjustments took off, as a share of the sales credited to them at prices before any adjustment.",
   "adjustment_report.from": "From",
   "adjustment_report.to": "To",
   "adjustment_report.range_backwards": "Choose a first day on or before the last day.",
@@ -150,6 +151,7 @@ const en = {
   "adjustment_report.entries.person": "Adjustments by {name}",
   "adjustment_report.entries.guests": "Adjustments by guests",
   "adjustment_report.entries.everyone": "Every adjustment",
+  "adjustment_report.entries.all_reasons": "All reasons",
   "adjustment_report.entries.close": "Close the list",
   "adjustment_report.entries.error": "These adjustments could not be loaded: {reason}",
   "adjustment_report.entries.time": "Time",
@@ -159,6 +161,8 @@ const en = {
   "adjustment_report.entries.quantity": "Quantity",
   "adjustment_report.entries.list_value": "List value",
   "adjustment_report.entries.requested_by": "Requested by",
+  "adjustment_report.entries.void": "Void",
+  "adjustment_report.entries.comp": "Comp {amount}",
   "adjustment_report.entries.credited_to": "Credited to",
   "adjustment_report.entries.order": "Order",
   "adjustment_report.entries.guest": "Guest",
@@ -253,6 +257,7 @@ const es: Record<keyof typeof en, string> = {
     "El local necesita al menos un motivo de cancelación que pida una nota.",
   "adjustments.load_error": "No se pudieron cargar las cancelaciones y descuentos.",
   "adjustments.no_matches": "Nada coincide con tu búsqueda.",
+  "adjustments.no_results": "Sin resultados",
   "adjustments.reorder_error": "No se pudo guardar el nuevo orden.",
   "adjustments.limit.heading": "Límite de descuentos por cuenta",
   "adjustments.limit.field": "Máximo descontado en una cuenta",
@@ -267,7 +272,7 @@ const es: Record<keyof typeof en, string> = {
   "nav.adjustment_report": "Informe de ajustes",
   "adjustment_report.title": "Informe de ajustes",
   "adjustment_report.intro":
-    "Cuenta las anulaciones, invitaciones y descuentos de las cuentas abiertas en estas jornadas. La tasa de cada persona es lo que descontaron sus propios ajustes, en proporción a las ventas que se le atribuyen a precios anteriores a cualquier ajuste.",
+    "Cuenta las cancelaciones y descuentos de las cuentas abiertas en estas jornadas. La tasa de cada persona es lo que descontaron sus propios ajustes, en proporción a las ventas que se le atribuyen a precios anteriores a cualquier ajuste.",
   "adjustment_report.from": "Desde",
   "adjustment_report.to": "Hasta",
   "adjustment_report.range_backwards": "Elige un primer día igual o anterior al último.",
@@ -311,6 +316,7 @@ const es: Record<keyof typeof en, string> = {
   "adjustment_report.entries.person": "Ajustes de {name}",
   "adjustment_report.entries.guests": "Ajustes de los clientes",
   "adjustment_report.entries.everyone": "Todos los ajustes",
+  "adjustment_report.entries.all_reasons": "Todos los motivos",
   "adjustment_report.entries.close": "Cerrar la lista",
   "adjustment_report.entries.error": "No se pudieron cargar estos ajustes: {reason}",
   "adjustment_report.entries.time": "Hora",
@@ -320,6 +326,8 @@ const es: Record<keyof typeof en, string> = {
   "adjustment_report.entries.quantity": "Cantidad",
   "adjustment_report.entries.list_value": "Valor de carta",
   "adjustment_report.entries.requested_by": "Solicitado por",
+  "adjustment_report.entries.void": "Cancelado",
+  "adjustment_report.entries.comp": "Descuento {amount}",
   "adjustment_report.entries.credited_to": "Atribuido a",
   "adjustment_report.entries.order": "Pedido",
   "adjustment_report.entries.guest": "Cliente",
@@ -351,14 +359,6 @@ export function tf(key: StringKey, values: Record<string, string>, locale?: stri
   return t(key, locale).replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);
 }
 
-/** The short name a list shows for each action. */
-const ACTION_NAMES: NameTable = {
-  cancel: { en: "Cancel", es: "Anular" },
-  comp: { en: "Give away", es: "Invitación" },
-  discount_percent: { en: "Percentage discount", es: "Descuento en porcentaje" },
-  discount_amount: { en: "Amount discount", es: "Descuento en importe" },
-};
-
 /** How the editor's checkboxes name a Comp reason's offers. */
 const ACTION_CHOICES: NameTable = {
   comp: { en: "Free (100%)", es: "Gratis (100 %)" },
@@ -371,12 +371,10 @@ const KIND_NAMES: NameTable = {
   comp: { en: "Comp", es: "Descuento" },
 };
 
-/** How a report heads each action's total. */
-const ACTION_TOTALS: NameTable = {
-  cancel: { en: "Cancellations", es: "Anulaciones" },
-  comp: { en: "Give-aways", es: "Invitaciones" },
-  discount_percent: { en: "Percentage discounts", es: "Descuentos en porcentaje" },
-  discount_amount: { en: "Amount discounts", es: "Descuentos en importe" },
+/** How a report heads each kind's total. */
+const KIND_TOTALS: NameTable = {
+  void: { en: "Voids", es: "Cancelaciones" },
+  comp: { en: "Comps", es: "Descuentos" },
 };
 
 /** How far an item had got when it was adjusted; a whole-bill discount has no item. */
@@ -394,10 +392,6 @@ const ROLE_NAMES: NameTable = {
   admin: { en: "Admin", es: "Administrador" },
 };
 
-export function actionName(action: string, locale?: string): string {
-  return resolveNameTable(ACTION_NAMES, action, locale);
-}
-
 export function actionChoice(action: string, locale?: string): string {
   return resolveNameTable(ACTION_CHOICES, action, locale);
 }
@@ -410,8 +404,8 @@ export function roleName(role: string, locale?: string): string {
   return resolveNameTable(ROLE_NAMES, role, locale);
 }
 
-export function actionTotalName(action: string, locale?: string): string {
-  return resolveNameTable(ACTION_TOTALS, action, locale);
+export function kindTotalName(kind: string, locale?: string): string {
+  return resolveNameTable(KIND_TOTALS, kind, locale);
 }
 
 export function stageName(stage: string, locale?: string): string {

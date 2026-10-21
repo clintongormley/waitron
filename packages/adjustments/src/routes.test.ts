@@ -794,7 +794,11 @@ describe("adjustment report routes", () => {
 
   it("refuses a staff member without report.view, and a request with no session", async () => {
     const fx = await reportFixture();
-    for (const path of [`${REPORT}?${DAY}`, `${ENTRIES}?${DAY}`]) {
+    for (const path of [
+      `${REPORT}?${DAY}`,
+      `${ENTRIES}?${DAY}`,
+      `${ENTRIES}?${DAY}&reasonId=${MISSING}`,
+    ]) {
       const refused = await send(fx.app, "GET", path, fx.cookie.staff);
       expect(refused.status, path).toBe(403);
       expect(await refused.json()).toEqual({
@@ -852,6 +856,59 @@ describe("adjustment report routes", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       error: { code: "shared.invalid_id", params: { kind: "PersonId", value: "not-a-uuid" } },
+    });
+  });
+
+  it("drills down to one reason's rows, its id read in any case", async () => {
+    const fx = await reportFixture();
+    const other = await seedReason(db);
+    const othersId = await withTransaction(db, (tx) =>
+      recordAdjustment(tx, {
+        workingOrderId: fx.billId,
+        line: null,
+        quantity: null,
+        reason: { id: other.id, name: other.name, policy: policySnapshotOf(other) },
+        action: "discount_amount",
+        percentBp: null,
+        beforeAmount: decimal("15.00"),
+        afterAmount: decimal("14.00"),
+        reduction: decimal("1.00"),
+        nominalValue: decimal("15.00"),
+        requestedBy: fx.supervisorId,
+        approvedBy: null,
+        note: null,
+        byGuest: false,
+      }),
+    );
+
+    const response = await send(
+      fx.app,
+      "GET",
+      `${ENTRIES}?${DAY}&reasonId=${other.id.toUpperCase()}`,
+      fx.cookie.manager,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      entries: [expect.objectContaining({ id: othersId, reasonId: other.id })],
+      next: null,
+    });
+  });
+
+  it.each<[string, string]>([
+    ["not-a-uuid", "not-a-uuid"],
+    ["", "empty"],
+  ])("refuses a drill-down whose reason id is %j (%s)", async (value) => {
+    const fx = await reportFixture();
+    const response = await send(
+      fx.app,
+      "GET",
+      `${ENTRIES}?${DAY}&reasonId=${value}`,
+      fx.cookie.manager,
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "shared.invalid_id", params: { kind: "AdjustmentReasonId", value } },
     });
   });
 
