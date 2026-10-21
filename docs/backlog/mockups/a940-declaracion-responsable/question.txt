@@ -26,9 +26,9 @@ Example: the deli goes live on version 1.0.0. Its declaration says «Nombre y ap
 productora: <your name>», then your NIF, then the address you choose, and every record the deli
 files carries your name and NIF as the software's producer. In 2027 a Waitron company exists;
 release 1.4.0 names it, and from that release every new record carries the company's NIF instead —
-part-way through the deli's running chain of records. AEAT's developer FAQ counts the producer's
-NIF as part of the system's identity, and says a change in that identity makes it a different
-system. So the switch most likely means a new installation number and a new chain of records at
+part-way through the deli's running chain of records. AEAT's developer FAQ ties the producer's NIF
+to the system's two-character code «como si formara parte de él», and says a change in the
+system's identity makes it a different system. So the switch most likely means a new installation number and a new chain of records at
 every venue running then — today that would be the deli alone. The asesor confirms the cost.
 
 - A (recommended) — you personally, now: your name, your NIF, and a postal address you are content
@@ -62,8 +62,9 @@ Veri*Factu" is a legal reading.
 ----------------------------------------------------------------------------------------------------
 Question 3 of 4 — the wording
 
-The item headings are AEAT's own worked example, word for word (the title is the law's own). The
-parts that are ours:
+The item headings are AEAT's own worked example, word for word, with three small departures: the
+title is the law's own wording, the annex says «persona productora» as the main items do, and the
+annex leaves out the long "how we comply" item. The parts that are ours:
 
 (a) name: «Waitron» (today the records say "Waitron POS"; they change to match)
 
@@ -71,7 +72,8 @@ parts that are ours:
 en un equipo servidor del propio usuario, situado en su establecimiento, y los terminales del
 establecimiento se conectan a él por la red local.» Then its parts: the server (makes, chains,
 keeps and sends the invoice records), the @waitron/verifactu library with its version and its own
-declaration (it builds each record, its fingerprint and QR code, and sends it), the till,
+declaration (it builds each record, its fingerprint and the QR code's contents, and sends the
+record), the till,
 handheld, kitchen-screen and dashboard apps («Los terminales no generan registros de
 facturación»), the print agent, and the outside parts we take responsibility for (Node.js with
 SQLite, Litestream, Linux with Docker; the full list is on the box). Optional services of ours

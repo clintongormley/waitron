@@ -193,8 +193,9 @@ example's, word for word**: the example is AEAT's own rendering of art. 15.1's i
 rather than giving a heading to copy, and adds explanatory sentences to several items that are
 not headings. Three departures, each deliberate: the title is the Orden's exact wording (art. 15.1
 fixes it); the person-producer wording of the example's footnote i, which the footnote applies to
-items h)–l), is also applied to the annex headings, by our choice; and the annex has no item 2.d)
-(the example has none either).
+items h)–l), is also applied to the annex headings, by our choice; and the annex leaves out the
+example's item 2.c) (see the choices below). Items are labelled «1.a)» to «1.l)», as the example
+labels them.
 
 Values marked ‹…› are filled in later: the producer's facts by the owner (question 1, §11), and
 the version, the library version, the functions list and the date by the release step (§5). Where
@@ -205,16 +206,16 @@ draft below is written for a person, because that is the producer today
 
 > **DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN**
 >
-> **a) Nombre del sistema informático a que se refiere esta declaración responsable:**
+> **1.a) Nombre del sistema informático a que se refiere esta declaración responsable:**
 > Waitron
 >
-> **b) Código identificador del sistema informático a que se refiere el apartado a) de esta
+> **1.b) Código identificador del sistema informático a que se refiere el apartado a) de esta
 > declaración responsable:** W1
 >
-> **c) Identificador completo de la versión concreta del sistema informático a que se refiere
+> **1.c) Identificador completo de la versión concreta del sistema informático a que se refiere
 > esta declaración responsable:** ‹1.0.0›
 >
-> **d) Componentes, hardware y software, de que consta el sistema informático a que se refiere
+> **1.d) Componentes, hardware y software, de que consta el sistema informático a que se refiere
 > esta declaración responsable, junto con una breve descripción de lo que hace dicho sistema
 > informático y de sus principales funcionalidades:**
 >
@@ -228,8 +229,8 @@ draft below is written for a person, because that is the producer today
 >   Agencia Tributaria.
 > - La biblioteca @waitron/verifactu, versión ‹x.y.z›, del mismo productor y con su propia
 >   declaración responsable. El servidor la usa en cada registro de facturación para formar el
->   registro, calcular su huella, generar el código QR de la factura y remitirlo a la Agencia
->   Tributaria.
+>   registro, calcular su huella, componer el contenido del código QR de la factura y remitir el
+>   registro a la Agencia Tributaria.
 > - Las aplicaciones de caja, terminal de mano, pantalla de cocina y panel de gestión, que el
 >   servidor sirve a un navegador web. Los terminales no generan registros de facturación.
 > - El agente de impresión, que envía tickets y facturas a las impresoras.
@@ -253,15 +254,15 @@ draft below is written for a person, because that is the producer today
 >
 > Cada instalación lleva la facturación de un único obligado tributario.
 >
-> **e) Indicación de si el sistema informático a que se refiere esta declaración responsable se
+> **1.e) Indicación de si el sistema informático a que se refiere esta declaración responsable se
 > ha producido de tal manera que, a los efectos de cumplir con el Reglamento, solo pueda
 > funcionar exclusivamente como «VERI\*FACTU»:** S - Sí
 >
-> **f) Indicación de si el sistema informático a que se refiere la declaración responsable
+> **1.f) Indicación de si el sistema informático a que se refiere la declaración responsable
 > permite ser usado por varios obligados tributarios o por un mismo usuario para dar soporte a la
 > facturación de varios obligados tributarios:** N - No
 >
-> **g) Tipos de firma utilizados para firmar los registros de facturación y de evento en el caso
+> **1.g) Tipos de firma utilizados para firmar los registros de facturación y de evento en el caso
 > de que el sistema informático a que se refiere esta declaración responsable no sea utilizado
 > como «VERI\*FACTU».** Dado que se trata de un producto de facturación que solo puede ser
 > utilizado exclusivamente en la modalidad de «VERI\*FACTU», no se realiza una firma electrónica
@@ -269,17 +270,17 @@ draft below is written for a person, because that is the producer today
 > firmados al ser remitidos correctamente a los servicios electrónicos de la Agencia Tributaria
 > con la debida autenticación mediante el adecuado certificado electrónico cualificado.
 >
-> **h) Nombre y apellidos de la persona productora del sistema informático a que se refiere
+> **1.h) Nombre y apellidos de la persona productora del sistema informático a que se refiere
 > esta declaración responsable:** ‹nombre y apellidos›
 >
-> **i) Número de identificación fiscal (NIF) español de la persona productora del sistema
+> **1.i) Número de identificación fiscal (NIF) español de la persona productora del sistema
 > informático a que se refiere esta declaración responsable:** ‹NIF›
 >
-> **j) Dirección postal completa de contacto de la persona productora del sistema informático a
+> **1.j) Dirección postal completa de contacto de la persona productora del sistema informático a
 > que se refiere esta declaración responsable:** ‹calle, número, código postal, localidad
 > (provincia), España›
 >
-> **k)** La persona productora del sistema informático a que se refiere esta declaración
+> **1.k)** La persona productora del sistema informático a que se refiere esta declaración
 > responsable hace constar que dicho sistema informático, en la versión indicada en ella, cumple
 > con lo dispuesto en el artículo 29.2.j) de la Ley 58/2003, de 17 de diciembre, General
 > Tributaria, en el Reglamento que establece los requisitos que deben adoptar los sistemas y
@@ -289,7 +290,7 @@ draft below is written for a person, because that is the producer today
 > y en la sede electrónica de la Agencia Estatal de Administración Tributaria para todo aquello
 > que complete las especificaciones de dicha orden.
 >
-> **l)**
+> **1.l)**
 > - Fecha en que la persona productora de este sistema informático suscribe esta declaración
 >   responsable del mismo: ‹día› de ‹mes› de ‹año›.
 > - Lugar en que la persona productora de este sistema informático suscribe esta declaración
@@ -477,8 +478,9 @@ The More menu (≡) is always drawn on these, because Find bill always lives in 
 (`apps/till/src/till-app.ts:17232-17240`, `apps/till/src/widgets/till-shell.ts:501`). On a tablet
 or wide handheld Log out sits in the operator menu, opened from the signed-in person's name; at
 phone width the operator's items, Log out included, are laid out inside More
-(`till-shell.ts:495`, `:869`). So **About Waitron** goes in More, as its last entry, and is found in
-the same place at every width. It opens the same sheet. (Picture 3.)
+(`till-shell.ts:495`, `:868`). So **About Waitron** goes in More, as its very last entry (after the
+language chooser when a narrow bar moves that into More), and is found in the same place at every
+width. It opens the same sheet. (Picture 3.)
 
 ### 6.4 Kitchen screen, and a till before sign-in
 
@@ -578,7 +580,7 @@ Each slice is one pull request.
 | --- | --- | --- |
 | 1 | `software-identity.ts`; the records carry the producer (not the taxpayer), the name "Waitron", the release's version, and the flags question 2 settles; the cancellation reader and the drain's grouping keep the taxpayer's name | FULL, **fiscal: the owner lands it** |
 | 2 | The template, `functions.md`, the renderer, the "agree" and "headings" guards, `pnpm release prepare` and `tag`, and the release runbook | FULL |
-| 3 | `/legal/declaration` (HTML, PDF, plain text) in every mode and on the landing and recovery listeners; About Waitron on the dashboard, the till's More and operator menus, the ⓘ corners and the setup wizard; guides in English and Spanish | LIGHT |
+| 3 | `/legal/declaration` (HTML, PDF, plain text) in every mode and on the landing and recovery listeners; About Waitron on the dashboard, the till's More menu, the ⓘ corners and the setup wizard; guides in English and Spanish | LIGHT |
 | 4 | CI on a `v*` tag: the version and the rendered declaration in the image, the PDF and text on the GitHub Release; `waitron.sh install v<version>` pulls the published image; production refuses an unreleased build; the "never changes" guard | FULL (the box's start path) |
 | 5 | The box keeps every version's declaration it has run, and the About page lists them | FULL (adds a migration) |
 | 6 | `@waitron/verifactu`'s own declaration, one per library release, in `waitron-io/verifactu` | That repository's own flow |
@@ -594,13 +596,15 @@ One at a time, each with a worked example; the full text is in the mock-ups fold
 
 1. **Who is the producer on the first declaration, and what tax number and address does it
    publish?** It goes on every box and on the public GitHub page, and the name and tax number go
-   into every invoice record AEAT receives. AEAT's developer FAQ counts the producer's NIF as part
-   of the system's identity, and says a change in that identity makes it a different system
-   (`docs/compliance/verifactu-faq-notes.md` §1–2, FAQ §4 pp. 9–10). So switching to a company
+   into every invoice record AEAT receives. AEAT's developer FAQ identifies a system by the
+   taxpayer's NIF, the two-character code and the installation number, says a change in any of
+   them makes it a different system, and ties the producer's NIF to the two-character code «como
+   si formara parte de él»; an installation number may never be reused
+   (`docs/compliance/verifactu-faq-notes.md` §1–3, FAQ §4). Read together, switching to a company
    later most likely means a new installation number and a new chain at every venue running then.
    Recommended: you personally, now, because until the company exists the only venue is your own
    deli, and a new installation there is a path the box already has (re-registering a filing node
-   starts a new chain, CLAUDE.md §5); the asesor confirms what
+   with a newly issued identity starts a new chain, CLAUDE.md §5); the asesor confirms what
    the switch costs. The alternative is to form the company before the first release.
 2. **The two yes/no answers:** "only Veri\*Factu" = S and "several taxpayers" = N. Recommended:
    as drafted, and ask the asesor to confirm both in the next batch, including whether the UK's
@@ -628,7 +632,7 @@ One at a time, each with a worked example; the full text is in the mock-ups fold
 | AEAT FAQ, «Certificación de los sistemas informáticos: declaración responsable», labelled «Actualizadas a 21 de octubre de 2026» | https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/preguntas-frecuentes/certificacion-sistemas-informaticos-declaracion-responsable.html | Every version; no signature; inside and outside; keep all; item e); hardware; components; the two-character code |
 | AEAT FAQ, general (sanction) | https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/preguntas-frecuentes.html | €1,000 per system without a declaration |
 | Orden HAC/1177/2024, art. 15 and annex block 2.6 (consolidated text, last updated 28/10/2024; the annex is published as images and was read by eye) | https://www.boe.es/buscar/act.php?id=BOE-A-2024-22138 | Title, items a)–l), annex 2.a)–d), where it must be, the records' twin fields |
-| AEAT developer FAQ §4, as indexed in the repository | `docs/compliance/verifactu-faq-notes.md` §1–2 | The producer's NIF as part of the system's identity (question 1) |
+| AEAT developer FAQ §4, as indexed in the repository | `docs/compliance/verifactu-faq-notes.md` §1–3 | The producer's NIF as part of the system's identity (question 1) |
 | Real Decreto 1007/2023, art. 13 (consolidated text, last updated 03/12/2025) | https://www.boe.es/buscar/act.php?id=BOE-A-2023-24840 | Who, every version, keep them all |
 
 The raw quotes, with every heading of the worked example verbatim, were gathered on 2026-10-21
