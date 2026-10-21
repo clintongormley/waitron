@@ -24,6 +24,7 @@ export type FirstFiscalHost = ReturnType<typeof createFirstSetupModuleHost>;
 const boundary = createErrorBoundary(
   {
     "setup.not_ready": 503,
+    "setup.certificate_refused": 422,
     "setup.owner_required": 403,
     "password.throttled": 429,
     "setup.attempt_conflict": 409,

@@ -24,6 +24,9 @@ import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { fiscalReadinessInput, submitFiscalReadiness } from "./fiscal-readiness-runner.js";
 import { mountSetup } from "./setup-api.js";
 import { request } from "../test/first-fiscal.js";
+import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
+
+const certificate = makeAuthority().issue({ passphrase: "synthetic" });
 
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: async () => {
@@ -225,7 +228,11 @@ async function preparedActivation(environment: "production" | "preproduction") {
       ? { mode: "live" }
       : {
           mode: "live",
-          aeatCert: { pfxBase64: "Y2VydA==", passphrase: "synthetic", certKind: "sello" },
+          aeatCert: {
+            pfxBase64: certificate.pfx.toString("base64"),
+            passphrase: certificate.passphrase,
+            certKind: "sello",
+          },
           email: {
             server: "smtp.example.test",
             port: 465,
@@ -245,8 +252,16 @@ async function preparedActivation(environment: "production" | "preproduction") {
   return {
     host,
     published,
-    activate: () =>
-      host.coordinator.run((hold) => activateFirstFiscal(host, deps, owner, body, hold)),
+    activate: (aeatCert?: unknown) =>
+      host.coordinator.run((hold) =>
+        activateFirstFiscal(
+          host,
+          deps,
+          owner,
+          aeatCert === undefined ? body : { ...body, aeatCert },
+          hold,
+        ),
+      ),
   };
 }
 
@@ -272,4 +287,23 @@ it("owned production Live still refuses activation without accepted authority re
   expect(await venue.db.select().from(tenants)).toEqual([]);
   expect(await venue.db.select().from(fiscalAllocations)).toEqual([]);
   expect((await f.host.store.read())!.status).toBe("consumption-intent");
+});
+
+it("refuses an unusable setup certificate before changing the owned attempt or minting venue rows", async () => {
+  const f = await preparedActivation("production");
+  const before = await f.host.store.read();
+  await expect(
+    f.activate({
+      pfxBase64: certificate.pfx.toString("base64"),
+      passphrase: "SYNTHETIC-wrong",
+      certKind: "sello",
+    }),
+  ).rejects.toMatchObject({
+    code: "setup.certificate_refused",
+    params: { field: "passphrase", reason: "passphrase_wrong" },
+  });
+  expect(f.published).toEqual([]);
+  expect(await venue.db.select().from(tenants)).toEqual([]);
+  expect(await venue.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await f.host.store.read()).toEqual(before);
 });

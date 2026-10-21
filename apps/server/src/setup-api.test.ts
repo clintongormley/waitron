@@ -18,6 +18,7 @@ import type { AdoptCredential, AdoptHooks, AdoptRequest } from "./adopt.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
+import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
 
@@ -189,11 +190,32 @@ function prepareBody(): Record<string, unknown> {
 
 // A well-formed AEAT-cert wire blob (the shape the wizard POSTs as `aeatCert`). A plain object, not
 // a regime type: the host sees the secret only as opaque `unknown`, validated through the seat.
+const CERTIFICATE = makeAuthority().issue({ passphrase: "cert-secret" });
 const CERT = {
-  pfxBase64: Buffer.from("fake-pfx-bytes").toString("base64"),
-  passphrase: "cert-secret",
+  pfxBase64: CERTIFICATE.pfx.toString("base64"),
+  passphrase: CERTIFICATE.passphrase,
   certKind: "sello",
 } as const;
+
+it("refuses an unusable certificate before calling any legacy provision step", async () => {
+  const { deps, calls } = makeDeps();
+  const app = new Hono();
+  mountSetup(app, deps, noopLog);
+  const response = await postProvision(app, {
+    ...liveBody(),
+    aeatCert: { ...CERT, passphrase: "SYNTHETIC-wrong" },
+  });
+  expect({ status: response.status, body: await response.json() }).toEqual({
+    status: 422,
+    body: {
+      error: {
+        code: "setup.certificate_refused",
+        params: { field: "passphrase", reason: "passphrase_wrong" },
+      },
+    },
+  });
+  expect(calls).toEqual([]);
+});
 
 /** A full set of provision deps, each a spy that records its invocation ORDER into `calls`. The
  * default `provision` also captures every request it saw into `provisionRequests`. */

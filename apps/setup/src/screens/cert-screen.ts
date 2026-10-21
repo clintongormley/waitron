@@ -1,4 +1,4 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   focusFirstInvalid,
@@ -13,7 +13,7 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { passwordIcon } from "../password-icon.js";
-import { format, t } from "../i18n/t.js";
+import { currentLocale, format, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { certificateExportHelp } from "../certificate-export-help.js";
@@ -27,6 +27,20 @@ const CERT_KINDS: ReadonlyArray<{ value: AeatCertDraft["certKind"]; label: Strin
   { value: "sello", label: "cert.kind.sello" },
   { value: "representante", label: "cert.kind.representante" },
 ];
+
+export interface CertificateRefusal {
+  field: "pfxBase64" | "passphrase";
+  reason: string;
+}
+
+const REFUSAL_MESSAGES: Readonly<Record<string, StringKey>> = {
+  passphrase_wrong: "cert.refusal.passphrase_wrong",
+  unreadable: "cert.refusal.unreadable",
+  old_encryption: "cert.refusal.old_encryption",
+  no_private_key: "cert.refusal.no_private_key",
+  expired: "cert.refusal.expired",
+  not_yet_valid: "cert.refusal.not_yet_valid",
+};
 
 interface CertificateForm {
   pfxBase64: string;
@@ -100,6 +114,8 @@ export class SetupCertScreen extends LitElement {
   ];
 
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
+  @property({ attribute: false }) refusal?: CertificateRefusal;
+  @state() private refusalCleared = false;
 
   /** Never rendered: only its presence is shown. */
   @state() private pfxBase64 = "";
@@ -183,7 +199,8 @@ export class SetupCertScreen extends LitElement {
     new LocaleChangeController(this);
   }
 
-  override willUpdate(): void {
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("refusal")) this.refusalCleared = false;
     if (!this.#seeded) {
       this.#seeded = true;
       this.#seedFromDraft();
@@ -204,6 +221,7 @@ export class SetupCertScreen extends LitElement {
   }
 
   async #onFileChange(event: Event): Promise<void> {
+    if (this.refusal?.field === "pfxBase64") this.refusalCleared = true;
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     const generation = ++this.#fileGeneration;
@@ -238,6 +256,7 @@ export class SetupCertScreen extends LitElement {
   #onPassphrase(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.passphrase = event.detail.value;
+    if (this.refusal?.field === "passphrase") this.refusalCleared = true;
     this.#scope?.changed();
   }
 
@@ -249,15 +268,20 @@ export class SetupCertScreen extends LitElement {
 
   #errors(): Partial<Record<"pfx" | "passphrase", string>> {
     const errors: Partial<Record<"pfx" | "passphrase", string>> = {};
-    if (!this.attempted) return errors;
-    if (this.pfxBase64 === "") {
+    if (this.attempted && this.pfxBase64 === "") {
       errors.pfx = this.fileReadFailed ? t("cert.file_unreadable") : t("cert.file_required");
     }
-    if (this.passphrase.trim() === "") errors.passphrase = t("cert.passphrase_required");
+    if (this.attempted && this.passphrase.trim() === "")
+      errors.passphrase = t("cert.passphrase_required");
+    if (this.refusal && !this.refusalCleared) {
+      const field = this.refusal.field === "passphrase" ? "passphrase" : "pfx";
+      errors[field] ??= t(REFUSAL_MESSAGES[this.refusal.reason] ?? "cert.refusal.unreadable");
+    }
     return errors;
   }
 
   #next(): void {
+    this.refusalCleared = true;
     this.attempted = true;
     if (this.pfxBase64 === "" || this.passphrase.trim() === "") {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
@@ -287,6 +311,15 @@ export class SetupCertScreen extends LitElement {
       <h1>${t("cert.heading")}</h1>
       <p>${t("cert.intro")}</p>
       ${certificateExportHelp(navigator.userAgent)}
+      <p>
+        <a
+          data-test="certificate-guide"
+          href=${`/help/${currentLocale().startsWith("es") ? "es" : "en"}/aeat-certificate#refusals`}
+          target="_blank"
+          rel="noopener"
+          >${t("cert.guide")}</a
+        >
+      </p>
       <label class="field file" ?invalid=${errors.pfx !== undefined}>
         <span
           >${t("cert.file_label")} *
@@ -369,7 +402,7 @@ export class SetupCertScreen extends LitElement {
         <wt-button
           variant="primary"
           data-test="next"
-          ?disabled=${hasFieldErrors}
+          ?disabled=${this.attempted && (this.pfxBase64 === "" || this.passphrase.trim() === "")}
           @click=${() => this.#next()}
           >${t("cert.next")}</wt-button
         >

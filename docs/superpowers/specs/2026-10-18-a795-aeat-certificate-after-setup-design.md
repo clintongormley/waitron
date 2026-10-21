@@ -1,4 +1,7 @@
 # A795 — installing or renewing the AEAT certificate after setup — design
+2026-10-22 update: A852 adds file-opening and date checks to setup. See the
+[setup certificate guide](../../../apps/server/src/guide/en/aeat-certificate.md). The observations
+below describe the earlier setup path.
 
 Date: 2026-10-18, revised the same day after a fresh-context claims review (§10 lists what it
 changed). Status: **waiting on the owner's answers to three questions (§9)**. Nothing is built.

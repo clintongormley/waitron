@@ -2,9 +2,15 @@ import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import { parseFirstSetupSettings } from "./first-setup-settings.js";
+import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 
 const contribution = venueFiscalSelection(ALL_MODULES, "ES-common").contribution!;
-const certificate = { pfxBase64: "c3ludGhldGlj", passphrase: "SYNTHETIC-cert", certKind: "sello" };
+const candidate = makeAuthority().issue({ passphrase: "SYNTHETIC-cert" });
+const certificate = {
+  pfxBase64: candidate.pfx.toString("base64"),
+  passphrase: candidate.passphrase,
+  certKind: "sello",
+};
 const email = {
   server: "smtp.example.test",
   port: 587,

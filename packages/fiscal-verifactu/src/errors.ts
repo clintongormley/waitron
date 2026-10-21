@@ -39,6 +39,7 @@ declare module "@waitron/shared" {
      * `apps/server/src/errors.ts`, like `server.credential_unusable` above.
      */
     "setup.request_invalid": { field: string };
+    "setup.certificate_refused": { field: string; reason: string };
 
     /**
      * A restore or standby reservation rejects a base over `MAX_BASE_CODE_LENGTH`, leaving room

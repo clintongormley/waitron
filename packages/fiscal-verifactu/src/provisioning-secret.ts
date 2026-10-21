@@ -70,6 +70,21 @@ export function parseAeatCert(raw: unknown): AeatCert {
   return parsed;
 }
 
+export function validateSetupAeatCert(raw: unknown): void {
+  const cert = parseAeatCert(raw);
+  const pfx = Buffer.from(cert.pfxBase64, "base64");
+  const refuse = (reason: string, field = "pfxBase64"): never => {
+    throw new AppError("setup.certificate_refused", { field, reason });
+  };
+  const opened = openCertificateFile(pfx, cert.passphrase);
+  if (!opened.ok) {
+    return refuse(opened.reason, opened.reason === "passphrase_wrong" ? "passphrase" : "pfxBase64");
+  }
+  const now = Date.now();
+  if (now >= opened.details.validUntil.getTime()) refuse("expired");
+  if (now < opened.details.validFrom.getTime()) refuse("not_yet_valid");
+}
+
 /**
  * Seal a venue's AEAT certificate into the `fiscal.aeat` vault purpose. Validated again here
  * because a caller may skip the host's `validate` seat, and `putCredential` accepts any non-empty

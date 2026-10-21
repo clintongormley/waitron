@@ -196,6 +196,14 @@ export const venueEn = {
   "cert.kind.representante": "Representative (representante)",
   "cert.fix_fields": "Correct the highlighted fields to continue.",
   "cert.file_unreadable": "We couldn't read that file. Please choose the certificate file again.",
+  "cert.refusal.passphrase_wrong": "The certificate passphrase is incorrect.",
+  "cert.refusal.unreadable": "Choose a valid .pfx or .p12 certificate file.",
+  "cert.refusal.old_encryption": "Export the certificate again with modern encryption.",
+  "cert.refusal.no_private_key": "Export the certificate again, including its private key.",
+  "cert.refusal.expired": "This certificate has expired. Choose its replacement.",
+  "cert.refusal.not_yet_valid":
+    "This certificate is not valid yet. Check the date or choose another file.",
+  "cert.guide": "Certificate help",
   "cert.back": "Back",
   "cert.next": "Next",
 
@@ -429,6 +437,14 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "cert.kind.sello": "Sello electrónico",
   "cert.kind.representante": "Representante",
   "cert.fix_fields": "Corrige los campos marcados para continuar.",
+  "cert.refusal.passphrase_wrong": "La contraseña del certificado es incorrecta.",
+  "cert.refusal.unreadable": "Elige un archivo de certificado .pfx o .p12 válido.",
+  "cert.refusal.old_encryption": "Exporta el certificado de nuevo con un cifrado moderno.",
+  "cert.refusal.no_private_key": "Exporta el certificado de nuevo, incluida su clave privada.",
+  "cert.refusal.expired": "Este certificado ha caducado. Elige su sustituto.",
+  "cert.refusal.not_yet_valid":
+    "Este certificado aún no es válido. Revisa la fecha o elige otro archivo.",
+  "cert.guide": "Ayuda con el certificado",
   "cert.file_unreadable":
     "No hemos podido leer ese archivo. Vuelve a elegir el archivo del certificado.",
   "cert.back": "Volver",

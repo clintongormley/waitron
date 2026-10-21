@@ -1,3 +1,4 @@
+import { makeAuthority as makeCertificateAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -7,6 +8,10 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { openVenueDatabase, readDeploymentEnvironment } from "@waitron/db";
 import { readTenantIdentities } from "./tenant-guard.js";
+
+const certificateMaterial = makeCertificateAuthority().issue({
+  passphrase: "SYNTHETIC-certificate",
+});
 
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
 const execute = promisify(execFile);
@@ -378,7 +383,7 @@ Object.defineProperty(performance, "now", { value: () => 0 });
 `,
   );
   const certificate = {
-    pfxBase64: "c3ludGhldGlj",
+    pfxBase64: certificateMaterial.pfx.toString("base64"),
     passphrase: "SYNTHETIC-certificate",
     certKind: "sello",
   };
@@ -566,7 +571,7 @@ Object.defineProperty(performance, "now", { value: () => 0 });
 `,
   );
   const certificate = {
-    pfxBase64: "c3ludGhldGlj",
+    pfxBase64: certificateMaterial.pfx.toString("base64"),
     passphrase: "SYNTHETIC-certificate",
     certKind: "sello",
   };

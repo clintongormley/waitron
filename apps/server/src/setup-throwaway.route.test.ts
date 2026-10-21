@@ -1,3 +1,4 @@
+import { makeAuthority as makeCertificateAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -38,8 +39,9 @@ const PRODUCTION_BOX: Box = { environment: "production", devMode: false };
 const PREPRODUCTION_BOX: Box = { environment: "preproduction", devMode: false };
 const DEV_BOX: Box = { environment: "preproduction", devMode: true };
 
+const certificate = makeCertificateAuthority().issue({ passphrase: "cert-secret" });
 const CERT = {
-  pfxBase64: Buffer.from("fake-pfx-bytes").toString("base64"),
+  pfxBase64: certificate.pfx.toString("base64"),
   passphrase: "cert-secret",
   certKind: "sello",
 } as const;

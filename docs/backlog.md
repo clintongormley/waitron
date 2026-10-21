@@ -571,16 +571,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
     as a promoted mirror (`persistTradingEnv` writes none). The route is mounted only when the
     intent is preparation or live (`apps/server/src/boot.ts`).
 
-- **A852. Setup accepts certificate files filing cannot use** (found by A795's design). The wizard
-  never opens the file, so a wrong passphrase, a file that is not a certificate, one with no private
-  key and an expired one are all accepted; a preproduction setup seals them as given. A
-  production setup needs its fiscal test to pass, which the first three cannot (their connection
-  fails before it reaches AEAT; for a wrong passphrase the test says "uncertain, retry"); that AEAT
-  refuses an expired one is assumed. A795 built the opening as `openCertificateFile`
-  (`packages/fiscal-verifactu/src/certificate-file.ts`), which A852 reuses; it reads the dates but
-  refuses none, and A795's date refusals sit in the unexported `checkLocally`
-  (`certificate-install.ts`).
-  [Detail](backlog/setup.md#a852-setup-accepts-certificate-files-filing-cannot-use)
+- **Bound certificate password-derivation work before opening a file.** PKCS#12 files choose their
+  own derivation cost; setup and certificate renewal currently pass it to the synchronous opener.
+  Scope a shared limit or an isolated opener with a deadline. Raised by A852's review.
 
 - **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.
   Several small wizard leftovers remain: a fiscal-test banner that may outlive its screen, an
