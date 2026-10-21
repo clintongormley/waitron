@@ -1187,7 +1187,6 @@ describe("an open table's order", () => {
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "fresh",
     nextReservation: null,
     today: null,

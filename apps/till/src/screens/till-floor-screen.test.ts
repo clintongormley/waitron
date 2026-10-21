@@ -36,7 +36,7 @@ function today(): TableToday {
   };
 }
 
-function table(over: Partial<TableState> = {}): TableState {
+function table(over: Partial<TableState> & { enRoute?: number } = {}): TableState {
   return {
     id: "t1",
     label: "1",
@@ -47,7 +47,6 @@ function table(over: Partial<TableState> = {}): TableState {
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "fresh",
     nextReservation: null,
     today: null,
@@ -214,7 +213,6 @@ describe("till-floor-screen", () => {
           hasOpenTab: true,
           pendingToServe: 3,
           readyToServe: 2,
-          enRoute: 0,
         }),
       ],
     });
@@ -232,7 +230,6 @@ describe("till-floor-screen", () => {
           hasOpenTab: true,
           pendingToServe: 3,
           readyToServe: 0,
-          enRoute: 0,
         }),
       ],
     });

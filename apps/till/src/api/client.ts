@@ -2187,15 +2187,6 @@ export interface FloorAnswer {
   revision: number;
 }
 
-/**
- * One row of the live-floor occupancy read-model from `GET /api/tables/state`. A table is
- * `"open-tab"` while a party holds it, paid or not. `hasOpenTab` says the party has an open bill,
- * and `tabLineCount`/`tabTotal` are present exactly then: the line count and gross draft total of
- * the party's open bills, the total as a two-place decimal string. `pendingToServe` counts the
- * lines still to deliver, `readyToServe` those the kitchen has bumped `ready` but the waiter has
- * not served, and `enRoute` those the pass has dispatched but the waiter has not acknowledged; all
- * three are DISTINCT from `pendingDeliveries` (uncollected counter deliveries).
- */
 export interface TableState {
   id: string;
   label: string;
@@ -2210,7 +2201,6 @@ export interface TableState {
   pendingDeliveries: number;
   pendingToServe: number;
   readyToServe: number;
-  enRoute: number;
   /**
    * The worst age band across the unserved lines fired to a kitchen station (not made here) of
    * every bill of the party's family that is not abandoned, paid ones included (a held dish does not

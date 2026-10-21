@@ -2486,8 +2486,9 @@ Away stamps leave those counts unchanged. The dashboard Kitchen tab retains prep
 and timing defaults and omits the retired firing-mode choice and its API/query contracts.
 Floor details count every ready dish without subtracting or separately showing legacy dispatch;
 table-state precedence ignores dispatch too. Floor list cards keep the complete ready count and
-omit the en-route badge, retaining station-ready chip de-duplication. Kitchen clients and the remaining floor client
-consumers still require coordinated retirement before PR A publication.
+omit the en-route badge, retaining station-ready chip de-duplication. The floor client contract and
+default fixtures omit dispatch; regression fixtures still supply old counts to check that they
+have no effect. Kitchen clients still require coordinated retirement before PR A publication.
 Client/internal-helper retirement, Requested and scoped pass release, station configuration,
 ticket presentation and schema retirement remain. Recheck A756's
 settings and current lane reservations before each working slice. A803's station/pass additions follow it. The plan

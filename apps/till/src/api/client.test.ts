@@ -2186,7 +2186,11 @@ describe("TillApi", () => {
     expect("setTableStatus" in TillApi.prototype).toBe(false);
   });
 
-  it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe + readyToServe + enRoute + timingBand and the tab fields", async () => {
+  it("keeps dispatch out of the floor read contract", () => {
+    expectTypeOf<TableState>().not.toHaveProperty("enRoute");
+  });
+
+  it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe + readyToServe + timingBand and the tab fields", async () => {
     const rows: TableState[] = [
       {
         id: "t1",
@@ -2200,7 +2204,6 @@ describe("TillApi", () => {
         pendingDeliveries: 0,
         pendingToServe: 2,
         readyToServe: 3,
-        enRoute: 1,
         timingBand: "forgotten",
         nextReservation: { time: "20:30" },
         today: {
@@ -2228,7 +2231,6 @@ describe("TillApi", () => {
         pendingDeliveries: 0,
         pendingToServe: 0,
         readyToServe: 0,
-        enRoute: 0,
         timingBand: "fresh",
         nextReservation: null,
         today: null,
@@ -2249,7 +2251,6 @@ describe("TillApi", () => {
       zoneId: "z1",
       pendingToServe: 2,
       readyToServe: 3,
-      enRoute: 1,
       today: {
         placement: { x: 2, y: 3, width: 8, height: 8, shape: "round", rotation: 15 },
         seats: 4,

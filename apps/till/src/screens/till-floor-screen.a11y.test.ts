@@ -53,7 +53,6 @@ const tables: TableState[] = [
     pendingDeliveries: 0,
     pendingToServe: 2,
     readyToServe: 1,
-    enRoute: 1,
     timingBand: "fresh",
     nextReservation: { time: "20:30" },
     today: null,
@@ -70,7 +69,6 @@ const tables: TableState[] = [
     pendingDeliveries: 1,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "warm",
     nextReservation: null,
     today: null,
@@ -87,7 +85,6 @@ const tables: TableState[] = [
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "fresh",
     nextReservation: null,
     today: null,
@@ -104,7 +101,6 @@ const tables: TableState[] = [
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "fresh",
     nextReservation: null,
     today: null,
@@ -123,7 +119,6 @@ const tables: TableState[] = [
     pendingDeliveries: 0,
     pendingToServe: 2,
     readyToServe: 2,
-    enRoute: 0,
     timingBand: "overdue",
     nextReservation: null,
     today: null,
@@ -142,7 +137,6 @@ const tables: TableState[] = [
     pendingDeliveries: 0,
     pendingToServe: 3,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "forgotten",
     nextReservation: null,
     today: null,
@@ -206,7 +200,6 @@ const partyTables: TableState[] = [
     tabTotal: undefined,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     nextReservation: null,
     state: "free",
     condition: "needs_clearing",
@@ -395,7 +388,6 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
       ...owing,
       pendingToServe: 0,
       readyToServe: 0,
-      enRoute: 0,
       signals: [
         { kind: "bill_requested", requestedAt: "2026-09-29T20:00:00.000Z" },
         { kind: "long_wait", band: "warm" },
@@ -441,7 +433,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
 
   it("has no violations with a calm table, a held one and a reserved one, on the list", async () => {
     const [owing] = partyTables as [TableState];
-    const quiet: TableState = { ...owing, pendingToServe: 0, readyToServe: 0, enRoute: 0 };
+    const quiet: TableState = { ...owing, pendingToServe: 0, readyToServe: 0 };
     const tables: TableState[] = [
       quiet,
       {
@@ -467,7 +459,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
 
   it("has no violations with a paid table that needs nothing, on the list", async () => {
     const [, paid] = partyTables as [TableState, TableState];
-    const quiet: TableState = { ...paid, pendingToServe: 0, readyToServe: 0, enRoute: 0 };
+    const quiet: TableState = { ...paid, pendingToServe: 0, readyToServe: 0 };
     const list = await mountWidget<TillFloorScreen>(
       "till-floor-screen",
       { zones, tables: [quiet] },
