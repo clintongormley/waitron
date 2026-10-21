@@ -80,8 +80,11 @@ installer's attention; this action repairs only Waitron-managed material.
 
 Repair retains the original fixed TLS files under a private `tls/repair-archive/` directory and
 resumes a reserved replacement after interruption. It does not recreate the vault or change the
-selected workspace, recovery records or fiscal identity. A supervised process restarts after sending
-the repair answer; a direct process repeats its admission checks internally. If that handoff fails,
+selected workspace, recovery records or fiscal identity. The public HTTP guide stays available while you download
+and install the certificate, even if the repair answer was lost. Choose **Reconnect** when you are
+ready. A supervised process then restarts after sending that answer; a direct process repeats its
+admission checks internally. The guide retains its public certificate download when you open HTTPS.
+If that handoff fails,
 reopen the public page and choose **Reconnect**. Healthy certificate files are not rotated by that
 retry. Other boot failures can still prevent the application from starting.
 

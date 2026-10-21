@@ -7,6 +7,7 @@ export const CA_CONTENT_TYPE = "application/x-x509-ca-cert";
 export const CA_FILENAME = "waitron-ca.crt";
 
 export interface TrustPageInput {
+  caCertificate?: string;
   connection?: BoxTlsInspection & { repairAllowed?: boolean; continuationRequired?: boolean };
   locale?: "en" | "es";
   reachUrls: string[];

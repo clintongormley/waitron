@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { chromium, type Browser, type Page } from "playwright";
 import { renderTrustPage, type TrustPageInput } from "./trust-page.js";
@@ -59,7 +60,7 @@ it("repairs by a credential-free empty request and keeps the retained certificat
     await page.locator("#connection-repair").press("Enter");
     await expect
       .poll(() => page.locator("#connection-status").textContent())
-      .toBe("Your secure connection is ready.");
+      .toBe("Certificate ready.");
     expect(calls).toHaveLength(1);
     expect(calls[0]!.url()).toBe("http://waitron.local:8080/setup-api/connection/repair");
     expect(calls[0]!.postData()).toBeNull();
@@ -97,7 +98,7 @@ it.each([403, 503])(
       await page.locator("#connection-repair").click();
       await expect
         .poll(() => page.locator("#connection-status").textContent())
-        .toBe("Your secure connection is ready.");
+        .toBe("Certificate ready.");
       expect(attempts).toBe(2);
       expect(await page.locator("#connection-error").textContent()).toBe("");
     } finally {
@@ -175,4 +176,71 @@ it.each([
   ["es-ES", "es"],
 ])("uses installed-language preferences for %s", (header, want) => {
   expect(connectionLocale(header)).toBe(want);
+});
+
+it("keeps a public certificate download across repair and explicitly reconnects before offering HTTPS", async () => {
+  const page = await browser!.newPage();
+  const publicPem =
+    "-----BEGIN CERTIFICATE-----\nSYNTHETIC-PUBLIC-CERTIFICATE\n-----END CERTIFICATE-----\n";
+  const calls: import("playwright").Request[] = [];
+  try {
+    await open(page, retained, async (request) => {
+      calls.push(request);
+      return {
+        status: 200,
+        body: request.url().endsWith("/continue")
+          ? { restarting: true }
+          : {
+              ...retained,
+              state: "healthy",
+              caCertificate: publicPem,
+              continuationRequired: true,
+            },
+      };
+    });
+    await page.locator("#connection-repair").click();
+    await expect.poll(() => page.locator("#connection-reconnect").count()).toBe(1);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url()).toBe("http://waitron.local:8080/setup-api/connection/repair");
+    expect(await page.locator("#connection-continue").isVisible()).toBe(false);
+    expect(await page.locator("#connection-status").textContent()).toBe(
+      "Certificate ready. Follow the instructions, then reconnect.",
+    );
+    expect(await page.locator("#connection-certificate").getAttribute("href")).toMatch(/^blob:/);
+    const downloadBox = await page.locator("#connection-certificate").boundingBox();
+    const reconnectBox = await page.locator("#connection-reconnect").boundingBox();
+    expect(downloadBox!.y).toBeLessThan(reconnectBox!.y);
+    const saved = page.waitForEvent("download");
+    await page.locator("#connection-certificate").click();
+    const download = await saved;
+    expect(await readFile((await download.path())!, "utf8")).toBe(publicPem);
+    await page.locator("#connection-reconnect").click();
+    await expect.poll(() => page.locator("#connection-continue").isVisible()).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.url()).toBe("http://waitron.local:8080/setup-api/connection/continue");
+    expect(calls[1]!.postData()).toBeNull();
+    expect(calls[1]!.headers()).not.toHaveProperty("cookie");
+    expect(await page.locator("#connection-continue").getAttribute("target")).toBe("_blank");
+    expect(await page.locator("#connection-continue").getAttribute("rel")).toBe(
+      "noopener noreferrer",
+    );
+  } finally {
+    await page.close();
+  }
+});
+
+it("a reloaded healthy bootstrap retains its public certificate before reconnect", async () => {
+  const page = await browser!.newPage();
+  try {
+    await open(page, { ...retained, state: "healthy" }, undefined, {
+      connection: { ...retained, state: "healthy", continuationRequired: true },
+      caCertificate: "public-certificate-on-reload",
+    });
+    expect(await page.locator("#connection-repair").count()).toBe(0);
+    expect(await page.locator("#connection-reconnect").count()).toBe(1);
+    expect(await page.locator("#connection-certificate").getAttribute("href")).toMatch(/^blob:/);
+    expect(await page.locator("#connection-continue").isVisible()).toBe(false);
+  } finally {
+    await page.close();
+  }
 });

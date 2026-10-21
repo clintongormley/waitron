@@ -95,7 +95,14 @@ async function repair(port: number) {
     signal: AbortSignal.timeout(10000),
   });
   expect(response.status).toBe(200);
-  return response.json();
+  const result = await response.json();
+  const continued = await fetch(`http://127.0.0.1:${port}/setup-api/connection/continue`, {
+    method: "POST",
+    headers: { Origin: `http://127.0.0.1:${port}` },
+  });
+  expect(continued.status).toBe(200);
+  await continued.body?.cancel();
+  return result;
 }
 
 it.each(["missing-key", "malformed", "mismatch", "missing-ca", "expired"] as const)(
@@ -516,4 +523,63 @@ it("actual HTTP rejects forged/private requests and archive reads before a legit
     expect((await get(port, path)).status).toBe(404);
   await repair(port);
   expect((await get(port, "/tls/repair-archive")).status).toBe(404);
+});
+
+it("keeps public CA download and reload available after a discarded repair reply until explicit HTTPS continuation", async () => {
+  const f = await fixture("missing-ca");
+  const [port] = (await freePorts(1)) as [number];
+  const strict = vi.fn(async () => {
+    const app = new Hono();
+    app.get("/", (c) => c.text("admitted after public certificate download"));
+    const server = await serveRecovery(app, {
+      stateDir: f.stateDir,
+      port,
+      httpHost: "127.0.0.1",
+      log: () => {},
+    });
+    return { close: () => closeListener(server) };
+  });
+  const handle = await startServerOrFirstSetupResolution(
+    {
+      WAITRON_STATE_DIR: f.stateDir,
+      WAITRON_VENUE_DIR: f.venueDir,
+      WAITRON_HTTP_HOST: "127.0.0.1",
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_LANDING_PORT: "0",
+    },
+    {},
+    { startServer: strict },
+  );
+  closes.push(handle.close);
+  const repaired = await fetch(`http://127.0.0.1:${port}/setup-api/connection/repair`, {
+    method: "POST",
+    headers: { Origin: `http://127.0.0.1:${port}` },
+  });
+  expect(repaired.status).toBe(200);
+  await repaired.body?.cancel();
+  await expect(get(port, "/ca.crt")).resolves.toMatchObject({ status: 200 });
+  const ca = await (await get(port, "/ca.crt")).text();
+  expect(ca).toContain("BEGIN CERTIFICATE");
+  expect(ca).not.toContain("PRIVATE KEY");
+  expect(ca).not.toBe(material.caCertPem);
+  const reloaded = await get(port, "/setup/connection");
+  expect(reloaded.status).toBe(200);
+  expect(await reloaded.text()).toContain(">Reconnect</button>");
+  expect(strict).not.toHaveBeenCalled();
+  const continued = await fetch(`http://127.0.0.1:${port}/setup-api/connection/continue`, {
+    method: "POST",
+    headers: { Origin: `http://127.0.0.1:${port}` },
+  });
+  expect(continued.status).toBe(200);
+  await continued.body?.cancel();
+  await vi.waitFor(async () =>
+    expect(await verifiedGet(port, "/", ca)).toEqual({
+      status: 200,
+      body: "admitted after public certificate download",
+    }),
+  );
+  expect(strict).toHaveBeenCalledOnce();
+  await expect(verifiedGet(port, "/", material.caCertPem)).rejects.toMatchObject({
+    code: "CERT_SIGNATURE_FAILURE",
+  });
 });

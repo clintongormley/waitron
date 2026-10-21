@@ -86,7 +86,17 @@ export function renderConnectionPage(
   const safeWords = JSON.stringify(words).replaceAll("<", "\\u003c");
   const script = `
 const words = ${safeWords};
-const button = document.getElementById("connection-repair");
+const button = document.getElementById("connection-repair") ?? document.getElementById("connection-reconnect");
+let healthy = ${ready};
+let continuationRequired = ${retry};
+let publicCertificateUrl;
+const retainCertificate = (pem) => {
+  if (typeof pem !== "string") return;
+  if (publicCertificateUrl) URL.revokeObjectURL(publicCertificateUrl);
+  publicCertificateUrl = URL.createObjectURL(new Blob([pem], { type: "application/x-x509-ca-cert" }));
+  document.getElementById("connection-certificate").href = publicCertificateUrl;
+};
+retainCertificate(${JSON.stringify(input.caCertificate ?? null).replaceAll("<", "\\u003c")});
 const status = document.getElementById("connection-status");
 const error = document.getElementById("connection-error");
 button?.addEventListener("click", async () => {
@@ -95,24 +105,41 @@ button?.addEventListener("click", async () => {
   status.textContent = words.busy;
   error.textContent = "";
   try {
-    const response = await fetch("/setup-api/connection/repair", { method: "POST", credentials: "omit", redirect: "error", cache: "no-store" });
+    const continuing = healthy && continuationRequired;
+    const response = await fetch(continuing ? "/setup-api/connection/continue" : "/setup-api/connection/repair", { method: "POST", credentials: "omit", redirect: "error", cache: "no-store" });
     if (!response.ok) throw new Error();
     const result = await response.json();
+    if (continuing) {
+      if (result.restarting !== true) throw new Error();
+      document.getElementById("connection-continue").hidden = false;
+      button.hidden = true;
+      status.textContent = words.open;
+      status.focus();
+      return;
+    }
     if (result.state !== "healthy" || !["retained", "new-required"].includes(result.trust) || result.caAvailable !== true) throw new Error();
+    healthy = true;
+    continuationRequired = result.continuationRequired === true;
+    retainCertificate(result.caCertificate);
     const newTrust = result.trust === "new-required";
     document.getElementById("trust-retained").hidden = newTrust;
     document.getElementById("trust-new").hidden = !newTrust;
     document.querySelectorAll("[data-removal]").forEach((node) => { node.hidden = !newTrust; });
     document.getElementById("connection-download").hidden = false;
     document.getElementById("connection-help").hidden = false;
-    document.getElementById("connection-continue").hidden = false;
+    document.getElementById("connection-continue").hidden = continuationRequired;
     document.getElementById("connection-fingerprint").textContent = typeof result.fingerprint === "string" ? result.fingerprint : "";
-    status.textContent = words.ready;
-    button.hidden = true;
+    status.textContent = continuationRequired ? words.certificateReady : words.ready;
+    button.hidden = !continuationRequired;
+    if (continuationRequired) {
+      button.id = "connection-reconnect";
+      button.textContent = words.reconnect;
+      document.getElementById("connection-actions").prepend(button);
+    }
     status.focus();
   } catch {
     error.textContent = words.failed;
-    status.textContent = words.needed;
+    status.textContent = healthy && continuationRequired ? words.certificateReady : words.needed;
   } finally { button.disabled = false; }
 });`;
   return `<!doctype html><html lang="${locale}"><head>
@@ -124,13 +151,13 @@ button?.addEventListener("click", async () => {
 <div class="logo">${TRUST_PAGE_LOGO_SVG}</div>
 <nav aria-label="${words.language}"><a href="?lang=en" lang="en"${locale === "en" ? ' aria-current="page"' : ""}>${CONNECTION_TEXT.en.languageName}</a><a href="?lang=es" lang="es"${locale === "es" ? ' aria-current="page"' : ""}>${CONNECTION_TEXT.es.languageName}</a></nav>
 <h1>${words.title}</h1><p>${words.intro}</p><p class="note">${words.publicOnly}</p>
-<p id="connection-status" role="status" tabindex="-1">${operator ? words.operator : ready ? words.ready : status.state === "refused" ? words.failed : words.needed}</p>
+<p id="connection-status" role="status" tabindex="-1">${operator ? words.operator : ready ? (retry ? words.certificateReady : words.ready) : status.state === "refused" ? words.failed : words.needed}</p>
 <p id="connection-error" role="alert"></p>
-${(!ready || retry) && !operator ? `<button id="connection-repair" type="button">${retry && ready ? words.reconnect : words.repair}</button><noscript><p>${words.failed}</p></noscript>` : ""}
+${!ready && !operator ? `<button id="connection-repair" type="button">${words.repair}</button><noscript><p>${words.failed}</p></noscript>` : ""}
 <section${hidden(!operator)}><div id="trust-retained"${hidden(status.trust === "retained")}><h2>${words.retained}</h2><p>${words.retainedHelp}</p></div>
 <div id="trust-new"${hidden(status.trust === "new-required")}><h2>${words.newTrust}</h2><p>${words.newTrustHelp}</p></div>
-<div id="connection-download"${hidden(status.caAvailable)}><p><a class="button" href="${escape(input.caDownloadPath)}" download="waitron-ca.crt">${words.download}</a></p><p class="note">${words.downloadHelp}</p><p class="note">${words.fingerprint}</p><p id="connection-fingerprint">${escape(status.fingerprint ?? "")}</p></div>
+<div id="connection-download"${hidden(status.caAvailable)}><p><a id="connection-certificate" class="button" href="${escape(input.caDownloadPath)}" download="waitron-ca.crt">${words.download}</a></p><p class="note">${words.downloadHelp}</p><p class="note">${words.fingerprint}</p><p id="connection-fingerprint">${escape(status.fingerprint ?? "")}</p></div>
 <div id="connection-help"${hidden(status.caAvailable)}><h2>${words.install}</h2><p class="note">${words.managed}</p>${details}</div></section>
-<section><p>${words.warning}</p><a id="connection-continue" class="button" href="${escape(input.httpsUrl)}"${hidden(ready || operator)}>${words.continue}</a><ul>${input.reachUrls.map((url) => `<li><a href="${escape(url)}">${escape(url)}</a></li>`).join("")}</ul></section>
+<section id="connection-actions">${ready && retry && !operator ? `<button id="connection-reconnect" type="button">${words.reconnect}</button>` : ""}<p>${words.warning}</p><a id="connection-continue" class="button" href="${escape(input.httpsUrl)}" target="_blank" rel="noopener noreferrer"${hidden((ready && !retry) || operator)}>${words.continue}</a><ul>${input.reachUrls.map((url) => `<li><a href="${escape(url)}">${escape(url)}</a></li>`).join("")}</ul></section>
 </main><script>${script}</script></body></html>`;
 }

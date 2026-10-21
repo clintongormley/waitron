@@ -1534,7 +1534,8 @@ only once someone adds it to `#applyVenueSetup`.
 ## Public secure-connection repair
 
 `connection-bootstrap.ts` mounts `/setup/connection` and the empty-body
-`POST /setup-api/connection/repair`. A damaged retained box certificate admits only the public
+`POST /setup-api/connection/repair`, followed by an explicit empty-body
+`POST /setup-api/connection/continue`. A damaged retained box certificate admits only the public
 connection app on the main HTTP port and enabled landing port. The protected recovery app,
 Retry, setup inspection and private setup actions stay off that fallback. Normal discovery and
 landing apps mirror the connection guide; their CA downloads parse the public certificate and
@@ -1544,8 +1545,11 @@ uses the same public-CA check. An operator TLS choice refuses box repair.
 The resolution screen opens the guide in a separate tab without passing its draft, owner token or
 password. The page sends no body and omits credentials. Its fixed EN/ES messages distinguish
 retained trust from a new trust installation; retained trust does not instruct you to remove the old
-certificate. The original `/setup/trust` help remains available. A failed direct handoff exposes a
-Reconnect action on a fresh public page, even though the repaired files are already healthy.
+certificate. The original `/setup/trust` help remains available. Repair leaves standalone HTTP alive for public CA download and reload. Reconnect triggers the
+post-flush handoff only after the installation guidance. The canonical public certificate travels in
+the repair result and healthy page reload, so the page retains its download as a Blob when that
+port becomes HTTPS. A failed direct handoff exposes Reconnect on a fresh public page, even though
+the repaired files are already healthy.
 
 `connection-bootstrap-page.test.ts` exercises the rendered script in Chromium, including refusal,
 retry, pending requests and both trust outcomes. `connection-bootstrap.entry.test.ts` binds actual

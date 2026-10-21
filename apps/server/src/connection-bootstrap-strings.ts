@@ -10,7 +10,9 @@ export const CONNECTION_TEXT = {
     reconnect: "Reconnect",
     needed: "The server’s secure connection needs repair.",
     busy: "Setting up the connection…",
-    ready: "Your secure connection is ready.",
+    ready: "Certificate ready.",
+    certificateReady: "Certificate ready. Follow the instructions, then reconnect.",
+    open: "Open Waitron below.",
     failed: "The connection could not be set up. Try again.",
     operator:
       "This server uses an installer-supplied certificate. Ask whoever installed it to check the certificate and address.",
@@ -40,7 +42,9 @@ export const CONNECTION_TEXT = {
     reconnect: "Reconectar",
     needed: "La conexión segura del servidor necesita reparación.",
     busy: "Configurando la conexión…",
-    ready: "La conexión segura está lista.",
+    ready: "Certificado listo.",
+    certificateReady: "Certificado listo. Sigue las instrucciones y reconecta.",
+    open: "Abre Waitron abajo.",
     failed: "No se ha podido configurar la conexión. Inténtalo de nuevo.",
     operator:
       "Este servidor usa un certificado del instalador. Pídele que compruebe el certificado y la dirección.",

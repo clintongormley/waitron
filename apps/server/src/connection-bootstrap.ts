@@ -51,11 +51,13 @@ async function emptyBody(request: Request): Promise<boolean> {
 export function mountConnectionBootstrap(
   app: Hono,
   deps: ConnectionBootstrapDeps,
-  aliases = true,
+  bootstrapOnly = true,
 ): void {
   let transitioning = false;
   let transitionFailed = false;
-  const publicPaths = aliases ? ["*"] : ["/setup/connection", "/setup-api/connection/repair"];
+  const publicPaths = bootstrapOnly
+    ? ["*"]
+    : ["/setup/connection", "/setup-api/connection/repair", "/setup-api/connection/continue"];
   for (const path of publicPaths)
     app.use(path, async (c, next) => {
       c.header("Cache-Control", "no-store");
@@ -64,10 +66,15 @@ export function mountConnectionBootstrap(
     });
   app.on(
     "GET",
-    aliases ? ["/", "/setup/connection", "/setup/trust"] : ["/setup/connection"],
+    bootstrapOnly ? ["/", "/setup/connection", "/setup/trust"] : ["/setup/connection"],
     async (c) => {
       const status = await inspectBoxTls(deps);
+      const caCertificate =
+        deps.repairAllowed !== false && status.caAvailable
+          ? await readBoxPublicCa(deps.stateDir, deps.now()).catch(() => null)
+          : null;
       const html = renderTrustPage({
+        caCertificate: caCertificate ?? undefined,
         caAvailable: status.caAvailable,
         caDownloadPath: "/ca.crt",
         httpsUrl: deps.reachUrls[0]!,
@@ -76,17 +83,17 @@ export function mountConnectionBootstrap(
         connection: {
           ...status,
           repairAllowed: deps.repairAllowed,
-          continuationRequired: transitionFailed || deps.continuationRequired,
+          continuationRequired: bootstrapOnly || transitionFailed || deps.continuationRequired,
         },
         locale: connectionLocale(c.req.query("lang") ?? c.req.header("accept-language")),
       });
       return c.html(html);
     },
   );
-  if (aliases)
+  if (bootstrapOnly)
     app.on("GET", ["/ca.crt", "/setup-api/ca.crt"], async (c) => {
       const status = await inspectBoxTls(deps);
-      if (status.caAvailable) {
+      if (deps.repairAllowed !== false && status.caAvailable) {
         try {
           const pem = await readBoxPublicCa(deps.stateDir, deps.now());
           if (pem !== null && new X509Certificate(pem).fingerprint256 === status.fingerprint)
@@ -100,7 +107,7 @@ export function mountConnectionBootstrap(
       }
       return c.json({ error: "no_box_ca" }, 404);
     });
-  app.post("/setup-api/connection/repair", async (c) => {
+  app.on("POST", ["/setup-api/connection/repair", "/setup-api/connection/continue"], async (c) => {
     const request = c.req.raw;
     const url = new URL(request.url);
     const origin = request.headers.get("origin");
@@ -119,7 +126,13 @@ export function mountConnectionBootstrap(
     )
       return c.json({ error: "connection.refused" }, 403);
     try {
-      const status = await repairBoxTls(deps);
+      const continuing = url.pathname.endsWith("/continue");
+      const status = continuing ? await inspectBoxTls(deps) : await repairBoxTls(deps);
+      if (status.state !== "healthy") throw new Error("Connection is not ready");
+      const caCertificate = await readBoxPublicCa(deps.stateDir, deps.now());
+      if (caCertificate === null) throw new Error("Public certificate is unavailable");
+      if (!continuing && bootstrapOnly)
+        return c.json({ ...status, caCertificate, continuationRequired: true });
       const outgoing = (c.env as Partial<HttpBindings> | undefined)?.outgoing;
       outgoing?.once("finish", () => {
         if (transitioning) return;
@@ -130,7 +143,11 @@ export function mountConnectionBootstrap(
           deps.log("warn", "connection.transition_failed");
         });
       });
-      return c.json(status);
+      return c.json(
+        continuing
+          ? { restarting: true }
+          : { ...status, caCertificate, continuationRequired: false },
+      );
     } catch {
       return c.json({ error: "connection.repair_failed" }, 503);
     }
