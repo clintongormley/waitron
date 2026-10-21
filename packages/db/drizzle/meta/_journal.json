@@ -1282,6 +1282,13 @@
       "when": 1792543731940,
       "tag": "0182_create_custom_themes",
       "breakpoints": true
+    },
+    {
+      "idx": 183,
+      "version": "6",
+      "when": 1792548740579,
+      "tag": "0183_retire_tenant_themes",
+      "breakpoints": true
     }
   ]
 }

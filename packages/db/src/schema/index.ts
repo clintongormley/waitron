@@ -40,7 +40,6 @@ export * from "./purchase-invoices.js";
 export * from "./device-profiles.js";
 export * from "./device-profile-printers.js";
 export * from "./printer-holders.js";
-export * from "./tenant-themes.js";
 export * from "./custom-themes.js";
 export * from "./tenant-receipts.js";
 export * from "./working-order-counters.js";

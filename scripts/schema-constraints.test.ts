@@ -795,7 +795,6 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "tenant_credentials_key_version_ck",
   "tenant_credentials_purpose_ck",
   "tenant_receipts_singleton_ck",
-  "tenant_themes_singleton_ck",
   "tenants_singleton_ck",
   "tenders_amount_ck",
   "tenders_cash_tendered_ck",

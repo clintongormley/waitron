@@ -46,7 +46,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 5,
+  version: 6,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -137,8 +137,21 @@ describe("staged configuration import", () => {
       },
     ],
     ["A757 pre-status-retirement export without statuses", { version: 4 }],
+    [
+      "A841 pre-theme-retirement export with a theme",
+      {
+        version: 5,
+        tables: {
+          ...bundle.tables,
+          tenant_themes: [
+            { id: 1, theme: '{"tokens":{}}', updated_at: "2026-10-01T00:00:00.000Z" },
+          ],
+        },
+      },
+    ],
+    ["A841 pre-theme-retirement export without themes", { version: 5 }],
     ["old version", { version: 1 }],
-    ["future version", { version: 6 }],
+    ["future version", { version: 7 }],
     [
       "retired drawer value",
       {
