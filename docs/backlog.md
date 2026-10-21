@@ -2586,8 +2586,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   prep-queue rail.
 
 - **A lost counter Send reply still tells you to check whether a sale went through.**
-  `#onPlaceOrder` uses `sale.unconfirmed`; A983's EN/ES screenshots show that wording after a
-  placement whose HTTP probe left `sales` empty. **Next action:** give a counter send its own
+  `#onPlaceOrder` uses `sale.unconfirmed`; its English and Spanish strings refer to a sale.
+  The HTTP retry case in `apps/server/src/place-replay.test.ts` checks that placement leaves
+  `sales` empty. **Next action:** give a counter send its own
   uncertainty message, telling you how to retry without implying a payment was taken.
 
 - **`apps/till/src/till-app.ts` decides permanent-refusal / known-code / unknown at six call sites;

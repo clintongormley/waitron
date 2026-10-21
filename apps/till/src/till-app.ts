@@ -6924,8 +6924,7 @@ export class TillApp extends LitElement {
     visit: number;
     api: TillApi;
     basket: string;
-    invoice: InvoiceRecipientDetail | undefined;
-    language: string | undefined;
+    invoice: string | undefined;
   };
 
   async #onPlaceOrder(
@@ -6952,19 +6951,31 @@ export class TillApp extends LitElement {
     let placed = false;
     try {
       const pending = this.#unconfirmedPlace;
-      const invoice = this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : undefined;
-      const language =
-        this.receiptLanguageChoice?.orderId === id
-          ? this.receiptLanguageChoice.language
-          : undefined;
+      const choice = this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : undefined;
+      const delivery = choice?.delivery;
+      const invoice =
+        choice === undefined
+          ? undefined
+          : JSON.stringify([
+              choice.invoiceType,
+              choice.recipient.taxId,
+              choice.recipient.legalName,
+              choice.recipient.address,
+              choice.recipient.countryCode,
+              delivery?.medium ?? null,
+              delivery?.medium === "a4"
+                ? delivery.pagePrinterId
+                : delivery?.medium === "email"
+                  ? delivery.recipient
+                  : null,
+            ]);
       const replay =
         pending?.id === id &&
         pending.session === session &&
         pending.visit === basketVisit &&
         pending.api === api &&
         pending.basket === this.#basketPayload() &&
-        pending.invoice === invoice &&
-        pending.language === language;
+        pending.invoice === invoice;
       if (!replay) {
         this.#unconfirmedPlace = undefined;
         if (!(await this.#askCounterDeadEnds("place", !refusalRetry, clearInactiveChoices))) return;
@@ -7008,7 +7019,6 @@ export class TillApp extends LitElement {
           api,
           basket: this.#basketPayload(),
           invoice,
-          language,
         };
       }
       reachedPlace = true;

@@ -136,6 +136,34 @@ describe("a repeated place", () => {
     expect(await snapshot()).toEqual(saved);
   });
 
+  it("refuses the same operator's different device without repeating the placement", async () => {
+    const path = `/api/working-orders/${orderId}/place`;
+    expect(await send(venue.app, venue.cookie, "POST", path, { expectedEdit: null })).toEqual({
+      status: 200,
+      json: { id: orderId, status: "placed" },
+    });
+    const saved = await snapshot();
+
+    const answer = await send(venue.app, venue.cookie2, "POST", path, { expectedEdit: null });
+
+    expect(answer.status).toBe(409);
+    expect(answer.json).toMatchObject({ code: "submission.id_reused" });
+    expect(await snapshot()).toEqual(saved);
+  });
+
+  it("replays the original placement facts after the order is later closed", async () => {
+    await place();
+    await suite.db
+      .update(workingOrders)
+      .set({ status: "abandoned" })
+      .where(eq(workingOrders.id, orderId));
+    const saved = await snapshot();
+
+    expect(await place()).toEqual({ id: orderId, status: "placed" });
+    expect(await snapshot()).toEqual(saved);
+    expect(saved.orders[0]!.status).toBe("abandoned");
+  });
+
   it("does not replay a placement made by another operation", async () => {
     await withTransaction(suite.db, (tx) =>
       markOrderPlaced(tx, venue.clock, venue.cfg, orderId, venue.operatorId),
