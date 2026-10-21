@@ -1572,13 +1572,31 @@ describe("till-ticket-view: a line given away or discounted (service plan Task 1
     expect(rows.map(rowText)).toEqual([
       "Hamburguesa 1 12,00 €",
       "Aceitunas 1,50 €",
-      "Invitación -12,00 €",
-      "Invitación -1,50 €",
+      "Descuento 100% -12,00 €",
+      "Descuento 100% -1,50 €",
       "Rioja 1 30,00 €",
       "Descuento 20% -6,00 €",
       "Pan 1 2,50 €",
       "Descuento -1,00 €",
     ]);
+  });
+
+  it("prints a full comp in Basque as the discount word with 100%", async () => {
+    const { el } = await mount({
+      locale: "eu-ES",
+      lines: [
+        {
+          descriptions: { "eu-ES": "Hanburgesa" },
+          quantity: "1",
+          gross: "0.00",
+          listGross: "12.00",
+          adjustments: [{ kind: "comp", amount: "12.00" }],
+        },
+      ],
+    });
+    const rows = [...el.shadowRoot!.querySelectorAll(".lines > li")].map(rowText);
+
+    expect(rows[rows.indexOf("Hanburgesa 1 12,00 €") + 1]).toBe("Deskontua 100% -12,00 €");
   });
 
   it("shows no struck-through price", async () => {
@@ -1833,7 +1851,7 @@ describe("till-ticket-view: the sale's own language", () => {
 
     expect(rows(el, ".lines > li")).toEqual([
       "Hamburguesa 1 12,00 €",
-      "Invitació -12,00 €",
+      "Descompte 100% -12,00 €",
       "Rioja 1 30,00 €",
       "Descompte 20% -6,00 €",
       "Descompte -1,00 €",

@@ -107,20 +107,21 @@ function netFacts(line: TillSaleLine, names: string, format: string, labels: Rec
 
 const percentFormatters = new Map<string, Intl.NumberFormat>();
 
-/** `Descuento 12,5%` for 1250 basis points, as `apps/server/src/receipt-ticket.ts` prints it. */
+/** `Descuento 12,5%` for 1250 basis points, and a full comp as 100%, as
+ *  `apps/server/src/receipt-document.ts`'s `adjustmentLabel` words them. */
 function adjustmentLabel(
   adjustment: ReceiptAdjustment,
   locale: string,
   labels: ReceiptLabels,
 ): string {
-  if (adjustment.kind === "comp") return labels.comp;
-  if (adjustment.percentBp === undefined) return labels.discount;
+  const percentBp = adjustment.kind === "comp" ? 10000 : adjustment.percentBp;
+  if (percentBp === undefined) return labels.discount;
   let formatter = percentFormatters.get(locale);
   if (formatter === undefined) {
     formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
     percentFormatters.set(locale, formatter);
   }
-  return `${labels.discount} ${formatter.format(adjustment.percentBp / 100)}%`;
+  return `${labels.discount} ${formatter.format(percentBp / 100)}%`;
 }
 
 function adjustmentRow(
