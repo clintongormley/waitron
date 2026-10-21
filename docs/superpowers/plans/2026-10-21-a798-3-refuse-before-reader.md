@@ -717,7 +717,11 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
     `sayCardChargedOnFullDisk` (`POST /api/pay` in `till-api.ts`, the bill payment route in
     `bill-payments-api.ts`), read by `afterCardCharged` (`bill-payments.ts`); every other caller of
     the same paths, the dashboard's stuck-payment resolve route among them, still answers
-    `storage.disk_full` (`payments-api.stuck.test.ts`).
+    `storage.disk_full` (`payments-api.stuck.test.ts`). The same two routes also answer it for a
+    charge whose capture the provider could not save for a full disk (SumUp's and Stripe's
+    `collect` throw `ChargeNotSavedError`, which `collectFailure` in `bill-payments.ts`
+    translates), while a full disk on the attempt's own first row still answers
+    `storage.disk_full` (`card-charged-not-recorded.test.ts`).
 19. **The sale-only disk sentence's English.** Design §3 and picture 1 give only the Spanish.
     DEFAULT: "Sale not recorded: the box is out of disk space. Don't take payment until it is
     fixed; tell a manager." The Spanish is the design's, word for word.

@@ -2474,7 +2474,14 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   to charge again (`afterCardCharged`, `bill-payments.ts`). Only the till's two card routes ask for
   it (`sayCardChargedOnFullDisk`, set in `till-api.ts`'s `POST /api/pay` and
   `bill-payments-api.ts`); every other caller, the dashboard's stuck-payment resolve route among
-  them, still answers `storage.disk_full`.
+  them, still answers `storage.disk_full`. The same answer covers a charge whose capture the
+  provider could not save: SumUp's and Stripe's `collect` throw `ChargeNotSavedError`
+  (`packages/payments/src/charge-not-saved.ts`) when the processor reported the card charged and
+  that save failed for a full disk, and the two routes translate only that error
+  (`collectFailure`, `bill-payments.ts`). Its cause is the full disk, so every other caller still
+  answers `storage.disk_full`. The provider's row stays `attempting`, for its pending pass to
+  capture. A full disk on any other save inside `collect`, the attempt's own first row among them,
+  still answers `storage.disk_full` (`card-charged-not-recorded.test.ts`).
 - Not gated: every route outside those three mounts, among them every dashboard route, the print
   agent's routes (`print-api.ts`), the provider webhook and node enrolment; and the background
   duties. Their writes that do not fit fail by themselves and note the stop.
