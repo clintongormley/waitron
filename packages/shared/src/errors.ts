@@ -56,6 +56,8 @@ export interface ErrorParams {
    * mis-send.
    */
   "management.request_invalid": { field: string };
+  /** The box's disk is full, so a write was refused. */
+  "storage.disk_full": Record<string, never>;
 }
 
 export type ErrorCode = keyof ErrorParams;

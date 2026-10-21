@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { sqliteFailureOf } from "./engine-failure.js";
+import { MAX_CAUSE_DEPTH } from "./cause-chain.js";
+import { diskFullIn, sqliteFailureOf } from "./engine-failure.js";
+import { AppError } from "./errors.js";
 
 /**
  * Hand-built errors, deliberately: this package is browser-safe and cannot import `node:sqlite` to
@@ -69,5 +71,66 @@ describe("sqliteFailureOf", () => {
 
   it("answers with an empty message when the layer carries no string one", () => {
     expect(sqliteFailureOf({ errcode: 14 })).toEqual({ errcode: 14, message: "" });
+  });
+});
+
+describe("diskFullIn", () => {
+  it("recognises the engine's full-disk code", () => {
+    expect(diskFullIn(driverError(13, "database or disk is full"))).toBe(true);
+  });
+
+  it("recognises the domain error", () => {
+    expect(diskFullIn(new AppError("storage.disk_full", {}))).toBe(true);
+  });
+
+  it("recognises either one under a wrapper", () => {
+    expect(
+      diskFullIn(
+        new Error("Failed to run the query 'ROLLBACK'", {
+          cause: new AppError("storage.disk_full", {}),
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      diskFullIn(
+        new Error("Failed to run the query 'ROLLBACK'", {
+          cause: new Error("wrapped", { cause: driverError(13, "database or disk is full") }),
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not take a neighbouring code for a full disk", () => {
+    expect(diskFullIn(driverError(12, "unknown operation"))).toBe(false);
+    expect(diskFullIn(driverError(14, "unable to open database file"))).toBe(false);
+    expect(diskFullIn(driverError(1, "no such table: t"))).toBe(false);
+    expect(diskFullIn(new AppError("shared.invalid_id", { kind: "table", value: "x" }))).toBe(
+      false,
+    );
+    expect(diskFullIn({ code: 13 })).toBe(false);
+    expect(diskFullIn({ errcode: "13" })).toBe(false);
+  });
+
+  it("stops at the depth bound", () => {
+    const chainWithFullDiskAt = (depth: number): unknown => {
+      let error: unknown = driverError(13, "database or disk is full");
+      for (let level = 0; level < depth; level += 1) error = new Error("wrapped", { cause: error });
+      return error;
+    };
+    expect(diskFullIn(chainWithFullDiskAt(MAX_CAUSE_DEPTH))).toBe(false);
+    expect(diskFullIn(chainWithFullDiskAt(MAX_CAUSE_DEPTH - 1))).toBe(true);
+  });
+
+  it("stops at a self-referencing error", () => {
+    const cyclic: { cause?: unknown } = {};
+    cyclic.cause = cyclic;
+    expect(diskFullIn(cyclic)).toBe(false);
+  });
+
+  it("answers false for values that are not objects", () => {
+    expect(diskFullIn(null)).toBe(false);
+    expect(diskFullIn(undefined)).toBe(false);
+    expect(diskFullIn("storage.disk_full")).toBe(false);
+    expect(diskFullIn(13)).toBe(false);
   });
 });
