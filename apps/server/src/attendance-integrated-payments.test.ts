@@ -414,6 +414,15 @@ describe("integrated whole-order attendance", () => {
     ]);
   });
 
+  it("keeps no attendance row when a walk-up card sale is refused under a clock in 2001", async () => {
+    at("2001-01-01T11:00:00.000Z");
+    await expect(
+      payWorkingOrderIntegrated(deps(), v.cfg, request(), collector),
+    ).rejects.toMatchObject({ code: "clock.unusable" });
+    expect(provider.collectCalls).toHaveLength(0);
+    expect(await operations()).toEqual([]);
+  });
+
   describe("workforce never migrated", () => {
     const withoutWorkforce = useVenueDb({
       migrations: migrationOptionsFor(

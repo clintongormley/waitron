@@ -13,6 +13,7 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { systemClock } from "./till-backend.js";
+import { parkOrder } from "./working-order.js";
 import "./errors.js";
 
 let venue: BillVenue;
@@ -49,10 +50,20 @@ function clockAt(iso: string): TrustedClock {
   return { ...base, now: () => reading };
 }
 
+const dish = () => [{ menuItemId: counter.offerFor(productId), quantity: "1" }];
+
 function cardSale(iso: string, id: string) {
   return send(venue.appAt(clockAt(iso)), venue.cookie, "POST", "/api/pay", {
     id,
-    lines: [{ menuItemId: counter.offerFor(productId), quantity: "1" }],
+    lines: dish(),
+    zoneId: counter.zoneId,
+  });
+}
+
+function payStored(iso: string, id: string) {
+  return send(venue.appAt(clockAt(iso)), venue.cookie, "POST", "/api/pay", {
+    id,
+    lines: [],
     zoneId: counter.zoneId,
   });
 }
@@ -82,6 +93,26 @@ it("refuses a walk-up card sale under a clock in 2001, naming the clock, before 
   expect(rows("payments", "working_order_id", id)).toBe(0);
 });
 
+it("refuses a stored open order under a clock in 2001 before the reader, and leaves no attempt mark", async () => {
+  const id = randomUUID();
+  await parkOrder({ db: venue.db }, venue.cfg, { id, lines: dish(), zoneId: counter.zoneId });
+  const before = collects();
+
+  const answer = await payStored("2001-01-01T11:00:00.000Z", id);
+
+  expect(answer.status).toBe(409);
+  expect(answer.json).toEqual({
+    code: "clock.unusable",
+    params: { clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: 60 },
+  });
+  expect(collects()).toBe(before);
+  expect(
+    venue.db.all(
+      sql`select status, payment_attempt_at as attemptAt from working_orders where id = ${id}`,
+    ),
+  ).toEqual([{ status: "open", attemptAt: null }]);
+});
+
 // No case in this file records a sale dated after the control: a later-dated record would trip the
 // clock-behind stop (A798-B slice 8) rather than test the first issue date.
 it("refuses at 23:59:59.999 local on 27-10-2024, and asks the reader at 00:00 local on 28-10-2024", async () => {
@@ -90,7 +121,10 @@ it("refuses at 23:59:59.999 local on 27-10-2024, and asks the reader at 00:00 lo
   const refused = await cardSale("2024-10-27T22:59:59.999Z", randomUUID());
 
   expect(refused.status).toBe(409);
-  expect(refused.json.code).toBe("clock.unusable");
+  expect(refused.json).toEqual({
+    code: "clock.unusable",
+    params: { clockAt: "2024-10-27T22:59:59.999Z", offsetMinutes: 60 },
+  });
   expect(collects()).toBe(before);
 
   const sold = await cardSale("2024-10-27T23:00:00.000Z", randomUUID());
@@ -98,4 +132,18 @@ it("refuses at 23:59:59.999 local on 27-10-2024, and asks the reader at 00:00 lo
   expect(sold.status).toBe(200);
   expect(sold.json.outcome).toBe("captured");
   expect(collects()).toBe(before + 1);
+});
+
+// Runs after the 28-10-2024 control on purpose: it records a sale dated after it.
+it("replays a settled card sale under a clock in 2001 without asking the reader", async () => {
+  const id = randomUUID();
+  const first = await cardSale("2024-10-28T10:00:00.000Z", id);
+  expect(first.status).toBe(200);
+  const before = collects();
+
+  const replay = await payStored("2001-01-01T11:00:00.000Z", id);
+
+  expect(replay.status).toBe(200);
+  expect(replay.json.outcome).toBe("captured");
+  expect(collects()).toBe(before);
 });
