@@ -175,9 +175,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   that start step can authorise (CLAUDE.md §5's "does not mint an installation number" sentence is
   amended in the same change); a guard, proven by deletion, refuses to add a record to a chain
   opened under another identity. Corrections of invoices issued before the change join the new
-  chain; the design asks for asesor Q53(d)(2) to be widened to cover that. Waits for the owner's choice of how the new installation is named without
-  A679's "anyone set up a box in the last hour?" question (recommended: A947's hour-and-minute
-  name, so A947's slice 4a first). After A940's slice 1; before the first production venue goes
+  chain; the design asks for asesor Q53(d)(2) to be widened to cover that. The name is settled:
+  the owner decided at about 22:25 on 2026-10-21 that every series name is five symbols for the
+  UTC minute (A947 §6.5), so A947's slice 4a lands first; A940's design is revised for it next.
+  After A940's slice 1; before the first production venue goes
   live. A move between fiscal modules stays a refused start until the first non-Veri\*Factu mode.
   [Design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md#56-when-the-systems-identity-changes-a-new-installation-by-itself-a993)
 
@@ -5767,20 +5768,24 @@ Not in any track until the standalone primary is done.
 **The on-prem mirror.** Read this section as requirements slices 3–5 must meet, not as work
 outstanding on code that exists.
 
-- **A947. Go-live on two local boxes — design revised for the owner's answers; his approval of the
-  revision awaited.** The owner, 2026-10-21: "For go live I want one box with failover to another
+- **A947. Go-live on two local boxes — design revised twice for the owner's answers; his approval of
+  the second revision awaited.** The owner, 2026-10-21: "For go live I want one box with failover to another
   local box." The [design](superpowers/specs/2026-10-21-a947-two-box-failover-design.md) re-cuts
   slices 3–5 into pull requests (§11) and answers several entries below: the vault-ring question
   (the spare gets the credentials key at joining), adding a spare with the internet down (the first
   copy over the LAN), the stored primary key (A45), and the drain confirmations rejoin lost (the
   tail receipt). All four questions are answered (§12): a manager switches from any till, signing
   in with a passkey or a password plus authenticator code when enrolled — no recovery sheet; the
-  switch never waits for the next hour, because a promotion's series carry the hour and the minute
-  (`A-06XV-40`, §6.5, a fiscal slice the owner lands); any device, even a reloaded one, reaches the
+  switch never waits for the next hour, because every series name is five symbols for the UTC
+  minute (`A-0CZZW`, §6.5; the owner's 22:25 follow-up), with no "last hour" question anywhere;
+  the recovery sheet and the restore form drop the installation code, and a test showed that
+  today's restore without it takes an earlier or the same name when the box's clock is behind,
+  so a setup or restore with the box's clock behind is now refused (§6.7) — slice 4a, fiscal, the owner lands it, first;
+  any device, even a reloaded one, reaches the
   switch (§6.6); the returning box hands over and becomes the spare by itself after three checks
   (§7.2); a spare is a choice per venue. Found while revising: both boxes put the same address in
   the membership chart, so a till's router sees one server (§2). No build before the owner
-  approves the revision.
+  approves the second revision.
   [Mock-ups](backlog/mockups/a947-two-box-failover/README.md) The membership, promotion and rejoin arc (#197–#272) is still in
 the tree. What remains, largest first:
 

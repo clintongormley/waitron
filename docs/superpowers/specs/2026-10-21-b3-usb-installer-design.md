@@ -40,7 +40,7 @@ which makes B3 go-live work. Four other pieces of work are already waiting on wh
   (`docs/backlog/box.md:63-66`).
 - **A947, two local boxes with failover** — "Both boxes are installed from the same stick,
   identically. The setup wizard asks which job the box does"
-  (`docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md:1011-1013`).
+  (`docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md:1239-1241`).
 - **A798, keep trading when a part fails** — "The box image keeps its clock synchronised, with no
   terminal … the image makes it standing" (`docs/backlog/box.md:366-373`).
 - **A940, the declaración responsable** — "B3's USB installer, when it is designed, copies the PDF
@@ -714,7 +714,7 @@ it (P50). Picture 5 and picture 7.
    box's own screen types nothing extra (§12).
 2. **After setup: the dashboard** (`/manage`), at its sign-in page. A spare box's screen (A947)
    follows the same setting, and also shows A947's switch page while the main box is silent
-   (A947 §6.6, `docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md:717-718`).
+   (A947 §6.6, `docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md:810-811`).
 3. **Once the box is told to: the till.** Each box has a setting, **«Pantalla de este equipo:
    Panel / Caja»** (Settings → This box, §10), and from then on its screen starts on the till.
 
@@ -1044,7 +1044,7 @@ nothing:
    `/usr/share/doc` (§13).
 8. **For A947:** the spare's screen follows §9's start-screen setting, and shows the switch page while
    the main box is silent, as A947 asks ("it shows the switch page",
-   `docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md:717-718`); A947 also has the
+   `docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md:810-811`); A947 also has the
    spare show a banner "on its own status page and on any screen attached to it" (`:373`).
 9. **For A917:** its naming form is "an unauthenticated plain-HTTP write, acceptable for the same
    reason setup itself is: an unclaimed server can be set up by anyone on its network"
@@ -1125,7 +1125,7 @@ file, outside the repository):
 so the first venue's box is installed from the first release tag, which waits for A940's release
 slices; encryption is in slice 1 because the owner wants it before go-live; the box's screen is the
 counter till at a one-box venue (A947 §6.6 calls the counter till "often the main box's own screen",
-`docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md:690`); and the setup code closes a
+`docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md:783`); and the setup code closes a
 way for a stranger to take a new box and puts the disk's recovery key on paper. Slices 4 and 7
 follow. Slice 8 changes how setup is
 authorised, so it takes the full review; none of the slices is fiscal.

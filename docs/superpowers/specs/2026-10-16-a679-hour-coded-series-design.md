@@ -1,6 +1,6 @@
 # A679: hour-coded invoice series
 
-**Approved by the owner, 2026-10-16 at 14:50.**
+**Approved by the owner, 2026-10-16 at 14:50.** **Dated pointer, 2026-10-21:** the owner replaced the four-symbol hour code with a five-symbol code for the UTC minute on every series, removed the "last hour" question and took the installation code off the recovery sheet and the restore form; see [A947 §6.5 and §6.7](2026-10-21-a947-two-box-failover-design.md). This design is not rewritten, and that change is not built yet.
 
 The owner accepted this design as written, including the epoch, clock threshold and disclosed limits.
 References below to proposals and recommendations record the design presented for that decision.

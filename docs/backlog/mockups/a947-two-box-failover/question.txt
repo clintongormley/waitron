@@ -1,3 +1,61 @@
+A947 — go-live on two local boxes: SECOND REVISION, for your answers of about 22:25. One question.
+Design: docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md (second revision note at
+the top; §6.5 and §6.7).
+
+==========================================================================================
+Second revision — question 1 of 1: approve the second revision?
+Pictures: 6-switch-series-worked-example.png first, then 2-take-over-dialog.png.
+
+Example. Friday 23 October, Bar Santet. 21:39 the bar box's power supply trips. 21:40:50 Marta
+taps «Cambiar» on the terrace till and signs in. The back-room box knows one name, 0CNNW (the bar
+box's setup on 16 October), so it takes the current minute: 19:40 in world time (UTC), five
+symbols 0CZZW. It sells at 21:41 as A-0CZZW/1. The bar box comes back at 21:47 and becomes the
+spare by itself. 21:55:50 the back-room box's disk fails; Marta switches again; the bar box knows
+0CNNW and 0CZZW, 21:55 is a later minute, so it sells at once as A-0D00B/1. Had a third switch
+come at 21:55:58, inside that same minute, it would have waited 2 seconds and taken 0D00C. AEAT
+sees 0CNNW, 0CZZW, 0D00B: three installations, nothing repeated.
+
+Saturday, a restore from an old backup with a wrong clock. Both boxes are lost; the only backup is
+Thursday's, which knows 0CNNW but not Friday's two names. The new box's clock says Tuesday 12:00;
+Marta's phone, doing the restore, says Saturday 11:00. What refuses it: the clock check — the box
+is behind the phone by more than 30 seconds, and for a restore that is now a refusal nobody can
+click past («ponla en hora para recuperar»). Once the clock is right it waits until 11:01 has
+passed and takes 11:02 Madrid, 0D0RY. You asked for a test, not reasoning: I ran today's code
+with the sheet's code left out. It does NOT refuse: once someone clicks past the clock warning
+it picks Tuesday's name, earlier than Friday's; and with a clock only 90 seconds behind it picked
+the very same name the switch had used, with no warning at all. So the sheet's code and the "last
+hour" question were doing real work, and this revision replaces them with that clock refusal.
+
+What changed, in short:
+- Every installation code, everywhere, is five symbols counting UTC minutes since 1 January 2026
+  — setup, switch, hand-over, restore, re-registration and A993's automatic change. It lasts
+  until October 2089. Always a minute later than every name the box knows; a name already taken
+  this minute waits for the next one (under a minute, 90 seconds at worst). The hour code with a
+  minute added (06XV-40) and the old option B are gone. Fiscal: its own pull request, which you
+  land, before the switch slices.
+- The "anyone set up a box in the last hour?" question goes, from setup, the restore form and the
+  switch.
+- The recovery sheet keeps only the box's recovery key, printed once per box. The restore form
+  stops asking for the installation code, and nothing asks for a reprint after a new series.
+- My calls: the clock check tightens from 120 to 30 seconds, since a name now lasts a minute; and
+  for a setup or a restore (the two that cannot see every name already used) the box needs a
+  second clock from another device or the internet, a box clock behind by more than 30 seconds is
+  refused, and the name is taken a minute or two after the check — up to two minutes, where you
+  expected at most one. The alternative: no wait, and accept that a name made in the last minute
+  or so by a box this one cannot know about could repeat.
+- Every place in the code the change touches is listed by file and line in the build plan (slice
+  4a). Development and demo boxes holding four-symbol names are reset, not migrated.
+
+- A (recommended) — approve. The build plan is written next; slice 4a (the five-symbol name, the
+  sheet without its code, the clock refusal) comes first, and the fiscal slices wait for you to
+  land them.
+- B — approve with changes: say which (for example, no wait for setups and restores).
+- Stop here — I'll write.
+
+==========================================================================================
+ANSWERED — the first revision's question, kept as asked. Answer (about 22:25): five symbols for
+the minute on every series; no installation code on the sheet and no reprint, "prove it".
+
 A947 — go-live on two local boxes: REVISED for your answers of 2026-10-21. One question.
 Design: docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md (revision note at the top).
 
