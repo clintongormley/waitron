@@ -580,3 +580,130 @@ describe("a full disk while migrating", () => {
     expect(() => db.execute("rollback")).toThrow("cannot rollback - no transaction is active");
   });
 });
+
+describe("telling listeners about a full disk", () => {
+  const counter = () => {
+    const calls = { n: 0 };
+    return { calls, listener: () => void calls.n++ };
+  };
+
+  it("calls each listener once when a statement inside a body is refused for a full disk", async () => {
+    const { store, fill, limit } = await open();
+    const first = counter();
+    const second = counter();
+    store.venue.onDiskFull(first.listener);
+    store.venue.onDiskFull(second.listener);
+    limit(4);
+    await expect(
+      store.venue.withWriteLock(async () => {
+        fill();
+      }),
+    ).rejects.toMatchObject(DISK_FULL);
+    expect(first.calls.n).toBe(1);
+    expect(second.calls.n).toBe(1);
+  });
+
+  it("calls it once for a statement outside any body", async () => {
+    const { store, fill, limit, errorOf } = await open();
+    const { calls, listener } = counter();
+    store.venue.onDiskFull(listener);
+    limit(4);
+    expect(await errorOf(fill)).toMatchObject(DISK_FULL);
+    expect(calls.n).toBe(1);
+  });
+
+  it("does not call it for a refusal that is not a full disk", async () => {
+    const { store, insert } = await open();
+    const { calls, listener } = counter();
+    store.venue.onDiskFull(listener);
+    insert("taken");
+    await expect(
+      store.venue.withWriteLock(async () => {
+        insert("taken");
+      }),
+    ).rejects.toThrow(/UNIQUE constraint failed: sale\.body/);
+    expect(calls.n).toBe(0);
+  });
+
+  it("does not call it again for the statements a body runs after the engine ended its transaction", async () => {
+    const { store, insert, fill, limit, errorOf } = await open();
+    const { calls, listener } = counter();
+    store.venue.onDiskFull(listener);
+    limit(4);
+    let part2: unknown;
+    await expect(
+      store.venue.withWriteLock(async () => {
+        insert("part 1");
+        await errorOf(fill);
+        part2 = await errorOf(() => insert("part 2"));
+      }),
+    ).rejects.toMatchObject(DISK_FULL);
+    expect(part2).toMatchObject(DISK_FULL);
+    expect(calls.n).toBe(1);
+  });
+
+  it("does not call it again as a full disk the engine backed out alone escapes the body", async () => {
+    const { store, db, insert, limit } = await open();
+    db.execute("create table log (v blob)");
+    db.execute(
+      "create trigger sale_big after insert on sale when new.body = 'big' " +
+        "begin insert into log values (zeroblob(65536)); end",
+    );
+    const { calls, listener } = counter();
+    store.venue.onDiskFull(listener);
+    limit(4);
+    await expect(
+      store.venue.withWriteLock(async () => {
+        await db.transaction(async () => {
+          insert("big");
+        });
+      }),
+    ).rejects.toMatchObject(DISK_FULL);
+    expect(calls.n).toBe(1);
+  });
+
+  it("keeps the caller's error when a listener throws", async () => {
+    const { store, fill, limit } = await open();
+    const { calls, listener } = counter();
+    store.venue.onDiskFull(() => {
+      throw new Error("boom");
+    });
+    store.venue.onDiskFull(listener);
+    limit(4);
+    await expect(
+      store.venue.withWriteLock(async () => {
+        fill();
+      }),
+    ).rejects.toMatchObject(DISK_FULL);
+    expect(calls.n).toBe(1);
+  });
+
+  it("stops calling a listener once unsubscribed", async () => {
+    const { store, fill, limit, errorOf } = await open();
+    const { calls, listener } = counter();
+    const unsubscribe = store.venue.onDiskFull(listener);
+    limit(4);
+    await errorOf(fill);
+    expect(calls.n).toBe(1);
+    unsubscribe();
+    expect(await errorOf(fill)).toMatchObject(DISK_FULL);
+    expect(calls.n).toBe(1);
+  });
+
+  it("tells the node file's listeners, not the venue file's, about the node file", async () => {
+    const { store, errorOf } = await open();
+    const venue = counter();
+    const node = counter();
+    store.venue.onDiskFull(venue.listener);
+    store.node.onDiskFull(node.listener);
+    const nodeDb = store.node;
+    nodeDb.execute("create table pad (pad blob)");
+    const [{ page_count }] = nodeDb.execute<{ page_count: number }>("pragma page_count").rows;
+    nodeDb.execute(`pragma max_page_count = ${page_count + 4}`);
+    expect(
+      await errorOf(() => nodeDb.execute("insert into pad (pad) values (zeroblob(65536))")),
+    ).toMatchObject(DISK_FULL);
+    expect(node.calls.n).toBe(1);
+    expect(venue.calls.n).toBe(0);
+  });
+});

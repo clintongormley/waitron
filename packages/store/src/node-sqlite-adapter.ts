@@ -6,7 +6,6 @@ import type {
 } from "node:sqlite";
 import { AppError, diskFullIn } from "@waitron/shared";
 import { type Connections, isPending, isReadOnlyRefusal } from "./connections.js";
-import { asDiskFull } from "./disk-full.js";
 import { createTableRelationsHelpers, extractTablesRelationalConfig } from "drizzle-orm";
 import { BetterSQLiteSession } from "drizzle-orm/better-sqlite3/session";
 import { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core/db";
@@ -95,7 +94,7 @@ export function adaptNodeSqlite(connections: Connections) {
         try {
           result = use(compile(write));
         } catch (error) {
-          const mapped = asDiskFull(error) ?? error;
+          const mapped = connections.refusal(error);
           if (wasOpen && !write.isTransaction) connections.noteEnded(mapped);
           throw mapped;
         }
@@ -108,7 +107,7 @@ export function adaptNodeSqlite(connections: Connections) {
         try {
           return use(compile(target));
         } catch (error) {
-          if (!isReadOnlyRefusal(error)) throw asDiskFull(error) ?? error;
+          if (!isReadOnlyRefusal(error)) throw connections.refusal(error);
           return onWriter(use);
         }
       };
@@ -206,7 +205,7 @@ export function adaptNodeSqlite(connections: Connections) {
               try {
                 write.exec(savepoint === undefined ? "commit" : `release ${savepoint}`);
               } catch (error) {
-                const mapped = asDiskFull(error) ?? error;
+                const mapped = connections.refusal(error);
                 if (!write.isTransaction) connections.noteEnded(mapped);
                 else {
                   try {
@@ -221,7 +220,7 @@ export function adaptNodeSqlite(connections: Connections) {
             };
             const failure = (error: unknown): unknown => {
               if (savepoint === undefined) {
-                return connections.endedBy()?.error ?? asDiskFull(error) ?? error;
+                return connections.endedBy()?.error ?? connections.refusal(error);
               }
               if (write.isTransaction) return error;
               const recorded = connections.endedBy()?.error;

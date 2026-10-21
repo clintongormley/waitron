@@ -2,7 +2,12 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { archiveTo } from "./archive.js";
-import { type CommitListener, type Connections, connectionPair } from "./connections.js";
+import {
+  type CommitListener,
+  type Connections,
+  connectionPair,
+  type DiskFullListener,
+} from "./connections.js";
 import { drizzleNodeSqlite, type NodeSqliteDatabase } from "./node-sqlite-adapter.js";
 import { registerSearchFunction } from "./search-function.js";
 import { closeQuietly, isLocked, lockVenueDirectory, type VenueLock } from "./venue-lock.js";
@@ -18,7 +23,7 @@ export {
 } from "./append-only.js";
 export type { AppendOnlyTrigger, CatalogueTarget, StatementTarget } from "./append-only.js";
 export { archiveTo } from "./archive.js";
-export type { CommitListener } from "./connections.js";
+export type { CommitListener, DiskFullListener } from "./connections.js";
 export { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
 export type { NodeSqliteDatabase, RawResult } from "./node-sqlite-adapter.js";
 export { openLock } from "./migration-lock.js";
@@ -98,6 +103,12 @@ export type StoreHandle<TSchema extends Record<string, unknown>> = NodeSqliteDat
    * `Connections.reportIfChanged` in `./connections.ts` has what the side-file comparison can miss.
    */
   onCommit: (listener: CommitListener) => () => void;
+  /**
+   * Registers `listener` for each statement, `begin`, `commit` or `release` on this file the engine
+   * refuses because the disk is full, called before `storage.disk_full` is thrown; returns the
+   * unsubscribe. A refusal re-thrown after the engine ended the transaction is not reported again.
+   */
+  onDiskFull: (listener: DiskFullListener) => () => void;
   /** Closes both of this file's connections. {@link VenueStore.close} closes both files. */
   close: () => Promise<void>;
 };
@@ -253,6 +264,7 @@ export async function openVenueStore<
       withWriteLock: <T>(body: () => Promise<T>) => writes.run(body),
       archiveTo: (path: string) => archiveTo(db, path),
       onCommit: (listener: CommitListener) => connections.onCommit(listener),
+      onDiskFull: (listener: DiskFullListener) => connections.onDiskFull(listener),
       // With the store's busy wait the checkpoint blocks on the busy handler, and on this
       // synchronous engine the whole process blocks with it.
       checkpointTruncate: () =>

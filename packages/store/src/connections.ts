@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { statSync } from "node:fs";
 import type { DatabaseSync, StatementSync } from "node:sqlite";
+import { asDiskFull } from "./disk-full.js";
 
 /**
  * An `async` body returns at its FIRST `await`, with its remaining work and its throw still ahead
@@ -33,6 +34,21 @@ export const settle = <T>(result: T, onOk: () => void, onFail: () => void): T =>
 
 /** Called on each commit on a file's write connection that the store reports. */
 export type CommitListener = () => void;
+
+/** Called each time the engine refuses a statement on this file because the disk is full. */
+export type DiskFullListener = () => void;
+
+/** A listener that throws, or returns a promise that rejects, is skipped. */
+const callEach = (listeners: Iterable<() => void>): void => {
+  for (const listener of listeners) {
+    try {
+      const returned: unknown = listener();
+      if (isPending(returned)) returned.then(undefined, () => {});
+    } catch {
+      // The caller's own outcome is what it needs; a listener's failure would replace it.
+    }
+  }
+};
 
 /**
  * How many rows `connection` has inserted, updated or deleted since it opened. Prepared once per
@@ -145,6 +161,15 @@ export interface Connections {
    * which changes the file without a commit.
    */
   sideFileReset: () => void;
+  /** Registers `listener` for the full disks {@link Connections.refusal} reports; returns the unsubscribe. */
+  onDiskFull: (listener: DiskFullListener) => () => void;
+  /**
+   * `error` as the store throws it: `storage.disk_full` when the engine refused for a full disk,
+   * else `error` itself. Tells every disk-full listener, synchronously, only when it turns an
+   * engine error into `storage.disk_full` — an error already mapped is the engine refusing nothing
+   * new. A listener that throws, or returns a promise that rejects, is skipped.
+   */
+  refusal: (error: unknown) => unknown;
 }
 
 /**
@@ -181,6 +206,7 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
    */
   const running = new Set<symbol>();
   const listeners = new Set<CommitListener>();
+  const diskFullListeners = new Set<DiskFullListener>();
   const location = write.location();
   const walPath = location === null ? null : `${location}-wal`;
   let lastWal: WalMark = "unreadable";
@@ -234,14 +260,19 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
         if (sameWal(wal, lastWal)) return;
         lastWal = wal;
       }
-      for (const listener of listeners) {
-        try {
-          const returned: unknown = listener();
-          if (isPending(returned)) returned.then(undefined, () => {});
-        } catch {
-          // See `reportIfChanged` on the interface.
-        }
-      }
+      callEach(listeners);
+    },
+    onDiskFull: (listener) => {
+      diskFullListeners.add(listener);
+      return () => {
+        diskFullListeners.delete(listener);
+      };
+    },
+    refusal: (error) => {
+      const mapped = asDiskFull(error);
+      if (mapped === undefined) return error;
+      if (mapped !== error) callEach(diskFullListeners);
+      return mapped;
     },
   };
 }
