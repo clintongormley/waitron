@@ -8,9 +8,10 @@ import {
   formatIsoMinute,
   tableNoMatches,
 } from "@waitron/dashboard-kit";
-import { addDecimal, compareDecimal, decimal, formatMoney } from "@waitron/shared";
+import { addDecimal, decimal, formatMoney } from "@waitron/shared";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import { MAX_ENTRY_PAGE_SIZE } from "../entry-pages.js";
+import { isFullComp } from "../full-comp.js";
 import type {
   AdjustmentAction,
   AdjustmentEntry,
@@ -115,22 +116,12 @@ function tallyCell(tally: AdjustmentTally): string {
 /** What was done, as staff name it: "Void", or "Comp" and how much (design §3.6). */
 function entryWords(entry: AdjustmentEntry, locale: string): string {
   if (entry.action === "cancel") return t("adjustment_report.entries.void");
-  const amount =
-    entry.action === "comp" || tookWholeValue(entry)
-      ? percentFormat(locale).format(1)
-      : entry.percentBp !== null
-        ? percentFormat(locale).format(entry.percentBp / 10000)
-        : money(entry.reduction);
+  const amount = isFullComp(entry)
+    ? percentFormat(locale).format(1)
+    : entry.percentBp !== null
+      ? percentFormat(locale).format(entry.percentBp / 10000)
+      : money(entry.reduction);
   return tf("adjustment_report.entries.comp", { amount });
-}
-
-/** An amount comp that took the item's whole list value is a full comp. */
-function tookWholeValue(entry: AdjustmentEntry): boolean {
-  return (
-    entry.action === "discount_amount" &&
-    compareDecimal(decimal(entry.afterAmount), decimal("0")) === 0 &&
-    compareDecimal(decimal(entry.beforeAmount), decimal(entry.nominalValue)) === 0
-  );
 }
 
 function personName(ref: PersonRef): string {

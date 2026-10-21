@@ -840,10 +840,39 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
     ]);
   });
 
-  it("prints a comped jamón's value and an invitation", () => {
+  it("prints a comped jamón's value and Descuento 100%", () => {
     expect(jamon(true)).toMatchObject([
       { units: "0.123 kg", item: "Jamón ibérico", price: "21,82", amount: "2,68" },
-      { item: "Invitación", amount: "-2,68" },
+      { item: "Descuento 100%", amount: "-2,68" },
+    ]);
+  });
+
+  it("names a dish's row by its own part comp when a bill comp took the rest", () => {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    input.result.lines = [
+      {
+        descriptions: { "es-ES": "Hamburguesa" },
+        quantity: "1",
+        gross: "0.00",
+        listGross: "10.00",
+        listUnitPriceGross: "10.00",
+        net: {
+          unitPrice: "0.00",
+          priceQuantity: "1.000",
+          base: "0.00",
+          tax: "0.00",
+          rate: "10.00",
+        },
+        adjustments: [{ kind: "discount", amount: "6.00" }],
+      },
+    ];
+    input.result.billAdjustments = [{ kind: "discount", percentBp: 10000, amount: "4.00" }];
+    input.result.vatBreakdown = [{ rate: "10.00", base: "0.00", tax: "0.00" }];
+    input.result.total = "0.00";
+    expect(tableOf(buildReceiptDocument(input)).rows.map((r) => r.item)).toEqual([
+      "Hamburguesa",
+      "Descuento",
+      "Descuento 100%",
     ]);
   });
 

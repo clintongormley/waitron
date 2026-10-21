@@ -466,7 +466,7 @@ describe("invoiceDiscounts", () => {
     ]);
   });
 
-  it("calls a comped dish's own row an invitation and leaves the bill's share for the end (S9)", () => {
+  it("marks a comped dish's own row as a comp and leaves the bill's share for the end (S9)", () => {
     const result = run(s9);
     expect(under(result)).toMatchObject({ 0: [{ rate: "21.00", amount: "22.31", comp: true }] });
     expect(result.atEnd).toMatchObject([
@@ -683,7 +683,7 @@ describe("invoiceDiscounts", () => {
       expect(result.atEnd).toEqual([]);
     });
 
-    it("calls a comped dish an invitation", () => {
+    it("marks a comped dish as a comp", () => {
       expect(under(invoiceDiscounts([group(0, 0, comped)], []))).toEqual({
         0: [
           { rate: "21.00", amount: "24.79", comp: true, named: { kind: "comp", amount: "30.00" } },
@@ -722,7 +722,7 @@ describe("invoiceDiscounts", () => {
       expect(result.under.get(0)?.map((d) => [d.rate, d.amount])).toEqual([["10", "1.04"]]);
     });
 
-    it("does not call a row an invitation when a discounted extra beside the comped dish is still charged", () => {
+    it("does not call a row a full comp when a discounted extra beside the comped dish is still charged", () => {
       const result = invoiceDiscounts([group(0, 0, comped, olives)], []);
       expect(result.under.get(0)?.map((d) => [d.rate, d.amount, d.comp])).toEqual([
         ["21.00", "24.91", false],

@@ -1492,11 +1492,15 @@ A909–A912 and A918 are what it left open. **A758-2 built the page** ([plan](..
 Voids and comps under Service, with search, drag to reorder and a real Delete; A923–A926 are what
 it left open. **A758-3 built the report** ([plan](../superpowers/plans/2026-10-21-a758-3-voids-and-comps-report.md)):
 Voids and Comps in the totals, each entry's words, who asked for and approved each reason, and a
-Reason filter on the list; A952–A959 are what it left open. A758-4 and A758-5 and the §3.8 and
-"collect it at the counter" slices follow. The §3.8 slice also makes the report's entries read
-"Void, charged" («Cancelado, cobrado», design §3.6) for a cancel that kept the charge, deferred
-from A758-3; most such rows are already told apart without a migration, because A773-1 writes a
-still-charge cancel with before = after = the dish's charge and nothing off
+Reason filter on the list; A952–A959 are what it left open. **A758-4 built the receipt words**
+([plan](../superpowers/plans/2026-10-21-a758-4-full-comp-receipt.md)): a full comp — Free, or an
+amount that took the whole list price — prints «Descuento 100%» in each language's own discount
+word, and the «Invitación» receipt label is gone; a test shows the filed record is unchanged;
+A911, A960 and A961 are what it left open. A758-5 and the §3.8 and "collect it at the
+counter" slices follow. The §3.8 slice also makes the
+report's entries read "Void, charged" («Cancelado, cobrado», design §3.6) for a cancel that kept
+the charge, deferred from A758-3; most such rows are already told apart without a migration,
+because A773-1 writes a still-charge cancel with before = after = the dish's charge and nothing off
 (`apps/server/src/line-cancel.ts:331-333`), so `afterAmount > 0` marks them — all but a
 still-charge cancel of a dish already comped to €0.00, which needs the slice's stored flag. The notes below are the review as written before the
 answers: where they differ from the design's decisions (§1 there) — three kinds, give-away against

@@ -466,6 +466,67 @@ const SAMPLES: Record<string, ReceiptDocumentInput> = {
     },
   },
   "full-invoice": { ...FULL, surface: "thermal" },
+  // A Free Burger and a whole-price amount on the Bottle print as 100%; the Bread's amount took
+  // only what its 50% left, so it prints plain.
+  "simplified-full-comps": {
+    ...MOCKUP,
+    result: {
+      ...MOCKUP.result,
+      total: "0.00",
+      vatBreakdown: [{ rate: "10.00", base: "0.00", tax: "0.00" }],
+      lines: [
+        {
+          ...line("1", "Hamburguesa", "0.00"),
+          listGross: "12.00",
+          adjustments: [{ kind: "comp", amount: "12.00" }],
+        },
+        {
+          ...line("1", "Rioja crianza", "0.00"),
+          listGross: "30.00",
+          adjustments: [{ kind: "comp", amount: "30.00" }],
+        },
+        {
+          ...line("1", "Pan de pueblo", "0.00"),
+          listGross: "2.50",
+          adjustments: [
+            { kind: "discount", percentBp: 5000, amount: "1.25" },
+            { kind: "discount", amount: "1.25" },
+          ],
+        },
+      ],
+      tender: { method: "cash", change: "0.00" },
+    },
+  },
+  "full-invoice-comp-eu": {
+    ...FULL,
+    surface: "thermal",
+    invoiceLocale: "eu-ES",
+    result: {
+      ...FULL.result,
+      invoiceType: "F1",
+      total: "8.80",
+      vatBreakdown: [
+        { rate: "21.00", base: "0.00", tax: "0.00" },
+        { rate: "10.00", base: "8.00", tax: "0.80" },
+      ],
+      lines: [
+        {
+          ...FULL.result.lines[0]!,
+          gross: "0.00",
+          net: {
+            unitPrice: "0.00",
+            priceQuantity: "1.000",
+            base: "0.00",
+            tax: "0.00",
+            rate: "21.00",
+          },
+          adjustments: [{ kind: "comp", amount: "12.10" }],
+        },
+        FULL.result.lines[1]!,
+      ],
+      tender: { method: "cash", change: "1.20" },
+    },
+  },
   "simplified-weighed-and-counted": {
     ...MOCKUP,
     result: {

@@ -297,8 +297,11 @@ export const PINS = { staff: "5555", supervisor: "6666", manager: "7777" } as co
 
 const quiet: Logger = () => {};
 
-export async function provisionAdjustmentVenue(db: Database): Promise<AdjustmentVenue> {
-  const clock = systemClock();
+export async function provisionAdjustmentVenue(
+  db: Database,
+  options: { clock?: TrustedClock } = {},
+): Promise<AdjustmentVenue> {
+  const clock = options.clock ?? systemClock();
   const backend = new VerifactuBackend({
     clock,
     db,

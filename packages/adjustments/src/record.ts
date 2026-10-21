@@ -7,6 +7,7 @@ import {
   stringToThousandths,
   type Decimal,
 } from "@waitron/shared";
+import { isFullComp } from "./full-comp.js";
 import type { AdjustmentAction, AdjustmentPolicySnapshot } from "./policy.js";
 import { adjustments, type AdjustmentSplit, type AdjustmentStage } from "./schema/adjustments.js";
 
@@ -193,6 +194,12 @@ export interface BillAdjustment {
   action: Exclude<AdjustmentAction, "cancel">;
   percentBp: number | null;
   reduction: Decimal;
+  /**
+   * Free, or an amount that took the whole list value of its item, or of the bill for a bill-wide
+   * amount: it prints as 100%. A percentage
+   * carries its own `percentBp`.
+   */
+  full: boolean;
 }
 
 /** This bill's comps and discounts, oldest first; its cancellations are not read. */
@@ -209,16 +216,36 @@ export async function readBillAdjustments(
       action: adjustments.action,
       percentBp: adjustments.percentBp,
       reduction: adjustments.reduction,
+      beforeAmount: adjustments.beforeAmount,
+      afterAmount: adjustments.afterAmount,
+      nominalValue: adjustments.nominalValue,
     })
     .from(adjustments)
     .where(and(eq(adjustments.workingOrderId, workingOrderId), ne(adjustments.action, "cancel")))
     .orderBy(asc(adjustments.createdAt), asc(adjustments.id));
-  return rows.map(({ quantity, lineQuantity, reduction, action, ...row }) => ({
-    ...row,
-    // The query leaves cancellations out.
-    action: action as BillAdjustment["action"],
-    // A line row holds both counts (`adjustments_line_level_ck`).
-    partOfLine: row.lineId !== null && quantity! < lineQuantity!,
-    reduction: centsToDecimal(reduction),
-  }));
+  return rows.map(
+    ({
+      quantity,
+      lineQuantity,
+      reduction,
+      action,
+      beforeAmount,
+      afterAmount,
+      nominalValue,
+      ...row
+    }) => ({
+      ...row,
+      // The query leaves cancellations out.
+      action: action as BillAdjustment["action"],
+      // A line row holds both counts (`adjustments_line_level_ck`).
+      partOfLine: row.lineId !== null && quantity! < lineQuantity!,
+      reduction: centsToDecimal(reduction),
+      full: isFullComp({
+        action,
+        beforeAmount: centsToDecimal(beforeAmount),
+        afterAmount: centsToDecimal(afterAmount),
+        nominalValue: centsToDecimal(nominalValue),
+      }),
+    }),
+  );
 }
