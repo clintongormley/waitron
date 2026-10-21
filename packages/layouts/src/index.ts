@@ -83,7 +83,6 @@ export {
   putVenueReceiptSettings,
   putReceipt,
 } from "./receipt-store.js";
-export { parseThemeChoices, parseThemeName } from "./theme-input.js";
 export { validateThemeConfiguration } from "./theme-configuration.js";
 export {
   createCustomTheme,
@@ -92,7 +91,7 @@ export {
   saveCustomTheme,
   setThemeInUse,
 } from "./theme-store.js";
-export type { StoredTheme, ThemeInUse, ThemeList } from "./theme-store.js";
+export type { StoredTheme, ThemeInUse } from "./theme-store.js";
 
 // Keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from the public
 // barrel (the rule is in packages/shared/src/errors.ts).

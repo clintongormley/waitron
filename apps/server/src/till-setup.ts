@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { tillProviderForReader, type TillReaderProvider } from "@waitron/shared";
 import { locations, readTenant, type Transaction } from "@waitron/db";
 import { getDeviceProfile, readThemeInUse } from "@waitron/layouts";
-import type { CapabilityFlag, NavigationScreen, ThemeInUse } from "@waitron/layouts";
+import type { CapabilityFlag, NavigationScreen } from "@waitron/layouts";
 import { cardReaders, DEMO_READER_ID, resolveDeviceReaderId } from "@waitron/payments";
 import type { DeviceBinding } from "./device-session.js";
 import { listCourses } from "./kitchen.js";
@@ -26,7 +26,7 @@ export async function readTillSetup(
   device: DeviceBinding | null,
 ) {
   const setup = await readSetupFields(tx, deps, device);
-  const themeInUse: ThemeInUse | null = await readThemeInUse(tx);
+  const themeInUse = await readThemeInUse(tx);
   return { setup, themeInUse };
 }
 

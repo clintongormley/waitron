@@ -19,7 +19,7 @@ export const WAITRON_THEME_ANSWER: VenueThemeAnswer = {
   logo: null,
 };
 
-export function themeCacheKey(row: { id: string; choices: ThemeChoices }): string {
+function themeCacheKey(row: { id: string; choices: ThemeChoices }): string {
   return JSON.stringify([row.id, row.choices]);
 }
 
