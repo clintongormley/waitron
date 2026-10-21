@@ -3488,3 +3488,10 @@ admission. Keep snapshots unavailable until the joint release checks pass. The
 [plan](../superpowers/plans/2026-10-20-a850-backup-verification.md) records the protocol vectors,
 local checks and remaining release gates. The current host setup caller uses recovery version 1;
 version 2 remains opt-in until Cloud supports the target-bound exchange.
+
+
+An ordinary archive restore ignores a recognised v1 Cloud cache: its key or file permissions
+cannot establish a target-bound approval. A saved v2 operation still requires its complete binding
+at staging, restart and placement. Unknown, duplicate-key or unparseable saved protocol state is
+refused before mutation rather than guessed to be v1. Preserve that state for diagnosis; this
+interface does not provide a reset or erase operation.

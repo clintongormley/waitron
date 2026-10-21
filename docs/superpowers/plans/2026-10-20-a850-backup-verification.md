@@ -1132,3 +1132,43 @@ six further ordinary restore, setup-recovery and replacement consumers pass 82 c
 The final source changes name only the new fixture's insert columns and the compiled distribution;
 no existing protected fiscal assertion changes. The earlier guessed `recovery-replacement.test.ts`
 selector matched no file; the actual `cloud-replacement.test.ts` is included in this final readback.
+
+
+### Task 27 whole-branch review and corrections — 21 October 2026
+
+The one installed Claude review completed in 551 seconds against captured base
+`f17a43ad5f52c54fb9e502b7b97f45117a1e21ae` and candidate
+`658712701e997880ebfab2b8b906180ce319889e`. It exercised independent target, binding,
+cleanup, key, read-only and owner-inventory omissions and built/imported the distribution.
+Its two findings were accepted:
+
+- The not-applicable owner's existing row check lacked an effective test. A new case copies
+  the real target migrations into private temporary folders and seeds a scheduler row there.
+  Verification refuses it; independently removing only the row check makes the assertion fail.
+  The existing empty-table accepting control stays unchanged. No shipped migration changes.
+- A known v1 Cloud cache with loose permissions or a damaged cached key blocked an ordinary
+  archive restore. Two cases first fail at staging, then pass after the binding reader recognises
+  a bounded, duplicate-free v1 envelope without v2 fields before inspecting operational keys.
+  The cache supplies no authority. V2, downgraded, ambiguous and duplicate-key state still refuse.
+  A real local archive with the same unusable v1 cache reaches the existing recovery authority
+  refusal. Existing restore/golden assertions remain unchanged.
+
+The scope decision is deliberate: malformed JSON and unknown saved protocol versions remain
+refusals, because they do not establish that the pending operation is an unrelated v1 cache.
+Recognising v1 does not relax the Cloud client's own private-state validation. The helper is
+called at staging, restart and final placement; every existing v2 downgrade check remains.
+
+The review did not independently qualify every owner's history/provider probes, WAL/concurrent
+execution, documentation or Docker execution. Driver owner-suite and prior installed-control
+receipts remain separate evidence; CI supplies package coverage and the image build. Actual
+Cloud isolation/admission, joint release and trading authority remain outside this review.
+This is the normal single review followed by its test-first correction pass, not a new design.
+
+
+Post-review qualification: all four affected complete suites pass 187 cases. Independent
+installed omission controls for the seeded-row check and legacy-cache separation fail their
+intended assertions; restoring the candidate passes all 187. The final candidate comparison
+finds no tracked-content difference. Fifteen complete server suites covering verification,
+ordinary restore, Cloud setup, replacement and authority consumers pass 582 cases. Server types,
+scoped lint, formatting and whitespace checks pass. The normal hook and current-head CI remain
+the next gates; the review is retained across these focused fixes.

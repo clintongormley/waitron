@@ -134,6 +134,26 @@ export async function readSnapshotRecoveryBinding(
     snapshotVerification?: SnapshotRecoveryVerification;
   },
 ): Promise<{ verification: SnapshotRecoveryVerification; publicKey: string } | undefined> {
+  if (input.snapshotVerification === undefined) {
+    try {
+      const path = join(stateDir, "cloud-recovery.json");
+      const info = await lstat(path);
+      if (!info.isFile() || info.size > 65536) cloudRecoveryUnavailable();
+      const raw = await readFile(path, "utf8");
+      const cached = parseBackupVerificationJson(raw, 65536);
+      // A recognised v1 cache carries no target approval; its key cannot bind a local restore.
+      if (
+        Buffer.byteLength(raw) <= 8192 &&
+        record(cached) &&
+        cached.version === 1 &&
+        !["protocol", "target", "snapshotVerification"].some((key) => Object.hasOwn(cached, key))
+      )
+        return undefined;
+    } catch (error) {
+      if (record(error) && error.code === "ENOENT") return undefined;
+      return cloudRecoveryUnavailable();
+    }
+  }
   const state = await readCloudRecoveryState(stateDir);
   if (state?.version !== 2 && input.snapshotVerification === undefined) return undefined;
   if (state?.version !== 2 || !input.snapshotVerification || !input.managedCloud)

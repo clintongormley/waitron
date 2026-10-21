@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { appendFile, cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import * as fs from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -136,7 +136,7 @@ async function fixture() {
       recoveryKey: { ...request.backupKey, secret: key },
       scratchRoot,
       modules,
-      migrationsRoot: null,
+      migrationsRoot: null as string | null,
       runtime,
       signal: new AbortController().signal,
       now: () => new Date(capturedAt),
@@ -561,6 +561,41 @@ describe("complete backup verification", () => {
       semanticsVersion: 1,
       status: "passed",
       checks: [{ code: "not_applicable", status: "passed" }],
+    });
+  });
+  it("refuses a target-only owner when real migrations seed its owned table", async () => {
+    const f = await fixture();
+    await seal(f);
+    const scheduler = ALL_MODULES.find((module) => module.name === "scheduler")!;
+    f.deps.modules = [...modules, scheduler];
+    f.deps.migrationsRoot = join(f.root, "migrations");
+    const migrations = migrationOptionsFor(orderedMigrationSets(f.deps.modules), null);
+    for (const module of f.deps.modules) {
+      const options = migrations.find(
+        (option) => option.migrationsTable === module.migrations.table,
+      );
+      await cp(options!.migrationsFolder, join(f.deps.migrationsRoot, module.name), {
+        recursive: true,
+      });
+    }
+    const schedulerRoot = join(f.deps.migrationsRoot, "scheduler");
+    const journal = JSON.parse(
+      await readFile(join(schedulerRoot, "meta/_journal.json"), "utf8"),
+    ) as {
+      entries: { tag: string }[];
+    };
+    await appendFile(
+      join(schedulerRoot, journal.entries.at(-1)!.tag + ".sql"),
+      `\n--> statement-breakpoint\ninsert into scheduled_runs
+        (id, duty, period_from, period_to, state, created_at, updated_at)
+        values ('90000000-0000-4000-8000-000000000009', 'verification-fixture',
+          '2026-10-20', '2026-10-21', 'pending', '${capturedAt}', '${capturedAt}');`,
+    );
+    f.request.target = buildBackupVerificationTarget(f.deps);
+    expect(await verify(f)).toMatchObject({
+      status: "unsupported",
+      reason: "target_incompatible",
+      modules: [],
     });
   });
   it("a target-only owner cannot claim an empty table its migrations did not create", async () => {

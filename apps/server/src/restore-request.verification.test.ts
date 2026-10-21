@@ -1,5 +1,5 @@
 import { createHash, generateKeyPairSync } from "node:crypto";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -172,6 +172,52 @@ it("an ordinary stream restore remains independent of a saved v2 snapshot approv
   const stream = vi.fn(async () => {});
   expect(await runStagedRestore(f.deps, undefined, stream)).toBe(true);
   expect(stream).toHaveBeenCalledOnce();
+});
+
+it.each(["loose-permissions", "damaged-identity"])(
+  "ordinary archive staging and restart ignore a recognised v1 Cloud cache with %s",
+  async (fault) => {
+    const f = await fixture();
+    const legacy = { ...f.saved, version: 1 } as Record<string, unknown>;
+    delete legacy.protocol;
+    delete legacy.target;
+    delete legacy.snapshotVerification;
+    if (fault === "damaged-identity") legacy.privateKey = "damaged-cache-key";
+    const cache = join(f.stateDir, "cloud-recovery.json");
+    await writeFile(cache, JSON.stringify(legacy));
+    if (fault === "loose-permissions") await chmod(cache, 0o644);
+    const before = await f.evidence();
+    await stageRestoreRequest(f.stateDir, {
+      artifact: f.request.artifact,
+      recoveryKey: f.request.recoveryKey,
+      environment: "preproduction",
+    });
+    expect(JSON.parse(await f.marker()).version).toBe(1);
+    const restore = vi.fn<(deps: RestoreFileDeps) => Promise<void>>(async () => {});
+    expect(await runStagedRestore(f.deps, restore)).toBe(true);
+    expect(restore).toHaveBeenCalledOnce();
+    expect(restore.mock.calls[0]![0]).toMatchObject({ environment: "preproduction" });
+    expect(await f.evidence()).toEqual(before);
+    expect(await readFile(cache, "utf8")).toBe(JSON.stringify(legacy));
+  },
+);
+
+it.each([
+  '{"version":2,"version":1}',
+  '{"version":1,"protocol":"backup-data-restore/v1"}',
+  '{"version":3}',
+  "{broken",
+])("ordinary archives refuse ambiguous or downgraded Cloud state %s", async (raw) => {
+  const f = await fixture();
+  await writeFile(join(f.stateDir, "cloud-recovery.json"), raw);
+  await expect(
+    stageRestoreRequest(f.stateDir, {
+      artifact: f.request.artifact,
+      recoveryKey: f.request.recoveryKey,
+      environment: "preproduction",
+    }),
+  ).rejects.toThrow(unavailable);
+  await expect(f.marker()).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it("matching v2 stages the complete descriptor and fresh request key", async () => {
@@ -447,6 +493,41 @@ describe("comparison immediately before real archive placement", () => {
     );
     await expect(
       restoreFromArtifactFile({ ...f.restoreDeps, withModuleOperations: operation }),
+    ).rejects.toMatchObject({
+      code: "promotion.break_glass_invalid",
+    });
+    expect(await f.evidence()).toEqual(before);
+  });
+  it("a local archive with an unusable v1 cache reaches the unchanged fiscal authority gate", async () => {
+    const f = await realFixture();
+    await writeFile(
+      join(f.stateDir, "cloud-recovery.json"),
+      '{"version":1,"privateKey":"damaged-cache"}',
+    );
+    await chmod(join(f.stateDir, "cloud-recovery.json"), 0o644);
+    const before = await f.evidence();
+    const operation = createRecoveryRestoreRunner(
+      ALL_MODULES,
+      {
+        binding: {
+          module: "fiscal-verifactu",
+          action: "restore",
+          eventId: "event-test",
+          sourceId: f.verification.archiveSha256,
+          targetNodeId: nodeId,
+        },
+        input: {},
+      },
+      "invalid node recovery key",
+    );
+    await expect(
+      restoreFromArtifactFile({
+        ...f.restoreDeps,
+        managedCloud: undefined,
+        snapshotVerification: undefined,
+        snapshotRequestKey: undefined,
+        withModuleOperations: operation,
+      }),
     ).rejects.toMatchObject({
       code: "promotion.break_glass_invalid",
     });
