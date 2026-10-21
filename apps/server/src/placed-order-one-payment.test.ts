@@ -552,3 +552,67 @@ describe("where a placed order's card registers itself as in flight", () => {
     },
   );
 });
+
+describe("a placed order's card when a transaction ahead in the write queue notes a full disk", () => {
+  /** A real state with nothing noted; a free-space read would find room and clear any refusal. */
+  const roomyState = (): DiskFullState =>
+    createDiskFullState({
+      dir: "/unused",
+      now: () => new Date(),
+      log: () => {},
+      statfs: () => Promise.resolve({ bavail: Number.MAX_SAFE_INTEGER, frsize: 1 }),
+    });
+
+  /** Holds the write queue until the returned `release`, then runs `inside` in that transaction. */
+  function holdQueue(inside: () => void) {
+    let open!: () => void;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    const held = withTransaction(venue.db, async () => {
+      await gate;
+      inside();
+    });
+    return async () => {
+      open();
+      await held;
+    };
+  }
+
+  const settled = <T>(paying: Promise<T>) =>
+    paying.then(
+      (paid) => ({ paid }),
+      (error: unknown) => ({ error }),
+    );
+
+  it.each(KINDS)(
+    "$label: refuses with storage.disk_full inside the first transaction, asking no reader",
+    async ({ kind }) => {
+      const id = await placed(kind);
+      const disk = roomyState();
+      const before = venue.card.collectCalls.length;
+      const release = holdQueue(() => disk.noteRefused());
+
+      const paying = settled(payWith(venue.card, id, disk));
+      await release();
+
+      expect(await paying).toMatchObject({ error: { code: "storage.disk_full" } });
+      expect(venue.card.collectCalls.length).toBe(before);
+      expect(paymentsOf(id)).toEqual([]);
+    },
+  );
+
+  it.each(KINDS)(
+    "$label: asks the reader when the transaction ahead notes nothing",
+    async ({ kind }) => {
+      const id = await placed(kind);
+      const disk = roomyState();
+      const before = venue.card.collectCalls.length;
+      const release = holdQueue(() => {});
+
+      const paying = settled(payWith(venue.card, id, disk));
+      await release();
+
+      expect(await paying).toMatchObject({ paid: { outcome: "captured" } });
+      expect(venue.card.collectCalls.length).toBe(before + 1);
+    },
+  );
+});

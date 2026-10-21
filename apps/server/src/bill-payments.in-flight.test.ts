@@ -88,3 +88,79 @@ describe("where a bill's card registers itself as in flight", () => {
     },
   );
 });
+
+describe("a bill's card when a transaction ahead in the write queue notes a full disk", () => {
+  /** A real state with nothing noted; a free-space read would find room and clear any refusal. */
+  const roomyState = (): DiskFullState =>
+    createDiskFullState({
+      dir: "/unused",
+      now: () => new Date(),
+      log: () => {},
+      statfs: () => Promise.resolve({ bavail: Number.MAX_SAFE_INTEGER, frsize: 1 }),
+    });
+
+  /** Holds the write queue until the returned `release`, then runs `inside` in that transaction. */
+  function holdQueue(inside: () => void) {
+    let open!: () => void;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    const held = withTransaction(suite.db, async () => {
+      await gate;
+      inside();
+    });
+    return async () => {
+      open();
+      await held;
+    };
+  }
+
+  async function payBehind(inside: (disk: DiskFullState) => void) {
+    const expectedEdit = await withTransaction(suite.db, (tx) => readBillEditState(tx, billId));
+    const reader = new FakePaymentProvider(suite.db);
+    const disk = roomyState();
+    const release = holdQueue(() => inside(disk));
+    const paying = takeReaderBillPayment(
+      { db: suite.db, backend: v.backend, clock: v.clock, provider: reader, disk },
+      v.cfg,
+      billId,
+      {
+        submissionId: newId(),
+        kind: "contribution",
+        amount: "1.00",
+        method: "card",
+        entry: "reader",
+        applied: "1.00",
+        tip: "0.00",
+        expectedEdit,
+      },
+      collector,
+    ).then(
+      (paid) => ({ paid }),
+      (error: unknown) => ({ error }),
+    );
+    await release();
+    return { result: await paying, reader };
+  }
+
+  const paymentsOfBill = () =>
+    withTransaction(suite.db, (tx) =>
+      tx
+        .select({ state: billPayments.state })
+        .from(billPayments)
+        .where(eq(billPayments.workingOrderId, billId)),
+    );
+
+  it("refuses with storage.disk_full inside the first transaction, asking no reader and writing no payment", async () => {
+    const { result, reader } = await payBehind((disk) => disk.noteRefused());
+
+    expect(result).toMatchObject({ error: { code: "storage.disk_full" } });
+    expect(reader.collectCalls.length).toBe(0);
+    expect(await paymentsOfBill()).toEqual([]);
+  });
+
+  it("asks the reader when the transaction ahead notes nothing", async () => {
+    const { result, reader } = await payBehind(() => {});
+
+    expect(result).toMatchObject({ paid: { payment: { state: "received" } } });
+    expect(reader.collectCalls.length).toBe(1);
+  });
+});
