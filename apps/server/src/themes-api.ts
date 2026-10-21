@@ -4,8 +4,10 @@ import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import {
   createCustomTheme,
+  deleteCustomTheme,
   listCustomThemes,
   readThemeInUse,
+  renameCustomTheme,
   saveCustomTheme,
   setThemeInUse,
   type StoredTheme,
@@ -120,6 +122,29 @@ export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): 
         saveCustomTheme(tx, { managementSessionId, id, theme }),
       );
       return c.json(themeAnswerOf(stored), 200);
+    }),
+  );
+
+  app.patch("/management-api/themes/:id", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const name = requireString((await readBody(c)).name, "name");
+      const id = c.req.param("id");
+      const stored = await withTransaction(deps.db, (tx) =>
+        renameCustomTheme(tx, { managementSessionId, id, name }),
+      );
+      return c.json(themeAnswerOf(stored), 200);
+    }),
+  );
+
+  app.delete("/management-api/themes/:id", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const id = c.req.param("id");
+      const answer = await withTransaction(deps.db, (tx) =>
+        deleteCustomTheme(tx, { managementSessionId, id }),
+      );
+      return c.json(answer, 200);
     }),
   );
 

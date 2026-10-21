@@ -9,7 +9,7 @@ import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/i
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { ThemeChoices } from "@waitron/ui-core/theme";
 import { mountThemesApi } from "./themes-api.js";
-import { forgetVenueTheme } from "./venue-theme.js";
+import { WAITRON_THEME_ANSWER, forgetVenueTheme } from "./venue-theme.js";
 
 let managerCookie: string;
 let supervisorCookie: string;
@@ -76,6 +76,14 @@ const save = (cookie: string, id: string, body: unknown) =>
     headers: { cookie, "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+const rename = (cookie: string, id: string, body: unknown) =>
+  app().request(`${PATH}/${id}`, {
+    method: "PATCH",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+const remove = (cookie: string, id: string) =>
+  app().request(`${PATH}/${id}`, { method: "DELETE", headers: { cookie } });
 
 const switchTo = (cookie: string, body: unknown) =>
   app().request("/management-api/theme-in-use", {
@@ -130,6 +138,8 @@ describe("the custom theme routes", () => {
       ["POST", PATH, { name: "Green", theme: DARK_GREEN, inUse: true }],
       ["PUT", `${PATH}/${id}`, { theme: DARK_GREEN }],
       ["PUT", "/management-api/theme-in-use", { customThemeId: id }],
+      ["PATCH", `${PATH}/${id}`, { name: "Green" }],
+      ["DELETE", `${PATH}/${id}`, undefined],
     ] as const) {
       const res = await app().request(path, {
         method,
@@ -318,9 +328,14 @@ describe("the custom theme routes", () => {
 
   it("an unknown or malformed id is theme.not_found", async () => {
     for (const id of [randomUUID(), "x"]) {
-      const res = await save(managerCookie, id, { theme: LEMON });
-      expect(res.status).toBe(404);
-      expect(await res.json()).toEqual(refusal("theme.not_found"));
+      for (const res of [
+        await save(managerCookie, id, { theme: LEMON }),
+        await rename(managerCookie, id, { name: "Green" }),
+        await remove(managerCookie, id),
+      ]) {
+        expect(res.status).toBe(404);
+        expect(await res.json()).toEqual(refusal("theme.not_found"));
+      }
     }
   });
 
@@ -473,5 +488,101 @@ describe("switching the custom theme in use", () => {
     expect(await res.json()).toEqual(refusal("management.request_invalid", { field: "inUse" }));
     expect(await rowsInUse()).toEqual([lemon]);
     expect(await storedRows()).toHaveLength(1);
+  });
+});
+
+describe("renaming and deleting a custom theme", () => {
+  it("renames a theme and answers it; the hash stays, even for the theme in use", async () => {
+    const lemon = await created("A", LEMON);
+    await switched(lemon);
+    const hash = (await venueTheme()).hash;
+    const res = await rename(managerCookie, lemon, { name: "Summer terrace" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      id: lemon,
+      name: "Summer terrace",
+      choices: LEMON,
+      warnings: [LEMON_WARNING],
+    });
+    forgetVenueTheme();
+    expect((await venueTheme()).hash).toBe(hash);
+    const listed = await (await list(managerCookie)).json();
+    expect(listed.themes).toEqual([expect.objectContaining({ id: lemon, name: "Summer terrace" })]);
+    expect(listed.inUse).toBe(lemon);
+  });
+
+  it("a rename to another theme's name is name_taken, and to Waitron's is reserved", async () => {
+    await created("Red", LEMON);
+    const green = await created("Green", DARK_GREEN);
+    const before = await storedRows();
+    const taken = await rename(managerCookie, green, { name: "red" });
+    expect(taken.status).toBe(409);
+    expect(await taken.json()).toEqual(refusal("theme.name_taken", { field: "name" }));
+    const reserved = await rename(managerCookie, green, { name: "WaItRoN" });
+    expect(reserved.status).toBe(400);
+    expect(await reserved.json()).toEqual(
+      refusal("theme.invalid", { field: "name", reason: "reserved" }),
+    );
+    expect(await storedRows()).toEqual(before);
+  });
+
+  it("deleting the theme in use answers inUse null and serves Waitron's look", async () => {
+    const a = await created("A", LEMON);
+    await created("B", DARK_GREEN);
+    await switched(a);
+    expect((await venueTheme()).hash).not.toBe(WAITRON_THEME_ANSWER.hash);
+    const res = await remove(managerCookie, a);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ inUse: null });
+    expect(await venueTheme()).toMatchObject({ hash: WAITRON_THEME_ANSWER.hash, css: "" });
+    expect(await rowsInUse()).toEqual([]);
+    expect(await storedRows()).toHaveLength(1);
+  });
+
+  it("deleting a theme not in use answers the one in use and leaves the hash", async () => {
+    const a = await created("A", LEMON);
+    const b = await created("B", DARK_GREEN);
+    await switched(a);
+    const hash = (await venueTheme()).hash;
+    const res = await remove(managerCookie, b);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ inUse: a });
+    expect((await venueTheme()).hash).toBe(hash);
+    expect(await rowsInUse()).toEqual([a]);
+  });
+
+  it("a supervisor and staff are refused rename and delete, and nothing changes", async () => {
+    const a = await created("A", LEMON);
+    await switched(a);
+    const before = await storedRows();
+    for (const res of [
+      await rename(supervisorCookie, a, { name: "Green" }),
+      await rename(staffCookie, a, { name: "Green" }),
+      await remove(supervisorCookie, a),
+      await remove(staffCookie, a),
+    ]) {
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual(
+        refusal("authorization.not_permitted", { permission: "layout.configure" }),
+      );
+    }
+    expect(await storedRows()).toEqual(before);
+    expect(await rowsInUse()).toEqual([a]);
+  });
+
+  it("a rename body names its field", async () => {
+    const a = await created("A", LEMON);
+    const before = await storedRows();
+    for (const [body, field] of [
+      [{}, "name"],
+      [{ name: 7 }, "name"],
+      [["Green"], "body"],
+      [null, "name"],
+    ] as const) {
+      const res = await rename(managerCookie, a, body);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual(refusal("management.request_invalid", { field }));
+    }
+    expect(await storedRows()).toEqual(before);
   });
 });
