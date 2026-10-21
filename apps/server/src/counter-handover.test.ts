@@ -1,6 +1,7 @@
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -916,6 +917,27 @@ describe("GET /api/orders/counter-waiting", () => {
     });
 
     expect((await waitingRow(id))?.counts).toEqual({ ...oneDish, ready: 1 });
+  });
+
+  it("reads every order's counts in the same statements for more orders as for fewer", async () => {
+    await placed("ticket_then_pay", "Tarta");
+    await paidPrepay();
+    const statements = async () => {
+      const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+      try {
+        const rows = await listCounterWaiting({ db: venue.db }, venue.cfg);
+        return { rows: rows.length, statements: prepare.mock.calls.length };
+      } finally {
+        prepare.mockRestore();
+      }
+    };
+    const fewer = await statements();
+    await placed("ticket_then_pay", "Tarta");
+    await paidPrepay();
+    const more = await statements();
+
+    expect(more.rows).toBe(fewer.rows + 2);
+    expect(more.statements).toBe(fewer.statements);
   });
 
   it("lists no movable dishes on an order sent but not paid", async () => {

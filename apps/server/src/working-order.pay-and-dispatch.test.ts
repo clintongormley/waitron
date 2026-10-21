@@ -543,7 +543,7 @@ async function addNode(cfg: DeviceRequestConfig, name: string): Promise<DeviceRe
 }
 
 /**
- * A parked order's dishes ordered (its dish lines' quantities, in whole thousandths, summed) and summed
+ * A parked order's dishes ordered (its dish lines' quantities summed, as whole dishes) and summed
  * `line_total` (the GROSS draft total the held list shows) — read and summed in JS, NOT the SQL
  * `listHeldOrders` runs, so its `counts.ordered`/`total` aggregate is
  * validated rather than restated (CLAUDE.md §1). `line_total` counts whole cents, read raw and

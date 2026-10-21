@@ -12,6 +12,7 @@ import { floorTodayTables } from "@waitron/db";
 import { deleteCourse } from "./course-delete.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -1402,7 +1403,7 @@ describe("listHeldOrders", () => {
     ]);
   });
 
-  it("lists a party bill's counts of one held, one waiting and one ready dish", async () => {
+  it("lists a party bill's counts of two held, one waiting and one ready dish", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const tabId = await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
@@ -1412,7 +1413,7 @@ describe("listHeldOrders", () => {
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [
-        { productId: held, quantity: "1", hold: true },
+        { productId: held, quantity: "2", hold: true },
         line(cooking),
         line(done),
       ]);
@@ -1423,8 +1424,31 @@ describe("listHeldOrders", () => {
     });
 
     const row = (await listHeldOrders({ db }, cfg)).find((order) => order.id === tabId)!;
-    expect(row.counts).toEqual({ ordered: 3, unsent: 0, held: 1, waiting: 1, ready: 1 });
+    expect(row.counts).toEqual({ ordered: 4, unsent: 0, held: 2, waiting: 1, ready: 1 });
     expect(row).not.toHaveProperty("itemCount");
+  });
+
+  it("reads every order's counts in the same statements for three orders as for one", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const statements = async () => {
+      const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+      try {
+        const held = await listHeldOrders({ db }, cfg);
+        return { rows: held.length, statements: prepare.mock.calls.length };
+      } finally {
+        prepare.mockRestore();
+      }
+    };
+    await parkProducts(cfg, { id: randomUUID(), lines: [{ productId: cafeId, quantity: "1" }] });
+    const one = await statements();
+    for (let i = 0; i < 2; i++) {
+      await parkProducts(cfg, { id: randomUUID(), lines: [{ productId: cafeId, quantity: "2" }] });
+    }
+    const three = await statements();
+
+    expect(one.rows).toBe(1);
+    expect(three.rows).toBe(3);
+    expect(three.statements).toBe(one.statements);
   });
 
   it("omits settled and abandoned orders — the status filter is the only reason they are gone", async () => {
