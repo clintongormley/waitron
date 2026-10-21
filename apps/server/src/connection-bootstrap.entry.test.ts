@@ -9,7 +9,7 @@ import {
   reissueServerLeaf,
   type SelfSignedMaterial,
 } from "./self-signed-cert.js";
-import { serveRecovery } from "./recovery-listener.js";
+import { needsConnectionBootstrap, serveRecovery } from "./recovery-listener.js";
 import { closeListener } from "./close-listener.js";
 import { freePorts } from "./testing/free-ports.js";
 import { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
@@ -582,4 +582,36 @@ it("keeps public CA download and reload available after a discarded repair reply
   await expect(verifiedGet(port, "/", material.caCertPem)).rejects.toMatchObject({
     code: "CERT_SIGNATURE_FAILURE",
   });
+});
+
+it("keeps a hostname-valid box on HTTPS after its network address changes", async () => {
+  const f = await fixture();
+  await writeFile(join(f.stateDir, "tls/server.key"), material.serverKeyPem);
+  const opts = {
+    stateDir: f.stateDir,
+    port: 0,
+    httpHost: "127.0.0.1",
+    log: vi.fn(),
+    landing: {
+      stateDir: f.stateDir,
+      httpHost: "127.0.0.1",
+      boxAddresses: ["192.168.1.20"],
+      httpPort: 0,
+      landingPort: 0,
+    },
+  };
+  expect(await needsConnectionBootstrap(opts, {})).toBe(false);
+  const server = await serveRecovery(
+    new Hono().get("/private-probe", (c) => c.text("protected")),
+    opts,
+  );
+  closes.push(() => closeListener(server));
+  const address = server.address();
+  if (address === null || typeof address === "string") throw new Error("Expected TCP listener");
+  expect(await verifiedGet(address.port, "/private-probe", material.caCertPem)).toEqual({
+    status: 200,
+    body: "protected",
+  });
+  expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(material.caCertPem);
+  expect(await readFile(join(f.stateDir, "tls/server.crt"), "utf8")).toBe(material.serverCertPem);
 });

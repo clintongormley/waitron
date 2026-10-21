@@ -110,3 +110,13 @@ Run each command from this worktree, read its test count and exit status, and re
 **Changed-check policy:** only the explicitly listed TLS/transport/setup behavioral suites gain or update approved assertions. Existing startup expectations may change solely to public-only fallback and durable preservation. No root guard, fiscal test expectation, schema snapshot, SQL, CI threshold, test exclusion or package configuration change is authorized. New focused suites are allowed. If an unchanged guard fails, investigate without weakening it; a required fiscal/guard change is a scope blocker for the driver to report.
 
 **Plan self-review:** Tasks map the five acceptance cases to concrete tests; Task 1 owns durability/trust, Task 2 owns routing and entry lifecycle, Task 3 owns copy/UI, Task 4 owns real sockets, controls and evidence. No runtime claim above is presented as verified by this plan-author session.
+
+
+### Review execution ruling — network changes and reserved leaves
+
+A changed interface address alone must not stop hostname-valid HTTPS startup. Startup inspection
+therefore omits the current-address requirement; explicit repair still signs current addresses.
+Resuming an interrupted repair validates its reserved authority and signed leaf identity, then
+refreshes only the leaf if addresses or its validity interval changed, durably saving that leaf
+before installation. The reserved CA and original archive remain unchanged. Linked TLS layouts
+retain the plan's explicit refusal; the public-repair limitation is recorded in the backlog.

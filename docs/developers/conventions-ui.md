@@ -1565,3 +1565,11 @@ A valid certificate followed by a private key passed parsing and signature check
 file download still included the key. The six surface/newline cases named "downloads only public
 certificate bytes" in `connection-bootstrap.test.ts` reproduce that boundary; they cover bootstrap,
 discovery and landing aliases with LF and CRLF PEM files. They do not audit every other PEM reader.
+
+
+Startup checks certificate validity and fixed hostnames without requiring every current network
+address. The repair action still includes current addresses. The "network address changes" real
+entry case checks that the hostname-valid saved pair continues serving verified HTTPS. The
+"reserved authority after" cases interrupt completion, then change the address or expire only the
+saved leaf; resumption signs a new leaf with the reserved CA rather than leaving an unfinished
+repair permanently refused. An expired or unusable reserved CA still refuses.

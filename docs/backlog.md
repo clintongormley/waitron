@@ -5032,6 +5032,12 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 
 ### The box: backups, upgrades and recovery
 
+- **Public TLS repair refuses linked layouts.** Healthy linked `tls/` folders still serve HTTPS,
+  but a damaged linked folder or managed file cannot be repaired through the public guide.
+  Decide whether to support links contained within the state folder while retaining archive,
+  exclusion and path-containment checks; cover the restored-layout startup and repair path.
+  Found by A733's whole-branch review; see the server README's secure-connection section.
+
 _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **A850. Verify backup data without fiscal activation.** Implement the

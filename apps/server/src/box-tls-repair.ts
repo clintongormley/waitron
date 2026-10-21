@@ -128,14 +128,19 @@ function signingAuthority(s: Snapshot, now: Date): boolean {
     return false;
   }
 }
-function healthy(s: Snapshot, deps: BoxTlsRepairDeps): boolean {
+function healthy(
+  s: Snapshot,
+  deps: BoxTlsRepairDeps,
+  checkAddresses = true,
+  checkLeafTime = true,
+): boolean {
   try {
     const ca = caPublic(s["ca.crt"], deps.now());
     if (ca === null || s["server.crt"] === null || s["server.key"] === null) return false;
     const leaf = new X509Certificate(s["server.crt"]);
     if (
       leaf.ca ||
-      !current(leaf, deps.now()) ||
+      (checkLeafTime && !current(leaf, deps.now())) ||
       !leaf.checkIssued(ca) ||
       !leaf.verify(ca.publicKey) ||
       !leaf.checkPrivateKey(createPrivateKey(s["server.key"]))
@@ -143,7 +148,7 @@ function healthy(s: Snapshot, deps: BoxTlsRepairDeps): boolean {
       return false;
     if (
       deps.hostnames.some((name) => leaf.checkHost(name) !== name) ||
-      addresses(deps).some((ip) => leaf.checkIP(ip) !== ip)
+      (checkAddresses && addresses(deps).some((ip) => leaf.checkIP(ip) !== ip))
     )
       return false;
     const usage = forge.pki
@@ -156,9 +161,14 @@ function healthy(s: Snapshot, deps: BoxTlsRepairDeps): boolean {
     return false;
   }
 }
-function inspection(s: Snapshot, deps: BoxTlsRepairDeps, p: Pending | null): BoxTlsInspection {
+function inspection(
+  s: Snapshot,
+  deps: BoxTlsRepairDeps,
+  p: Pending | null,
+  checkAddresses = true,
+): BoxTlsInspection {
   const ca = caPublic(s["ca.crt"], deps.now());
-  const usable = healthy(s, deps);
+  const usable = healthy(s, deps, checkAddresses);
   return {
     state: usable && p?.complete !== false ? "healthy" : "repair-required",
     trust:
@@ -175,12 +185,17 @@ function inspection(s: Snapshot, deps: BoxTlsRepairDeps, p: Pending | null): Box
 }
 export async function inspectBoxTls(
   deps: BoxTlsRepairDeps,
-  options: { allowLinkedTlsDirectory?: boolean } = {},
+  options: { allowLinkedTlsDirectory?: boolean; requireCurrentAddresses?: boolean } = {},
 ): Promise<BoxTlsInspection> {
   try {
     const directory =
       options.allowLinkedTlsDirectory === true ? await fs.realpath(tlsDir(deps)) : tlsDir(deps);
-    return inspection(await snapshot(deps, directory), deps, await pending(deps, directory));
+    return inspection(
+      await snapshot(deps, directory),
+      deps,
+      await pending(deps, directory),
+      options.requireCurrentAddresses !== false,
+    );
   } catch {
     return { state: "refused", trust: "new-required", caAvailable: false };
   }
@@ -232,8 +247,19 @@ function readCandidate(value: unknown, deps: BoxTlsRepairDeps): SelfSignedMateri
   )
     throw refused();
   const s = candidateSnapshot(m);
-  if (!healthy(s, deps) || !signingAuthority(s, deps.now())) throw refused();
-  return m;
+  if (!healthy(s, deps, false, false) || !signingAuthority(s, deps.now())) throw refused();
+  return healthy(s, deps)
+    ? m
+    : {
+        ...m,
+        ...reissueServerLeaf({
+          caCertPem: m.caCertPem,
+          caKeyPem: m.caKeyPem,
+          hostnames: deps.hostnames,
+          ipAddresses: addresses(deps),
+          now: deps.now(),
+        }),
+      };
 }
 export async function repairBoxTls(deps: BoxTlsRepairDeps): Promise<BoxTlsInspection> {
   await fs.mkdir(deps.stateDir, { recursive: true, mode: 0o700 });
@@ -312,8 +338,10 @@ export async function repairBoxTls(deps: BoxTlsRepairDeps): Promise<BoxTlsInspec
       await writeDurableHostJson(join(folder, "candidate.json"), m, limit);
       saved = m;
     }
-    // The reserved generation survives a restart before or after its candidate becomes durable.
+    // A changed address or leaf lifetime must not replace the reserved authority.
     const m = readCandidate(saved, deps);
+    if (m.serverCertPem !== (saved as SelfSignedMaterial).serverCertPem)
+      await writeDurableHostJson(join(folder, "candidate.json"), m, limit);
     const candidate = candidateSnapshot(m);
     for (const name of names.slice(0, 4)) {
       if (p.trust === "retained" && (name === "ca.crt" || name === "ca.key")) {

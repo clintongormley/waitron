@@ -499,3 +499,49 @@ it("returns only connection facts and the public CA fingerprint", async () => {
     fingerprint: new X509Certificate(material.caCertPem).fingerprint256,
   });
 });
+
+it.each(["address", "leaf-expiry"])(
+  "resumes its reserved authority after a %s change",
+  async (change) => {
+    const f = await fixture(null);
+    const original = faults.rename.getMockImplementation()!;
+    let markers = 0;
+    faults.rename.mockImplementation(async (from, to) => {
+      if (to === join(f.stateDir, "tls", "repair-pending.json") && ++markers === 2)
+        throw Object.assign(new Error("completion interrupted"), { code: "EIO" });
+      return original(from, to);
+    });
+    try {
+      await expect(repairBoxTls(f)).rejects.toBeDefined();
+    } finally {
+      faults.rename.mockImplementation(original);
+    }
+    const { folder } = await archive(f.stateDir);
+    const saved = JSON.parse(await readFile(join(folder, "candidate.json"), "utf8"));
+    if (change === "leaf-expiry") {
+      const leaf = forge.pki.certificateFromPem(saved.serverCertPem);
+      leaf.validity.notAfter = new Date(now.getTime() + 86400000);
+      leaf.sign(forge.pki.privateKeyFromPem(saved.caKeyPem), forge.md.sha256.create());
+      saved.serverCertPem = forge.pki.certificateToPem(leaf);
+      await writeFile(join(folder, "candidate.json"), JSON.stringify(saved));
+    }
+    const resumed = {
+      ...f,
+      listIpv4: () => (change === "address" ? ["192.168.1.99"] : f.listIpv4()),
+      now: () => (change === "leaf-expiry" ? new Date(now.getTime() + 2 * 86400000) : now),
+    };
+    expect(await repairBoxTls(resumed)).toMatchObject({ state: "healthy", trust: "new-required" });
+    expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(saved.caCertPem);
+    expect(await readFile(join(f.stateDir, "tls/ca.key"), "utf8")).toBe(saved.caKeyPem);
+    const leaf = new X509Certificate(await readFile(join(f.stateDir, "tls/server.crt")));
+    expect(leaf.verify(new X509Certificate(saved.caCertPem).publicKey)).toBe(true);
+    if (change === "address") expect(leaf.checkIP("192.168.1.99")).toBe("192.168.1.99");
+    else expect(Date.parse(leaf.validTo)).toBeGreaterThan(resumed.now().getTime());
+    expect(await readdir(join(f.stateDir, "tls/repair-archive"))).toEqual([
+      folder.split("/").at(-1),
+    ]);
+    await expect(ensureBoxSecrets(resumed)).resolves.toMatchObject({
+      certFile: join(f.stateDir, "tls/server.crt"),
+    });
+  },
+);

@@ -93,6 +93,13 @@ checks reject ordinary cross-site browser submissions; they do not protect again
 participant or an arbitrary HTTP client. Use your known server address on the venue network, and
 keep all private recovery work on trusted HTTPS. Filesystem flushes and the shared recovery lock
 coordinate Waitron writers, not an administrator editing the files or a failed disk.
+Repair refuses a linked TLS folder or linked managed file. A healthy linked folder can still serve
+HTTPS; repairing a damaged linked layout from this page remains an open limitation.
+
+A new network address alone does not block startup when the saved certificate still covers the
+box's fixed hostnames. Use its hostname to reconnect; the public repair action can add current
+addresses under the retained authority. An interrupted repair refreshes an outdated saved leaf
+under the same reserved authority before continuing.
 
 ## The venue directory
 

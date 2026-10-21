@@ -94,8 +94,12 @@ export async function needsConnectionBootstrap(
   }
   return (
     retained &&
-    (await inspectBoxTls(connectionDepsFor(opts, opts.port), { allowLinkedTlsDirectory: true }))
-      .state !== "healthy"
+    (
+      await inspectBoxTls(connectionDepsFor(opts, opts.port), {
+        allowLinkedTlsDirectory: true,
+        requireCurrentAddresses: false,
+      })
+    ).state !== "healthy"
   );
 }
 
@@ -114,7 +118,12 @@ export async function serveRecovery(
   const connection = connectionDepsFor(opts, opts.port);
   const bootstrap =
     opts.bootstrapOnly === true ||
-    (await inspectBoxTls(connection, { allowLinkedTlsDirectory: true })).state !== "healthy";
+    (
+      await inspectBoxTls(connection, {
+        allowLinkedTlsDirectory: true,
+        requireCurrentAddresses: false,
+      })
+    ).state !== "healthy";
   return new Promise((resolve, reject) => {
     const tls = bootstrap ? undefined : recoveryTlsFiles(opts.stateDir);
     const surface = new Hono();
