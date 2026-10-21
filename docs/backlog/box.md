@@ -591,7 +591,7 @@ Left open by A938.
 
 ## A transaction opened outside the write queue can let a body's writes after a full disk commit
 
-Left open by A798-B slice 1 (`feat/a798-1-full-disk-store`). The store's record of a transaction
+Left open by A798-B slice 1 (#1936). The store's record of a transaction
 the engine ended belongs to the connection pair, not to the body, so an outermost `db.transaction`
 opened outside the write queue clears it, and the body's later writes are kept. What was measured,
 in two orderings, and the grep behind "no product code is known to open one" are in the

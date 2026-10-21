@@ -5301,8 +5301,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   2026-10-20). It adds a module seat for staff notices and one
   migration in the Veri*Factu module's set. Slice 1 of 10 (a full disk reported as
   `storage.disk_full`; nothing a body writes through the write queue after one that ended its
-  transaction can commit, except as the entry below says) is built on
-  `feat/a798-1-full-disk-store`. Open asesor questions:
+  transaction can commit, except as the entry below says) is #1936. Open asesor questions:
   [Q51](compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21)
   and
   [Q52](compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21).
@@ -5310,7 +5309,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **A transaction opened outside the write queue can let a body's writes after a full disk
   commit.** The store's record of a transaction the engine ended belongs to the connection pair,
   not the body, so an outside `db.transaction` clears it and the body's later writes are kept.
-  Left open by A798-B slice 1 (`feat/a798-1-full-disk-store`); no product code is known to open
+  Left open by A798-B slice 1 (#1936); no product code is known to open
   one. [Detail](backlog/box.md#a-transaction-opened-outside-the-write-queue-can-let-a-bodys-writes-after-a-full-disk-commit)
 
 - **Recovery actions the 2026-09-08 node-containers design handed on** (§9.3, §12) — starting without
