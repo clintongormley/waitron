@@ -224,49 +224,32 @@ describe("till-station-screen", () => {
     expect(queueWidget(el)!.fireControl).toBe("kitchen");
   });
 
-  it("a fire-course from the widget calls fireCourse then reloads the active queue, and does not escape the screen", async () => {
-    const api = stubApi();
-    const { el, host } = await mountWidget<TillStationScreen>("till-station-screen", {
-      api,
-      fireControl: "kitchen",
-    });
-    await flush(el);
-    // Stopped at the screen (it owns the fire here), so the app never double-handles it.
-    const escaped = vi.fn();
-    host.addEventListener("fire-course", escaped);
-    queueWidget(el)!.dispatchEvent(
-      new CustomEvent("fire-course", {
-        detail: { orderId: "wo-1", courseId: "co-2" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await flush(el);
-    expect(api.fireCourse).toHaveBeenCalledWith("wo-1", "co-2");
-    // Reloaded: once on connect, once after the fire — so the released course drops its greying.
-    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
-    expect(escaped).not.toHaveBeenCalled();
-  });
-
-  it("a failed fire-course still reloads the queue (reconciling to server truth)", async () => {
-    const api = stubApi({
-      fireCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }),
-    });
-    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
-      api,
-      fireControl: "kitchen",
-    });
-    await flush(el);
-    queueWidget(el)!.dispatchEvent(
-      new CustomEvent("fire-course", {
-        detail: { orderId: "wo-1", courseId: "co-2" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await flush(el);
-    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
-  });
+  it.each(["waiter", "kitchen", "expo"] as const)(
+    "A773 waiter authority: ignores a course Fire under the former %s control",
+    async (fireControl) => {
+      const api = stubApi({ fireCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }) });
+      const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+        api,
+        fireControl,
+      });
+      await flush(el);
+      const before = queueWidget(el)!.groups;
+      queueWidget(el)!.dispatchEvent(
+        new CustomEvent("fire-course", {
+          detail: { orderId: "wo-1", courseId: "co-2" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(api.getFindBill).not.toHaveBeenCalled();
+      expect(api.previewPartyAllergy).not.toHaveBeenCalled();
+      expect(api.fireCourse).not.toHaveBeenCalled();
+      expect(api.getStationQueue).toHaveBeenCalledOnce();
+      expect(queueWidget(el)!.groups).toBe(before);
+      expect(el.shadowRoot!.querySelector('till-party-allergy-dialog, [role="alert"]')).toBeNull();
+    },
+  );
 
   it("an advance-ticket-item from the widget calls advanceTicketItem then reloads the active queue", async () => {
     const api = stubApi();
@@ -3747,232 +3730,76 @@ describe("till-station-screen out-of-date banner", () => {
   });
 });
 
-describe("till-station-screen — firing a party's held group", () => {
-  const fireDetail = { partyId: "v-4", groupId: "g-3", expectedPartyRevision: 12 };
-
-  function fireFromWidget(el: TillStationScreen): void {
-    queueWidget(el)!.dispatchEvent(
-      new CustomEvent("fire-kitchen-group", { detail: fireDetail, bubbles: true, composed: true }),
-    );
-  }
-
-  const tableChanged = (el: TillStationScreen) =>
-    el.shadowRoot!.querySelector<HTMLElement>("[data-table-changed]");
-
-  it("calls fireGroup with a fresh submission id per press and the card's revision, reloads, and does not escape the screen", async () => {
-    const api = stubApi({ fireGroup: vi.fn().mockResolvedValue({ revision: 13 }) });
-    const { el, host } = await mountWidget<TillStationScreen>("till-station-screen", {
-      api,
-      fireControl: "kitchen",
-    });
-    await flush(el);
-    const escaped = vi.fn();
-    host.addEventListener("fire-kitchen-group", escaped);
-    fireFromWidget(el);
-    await flush(el);
-    fireFromWidget(el);
-    await flush(el);
-    const calls = vi.mocked(api.fireGroup).mock.calls;
-    expect(calls).toEqual([
-      ["v-4", "g-3", { submissionId: expect.any(String), expectedPartyRevision: 12 }],
-      ["v-4", "g-3", { submissionId: expect.any(String), expectedPartyRevision: 12 }],
-    ]);
-    expect(calls[0]![2].submissionId).not.toBe(calls[1]![2].submissionId);
-    expect(api.getStationQueue).toHaveBeenCalledTimes(3);
-    expect(escaped).not.toHaveBeenCalled();
-    expect(tableChanged(el)).toBeNull();
-  });
-
-  it("on party.out_of_date it reloads and says the table changed, and never sends again on its own", async () => {
-    const api = stubApi({
-      fireGroup: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
-    });
-    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
-      api,
-      fireControl: "kitchen",
-    });
-    await flush(el);
-    fireFromWidget(el);
-    await flush(el);
-    await flush(el);
-    expect(api.fireGroup).toHaveBeenCalledOnce();
-    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
-    expect(tableChanged(el)!.textContent).toContain(t("station.table_changed"));
-    expect(tableChanged(el)!.getAttribute("role")).toBe("status");
-  });
-
-  it("the next press clears the notice", async () => {
-    const api = stubApi({
-      fireGroup: vi
-        .fn()
-        .mockRejectedValueOnce({ code: "party.out_of_date" })
-        .mockResolvedValue({ revision: 14 }),
-    });
-    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
-      api,
-      fireControl: "kitchen",
-    });
-    await flush(el);
-    fireFromWidget(el);
-    await flush(el);
-    expect(tableChanged(el)).not.toBeNull();
-    fireFromWidget(el);
-    await flush(el);
-    expect(tableChanged(el)).toBeNull();
-  });
-
-  function partyQueue(label: string | null): StationQueueGroup[] {
-    return [
-      {
-        ...cocinaQueue[0]!,
-        orderId: "wo-4",
-        orderNumber: 12,
-        label,
-        status: "placed",
-        party: { id: "v-4", revision: 12 },
-        items: [
-          {
-            ...cocinaQueue[0]!.items[0]!,
-            id: "ti-4",
-            firedAt: null,
-            group: {
-              id: "g-3",
-              position: 3,
-              displayNumber: 3,
-              numberPartyId: "v-4",
-              state: "held",
-            },
-          },
-        ],
-      },
-    ];
-  }
-
-  const staleNotice = (label: string) =>
-    `${t("station.table_changed_named").replace("{table}", label)} ${t("station.table_changed")}`;
-
-  it("names the table that changed, and never says where it changed", async () => {
-    const api = stubApi({
-      getStationQueue: vi.fn().mockResolvedValue({ items: partyQueue("Mesa 4"), notices: [] }),
-      fireGroup: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
-    });
-    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
-      api,
-      fireControl: "kitchen",
-    });
-    await flush(el);
-    fireFromWidget(el);
-    await flush(el);
-    const text = tableChanged(el)!.textContent!.replace(/\s+/g, " ").trim();
-    expect(text).toBe(staleNotice("Mesa 4"));
-    expect(text).not.toContain("till");
-  });
-
-  it("names a card with no label by its order number", async () => {
-    const api = stubApi({
-      getStationQueue: vi.fn().mockResolvedValue({ items: partyQueue(null), notices: [] }),
-      fireGroup: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
-    });
-    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
-      api,
-      fireControl: "kitchen",
-    });
-    await flush(el);
-    fireFromWidget(el);
-    await flush(el);
-    expect(tableChanged(el)!.textContent!.replace(/\s+/g, " ").trim()).toBe(staleNotice("#12"));
-  });
-
-  it("says a table changed when the group's card is not on screen", async () => {
-    const api = stubApi({
-      fireGroup: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
-    });
-    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
-      api,
-      fireControl: "kitchen",
-    });
-    await flush(el);
-    fireFromWidget(el);
-    await flush(el);
-    expect(tableChanged(el)!.textContent!.replace(/\s+/g, " ").trim()).toBe(
-      `${t("station.table_changed_unnamed")} ${t("station.table_changed")}`,
-    );
-  });
-
-  it("the next successful read after the one that showed it clears the notice", async () => {
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
-    try {
+describe.each(["Table 4", null, "missing card"])(
+  "A773 waiter authority — station group events (%s)",
+  (label) => {
+    it.each([
+      ["success", null],
+      ["changed party", "party.out_of_date"],
+      ["group no longer held", "group.not_held"],
+      ["allergy unanswered", "allergy.unanswered"],
+    ] as const)("does not start a group write or its %s response", async (_label, code) => {
+      const fireGroup =
+        code === null
+          ? vi.fn().mockResolvedValue({ revision: 13 })
+          : vi.fn().mockRejectedValue({ code });
+      const queue: StationQueueGroup[] =
+        label === "missing card"
+          ? []
+          : [
+              {
+                ...cocinaQueue[0]!,
+                label,
+                party: { id: "v-4", revision: 12 },
+                items: [
+                  {
+                    ...cocinaQueue[0]!.items[0]!,
+                    firedAt: null,
+                    group: {
+                      id: "g-3",
+                      position: 3,
+                      displayNumber: 3,
+                      numberPartyId: "v-4",
+                      state: "held",
+                    },
+                  },
+                ],
+              },
+            ];
       const api = stubApi({
-        getStationQueue: vi.fn().mockResolvedValue({ items: partyQueue("Mesa 4"), notices: [] }),
-        fireGroup: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
+        fireGroup,
+        getStationQueue: vi.fn().mockResolvedValue({ items: queue, notices: [], printersDown: [] }),
       });
       const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
         api,
         fireControl: "kitchen",
       });
       await flush(el);
-      fireFromWidget(el);
-      await flush(el);
-      expect(tableChanged(el)).not.toBeNull();
-      vi.mocked(api.getStationQueue).mockRejectedValueOnce(new TypeError("offline"));
-      vi.advanceTimersByTime(15_000);
-      await flush(el);
-      expect(tableChanged(el)).not.toBeNull();
-      vi.advanceTimersByTime(15_000);
-      await flush(el);
-      expect(tableChanged(el)).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("another refusal reloads without the notice", async () => {
-    const api = stubApi({ fireGroup: vi.fn().mockRejectedValue({ code: "group.not_held" }) });
-    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
-      api,
-      fireControl: "kitchen",
+      expect(queueWidget(el)!.groups).toEqual(queue);
+      const before = queueWidget(el)!.groups;
+      for (let press = 0; press < 2; press++) {
+        queueWidget(el)!.dispatchEvent(
+          new CustomEvent("fire-kitchen-group", {
+            detail: { partyId: "v-4", groupId: "g-3", expectedPartyRevision: 12 },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+        await flush(el);
+      }
+      expect(fireGroup).not.toHaveBeenCalled();
+      expect(api.previewPartyAllergy).not.toHaveBeenCalled();
+      expect(api.getFindBill).not.toHaveBeenCalled();
+      expect(api.getStationQueue).toHaveBeenCalledOnce();
+      expect(queueWidget(el)!.groups).toBe(before);
+      expect(
+        el.shadowRoot!.querySelector(
+          'till-party-allergy-dialog, [data-table-changed], [role="alert"]',
+        ),
+      ).toBeNull();
     });
-    await flush(el);
-    fireFromWidget(el);
-    await flush(el);
-    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
-    expect(tableChanged(el)).toBeNull();
-  });
-
-  it("device mode ignores a stray fire-kitchen-group: no session verb, no reload", async () => {
-    const api = {
-      getDeviceStationScreen: vi.fn().mockResolvedValue({
-        stations: [
-          {
-            name: "Cocina",
-            available: true,
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
-            },
-            id: "st-dev",
-            printersDown: [],
-            queue: cocinaQueue,
-            notices: [],
-          },
-        ],
-      }),
-      fireGroup: vi.fn(),
-    } as unknown as TillApi;
-    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
-      api,
-      deviceMode: true,
-    });
-    await flush(el);
-    fireFromWidget(el);
-    await flush(el);
-    expect(api.fireGroup).not.toHaveBeenCalled();
-    expect(api.getDeviceStationScreen).toHaveBeenCalledOnce();
-  });
-});
+  },
+);
 
 describe.each([false, true])("printer warnings (device mode: %s)", (deviceMode) => {
   const down = [

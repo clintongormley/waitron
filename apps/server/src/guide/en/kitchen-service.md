@@ -83,3 +83,6 @@ late flags. You no longer choose a venue-wide firing mode there.
 Request held food from the table's order screen. A station queue shows held courses and groups
 without a Fire button. Held dishes stay dimmed and cannot be advanced by tapping them.
 Once released, a dish can move through preparation to Ready at its station.
+
+Confirm allergy instructions in the table's allergy window before requesting cooking. At the
+station, read the copy already attached to each dish and acknowledge any corrections.

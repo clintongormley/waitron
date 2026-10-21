@@ -2449,7 +2449,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Add Requested and pass release,
   remove Away/Done, and finish the station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before
   each slice. The plan carries A797's completed Q42 amendments; its revised design, pictures and FYI landed on 2026-10-21. A803's pass/station tail follows this build.
-  The station queue no longer offers course/group Fire buttons; held work stays non-advanceable. The newly landed floor map counts ready food without a legacy dispatch fallback.
+  The station queue no longer offers course/group Fire buttons; held work stays non-advanceable.
+  The station screen ignores the retired Fire events without opening an allergy window or making
+  cooking requests. Expo still uses the shared allergy controller until its own retirement.
+  The newly landed floor map counts ready food without a legacy dispatch fallback.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held

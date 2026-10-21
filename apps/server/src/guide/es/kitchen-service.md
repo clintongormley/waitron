@@ -94,3 +94,6 @@ los avisos de retraso predeterminados. Ya no se elige allí un modo de marcha pa
 Pide los platos en espera desde el pedido de la mesa. La cola de una estación muestra los pases
 y grupos en espera sin botón Marchar. Esos platos se muestran atenuados y no avanzan al tocarlos.
 Una vez enviados a preparar, puedes avanzar los platos hasta Listo en su estación.
+
+Confirma las instrucciones de alergia en la ventana de alergias de la mesa antes de pedir la
+preparación. En la estación, lee la copia que acompaña a cada plato y confirma las correcciones.

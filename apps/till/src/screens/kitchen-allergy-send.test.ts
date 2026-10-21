@@ -145,6 +145,19 @@ function fixture(kind: "group" | "course", deviceMode = false) {
       notices: [],
       printersDown: [],
     }),
+    getDeviceStationScreen: vi.fn().mockResolvedValue({
+      stations: [
+        {
+          id: "station-1",
+          name: "Kitchen",
+          available: true,
+          today: { open: true, isDefault: true, byHand: null, sendsTo: null, why: "default" },
+          queue: [kind === "group" ? stationGroup : { ...stationGroup, items: [stationItem] }],
+          notices: [],
+          printersDown: [],
+        },
+      ],
+    }),
     getExpoQueue: vi.fn().mockResolvedValue(orders),
     getDevicePassScreen: vi.fn().mockResolvedValue({ orders, stations: [], zones: null }),
     getFindBill: vi.fn().mockResolvedValue({ workingOrderId: "bill-1", partyId: party.id }),
@@ -209,37 +222,70 @@ async function settle(el: Screen) {
   await el.updateComplete;
 }
 
+describe("A773 waiter authority — station allergy boundary", () => {
+  for (const deviceMode of [false, true])
+    for (const kind of ["group", "course"] as const)
+      it.each([null, "none", "allergies"] as const)(
+        `station ${kind} never previews or sends an answer %s (device ${deviceMode})`,
+        async (answer) => {
+          const api = fixture(kind, deviceMode);
+          api.previewPartyAllergy.mockResolvedValue(view(answer));
+          const { el } = await mount("station", kind, api);
+          const reads = deviceMode ? api.getDeviceStationScreen : api.getStationQueue;
+          const count = reads.mock.calls.length;
+          for (let press = 0; press < 2; press++) {
+            await fire(el, kind);
+            await settle(el);
+          }
+          el.dispatchEvent(
+            new CustomEvent("allergy-confirm", {
+              detail: {
+                scopeKey: "old-scope",
+                expectedPartyRevision: 7,
+                patch: { party: { answer: "none", guests: [] }, ticks: [] },
+              },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+          await settle(el);
+          expect(api.getFindBill).not.toHaveBeenCalled();
+          expect(api.previewPartyAllergy).not.toHaveBeenCalled();
+          expect(api.fireGroup).not.toHaveBeenCalled();
+          expect(api.fireCourse).not.toHaveBeenCalled();
+          expect(api.fireDeviceGroup).not.toHaveBeenCalled();
+          expect(api.fireDeviceCourse).not.toHaveBeenCalled();
+          expect(reads).toHaveBeenCalledTimes(count);
+          expect(dialog(el)).toBeNull();
+          expect(el.shadowRoot!.querySelector('[role="alert"], [data-table-changed]')).toBeNull();
+        },
+      );
+});
+
 describe("A669 kitchen fire callers", () => {
-  it("changing stations retires a pending preview even if that station is reopened", async () => {
-    let resolve!: (v: PartyAllergyRead) => void;
+  it("changing stations after an obsolete Fire opens no allergy preview", async () => {
     const api = fixture("group");
     const stations = await api.listStations();
     api.listStations.mockResolvedValue([
       ...stations,
       { ...stations[0]!, id: "station-2", name: "Bar", isDefault: false },
     ]);
-    api.previewPartyAllergy.mockImplementationOnce(
-      () =>
-        new Promise((r) => {
-          resolve = r;
-        }),
-    );
     const { el } = await mount("station", "group", api);
     await fire(el, "group");
-    await vi.waitFor(() => expect(api.previewPartyAllergy).toHaveBeenCalledOnce());
+    await settle(el);
+    expect(api.previewPartyAllergy).not.toHaveBeenCalled();
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-station="station-2"]')!);
     await settle(el);
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-station="station-1"]')!);
     await settle(el);
-    resolve(view("none"));
-    await settle(el);
+    expect(api.previewPartyAllergy).not.toHaveBeenCalled();
     expect(api.fireGroup).not.toHaveBeenCalled();
     expect(dialog(el)).toBeNull();
   });
 
   it("a course lookup delivered with a changed operator cannot fire a counter dish", async () => {
     const api = fixture("course");
-    const { el } = await mount("station", "course", api);
+    const { el } = await mount("expo", "course", api);
     api.getFindBill.mockImplementationOnce(async () => {
       el.operatorSession++;
       return { workingOrderId: "bill-1", partyId: null };
@@ -251,23 +297,23 @@ describe("A669 kitchen fire callers", () => {
   });
   it("a successful Fire delivered with a changed operator does not refresh that operator's board", async () => {
     const api = fixture("group");
-    const { el } = await mount("station", "group", api);
+    const { el } = await mount("expo", "group", api);
     api.fireGroup.mockImplementationOnce(async () => {
       el.operatorSession++;
       return { revision: 8 };
     });
     await fire(el, "group");
     await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
-    const reads = api.getStationQueue.mock.calls.length;
+    const reads = api.getExpoQueue.mock.calls.length;
     await userEvent.click(dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
     await settle(el);
     expect(api.fireGroup).toHaveBeenCalledOnce();
-    expect(api.getStationQueue).toHaveBeenCalledTimes(reads);
+    expect(api.getExpoQueue).toHaveBeenCalledTimes(reads);
     expect(dialog(el)).toBeNull();
   });
   it("a screen removed while starting its course lookup cancels that read", async () => {
     const api = fixture("course");
-    const { el } = await mount("station", "course", api);
+    const { el } = await mount("expo", "course", api);
     api.getFindBill.mockImplementationOnce(() => {
       el.remove();
       return new Promise(() => {});
@@ -280,7 +326,7 @@ describe("A669 kitchen fire callers", () => {
   it("a preview naming another party is unread rather than an allergy answer", async () => {
     const api = fixture("group");
     api.previewPartyAllergy.mockResolvedValue({ ...view("none"), partyId: "other-party" });
-    const { el } = await mount("station", "group", api);
+    const { el } = await mount("expo", "group", api);
     await fire(el, "group");
     await vi.waitFor(() =>
       expect(el.shadowRoot!.textContent).toContain(codeMessage("table.error")),
@@ -296,7 +342,7 @@ describe("A669 kitchen fire callers", () => {
           resolve = () => r({ revision: 8 });
         }),
     );
-    const { el } = await mount("station", "group", api);
+    const { el } = await mount("expo", "group", api);
     await fire(el, "group");
     await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
     const form = dialog(el)!;
@@ -310,7 +356,7 @@ describe("A669 kitchen fire callers", () => {
     await vi.waitFor(() => expect(dialog(el)).toBeNull());
   });
 
-  it.each(["station", "expo"] as const)(
+  it.each(["expo"] as const)(
     "%s keeps a counter course outside table allergy scope",
     async (screen) => {
       const api = fixture("course");
@@ -329,7 +375,7 @@ describe("A669 kitchen fire callers", () => {
     async (code) => {
       const api = fixture("group");
       api.fireGroup.mockRejectedValueOnce({ code });
-      const { el } = await mount("station", "group", api);
+      const { el } = await mount("expo", "group", api);
       await fire(el, "group");
       await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
       await userEvent.click(dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
@@ -344,7 +390,7 @@ describe("A669 kitchen fire callers", () => {
   it("keeps showing a repeated Fire refusal while retaining its answer for retry", async () => {
     const api = fixture("group");
     api.fireGroup.mockRejectedValue({ code: "device.forbidden_action" });
-    const { el } = await mount("station", "group", api);
+    const { el } = await mount("expo", "group", api);
     await fire(el, "group");
     await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
     const form = dialog(el)!;
@@ -360,7 +406,7 @@ describe("A669 kitchen fire callers", () => {
     const api = fixture("group");
     api.previewPartyAllergy.mockResolvedValue(view("none"));
     api.fireGroup.mockRejectedValue({ code: "device.forbidden_action" });
-    const { el } = await mount("station", "group", api);
+    const { el } = await mount("expo", "group", api);
     await fire(el, "group");
     await vi.waitFor(() =>
       expect(el.shadowRoot!.textContent).toContain(codeMessage("device.forbidden_action")),
@@ -370,7 +416,7 @@ describe("A669 kitchen fire callers", () => {
   it("Cancel after an unknown Fire retains no hidden retry", async () => {
     const api = fixture("group");
     api.fireGroup.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    const { el } = await mount("station", "group", api);
+    const { el } = await mount("expo", "group", api);
     await fire(el, "group");
     await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
     const form = dialog(el)!;
@@ -391,7 +437,7 @@ describe("A669 kitchen fire callers", () => {
       ];
       api.previewPartyAllergy.mockResolvedValue(read);
       api.fireGroup.mockRejectedValueOnce({ code: "allergy.invalid", field: `guests.0.${field}` });
-      const { el } = await mount("station", "group", api);
+      const { el } = await mount("expo", "group", api);
       await fire(el, "group");
       await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
       const form = dialog(el)!;
@@ -412,7 +458,7 @@ describe("A669 kitchen fire callers", () => {
     ];
     api.previewPartyAllergy.mockResolvedValue(read);
     api.fireGroup.mockRejectedValueOnce({ code: "allergy.invalid" });
-    const { el } = await mount("station", "group", api);
+    const { el } = await mount("expo", "group", api);
     await fire(el, "group");
     await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
     const form = dialog(el)!;
@@ -441,7 +487,7 @@ describe("A669 kitchen fire callers", () => {
             reject = j;
           }),
       );
-      const { el } = await mount("station", "group", api);
+      const { el } = await mount("expo", "group", api);
       await fire(el, "group");
       await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
       await userEvent.click(dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
@@ -462,7 +508,7 @@ describe("A669 kitchen fire callers", () => {
     },
   );
 
-  it("a late course lookup refusal cannot mark the next station orientation", async () => {
+  it("a late course lookup refusal cannot mark the next pass orientation", async () => {
     let reject!: (e: unknown) => void;
     const api = fixture("course");
     api.getFindBill.mockImplementationOnce(
@@ -471,7 +517,7 @@ describe("A669 kitchen fire callers", () => {
           reject = r;
         }),
     );
-    const { el } = await mount("station", "course", api);
+    const { el } = await mount("expo", "course", api);
     await fire(el, "course");
     await vi.waitFor(() => expect(api.getFindBill).toHaveBeenCalledOnce());
     el.operatorSession++;
@@ -481,7 +527,7 @@ describe("A669 kitchen fire callers", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
     expect(api.fireCourse).not.toHaveBeenCalled();
   });
-  it.each(["station", "expo"] as const)(
+  it.each(["expo"] as const)(
     "%s shows a failed preview without sending or inventing an answer",
     async (screen) => {
       const api = fixture("group");
@@ -510,7 +556,7 @@ describe("A669 kitchen fire callers", () => {
     ];
     read.dishes[0]!.extras = [{ name: "Cream", quantity: "1.000", allergens: { milk: {} } }];
     api.previewPartyAllergy.mockResolvedValue(read);
-    const { el } = await mount("station", "group", api);
+    const { el } = await mount("expo", "group", api);
     await fire(el, "group");
     await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
     const form = dialog(el)!;
@@ -523,7 +569,7 @@ describe("A669 kitchen fire callers", () => {
     expect(api.fireGroup).not.toHaveBeenCalled();
   });
 
-  for (const screen of ["station", "expo"] as const)
+  for (const screen of ["expo"] as const)
     for (const language of ["en", "es"] as const)
       for (const theme of ["light", "dark"] as const)
         for (const width of [390, 1280]) {
@@ -587,7 +633,7 @@ describe("A669 kitchen fire callers", () => {
           });
         }
 
-  it.each(["station", "expo"] as const)(
+  it.each(["expo"] as const)(
     "%s retains an unknown Fire answer for an exact retry",
     async (screen) => {
       const api = fixture("group");
@@ -606,7 +652,7 @@ describe("A669 kitchen fire callers", () => {
       await vi.waitFor(() => expect(dialog(el)).toBeNull());
     },
   );
-  it.each(["station", "expo"] as const)(
+  it.each(["expo"] as const)(
     "%s rejects a stale card before sending its answer",
     async (screen) => {
       const api = fixture("group");
@@ -622,7 +668,7 @@ describe("A669 kitchen fire callers", () => {
       expect(dialog(el)).toBeNull();
     },
   );
-  it.each(["station", "expo"] as const)(
+  it.each(["expo"] as const)(
     "%s closes the answer when another operator signs in on the same API",
     async (screen) => {
       const { el, api } = await mount(screen, "group");
@@ -669,7 +715,7 @@ describe("A669 kitchen fire callers", () => {
     expect(api.fireGroup).not.toHaveBeenCalled();
     expect(dialog(el)).toBeNull();
   });
-  it.each(["station", "expo"] as const)(
+  it.each(["expo"] as const)(
     "%s prevents two presses from opening or sending twice",
     async (screen) => {
       const { el, api } = await mount(screen, "group");
@@ -689,8 +735,6 @@ describe("A669 kitchen fire callers", () => {
   );
 
   it.each([
-    ["station", "group"],
-    ["station", "course"],
     ["expo", "group"],
     ["expo", "course"],
   ] as const)(
@@ -722,7 +766,7 @@ describe("A669 kitchen fire callers", () => {
       await vi.waitFor(() => expect(dialog(el)).toBeNull());
     },
   );
-  it.each(["station", "expo"] as const)("%s cancellation fires nothing", async (screen) => {
+  it.each(["expo"] as const)("%s cancellation fires nothing", async (screen) => {
     const { el, api } = await mount(screen, "group");
     await fire(el, "group");
     await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
@@ -731,7 +775,7 @@ describe("A669 kitchen fire callers", () => {
     expect(api.fireGroup).not.toHaveBeenCalled();
     expect(dialog(el)).toBeNull();
   });
-  it.each(["station", "expo"] as const)(
+  it.each(["expo"] as const)(
     "%s sends one guest assignment across both bills without dropping a dish",
     async (screen) => {
       const api = fixture("group");
@@ -754,23 +798,20 @@ describe("A669 kitchen fire callers", () => {
       });
     },
   );
-  it.each(["station", "expo"] as const)(
-    "%s never reoffers already considered held dishes",
-    async (screen) => {
-      const api = fixture("group");
-      const read = view("allergies");
-      read.dishes.forEach((d) => (d.offeredBefore = true));
-      api.previewPartyAllergy.mockResolvedValue(read);
-      const { el } = await mount(screen, "group", api);
-      await fire(el, "group");
-      await vi.waitFor(() => expect(api.fireGroup).toHaveBeenCalledOnce());
-      expect(dialog(el)).toBeNull();
-      expect(api.fireGroup.mock.calls[0]![2]).toEqual({
-        submissionId: expect.any(String),
-        expectedPartyRevision: 7,
-      });
-    },
-  );
+  it.each(["expo"] as const)("%s never reoffers already considered held dishes", async (screen) => {
+    const api = fixture("group");
+    const read = view("allergies");
+    read.dishes.forEach((d) => (d.offeredBefore = true));
+    api.previewPartyAllergy.mockResolvedValue(read);
+    const { el } = await mount(screen, "group", api);
+    await fire(el, "group");
+    await vi.waitFor(() => expect(api.fireGroup).toHaveBeenCalledOnce());
+    expect(dialog(el)).toBeNull();
+    expect(api.fireGroup.mock.calls[0]![2]).toEqual({
+      submissionId: expect.any(String),
+      expectedPartyRevision: 7,
+    });
+  });
   it.each(["group", "course"] as const)(
     "device %s shows an unanswered refusal and opens no person-owned editor",
     async (kind) => {
@@ -789,29 +830,26 @@ describe("A669 kitchen fire callers", () => {
       expect(api.fireCourse).not.toHaveBeenCalled();
     },
   );
-  it.each(["station", "expo"] as const)(
-    "%s ignores a preview after an API switch",
-    async (screen) => {
-      let resolve!: (v: PartyAllergyRead) => void;
-      const api = fixture("group");
-      api.previewPartyAllergy.mockImplementation(
-        () =>
-          new Promise((r) => {
-            resolve = r;
-          }),
-      );
-      const { el } = await mount(screen, "group", api);
-      await fire(el, "group");
-      await vi.waitFor(() => expect(api.previewPartyAllergy).toHaveBeenCalledOnce());
-      el.api = fixture("group") as unknown as TillApi;
-      await el.updateComplete;
-      resolve(view());
-      await settle(el);
-      expect(dialog(el)).toBeNull();
-      expect(api.fireGroup).not.toHaveBeenCalled();
-    },
-  );
-  it.each(["station", "expo"] as const)(
+  it.each(["expo"] as const)("%s ignores a preview after an API switch", async (screen) => {
+    let resolve!: (v: PartyAllergyRead) => void;
+    const api = fixture("group");
+    api.previewPartyAllergy.mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolve = r;
+        }),
+    );
+    const { el } = await mount(screen, "group", api);
+    await fire(el, "group");
+    await vi.waitFor(() => expect(api.previewPartyAllergy).toHaveBeenCalledOnce());
+    el.api = fixture("group") as unknown as TillApi;
+    await el.updateComplete;
+    resolve(view());
+    await settle(el);
+    expect(dialog(el)).toBeNull();
+    expect(api.fireGroup).not.toHaveBeenCalled();
+  });
+  it.each(["expo"] as const)(
     "%s invalidates a removed and reopened same-party screen",
     async (screen) => {
       let resolve!: (v: PartyAllergyRead) => void;
