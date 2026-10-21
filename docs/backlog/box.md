@@ -615,7 +615,9 @@ encrypted copy in `<state>/backup-staging`. The run's own `finally` deletes them
 state or venue folder has under 256 MiB free at the start, and after a start whose failure was
 classified `storage.disk_full`, whatever the free space (`runAdmittedEntry`'s catch,
 `apps/server/src/node-entry.ts`; the slice's plan, decision 7). Either way it keeps them while the
-venue folder's holder file shows a fresh heartbeat. Outside those two cases they stay
+venue folder's holder file shows a fresh heartbeat, except, in the second case, one the failed start
+wrote itself because first-setup admission still holds that folder (`venueHeld`, from `run` in
+`apps/server/src/first-setup-entry.ts`). Outside those two cases they stay
 indefinitely: each backup run deletes only its own files (the dump is named from the run's own
 time, `dumpFileName`, and the encrypted copy goes in a fresh `mkdtemp` folder, both in
 `apps/server/src/backup-sweep.ts`), and nothing else in the server deletes from `backup-staging`;

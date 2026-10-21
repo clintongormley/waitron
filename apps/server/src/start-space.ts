@@ -36,6 +36,11 @@ export interface StartSpaceDeps {
   floor: number;
   /** Delete whatever the free space: a start whose failure was a full disk. */
   force?: boolean;
+  /**
+   * This process holds the venue folder's lock for the whole call. No other process can then hold
+   * it, so the holder file is this process's own and does not keep backup staging.
+   */
+  venueHeld?: boolean;
   now: () => Date;
   statfs?: Statfs;
   readVenueHolder: (venueDir: string) => VenueHolder | null;
@@ -91,7 +96,7 @@ export async function freeSpaceAtStart(
     await remove(path, false);
   }
 
-  const holder = deps.readVenueHolder(deps.venueDir);
+  const holder = deps.venueHeld === true ? null : deps.readVenueHolder(deps.venueDir);
   // The time is read again: the deletions above can outlast VENUE_HOLDER_STALE_MS, and a live
   // heartbeat judged against the start of them reads as one from the future.
   if (holder === null || !isVenueHolderFresh(holder, deps.now())) {

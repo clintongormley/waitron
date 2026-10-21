@@ -209,6 +209,15 @@ describe("freeSpaceAtStart", () => {
     expect(readVenueHolder).toHaveBeenCalledWith(venueDir);
   });
 
+  it("deletes backup staging under a fresh holder when this process holds the venue folder", async () => {
+    await touch(staging());
+    const readVenueHolder = vi.fn(() => holder(5_000));
+    const { deps: d } = deps({ venueHeld: true, readVenueHolder });
+    await freeSpaceAtStart(d);
+    expect(existsSync(staging())).toBe(false);
+    expect(readVenueHolder).not.toHaveBeenCalled();
+  });
+
   it("judges the holder at the time it reads it, after a slow clean-up", async () => {
     await touch(staging());
     await touch(join(logDir, "crash-reports", "holder-frozen-a.json"), 8 * DAY_MS);

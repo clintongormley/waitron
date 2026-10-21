@@ -386,7 +386,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   }
 
   const selected = admission.roots.binding === null ? deps : rooted;
-  return admission.run(() => runAdmittedEntry(selected, transport));
+  return admission.run((venueHeld) => runAdmittedEntry(selected, transport, venueHeld));
 }
 
 type CountCheck = { written: true } | { written: false; freeBytes: number | null };
@@ -421,7 +421,12 @@ export function recordedStartFailureCode(error: unknown): string | undefined {
   return typeof error === "object" && error !== null ? recordedCodes.get(error) : undefined;
 }
 
-async function runAdmittedEntry(deps: EntryDeps, transport: RecoveryServeOptions): Promise<void> {
+/** `venueHeld`: the caller holds `deps.venueDir`'s lock for the whole call. */
+async function runAdmittedEntry(
+  deps: EntryDeps,
+  transport: RecoveryServeOptions,
+  venueHeld: boolean,
+): Promise<void> {
   // Outside the recovery lock: it decides only whether this start boots or serves the page. Every change
   // below re-reads under the lock, so a write made since is kept rather than overwritten.
   const state = await deps.readRecoveryState(deps.stateDir);
@@ -536,6 +541,7 @@ async function runAdmittedEntry(deps: EntryDeps, transport: RecoveryServeOptions
         logDir,
         floor: deps.freeSpaceFloor ?? START_FREE_SPACE_FLOOR,
         force: true,
+        venueHeld,
         now,
         statfs: deps.statfs,
         readVenueHolder: deps.readVenueHolder ?? readVenueHolder,

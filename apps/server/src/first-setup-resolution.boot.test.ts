@@ -17,6 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
+import { dumpFileName } from "./backup-keys.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 const dirs: string[] = [];
@@ -633,6 +634,22 @@ it("fails the start as before when the selected workspace's free space cannot be
       ),
     ).rejects.toBe(error);
     expect(serveRecovery).not.toHaveBeenCalled();
+  } finally {
+    await f.dispose();
+  }
+});
+
+it("a start that failed on a full disk deletes backup staging while it holds the selected workspace itself", async () => {
+  const f = await replacement();
+  try {
+    const staged = join(f.binding.stateDir, "backup-staging", dumpFileName(new Date()));
+    await mkdir(join(f.binding.stateDir, "backup-staging"), { recursive: true });
+    await writeFile(staged, "copy");
+    const error = diskFull();
+    await expect(
+      entry.runEntry(selectedEntryDeps(f, { startServer: () => Promise.reject(error) })),
+    ).rejects.toBe(error);
+    await expect(stat(staged)).rejects.toMatchObject({ code: "ENOENT" });
   } finally {
     await f.dispose();
   }

@@ -7,6 +7,8 @@ import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { FRESH, levelFor, type RecoveryState } from "./recovery-state.js";
 import { escapeHtml } from "./recovery-surface.js";
 import { AppError } from "@waitron/shared";
+import { lockVenueDatabase } from "@waitron/db";
+import { dumpFileName } from "./backup-keys.js";
 import { startFailureCode } from "./boot-failure.js";
 import { recordedStartFailureCode, runEntry } from "./node-entry.js";
 import { firstFiscalFixture } from "../test/first-fiscal.js";
@@ -386,6 +388,60 @@ describe("a start that fails on a full disk", () => {
     await expect(runEntry(d)).rejects.toBe(error);
     expect(existsSync(leftover)).toBe(false);
     expect(seen).toEqual([true, false]);
+  });
+
+  it("deletes backup staging after a full-disk failure once its own hold of the venue folder is released", async () => {
+    const staged = join(
+      STATE_DIR,
+      "backup-staging",
+      dumpFileName(new Date("2026-10-20T00:00:00Z")),
+    );
+    await mkdir(join(STATE_DIR, "backup-staging"), { recursive: true });
+    await writeFile(staged, "copy");
+    dirs.push(join(STATE_DIR, "backup-staging"));
+    const error = diskFull();
+    const d = deps(
+      {
+        lockVenue: lockVenueDatabase,
+        startServer: vi.fn<StartServer>(() => Promise.reject(error)),
+      },
+      () => 100 * MIB,
+    );
+    await expect(runEntry(d)).rejects.toBe(error);
+    expect(existsSync(staged)).toBe(false);
+  });
+
+  it("keeps backup staging after a full-disk failure while another process's holder is fresh", async () => {
+    const staged = join(
+      STATE_DIR,
+      "backup-staging",
+      dumpFileName(new Date("2026-10-20T00:00:00Z")),
+    );
+    await mkdir(join(STATE_DIR, "backup-staging"), { recursive: true });
+    await writeFile(staged, "copy");
+    dirs.push(join(STATE_DIR, "backup-staging"));
+    const error = diskFull();
+    const heartbeatAt = new Date().toISOString();
+    const d = deps(
+      {
+        runStagedRestore: () => Promise.reject(error),
+        readVenueHolder: () => ({
+          kind: "server",
+          pid: process.pid + 1,
+          host: "box",
+          lockedAt: heartbeatAt,
+          heartbeatAt,
+        }),
+      },
+      () => 100 * MIB,
+    );
+    await expect(runEntry(d)).rejects.toBe(error);
+    expect(d.log).toHaveBeenCalledWith(
+      "warn",
+      "storage.start_space_low",
+      expect.objectContaining({ deleted: expect.any(Number) }),
+    );
+    expect(existsSync(staged)).toBe(true);
   });
 
   it("deletes nothing for any other failure", async () => {
