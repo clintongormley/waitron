@@ -63,6 +63,10 @@ export class DashboardQueries {
     apply: (value: T) => void,
   ): Promise<void> {
     const query = dashboardQuery(this.#client(name), name, args);
-    return this.#queries.watch(name, { ...query, read: () => send(query.read) }, apply);
+    return this.#queries.watch(
+      name,
+      { ...query, key: `sent:${query.key}`, read: () => send(query.read) },
+      apply,
+    );
   }
 }
