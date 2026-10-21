@@ -5479,13 +5479,13 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   2026-10-20). It adds a module seat for staff notices and one
   migration in the Veri*Factu module's set. Slice 1 of 10 (a full disk reported as
   `storage.disk_full`; nothing a body writes through the write queue after one that ended its
-  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) is finished and parked for the owner in #<this pull request>; slice 4 is next. Open asesor questions:
+  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) is finished and parked for the owner in #1950; slice 4 is next. Open asesor questions:
   [Q51](compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21)
   and
   [Q52](compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21).
 
 - **Till surfaces that still show their own message for a full disk, and the station screen's
-  silence.** Left open by A798-B slice 3 (#<this pull request>) for slice 6: the draft save's
+  silence.** Left open by A798-B slice 3 (#1950) for slice 6: the draft save's
   refusals and the unpaid departure, among others, now meet a full disk whenever the stop holds, and
   the station screen, on a kitchen display and on a till's Station tab, shows nothing for a refused bump.
   [Detail](backlog/box.md#till-surfaces-that-still-show-their-own-message-for-a-full-disk-and-the-station-screens-silence)
@@ -5494,17 +5494,17 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   the gate checks, or a sale or payment attempt, reads 16 MiB free (`apps/server/src/disk-full-state.ts`),
   so the stop stays until the status strip slice 6 adds reads `full()` or slice 5's free-space watch
   clears it.
-  Left open by A798-B slice 3 (#<this pull request>).
+  Left open by A798-B slice 3 (#1950).
 
 - **A cancel's whole-invoice credit under a clock before 28-10-2024 reaches the chain without the
   clock check** (`creditWholeInvoice`, `apps/server/src/cancel-credit.ts`), and so, read not run,
   answers `fiscal.record_invalid`; so does the setup readiness check's test sale. No product path
-  records a substitution or a void today. Left open by A798-B slice 3 (#<this pull request>) for slice 8.
+  records a substitution or a void today. Left open by A798-B slice 3 (#1950) for slice 8.
 
 - **Which alert area `clock.unusable` belongs to.** `CORE_ALERTS` (`packages/db/src/alerts.ts`) gives
   the `clock.` prefix to the area `fiscal`, while design §4.3 puts `clock.unusable` under "Equipo";
   the slice that raises it as an alert (slice 9) settles which wins. Left open by A798-B slice 3
-  (#<this pull request>).
+  (#1950).
 
 - **A transaction opened outside the write queue can let a body's writes after a full disk
   commit.** The store's record of a transaction the engine ended belongs to the connection pair,

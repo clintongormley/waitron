@@ -2404,7 +2404,7 @@ itself and keeps nothing.
 
 ### A full disk stops the till's writes
 
-Since A798-B slice 3 (#<this pull request>), one save refused for a full disk, or a start with less than 16 MiB free, stops every write the
+Since A798-B slice 3 (#1950), one save refused for a full disk, or a start with less than 16 MiB free, stops every write the
 till app and the kitchen screens send, except a short open list (below), until the venue folder
 has 16 MiB free again. The owner chose this on 2026-10-21, following the design's §4.6 item 5:
 every sale, order, kitchen send and clock-in is refused, even one whose own save would still fit. The decisions behind it are numbered in the
@@ -2429,7 +2429,7 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   the stop when another refusal was noted while it was in flight, even one noted after a faster
   reading had already cleared it. With the stop off, nothing is read: each of those checks awaits
   `full()` only while `since()` names a refusal, because the extra await would let another write's
-  transaction get into the write queue ahead of a payment's first transaction (#<this pull request>;
+  transaction get into the write queue ahead of a payment's first transaction (#1950;
   the in-flight cases in `placed-order-one-payment.test.ts` and `bill-payments.in-flight.test.ts`).
 
 **What is refused, and where.**

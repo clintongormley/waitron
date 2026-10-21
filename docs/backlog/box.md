@@ -651,7 +651,7 @@ Not closed in slice 1, because product writes go through `withTransaction`, whic
 
 ## Till surfaces that still show their own message for a full disk, and the station screen's silence
 
-Left open by A798-B slice 3 (#<this pull request>), for slice 6. Since slice 3, once a save has
+Left open by A798-B slice 3 (#1950), for slice 6. Since slice 3, once a save has
 failed for a full disk, or the box started with less than 16 MiB free, every till write except the open ones answers `507 storage.disk_full` until
 the venue folder has 16 MiB free
 ([conventions-data.md](../developers/conventions-data.md#a-full-disk-stops-the-tills-writes)). The
