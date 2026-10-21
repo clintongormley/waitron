@@ -3248,10 +3248,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   sweeps and the token-list guard, in `@waitron/ui-core/theme`. Slice 2 landed
   2026-10-21 (#1932): custom themes stored in `custom_themes` (`tenant_themes` retired), their
   routes, the theme in use served at `/api/theme`, the till's `themeHash`, and configuration copies
-  at format 6. Slice 3 landed 2026-10-21: the theme in use reaches the screens — the dashboard and the till
-  apply the browser's stored copy at start and fetch `/api/theme` without waiting on it; an open
-  dashboard follows through a passive live read of `custom_themes`, and a signed-in till through its
-  `themeHash` once per poll. Next: slice 4 (primary-coloured text), then slice 5 (the editor).
+  at format 6. Slice 3 landed 2026-10-21: the theme in use reaches the screens — the dashboard and
+  the till apply the browser's stored copy at start and fetch `/api/theme` without waiting on it;
+  an open dashboard follows through a passive live read of `custom_themes`, and a signed-in till
+  through its `themeHash` once per poll. Next: slice 4 (primary-coloured text), then slice 5 (the editor).
 
 - **WebKit in CI for A841's start-up checks (lane A ruling, 2026-10-21).** The dashboard's and the
   till's `venue-theme-startup.test.ts` run in Chromium in CI; WebKit was measured once, locally
