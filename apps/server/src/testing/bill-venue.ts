@@ -90,7 +90,12 @@ export interface BillVenue {
   /** The same routes, tips on, on another clock. */
   appAt(clock: TrustedClock): Hono;
   /** The same routes, tips on, with these deps. */
-  appWith(opts: { clock?: TrustedClock; disk?: DiskFullState; log?: Logger }): Hono;
+  appWith(opts: {
+    clock?: TrustedClock;
+    disk?: DiskFullState;
+    log?: Logger;
+    workforceEnabled?: boolean;
+  }): Hono;
   /** The same routes with the venue's tips off. */
   appTipsOff: Hono;
   /** The first till's session and device. */
@@ -272,6 +277,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     at: TrustedClock = clock,
     disk?: DiskFullState,
     log: Logger = quiet,
+    workforceEnabled?: boolean,
   ): Hono => {
     const app = new Hono();
     mountTillApi(
@@ -285,6 +291,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
         venueLocale: LOCALE,
         pool,
         ...(disk === undefined ? {} : { disk }),
+        ...(workforceEnabled === undefined ? {} : { workforceEnabled }),
       },
       log,
     );
@@ -308,7 +315,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     pool,
     app: mount(true),
     appAt: (at) => mount(true, at),
-    appWith: (opts) => mount(true, opts.clock, opts.disk, opts.log),
+    appWith: (opts) => mount(true, opts.clock, opts.disk, opts.log, opts.workforceEnabled),
     appTipsOff: mount(false),
     cookie: await cookieFor(devices[0]!),
     deviceId: devices[0]!.deviceId,

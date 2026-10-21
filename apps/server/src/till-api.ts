@@ -2,7 +2,7 @@ import { refuseRecalledWrite } from "./draft-source.js";
 import { currentZoneDevice } from "./device-zones.js";
 import type { LiveEvents } from "./live-api.js";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
-import type { Hono } from "hono";
+import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
@@ -251,6 +251,7 @@ import { resolveLoginLocale } from "./login-locale.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
+import { mountGatedWhileDiskFull } from "./disk-full-gate.js";
 import {
   checkZones,
   gateZones,
@@ -280,8 +281,9 @@ export interface TillApiDeps {
    */
   pool?: CardProviderPool;
   /**
-   * Unset in suites that test no full-disk stop; unset, nothing is refused for a full disk. A live
-   * boot supplies it.
+   * Read by the full-disk gate, the reader payments and, through the deps they pass, the cash,
+   * collect and bill-payment routes. Unset, nothing is refused for a full disk; a live boot always
+   * supplies it.
    */
   disk?: DiskFullState;
   /**
@@ -1219,8 +1221,30 @@ async function movingRooms<T extends object>(
   return moved.size === 0 ? result : { ...result, zoneRevisions: Object.fromEntries(moved) };
 }
 
+/** Open while a full-disk stop holds; each still fails by itself if its own save does not fit. */
+const TILL_OPEN_WHILE_DISK_FULL: ReadonlySet<string> = new Set([
+  // A refused sign-out keeps someone signed in on a shared till; a refused sign-in, the next shift out.
+  "POST /api/session",
+  "DELETE /api/session",
+  "PUT /api/session/locale",
+  // Refused inside, after their replay checks, the one place a resend is told from a new sale.
+  "POST /api/sales",
+  "POST /api/pay",
+  "POST /api/working-orders/:id/collect",
+  "POST /api/working-orders/:id/payments",
+  // Save nothing of their own; a refused send-preview would hide the kitchen send's own refusal.
+  "POST /api/dead-ends/sale",
+  "POST /api/dead-ends/draft",
+  "POST /api/dead-ends/order",
+  "POST /api/working-orders/:id/payments/preview",
+  "POST /api/working-orders/:id/adjustments/preview",
+  "POST /api/parties/:id/allergy/send-preview",
+  "POST /api/bills/:id/move/allergy-preview",
+]);
+
 /** Mount the till routes with the shared error boundary. */
-export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
+export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
+  const app = new Hono();
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
   const catchUpFloor = (tx: Transaction) =>
     ensureToday(tx, deps.cfg, deps.tableRemovals ?? [], deps.clock.now().instant);
@@ -4145,4 +4169,5 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       return c.json(result);
     }),
   );
+  mountGatedWhileDiskFull(root, app, { disk: deps.disk, log, open: TILL_OPEN_WHILE_DISK_FULL });
 }
