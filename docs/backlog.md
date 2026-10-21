@@ -5490,10 +5490,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   the station screen, on a kitchen display and on a till's Station tab, shows nothing for a refused bump.
   [Detail](backlog/box.md#till-surfaces-that-still-show-their-own-message-for-a-full-disk-and-the-station-screens-silence)
 
-- **A full-disk stop on a box nobody writes to outlives the freed space.** It clears only when a till
-  or kitchen screen tries a write that is not on the open list and reads 16 MiB free
-  (`apps/server/src/disk-full-state.ts`), so the stop stays until the status strip slice 6 adds reads
-  `full()` or slice 5's free-space watch clears it.
+- **A full-disk stop on a box nobody writes to outlives the freed space.** It clears only when a write
+  the gate checks, or a sale or payment attempt, reads 16 MiB free (`apps/server/src/disk-full-state.ts`),
+  so the stop stays until the status strip slice 6 adds reads `full()` or slice 5's free-space watch
+  clears it.
   Left open by A798-B slice 3 (#<this pull request>).
 
 - **A cancel's whole-invoice credit under a clock before 28-10-2024 reaches the chain without the

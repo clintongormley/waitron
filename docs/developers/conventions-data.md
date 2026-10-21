@@ -2502,7 +2502,8 @@ reader for a new sale (`payIntegrated`); and on every bill payment, cash include
   (`read-only-gate.ts`).
 - The free-space reading counts bytes (`bavail` times `frsize`, `free-bytes.ts`), not inodes. A
   full-disk refusal on a disk with bytes free but no inodes left is noted, then cleared by the next
-  gated write's reading, which goes on, and fails by itself only if its own save cannot be written.
+  free-space reading; the write that took it goes on, and fails by itself only if its own save
+  cannot be written.
   Reasoned from the code, not run.
 
 ### A full disk is not one error code

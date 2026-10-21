@@ -769,7 +769,7 @@ Decisions 21-29 are Task 12's: what the owner's answer (a) does not settle.
     one sentence everywhere, Tasks 9a and 9b show the code table's entry for `storage.disk_full`
     instead of `sale.disk_full`, and nothing on the server changes. The pull request names this
     decision.
-25. **The kitchen display's silence.** DEFAULT: not fixed here. The station screen shows nothing for
+25. **The station screen's silence.** DEFAULT: not fixed here. The station screen shows nothing for
     any refused bump today (read: `till-station-screen.ts:578-586`); under the stop its tickets
     simply do not move. Added to backlog (a) for slice 6, beside the surfaces that show their own
     fallback.
