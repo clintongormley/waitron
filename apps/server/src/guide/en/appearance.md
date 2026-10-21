@@ -89,9 +89,9 @@ for each colour that is. It offers three choices:
 
 When the theme you saved is the one in use, the dashboard you are using changes to the new look at
 once. Other dashboards open at the same time follow on their own, and a signed-in till follows the
-next time it checks its menu for changes. A till set up for counter service checks every 15
-seconds. Any other till checks every 15 seconds while a table's order is open on it, and otherwise
-follows when it next opens one, or when it restarts.
+next time it checks its menu for changes. A handheld phone or tablet, and a cash register set up
+for counter service, check every 15 seconds. Any other cash register checks every 15 seconds while
+a table's order is open on it, and otherwise follows when it next opens one, or when it restarts.
 
 If you saved anyway, the Look card keeps a warning line for each colour that is still hard to read,
 so the next person who opens the page sees it too.

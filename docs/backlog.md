@@ -3264,11 +3264,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   any screen (a theme can be put in use only through the management API or a configuration copy).
   Next: slice 13 (the Themes card and the name dialog, which closes that gap), then 6, 7 and 10.
 
-- **A till on the floor plan with no counter zone misses a theme change (A841 slice 5's review,
+- **A cash register on the floor plan with no counter zone misses a theme change (A841 slice 5's review,
   2026-10-21).** A till learns of a new theme only through the setup revision its 15-second menu
   check returns, and that check asks about the counter zone plus the zone of a table whose order is
-  on screen (`apps/till/src/till-app.ts:2585-2591`); a till whose profile has no counter zone gets an
-  empty one at sign-in (`:4884-4901`), so on the floor plan it asks about no zone and keeps the old
+  on screen (`apps/till/src/till-app.ts:2585-2591`); a cash register whose profile has no counter
+  zone gets an empty one at sign-in (`:4884-4901`; a handheld always gets one), so on the floor plan it asks about no zone and keeps the old
   theme until it opens a table, its zones or profile change, or it reloads. Traced by reading, not
   run. The design says every signed-in till follows within one poll (design section 12). Decide:
   have the poll return the setup revision without asking about a zone, or accept it and correct the

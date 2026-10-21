@@ -92,10 +92,10 @@ cada color afectado. Ofrece tres opciones:
 
 Cuando el tema que guardaste es el que está en uso, el panel que estás usando cambia al nuevo
 aspecto al momento. Los demás paneles abiertos a la vez lo siguen por su cuenta, y una caja con la
-sesión iniciada lo sigue la próxima vez que comprueba si su carta ha cambiado. Una caja preparada
-para el servicio en mostrador lo comprueba cada 15 segundos. Cualquier otra caja lo comprueba cada
-15 segundos mientras tiene abierto el pedido de una mesa y, si no, lo sigue cuando vuelve a abrir
-uno, o cuando se reinicia.
+sesión iniciada lo sigue la próxima vez que comprueba si su carta ha cambiado. Un teléfono o una
+tableta de mano, y una caja registradora preparada para el servicio en mostrador, lo comprueban
+cada 15 segundos. Cualquier otra caja registradora lo comprueba cada 15 segundos mientras tiene
+abierto el pedido de una mesa y, si no, lo sigue cuando vuelve a abrir uno, o cuando se reinicia.
 
 Si guardaste de todos modos, la tarjeta Aspecto conserva una línea de aviso por cada color que
 sigue leyéndose mal, para que también lo vea la próxima persona que abra la página.
