@@ -1168,8 +1168,10 @@ excludes the file. Guard: the stream job's cases in `scripts/ci-workflow.test.mj
 their name: they read `ci.yml` as text, so a step an `if:` switches off still passes them. Before the
 branch's first CI run, the mount had been run only in a privileged Linux container on Docker
 Desktop during the slice's review (2026-10-21), where the 32 MiB tmpfs mounted and the fill reached
-`ENOSPC`. **How these cases behave on a GitHub runner's tmpfs is unmeasured until that run**; the
-pull request records what it printed.
+`ENOSPC`. On a GitHub runner the first run (PR #1941, run 39600285845, job `test-server-stream`,
+2026-10-21) printed `✓ src/start-full-disk.e2e.test.ts (7 tests) 1487ms` on the 32 MiB tmpfs, with
+`WAITRON_FULL_DISK_DIR: /home/runner/work/_temp/full-disk`; the job's whole run printed
+`Tests  36 passed (36)`.
 
 **A run you interrupt can leave its image attached.** A run stopped with Ctrl-C during the
 slice's review (2026-10-21) left its image still attached afterwards. `pnpm reap` does not look for

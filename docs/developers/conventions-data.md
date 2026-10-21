@@ -2378,8 +2378,8 @@ itself and keeps nothing.
   `commit` runs the real `rollback` and then throws errcode 13. Through the old queue it printed the
   same lines the real disk image did (E8's last case). No page-limit shape TRIED met the limit at
   commit (E3, E3b). Since slice 2 a real disk meets it: the at-commit case in
-  `apps/server/src/start-full-disk.e2e.test.ts` passes on a 32 MiB HFS+ image, and on a tmpfs it is
-  unmeasured until that file's first CI run
+  `apps/server/src/start-full-disk.e2e.test.ts` passes on a 32 MiB HFS+ image, and passed on a GitHub
+  runner's 32 MiB tmpfs in that file's first CI run
   ([testing-guide.md](testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem)).
 - The change-feed shape in E13 was a copy of its trigger, not the feed itself.
 - **The record of an ended transaction belongs to the connection pair, not to the body.** An
