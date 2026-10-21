@@ -26,6 +26,7 @@ import {
   listAttempting,
   recordAttemptResolution,
   refundLookupOf,
+  saveCharge,
   stampAttemptingRef,
 } from "@waitron/payments";
 import { billPaymentIdempotencyKey, fromMinorUnits, workingOrderIdempotencyKey } from "./client.js";
@@ -201,11 +202,18 @@ export class StripeTerminalProvider implements PaymentProvider {
         settledAt: null,
       };
     }
-    const row = await this.inTransaction((tx) =>
+    const row =
       outcome.kind === "captured"
-        ? captureAttempting(tx, { ...key, settledAt: outcome.settledAt, externalRef: outcome.piId })
-        : failAttempting(tx, key),
-    );
+        ? await saveCharge(() =>
+            this.inTransaction((tx) =>
+              captureAttempting(tx, {
+                ...key,
+                settledAt: outcome.settledAt,
+                externalRef: outcome.piId,
+              }),
+            ),
+          )
+        : await this.inTransaction((tx) => failAttempting(tx, key));
     return {
       provider: PROVIDER,
       paymentRef,

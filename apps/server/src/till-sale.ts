@@ -86,7 +86,7 @@ import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js
 import { issueMoment } from "./issue-moment.js";
 import { cashChange, ZERO } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
-import { afterCardCharged, refuseBillWithPayments } from "./bill-payments.js";
+import { afterCardCharged, collectFailure, refuseBillWithPayments } from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
@@ -1369,7 +1369,7 @@ async function payIntegrated(
     });
   } catch (error) {
     await releasePaymentAttempt(deps, req.id, attemptAt);
-    throw error;
+    throw collectFailure(deps, req.id, error);
   }
   if (result.state !== "captured" && result.state !== "accepted_offline") {
     if (result.state === "failed" || result.state === "network_unavailable") {

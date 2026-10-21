@@ -39,6 +39,7 @@ import type { SettleSaleTender } from "@waitron/core";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   associatePaymentWithSale,
+  ChargeNotSavedError,
   findPaymentsByBillPayments,
   MANUAL_PROVIDER,
   recordManualCardPayment,
@@ -1243,14 +1244,34 @@ export async function afterCardCharged<T>(
   work: () => Promise<T>,
 ): Promise<T> {
   if (deps.sayCardChargedOnFullDisk !== true) return work();
-  const { log } = deps;
   try {
     return await work();
   } catch (error) {
     if (!diskFullIn(error)) throw error;
-    log?.("error", "sale.charged_not_recorded", { workingOrderId });
-    throw new AppError("sale.charged_not_recorded", { workingOrderId, reason: "disk_full" });
+    throw chargedNotRecorded(deps.log, workingOrderId);
   }
+}
+
+/**
+ * What a failed `collect` is answered with. When `deps` opts in, a charge the provider could not
+ * save for a full disk ({@link ChargeNotSavedError}) becomes `sale.charged_not_recorded`; any
+ * other failure, a full disk before the charge among them, passes through unchanged.
+ */
+export function collectFailure(
+  deps: { sayCardChargedOnFullDisk?: boolean; log?: Logger },
+  workingOrderId: string,
+  error: unknown,
+): unknown {
+  if (deps.sayCardChargedOnFullDisk !== true || !(error instanceof ChargeNotSavedError)) {
+    return error;
+  }
+  return chargedNotRecorded(deps.log, workingOrderId);
+}
+
+/** Carries no cause: the error boundary answers `storage.disk_full` for any full disk in the chain. */
+function chargedNotRecorded(log: Logger | undefined, workingOrderId: string): AppError {
+  log?.("error", "sale.charged_not_recorded", { workingOrderId });
+  return new AppError("sale.charged_not_recorded", { workingOrderId, reason: "disk_full" });
 }
 
 /** {@link takeReaderBillPayment}'s deps: the fiscal ones, and the reader's provider. */
@@ -1439,7 +1460,7 @@ export async function takeReaderBillPayment(
           failBillPayment(tx, payment.id, deps.clock.now().instant, undefined, deps.attendance),
         );
       }
-      throw error;
+      throw collectFailure(deps, workingOrderId, error);
     }
 
     if (result.state === "captured") {

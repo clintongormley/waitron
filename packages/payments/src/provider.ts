@@ -231,7 +231,9 @@ export interface PaymentProvider {
   readonly provider: string;
   readonly capabilities: ProviderCapabilities;
 
-  /** An uncertain charge stays `attempting` until its provider can determine the outcome. */
+  /** An uncertain charge stays `attempting` until its provider can determine the outcome. An
+   * adapter that saves a reported charge after its processor answers throws `ChargeNotSavedError`
+   * (./charge-not-saved.ts) when that save fails for a full disk. */
   collect(params: CollectParams): Promise<PaymentResult>;
 
   /** One pass over this provider's `accepted_offline` rows: `settled` when the network cleared it,

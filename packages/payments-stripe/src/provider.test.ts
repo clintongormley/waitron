@@ -5,14 +5,17 @@ import Stripe from "stripe";
 import { describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, deviceProfiles, devices, withTransaction } from "@waitron/db";
+import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   AppError,
   decimal,
+  diskFullIn,
   workingOrderId as brandWorkingOrderId,
   deviceOrigin,
 } from "@waitron/shared";
 import {
+  ChargeNotSavedError,
   PAYMENTS_MIGRATIONS,
   failAttempting,
   getPaymentByRef,
@@ -518,6 +521,55 @@ async function attemptingRowOf(workingOrderId: string): Promise<{ paymentRef: st
   expect(mine).toHaveLength(1);
   return mine[0]!;
 }
+
+/**
+ * Makes the save of a capture fail for a real full disk: a trigger makes that one update need far
+ * more pages than the page limit leaves, while every smaller write still fits.
+ */
+function fullDiskOnCapture(db: Database): { lift: () => void } {
+  db.run(sql.raw("create table if not exists full_disk_pad (body blob)"));
+  db.run(
+    sql.raw(
+      "create trigger full_disk_on_capture before update on payments when old.state = 'attempting' and new.state = 'captured' begin insert into full_disk_pad values (zeroblob(16777216)); end",
+    ),
+  );
+  const [{ page_count: pages }] = db.all<{ page_count: number }>(sql`pragma page_count`) as [
+    { page_count: number },
+  ];
+  db.all(sql.raw(`pragma max_page_count = ${pages + 128}`));
+  return {
+    lift: () => {
+      db.all(sql.raw("pragma max_page_count = 4294967294"));
+      db.run(sql.raw("drop trigger full_disk_on_capture"));
+    },
+  };
+}
+
+describe("StripeTerminalProvider.collect when a full disk refuses the capture's save", () => {
+  it("says the card was charged, still as a full disk, and leaves the row for resolvePending", async () => {
+    const fake = new FakeStripe();
+    const provider = providerFor(fake);
+    const p = await collectParams();
+    const disk = fullDiskOnCapture(suite.db);
+    let error: unknown;
+    try {
+      error = await provider.collect(p).catch((e: unknown) => e);
+    } finally {
+      disk.lift();
+    }
+
+    expect(error).toBeInstanceOf(ChargeNotSavedError);
+    expect(diskFullIn(error)).toBe(true);
+    const { paymentRef } = await attemptingRowOf(p.workingOrderId);
+    const left = await rowFor(paymentRef);
+    expect(left?.state).toBe("attempting");
+    expect((await fake.retrievePaymentIntent(left!.externalRef!)).status).toBe("succeeded");
+
+    await provider.resolvePending(new Date());
+
+    expect((await rowFor(paymentRef))?.state).toBe("captured");
+  });
+});
 
 describe("StripeTerminalProvider.collect stamps the PaymentIntent before the reader processes it", () => {
   it("the row carries the PaymentIntent id, still attempting, when the reader is asked to process it", async () => {

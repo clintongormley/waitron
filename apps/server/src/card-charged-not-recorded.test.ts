@@ -11,8 +11,14 @@ import {
   createProduct,
 } from "@waitron/catalogue";
 import { insertCapturedPayment } from "@waitron/payments";
+import type { CollectParams, PaymentProvider } from "@waitron/payments";
+import { StripeTerminalProvider } from "@waitron/payments-stripe";
+import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
+import { SumUpCloudProvider } from "@waitron/payments-sumup";
+import { FakeSumUp } from "@waitron/payments-sumup/src/testing/fake-sumup.js";
 import { AppError, decimal } from "@waitron/shared";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import { createDiskFullState, watchForDiskFull } from "./disk-full-state.js";
 import {
   inTx,
   paymentRows,
@@ -447,3 +453,252 @@ describe("a bill's reader payment when the bill's sale fails for a full disk aft
     expect(answer.json.code).toBe("server.internal");
   });
 });
+
+/** A real provider over its fake processor, and what the processor says of every charge begun. */
+interface RealProvider {
+  provider: PaymentProvider;
+  /** The processor's own status of each charge this provider began, in order. */
+  charges: () => Promise<string[]>;
+}
+
+const noWait = { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() };
+
+function realSumUp(): RealProvider {
+  const client = new FakeSumUp();
+  const begun: string[] = [];
+  const create = client.createCheckout.bind(client);
+  vi.spyOn(client, "createCheckout").mockImplementation((params) => {
+    begun.push(params.foreignTransactionId);
+    return create(params);
+  });
+  return {
+    provider: new SumUpCloudProvider({
+      db: venue.db,
+      client,
+      incidents: () => Promise.resolve(true),
+      poll: noWait,
+    }),
+    charges: async () =>
+      Promise.all(
+        begun.map(
+          async (foreignTransactionId) =>
+            (await client.findTransaction({ foreignTransactionId }))?.status ?? "none",
+        ),
+      ),
+  };
+}
+
+function realStripe(): RealProvider {
+  const client = new FakeStripe();
+  const begun: string[] = [];
+  const create = client.createPaymentIntent.bind(client);
+  vi.spyOn(client, "createPaymentIntent").mockImplementation(async (params) => {
+    const intent = await create(params);
+    begun.push(intent.id);
+    return intent;
+  });
+  return {
+    provider: new StripeTerminalProvider({ db: venue.db, client, poll: noWait }),
+    charges: async () =>
+      Promise.all(begun.map(async (id) => (await client.retrievePaymentIntent(id)).status)),
+  };
+}
+
+const REAL_PROVIDERS = [
+  { name: "SumUp", make: realSumUp, charged: "SUCCESSFUL" },
+  { name: "Stripe", make: realStripe, charged: "succeeded" },
+] as const;
+
+/**
+ * Makes the one `payments` write `when` matches fail for a real full disk: a trigger makes that
+ * write need far more pages than the page limit leaves, while every smaller write still fits.
+ */
+function fullDiskOn(when: "insert attempting" | "save capture"): { lift: () => void } {
+  const clause =
+    when === "insert attempting"
+      ? "before insert on payments when new.state = 'attempting'"
+      : "before update on payments when old.state = 'attempting' and new.state = 'captured'";
+  venue.db.run(sql.raw("create table if not exists full_disk_pad (body blob)"));
+  venue.db.run(
+    sql.raw(
+      `create trigger full_disk_on_payments ${clause} begin insert into full_disk_pad values (zeroblob(16777216)); end`,
+    ),
+  );
+  const [{ page_count: pages }] = venue.db.all<{ page_count: number }>(sql`pragma page_count`) as [
+    { page_count: number },
+  ];
+  venue.db.all(sql.raw(`pragma max_page_count = ${pages + 128}`));
+  return {
+    lift: () => {
+      venue.db.all(sql.raw("pragma max_page_count = 4294967294"));
+      venue.db.run(sql.raw("drop trigger full_disk_on_payments"));
+    },
+  };
+}
+
+function providerRows(workingOrderId: string) {
+  return venue.db.all<{ provider: string; state: string; saleId: string | null }>(
+    sql`select provider, state, sale_id as saleId from payments
+        where working_order_id = ${workingOrderId}`,
+  );
+}
+
+describe.each(REAL_PROVIDERS)(
+  "$name: a full disk while saving a charge the processor made",
+  ({ make, charged }) => {
+    /** The till's two card routes, through the real provider and a store-watching stop. */
+    function tillWith(real: RealProvider) {
+      // The venue's reader is the test provider's, which has no vendor reference to pass on.
+      const routed: PaymentProvider = Object.assign(
+        Object.create(real.provider) as PaymentProvider,
+        {
+          collect: (params: CollectParams) =>
+            real.provider.collect({ ...params, readerRef: "rdr_1" }),
+        },
+      );
+      vi.spyOn(venue.pool, "get").mockResolvedValue(routed);
+      const disk = createDiskFullState({
+        dir: "/unused",
+        now: () => new Date(),
+        log: () => {},
+        statfs: () => Promise.resolve({ bavail: Number.MAX_SAFE_INTEGER, frsize: 1 }),
+      });
+      const unwatch = watchForDiskFull(disk, [venue.db]);
+      const { log, charged: chargedLines } = capturingLog();
+      const app = venue.appWith({ disk, log });
+      return {
+        disk,
+        unwatch,
+        chargedLines,
+        walkUp: (id: string) =>
+          send(app, venue.cookie, "POST", "/api/pay", {
+            id,
+            lines: lines(),
+            zoneId: counter.zoneId,
+          }),
+        payAgain: (id: string) =>
+          send(app, venue.cookie, "POST", "/api/pay", { id, lines: [], zoneId: counter.zoneId }),
+        payBill: (billId: string) =>
+          send(app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
+            submissionId: randomUUID(),
+            kind: "contribution",
+            amount: "35.00",
+            method: "card",
+            entry: "reader",
+            applied: "35.00",
+            tip: "0.00",
+          }),
+      };
+    }
+
+    it("says the card was charged on POST /api/pay, and files it later without charging again", async () => {
+      const real = make();
+      const till = tillWith(real);
+      const id = randomUUID();
+      const disk = fullDiskOn("save capture");
+      let answer;
+      try {
+        answer = await till.walkUp(id);
+      } finally {
+        disk.lift();
+        till.unwatch();
+      }
+
+      expect(answer.status).toBe(507);
+      expect(answer.json).toEqual(chargedNotRecorded(id));
+      expect(await real.charges()).toEqual([charged]);
+      expect(till.disk.noted()).toBe(true);
+      expect(providerRows(id)).toEqual([
+        { provider: real.provider.provider, state: "attempting", saleId: null },
+      ]);
+      expect(till.chargedLines()).toEqual([
+        { level: "error", event: "sale.charged_not_recorded", fields: { workingOrderId: id } },
+      ]);
+
+      await real.provider.resolvePending(new Date());
+      const again = await till.payAgain(id);
+
+      expect(again.status).toBe(200);
+      expect(again.json.outcome).toBe("captured");
+      expect(await real.charges()).toEqual([charged]);
+      expect(registroCount(venue, id)).toBe(1);
+    });
+
+    it("says the card was charged on a bill's reader payment, and the pending pass completes it", async () => {
+      const real = make();
+      const till = tillWith(real);
+      const billId = await tabWith(venue, "Paella");
+      const disk = fullDiskOn("save capture");
+      let answer;
+      try {
+        answer = await till.payBill(billId);
+      } finally {
+        disk.lift();
+        till.unwatch();
+      }
+
+      expect(answer.status).toBe(507);
+      expect(answer.json).toEqual(chargedNotRecorded(billId));
+      expect(await real.charges()).toEqual([charged]);
+      expect(till.disk.noted()).toBe(true);
+      expect(providerRows(billId)).toEqual([
+        { provider: real.provider.provider, state: "attempting", saleId: null },
+      ]);
+      expect((await paymentRows(venue, billId)).map((row) => row.state)).toEqual(["pending"]);
+
+      await real.provider.resolvePending(new Date());
+      await settlePendingBillPayments({
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        cfg: venue.cfg,
+      });
+
+      expect((await paymentRows(venue, billId)).map((row) => row.state)).toEqual(["received"]);
+      expect(await real.charges()).toEqual([charged]);
+      expect(registroCount(venue, billId)).toBe(1);
+    });
+
+    it("still says the sale is not recorded when the attempt cannot be saved, before any charge", async () => {
+      const real = make();
+      const till = tillWith(real);
+      const id = randomUUID();
+      const disk = fullDiskOn("insert attempting");
+      let answer;
+      try {
+        answer = await till.walkUp(id);
+      } finally {
+        disk.lift();
+        till.unwatch();
+      }
+
+      expect(answer.status).toBe(507);
+      expect(answer.json).toEqual({ code: "storage.disk_full", params: {} });
+      expect(await real.charges()).toEqual([]);
+      expect(till.disk.noted()).toBe(true);
+      expect(providerRows(id)).toEqual([]);
+      expect(till.chargedLines()).toEqual([]);
+    });
+
+    it("still says the bill's payment is not recorded when the attempt cannot be saved, before any charge", async () => {
+      const real = make();
+      const till = tillWith(real);
+      const billId = await tabWith(venue, "Paella");
+      const disk = fullDiskOn("insert attempting");
+      let answer;
+      try {
+        answer = await till.payBill(billId);
+      } finally {
+        disk.lift();
+        till.unwatch();
+      }
+
+      expect(answer.status).toBe(507);
+      expect(answer.json).toEqual({ code: "storage.disk_full", params: {} });
+      expect(await real.charges()).toEqual([]);
+      expect(till.disk.noted()).toBe(true);
+      expect(providerRows(billId)).toEqual([]);
+      expect(till.chargedLines()).toEqual([]);
+    });
+  },
+);
