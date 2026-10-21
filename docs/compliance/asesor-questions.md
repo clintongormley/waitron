@@ -6,6 +6,8 @@
 
 **2026-10-21, A798-B (a clock behind the last sale):** [Q51](#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21) (a chain whose record times step back once, when a manager restarts payments) and [Q52](#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21) (what to do about sales recorded under a restart whose clock later proved wrong) were added after Q47, as the [A798 design](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md) §10 asks. Neither behaviour is built yet. Neither is in the shortened list or the Word copies, and no enquiry has been sent.
 
+**2026-10-22, A980 (data protection):** [Q54 to Q58](#data-protection-questions-for-a-privacy-specialist-added-2026-10-22) were added for a privacy specialist, not the asesor fiscal, from the [A980 design](../superpowers/specs/2026-10-22-a980-data-protection-design.md) §9. [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) still carries the Article 9 basis for allergy notes. None is in the shortened list or the Word copies, and no enquiry has been sent.
+
 Companion to [verifactu-findings.md](verifactu-findings.md), which records what is already
 settled. **Do not ask about anything in that document** — it is sourced from AEAT and BOE
 primary texts. These are the items that research could not resolve.
@@ -643,6 +645,132 @@ These referrals do not ask the fiscal adviser to certify the GDPR programme. The
 > Para registros realmente retirados, sustituidos o archivados, concrete las obligaciones y plazos restantes, los hechos iniciales reales del centro, el bloqueo del artículo 32 cuando proceda, las retenciones por litigio y las condiciones de destrucción. La retirada inmediata o en el siguiente barrido diario, sin período adicional, es solo una propuesta cuando no quede deber, retención, dependencia ni protección de almacenamiento. Ocultar, archivar o pulsar Eliminar no acredita esos requisitos. Mantenga la evaluación de copias/restauraciones, retraso de recuperación propuesto de 35 días, roles, contratos, claves y destinatarios de la versión inicial. Si el original protegido no puede retirarse sin alterar historia inmutable, indique el tratamiento y la escalada necesarios; una vista ocultada no elimina el original.
 
 No answer or owner/adviser agreement is recorded. No Q48 enquiry has been sent. G4 still requires measured storage/restore results; G5 remains a separate protected-storage decision, with separate explicit permission for any invariant conflict.
+
+---
+
+## Data protection questions for a privacy specialist (added 2026-10-22)
+
+**For a privacy specialist or data-protection lawyer, not the asesor fiscal.** These come from the
+[A980 design](../superpowers/specs/2026-10-22-a980-data-protection-design.md) §9, where every
+quotation below has its source in the provenance table. Q48 (G3) already asks which Article 9
+exception covers diners' allergy notes; these do not repeat it. Nothing here is built that
+depends on the answers, and no enquiry has been sent.
+
+### Q54. The AEPD's simplified tool, the record of processing and a DPO, for a restaurant that records allergies (added 2026-10-22)
+
+**Why we ask.** The till lets staff note a diner's allergy against a seat ("window, seat 2:
+peanut"), usually without a name, and the table can be linked to a booking that has one. The
+AEPD says its Facilita RGPD tool «no podrá utilizarse para tratamientos que impliquen un alto
+riesgo para los derechos y libertades de las personas, como datos de salud». GDPR art. 30.5 lifts
+the record-keeping duty for firms under 250 staff «a menos que el tratamiento que realice … no sea
+ocasional, o incluya categorías especiales de datos personales». Art. 37.1.c requires a DPO for
+«el tratamiento a gran escala de categorías especiales de datos». Our reading: the record is
+required and a DPO is not. We cannot settle (a) and (b) from the texts.
+
+> Un restaurante anota, cuando el cliente lo comunica, las alergias de los comensales de una mesa
+> (por ejemplo «ventana, asiento 2: cacahuete»), normalmente sin nombre, para preparar la comida
+> con seguridad; la mesa puede estar vinculada a una reserva con nombre y teléfono. También lleva
+> el registro diario de jornada y emite facturas completas con el NIF de clientes autónomos.
+>
+> **(a)** ¿Son esas anotaciones «datos relativos a la salud» (art. 4.15 RGPD) de una persona
+> identificable, también cuando no figura el nombre?
+>
+> **(b)** La AEPD indica que Facilita RGPD «no podrá utilizarse para tratamientos que impliquen un
+> alto riesgo …, como datos de salud». ¿Puede este restaurante usar Facilita, o debe hacer su
+> propio análisis de riesgos?
+>
+> **(c)** Entendemos que la excepción del art. 30.5 RGPD no se aplica, porque el tratamiento no es
+> ocasional e incluye categorías especiales, y que el restaurante debe llevar el registro de
+> actividades de tratamiento. ¿Es correcto?
+>
+> **(d)** Entendemos que no debe designar delegado de protección de datos: no trata categorías
+> especiales «a gran escala» (art. 37.1.c RGPD) ni figura en la lista del art. 34.1 LOPDGDD. ¿Es
+> correcto?
+
+---
+
+### Q55. A former employee's working-time record: blocked, or available to her representatives? (added 2026-10-22)
+
+**Why we ask.** ET art. 34.9 says the daily records are kept four years and «permanecerán a
+disposición de las personas trabajadoras, de sus representantes legales y de la Inspección de
+Trabajo y Seguridad Social». LOPDGDD art. 32 obliges the controller to block data «cuando proceda
+a su rectificación o supresión», which prevents processing «incluyendo su visualización, excepto
+para la puesta a disposición de los datos a los jueces y tribunales, el Ministerio Fiscal o las
+Administraciones Públicas competentes». Worker representatives are not in that exception. The
+design proposes keeping the former employee's email for one year after she leaves, the window in
+ET art. 59.1 («prescribirán al año de su terminación»), then clearing it and keeping her name.
+
+> Una trabajadora que dejó la empresa pide la supresión de sus datos. La empresa conserva su
+> registro de jornada por el art. 34.9 ET, denegando la supresión de ese registro por el art.
+> 17.3.b RGPD.
+>
+> **(a)** ¿Debe la empresa bloquear ese registro conforme al art. 32 LOPDGDD? Si lo bloquea, ¿pueden
+> seguir consultándolo la propia trabajadora y los representantes legales, que el art. 34.9 ET
+> menciona pero el art. 32.2 LOPDGDD no?
+>
+> **(b)** Proponemos conservar su correo electrónico durante un año desde la baja (art. 59.1 ET),
+> para atender sus solicitudes y enviarle su registro, y después borrarlo, conservando su nombre
+> junto al registro. Su PIN, contraseña y llaves de acceso se borran el mismo día de la baja.
+> ¿Es proporcionado, o debe borrarse antes o conservarse más tiempo?
+
+---
+
+### Q56. An invoice customer's refused erasure: does blocking still apply? (added 2026-10-22)
+
+**Why we ask.** A full invoice must carry the recipient's «Nombre y apellidos, razón o
+denominación social completa» (RD 1619/2012 art. 6.1.c), its copy must be kept (art. 19.1.b), and
+the filed record is already at AEAT. In Waitron both the sale and the filed record are
+append-only. LOPDGDD art. 32.1 ties blocking to the controller «proceda a su rectificación o
+supresión»; when erasure is refused under GDPR art. 17.3.b, nothing is erased.
+
+> Un cliente autónomo que pidió factura completa (nombre, NIF y dirección) solicita que se borren
+> sus datos. La copia de la factura y el registro de facturación remitido a la AEAT no pueden
+> modificarse.
+>
+> **(a)** Si la empresa deniega la supresión por el art. 17.3.b RGPD, ¿debe aplicar igualmente el
+> bloqueo del art. 32 LOPDGDD, ocultando esos datos de las pantallas habituales del personal y
+> reservándolos para la Administración, o el bloqueo solo procede cuando la empresa efectivamente
+> suprime datos?
+>
+> **(b)** La dirección de correo a la que se envió la factura, ¿puede borrarse a petición del
+> cliente una vez entregada, o conviene conservarla como prueba de la remisión?
+
+---
+
+### Q57. Waitron's role when it receives bug reports from a venue (added 2026-10-22)
+
+**Why we ask.** When Waitron Cloud hosts or backs up a venue's data, Waitron is the venue's
+processor under a GDPR art. 28 contract. Waitron also plans to receive bug reports from the box
+(technical logs and, when a manager chooses, a description of what they were doing), which it uses
+to fix its own software. LOPDGDD art. 33.2 treats as controller «quien figurando como encargado
+utilizase los datos para sus propias finalidades».
+
+> **(a)** Para los informes de errores que el software del restaurante envía a Waitron y que
+> Waitron utiliza para corregir su propio producto, ¿actúa Waitron como encargado del restaurante
+> o como responsable?
+>
+> **(b)** Si es responsable, ¿queda fuera del RGPD el informe cuando se eliminan los datos
+> personales antes del envío (registros enmascarados, sin texto escrito por el personal)? ¿Qué debe
+> decir el aviso de privacidad del restaurante sobre ese envío?
+
+---
+
+### Q58. Recording which employee performs each till operation (added 2026-10-22)
+
+**Why we ask.** The till stamps the employee on every void, refund, cash-drawer opening and order
+change, and the device on every clock-in; those stamps cannot be deleted. There is no location
+tracking, video or sound. ET art. 20.3 lets the employer adopt «las medidas que estime más
+oportunas de vigilancia y control». LOPDGDD art. 87.3 requires criteria for the employer's
+digital devices, in whose drafting «deberán participar los representantes de los trabajadores».
+
+> **(a)** ¿Es este registro de operaciones por empleado una medida de vigilancia y control del
+> art. 20.3 ET que exige información previa específica a la plantilla y, en su caso, a sus
+> representantes?
+>
+> **(b)** ¿Se aplica el art. 87.3 LOPDGDD a un TPV compartido que la empresa pone a disposición del
+> personal?
+>
+> **(c)** ¿Basta con mencionarlo en el aviso de privacidad del personal, como proponemos?
 
 ---
 

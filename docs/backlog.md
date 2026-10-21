@@ -7245,7 +7245,10 @@ portability, breach notification, retention) and which Waitron must _build_ vers
 _operate_. Blocks nothing today; the retention/erasure/export mechanics become build work once
 scoped. A664’s [proposed retention map](superpowers/specs/2026-10-16-a664-data-retention-design.md)
 awaits owner and relevant specialist approval under its own gates; the broader privacy programme
-remains open.
+remains open. **Scoped 2026-10-22 by A980:** the [data-protection design](superpowers/specs/2026-10-22-a980-data-protection-design.md)
+holds the data map, the controller and processor split, the builds-versus-venue list and ten
+proposed go-live slices; its owner questions O1 to O9 and the privacy-specialist questions Q54 to
+Q58 are open, and nothing is built. The Cloud half is lane D's D101.
 
 ---
 
