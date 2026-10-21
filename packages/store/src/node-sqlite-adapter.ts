@@ -64,15 +64,30 @@ export function adaptNodeSqlite(connections: Connections) {
         if (asArrays) stmt.setReturnArrays(true);
         return stmt;
       };
+      const bareRollback = /^\s*rollback\s*;?\s*$/i.test(query);
       /**
        * A statement on the writer with no transaction open commits by itself. Whether it changed a
        * row is read off SQLite's own counter, so a read, or DDL, which the counter does not count,
        * tells nobody.
+       *
+       * A bare `rollback` issued outside any body after a statement ended the transaction throws
+       * that statement's failure, not "cannot rollback": drizzle's migrator issues its own `begin`
+       * and `rollback` as ordinary statements and would otherwise hide a full disk behind its
+       * failed rollback (E9 and decision 7 in
+       * `docs/superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md`). Clearing the
+       * record cannot take it from a running body: while one runs, a statement from outside it goes
+       * to the read connection (`forStatement`, `./connections.ts:210`) and never reaches here.
        */
       const onWriter = <T>(use: (stmt: StatementSync) => T): T => {
         const ended = connections.endedBy();
-        if (ended !== undefined && connections.insideBody()) throw ended.error;
         const write = connections.write;
+        if (ended !== undefined) {
+          if (connections.insideBody()) throw ended.error;
+          if (bareRollback && !write.isTransaction) {
+            connections.clearEnded();
+            throw ended.error;
+          }
+        }
         const wasOpen = write.isTransaction;
         const mark = wasOpen ? null : connections.changeMark();
         let result: T;

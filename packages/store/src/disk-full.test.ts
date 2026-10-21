@@ -1,8 +1,13 @@
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { diskFullIn } from "@waitron/shared";
+import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { afterEach, describe, expect, it } from "vitest";
+import { connectionPair } from "./connections.js";
 import { openVenueStore } from "./index.js";
+import { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
 
 const opened: { close: () => Promise<void> }[] = [];
 
@@ -34,7 +39,7 @@ const open = async () => {
       return error;
     }
   };
-  return { store, db, insert, fill, bodies, limit, errorOf };
+  return { directory, store, db, insert, fill, bodies, limit, errorOf };
 };
 
 const DISK_FULL = { code: "storage.disk_full" };
@@ -242,5 +247,239 @@ describe("an engine rollback that ends the transaction", () => {
     expect((run as Error).message).toBe("refused x");
     expect(run).not.toMatchObject(DISK_FULL);
     expect(bodies()).toEqual([]);
+  });
+  it("keeps a running body's record of a full disk when a rollback is issued from outside it", async () => {
+    const { store, db, fill, bodies, limit, errorOf } = await open();
+    limit(4);
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let filled!: () => void;
+    const hasFilled = new Promise<void>((resolve) => {
+      filled = resolve;
+    });
+    const run = store.venue.withWriteLock(async () => {
+      await errorOf(fill);
+      filled();
+      await released;
+    });
+    run.catch(() => undefined);
+    await hasFilled;
+    const outside = await errorOf(() => db.execute("rollback"));
+    expect((outside as Error).message).toBe("cannot rollback - no transaction is active");
+    release();
+    await expect(run).rejects.toMatchObject(DISK_FULL);
+    expect(bodies()).toEqual([]);
+  });
+});
+
+describe("a refused statement inside a nested transaction", () => {
+  const refusals: [string, string[], string][] = [
+    ["a duplicate unique key", [], "insert into sale (body) values ('before')"],
+    [
+      "a null into a not null column",
+      ["create table nn (v text not null)"],
+      "insert into nn values (null)",
+    ],
+    ["a failing check", ["create table ck (v integer check (v > 0))"], "insert into ck values (0)"],
+    [
+      "an immediate foreign key",
+      [
+        "create table parent (id integer primary key)",
+        "create table child (p integer references parent (id))",
+      ],
+      "insert into child values (99)",
+    ],
+    [
+      "RAISE(ABORT)",
+      [
+        "create trigger refuse_abort before insert on sale when new.body = 'abort' begin select raise(abort, 'refused abort'); end",
+      ],
+      "insert into sale (body) values ('abort')",
+    ],
+    [
+      "RAISE(FAIL)",
+      [
+        "create trigger refuse_fail before insert on sale when new.body = 'fail' begin select raise(fail, 'refused fail'); end",
+      ],
+      "insert into sale (body) values ('fail')",
+    ],
+    ["a missing table", [], "insert into nowhere values (1)"],
+  ];
+
+  it.each(refusals)(
+    "leaves the transaction usable after each refusal the product can meet: %s",
+    async (_name, setup, refused) => {
+      const { store, db, insert, bodies, errorOf } = await open();
+      for (const statement of setup) db.execute(statement);
+      let nested: unknown;
+      await expect(
+        store.venue.withWriteLock(async () => {
+          insert("before");
+          nested = await errorOf(() =>
+            db.transaction(async () => {
+              db.execute(refused);
+            }),
+          );
+          insert("after");
+        }),
+      ).resolves.toBeUndefined();
+      expect(nested).toBeInstanceOf(Error);
+      expect(nested).not.toMatchObject(DISK_FULL);
+      expect(bodies()).toEqual(["before", "after"]);
+    },
+  );
+});
+
+describe("a full disk that leaves the transaction open", () => {
+  const openWithBigTrigger = async () => {
+    const opened = await open();
+    opened.db.execute("create table log (v blob)");
+    opened.db.execute(
+      "create trigger sale_big after insert on sale when new.body = 'big' " +
+        "begin insert into log values (zeroblob(65536)); end",
+    );
+    opened.limit(4);
+    return opened;
+  };
+
+  it("rolls back a full disk that left the transaction open, and serves the next one", async () => {
+    const { store, db, insert, bodies } = await openWithBigTrigger();
+    let nested: unknown;
+    let run: unknown;
+    try {
+      await store.venue.withWriteLock(async () => {
+        insert("outer");
+        try {
+          await db.transaction(async () => {
+            insert("inner");
+            insert("big");
+          });
+        } catch (error) {
+          nested = error;
+          throw error;
+        }
+      });
+    } catch (error) {
+      run = error;
+    }
+    expect(nested).toMatchObject(DISK_FULL);
+    expect(run).toMatchObject(DISK_FULL);
+    expect(bodies()).toEqual([]);
+    await expect(
+      store.venue.withWriteLock(async () => {
+        insert("next");
+      }),
+    ).resolves.toBeUndefined();
+    expect(bodies()).toEqual(["next"]);
+  });
+
+  it("lets a body that catches a full disk the engine backed out alone carry on", async () => {
+    const { store, db, insert, bodies, errorOf } = await openWithBigTrigger();
+    let nested: unknown;
+    await expect(
+      store.venue.withWriteLock(async () => {
+        insert("outer");
+        nested = await errorOf(() =>
+          db.transaction(async () => {
+            insert("inner");
+            insert("big");
+          }),
+        );
+        insert("after");
+      }),
+    ).resolves.toBeUndefined();
+    expect(nested).toMatchObject(DISK_FULL);
+    expect(bodies()).toEqual(["outer", "after"]);
+  });
+});
+
+/** `real`, with `exec` answered by `exec` instead; every `exec` text is recorded in `execs`. */
+const scriptExec = (
+  real: DatabaseSync,
+  exec: (text: string, target: DatabaseSync) => void,
+): { db: DatabaseSync; execs: string[] } => {
+  const execs: string[] = [];
+  const db = new Proxy(real, {
+    get(target, property) {
+      if (property === "exec") {
+        return (text: string) => {
+          execs.push(text);
+          exec(text, target);
+        };
+      }
+      const value: unknown = Reflect.get(target, property, target);
+      return typeof value === "function"
+        ? (value as (...a: unknown[]) => unknown).bind(target)
+        : value;
+    },
+  });
+  return { db, execs };
+};
+
+/**
+ * Stands in for a disk that fills at `commit`, as E7 and K in
+ * `docs/superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md` measured a real one: the
+ * commit refused with errcode 13 and the whole transaction already rolled back by the engine.
+ */
+const fullAtCommit = (real: DatabaseSync) =>
+  scriptExec(real, (text, target) => {
+    if (text !== "commit") return target.exec(text);
+    target.exec("rollback");
+    throw Object.assign(new Error("database or disk is full"), {
+      errcode: 13,
+      code: "ERR_SQLITE_ERROR",
+    });
+  });
+
+describe("a full disk at the adapter's own commit", () => {
+  it("hands back storage.disk_full when a top-level transaction's commit fills the disk, and issues no rollback", async () => {
+    const real = new DatabaseSync(":memory:");
+    real.exec("create table t (who text)");
+    const { db: w, execs } = fullAtCommit(real);
+    const db = drizzleNodeSqlite(connectionPair(w, w), { schema: {} });
+    await expect(
+      db.transaction(async () => {
+        db.execute("insert into t values ('x')");
+      }),
+    ).rejects.toMatchObject(DISK_FULL);
+    expect(execs).toEqual(["begin deferred", "commit"]);
+    expect(real.prepare("select who from t").all()).toEqual([]);
+    expect(real.isTransaction).toBe(false);
+  });
+});
+
+describe("a full disk while migrating", () => {
+  it("reports a full disk while migrating as storage.disk_full", async () => {
+    const { directory, store, db, limit } = await open();
+    const migrationsFolder = join(directory, "migrations");
+    mkdirSync(join(migrationsFolder, "meta"), { recursive: true });
+    writeFileSync(
+      join(migrationsFolder, "meta", "_journal.json"),
+      JSON.stringify({
+        version: "7",
+        dialect: "sqlite",
+        entries: [
+          { idx: 0, version: "6", when: 1700000000000, tag: "0000_fill", breakpoints: true },
+        ],
+      }),
+    );
+    writeFileSync(
+      join(migrationsFolder, "0000_fill.sql"),
+      "CREATE TABLE `filler` (`id` integer PRIMARY KEY, `pad` blob);\n" +
+        "--> statement-breakpoint\n" +
+        "INSERT INTO `filler` (`pad`) VALUES (zeroblob(262144));\n",
+    );
+    limit(8);
+    let thrown: unknown;
+    try {
+      migrate(store.venue as unknown as Parameters<typeof migrate>[0], { migrationsFolder });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(diskFullIn(thrown)).toBe(true);
+    expect((thrown as Error).message).not.toContain("cannot rollback");
+    expect(db.execute("select name from sqlite_master where name = 'filler'").rows).toEqual([]);
   });
 });
