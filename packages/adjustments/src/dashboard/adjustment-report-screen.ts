@@ -229,6 +229,12 @@ export class AdjustmentReportScreen extends LitElement {
         flex: 1 1 calc(var(--wt-tap-min) * 8);
         min-width: 0;
       }
+      .breakdowns section.wide {
+        flex-basis: 100%;
+      }
+      .scroll {
+        overflow-x: auto;
+      }
       table {
         width: 100%;
         border-collapse: collapse;
@@ -788,31 +794,39 @@ export class AdjustmentReportScreen extends LitElement {
     extraHeadings: string[] = [],
   ): TemplateResult {
     const id = `${test}-heading`;
-    return html`<section>
+    const wide = extraHeadings.length > 0;
+    const table = html`<table data-test=${test} aria-labelledby=${id}>
+      <thead>
+        <tr>
+          <th scope="col">${first}</th>
+          <th scope="col" class="num">${t("adjustment_report.column.count")}</th>
+          <th scope="col" class="num">${t("adjustment_report.column.reduction")}</th>
+          <th scope="col" class="num">${t("adjustment_report.column.cancelled")}</th>
+          ${extraHeadings.map((heading) => html`<th scope="col">${heading}</th>`)}
+        </tr>
+      </thead>
+      <tbody>
+        ${lines.map(
+          ({ label, tally, extra = [] }) =>
+            html`<tr>
+              <th scope="row">${label}</th>
+              <td class="num">${count(tally.count)}</td>
+              <td class="num">${money(tally.reduction)}</td>
+              <td class="num">${money(tally.cancelledNominalValue)}</td>
+              ${extra.map((cell) => html`<td>${cell}</td>`)}
+            </tr>`,
+        )}
+      </tbody>
+    </table>`;
+    return html`<section class=${wide ? "wide" : ""}>
       <h2 id=${id} data-test=${id}>${heading}</h2>
-      <table data-test=${test} aria-labelledby=${id}>
-        <thead>
-          <tr>
-            <th scope="col">${first}</th>
-            <th scope="col" class="num">${t("adjustment_report.column.count")}</th>
-            <th scope="col" class="num">${t("adjustment_report.column.reduction")}</th>
-            <th scope="col" class="num">${t("adjustment_report.column.cancelled")}</th>
-            ${extraHeadings.map((heading) => html`<th scope="col">${heading}</th>`)}
-          </tr>
-        </thead>
-        <tbody>
-          ${lines.map(
-            ({ label, tally, extra = [] }) =>
-              html`<tr>
-                <th scope="row">${label}</th>
-                <td class="num">${count(tally.count)}</td>
-                <td class="num">${money(tally.reduction)}</td>
-                <td class="num">${money(tally.cancelledNominalValue)}</td>
-                ${extra.map((cell) => html`<td>${cell}</td>`)}
-              </tr>`,
-          )}
-        </tbody>
-      </table>
+      ${
+        wide
+          ? html`<div class="scroll" tabindex="0" role="region" aria-labelledby=${id}>
+              ${table}
+            </div>`
+          : table
+      }
     </section>`;
   }
 

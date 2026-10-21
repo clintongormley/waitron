@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveData, setLocale, tableNoMatches } from "@waitron/dashboard-kit";
 import { formatMoney } from "@waitron/shared";
 import { applyTokens } from "@waitron/ui";
+import { page } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { AdjustmentsApi } from "./client.js";
 import { ADJUSTMENTS_STRINGS, kindTotalName, tf } from "./strings.js";
@@ -414,6 +415,40 @@ describe("the adjustment report", () => {
     expect(alex[ADJUSTMENTS_STRINGS.es["adjustment_report.column.rate"]]).toBe("4,6 %");
     expect(alex[ADJUSTMENTS_STRINGS.es["adjustment_report.column.reduction"]]).toBe("37,00 €");
     expect(text(part(el, "heading"))).toBe(ADJUSTMENTS_STRINGS.es["adjustment_report.title"]);
+  });
+
+  async function atWidth(width: number, check: () => Promise<void>): Promise<void> {
+    const before = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(width, 800);
+    try {
+      expect(window.innerWidth).toBe(width);
+      await check();
+    } finally {
+      await page.viewport(...before);
+    }
+  }
+
+  it("gives By reason's six columns the whole row on a wide window", async () => {
+    await atWidth(1280, async () => {
+      const el = await mount(fakeApi());
+      const row = el.shadowRoot!.querySelector(".breakdowns")!.getBoundingClientRect();
+      const section = part(el, "by-reason")!.closest("section")!.getBoundingClientRect();
+      expect(section.width).toBeCloseTo(row.width, 0);
+      expect(part(el, "by-action")!.getBoundingClientRect().top).toBeLessThan(section.top);
+    });
+  });
+
+  it("keeps By reason on a phone's screen, its last column reached by scrolling the table", async () => {
+    await atWidth(390, async () => {
+      const el = await mount(fakeApi());
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+      const table = part(el, "by-reason")!;
+      const box = table.parentElement!;
+      box.scrollLeft = box.scrollWidth;
+      const last = [...table.querySelectorAll("thead th")].at(-1)!.getBoundingClientRect();
+      expect(last.right).toBeLessThanOrEqual(box.getBoundingClientRect().right + 0.5);
+      expect(box.getBoundingClientRect().right).toBeLessThanOrEqual(390.5);
+    });
   });
 });
 
