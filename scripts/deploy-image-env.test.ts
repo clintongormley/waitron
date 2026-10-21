@@ -224,6 +224,14 @@ describe("the container image's environment", () => {
     expect(IMAGE_SMOKE).toContain("https://127.0.0.1/help/es/products");
   });
 
+  // Weaker than its name: it reads the Dockerfile as text, so only a booted bundle or image-smoke's
+  // setup box shows the server finds the copied token files.
+  it("ships ui-core's token files where the server resolves them", () => {
+    expect(DOCKERFILE).toContain(
+      "/src/apps/server/dist/node_modules/@waitron/ /app/node_modules/@waitron/",
+    );
+  });
+
   it("ships the sample images at the directory the installed Demo seed reads", () => {
     expect(IMAGE_ENV.WAITRON_DEMO_MEDIA_SOURCE).toBe("/app/demo-media");
     expect(DOCKERFILE).toContain("/src/apps/server/scripts/demo-seed/media/ /app/demo-media/");

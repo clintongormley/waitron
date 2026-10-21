@@ -266,6 +266,9 @@ importers:
       '@waitron/tunnel':
         specifier: workspace:*
         version: link:../../packages/tunnel
+      '@waitron/ui-core':
+        specifier: workspace:*
+        version: link:../../packages/ui-core
       '@waitron/venue-service':
         specifier: workspace:*
         version: link:../../packages/venue-service
