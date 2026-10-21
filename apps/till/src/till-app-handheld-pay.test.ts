@@ -543,6 +543,7 @@ describe("a presented bill on a handheld", () => {
     ],
     [{ code: "fiscal.record_invalid" }, "sale.refused"],
     [{ code: "something.else" }, "sale.error"],
+    [{ code: "storage.disk_full", status: 507 }, "sale.disk_full"],
   ] as const)("a cash send refused as %o says %s, as the pay card does", async (error, key) => {
     const { el } = await openPresented({ collectOrder: vi.fn().mockRejectedValue(error) });
     await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 4 });
@@ -550,6 +551,62 @@ describe("a presented bill on a handheld", () => {
     expect(presented(el)!.open).toBe(true);
     expect(await sheetMessage(el)).toBe(t(key));
     expect(el.shadowRoot!.textContent).not.toContain(t(key));
+  });
+
+  it("a cash send refused for a wrong clock shows the date the box's clock reads, on the sheet", async () => {
+    const { el } = await openPresented({
+      collectOrder: vi.fn().mockRejectedValue({
+        code: "clock.unusable",
+        clockAt: "2001-01-01T11:00:00.000Z",
+        offsetMinutes: 60,
+        status: 409,
+      }),
+    });
+    await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 4 });
+
+    expect(await sheetMessage(el)).toBe(t("sale.clock_unusable").replace("{date}", "01/01/2001"));
+  });
+
+  it("a sheet send on a terminal the box does not talk to, refused for a full disk, adds the card advice", async () => {
+    const { el } = await openPresented({
+      collectOrder: vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 }),
+    });
+    await payFromSheet(el, { method: "manual", externalRef: "OP-4417" });
+
+    expect(await sheetMessage(el)).toBe(t("sale.disk_full_manual_card"));
+  });
+
+  it.each([
+    [{ code: "storage.disk_full", status: 507 }, "sale.disk_full"],
+    [
+      {
+        code: "sale.charged_not_recorded",
+        workingOrderId: "wo-1",
+        reason: "disk_full",
+        status: 507,
+      },
+      "sale.charged_disk_full",
+    ],
+  ] as const)("a reader card refused as %o says %s on the sheet", async (error, key) => {
+    const { el } = await openPresented({ pay: vi.fn().mockRejectedValue(error) });
+    await takeOnReader(el);
+
+    expect(presented(el)!.open).toBe(true);
+    expect(await sheetMessage(el)).toBe(t(key));
+  });
+
+  it("a reader card refused for a wrong clock shows the date the box's clock reads", async () => {
+    const { el } = await openPresented({
+      pay: vi.fn().mockRejectedValue({
+        code: "clock.unusable",
+        clockAt: "2001-01-01T11:00:00.000Z",
+        offsetMinutes: 60,
+        status: 409,
+      }),
+    });
+    await takeOnReader(el);
+
+    expect(await sheetMessage(el)).toBe(t("sale.clock_unusable").replace("{date}", "01/01/2001"));
   });
 
   it("a cash send refused as paid meanwhile says so on the sheet and reads the bills again", async () => {

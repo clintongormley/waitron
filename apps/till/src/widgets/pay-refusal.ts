@@ -1,7 +1,7 @@
 import { formatMoney } from "@waitron/shared";
 import type { BillUnsent } from "../api/client.js";
 import { billUnsentText } from "../state/bill-unsent.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { clockReadingOf, clockUnusableText, currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { isTakePaymentRefusal } from "../state/bill-payment.js";
 
@@ -24,6 +24,13 @@ export interface PayRefusal {
   permission?: string;
   /** A `device.forbidden_action`'s action: `pay` is the reader's. */
   action?: string;
+  /** A `clock.unusable`'s reading of the box's clock. */
+  clockAt?: string;
+  offsetMinutes?: number;
+  /** A `sale.charged_not_recorded`'s cause. */
+  reason?: string;
+  /** The payment refused was a card already charged on a terminal the box does not talk to. */
+  manualCard?: true;
 }
 
 function chargeableText(amount: string): string {
@@ -58,7 +65,15 @@ export function refusalText(refusal: PayRefusal): string {
     case "sale.refused":
     case "bill.pay_with_bill_payments":
       return t(refusal.code);
+    case "storage.disk_full":
+      return t(refusal.manualCard ? "sale.disk_full_manual_card" : "sale.disk_full");
   }
+  if (refusal.code === "clock.unusable") {
+    const reading = clockReadingOf(refusal);
+    if (reading !== undefined) return clockUnusableText(reading.clockAt, reading.offsetMinutes);
+  }
+  if (refusal.code === "sale.charged_not_recorded" && refusal.reason === "disk_full")
+    return t("sale.charged_disk_full");
   if (refusal.code === "device.forbidden_action" && refusal.action === "pay")
     return t("card_reader.not_set_up");
   if (refusal.code === "bill.tip_not_allowed" && refusal.chargeable !== undefined)

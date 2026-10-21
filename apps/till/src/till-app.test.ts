@@ -11876,6 +11876,53 @@ describe("till-app", () => {
       ]);
       expect(ticket(el)!.originalReceiptAvailable).toBe(false);
     });
+    describe("Find a bill's pay on a full disk and a wrong clock", () => {
+      async function findBillRefused(refusal: object, tender: object) {
+        const { el } = await mountApp({
+          getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+          collectOrder: vi.fn().mockRejectedValue(refusal),
+        });
+        const form = await openCollection(el);
+        emit(form, "find-bill-pay", { workingOrderId: "wo-debt", tender, invoiced: true });
+        await flush(el);
+        await form.updateComplete;
+        return form.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
+          .error;
+      }
+
+      it("a cash payment refused for a full disk says not to take payment", async () => {
+        expect(
+          await findBillRefused(
+            { code: "storage.disk_full", status: 507 },
+            { method: "cash", amount: "30.00" },
+          ),
+        ).toBe(t("sale.disk_full"));
+      });
+
+      it("a payment on a terminal the box does not talk to, refused for a full disk, adds the card advice", async () => {
+        expect(
+          await findBillRefused(
+            { code: "storage.disk_full", status: 507 },
+            { method: "card", amount: "30.00", externalRef: "OP-4417" },
+          ),
+        ).toBe(t("sale.disk_full_manual_card"));
+      });
+
+      it("a payment refused for a wrong clock shows the date the box's clock reads", async () => {
+        expect(currentLocale()).toBe("es-ES");
+        expect(
+          await findBillRefused(
+            {
+              code: "clock.unusable",
+              clockAt: "2001-01-01T11:00:00.000Z",
+              offsetMinutes: 60,
+              status: 409,
+            },
+            { method: "cash", amount: "30.00" },
+          ),
+        ).toBe(t("sale.clock_unusable").replace("{date}", "01/01/2001"));
+      });
+    });
     it("A773 Find a bill ignores a collection answer from a replaced API", async () => {
       let answer!: (result: TillSaleResult) => void;
       const collect = vi.fn(
@@ -12547,6 +12594,55 @@ describe("till-app", () => {
       expect(banner.textContent).toContain(t("sale.refused"));
       expect(banner.textContent).not.toContain(t("sale.error"));
       expect(tenderPay(el).stage).toBe("collect"); // still awaiting collection
+    });
+
+    describe("collect-order: a full disk and a wrong clock", () => {
+      async function collectRefused(refusal: object, tender: object) {
+        const { el } = await mountApp({
+          zonePolicy: { serviceMode: "ticket_then_pay" },
+          getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+          collectOrder: vi.fn().mockRejectedValue(refusal),
+        });
+        const c = await toCounter(el);
+        c.store.addProduct(cafe, "2");
+        await el.updateComplete;
+        emit(c, "place-order");
+        await flush(el);
+        emit(counter(el)!, "collect-order", tender);
+        await flush(el);
+        return el.shadowRoot!.querySelector('[role="alert"]')!.textContent!;
+      }
+
+      it("a cash collect refused for a full disk says not to take payment", async () => {
+        const text = await collectRefused(
+          { code: "storage.disk_full", status: 507 },
+          { method: "cash", amount: "5" },
+        );
+        expect(text).toContain(t("sale.disk_full"));
+        expect(text).not.toContain(t("sale.disk_full_manual_card"));
+      });
+
+      it("a collect on a terminal the box does not talk to, refused for a full disk, adds the card advice", async () => {
+        const text = await collectRefused(
+          { code: "storage.disk_full", status: 507 },
+          { method: "card", amount: "5", externalRef: "OP-4417" },
+        );
+        expect(text).toContain(t("sale.disk_full_manual_card"));
+      });
+
+      it("a collect refused for a wrong clock shows the date the box's clock reads", async () => {
+        expect(currentLocale()).toBe("es-ES");
+        const text = await collectRefused(
+          {
+            code: "clock.unusable",
+            clockAt: "2001-01-01T11:00:00.000Z",
+            offsetMinutes: 60,
+            status: 409,
+          },
+          { method: "cash", amount: "5" },
+        );
+        expect(text).toContain(t("sale.clock_unusable").replace("{date}", "01/01/2001"));
+      });
     });
 
     it("collect-order: says the operator may not take payments when refused the payment permission", async () => {

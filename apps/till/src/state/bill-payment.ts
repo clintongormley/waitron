@@ -243,6 +243,9 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
     chargeable?: unknown;
     permission?: unknown;
     action?: unknown;
+    clockAt?: unknown;
+    offsetMinutes?: unknown;
+    reason?: unknown;
   };
   const unsent = billUnsentOf(error);
   return {
@@ -252,6 +255,9 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
     ...(typeof refused.chargeable === "string" ? { chargeable: refused.chargeable } : {}),
     ...(typeof refused.permission === "string" ? { permission: refused.permission } : {}),
     ...(typeof refused.action === "string" ? { action: refused.action } : {}),
+    ...(typeof refused.clockAt === "string" ? { clockAt: refused.clockAt } : {}),
+    ...(typeof refused.offsetMinutes === "number" ? { offsetMinutes: refused.offsetMinutes } : {}),
+    ...(typeof refused.reason === "string" ? { reason: refused.reason } : {}),
   };
 }
 

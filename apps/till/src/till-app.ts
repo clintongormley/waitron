@@ -63,6 +63,7 @@ import {
   toScale,
 } from "@waitron/shared";
 import {
+  clockReadingOf,
   clockUnusableText,
   countText,
   currentLocale,
@@ -586,7 +587,9 @@ function isPaymentsReceived(error: unknown): boolean {
 }
 
 /** What the pay card, and the presented bill's sheet, say of a refused whole payment. */
-function wholeTabErrorOf(error: unknown): CounterError {
+function wholeTabErrorOf(error: unknown, tender: { manualCard: boolean }): CounterError {
+  const saleRefusal = saleRefusalOf(error, tender);
+  if (saleRefusal !== undefined) return saleRefusal;
   return isPaymentsReceived(error)
     ? "bill.pay_with_bill_payments"
     : isPermanentSaleRefusal(error)
@@ -1456,7 +1459,14 @@ class ZoneOfferIndex {
 /** A sale refused for a full disk, a card charged but not recorded, or a wrong clock, in the money
  * surface's own words. `manualCard`: the tender is a card already charged on a terminal the box does
  * not talk to. */
-function saleRefusalOf(error: unknown, tender: { manualCard: boolean }): CounterError | undefined {
+function saleRefusalOf(
+  error: unknown,
+  tender: { manualCard: boolean },
+):
+  | Extract<StringKey, "sale.disk_full" | "sale.disk_full_manual_card" | "sale.charged_disk_full">
+  | { code: string }
+  | { clockUnusable: { clockAt: string; offsetMinutes: number } }
+  | undefined {
   const refusal = error as
     { code?: string; reason?: unknown; clockAt?: unknown; offsetMinutes?: unknown } | undefined;
   switch (refusal?.code) {
@@ -1466,13 +1476,10 @@ function saleRefusalOf(error: unknown, tender: { manualCard: boolean }): Counter
       return refusal.reason === "disk_full"
         ? "sale.charged_disk_full"
         : { code: "sale.charged_not_recorded" };
-    case "clock.unusable":
-      return typeof refusal.clockAt === "string" &&
-        Number.isFinite(Date.parse(refusal.clockAt)) &&
-        typeof refusal.offsetMinutes === "number" &&
-        Number.isFinite(refusal.offsetMinutes)
-        ? { clockUnusable: { clockAt: refusal.clockAt, offsetMinutes: refusal.offsetMinutes } }
-        : { code: "clock.unusable" };
+    case "clock.unusable": {
+      const reading = clockReadingOf(refusal);
+      return reading === undefined ? { code: "clock.unusable" } : { clockUnusable: reading };
+    }
     default:
       return undefined;
   }
@@ -2751,7 +2758,11 @@ export class TillApp extends LitElement {
     pinError: string | null;
   } | null = null;
   @state() private findBillError?:
-    StringKey | { overLimit: string } | { code: string } | { unsentBill: BillUnsent };
+    | StringKey
+    | { overLimit: string }
+    | { code: string }
+    | { unsentBill: BillUnsent }
+    | { clockUnusable: { clockAt: string; offsetMinutes: number } };
   /** The waiting orders whose hand over is out, each pressed once until it answers. */
   #handingOver = new Set<string>();
   /** Each Pay pressed on a waiting order; only the latest one's answer may load the basket. */
@@ -7122,15 +7133,17 @@ export class TillApp extends LitElement {
       // No preliminary save, so any network failure may have filed. Collect carries a tender, so a
       // permanent refusal takes `sale.refused`.
       if (session !== this.#operatorSession) return;
-      this.errorKey = isPermanentSaleRefusal(error)
-        ? "sale.refused"
-        : isNetworkFailure(error)
-          ? "sale.unconfirmed"
-          : isTakePaymentRefusal(error)
-            ? "take_payment.not_permitted"
-            : isPaymentInFlight(error)
-              ? "sale.payment_in_flight"
-              : (settleRefusalOf(error) ?? "sale.error");
+      this.errorKey =
+        saleRefusalOf(error, { manualCard: tender.method === "card" }) ??
+        (isPermanentSaleRefusal(error)
+          ? "sale.refused"
+          : isNetworkFailure(error)
+            ? "sale.unconfirmed"
+            : isTakePaymentRefusal(error)
+              ? "take_payment.not_permitted"
+              : isPaymentInFlight(error)
+                ? "sale.payment_in_flight"
+                : (settleRefusalOf(error) ?? "sale.error"));
     } finally {
       this.submitting = false;
     }
@@ -7821,15 +7834,17 @@ export class TillApp extends LitElement {
       )
         this.#unansweredWholePayments.delete(key);
       if (!current()) return;
-      this.findBillError = isPermanentSaleRefusal(error)
-        ? "sale.refused"
-        : isNetworkFailure(error)
-          ? "sale.unconfirmed"
-          : isTakePaymentRefusal(error)
-            ? "take_payment.not_permitted"
-            : isPaymentInFlight(error)
-              ? "sale.payment_in_flight"
-              : (settleRefusalOf(error) ?? "sale.error");
+      this.findBillError =
+        saleRefusalOf(error, { manualCard: (payment?.tender ?? tender).method === "card" }) ??
+        (isPermanentSaleRefusal(error)
+          ? "sale.refused"
+          : isNetworkFailure(error)
+            ? "sale.unconfirmed"
+            : isTakePaymentRefusal(error)
+              ? "take_payment.not_permitted"
+              : isPaymentInFlight(error)
+                ? "sale.payment_in_flight"
+                : (settleRefusalOf(error) ?? "sale.error"));
     } finally {
       this.submitting = false;
       if (current()) this.findBillBusy = false;
@@ -16025,7 +16040,8 @@ export class TillApp extends LitElement {
       )
         return false;
       paidMeanwhile = isPaymentsReceived(error);
-      if (refused?.(error) !== true) this.errorKey = wholeTabErrorOf(error);
+      if (refused?.(error) !== true)
+        this.errorKey = wholeTabErrorOf(error, { manualCard: detail.method === "card" });
     } finally {
       this.submitting = false;
     }
@@ -16126,7 +16142,10 @@ export class TillApp extends LitElement {
         this.#closePresented(open.id);
         return false;
       }
-      this.#showPresentedRefusal(open.id, this.#counterRefusal(wholeTabErrorOf(error)));
+      this.#showPresentedRefusal(
+        open.id,
+        this.#counterRefusal(wholeTabErrorOf(error, { manualCard: tender.method === "card" })),
+      );
       return true;
     });
     if (paid) this.#closePresented(open.id);
@@ -16140,12 +16159,16 @@ export class TillApp extends LitElement {
     const held = this.#unansweredWholePayments.get(open.billId);
     if (held === undefined || this.#presentedHeld(open)) return;
     this.presentedPaying = { ...open, refusal: null };
+    const manualCard = held.tender.method === "card";
     const paid = await this.#payWholeTab(
       { ...held.tender, ...(held.guests === undefined ? {} : { guests: held.guests }) },
       (error) => {
         if (this.#presentedNow(open.id) === null) return false;
         if (!isNetworkFailure(error))
-          this.#showPresentedRefusal(open.id, this.#counterRefusal(wholeTabErrorOf(error)));
+          this.#showPresentedRefusal(
+            open.id,
+            this.#counterRefusal(wholeTabErrorOf(error, { manualCard })),
+          );
         return true;
       },
     );
@@ -16219,7 +16242,9 @@ export class TillApp extends LitElement {
         this.#showPresentedRefusal(
           id,
           this.#counterRefusal(
-            isReaderRefusal(error) ? "card_reader.not_set_up" : wholeTabErrorOf(error),
+            isReaderRefusal(error)
+              ? "card_reader.not_set_up"
+              : wholeTabErrorOf(error, { manualCard: false }),
           ),
         );
     } finally {
@@ -16820,6 +16845,7 @@ export class TillApp extends LitElement {
     const now = this.#billPayingNow(id);
     if (now === null) return;
     const refusal = refusalOf(error, stage === "take");
+    if (asked.pay.method === "card" && asked.card?.entry === "manual") refusal.manualCard = true;
     if (refusal.unsent !== undefined)
       refusal.billLabel = this.#paymentBillLabel(refusal.unsent.billId);
     const { preview } = error as { preview?: unknown };
