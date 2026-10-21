@@ -63,6 +63,34 @@ const read = () => withTransaction(suite.db, (tx) => readVenueDetails(tx, venue.
 afterEach(() => vi.useRealTimers());
 
 describe("ordinary zone edit revision", () => {
+  it("uses an eligible committed zone edit for the next sale without restarting admission", async () => {
+    const sell = await prepareSale();
+    const initial = await read();
+    const saved = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, venue.cfg, {
+        expected: initial.details,
+        changes: { timeZone: "UTC" },
+      }),
+    );
+    expect(saved.model.businessDayClock.revision).toBe(1);
+    const result = await sell();
+    expect(result).toMatchObject({ issuedAt: "2026-10-06T12:00:00.000Z", issuedOffsetMinutes: 0 });
+    expect(suite.db.all(sql`select issued_offset_minutes from sales`)).toEqual([
+      { issued_offset_minutes: 0 },
+    ]);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        writeVenueDetails(tx, venue.cfg, {
+          expected: saved.model.details,
+          changes: { timeZone: "Europe/Madrid" },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "venue.detail_locked",
+      params: { field: "timeZone", reason: "sales" },
+    });
+  });
+
   it("propagates a formatter runtime fault without changing settings", async () => {
     const initial = await read();
     const failure = new Error("formatter unavailable");

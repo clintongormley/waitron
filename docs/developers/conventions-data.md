@@ -3348,6 +3348,13 @@ the suite catches a missing wait for every other duty.
 
 The landing listener, started last, is the one step not on the list.
 
+On 2026-10-22, A696's `boot.failed-start.test.ts` case “aborts and awaits a started cloud
+worker when snapshot initialization throws” failed with an un-aborted worker signal. Cloud
+undos were registered only after all three initializers returned. Each now registers its own
+abort-and-wait immediately; restoring the earlier registration block in an installed disposable
+checkout reproduces that assertion failure. The complete failed-start file passes 31 cases.
+This receipt covers that initializer boundary, not every possible duty failure.
+
 **What the guard does not see.** `apps/server/src/boot.failed-start.test.ts` is weaker than its
 name — it covers only the duties it names, so a new one that forgets is seen by nothing. Removing
 `await loop` still passes, so not every stop is proven to finish before the store closes.

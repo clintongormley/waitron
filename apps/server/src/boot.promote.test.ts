@@ -489,6 +489,36 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       expect(await readStandardSeriesId(mirrorDb, seed.nodeId)).toBe(activeSeriesId);
       expect(persisted.WAITRON_NODE_ID).toBe(seed.nodeId);
       expect(persisted.WAITRON_ENV).toBe("production");
+      await server.close();
+      await mirrorDb.execute(
+        sql`update locations set time_zone = 'Invalid/Zone' where id = ${MIRROR_LOCATION_ID}`,
+      );
+      const records = mirrorDb.all(sql`select * from registros_facturacion order by secuencia`);
+      const attempts = mirrorDb.all(sql`select * from envios order by registro_id`);
+      const restartPort = await freePort();
+      const restarted = await startServer({
+        ...KEY_ENV,
+        ...TICK_ENV,
+        ...persisted,
+        WAITRON_VENUE_DIR: mirrorVenueDir,
+        WAITRON_HTTP_PORT: String(restartPort),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_STATE_DIR: stateDir,
+      });
+      try {
+        const node = await fetch(`http://127.0.0.1:${restartPort}/api/node`);
+        expect(await node.json()).toEqual({ acceptingSales: false });
+        const health = await fetch(`http://127.0.0.1:${restartPort}/health`);
+        expect(await health.json()).toEqual({ ok: true, tradingAvailable: false });
+        expect(restarted.promoteMirrorToPrimary).toBeUndefined();
+        expect(mirrorDb.all(sql`select * from registros_facturacion order by secuencia`)).toEqual(
+          records,
+        );
+        expect(mirrorDb.all(sql`select * from envios order by registro_id`)).toEqual(attempts);
+        expect(await readDeploymentMode(mirrorDb, seed.nodeId)).toBe("primary");
+      } finally {
+        await restarted.close();
+      }
     } finally {
       await server.close();
       killSpy.mockRestore();

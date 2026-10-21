@@ -624,6 +624,47 @@ describe("a start that fails after the venue folder is opened gives the folder b
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 
+  it("aborts and awaits a started cloud worker when snapshot initialization throws", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir();
+    const env = {
+      ...(await tradingEnv(venueDir, state)),
+      WAITRON_CLOUD_ORIGIN: "https://cloud.example",
+    };
+    const failure = new Error("snapshot initialization failed");
+    let workerSignal: AbortSignal | undefined;
+    let workerStopped = false;
+    let release!: () => void;
+    vi.mocked(runCloudWorker).mockImplementationOnce(({ signal }) => {
+      workerSignal = signal;
+      return new Promise<void>((resolve) => {
+        release = resolve;
+        signal.addEventListener(
+          "abort",
+          () => {
+            setImmediate(() => {
+              workerStopped = true;
+              resolve();
+            });
+          },
+          { once: true },
+        );
+      });
+    });
+    vi.mocked(runCloudSnapshotLoop).mockImplementationOnce(() => {
+      throw failure;
+    });
+    try {
+      await expect(startServer(env)).rejects.toBe(failure);
+      expect(workerSignal?.aborted).toBe(true);
+      expect(workerStopped).toBe(true);
+      expect(readVenueHolder(venueDir)).toBeNull();
+      await expect(bindAndRelease(Number(env.WAITRON_HTTP_PORT))).resolves.toBeUndefined();
+    } finally {
+      release?.();
+    }
+  }, 60_000);
+
   it("waits for the cloud snapshot loop when the cloud worker refuses to stop", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });

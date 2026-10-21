@@ -376,6 +376,25 @@ describe("bill payment admission and issue clocks", () => {
     ).rejects.toMatchObject({ code: "venue.time_zone_not_ready" });
     expect(v.snapshot()).toEqual(before);
   });
+  it("retains pending worker rows when a caller bypasses the pass gate", async () => {
+    const id = await v.bill();
+    const pending = await v.pending(id, false);
+    const before = v.snapshot();
+    const result: unknown = await withTransaction(v.db, (tx) =>
+      settleFromProviderRow(
+        tx,
+        { ...v.deps, admission: close("invalid") },
+        pending.id,
+        new Date(),
+        "stored",
+      ),
+    ).catch((error: unknown) => error);
+    expect(v.snapshot()).toEqual(before);
+    expect(result).toMatchObject({
+      code: "venue.time_zone_not_ready",
+      params: { reason: "invalid" },
+    });
+  });
   it("refuses a partial cash refund before its row, attendance or drawer write", async () => {
     const id = await v.bill();
     const paid = await takeBillPayment(

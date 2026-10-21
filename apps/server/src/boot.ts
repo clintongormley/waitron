@@ -3360,6 +3360,7 @@ async function bootServer(
   });
   undoOnFailure.push(() => mdns.stop());
   const cloudController = new AbortController();
+  undoOnFailure.push(async () => cloudController.abort());
   const cloudWorker = cloudConnection
     ? runCloudWorker({
         connection: cloudConnection,
@@ -3368,6 +3369,10 @@ async function bootServer(
         onError: (error) => log("error", "cloud.refresh_failed", { errorCode: codeOf(error) }),
       })
     : undefined;
+  undoOnFailure.push(async () => {
+    cloudController.abort();
+    await cloudWorker;
+  });
   const cloudSnapshots = cloudConnection
     ? runCloudSnapshotLoop({
         signal: cloudController.signal,
@@ -3401,15 +3406,18 @@ async function bootServer(
         }),
       })
     : undefined;
+  undoOnFailure.push(async () => {
+    cloudController.abort();
+    await cloudSnapshots;
+  });
   const suggestionLoop = suggestionRunner?.run(cloudController.signal, {
     onError: (error) =>
       log("error", "content.suggestion_runner_failed", { errorCode: codeOf(error) }),
   });
-  // The unwind runs newest first: abort before awaiting any of the three duties, even if one rejects.
-  undoOnFailure.push(async () => cloudSnapshots);
-  undoOnFailure.push(async () => cloudWorker);
-  undoOnFailure.push(async () => suggestionLoop);
-  undoOnFailure.push(async () => cloudController.abort());
+  undoOnFailure.push(async () => {
+    cloudController.abort();
+    await suggestionLoop;
+  });
   return makeStartedServer(
     server,
     health,

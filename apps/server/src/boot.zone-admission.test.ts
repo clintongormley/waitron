@@ -1,6 +1,7 @@
 import { once } from "node:events";
 import { randomUUID } from "node:crypto";
 import Stripe from "stripe";
+import { StripeReconciler } from "@waitron/payments-stripe";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -21,6 +22,7 @@ import {
   writeMirrorConfig,
   writeNodeMembership,
   workingOrders,
+  incidents,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -246,6 +248,59 @@ function noDuties() {
 }
 
 describe("startup zone admission", () => {
+  it("retains one committed repair after a lost answer and a failed restart", async () => {
+    await rawZone("Invalid/Zone");
+    const input = { timeZone: "Europe/Madrid", expectedClockRevision: 0, confirmed: true };
+    await withMockedKill(async (kills) => {
+      await boot();
+      const answer = await request(PATH, "POST", input);
+      await answer.body?.cancel();
+      await vi.waitFor(() => expect(kills).toHaveLength(1));
+      const status = await request(PATH);
+      expect(await status.json()).toMatchObject({
+        eligible: false,
+        admission: { state: "restart_required" },
+        clockRevision: 1,
+      });
+      await refusal(await request(PATH, "POST", input), 409, "venue.time_zone_repair_not_needed");
+      expect(await (await request("/api/node")).json()).toEqual({ acceptingSales: false });
+      noDuties();
+      await server!.close();
+      server = undefined;
+    });
+    const repaired = await suite.db
+      .select()
+      .from(incidents)
+      .where(eq(incidents.code, "venue.time_zone_repaired"));
+    expect(repaired).toHaveLength(1);
+    expect(repaired[0]!.acknowledgedBy).toBe(manager);
+    const fault = new AppError("venue.time_zone_conversion_failed", { reason: "invalid_instant" });
+    vi.mocked(validateRetainedZoneClock).mockRejectedValueOnce(fault);
+    await expect(boot()).rejects.toBe(fault);
+    noDuties();
+    expect(
+      await suite.db.select().from(incidents).where(eq(incidents.code, "venue.time_zone_repaired")),
+    ).toEqual(repaired);
+    expect((await suite.db.select().from(locations))[0]!.timeZone).toBe("Europe/Madrid");
+    expect((await suite.db.select().from(locationBusinessDaySettings))[0]!.revision).toBe(1);
+    await boot();
+    expect((await (await request("/api/node")).json()).acceptingSales).toBe(true);
+    expect(runPendingCardLoop).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    new AppError("venue.time_zone_conversion_failed", { reason: "invalid_instant" }),
+    new AppError("venue.time_zone_target_invalid", { reason: "mismatch" }),
+    new TypeError("synthetic formatter failure"),
+  ])("keeps a startup classification failure fatal without granting repair (%j)", async (fault) => {
+    vi.mocked(readZoneContext).mockRejectedValueOnce(fault);
+    await expect(boot()).rejects.toBe(fault);
+    noDuties();
+    expect(listener.current).toBeUndefined();
+    expect((await suite.db.select().from(locations))[0]!.timeZone).toBe("Europe/Madrid");
+    expect(await suite.db.select().from(locationBusinessDaySettings)).toEqual([]);
+  });
+
   it("does not bind or start any normal duty while raw-zone validation is delayed", async () => {
     const entered = gate();
     const release = gate();
@@ -597,6 +652,51 @@ describe("startup zone admission", () => {
       server = undefined;
     });
     expect(JSON.stringify(suite.db.all(sql`select * from payments order by id`))).toBe(before);
+    await withMockedKill(async (kills) => {
+      await boot();
+      const repaired = await request(PATH, "POST", {
+        timeZone: "Europe/Madrid",
+        expectedClockRevision: 0,
+        confirmed: true,
+      });
+      expect(repaired.status).toBe(200);
+      await repaired.body?.cancel();
+      await vi.waitFor(() => expect(kills).toHaveLength(1));
+      await server!.close();
+      server = undefined;
+    });
+    const audit = vi
+      .spyOn(StripeReconciler.prototype, "reconcile")
+      .mockRejectedValue(new Error("Synthetic offline settlement audit"));
+    try {
+      await boot();
+      expect((await (await request("/api/node")).json()).acceptingSales).toBe(true);
+      const signature = sdk.webhooks.generateTestHeaderString({ payload: body, secret });
+      const deliver = () =>
+        fetch(`${url}/webhooks/stripe`, {
+          method: "POST",
+          headers: { "stripe-signature": signature },
+          body,
+        });
+      const first = await deliver();
+      expect(first.status).toBe(200);
+      expect(await first.text()).toBe("");
+      const settled = suite.db.all(sql`select * from payments order by id`);
+      expect(settled).toHaveLength(1);
+      expect(settled[0]).toMatchObject({
+        state: "captured",
+        external_ref: reference,
+        amount: 1210,
+      });
+      const duplicate = await deliver();
+      expect(duplicate.status).toBe(200);
+      expect(await duplicate.text()).toBe("");
+      expect(suite.db.all(sql`select * from payments order by id`)).toEqual(settled);
+    } finally {
+      await server?.close();
+      server = undefined;
+      audit.mockRestore();
+    }
   });
   it("commits confirmation through the real listener, then requests restart while admission stays closed", async () => {
     await rawZone("Invalid/Zone");
