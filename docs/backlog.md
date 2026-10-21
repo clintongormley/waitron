@@ -3256,7 +3256,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   an open dashboard follows through a passive live read of `custom_themes`, and a signed-in till
   through its `themeHash` once per poll. Slice 4 landed 2026-10-21 (#1945): text painted in the brand colour
   reads `--wt-color-primary-text`, and a root guard (`scripts/primary-coloured-text.test.ts`) refuses
-  `color: var(--wt-color-primary)` outside a list of icons and spinners. Slice 5 landed: Settings →
+  `color: var(--wt-color-primary)` outside a list of icons and spinners. Slice 5 landed 2026-10-21 (#1947): Settings →
   Appearance shows the theme in use, and a manager edits the brand colour, background and corners in
   place with a Light and Dark preview, warnings with one-press fixes, Fix all and a Hard to read
   dialog before saving anyway. Until slice 13, Edit is offered only while one of the venue's own
