@@ -158,6 +158,9 @@ async function sizeTab(strip: HTMLElement, zoneTab: HTMLElement, width: (span: n
   expect(name).toBeLessThan(target);
   zoneTab.style.paddingRight = `${target - name}px`;
   await nextFrames();
+  const sized = paddingBox(strip);
+  expect(sized.right - sized.left).toBeCloseTo(box.right - box.left, 2);
+  expect(zoneTab.getBoundingClientRect().width).toBeCloseTo(target, 1);
 }
 
 /** Halfway between too wide to clear an edge at each end and too wide to clear one edge. */
