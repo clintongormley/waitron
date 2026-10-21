@@ -35,12 +35,22 @@ const hand = theme("t-hand", "By hand", {
   handSet: { dark: { bg: "#101010" }, light: { text: "#6a6a6a", bg: "#f8f1e1" } },
 });
 const inUse = (view: ThemeView): ThemeList => ({ themes: [view], inUse: view.id });
+const xmas = theme("t-xmas", "Christmas", {
+  ...WAITRON_CHOICES,
+  brandColor: "#7a1f2b",
+  brandFix: { dark: true },
+});
+/** `#2a6fb0` warns on dark screens only. */
+const summer = theme("t-summer", "Summer terrace", { ...WAITRON_CHOICES, brandColor: "#2a6fb0" });
+const four: ThemeList = { themes: [lucia, xmas, summer], inUse: lucia.id };
 
-const states: Record<string, { list: ThemeList; select: string }> = {
+const states: Record<string, { list: ThemeList; select: string; canEdit?: boolean }> = {
   waitron: { list: { themes: [lucia], inUse: null }, select: "[data-test=saved-theme]" },
   lucia: { list: inUse(lucia), select: "[data-test=edit]" },
   "lemon-warning": { list: inUse(lemon), select: "[data-test=saved-warning]" },
   "hand-set": { list: inUse(hand), select: "[data-test=saved-hand]" },
+  "four themes, editor": { list: four, select: "[data-test=saved-theme]" },
+  "four themes, supervisor": { list: four, select: "[data-test=saved-theme]", canEdit: false },
 };
 
 const cases = ["light", "dark"].flatMap((mode) =>
@@ -56,12 +66,12 @@ afterEach(() => {
 
 it.each(cases)("Appearance page: $state, $locale / $mode", async ({ mode, locale, state }) => {
   setLocale(locale);
-  const { list, select } = states[state]!;
+  const { list, select, canEdit = true } = states[state]!;
   const fetchImpl = () => Promise.resolve(new Response(JSON.stringify(list), { status: 200 }));
   const api = new DashboardApi("", fetchImpl);
   const { el, host } = await mountWidget<Screen>(
     "dashboard-appearance-screen",
-    { api, canEdit: true },
+    { api, canEdit },
     mode,
   );
   await expect
@@ -71,6 +81,16 @@ it.each(cases)("Appearance page: $state, $locale / $mode", async ({ mode, locale
       )?.shadowRoot?.querySelector(select),
     )
     .toBeTruthy();
+  await expect
+    .poll(() =>
+      el
+        .shadowRoot!.querySelector("dashboard-themes-card")
+        ?.shadowRoot?.querySelector("wt-data-table"),
+    )
+    .toBeTruthy();
   await (el.shadowRoot!.querySelector("dashboard-look-card") as Card).updateComplete;
+  const themes = el.shadowRoot!.querySelector("dashboard-themes-card")!;
+  await themes.updateComplete;
+  await themes.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
   await expectNoA11yViolations(host);
 });
