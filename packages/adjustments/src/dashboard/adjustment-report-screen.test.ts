@@ -741,7 +741,7 @@ describe("the drill-down", () => {
     const percent = new Intl.NumberFormat("es", { style: "percent", maximumFractionDigits: 2 });
     // The cells are read through `text`, which turns the formatters' non-breaking spaces into spaces.
     const comp = (amount: string) =>
-      tf("adjustment_report.entry.comp", { amount }, "es").replace(/\s+/g, " ");
+      tf("adjustment_report.entries.comp", { amount }, "es").replace(/\s+/g, " ");
     const percentage = {
       ...samEntry(),
       id: "e5",
@@ -756,7 +756,7 @@ describe("the drill-down", () => {
     part(el, "show-all")!.click();
     await settle(el);
     const action = (key: string) => Object.values(row(part(el, "entries")!, key))[1];
-    expect(action("e3")).toBe(ADJUSTMENTS_STRINGS.es["adjustment_report.entry.void"]);
+    expect(action("e3")).toBe(ADJUSTMENTS_STRINGS.es["adjustment_report.entries.void"]);
     expect(action("e1")).toBe(comp(percent.format(1)));
     expect(action("e4")).toBe(comp(formatMoney("3.00", "es")));
     expect(action("e5")).toBe(comp(percent.format(0.2)));

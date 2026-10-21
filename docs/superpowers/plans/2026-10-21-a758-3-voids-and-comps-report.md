@@ -619,7 +619,7 @@ from a throwaway browser harness over the fixture data, never committed.
     counts sit one under another in a cell;
   - each entry's Action cell reads Void, Comp 100%, Comp 20%, Comp €3.00 and their Spanish, the
     percent sign spaced in Spanish;
-  - the Reason field sits under the list's heading, at the field width other filters use, and its
+  - the Reason field sits under the list's heading, as wide as its longest choice (`stable-width`) and never wider than the screen, and its
     open list shows All reasons first;
   - dark theme: the field's box, the open list's hover and the chosen row's tick are visible.
   Fix what is a defect (a failing test first); list what is a judgement call as an owner point.

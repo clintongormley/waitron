@@ -96,7 +96,6 @@ function rate(value: string | null): string {
   return value === null ? NONE : rateFormat(currentLocale()).format(Number(value) / 100);
 }
 
-/** The tallies of several actions, added together. */
 function sumTallies(tallies: AdjustmentTally[]): AdjustmentTally {
   return tallies.reduce((sum, tally) => ({
     count: sum.count + tally.count,
@@ -115,14 +114,14 @@ function tallyCell(tally: AdjustmentTally): string {
 
 /** What was done, as staff name it: "Void", or "Comp" and how much (design §3.6). */
 function entryWords(entry: AdjustmentEntry, locale: string): string {
-  if (entry.action === "cancel") return t("adjustment_report.entry.void");
+  if (entry.action === "cancel") return t("adjustment_report.entries.void");
   const amount =
     entry.action === "comp" || tookWholeValue(entry)
       ? percentFormat(locale).format(1)
       : entry.percentBp !== null
         ? percentFormat(locale).format(entry.percentBp / 10000)
         : money(entry.reduction);
-  return tf("adjustment_report.entry.comp", { amount });
+  return tf("adjustment_report.entries.comp", { amount });
 }
 
 /** An amount comp that took the item's whole list value is a full comp. */
@@ -484,7 +483,6 @@ export class AdjustmentReportScreen extends LitElement {
     this.entries = [...entries.slice(0, upTo + 1), ...shown.slice(last + 1)];
   }
 
-  /** With every reason listed, a first page passes no options at all. */
   #ask(
     api: AdjustmentsApi,
     listed: Listed,

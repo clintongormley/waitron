@@ -2273,7 +2273,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   PR's pictures show them; owner to read them.
 
 - **A957. The Spanish report still says «anulado» beside «Cancelaciones» (left open by A758-3).**
-  The By action column «Valor de carta anulado» and the summary figure «Valor de carta de lo
+  The column «Valor de carta anulado» and the summary figure «Valor de carta de lo
   anulado» (`packages/adjustments/src/dashboard/strings.ts`). D10 makes Void «Cancelar» and D22
   asks for one word per meaning, but nothing gives these two phrases. The other way: «Valor de
   carta cancelado» / «Valor de carta de lo cancelado». Owner to choose.
