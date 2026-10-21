@@ -1,5 +1,5 @@
 import { html, render } from "lit";
-import { applyTokens, startThemeChoice } from "@waitron/ui";
+import { applyTokens, startThemeChoice, startVenueTheme } from "@waitron/ui";
 import {
   BUILD_CHANGED_EVENT,
   createInstrumentedFetch,
@@ -14,6 +14,7 @@ import { isTrustBroken } from "./trust-check.js";
 import "./till-app.js";
 
 applyTokens(document.documentElement);
+startVenueTheme(document.documentElement);
 startThemeChoice(document.documentElement);
 
 installErrorCapture(window, diag);

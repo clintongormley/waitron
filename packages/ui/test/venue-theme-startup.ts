@@ -28,7 +28,7 @@ const REPAINT_LIMIT_MS = 5_000;
 const LOAD_LIMIT_MS = 15_000;
 const ASK_LIMIT_MS = 5_000;
 
-type Frame = readonly [themedRoot: boolean, bg: string];
+type Frame = readonly [themedRoot: boolean, bg: string, atMs: number];
 
 function answerTheme(route: Route, scenario: StartupScenario): Promise<void> | undefined {
   switch (scenario.answer) {
@@ -98,13 +98,14 @@ export function venueThemeStartupProbe(indexHtml: URL): BrowserCommand<[StartupS
         ({ key, stored }) => {
           if (stored === null) window.localStorage.removeItem(key);
           else window.localStorage.setItem(key, stored);
-          const frames: Array<readonly [boolean, string]> = [];
+          const frames: Array<readonly [boolean, string, number]> = [];
           (window as unknown as { __startupFrames: typeof frames }).__startupFrames = frames;
           const sample = (): void => {
             const root = document.documentElement;
             frames.push([
               root.hasAttribute("data-wt-theme-root"),
               getComputedStyle(root).getPropertyValue("--wt-color-bg").trim(),
+              performance.now(),
             ]);
             requestAnimationFrame(sample);
           };
@@ -134,7 +135,11 @@ export function venueThemeStartupProbe(indexHtml: URL): BrowserCommand<[StartupS
       ]);
       clearTimeout(timer);
       await subject.waitForTimeout(SETTLE_MS);
-      const firstThemedBg = (await readFrames()).find(([themed]) => themed)?.[1] ?? null;
+      const firstThemed = (await readFrames()).find(([themed]) => themed);
+      const firstThemedBg = firstThemed?.[1] ?? null;
+      console.log(
+        `start-up probe ${browser.browserType().name()} ${browser.version()} ${scenario.colorScheme} stored=${scenario.stored === null ? "none" : scenario.stored.slice(0, 8)} answer=${scenario.answer}: first themed frame ${firstThemedBg} at ${firstThemed?.[2].toFixed(0)} ms`,
+      );
       if (scenario.answer === "late") {
         await subject
           .waitForFunction(

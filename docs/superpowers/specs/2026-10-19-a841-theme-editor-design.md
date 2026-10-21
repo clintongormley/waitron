@@ -2222,6 +2222,15 @@ fetched without holding anything** (B4: I chose the stored copy).
   about the real apps' bundles. WebKit was not measured: Playwright 1.64.1's WebKit is not installed
   here (`Executable doesn't exist at …/ms-playwright/webkit-2370/pw_run.sh`). Slice 3 measures both
   engines in the real apps (B4).
+  Measured 2026-10-21 in slice 3: Playwright 1.64.1, Chromium 156.0.8078.4 and WebKit 27.2, the real
+  `index.html` and `main.ts` of each app, `WAITRON_STARTUP_ENGINES=chromium,webkit`: all eight cases
+  passed in WebKit in both apps (`Tests 16 passed (16)` each) — the stored copy's first themed frame
+  was `#edf6f0` (dashboard 363 ms, till 331 ms after navigation, modules served unbundled by the
+  Vitest server, so not a production timing), the dark device's `#0b110d`, no
+  stored copy and a malformed one `#f7f7f8`, the late answer repainted and was stored, and a
+  refused, failed or non-JSON answer kept the stored copy. See
+  `apps/dashboard/src/venue-theme-startup.test.ts`, `apps/till/src/venue-theme-startup.test.ts` and
+  `docs/developers/testing-guide.md`, "The start-up probe runs WebKit only when asked".
 - The round-1 finding that Vite rewrites `<link href="/api/theme.css">` to `/manage/…` in the
   dashboard's development server no longer applies: there is no link. (The reviewer's
   `/tmp/a841-review/run.mjs`, re-run with its fixture carrying `vite-ignore`, printed
@@ -2659,6 +2668,8 @@ permission-gated write (CLAUDE.md's risk triggers).
   colours until the fetch answers (probe7). On every later start the stored copy shows the theme
   from the app's first frame.
 - **WebKit not yet measured** (section 12); slice 3 measures it.
+  Measured 2026-10-21 in slice 3: WebKit 27.2 passed all eight start-up cases in both apps (section
+  12; `apps/dashboard/src/venue-theme-startup.test.ts`, `apps/till/src/venue-theme-startup.test.ts`).
 - **Old till browsers.** The sheet uses nothing newer than `:not()`, media queries and constructed
   stylesheets (which `applyTokens` already uses); which browsers venues' tills run I do not know.
 - **The checks are not every pair.** They cover the rules of section 9; a component that puts the

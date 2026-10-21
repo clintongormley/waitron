@@ -5,6 +5,7 @@ import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
 import { pointerGestureCommands } from "@waitron/ui/src/vitest-pointer-gestures.js";
 import { probeTillReload } from "./test/native-reload.js";
 import { holdDraftLine } from "./test/hold-draft-line.js";
+import { venueThemeStartupProbe } from "@waitron/ui/test/venue-theme-startup.js";
 
 type ColorScheme = "light" | "dark" | null;
 
@@ -39,12 +40,14 @@ export default defineConfig({
       "lit/directives/live.js",
       "lit/async-directive.js",
     ],
+    entries: ["src/main.ts"],
   },
   test: {
     globals: true,
     clearMocks: false,
     // A crashed Stryker run leaves mutated copies of the source, tests included, in .stryker-tmp.
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
+    provide: { startupEngines: (process.env["WAITRON_STARTUP_ENGINES"] ?? "chromium").split(",") },
     browser: {
       enabled: true,
       provider: playwright({}),
@@ -60,6 +63,7 @@ export default defineConfig({
         },
         ...parkPointerCommands,
         ...pointerGestureCommands,
+        probeVenueThemeStartup: venueThemeStartupProbe(new URL("./index.html", import.meta.url)),
       },
     },
     coverage: {
