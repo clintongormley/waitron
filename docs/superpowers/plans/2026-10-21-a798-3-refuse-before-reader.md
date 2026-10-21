@@ -788,6 +788,11 @@ Decisions 21-29 are Task 12's: what the owner's answer (a) does not settle.
     that press as already done or saves the round a second time, sending the kitchen a duplicate.
     DEFAULT: accepted — only the four sale routes answer resends during the stop, because there a
     false "not recorded" is about money; the window is one unanswered request long.
+    **As built (2026-10-22):** since #1949 the counter's Send is resent too: the till keeps a Send
+    whose reply was lost and sends it again when Send is pressed with the basket unchanged, at any
+    later time. While the stop holds, that resend is refused `storage.disk_full`, the till forgets
+    the kept Send and shows "Not saved: the box is out of disk space…" even when the first Send
+    placed the order (`till-api.disk-full-gate.test.ts` pins the server's answer).
 27. **The reader routes are not behind the gate; decision 17's checks stay theirs.** `POST /api/pay`
     and the bill payment route are open at the gate, because the gate cannot tell Pay again or a
     resend from a new payment (that is decided inside the first transaction). So the gate is not the

@@ -2515,6 +2515,9 @@ reader for a new sale (`payIntegrated`); and on every bill payment, cash include
   staying open is pinned by its own case in `till-api.fiscal-sale-paths.test.ts`. They also pick
   routes by the gate's own verbs and `/api/` filter, so a route the gate's selection misses is
   missed by the sweeps too.
+- A resend of any other write is refused like a new one (the plan's decision 26). Since #1949 that
+  includes a counter Send pressed again after a lost reply: while the stop holds it is answered
+  `storage.disk_full` and the till says the order was not saved, even when the first Send placed it.
 - The gate refuses by verb, so a write inside a `GET` still runs, as with the read-only gate
   (`read-only-gate.ts`).
 - The free-space reading counts bytes (`bavail` times `frsize`, `free-bytes.ts`), not inodes. A

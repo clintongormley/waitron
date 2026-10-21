@@ -5496,6 +5496,13 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   clears it.
   Left open by A798-B slice 3 (#1950).
 
+- **A counter Send pressed again during a full-disk stop says "Not saved" about an order the kitchen
+  may already have.** The gate refuses the resend before `placeOrder` can answer it with the first
+  placement (`TILL_OPEN_WHILE_DISK_FULL`, `apps/server/src/till-api.ts`; `#onPlaceOrder` in
+  `apps/till/src/till-app.ts`). Opening the place route at the gate and refusing only a new
+  placement inside it, as the four sale routes do, would close it. Left open by A798-B slice 3
+  (#1950).
+
 - **A cancel's whole-invoice credit under a clock before 28-10-2024 reaches the chain without the
   clock check** (`creditWholeInvoice`, `apps/server/src/cancel-credit.ts`), and so, read not run,
   answers `fiscal.record_invalid`; so does the setup readiness check's test sale. No product path
