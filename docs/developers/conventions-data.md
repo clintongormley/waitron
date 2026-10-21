@@ -2588,8 +2588,8 @@ nothing checks that a new entry point names itself. `waitron-break-glass` and `w
 open the folder with `exclusive: false`, so they take no lock and write no holder file. A holder that
 dies leaves its file behind; the next holder overwrites it.
 
-**A start below the free-space floor reads it too, and on a full disk that guards less than it
-seems.** With under 256 MiB free, a start deletes the copies a backup run leaves in
+**Every start reads it too, and on a full disk that guards less than it seems.** Whatever the free
+space, a start deletes the copies a backup run leaves in
 `<state>/backup-staging` unless the holder file shows a fresh heartbeat (`freeSpaceAtStart`, `apps/server/src/start-space.ts`), so that a
 start refused beside a running server does not delete that server's backup in progress. But the
 heartbeat is written as a new file and a rename (`writeVenueHolder`,
@@ -2599,11 +2599,10 @@ heartbeat is written as a new file and a rename (`writeVenueHolder`,
 so about half a minute after the disk fills (30 s after its last heartbeat, which is rewritten
 every 5 s) a running server's holder reads stale, and a start beside it deletes
 its staging. Accepted (the plan's decision 5): that one backup run may fail, and the database and every
-archive already at a destination are untouched. Between a full disk and 256 MiB free, where the
-heartbeat still writes, the guard holds. Read, not run: when `WAITRON_VENUE_DIR` puts the venue
-folder on another disk, a full venue disk with room on the state disk still makes the start delete
-(it acts on the lower of the two folders' free space) while the heartbeat goes stale, so a running
-server whose backup had room loses its staging.
+archive already at a destination are untouched. While the disk has room for the heartbeat, the
+guard holds. Read, not run: when `WAITRON_VENUE_DIR` puts the venue folder on another disk, a full
+venue disk stops the heartbeat while the state disk still has room, so a running server whose
+backup had room loses its staging to a start beside it.
 
 **Two limits, on purpose.** A start refused `provisioning.database_in_use`
 (`apps/server/src/node-entry.ts`) reads the file with `readVenueHolder` and `/health` with
