@@ -70,6 +70,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
     { name: "device_profile_printers" },
     { name: "station_printers" },
     { name: "tenant_themes" },
+    { name: "custom_themes" },
   ],
   validate: validateCoreConfiguration,
 } as const;

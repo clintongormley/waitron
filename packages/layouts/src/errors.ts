@@ -46,5 +46,6 @@ declare module "@waitron/shared" {
     "theme.invalid": { field: string; reason: ThemeRefusalReason | ThemeNameRefusal };
     "theme.name_taken": { field: "name" };
     "theme.not_found": Record<string, never>;
+    "setup.request_invalid": { field: string };
   }
 }

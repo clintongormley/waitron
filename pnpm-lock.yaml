@@ -725,6 +725,9 @@ importers:
       '@waitron/identity':
         specifier: workspace:*
         version: link:../identity
+      '@waitron/layouts':
+        specifier: workspace:*
+        version: link:../layouts
       '@waitron/media':
         specifier: workspace:*
         version: link:../media

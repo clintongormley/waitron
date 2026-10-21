@@ -47,7 +47,8 @@ import {
   IDENTITY_CONFIGURATION_TRANSFER,
   IDENTITY_CHANGE_SOURCES,
 } from "@waitron/identity";
-import type { WaitronModule } from "@waitron/module";
+import { validateThemeConfiguration } from "@waitron/layouts";
+import type { ModuleConfigurationTransfer, WaitronModule } from "@waitron/module";
 import {
   PAYMENTS_ALERTS,
   PAYMENTS_CLASSIFICATION,
@@ -105,6 +106,22 @@ import {
  * `fiscal-verifactu` and the no-regime `fiscal-none` — so exactly one is enabled per deployment
  * (`fiscalSlot`); provisioning selects it from the venue's territory.
  */
+type TransferValidate = NonNullable<
+  Extract<ModuleConfigurationTransfer, { kind: "tables" }>["validate"]
+>;
+
+// Typed as the contract's validate so the bundle the import supplies reaches a core check that
+// one day reads it.
+const validateCore: TransferValidate = CORE_CONFIGURATION_TRANSFER.validate;
+
+const CORE_TRANSFER: ModuleConfigurationTransfer = {
+  ...CORE_CONFIGURATION_TRANSFER,
+  validate: (tables, bundle) => {
+    validateCore(tables, bundle);
+    validateThemeConfiguration(tables);
+  },
+};
+
 export const ALL_MODULES: readonly WaitronModule[] = [
   {
     name: "core",
@@ -114,7 +131,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     alerts: CORE_ALERTS,
     classification: CORE_CLASSIFICATION,
     changes: CORE_CHANGE_SOURCES,
-    configurationTransfer: CORE_CONFIGURATION_TRANSFER,
+    configurationTransfer: CORE_TRANSFER,
   },
   {
     name: "catalogue",

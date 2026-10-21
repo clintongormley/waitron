@@ -84,6 +84,7 @@ export {
   putReceipt,
 } from "./receipt-store.js";
 export { parseThemeChoices, parseThemeName } from "./theme-input.js";
+export { validateThemeConfiguration } from "./theme-configuration.js";
 export {
   createCustomTheme,
   listCustomThemes,

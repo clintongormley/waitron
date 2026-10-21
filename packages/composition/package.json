@@ -23,6 +23,7 @@
     "@waitron/fiscal-none": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",
     "@waitron/identity": "workspace:*",
+    "@waitron/layouts": "workspace:*",
     "@waitron/module": "workspace:*",
     "@waitron/payments": "workspace:*",
     "@waitron/payments-stripe": "workspace:*",
