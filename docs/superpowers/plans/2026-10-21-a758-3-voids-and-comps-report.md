@@ -9,7 +9,7 @@ routes keep their gate, `gatedBy(VIEW_REPORTS, …)` (`packages/adjustments/src/
 and `:223-240`; `VIEW_REPORTS` is `"report.view"`, `:47`). The one new input, `reasonId`, narrows a
 list the same permission already shows whole, so it reaches no row that was not reachable before.
 It is an id in a request, though — if the plan reviewer counts that as the "by-id read" risk
-trigger, the path becomes FULL and the driver adds per-task reviews to Tasks 3a and 3b only.
+trigger, the path becomes FULL and the driver adds per-task reviews to Tasks 3a, 3b-i and 3b-ii only.
 **No task changes permissions or authentication.**
 
 Implementers are dispatched as `subagent_type: "implementer"`. An implementer that passes about 150
@@ -29,7 +29,7 @@ worked out in the screen from fields every entry already carries (Task 1b). The 
 three fields, filled in the loop that already sums them (`tallyRow`, `reports.ts:191-201`), and the
 screen draws them as the people table already draws "Approved by" (Tasks 2a, 2b). The entries route
 takes an optional `reasonId`, `listAdjustmentEntries` filters on it, and the screen gains a Reason
-`wt-combobox` above the list (Tasks 3a, 3b).
+`wt-combobox` above the list (Tasks 3a, 3b-i, 3b-ii).
 
 **Tech stack:** TypeScript, Drizzle on `node:sqlite`, Hono, Lit, Vitest (a `node` project and a
 real-Chromium `browser` project).
@@ -50,12 +50,12 @@ Every `file:line` below was read on 2026-10-21 in this worktree at `main` `76ada
 
 | File | Tasks |
 |---|---|
-| `packages/adjustments/src/dashboard/adjustment-report-screen.ts` (923 lines) | 1a, 1b, 2b, 3b |
-| `packages/adjustments/src/dashboard/strings.ts` (419 lines; `en` `:11-167`, `es` `:169-328`, name tables `:354-419`) | 1a, 1b, 2b, 3b |
-| `packages/adjustments/src/dashboard/adjustment-report-screen.test.ts` (1241 lines, browser) | 1a, 1b, 2b, 3b |
-| `packages/adjustments/src/dashboard/adjustment-report-screen.a11y.test.ts` (browser) | 3b |
-| `packages/adjustments/src/dashboard/client.ts` (types `:37-112`, `listEntries` `:199-217`) | 2a, 3b |
-| `packages/adjustments/src/dashboard/client.test.ts` (browser) | 3b |
+| `packages/adjustments/src/dashboard/adjustment-report-screen.ts` (923 lines) | 1a, 1b, 2b, 3b-ii |
+| `packages/adjustments/src/dashboard/strings.ts` (419 lines; `en` `:11-167`, `es` `:169-328`, name tables `:354-419`) | 1a, 1b, 2b, 3b-ii |
+| `packages/adjustments/src/dashboard/adjustment-report-screen.test.ts` (1241 lines, browser) | 1a, 1b, 2b, 3b-ii |
+| `packages/adjustments/src/dashboard/adjustment-report-screen.a11y.test.ts` (browser) | 3b-ii |
+| `packages/adjustments/src/dashboard/client.ts` (types `:37-112`, `listEntries` `:199-217`) | 2a, 3b-i |
+| `packages/adjustments/src/dashboard/client.test.ts` (browser) | 3b-i |
 | `packages/adjustments/test/report-fixtures.ts` (fixture data only) | 2a |
 | `packages/adjustments/src/reports.ts` (488 lines) | 2a, 3a |
 | `packages/adjustments/src/reports.test.ts` (node, real database) | 2a, 3a |
@@ -120,7 +120,7 @@ They pin `byAction` and people rows with `toMatchObject`
    whole, four rows each, at `:233-238`, `:258-263` and `:276-281`; the two lists of zero counts
    at `:292` and `:316` count four rows; `:304` picks row `[3]`; the intro at `:152-154` says
    "give-aways"; the entries' words are pinned at `:542` (it was `:536`), `:554`, `:579` and
-   `:590`. Adding two columns to By reason changes `:239-243`, `:264-267` and `:282`, and new fields
+   `:590`. Adding two columns to By reason changes `:245-249`, `:270-273` and `:283`, and new fields
    on a reason's totals change three `toEqual` pins in `reports.test.ts`. All seventeen are listed
    below.
 2. **The entries route moved:** `routes.ts:205-222` in the outline is now `:223-240` (A758-1 and
@@ -172,8 +172,18 @@ They pin `byAction` and people rows with `toMatchObject`
      `beforeAmount` equal to `nominalValue`), else "Comp {amount}" with the amount it took off
      (`reduction`): "Comp €3.00", «Descuento 3,00 €». The parent plan's Open point 3 settles
      this rule; owner point 4 repeats it.
-   - "Void, charged" for a cancel that took nothing off is the §3.8 slice's (the outline's "Not
-     here"); until then that cancel reads "Void".
+   - **"Void, charged" is deferred by choice, not for want of data.** Design §3.6 "Each entry"
+     (`spec:365-367`) gives it to the report, but the parent plan's outline puts it with the §3.8
+     slice ("Not here", `2026-10-19-a758-reason-rules.md:1093-1094`), and this plan keeps that
+     scope. Until then a cancel that kept the charge reads "Void". The outline's reason ("Nothing
+     stored says which cancels kept the charge", its Open point 5, `:1175-1178`) is too wide for
+     the wording: A773-1 already writes a still-charge cancel with `beforeAmount` = `afterAmount` =
+     the dish's charge and `reduction` 0 (`apps/server/src/line-cancel.ts:331-333`; pinned by the
+     cases at `line-cancel.test.ts:319` and `:370`), so `action === "cancel" && afterAmount > 0`
+     tells most of them apart on the entry the screen already has, with no migration. The one shape
+     it cannot tell apart is a still-charge cancel of a dish already comped to €0.00 (before 0,
+     after 0), which looks like a removed one — the fixture's `e2` (`test/report-fixtures.ts:169-184`)
+     has that shape and must stay "Void". Task 4 carries this to the §3.8 slice; Owner point 6.
    One template, `"Comp {amount}"` / `"Descuento {amount}"`, carries all three comp forms.
 4. **A reason's totals gain `requesters`, `guestRequests` and `approvers`.** `requesters` and
    `approvers` are `(PersonRef & { count: number })[]`, the shape `PersonAdjustments.approvers`
@@ -207,13 +217,17 @@ They pin `byAction` and people rows with `toMatchObject`
    counted over the range (`report.overall.byReason`), by name, then by id. The choice:
    - survives opening another person's list, so "Alex's staff meals" takes two choices;
    - survives a change of range. A reason the new range does not hold stays offered under the name
-     it had when chosen, and the list says there are none, so the field never changes its value by
-     itself;
+     it had when chosen, and the list is empty, so the field never changes its value by itself.
+     While a reason is chosen, the empty list says `tableNoMatches()` (already imported by the
+     screen, `adjustment-report-screen.ts:9`, and used as `noMatchesMessage` at `:868`), not
+     `adjustment_report.none` ("No adjustments on these days.", `:867`), which would be false when
+     the days hold adjustments under other reasons;
    - goes back to All reasons when the list is closed.
    Owner point 3.
 8. **With no reason chosen, the screen calls the client exactly as it does today.** The screen's
    tests pin the call's arguments with `toHaveBeenCalledWith`, three arguments for a first page
-   (`adjustment-report-screen.test.ts:532`, `:576`, `:597`, `:647`, `:1038`, `:1233`) and
+   (`adjustment-report-screen.test.ts:532`, `:576`, `:597`, `:647`, `:1038`, `:1233`; and
+  `toHaveBeenLastCalledWith` at `:417`) and
    `{ after }` or `{ after, limit }` for later ones (`:700`, `:820`, `:881`, `:972`, `:1041`), and
    the accessibility suite tells a first page from a later one by whether a fourth argument exists
    (`adjustment-report-screen.a11y.test.ts:93-97`). With no reason chosen, the first page passes no
@@ -229,13 +243,18 @@ They pin `byAction` and people rows with `toMatchObject`
 **Files:** `adjustment-report-screen.ts` (`:29`, `:31-36`, `:797-805`), `strings.ts`
 (`:108-109`, `:269-270`, `:374-380`, `:413-415`), `adjustment-report-screen.test.ts`.
 
-- [ ] **Failing test first.** Change the seven checks listed for Task 1a under "Changed test
-  checks", then add one Spanish case: with `setLocale("es-ES")`, the By action rows read
-  `[kindTotalName("void", "es"), …]`, `[kindTotalName("comp", "es"), …]` — import the helper from
-  `./strings.js`, never a literal. Run
+- [ ] **Failing test first, in two runs.** A named import that `strings.ts` does not export stops
+  the whole test file loading (`SyntaxError: … does not provide an export named …`, `Tests no
+  tests`), so none of its cases would run. First change only the seven checks listed for Task 1a
+  under "Changed test checks" and run
   `pnpm --filter @waitron/adjustments exec vitest run src/dashboard/adjustment-report-screen.test.ts`.
-  Expected: the by-action and intro cases fail on "Cancellations"/"Give-aways" and four rows; the
-  Spanish case fails because `kindTotalName` does not exist yet.
+  Expected: a `Tests` count with the by-action and intro cases failing by name, on
+  "Cancellations"/"Give-aways" and four rows.
+- [ ] **Then the Spanish case.** Add `kindTotalName` to `strings.ts` as an export that returns `""`
+  for now, then add the case: with `setLocale("es-ES")`, the By action rows read
+  `[kindTotalName("void", "es"), …]`, `[kindTotalName("comp", "es"), …]` — import the helper from
+  `./strings.js`, never a literal. Run the same command. Expected: the file loads and the Spanish
+  case fails on its row labels, beside the seven failures above.
 - [ ] **The rows.** Replace `ACTIONS` with the two kinds and the actions each adds up:
 
   ```ts
@@ -400,7 +419,7 @@ keys in `en` and `es`), `adjustment-report-screen.test.ts`.
 - [ ] **The table.** `#breakdown` takes extra headings and, per line, extra cells:
 
   ```ts
-  #breakdown(test, heading, first, lines: { label: string; tally: AdjustmentTally; extra?: unknown[] }[],
+  #breakdown(test, heading, first, lines: { label: string; tally: AdjustmentTally; extra?: (TemplateResult | string)[] }[],
              extraHeadings: string[] = [])
   ```
 
@@ -459,16 +478,28 @@ keys in `en` and `es`), `adjustment-report-screen.test.ts`.
   `:231-236`.
 - [ ] Run both suites; read the counts. Typecheck. Commit — "Adjustment entries: filter by reason".
 
-## Task 3b: the Reason field above the list
+## Task 3b-i: the client asks with a reason
 
-**Files:** `client.ts` (`:199-217`), `client.test.ts`, `adjustment-report-screen.ts` (`:236-250`,
-`:330-386`, `:427-450`, `:472-478`, `:828-889`), `strings.ts`, `adjustment-report-screen.test.ts`,
+**Files:** `client.ts` (`:199-217`), `client.test.ts`.
+
+- [ ] **Failing test first.** `client.test.ts`: `listEntries(from, to, { personId }, { reasonId })`
+  asks `…&personId=…&reasonId=…`, and with `{ reasonId, after, limit }` asks
+  `…&guests=true&reasonId=…&after=…&limit=…`. Run
+  `pnpm --filter @waitron/adjustments exec vitest run src/dashboard/client.test.ts`. Expected: the
+  new cases ask no `reasonId`.
+- [ ] **The client.** `listEntries`'s fourth argument becomes
+  `options: { after?: string; limit?: number; reasonId?: string } = {}`; `reasonId` is set on the
+  query right after `personId`/`guests` (Decision 8).
+- [ ] Run the client suite (read the count) and typecheck. Commit — "Adjustments client: ask the
+  entries for one reason".
+
+## Task 3b-ii: the Reason field above the list
+
+**Files:** `adjustment-report-screen.ts` (`:236-250`, `:330-386`, `:427-450`, `:472-478`,
+`:828-889`), `strings.ts`, `adjustment-report-screen.test.ts`,
 `adjustment-report-screen.a11y.test.ts`.
 
 - [ ] **Failing tests first.**
-  - `client.test.ts`: `listEntries(from, to, { personId }, { reasonId })` asks
-    `…&personId=…&reasonId=…`, and with `{ reasonId, after, limit }` asks
-    `…&guests=true&reasonId=…&after=…&limit=…`.
   - `adjustment-report-screen.test.ts`, a new `describe("the reason filter")`, using
     `chooseOption` from `@waitron/ui/src/test-helpers.js` and the fixture's reasons:
     1. The list shows a `wt-combobox[name="reason"]` labelled "Reason", value `"all"`, options
@@ -482,17 +513,14 @@ keys in `en` and `es`), `adjustment-report-screen.test.ts`.
     5. Opening another person keeps the choice and asks with it; closing the list and opening it
        again starts at All reasons.
     6. A new range whose report holds no Staff meal keeps the choice, still offers Staff meal by
-       its name, and asks with it.
+       its name, and asks with it; when the answer is empty, the table's `emptyMessage` is
+       `tableNoMatches()`, and with All reasons chosen it is `t("adjustment_report.none")` again.
     7. The choice's `wt-change` does not reach `document`.
     8. In Spanish, the label and the first option read `ADJUSTMENTS_STRINGS.es[…]`.
   - `adjustment-report-screen.a11y.test.ts`: "a list filtered by reason", in both themes (the
     file's `describe.each`).
 
-  Run the client, screen and a11y suites. Expected: no `wt-combobox[name="reason"]`; the client
-  cases ask no `reasonId`.
-- [ ] **The client.** `listEntries`'s fourth argument becomes
-  `options: { after?: string; limit?: number; reasonId?: string } = {}`; `reasonId` is set on the
-  query right after `personId`/`guests` (Decision 8).
+  Run the screen and a11y suites. Expected: no `wt-combobox[name="reason"]`.
 - [ ] **The screen.**
   - State: `@state() private reasonFilter?: { id: string; name: string }`, the chosen reason and the
     name it had when chosen.
@@ -528,10 +556,11 @@ keys in `en` and `es`), `adjustment-report-screen.test.ts`.
     followed by `report.overall.byReason` sorted by name then id, plus the chosen reason when the
     report no longer holds it (Decision 7). `#onReasonChange` stops the event, sets or clears
     `reasonFilter`, and calls `#loadEntries(this.entriesOf!)`. `#closeEntries` clears
-    `reasonFilter`; `#openEntries` keeps it.
+    `reasonFilter`; `#openEntries` keeps it. The entries table's `.emptyMessage` (`:867`) is
+    `tableNoMatches()` while `reasonFilter` is set (Decision 7).
   - `#entriesSection` needs the report for the options: pass it in from `render` (`:913`).
 - [ ] **The words.** `adjustment_report.entries.all_reasons`: "All reasons" / "Todos los motivos".
-- [ ] Run the client, screen and a11y suites (read each count), typecheck, strings guards. Commit —
+- [ ] Run the screen and a11y suites (read each count), typecheck, strings guards. Commit —
   "Adjustment report: a Reason filter on the list".
 
 ## Task 4: backlog
@@ -545,6 +574,15 @@ keys in `en` and `es`), `adjustment-report-screen.test.ts`.
   and the §3.8 and "collect it at the counter" slices remain. Never mark it done.
 - [ ] The same sentence in `docs/backlog/till.md` "## A758" after A758-2's (`:1491-1493`), and
   "A758-3 to A758-5" (`:1493`) becomes "A758-4 and A758-5".
+- [ ] **Hand "Void, charged" to the §3.8 slice.** The backlog has no entry of its own for that
+  slice; it is named in the A758 entry's "Left:" (`docs/backlog.md:2217-2219`) and in
+  `docs/backlog/till.md:1493`. In both places, after "the §3.8 … slices", add one sentence: the §3.8
+  slice also makes the report's entries read "Void, charged" («Cancelado, cobrado», design §3.6) for
+  a cancel that kept the charge, deferred from A758-3; most such rows are already told apart
+  without a migration, because A773-1 writes a still-charge cancel with before = after = the
+  dish's charge and nothing off (`apps/server/src/line-cancel.ts:331-333`), so `afterAmount > 0`
+  marks them — all but a still-charge cancel of a dish already comped to €0.00, which needs the
+  slice's stored flag. Re-read both places with `grep -n "Void, charged"` afterwards.
 - [ ] For each owner point below that the PR leaves open, a short entry in the till area of
   `docs/backlog.md`, beside A923–A926, numbered from `~/waitron-campaign-shared/next-item-number`
   (read it, use it, write the next number back).
@@ -613,9 +651,9 @@ unless named.
 | 12 | 2a | `packages/adjustments/src/reports.test.ts:341-344` (Alex's By reason, `toEqual`) | each reason gains `requesters`, `guestRequests`, `approvers`: Mistake `[Alex 2]`, 0, `[]`; Cold food `[Alex 1]`, 0, `[Mia 1]` | §3.7: By reason gains who asked and who approved |
 | 13 | 2a | `reports.test.ts:464-468` (overall By reason, `toEqual`) | the same fields: Mistake as above; Cold food as above; Regular `[Sam 1]`, 0, `[]` | §3.7 |
 | 14 | 2a | `reports.test.ts:811-813` (a reason named by its newest row, `toEqual`) | gains `requesters: [Alex 2]`, `guestRequests: 0`, `approvers: []` | §3.7 |
-| 15 | 2b | `:239-243` (everyone's By reason) | four cells a row → six: Entry error `"Alex (2)"`, `"—"`; Cold food `"Alex (1)"`, `"Mia (1)"`; Staff meal `"Sam (1)"`, `"—"` | §3.7 |
-| 16 | 2b | `:264-267` (Alex's By reason) | the same two extra cells for Entry error and Cold food | §3.7 |
-| 17 | 2b | `:282` (Sam's By reason) | `["Staff meal","1","€3.00","€0.00"]` → `[…, "Sam (1)", "—"]` | §3.7 |
+| 15 | 2b | `:245-249` (everyone's By reason) | four cells a row → six: Entry error `"Alex (2)"`, `"—"`; Cold food `"Alex (1)"`, `"Mia (1)"`; Staff meal `"Sam (1)"`, `"—"` | §3.7 |
+| 16 | 2b | `:270-273` (Alex's By reason) | the same two extra cells for Entry error and Cold food | §3.7 |
+| 17 | 2b | `:283` (Sam's By reason) | `["Staff meal","1","€3.00","€0.00"]` → `[…, "Sam (1)", "—"]` | §3.7 |
 
 Unchanged, checked: the By action headings (Decision 1); every `listEntries` call check
 (Decision 8); `client.test.ts`'s pinned addresses (Decision 8); the server suites named under "The
@@ -646,6 +684,16 @@ files"; `adjustment-report-screen.a11y.test.ts` (one case added, none changed).
 5. **Words no picture drew:** Voids / Comps («Cancelaciones» / «Descuentos»), Void («Cancelado»),
    "Comp {amount}" («Descuento {amount}»), All reasons («Todos los motivos»), and the reworded intro
    in both languages.
-6. **Still not here** (the §3.8 slice, the parent plan's Open point 5): "Void, charged", "Refunded
-   …", «En preparación», and a €0.00 "still charge" cancel's list value counted in its person's
-   sales (`reports.ts:383`).
+6. **"Void, charged" is deferred to the §3.8 slice by choice.** Design §3.6 gives it to the report,
+   and most of the rows that need it can already be told apart (`afterAmount > 0` on a cancel;
+   Decision 3), so it could be built here without a migration. This PR keeps the parent outline's
+   scope instead, and until the §3.8 slice a cancel that kept the charge reads "Void" beside €0.00
+   taken off. The other way: build it in this PR, leaving only the €0.00-comped case to the slice.
+7. **Still not here** (the §3.8 slice, the parent plan's Open point 5): "Refunded …", «En
+   preparación», and a €0.00 "still charge" cancel's list value counted in its person's sales
+   (`reports.ts:383`).
+8. **The Spanish report still says «anulado»** beside the new «Cancelaciones»: the By action
+   column «Valor de carta anulado» (`strings.ts:295`) and the summary figure «Valor de carta de lo
+   anulado» (`strings.ts:283`). D10 makes Void «Cancelar» and D22 asks for one word per meaning,
+   but neither the design nor an owner answer gives these two phrases, so this PR leaves them. The
+   other way: «Valor de carta cancelado» / «Valor de carta de lo cancelado» (no test spells them).
