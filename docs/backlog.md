@@ -5205,12 +5205,15 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   Private placement uses the existing file writers and real migrations, with a populated catalogue
   predecessor check; it validates captured backup settings and excludes the old destination file.
   Scheduler and bookings compare captured state without actions; fiscal-none explicitly declares
-  its empty obligations. Complete generated owner coverage still waits for the payment check.
+  its empty obligations. The payment owner preserves payment/refund and immutable hold/resolution
+  evidence, checks reader/sale relationships and authenticates provider payloads through offline
+  adapter checks. Complete owner registration now matches the real migrated database, including
+  media and inactive owners; removing each real owner refuses verification.
   Host state checks now validate TLS key pairs, captured optional settings and selected-node sealed
   material; scratch-layout checks compare effective vault/account keys with the real boot loader.
   Signed paper needs release-reviewed public roots; stored Cloud receipt references remain unsupported.
-  Embedded build identity, the artifact verifier and remaining module checks, and
-  target-bound recovery remain open. Cloud integration
+  Embedded build identity, the complete artifact verifier and authority-boundary qualification,
+  and target-bound recovery remain open. Cloud integration
   follows the implementing Waitron release. Snapshots stay unavailable until complete module checks,
   target-bound recovery and joint acceptance pass.
 

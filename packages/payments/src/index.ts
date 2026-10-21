@@ -122,6 +122,7 @@ export type {
   SettlementReportSource,
 } from "./reconcile.js";
 export { PAYMENTS_CLASSIFICATION } from "./classification.js";
+export { paymentsBackupVerification } from "./backup-verification.js";
 export { PAYMENTS_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 export { PAYMENTS_CHANGE_SOURCES } from "./classification.js";
 export type {

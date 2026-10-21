@@ -1,6 +1,6 @@
 import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { getCredential } from "@waitron/credentials";
+import { getCredential, validatePayload } from "@waitron/credentials";
 import type { KeyRing } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
 import type {
@@ -123,6 +123,16 @@ function pairingStatus(raw: string): AddReaderResult["status"] {
 export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
   providerId: PROVIDER_ID,
   credentialPurpose: CREDENTIAL_PURPOSE,
+  verifyBackupCredential(payload) {
+    try {
+      validatePayload(CREDENTIAL_PURPOSE, payload);
+      optionsFromSealed(payload);
+      return true;
+    } catch (error) {
+      if (error instanceof AppError) return false;
+      throw error;
+    }
+  },
   credentialFields: [
     { name: "apiKey", labelKey: "payments.sumup.api_key", secret: true },
     {

@@ -480,13 +480,13 @@ Each task's checklist means: write the named red assertions; run its exact comma
 
 ### Task 14: Cover payments and declared offline provider secrets
 
-**Files:** create `packages/payments/src/backup-verification.ts`, `packages/payments/src/backup-verification.test.ts`; modify `packages/payments/src/index.ts`, `packages/payments/package.json` (module/store dependencies), `packages/composition/src/modules.ts`.
-**Consumes:** Tasks 6/11 and complete payments classification. **Produces:** `PAYMENTS_BACKUP_VERIFICATION:BackupVerificationContribution`.
+**Files:** create `packages/payments/src/backup-verification.ts`, `packages/payments/src/backup-verification.test.ts`; modify `packages/payments/src/index.ts`, `packages/payments/package.json` (module/store dependencies), `packages/payments/src/card-provider.ts`, `packages/composition/src/modules.ts`; add offline-check implementations and sibling `backup-verification.test.ts` suites in `payments-stripe` and `payments-sumup`.
+**Consumes:** Tasks 6/11 and complete payments classification. **Produces:** `paymentsBackupVerification(providers):BackupVerificationContribution`, composed with the existing `CARD_PROVIDERS` registry. Each adapter supplies a pure optional `verifyBackupCredential(payload, environment):boolean` on `CardProviderContribution`; a present credential without those semantics is unsupported. Provider names and payload parsing stay in the adapter packages; the existing no-provider-vocabulary guard remains unchanged.
 
-- [ ] RED `preserves refund hold resolution and outcome evidence`, `checks readers and sale relationships`, `checks present provider payloads without provider calls`, `permits absent credentials only for unconfigured providers`. Same-count immutable edits fail; in-flight work remains data, never executed.
-- [ ] Run `pnpm --filter @waitron/payments exec vitest run src/backup-verification.test.ts`; expect new export then omitted-evidence assertion red.
-- [ ] Implement complete row comparison, configured-provider requirements and offline payload/URL parsing. No provider connectivity claim, capture/refund/poller/terminal or webhook action. Instrument those functions to throw and require zero calls. GREEN same command.
-- [ ] Commit `git commit -s -m "feat(payments): verify backup data without payment effects"`.
+- [x] RED `preserves refund hold resolution and outcome evidence`, `checks readers and sale relationships`, `checks present provider payloads without provider calls`, `permits absent credentials only for unconfigured providers`. Same-count immutable edits fail; in-flight work remains data, never executed.
+- [x] Run `pnpm --filter @waitron/payments exec vitest run src/backup-verification.test.ts`; expect new export then omitted-evidence assertion red.
+- [x] Implement complete row comparison, configured-provider requirements and offline payload/URL parsing. No provider connectivity claim, capture/refund/poller/terminal or webhook action. Instrument those functions to throw and require zero calls. GREEN same command.
+- [x] Commit `git commit -s -m "feat(payments): verify backup data without payment effects"`.
 
 ### Task 15: Cover catalogue and actual media database state
 
@@ -563,10 +563,10 @@ Each task's checklist means: write the named red assertions; run its exact comma
 **Files:** create `packages/scheduler/src/backup-verification.ts`, `packages/scheduler/src/backup-verification.test.ts`, `packages/bookings/src/backup-verification.ts`, `packages/bookings/src/backup-verification.test.ts`, `packages/fiscal-none/src/backup-verification.ts`, `packages/fiscal-none/src/backup-verification.test.ts`; modify `packages/scheduler/src/index.ts`, `packages/bookings/src/index.ts`, `packages/fiscal-none/src/index.ts`, `packages/scheduler/package.json` (module/store), `packages/bookings/package.json` (store), `packages/fiscal-none/package.json` (module/store), `packages/composition/src/modules.ts`, `packages/composition/src/backup-verification.test.ts`.
 **Consumes:** Tasks 1–3/6 and all owner contributions. **Produces:** `SCHEDULER_BACKUP_VERIFICATION`, `BOOKINGS_BACKUP_VERIFICATION`, `FISCAL_NONE_BACKUP_VERIFICATION`, each `BackupVerificationContribution`, and complete generated real inventory.
 
-- [ ] RED `scheduler preserves runs without scheduling`, `bookings preserves all values without action`, `fiscal-none explicitly checks no-owned-state`, `every descriptor table nonDb source and restore effect has exactly one owner`. Set equality must use generated classifications/descriptors, including media. Delete every real contribution independently; each must refuse.
-- [ ] Run `pnpm --filter @waitron/scheduler exec vitest run src/backup-verification.test.ts`, `pnpm --filter @waitron/bookings exec vitest run src/backup-verification.test.ts`, `pnpm --filter @waitron/fiscal-none exec vitest run src/backup-verification.test.ts`, and `pnpm --filter @waitron/composition exec vitest run src/backup-verification.test.ts src/composition.test.ts`; expect missing declarations/real inventory assertions red.
-- [ ] Implement small explicit declarations; only fiscal-none claims database-only with its empty-journal source receipt. Require named independent checks for all data effects, and tests for empty secrets/entries/effects. Every package newly importing query types or module helpers declares that direct dependency; preserve credentials' structural adapter. GREEN all commands plus `pnpm exec vitest run scripts/workspace-cycles.test.ts`.
-- [ ] Commit `git commit -s -m "feat(composition): complete verification owner coverage"`.
+- [x] RED `scheduler preserves runs without scheduling`, `bookings preserves all values without action`, `fiscal-none explicitly checks no-owned-state`, `every descriptor table nonDb source and restore effect has exactly one owner`. Set equality must use generated classifications/descriptors, including media. Delete every real contribution independently; each must refuse.
+- [x] Run `pnpm --filter @waitron/scheduler exec vitest run src/backup-verification.test.ts`, `pnpm --filter @waitron/bookings exec vitest run src/backup-verification.test.ts`, `pnpm --filter @waitron/fiscal-none exec vitest run src/backup-verification.test.ts`, and `pnpm --filter @waitron/composition exec vitest run src/backup-verification.test.ts src/composition.test.ts`; expect missing declarations/real inventory assertions red.
+- [x] Implement small explicit declarations; only fiscal-none claims database-only with its empty-journal source receipt. Require named independent checks for all data effects, and tests for empty secrets/entries/effects. Every package newly importing query types or module helpers declares that direct dependency; preserve credentials' structural adapter. GREEN all commands plus `pnpm exec vitest run scripts/workspace-cycles.test.ts`.
+- [x] Commit `git commit -s -m "feat(composition): complete verification owner coverage"`.
 
 ### Task 22: Verify host state secrets and declared entry placement
 
@@ -960,3 +960,42 @@ in its source. Eight focused server suites passed 274 tests. Nineteen independen
 installed disposable copy failed their intended expectations beside an accepting control; the
 restored copy passed all 85 cases. These are host-reader checks, not complete artifact, authority,
 runtime or joint release acceptance. No existing test assertion or ordinary restore code changed.
+
+### Task 14 provider boundary correction — 21 October 2026
+
+The first full payments suite rejected provider names in the initial verifier draft through
+`no-provider-vocabulary.test.ts`. The guard is unchanged. The generic factory now takes the existing
+composition registry and authenticates its declared credential purposes. Each provider adapter
+parses its own stored fields offline; no provider adapter becomes a module descriptor.
+
+Disconnect refuses an active reader before deleting its credential (`apps/server/src/payments-api.ts`,
+the provider disconnect route). A disabled or deleted reader and historic payments may therefore
+remain without that credential. The verifier accepts that retained history, requires credentials for
+active undeleted readers, checks every present provider payload, and refuses credential presence
+lost between source and restored copies. It cannot identify a credential independently lost before
+capture where no separate connection marker remains. Missing keys remain inconclusive.
+
+The original Task 21 small-owner checkpoint above records its 20 October state. Its pending complete
+inventory is qualified separately after Task 14; neither checkpoint establishes complete artifact,
+Cloud, pinned-runtime or joint release acceptance. Tasks 5 and 23–27 remain required.
+
+### Tasks 14 and 21 qualification — 21 October 2026
+
+The payment owner compares all classified payment tables and the three append-only evidence
+sets. It checks declared relationships in both private copies and decrypts every present provider
+credential through the shared captured key resolver. Provider adapters supply their own offline
+payload checks through the existing registry. In-flight payments remain data.
+
+The complete real inventory now matches the database produced by the shipped migration descriptors,
+including media tables and inactive owners. Each real owner was removed independently and refused.
+Module-owned non-database entries match declared sources; declared data effects name independent
+checks, while activation effects remain outside verification.
+
+Local qualification: the full payments suite passed 763 cases and its coverage bars; composition
+passed 122 and its coverage bars. The two provider-focused runs passed 43 and 39; root boundary
+checks passed 5,344 and the unchanged protected fiscal pair passed 20. Eleven omissions in an
+installed independent candidate each failed the intended assertions; the restored payment and
+inventory suites passed 56 and 22. All 8,682 candidate paths matched before and after the experiments,
+and the owned temporary candidate was removed. No existing test assertion, guard or shipped SQL
+changed in this step. These are local module and inventory receipts, not CI or complete artifact
+qualification. Tasks 5 and 23–27 remain open before branch finishing and release handoff.

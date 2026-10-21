@@ -1,3 +1,4 @@
+import { CARD_PROVIDERS } from "./card-providers.js";
 import { MEDIA_MODULE } from "@waitron/media";
 import { CREDENTIALS_BACKUP_VERIFICATION } from "./credentials-backup-verification.js";
 import { CORE_BACKUP_VERIFICATION } from "./core-backup-verification.js";
@@ -59,6 +60,7 @@ import type { ModuleConfigurationTransfer, WaitronModule } from "@waitron/module
 import {
   PAYMENTS_ALERTS,
   PAYMENTS_CLASSIFICATION,
+  paymentsBackupVerification,
   PAYMENTS_CONFIGURATION_TRANSFER,
   PAYMENTS_CHANGE_SOURCES,
 } from "@waitron/payments";
@@ -241,6 +243,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../payments/drizzle",
     },
     classification: PAYMENTS_CLASSIFICATION,
+    backup: { verification: paymentsBackupVerification(CARD_PROVIDERS) },
     changes: PAYMENTS_CHANGE_SOURCES,
     configurationTransfer: PAYMENTS_CONFIGURATION_TRANSFER,
     alerts: PAYMENTS_ALERTS,

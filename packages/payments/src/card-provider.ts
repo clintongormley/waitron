@@ -38,6 +38,11 @@ export interface AddReaderResult {
 export interface CardProviderContribution {
   readonly providerId: string;
   readonly credentialPurpose: Purpose;
+  /** Parse captured credentials offline; never construct a client or contact the provider. */
+  readonly verifyBackupCredential?: (
+    payload: Readonly<Record<string, string>>,
+    environment: "preproduction" | "production",
+  ) => boolean;
   readonly credentialFields: readonly ProviderCredentialField[];
   readonly readerAdd: ReaderAddMode;
   /** Verify the typed credentials against the provider WITHOUT sealing, and return the merchant name
