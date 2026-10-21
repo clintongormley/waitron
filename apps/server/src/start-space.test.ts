@@ -209,6 +209,22 @@ describe("freeSpaceAtStart", () => {
     expect(readVenueHolder).toHaveBeenCalledWith(venueDir);
   });
 
+  it("judges the holder at the time it reads it, after a slow clean-up", async () => {
+    await touch(staging());
+    await touch(join(logDir, "crash-reports", "holder-frozen-a.json"), 8 * DAY_MS);
+    // The deletions before the holder is read took a minute; the holder beat 50 ms ago.
+    const later = new Date(NOW.getTime() + 60_000);
+    const now = vi.fn(() => NOW);
+    const readVenueHolder = vi.fn(() => {
+      now.mockReturnValue(later);
+      return { ...holder(0), heartbeatAt: new Date(later.getTime() - 50).toISOString() };
+    });
+    const { deps: d } = deps({ now, readVenueHolder });
+    await freeSpaceAtStart(d);
+    expect(existsSync(staging())).toBe(true);
+    expect(existsSync(join(logDir, "crash-reports", "holder-frozen-a.json"))).toBe(false);
+  });
+
   it("deletes when told to, whatever the free space", async () => {
     await touch(rotated(2));
     const { deps: d, log } = deps({ free: 5000, force: true });

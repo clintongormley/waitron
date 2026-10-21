@@ -92,7 +92,9 @@ export async function freeSpaceAtStart(
   }
 
   const holder = deps.readVenueHolder(deps.venueDir);
-  if (holder === null || !isVenueHolderFresh(holder, now)) {
+  // The time is read again: the deletions above can outlast VENUE_HOLDER_STALE_MS, and a live
+  // heartbeat judged against the start of them reads as one from the future.
+  if (holder === null || !isVenueHolderFresh(holder, deps.now())) {
     const stagingDir = join(deps.stateDir, BACKUP_STAGING_DIR);
     for (const name of (await entries(stagingDir, BACKUP_STAGING_DIR, deps.log, failed)) ?? []) {
       if (STAGED_DUMP.test(name)) await remove(join(stagingDir, name), false);
