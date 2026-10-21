@@ -1264,6 +1264,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This alert no longer exists. Refresh the list.",
     es: "Este aviso ya no existe. Actualiza la lista.",
   },
+  "storage.disk_full": {
+    en: "Not saved: the box is out of disk space.",
+    es: "No se ha guardado: el equipo no tiene espacio en disco.",
+  },
+  "clock.unusable": {
+    en: "Not recorded: the box's clock is wrong.",
+    es: "No se ha registrado: la hora del equipo es incorrecta.",
+  },
   "server.internal": {
     en: "Something went wrong, try again",
     es: "Algo salió mal, inténtalo de nuevo",

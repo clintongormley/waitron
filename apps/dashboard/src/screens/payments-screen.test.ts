@@ -1686,6 +1686,37 @@ describe("card payments stuck after a restart", () => {
     expect(listStuckPayments).toHaveBeenCalledTimes(2);
   });
 
+  it("names a full disk the check met rather than the section's generic failure", async () => {
+    expect(codeMessage("storage.disk_full")).not.toBe(codeMessage("server.internal"));
+    const { el } = await mount(
+      stubApi({
+        listStuckPayments: vi.fn().mockResolvedValue(STUCK),
+        resolveStuckPayment: vi.fn().mockRejectedValue({ code: "storage.disk_full" }),
+      }),
+    );
+
+    await confirmResolve(el);
+
+    expect(result(el)!.textContent!.trim()).toBe(
+      `Order 12 · Terrace 3: ${codeMessage("storage.disk_full")}`,
+    );
+  });
+
+  it("keeps the section's generic failure for a check that failed inside the server", async () => {
+    const { el } = await mount(
+      stubApi({
+        listStuckPayments: vi.fn().mockResolvedValue(STUCK),
+        resolveStuckPayment: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      }),
+    );
+
+    await confirmResolve(el);
+
+    expect(result(el)!.textContent!.trim()).toBe(
+      `Order 12 · Terrace 3: ${t("payments.stuck.failed")}`,
+    );
+  });
+
   it("reads a refusal the section has no wording of its own for by its code", async () => {
     const { el } = await mount(
       stubApi({

@@ -863,3 +863,35 @@ it.each(["success", "failure"])(
     expect(save.mock.calls[2]![0]).toBe(current);
   },
 );
+
+it("names a full disk at the bottom of the form and holds no uncertain batch", async () => {
+  expect(codeMessage("storage.disk_full")).not.toBe(codeMessage("server.internal"));
+  const save = vi.fn().mockRejectedValue({ code: "storage.disk_full" });
+  const { el } = await mount({ saveContentTranslations: save });
+  await edit(el, "Draft");
+  button(el, "save").click();
+  await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+      codeMessage("storage.disk_full"),
+    ),
+  );
+  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).not.toContain(
+    t("translations.uncertain"),
+  );
+  expect(button(el, "save").textContent).toContain(t("translations.save"));
+  expect(input(el)?.disabled).toBe(false);
+});
+
+it("still holds the batch as uncertain when a save fails inside the server", async () => {
+  const save = vi.fn().mockRejectedValue({ code: "server.internal" });
+  const { el } = await mount({ saveContentTranslations: save });
+  await edit(el, "Draft");
+  button(el, "save").click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+      t("translations.uncertain"),
+    ),
+  );
+  expect(button(el, "save").textContent).toContain(t("translations.retry_batch"));
+});
