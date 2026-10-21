@@ -7,6 +7,7 @@ import {
   listCustomThemes,
   readThemeInUse,
   saveCustomTheme,
+  setThemeInUse,
   type StoredTheme,
 } from "@waitron/layouts";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
@@ -39,7 +40,7 @@ export interface ThemeAnswer {
   readonly warnings: readonly ThemeWarning[];
 }
 
-/** Takes no transaction: deriving a theme is slow, and runs after the request's transaction ends. */
+/** Takes no transaction: colours are worked out after the request's transaction, which holds the write lock. */
 export function themeAnswerOf(stored: StoredTheme): ThemeAnswer {
   const { id, name, updatedAt, choices } = stored;
   if (choices === null) {
@@ -94,8 +95,12 @@ export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): 
       }
       const name = body.name;
       const theme = requireTheme(body);
+      if (body.inUse !== undefined && typeof body.inUse !== "boolean") {
+        throw new AppError("management.request_invalid", { field: "inUse" });
+      }
+      const inUse = body.inUse === true;
       const stored = await withTransaction(deps.db, (tx) =>
-        createCustomTheme(tx, { managementSessionId, name, theme }),
+        createCustomTheme(tx, { managementSessionId, name, theme, inUse }),
       );
       return c.json(themeAnswerOf(stored), 201);
     }),
@@ -110,6 +115,21 @@ export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): 
         saveCustomTheme(tx, { managementSessionId, id, theme }),
       );
       return c.json(themeAnswerOf(stored), 200);
+    }),
+  );
+
+  app.put("/management-api/theme-in-use", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const body = await readBody(c);
+      const customThemeId = body.customThemeId;
+      if (customThemeId !== null && typeof customThemeId !== "string") {
+        throw new AppError("management.request_invalid", { field: "customThemeId" });
+      }
+      const inUse = await withTransaction(deps.db, (tx) =>
+        setThemeInUse(tx, { managementSessionId, customThemeId }),
+      );
+      return c.json({ inUse }, 200);
     }),
   );
 }

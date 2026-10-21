@@ -25,7 +25,7 @@ export function themeCacheKey(row: { id: string; choices: ThemeChoices }): strin
 
 let cached: { key: string; answer: VenueThemeAnswer } | null = null;
 
-/** Takes no transaction: deriving a theme is slow, and runs after the read's transaction ends. */
+/** Takes no transaction: colours are worked out after the read's transaction, which holds the write lock. */
 export function venueThemeAnswer(inUse: ThemeInUse | null): VenueThemeAnswer {
   if (inUse === null || inUse.choices === null) return WAITRON_THEME_ANSWER;
   const key = themeCacheKey({ id: inUse.id, choices: inUse.choices });
