@@ -122,7 +122,7 @@ The floor's Not sent signal counts both kinds per bill (`readUnsentDrafts`,
 `unsent_draft` (`table-signals.ts:234-239`). A counter order has no party, so it has no draft.
 
 **How a line's unit is known.** A line freezes its unit's printed name and its decimal places,
-`unit_name` and `unit_precision` (`orders.ts:174-176`; written from `item.product.unit.precision`,
+`unit_name` and `unit_precision` (`orders.ts:176-177`; written from `item.product.unit.precision`,
 `packages/catalogue/src/pricing.ts:224`) — not whether the unit weighs or measures. The unit itself
 is `product_units` → `units` (`packages/catalogue/src/schema/units.ts:5-27,40-61`), joined with
 `unitOwnerJoin` so a variant reads its parent's unit, and "A product with no row reads as Each"
@@ -138,8 +138,7 @@ New venues are seeded with `g` (0 places, scale `g`, measure), `kg` (3, `kg`, me
 `measure` (`apps/till/src/widgets/product-name.ts:85-88`).
 
 Existing per-dish counters: the floor's ready chip counts a dish as one when its frozen
-`unit_precision` is above 0, else by its units left to serve, `(quantity − cancelled − served) /
-1000` (`table-signals.ts:96-103`); slice 3's held count counts a dish as one when `unitPrecision`
+`unit_precision` is above 0, else by its fired units left to serve (`table-signals.ts:96-103`); slice 3's held count counts a dish as one when `unitPrecision`
 is above 0, else `active / 1000` (`readHeldCounts`, `order-groups.ts:1536-1571`, counting at
 `:1565-1569`). Neither reads the unit's scale or `measure`, so a 150 g dish (precision 0) counts
 150 in both. The till's draft count says "A weighed or fractional line counts once"
@@ -263,7 +262,7 @@ to 2026-10-02 or 2026-10-07, before this branch.
    keyed by party, reads only `order_groups.state = 'held'` and only open parties
    (`order-groups.ts:1543-1564`); a bill's row needs a count per bill, including a dish held by its
    kitchen item outside any held group. The new reader keeps its arithmetic — active quantity less
-   cancellations, extras not counted, recalled dishes not held (`:1565-1569`) — but decides "one"
+   cancellations, extras not counted, recalled dishes not held (`:1559-1569`) — but decides "one"
    by the unit (Decision 1), where `readHeldCounts` reads only `unitPrecision` (`:1567`). Task 1b
    pins that for one bill holding a party's only held group, of a counted dish and a kg dish, the
    two agree; for a gram dish they differ, and Task 7 records that in the backlog.
@@ -300,7 +299,7 @@ to 2026-10-02 or 2026-10-07, before this branch.
    present on every incoming row (the receiving desk may already open the tab's lines, `:207-275`),
    and on a sent or per-tab row only while (a) the tab's current department is the viewer's
    (`currentDepartmentId`, set by `summarizeTransfers`,
-   `packages/venue-service/src/department-transfers.ts:514,544`, against `sender.departmentId`) and
+   `packages/venue-service/src/department-transfers.ts:511,549`, against `sender.departmentId`) and
    (b) the tab's zone is one the viewer's profile may work in, or none: `readZoneScope(tx, cfg,
    session.device.deviceProfileId)` once, then — only when the scope is not null, as
    `visibleOrders` does (`zone-access.ts:115-121`) — `VENUE_SERVICE.findOrderZones(tx, cfg,
@@ -392,7 +391,7 @@ red is a stop.
     `unit_precision` is null at 1.5 (set by a direct update in the test, as such a row can exist):
     `ordered 1`; a unit with 0 places refuses 1.5 with `quantity.invalid` (assert the code, CLAUDE.md
     §4) — the case that makes "a counted dish by its quantity" safe to divide;
-  - a placed counter order handed over (`markCollected`): only `ordered`;
+  - a `ticket_then_pay` counter order, sent and handed over (`placed("ticket_then_pay", …)`, `apps/server/src/counter-handover.test.ts:105`; handing over refuses a placed order otherwise, `working-order.ts:6841-6860`, `:6872-6881`): only `ordered`;
   - an order with no lines: all zeros;
   - **one read:** for three orders the reader prepares the same number of statements as for one,
     and none for `[]` (the `prepare` spy of `table-signals.test.ts:686-699`).
@@ -415,12 +414,10 @@ red is a stop.
   `apps/server/src/table-signals.test.ts:1-75` imports (`addTabRound`, `placeGroups`, `fireGroup`,
   `serveLine`, `routeProductTo`, `createStation`). There is no made-here fixture: set it by a
   direct `ticket_items` update, as `table-signals.test.ts:207-221` does. The recall fixture is
-  the one `table-signals.test.ts:637-668` uses. A saved draft is written through the draft save
-  path the A773-1 tests use (find it with `git grep -ln "saveDraft\|appendRecalledLine" -- 'apps/server/src/*.test.ts'`).
+  the one `table-signals.test.ts:637-668` uses. A saved draft is written with `saveDraftForTest` (`apps/server/src/testing/draft-command-fixture.ts:24`), as `table-signals.test.ts:2` imports it (as `saveDraft`) and calls it with `billId` and `draftLine(v, "Burger")` (`:240-247`); `saveDraft` requires a bill id (`order-drafts.ts:476`).
 
 - [ ] **Step 1: Write the failing tests** — each name contains "counts":
-  - a party bill with a held group (a counted dish × 2 and a 0.450 kg dish with an extra):
-    `ordered 3, held 3`; the extra adds nothing; `readHeldCounts` for the party also says 3;
+  - a party bill with a held group (a counted dish × 2 carrying an extra, and a 0.450 kg dish — a weighed dish refuses an extra, `extras.unsupported_product`, `working-order.ts:825-834`): `ordered 3, held 3`; the extra adds nothing; `readHeldCounts` for the party also says 3;
   - fired to a station, `queued` then `preparing`: waiting; marked ready: ready; two of three
     served with `serveLine`: `ordered 3, ready 1`; all served: `ordered 3`, nothing else;
   - a dish fired with its extra routed to another station: waiting while the extra is `queued`
@@ -492,8 +489,7 @@ red is a stop.
   - the source's `/sent` and per-tab rows carry the same while the transfer is pending, and after
     a decline;
   - **refusing case, department:** after acceptance the source's `/sent` and per-tab rows have no
-    `counts` key (beside the existing `not.toHaveProperty("lines")`, `:1881`), while the
-    destination, now responsible, sees them on its own rows;
+    `counts` key (beside the existing `not.toHaveProperty("lines")`, `:1881`); the destination lists no row for an accepted transfer on any of the three routes (incoming lists only pending ones, `department-transfers.ts:248-264`; the other two select by the source department, `:590-596`, `:612-648`);
   - **refusing case, zone:** with the transfer pending, the source's `/sent` row has `counts`;
     after `retargetOrderServiceContext(tx, v.cfg, f.tab, f.hidden)` (as `:989-999` does) the
     same `/sent` row is still listed and has no `counts` key;
