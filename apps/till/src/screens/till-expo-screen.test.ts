@@ -624,7 +624,7 @@ describe("till-expo-screen", () => {
       }));
   });
 
-  it("offers Fire, Ready and Away on a kitchen display with Run the pass, through the device's routes", async () => {
+  it("offers Fire without Away on a kitchen display with Run the pass, through the device's routes", async () => {
     const api = stubApi([], {
       getDevicePassScreen: vi.fn().mockResolvedValue(deviceBoard()),
     });
@@ -639,9 +639,8 @@ describe("till-expo-screen", () => {
     root.querySelector<HTMLElement>('[data-fire="co-2"]')!.click();
     await flush(el);
     expect(api.fireDeviceCourse).toHaveBeenCalledWith("wo-1", "co-2");
-    root.querySelector<HTMLElement>('[data-away="co-1"]')!.click();
-    await flush(el);
-    expect(api.markDeviceCourseAway).toHaveBeenCalledWith("wo-1", "co-1");
+    expect(root.querySelector("[data-away]")).toBeNull();
+    expect(api.markDeviceCourseAway).not.toHaveBeenCalled();
     expect(api.fireCourse).not.toHaveBeenCalled();
     expect(api.markCourseAway).not.toHaveBeenCalled();
     expect(root.querySelector("[data-reprint]")).toBeNull();
@@ -1150,14 +1149,14 @@ describe("till-expo-screen", () => {
     }
   });
 
-  it("shows no Fire, Ready or Away without Run the pass, and each of them with it", async () => {
+  it("shows no cooking controls without Run the pass, and Fire and Ready with it", async () => {
     const api = stubApi([threeCourseOrder]);
     const el = await mount({ api, fireControl: "expo", runsPass: false });
     expect(el.shadowRoot!.querySelector(".lever")).toBeNull();
     el.runsPass = true;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('[data-fire="co-2"]')).not.toBeNull();
-    expect(el.shadowRoot!.querySelector('[data-away="co-1"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-away="co-1"]')).toBeNull();
     const notReady = await mount({
       api: stubApi([firedNotReadyOrder]),
       fireControl: "expo",
@@ -1180,7 +1179,7 @@ describe("till-expo-screen", () => {
     }
   });
 
-  it("keeps sent-out dishes visible without lateness on a pass choice", async () => {
+  it("keeps ready dishes and their lateness regardless of a legacy Away stamp", async () => {
     const old = { ...threeCourseOrder.courses[0]!.items[0]!, awayAt: FIRED, queuedAt: FIRED };
     const fresh = {
       ...threeCourseOrder.courses[1]!.items[0]!,
@@ -1191,15 +1190,19 @@ describe("till-expo-screen", () => {
       courses: [{ ...threeCourseOrder.courses[0]!, away: false, items: [old, fresh] }],
     };
     const el = await mount({ api: passApi([order]), now: Date.parse("2026-08-17T11:01:00.000Z") });
-    expect(el.shadowRoot!.querySelector('[data-item="ti-0"]')!.textContent).toContain("Sent out");
-    expect(el.shadowRoot!.querySelector('[data-item="ti-0"] [data-forgotten]')).toBeNull();
-    expect(orderCard(el, 5)!.classList.contains("age-forgotten")).toBe(false);
-    expect(el.shadowRoot!.querySelector(".overdue-count")).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-item="ti-0"]')!.textContent).not.toContain(
+      t("expo.sent_out"),
+    );
+    expect(el.shadowRoot!.querySelector('[data-item="ti-0"] [data-forgotten]')).not.toBeNull();
+    expect(orderCard(el, 5)!.classList.contains("age-forgotten")).toBe(true);
+    expect(el.shadowRoot!.querySelector(".overdue-count")).not.toBeNull();
   });
 
-  it("keeps an away section on a pass choice but offers no lever", async () => {
+  it("keeps a ready section on a pass choice without a sent-out label or lever", async () => {
     const el = await mount({ api: passApi([withAwayCourse]), fireControl: "expo" });
-    expect(el.shadowRoot!.querySelector('[data-item="ti-4"]')!.textContent).toContain("Sent out");
+    expect(el.shadowRoot!.querySelector('[data-item="ti-4"]')!.textContent).not.toContain(
+      t("expo.sent_out"),
+    );
     expect(el.shadowRoot!.querySelector('[data-course="co-4"] .lever')).toBeNull();
   });
 
@@ -1225,14 +1228,14 @@ describe("till-expo-screen", () => {
     el.runsPass = true;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('[data-fire="co-2"]')).not.toBeNull();
-    expect(el.shadowRoot!.querySelector('[data-away="co-1"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-away="co-1"]')).toBeNull();
     el.fireControl = "kitchen";
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('[data-fire="co-2"]')).toBeNull();
-    expect(el.shadowRoot!.querySelector('[data-away="co-1"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-away="co-1"]')).toBeNull();
   });
 
-  it("never marks a course Done after a legacy Away", async () => {
+  it("never marks a course Done or Away for ready food", async () => {
     const passOrder = {
       ...threeCourseOrder,
       courses: [{ ...threeCourseOrder.courses[1]!, allReady: true }],
@@ -1248,13 +1251,13 @@ describe("till-expo-screen", () => {
       },
     );
     const el = await mount({ api });
-    el.shadowRoot!.querySelector<HTMLElement>('[data-away="co-1"]')!.click();
+    expect(el.shadowRoot!.querySelector('[data-away="co-1"]')).toBeNull();
     await flush(el);
-    expect(api.markCourseAway).toHaveBeenCalledWith("wo-1", "co-1");
+    expect(api.markCourseAway).not.toHaveBeenCalled();
     expect(api.markDevicePassDone).not.toHaveBeenCalled();
   });
 
-  it("never marks a group Done after a legacy Away", async () => {
+  it("never marks a group Done or Away for ready food", async () => {
     const passOrder = {
       ...threeCourseOrder,
       party: { id: "party-1", revision: 3 },
@@ -1284,9 +1287,9 @@ describe("till-expo-screen", () => {
       },
     );
     const el = await mount({ api });
-    el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
+    expect(el.shadowRoot!.querySelector('[data-group-away="g-3"]')).toBeNull();
     await flush(el);
-    expect(api.markGroupAway).toHaveBeenCalled();
+    expect(api.markGroupAway).not.toHaveBeenCalled();
     expect(api.markDevicePassDone).not.toHaveBeenCalled();
   });
 
@@ -1839,11 +1842,11 @@ describe("till-expo-screen", () => {
     expect(el.shadowRoot!.querySelector('[data-away="co-3"]')).toBeNull();
   });
 
-  it("a FIRED, all-ready course shows the En-camino (away) lever", async () => {
+  it("a fired all-ready course stays visible without a dispatch lever", async () => {
     const el = await mount({ api: stubApi(), fireControl: "expo" });
     const away = el.shadowRoot!.querySelector<HTMLElement>('[data-away="co-1"]');
-    expect(away).not.toBeNull();
-    expect(away!.textContent).toContain(t("expo.away"));
+    expect(away).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-item="ti-1"]')).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[data-ready="co-1"]')).toBeNull();
   });
 
@@ -1853,11 +1856,11 @@ describe("till-expo-screen", () => {
     expect(nullCourse.querySelector(".lever")).toBeNull();
   });
 
-  it("a fully-away course drops off the board; its live sibling stays", async () => {
+  it("a legacy-away course and its sibling both stay on the board", async () => {
     const el = await mount({ api: stubApi([withAwayCourse]), fireControl: "expo" });
     const card = orderCard(el, 8)!;
-    expect(card.querySelector('[data-course="co-4"]')).toBeNull(); // away → hidden
-    expect(card.querySelector('[data-course="co-5"]')).not.toBeNull(); // live → shown
+    expect(card.querySelector('[data-course="co-4"]')).not.toBeNull();
+    expect(card.querySelector('[data-course="co-5"]')).not.toBeNull();
   });
 
   it("clicking Fire calls fireCourse(orderId, courseId) then reloads the queue", async () => {
@@ -1878,21 +1881,21 @@ describe("till-expo-screen", () => {
     expect(api.getExpoQueue).toHaveBeenCalledTimes(2);
   });
 
-  it("clicking En camino calls markCourseAway(orderId, courseId) then reloads", async () => {
+  it("ready food has no Away action or dispatch write", async () => {
     const api = stubApi();
     const el = await mount({ api, fireControl: "expo" });
-    el.shadowRoot!.querySelector<HTMLElement>('[data-away="co-1"]')!.click();
+    expect(el.shadowRoot!.querySelector('[data-away="co-1"]')).toBeNull();
     await flush(el);
-    expect(api.markCourseAway).toHaveBeenCalledWith("wo-1", "co-1");
-    expect(api.getExpoQueue).toHaveBeenCalledTimes(2);
+    expect(api.markCourseAway).not.toHaveBeenCalled();
+    expect(api.getExpoQueue).toHaveBeenCalledTimes(1);
   });
 
   it("a failed action still reloads the queue (reconciling to server truth)", async () => {
-    const api = stubApi(undefined, {
-      markCourseAway: vi.fn().mockRejectedValue({ code: "course.not_found" }),
+    const api = stubApi([firedNotReadyOrder], {
+      bumpCourseReady: vi.fn().mockRejectedValue({ code: "course.not_found" }),
     });
     const el = await mount({ api, fireControl: "expo" });
-    el.shadowRoot!.querySelector<HTMLElement>('[data-away="co-1"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-ready="co-3"]')!.click();
     await flush(el);
     expect(api.getExpoQueue).toHaveBeenCalledTimes(2);
   });
@@ -2272,27 +2275,29 @@ describe("till-expo-screen — a seated party's groups", () => {
     const el = await mount({ api: stubApi([reordered]), fireControl: "expo" });
     expect(sections(el).map((s) => s.dataset.groupSection)).toEqual([
       "none",
+      "g-1",
       "g-5",
       "g-2",
       "g-3",
       "g-4",
     ]);
-    expect(sections(el)[1]!.querySelector(".course-head")!.textContent).toContain(
+    expect(sections(el)[2]!.querySelector(".course-head")!.textContent).toContain(
       `${groupName(5)} · Terrace 7`,
     );
   });
 
-  it("shows the lines with no group first, then each group by position; a group already away drops off", async () => {
+  it("shows the lines with no group first, then each group by position; legacy Away never removes one", async () => {
     const el = await mount({ api: partyApi(), fireControl: "expo" });
     expect(sections(el).map((s) => s.dataset.groupSection)).toEqual([
       "none",
+      "g-1",
       "g-2",
       "g-3",
       "g-4",
       "g-5",
     ]);
     expect(sections(el)[0]!.querySelector(".course-head")).toBeNull();
-    expect(sections(el)[1]!.querySelector(".course-head")!.textContent).toContain(groupName(2));
+    expect(sections(el)[2]!.querySelector(".course-head")!.textContent).toContain(groupName(2));
     expect(orderCard(el, 9)!.querySelector("[data-course]")).toBeNull();
   });
 
@@ -2306,16 +2311,17 @@ describe("till-expo-screen — a seated party's groups", () => {
     expect(held[0]!.querySelector('[data-item="it-steak"]')!.classList.contains("held")).toBe(true);
   });
 
-  it("offers Ready on a fired group not all ready, Away on one all ready, and nothing on the lines with no group", async () => {
+  it("offers Ready only on a fired group not all ready, with no action on ready or ungrouped food", async () => {
     const el = await mount({ api: partyApi(), fireControl: "expo" });
-    const [none, preparing, plated] = sections(el);
+    const [none, , preparing, plated] = sections(el);
     expect(none!.querySelector(".lever")).toBeNull();
     const ready = preparing!.querySelector<HTMLElement>('[data-group-ready="g-2"]')!;
     expect(ready.textContent).toContain(t("expo.group_ready"));
     expect(ready.getAttribute("aria-label")).toBe(`${t("expo.group_ready")} ${groupName(2)}`);
     expect(preparing!.querySelector("[data-group-away]")).toBeNull();
     const away = plated!.querySelector<HTMLElement>('[data-group-away="g-3"]')!;
-    expect(away.textContent).toContain(t("expo.away"));
+    expect(away).toBeNull();
+    expect(plated!.querySelector('[data-item="it-salad"]')).not.toBeNull();
     expect(plated!.querySelector("[data-group-ready]")).toBeNull();
   });
 
@@ -2327,12 +2333,12 @@ describe("till-expo-screen — a seated party's groups", () => {
   });
 
   it.each(["waiter", "kitchen"] as const)(
-    "under fire control %s, offers no Fire on a held group but keeps Ready and Away",
+    "under fire control %s, offers no Fire on a held group but keeps Ready without Away",
     async (fireControl) => {
       const el = await mount({ api: partyApi(), fireControl });
       expect(el.shadowRoot!.querySelector("[data-group-fire]")).toBeNull();
       expect(el.shadowRoot!.querySelector('[data-group-ready="g-2"]')).not.toBeNull();
-      expect(el.shadowRoot!.querySelector('[data-group-away="g-3"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-group-away="g-3"]')).toBeNull();
     },
   );
 
@@ -2341,10 +2347,16 @@ describe("till-expo-screen — a seated party's groups", () => {
     ["Away", "data-group-away", "g-3", "markGroupAway"],
     ["Fire", "data-group-fire", "g-4", "fireGroup"],
   ] as const)(
-    "%s calls the group verb with a fresh submission id per press and the card's revision, then reloads",
+    "%s uses a fresh submission and card revision, or stays absent when retired",
     async (_name, attribute, groupId, verb) => {
       const api = partyApi();
       const el = await mount({ api, fireControl: "expo" });
+      if (_name === "Away") {
+        expect(el.shadowRoot!.querySelector(`[${attribute}="${groupId}"]`)).toBeNull();
+        expect(api.markGroupAway).not.toHaveBeenCalled();
+        expect(api.getExpoQueue).toHaveBeenCalledTimes(1);
+        return;
+      }
       el.shadowRoot!.querySelector<HTMLElement>(`[${attribute}="${groupId}"]`)!.click();
       await flush(el);
       el.shadowRoot!.querySelector<HTMLElement>(`[${attribute}="${groupId}"]`)!.click();
@@ -2364,14 +2376,14 @@ describe("till-expo-screen — a seated party's groups", () => {
 
   it("on party.out_of_date it reloads and says the table changed, and never sends again on its own", async () => {
     const api = partyApi({
-      markGroupAway: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
+      bumpGroupReady: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
     });
     const el = await mount({ api, fireControl: "expo" });
     expect(tableChanged(el)).toBeNull();
-    el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-ready="g-2"]')!.click();
     await flush(el);
     await flush(el);
-    expect(api.markGroupAway).toHaveBeenCalledOnce();
+    expect(api.bumpGroupReady).toHaveBeenCalledOnce();
     expect(api.getExpoQueue).toHaveBeenCalledTimes(2);
     expect(tableChanged(el)!.textContent).toContain(t("station.table_changed"));
     expect(tableChanged(el)!.getAttribute("role")).toBe("status");
@@ -2399,10 +2411,10 @@ describe("till-expo-screen — a seated party's groups", () => {
 
   it("names the table that changed, and never says where it changed", async () => {
     const api = partyApi({
-      markGroupAway: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
+      bumpGroupReady: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
     });
     const el = await mount({ api, fireControl: "expo" });
-    el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-ready="g-2"]')!.click();
     await flush(el);
     const text = tableChanged(el)!.textContent!.replace(/\s+/g, " ").trim();
     expect(text).toBe(staleNotice("Mesa 4"));
@@ -2413,33 +2425,43 @@ describe("till-expo-screen — a seated party's groups", () => {
     const unlabelled: ExpoOrder = { ...partyOrder };
     delete unlabelled.tableLabel;
     const api = partyApi({
-      markGroupAway: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
+      bumpGroupReady: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
     });
     (api.getExpoQueue as ReturnType<typeof vi.fn>).mockResolvedValue([unlabelled]);
     const el = await mount({ api, fireControl: "expo" });
-    el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-ready="g-2"]')!.click();
     await flush(el);
     expect(tableChanged(el)!.textContent!.replace(/\s+/g, " ").trim()).toBe(staleNotice("#9"));
   });
 
   it("the next successful read after the one that showed it clears the notice", async () => {
     const api = partyApi({
-      markGroupAway: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
+      bumpGroupReady: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
     });
     (api.getExpoQueue as ReturnType<typeof vi.fn>).mockResolvedValue([
-      threeCourseOrder,
+      {
+        ...threeCourseOrder,
+        courses: threeCourseOrder.courses.map((course) =>
+          course.courseId === "co-1"
+            ? {
+                ...course,
+                items: course.items.map((item) => ({ ...item, state: "preparing" as const })),
+              }
+            : course,
+        ),
+      },
       partyOrder,
     ]);
     const el = await mount({ api, fireControl: "expo" });
-    el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-ready="g-2"]')!.click();
     await flush(el);
     expect(tableChanged(el)).not.toBeNull();
-    const counterAway = () => orderCard(el, 5)!.querySelector<HTMLElement>('[data-away="co-1"]')!;
+    const counterReady = () => orderCard(el, 5)!.querySelector<HTMLElement>('[data-ready="co-1"]')!;
     (api.getExpoQueue as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new TypeError("offline"));
-    counterAway().click();
+    counterReady().click();
     await flush(el);
     expect(tableChanged(el)).not.toBeNull();
-    counterAway().click();
+    counterReady().click();
     await flush(el);
     expect(tableChanged(el)).toBeNull();
   });
@@ -2447,7 +2469,17 @@ describe("till-expo-screen — a seated party's groups", () => {
   it("a counter order beside a party's keeps its course sections and course levers", async () => {
     const api = partyApi();
     (api.getExpoQueue as ReturnType<typeof vi.fn>).mockResolvedValue([
-      threeCourseOrder,
+      {
+        ...threeCourseOrder,
+        courses: threeCourseOrder.courses.map((course) =>
+          course.courseId === "co-1"
+            ? {
+                ...course,
+                items: course.items.map((item) => ({ ...item, state: "preparing" as const })),
+              }
+            : course,
+        ),
+      },
       partyOrder,
     ]);
     const el = await mount({ api, fireControl: "expo" });
@@ -2456,9 +2488,9 @@ describe("till-expo-screen — a seated party's groups", () => {
       [...counter.querySelectorAll<HTMLElement>("[data-course]")].map((c) => c.dataset.course),
     ).toEqual(["none", "co-1", "co-2"]);
     expect(counter.querySelector("[data-group-section]")).toBeNull();
-    counter.querySelector<HTMLElement>('[data-away="co-1"]')!.click();
+    counter.querySelector<HTMLElement>('[data-ready="co-1"]')!.click();
     await flush(el);
-    expect(api.markCourseAway).toHaveBeenCalledWith("wo-1", "co-1");
+    expect(api.bumpCourseReady).toHaveBeenCalledWith("wo-1", "co-1");
     expect(api.markGroupAway).not.toHaveBeenCalled();
   });
 
@@ -2511,7 +2543,7 @@ describe("till-expo-screen — a seated party's groups", () => {
     ["Away", "data-group-away", "g-3", "markDeviceGroupAway", "markGroupAway"],
     ["Fire", "data-group-fire", "g-4", "fireDeviceGroup", "fireGroup"],
   ] as const)(
-    "a kitchen display's %s goes through the device's group route",
+    "a kitchen display's %s uses its device route, or stays absent when retired",
     async (_name, attribute, groupId, verb, sessionVerb) => {
       const { api, board } = devicePartyApi();
       const el = await mount({
@@ -2521,6 +2553,13 @@ describe("till-expo-screen — a seated party's groups", () => {
         runsPass: true,
         initialDevicePass: board,
       });
+      if (_name === "Away") {
+        expect(el.shadowRoot!.querySelector(`[${attribute}="${groupId}"]`)).toBeNull();
+        expect(api.markDeviceGroupAway).not.toHaveBeenCalled();
+        expect(api.markGroupAway).not.toHaveBeenCalled();
+        expect(api.getDevicePassScreen).not.toHaveBeenCalled();
+        return;
+      }
       el.shadowRoot!.querySelector<HTMLElement>(`[${attribute}="${groupId}"]`)!.click();
       await flush(el);
       const stubs = api as unknown as Record<string, ReturnType<typeof vi.fn>>;

@@ -325,7 +325,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on a populated pass board (all three levers, both age extremes)", async () => {
+  it("has no violations on a populated pass board (Fire and Ready, both age extremes)", async () => {
     const { el, host } = await mountWidget<TillExpoScreen>(
       "till-expo-screen",
       { api: stubApi(), fireControl: "expo", runsPass: true },
@@ -350,7 +350,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
   it("has no violations on a party's groups with the table-changed notice", async () => {
     const api = {
       getExpoQueue: vi.fn().mockResolvedValue([partyOrder]),
-      markGroupAway: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
+      bumpGroupReady: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
       reprintOrder: vi.fn().mockResolvedValue(undefined),
     } as unknown as TillApi;
     const { el, host } = await mountWidget<TillExpoScreen>(
@@ -359,7 +359,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
       theme,
     );
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-ready="g-2"]')!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-table-changed]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-group-held]")).not.toBeNull();

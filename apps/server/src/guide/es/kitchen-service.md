@@ -63,7 +63,8 @@ persona.
 
 Una cuenta cobrada puede tener comida pendiente de servir. El pase y su monitor conservan esa
 comida hasta que la marques como servida o termines el servicio de la mesa. El pase no tiene una
-acción Hecho aparte. Si las mesas se han
+acción Hecho ni En camino aparte. Los platos listos conservan su estado Listo y los avisos de
+retraso mientras esperan a que los sirvas. Si las mesas se han
 unido a otro grupo de comensales, sus cuentas cobradas siguen visibles hasta que termine el grupo
 que las reúne.
 

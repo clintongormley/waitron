@@ -474,7 +474,6 @@ export class TillExpoScreen extends LitElement {
       this.fireControl,
     ]),
   );
-  /** Decides who FIRES a held course or group; the ready/away levers are the pass's own regardless. */
   @property() fireControl: FireControlMode = "waiter";
   /** Injectable clock for age classification; unset falls back to the {@link #clock}'s ticked time. */
   @property({ attribute: false }) now?: number;
@@ -486,7 +485,6 @@ export class TillExpoScreen extends LitElement {
   @property({ attribute: false }) initialDevicePass?: DevicePassScreen;
   /** A kitchen display's title. */
   @property({ attribute: false }) deviceName?: string;
-  /** The profile's "Run the pass": draws Fire, Ready and Away. */
   @property({ type: Boolean }) runsPass = false;
   @property({ type: Boolean }) monitor = false;
   @property({ attribute: false }) initialDevicePassMonitor?: DevicePassMonitor;
@@ -510,7 +508,7 @@ export class TillExpoScreen extends LitElement {
   #request = 0;
   #appliedRequest = 0;
   /**
-   * UNLIKE the fire/ready/away levers, a failed reprint is not swallowed: it changes no order state, so a
+   * Unlike cooking actions, a failed reprint is not swallowed: it changes no order state, so a
    * reload reconciles nothing and a silent failure would leave the expediter no signal.
    */
   @state() private reprintErrorCode?: string;
@@ -658,8 +656,6 @@ export class TillExpoScreen extends LitElement {
     return this.isConnected && this.#boardId() === boardId;
   }
 
-  /** At a till a rejected call (a race, an already-dispatched course) is SWALLOWED; the reload
-   * converges the board on server truth. A kitchen display also says why. */
   async #act(order: ExpoOrder, call: () => Promise<void>): Promise<void> {
     const boardId = this.#boardId();
     this.leverError = undefined;
@@ -921,15 +917,11 @@ export class TillExpoScreen extends LitElement {
   }
 
   #visibleCourses(order: ExpoOrder): ExpoCourse[] {
-    return order.courses
-      .filter((course) => this.#isPass() || !course.away)
-      .sort((a, b) => courseOrder(a) - courseOrder(b));
+    return [...order.courses].sort((a, b) => courseOrder(a) - courseOrder(b));
   }
 
   #visibleGroups(order: ExpoOrder): ExpoGroup[] {
-    return (order.groups ?? [])
-      .filter((group) => this.#isPass() || !group.away)
-      .sort((a, b) => groupOrder(a) - groupOrder(b));
+    return [...(order.groups ?? [])].sort((a, b) => groupOrder(a) - groupOrder(b));
   }
 
   #groupSection(order: ExpoOrder, party: QueueParty, group: ExpoGroup): TemplateResult {
@@ -948,13 +940,12 @@ export class TillExpoScreen extends LitElement {
             </div>`
       }
       <ul class="items">
-        ${group.items.map((item) => html`<li>${this.#item(item, this.#isPass())}</li>`)}
+        ${group.items.map((item) => html`<li>${this.#item(item)}</li>`)}
       </ul>
       ${group.groupId === null ? nothing : this.#groupLever(order, party, group, group.groupId, name)}
     </div>`;
   }
 
-  /** The course lever's shape, one group at a time, through the group verbs. */
   #groupLever(
     order: ExpoOrder,
     party: QueueParty,
@@ -962,7 +953,7 @@ export class TillExpoScreen extends LitElement {
     groupId: string,
     name: string,
   ): TemplateResult | typeof nothing {
-    if (!this.#drawsLevers() || (this.#isPass() && group.away)) return nothing;
+    if (!this.#drawsLevers()) return nothing;
     if (group.state === "held") {
       if (this.fireControl !== "expo") return nothing;
       return html`<button
@@ -979,21 +970,7 @@ export class TillExpoScreen extends LitElement {
         ? (group as WatcherGroup).allReady
         : group.items.every((item) => item.state === "ready")
     ) {
-      return html`<button
-        class="lever away"
-        data-group-away=${groupId}
-        aria-label=${`${t("expo.away")} ${name}`}
-        @click=${() => {
-          void this.#groupAct(order, party, async (command) => {
-            const result = this.deviceMode
-              ? await this.api.markDeviceGroupAway(party.id, groupId, command)
-              : await this.api.markGroupAway(party.id, groupId, command);
-            return result;
-          });
-        }}
-      >
-        ${t("expo.away")}
-      </button>`;
+      return nothing;
     }
     return html`<button
       class="lever ready"
@@ -1014,7 +991,7 @@ export class TillExpoScreen extends LitElement {
     return html`<div class="course" data-course=${course.courseId ?? "none"}>
       ${course.courseName ? html`<div class="course-head">${course.courseName}</div>` : nothing}
       <ul class="items">
-        ${course.items.map((item) => html`<li>${this.#item(item, this.#isPass())}</li>`)}
+        ${course.items.map((item) => html`<li>${this.#item(item)}</li>`)}
       </ul>
       ${this.#lever(order, course)}
     </div>`;
@@ -1022,9 +999,9 @@ export class TillExpoScreen extends LitElement {
 
   /** A FORGOTTEN item is flagged with a text label, not a second border colour, which would compete with
    *  the item's own kitchen-state border for the same CSS property. */
-  #item(item: ExpoItem, watcher = false): TemplateResult {
+  #item(item: ExpoItem): TemplateResult {
     const held = item.firedAt === null;
-    const forgotten = !(watcher && item.awayAt !== null) && this.#itemBand(item) === "forgotten";
+    const forgotten = this.#itemBand(item) === "forgotten";
     const label = dishLine(
       { quantity: item.qty, unitName: item.unitName, soldInEach: item.soldInEach },
       item.name,
@@ -1034,7 +1011,6 @@ export class TillExpoScreen extends LitElement {
         <span class="item-name">${label}</span>
         <span class="item-station">${item.stationName}</span>
         <span class="item-state">${t(`station.state.${item.state}` as const)}</span>
-        ${watcher && item.awayAt !== null ? html`<span>${t("expo.sent_out")}</span>` : nothing}
         ${
           forgotten
             ? html`<span class="item-forgotten-flag" data-forgotten
@@ -1094,12 +1070,8 @@ export class TillExpoScreen extends LitElement {
     </span>`;
   }
 
-  /**
-   * The null (courseless) course has no per-course route, so no lever. The branches are explicit because
-   * Lit fixes an attribute NAME at template-compile time, so one binding cannot name three attributes.
-   */
   #lever(order: ExpoOrder, course: ExpoCourse): TemplateResult | typeof nothing {
-    if (!this.#drawsLevers() || (this.#isPass() && course.away)) return nothing;
+    if (!this.#drawsLevers()) return nothing;
     if (course.courseId === null) return nothing;
     const courseId = course.courseId;
     const name = course.courseName ?? "";
@@ -1119,20 +1091,7 @@ export class TillExpoScreen extends LitElement {
         ? (course as WatcherCourse).allReady
         : course.items.every((item) => item.state === "ready")
     ) {
-      return html`<button
-        class="lever away"
-        data-away=${courseId}
-        aria-label=${`${t("expo.away")} ${name}`}
-        @click=${() => {
-          void this.#act(order, async () => {
-            await (this.deviceMode
-              ? this.api.markDeviceCourseAway(order.orderId, courseId)
-              : this.api.markCourseAway(order.orderId, courseId));
-          });
-        }}
-      >
-        ${t("expo.away")}
-      </button>`;
+      return nothing;
     }
     return html`<button
       class="lever ready"
@@ -1162,11 +1121,7 @@ export class TillExpoScreen extends LitElement {
     const sections =
       order.party === undefined ? this.#visibleCourses(order) : this.#visibleGroups(order);
     return worstBand(
-      sections.flatMap((section) =>
-        section.items
-          .filter((item) => !this.#isPass() || item.awayAt === null)
-          .map((item) => this.#itemBand(item)),
-      ),
+      sections.flatMap((section) => section.items.map((item) => this.#itemBand(item))),
     );
   }
 
