@@ -516,18 +516,6 @@ its list does include `color()`. **Next action:** decide whether the token rule 
 as components, then make the guard and both documents agree. Whoever picks up the next screen should
 settle this first, because every screen after it inherits the answer.
 
-## Also open, and product-wide: the primary blue fails the accessibility contrast bar as text on the page background, in the light theme
-
-**Also open, and product-wide: the primary blue fails the accessibility contrast bar as text on the
-page background, in the light theme.** Light `--wt-color-primary` (`#1f6feb`) on `--wt-color-bg`
-(`#f7f7f8`) is 4.33 to 1, under the 4.5 to 1 WCAG AA minimum for normal text
-(`packages/ui-core/src/tokens/colors.css`). The dark theme is fine (`#4c8dff` on `#101216`, 5.86 to
-1), and so is the same blue on a card or modal surface (4.63 to 1 on white). The `*.a11y.test.ts`
-suites run axe's full default ruleset, but axe only sees a pairing some mounted component paints;
-nothing enumerates the tokens against each other. **Next action:** an owner colour call — darken the
-light theme's primary until it clears 4.5 to 1 as text, or rule that the token is never text on the
-page background and add a check that says so.
-
 ## The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25)
 
 - **The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25).**

@@ -3264,8 +3264,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Two icons painted in the brand colour sit, in one state each, on a fill no contrast rule checks
   them against (A841 slice 4).** The till's card-waiting spinner on `--wt-color-surface-sunken`
-  (Waitron's light blue measured 3.28:1 there; a venue theme could go under 3:1), and the data
-  table's column-chooser eye icon while its row is dragged, on `--wt-color-surface-lifted`
+  (Waitron's light blue is 3.28:1 there by the WCAG formula, per
+  `docs/superpowers/plans/2026-10-21-a841-4-primary-text.md`; a venue theme could go under 3:1),
+  and the data table's column-chooser eye icon while its row is dragged, on `--wt-color-surface-lifted`
   (`packages/ui/src/components/wt-data-table.ts:684-688`; read, not measured). The spinner is marked
   decorative beside text saying what is happening, so WCAG 1.4.11 may not ask for 3:1 at all. Decide
   whether the theme's contrast rules should cover either fill.
@@ -4650,14 +4651,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   as well as components, then make the guard and both documents agree. Whoever picks up the next
   screen should settle this first, because every screen after it inherits the answer.
   [Detail](backlog/dashboard.md#open-and-it-bites-this-work-first-two-documents-state-the-component-rules-and-they-have-drifted)
-
-- **Also open, and product-wide: the primary blue fails the accessibility contrast bar as text on
-  the page background, in the light theme.** Light `--wt-color-primary` (`#1f6feb`) on
-  `--wt-color-bg` (`#f7f7f8`) is 4.33 to 1, under the 4.5 to 1 WCAG AA minimum for normal text
-  (`packages/ui-core/src/tokens/colors.css`). **Next action:** an owner colour call — darken the
-  light theme's primary until it clears 4.5 to 1 as text, or rule that the token is never text on
-  the page background and add a check that says so.
-  [Detail](backlog/dashboard.md#also-open-and-product-wide-the-primary-blue-fails-the-accessibility-contrast-bar-as-text-on-the-page-background-in-the-light-theme)
 
 - **Nothing stops the next screen styling `wt-data-table` cell markup with a class.** A check that
   compares the class names a screen's own stylesheet styles against the class names it puts inside
