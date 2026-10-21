@@ -44,6 +44,18 @@ export function overLimitText(limit: string): string {
   return t("sale.over_simplified_limit").replace("{amount}", () => formatMoney(limit, locale));
 }
 
+/** `clockAt`'s date in the reading's own offset, the one the record would carry, never the till's
+ * own time zone. */
+export function clockUnusableText(clockAt: string, offsetMinutes: number): string {
+  const date = new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.parse(clockAt) + offsetMinutes * 60_000));
+  return t("sale.clock_unusable").replace("{date}", () => date);
+}
+
 export function differentPeopleText(limit: string): string {
   return t("table.confirm_different_people").replace("{amount}", () => formatMoney(limit, locale));
 }

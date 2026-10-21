@@ -10050,6 +10050,115 @@ describe("till-app", () => {
     expect(banner.textContent).toContain(t("sale.refused"));
   });
 
+  describe("a full disk, a card charged but not recorded, and a wrong clock on the counter's pay", () => {
+    const diskFull = { code: "storage.disk_full", status: 507 };
+
+    async function payCash(refusal: object) {
+      const { el } = await mountApp({ recordSale: vi.fn().mockRejectedValue(refusal) });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      return el.shadowRoot!.querySelector('[role="alert"]')!.textContent!;
+    }
+
+    async function payReader(refusal: object) {
+      const { el } = await mountApp({ pay: vi.fn().mockRejectedValue(refusal) });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "1");
+      await el.updateComplete;
+      emit(c, "collect-card", {});
+      await flush(el);
+      return el.shadowRoot!.querySelector('[role="alert"]')!.textContent!;
+    }
+
+    it("a cash sale refused for a full disk says not to take payment", async () => {
+      const text = await payCash(diskFull);
+      expect(text).toContain(t("sale.disk_full"));
+      expect(text).not.toContain(codeMessage("storage.disk_full"));
+    });
+
+    it("a reader card pay refused for a full disk says not to take payment", async () => {
+      const text = await payReader(diskFull);
+      expect(text).toContain(t("sale.disk_full"));
+      expect(text).not.toContain(codeMessage("storage.disk_full"));
+      expect(text).not.toContain(t("sale.disk_full_manual_card"));
+    });
+
+    it("an Otro datáfono sale refused for a full disk adds the card advice", async () => {
+      const { el } = await mountApp({ recordSale: vi.fn().mockRejectedValue(diskFull) });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "confirm-payment", { method: "card", amount: "5", externalRef: "OP-4417" });
+      await flush(el);
+      const text = el.shadowRoot!.querySelector('[role="alert"]')!.textContent!;
+      expect(text).toContain(t("sale.disk_full_manual_card"));
+      expect(t("sale.disk_full_manual_card")).toContain(
+        "Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+      );
+    });
+
+    it("a card charged but not recorded for a full disk names the disk", async () => {
+      const text = await payReader({
+        code: "sale.charged_not_recorded",
+        workingOrderId: "wo-1",
+        reason: "disk_full",
+        status: 507,
+      });
+      expect(text).toContain(t("sale.charged_disk_full"));
+    });
+
+    it("a card charged but not recorded for another reason does not name the disk", async () => {
+      const text = await payReader({
+        code: "sale.charged_not_recorded",
+        workingOrderId: "wo-1",
+        reason: "something_else",
+        status: 507,
+      });
+      expect(text).toContain(codeMessage("sale.charged_not_recorded"));
+      expect(text).not.toContain(t("sale.charged_disk_full"));
+    });
+
+    it("a wrong clock shows the date the box's clock reads", async () => {
+      expect(currentLocale()).toBe("es-ES");
+      const text = await payReader({
+        code: "clock.unusable",
+        clockAt: "2001-01-01T11:00:00.000Z",
+        offsetMinutes: 60,
+        status: 409,
+      });
+      expect(text).toContain("01/01/2001");
+      expect(text).not.toContain(t("sale.refused"));
+    });
+
+    it.each([
+      [0, "27/10/2024"],
+      [60, "28/10/2024"],
+    ])(
+      "a wrong clock at offset %i shows the date in the reading's own offset (%s)",
+      async (offsetMinutes, date) => {
+        const text = await payCash({
+          code: "clock.unusable",
+          clockAt: "2024-10-27T23:30:00.000Z",
+          offsetMinutes,
+          status: 409,
+        });
+        expect(text).toContain(date);
+      },
+    );
+
+    it("a wrong clock without a reading shows the code table's sentence", async () => {
+      const text = await payCash({
+        code: "clock.unusable",
+        clockAt: "2001-01-01T11:00:00.000Z",
+        status: 409,
+      });
+      expect(text).toContain(codeMessage("clock.unusable"));
+    });
+  });
+
   it("still says to retry when the refusal is an ordinary one", async () => {
     // The control in the other direction: without it, wiring every refusal to `sale.refused` would
     // pass the two cases above while telling an operator to stop for a fault a retry would clear.

@@ -63,6 +63,7 @@ import {
   toScale,
 } from "@waitron/shared";
 import {
+  clockUnusableText,
   countText,
   currentLocale,
   differentPeopleText,
@@ -1235,6 +1236,7 @@ type CounterError =
   | { excess: string; lineChange?: true }
   /** An order past the simplified-invoice limit, `overLimit` being the limit. */
   | { overLimit: string }
+  | { clockUnusable: { clockAt: string; offsetMinutes: number } }
   | { unsentBill: BillUnsent }
   | { takenOver: string; unsent?: true }
   | { partyChanged: PartyChange }
@@ -1338,6 +1340,8 @@ function errorText(
       >`;
   }
   if ("overLimit" in error) return overLimitText(error.overLimit);
+  if ("clockUnusable" in error)
+    return clockUnusableText(error.clockUnusable.clockAt, error.clockUnusable.offsetMinutes);
   if ("billPayments" in error)
     return [
       t("table.bill_to_pay").replace("{amount}", () =>
@@ -1446,6 +1450,28 @@ class ZoneOfferIndex {
         (offer !== undefined && !this.sendable.has(offer.menuId) ? "period_ended" : undefined)
       );
     });
+  }
+}
+
+/** A sale refused for a full disk, a card charged but not recorded, or a wrong clock, in the money
+ * surface's own words. `manualCard`: the tender is a card already charged on a terminal the box does
+ * not talk to. */
+function saleRefusalOf(error: unknown, tender: { manualCard: boolean }): CounterError | undefined {
+  const refusal = error as
+    { code?: string; reason?: unknown; clockAt?: unknown; offsetMinutes?: unknown } | undefined;
+  switch (refusal?.code) {
+    case "storage.disk_full":
+      return tender.manualCard ? "sale.disk_full_manual_card" : "sale.disk_full";
+    case "sale.charged_not_recorded":
+      return refusal.reason === "disk_full"
+        ? "sale.charged_disk_full"
+        : { code: "sale.charged_not_recorded" };
+    case "clock.unusable":
+      return typeof refusal.clockAt === "string" && typeof refusal.offsetMinutes === "number"
+        ? { clockUnusable: { clockAt: refusal.clockAt, offsetMinutes: refusal.offsetMinutes } }
+        : { code: "clock.unusable" };
+    default:
+      return undefined;
   }
 }
 
@@ -6050,13 +6076,15 @@ export class TillApp extends LitElement {
         inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
       } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
       else
-        this.errorKey = isPermanentSaleRefusal(error)
-          ? "sale.refused"
-          : reachedFiscal && isNetworkFailure(error)
-            ? "sale.unconfirmed"
-            : isTakePaymentRefusal(error)
-              ? "take_payment.not_permitted"
-              : counterError(error, "sale.error");
+        this.errorKey =
+          saleRefusalOf(error, { manualCard: tender.method === "card" }) ??
+          (isPermanentSaleRefusal(error)
+            ? "sale.refused"
+            : reachedFiscal && isNetworkFailure(error)
+              ? "sale.unconfirmed"
+              : isTakePaymentRefusal(error)
+                ? "take_payment.not_permitted"
+                : counterError(error, "sale.error"));
       paidMeanwhile = isPaymentsReceived(error);
     } finally {
       this.submitting = false;
@@ -6199,17 +6227,19 @@ export class TillApp extends LitElement {
         inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
       } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
       else
-        this.errorKey = isPermanentSaleRefusal(error)
-          ? "sale.refused"
-          : reachedFiscal && isNetworkFailure(error)
-            ? "sale.unconfirmed"
-            : isReaderRefusal(error)
-              ? "card_reader.not_set_up"
-              : isTakePaymentRefusal(error)
-                ? "take_payment.not_permitted"
-                : isPaymentInFlight(error)
-                  ? "sale.payment_in_flight"
-                  : counterError(error, "sale.error");
+        this.errorKey =
+          saleRefusalOf(error, { manualCard: false }) ??
+          (isPermanentSaleRefusal(error)
+            ? "sale.refused"
+            : reachedFiscal && isNetworkFailure(error)
+              ? "sale.unconfirmed"
+              : isReaderRefusal(error)
+                ? "card_reader.not_set_up"
+                : isTakePaymentRefusal(error)
+                  ? "take_payment.not_permitted"
+                  : isPaymentInFlight(error)
+                    ? "sale.payment_in_flight"
+                    : counterError(error, "sale.error"));
       if (reachedFiscal && isNetworkFailure(error) && !this.#store.persisted)
         await this.#adoptCreatedCounterNote(id, basketVisit, session, false);
       paidMeanwhile = isPaymentsReceived(error);

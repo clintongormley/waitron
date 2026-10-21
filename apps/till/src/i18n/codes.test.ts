@@ -760,3 +760,29 @@ it("says a booking holds a table back, in both languages", () => {
     "Esa mesa tiene una reserva. Muévela o cancélala primero",
   ]);
 });
+
+it("names a full disk, a card charged but not recorded, and a wrong clock in both languages", () => {
+  const cases: [string, string, string][] = [
+    [
+      "storage.disk_full",
+      "No se ha guardado: el equipo no tiene espacio en disco. Avisa al encargado.",
+      "Not saved: the box is out of disk space. Tell a manager.",
+    ],
+    [
+      "sale.charged_not_recorded",
+      "Cobrado con tarjeta, pero la venta no se ha registrado. No vuelvas a cobrar; avisa al encargado.",
+      "Card charged, but the sale is not recorded. Do not charge again; tell a manager.",
+    ],
+    [
+      "clock.unusable",
+      "Venta no registrada: la hora del equipo es incorrecta. Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+      "Sale not recorded: the box's clock is wrong. Tell a manager. If you already charged a card on the terminal, refund it there.",
+    ],
+  ];
+  for (const [code, spanish, english] of cases) {
+    expect(codeMessage(code, "es-ES")).toBe(spanish);
+    expect(codeMessage(code, "en-GB")).toBe(english);
+    expect(codeMessage(code, "es-ES")).not.toBe(codeMessage("server.internal", "es-ES"));
+    expect(codeMessage(code, "en-GB")).not.toBe(codeMessage("server.internal", "en-GB"));
+  }
+});

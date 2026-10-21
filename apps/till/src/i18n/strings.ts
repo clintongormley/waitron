@@ -1338,6 +1338,14 @@ export const en = {
   // charged, because a settle path can reach it after a card was already charged on a terminal.
   "sale.refused":
     "This sale cannot be filed with the tax agency. The till has recorded nothing, and trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up. If you already charged a card on the terminal, refund it there.",
+  "sale.disk_full":
+    "Sale not recorded: the box is out of disk space. Don't take payment until it is fixed; tell a manager.",
+  "sale.disk_full_manual_card":
+    "Sale not recorded: the box is out of disk space. Don't take payment until it is fixed; tell a manager. If you already charged a card on the terminal, refund it there.",
+  "sale.charged_disk_full":
+    "Card charged, but the sale is not recorded: the box is out of space. Do not charge again; tell a manager.",
+  "sale.clock_unusable":
+    "Sale not recorded: the box's clock is wrong (it reads {date}). Tell a manager. If you already charged a card on the terminal, refund it there.",
   "take_payment.not_permitted": "You do not have permission to take payments",
   "reprint.error": "Could not reprint the receipt, try again",
   "reprint_language.title": "Reprint receipt",
@@ -3017,6 +3025,14 @@ export const es: Record<StringKey, string> = {
   "sale.payment_in_flight": "Se está cobrando este pedido con tarjeta. Espera a que termine.",
   "sale.refused":
     "Esta venta no se puede registrar en Hacienda. La caja no ha registrado nada y reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró esta caja. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+  "sale.disk_full":
+    "Venta no registrada: el equipo no tiene espacio en disco. No cobres hasta que se resuelva; avisa al encargado.",
+  "sale.disk_full_manual_card":
+    "Venta no registrada: el equipo no tiene espacio en disco. No cobres hasta que se resuelva; avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+  "sale.charged_disk_full":
+    "Cobrado con tarjeta, pero la venta no se ha registrado: el equipo no tiene espacio. No vuelvas a cobrar; avisa al encargado.",
+  "sale.clock_unusable":
+    "Venta no registrada: la hora del equipo es incorrecta (marca {date}). Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "take_payment.not_permitted": "No tienes permiso para cobrar",
   "reprint.error": "No se pudo reimprimir el recibo, inténtalo de nuevo",
   "reprint_language.title": "Reimprimir recibo",
