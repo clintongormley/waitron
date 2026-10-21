@@ -55,7 +55,7 @@ of the two stopped it, and whether a card was charged, in words staff can act on
    (`refuseBeforeFirstIssueDate`, new `packages/fiscal-verifactu/src/first-issue-date.ts`) and
    offers that judgement through the fiscal seat: `FiscalBackend` gains `assertRecordableAt(reading)`
    (`packages/fiscal/src/backend.ts:171`), which `VerifactuBackend` implements by delegating to it.
-   It throws a new code, `clock.unusable`, carrying the reading (`clockAt`). No record builder
+   It throws a new code, `clock.unusable`, carrying the reading (`clockAt`, `offsetMinutes`). No record builder
    changes: `VerifactuBackend.recordSale`, core `recordSale` and `chain.ts` are untouched.
 2. The server asks the seat at the issue reading: `issueMoment` calls `assertRecordableAt` on the
    reading it takes, so every server path that records a sale is refused by name before the invoice
@@ -66,7 +66,7 @@ of the two stopped it, and whether a card was charged, in words staff can act on
    store's report sets it, a start on a folder with less than 16 MiB free sets it, and a free-space
    reading of at least 16 MiB clears it. A reader payment checks it before its first transaction,
    inside it, and again just before the reader. A card charged whose sale then fails for a full
-   disk answers its own code, `sale.charged_not_recorded`.
+   disk answers its own code, `sale.charged_not_recorded`, on every path that runs after a charge.
 5. The till gives each refusal its sentence: a refused save, a sale refused before any money, a
    card charged but not recorded, and a wrong clock with its date. The dashboard gives
    `storage.disk_full` and `clock.unusable` one each.
@@ -86,11 +86,13 @@ and the clock entry under "Payments and card readers" (`docs/backlog.md:3896-390
 citations of `till-sale.ts:1236-1237` now read `:1237-1238` after #1938.
 
 **Lane note:** #1938 merged as `8f17dac0b`; this branch is rebased onto it. Of the open pull
-requests (read: `gh pr list --state open`), #1944 touches three files this slice changes:
+requests (read: `gh pr list --state open`), #1944 touches three source files this slice changes:
 `apps/server/src/till-api.ts` (its hunks start at `:45`-`:171`, `:1152`, `:2236`, `:2248` and
 `:3199`, none in the status table at `:413-446` or at `:1248`/`:1327`),
 `apps/server/src/working-order.ts` (its hunks above `:6683` remove more lines than they add, so
-`priceForIssuance` moves up if it lands first; its body is not in a hunk), and `apps/till/src/i18n/strings.ts`.
+`priceForIssuance` moves up if it lands first; its body is not in a hunk), and `apps/till/src/i18n/strings.ts`;
+it also edits `apps/server/src/department-transfer-api.test.ts`, whose `priceForIssuance` calls
+Task 2 gains an argument (read: `gh pr view 1944 --json files`).
 If #1944 lands first, find each site by name. #1939 touches `packages/fiscal-none/src/index.ts` and
 `packages/fiscal-verifactu/src/index.ts`, which this slice does not edit.
 
@@ -164,6 +166,53 @@ Findings in `~/waitron-campaign-b/a798-3-plan-review/round1.md`, with the lane r
   need their own mapping (`saleRefusalOf`, Task 9a) because a sale shows sentences the code table's
   generic ones do not — the sale-only disk sentence and the dated clock sentence — so
   `counterError`'s `{ code }` is not enough there.
+
+---
+
+## Review round 2 (claim check)
+
+Findings in `~/waitron-campaign-b/a798-3-plan-review/round2-check.md`, with the lane runner's
+rulings. Every citation added in this round was re-read at this branch's code (`8f17dac0b`); the
+two TypeScript probes the check gives were re-run (`tsc` 7.0.2), each with a compiling control.
+
+- **I1** (`sale.charged_not_recorded` covered one after-the-charge path): decision 18, Task 7b and
+  Review focus 7 now wrap all four of `/api/pay`'s — `finalizeSettle` (`till-sale.ts:1357`),
+  `finalizeCapture` (`:1368`), `finalizeRecovery` (`:1305`), `finalizeSettleRecovery` (`:1308`) —
+  plus the bill's captured P3. Task 7b adds a settle case and a recover case. The settle case
+  cannot use the check's `recordSale` spy: `finalizeSettle` calls `settleSale` from
+  `@waitron/core` directly (`till-sale.ts:49`), which takes no backend
+  (`packages/core/src/settle-sale.ts:41`), so the task mocks `@waitron/core`'s `settleSale`.
+- **I2** ("Otro datáfono" got the sentence that implies nothing was charged): decision 10 and
+  Tasks 9a, 9b add `sale.disk_full_manual_card`, the sale-only sentence followed by today's card
+  advice word for word (`apps/till/src/i18n/strings.ts:1350`, `:3041`), shown when the tender was
+  a manual card; one test per surface. Not put to the owner (runner's ruling).
+- **I3** (Task 8 picked the store by call index): the store is now the recorded one whose `venue`
+  is `mountTillApi`'s recorded `db` (`boot.ts:1656`); the "second a start makes" sentence is gone,
+  and the step names the two short-lived opens before it (`boot.ts:903`, `:926` →
+  `append-only-watch.ts:31`).
+- **N1** (Task 8's push did not compile): the unsubscribe is pushed as
+  `async () => stopWatchingDisk()` (`boot.ts:816`; probe `round2-check/tsc-undo`, TS2345, exit 1).
+- **N2** (Task 7's parameter after an optional one): `refusals` goes before `attendance?`
+  (`bill-payments.ts:1046`; probe `round2-check/tsc-param`, TS1016, exit 1).
+- **N3** (`priceForIssuance`'s test callers): Task 2 lists `department-transfer-api.test.ts` and
+  `unpaid-invoice-delivery.test.ts` and runs both; the lane note names #1944's edit of the first.
+- **N4**: `served-at-huella.test.ts` dropped from Task 1's Files list and `git add`.
+- **N5** (`cause`): renamed `reason`, as the registry's siblings (`apps/server/src/errors.ts:60`,
+  `:260`, `:575`, `:622`, `:1248`). The till shows the disk sentence (`sale.charged_disk_full`)
+  only for `reason: "disk_full"`; the code table's entry is the cause-neutral sentence, with a test
+  for another value.
+- **N6** (the date in the till's zone): `clock.unusable` carries `offsetMinutes` too, and the till
+  formats the instant shifted by it, in UTC (decision 11, with the `node -e` measurement and its
+  control); Tasks 1, 2, 6, 7 expect the new param and Task 9a tests a pair of offsets.
+- **N7**: decision 6's precedence list now reads "everything checked after the issue reading, for
+  example …", adding `record-sale.ts:203-269`'s checks.
+- **N8**: Task 12(c) no longer refuses in `issueMoment`; it refuses at the routes before any money
+  moves, and every path after a charge goes on.
+- **N9**: Task 7 says its three clock cases are part payments.
+- **N10**: Task 5 says `appWith` and the `disk?` members are written in Step 1, as setup.
+- **N11**: Task 1's `VerifactuBackend` case uses `expect(() => …).toThrow(…)`.
+- **N12**: decision 2 names slice 2's start reading and why it is not passed down; decision 18 and
+  Task 7b log `sale.charged_not_recorded` at `error` where it is thrown.
 
 ---
 
@@ -310,7 +359,13 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
    keeps a noted stop on `null` because an engine refusal has already proved the disk full, but at
    start nothing has, and on a filesystem that never reports free space a stop set at start could
    never clear, refusing every card-reader payment for good. The free-space watch and its alerts
-   stay slice 5's (design §4.6 item 4).
+   stay slice 5's (design §4.6 item 4). Slice 2's start already reads free space
+   (`freeSpaceAtStart`, `apps/server/src/start-space.ts:56-119`, called at
+   `apps/server/src/node-entry.ts:300`), but over the state and venue folders together, before
+   migrations and before its own cleanup, and it does not pass the reading on; passing it down
+   would thread a parameter through to boot for an older reading of two folders, so this reading
+   is taken separately, after the long-lived open, on the venue folder that holds both database
+   files.
 3. **What clears it: a free-space reading of the venue folder of at least `FULL_DISK_BYTES`
    (16 MiB).** The design says "Trading comes back only when someone frees space" without saying
    how the box knows. A later successful write cannot be the sign: M2 shows small writes succeed
@@ -366,16 +421,18 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
    of a card already charged (`kind: "recover"`/`"recover-settle"`, which never asks the reader,
    M3). If the owner answers (a) or (c), optional Task 12 adds its check; the main tasks stay, since
    both include (b)'s refusal before the reader.
-5. **The clock refusal is a new code, `clock.unusable { clockAt }`, declared by the Veri\*Factu
+5. **The clock refusal is a new code, `clock.unusable { clockAt, offsetMinutes }`, declared by the Veri\*Factu
    module and offered through the fiscal seat.** Design §8 calls it "`fiscal.record_invalid` caused
    by the minimum date". Keeping that code would make the till recognise the library's own
    validation code, `FECHA_EXPEDICION_BEFORE_MINIMUM` — a Spanish identifier in general code
    (CLAUDE.md §3, English only) and a regime detail on the generic side of the seat (§5). DEFAULT:
    `clock.unusable`, beside its siblings `clock.degraded` and `clock.jump_detected` (M5), the name
    design §4.3 already gives the alert for the same cause, following the design's "one code for the
-   refusal and the alert" (§4.8 a). `clockAt` is the reading's instant as ISO 8601: a time, not
-   operator data, so it may go into the log the recovery page shows (the reason
-   `fiscal.record_invalid`'s params carry no values, `packages/fiscal-verifactu/src/errors.ts:80-89`).
+   refusal and the alert" (§4.8 a). `clockAt` is the reading's instant as ISO 8601 and
+   `offsetMinutes` the reading's own offset (the till needs it to print the date the record would
+   carry, decision 11): a time, not operator data, so both may go into the log the recovery page
+   shows (the reason `fiscal.record_invalid`'s params carry no values,
+   `packages/fiscal-verifactu/src/errors.ts:80-89`).
    The seat member is `FiscalBackend.assertRecordableAt(reading)`, REQUIRED rather than optional,
    so a regime added later has to decide; `VerifactuBackend` implements it by delegating (Review
    round 1, I4, says why that adds one method to `backend.ts`).
@@ -399,11 +456,13 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
      which go through the chain (`chain.ts:187-197`); slice 8 stops every money route under a clock
      behind the last sale. No till route that records a sale is left (M6).
    - **Precedence change:** under a clock before the minimum date, a sale that today fails for
-     another reason checked after the issue reading now answers `clock.unusable` instead. In
-     `fileImmediateSale` that is a tender shortfall (`settlementFor`, `till-sale.ts:941`),
-     `selectOrderInvoice`'s refusals (`:947`), core `recordSale`'s own checks (counterparty,
-     breakdown, simplified-invoice limit; `record-sale.ts:171-198`) and the backend's
-     `sif.not_registered` or foreign-recipient refusal; at the check before the reader
+     another reason checked after the issue reading now answers `clock.unusable` instead: that
+     is everything checked after the issue reading. In `fileImmediateSale`, for example, a tender
+     shortfall (`settlementFor`, `till-sale.ts:941`), `selectOrderInvoice`'s refusals (`:947`),
+     core `recordSale`'s own checks (counterparty, breakdown, simplified-invoice limit;
+     `record-sale.ts:171-198`), its integrity check, the `sale.series_*` refusals,
+     `fiscal.taxpayer_domicile_missing` and `requireRecipientAddress` (`record-sale.ts:203-269`),
+     and the backend's `sif.not_registered` or foreign-recipient refusal; at the check before the reader
      (`till-sale.ts:1237-1238`) and in `beginBillPayment` (`bill-payments.ts:1078`), whatever those
      functions check after it. Under any other clock nothing changes. (read)
 7. **The clock check applies to every bill payment; the stop only to a reader payment on a bill.**
@@ -429,17 +488,38 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
       registrada: el equipo no tiene espacio en disco. No cobres hasta que se resuelva; avisa al
       encargado." / English in decision 19 — on every money surface, for `storage.disk_full`: the
       stop's refusal before the reader, a sale whose first transaction failed (M2: `collect 0`),
-      and a cash or "Otro datáfono" sale that did not fit.
+      and a cash or "Otro datáfono" sale that did not fit. **On an "Otro datáfono" tender** (a
+      card staff have already charged on a terminal the box does not talk to: the counter's
+      `tender.method === "card"`, `apps/till/src/widgets/tender-pay.ts:53-56`, a collect or
+      found-bill card tender, a bill's manual-card contribution) the sentence is followed by
+      today's card advice, word for word from `sale.refused` (`apps/till/src/i18n/strings.ts:1347-1350`,
+      Spanish `:3040-3041`): "Si ya has cobrado con tarjeta en el datáfono, devuelve el importe
+      ahí." / "If you already charged a card on the terminal, refund it there." Design §3's table
+      words only the generic case; "No cobres hasta que se resuelva" alone would tell staff nothing
+      about the card already taken, which is the case `sale.refused`'s comment
+      (`strings.ts:1347-1348`) exists for.
     - **A card charged, the sale not recorded** (design §3): "Cobrado con tarjeta, pero la venta no
       se ha registrado: el equipo no tiene espacio. No vuelvas a cobrar; avisa al encargado." /
       "Card charged, but the sale is not recorded: the box is out of space. Do not charge again;
-      tell a manager." — for `sale.charged_not_recorded` (decision 18).
+      tell a manager." — for `sale.charged_not_recorded` with `reason: "disk_full"` (decision 18).
+      The code table's entry for `sale.charged_not_recorded` holds the same sentence without the
+      cause, "Cobrado con tarjeta, pero la venta no se ha registrado. No vuelvas a cobrar; avisa al
+      encargado." / "Card charged, but the sale is not recorded. Do not charge again; tell a
+      manager.", shown for any other or missing `reason` (slice 8 adds a second).
 11. **The clock sentence carries the reading's date.** Design §3 and picture 6: "Venta no
     registrada: la hora del equipo es incorrecta (marca 01/01/2001). Avisa al encargado. Si ya has
     cobrado con tarjeta en el datáfono, devuelve el importe ahí." DEFAULT: that sentence with
-    `{date}` filled from the refusal's `clockAt`, formatted with
-    `Intl.DateTimeFormat(currentLocale(), { day: "2-digit", month: "2-digit", year: "numeric" })`
-    in the till's own time zone (M6 printed `01/01/2001` in `es-ES` and `en-GB`). English, the
+    `{date}` filled from the refusal's `clockAt`, formatted in the reading's own offset — the rule
+    the library judges the date by (M4) — not the till's time zone: shift the instant by the
+    refusal's `offsetMinutes` and format the result in UTC,
+    `new Intl.DateTimeFormat(currentLocale(), { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }).format(new Date(Date.parse(clockAt) + offsetMinutes * 60_000))`
+    (M6 printed `01/01/2001` in `es-ES` and `en-GB`). Measured 2026-10-21 on Node v26.11.1 with
+    `node -e`: `2024-10-27T23:30:00.000Z` at offset 0 → `27/10/2024`, at +60 → `28/10/2024`
+    (the two dates M4's library gives), `2001-01-01T11:00:00.000Z` at +60 → `01/01/2001`; the
+    control, the same 23:30 instant formatted in the zone `Europe/Madrid` with no shift, printed
+    `28/10/2024` — the date AEAT would accept, which a till in that zone would have shown for a
+    refusal made at offset 0. A `clock.unusable` carrying `clockAt` but no numeric
+    `offsetMinutes` is treated as one without `clockAt`. English, the
     plan's (the design gives none): "Sale not recorded: the box's clock is wrong (it reads {date}).
     Tell a manager. If you already charged a card on the terminal, refund it there." The card
     advice is today's, word for word (`apps/till/src/i18n/strings.ts:1350`, `:3041`). A
@@ -515,17 +595,29 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
     params today (`error-boundary.ts:34-39`), so the till cannot tell "no card was charged" from "a
     card was charged" — and the first failure that sets the stop is the second kind (M2's loop).
     DEFAULT: a new code in the server's registry (`apps/server/src/errors.ts`),
-    `sale.charged_not_recorded { workingOrderId: string; cause: "disk_full" }`, answered `507`.
+    `sale.charged_not_recorded { workingOrderId: string; reason: "disk_full" }`, answered `507`.
+    The parameter is `reason`, as the registry's other enumerated "why" parameters are
+    (`apps/server/src/errors.ts:60`, `:260`, `:575`, `:622`, `:1248`) and as the boundary's
+    comment expects (`packages/server-kit/src/error-boundary.ts:43`); not `cause`, which is the
+    field `diskFullIn` walks (`packages/shared/src/engine-failure.ts:26`, `:46`).
     How each path sets its answer: the stop's refusal before the reader, and a first transaction
     that fails for a full disk, answer `storage.disk_full` (nothing charged); a cash or "Otro
-    datáfono" sale that fails answers `storage.disk_full` (no reader); `POST /api/pay`'s P3
-    (`till-sale.ts:1353-1381`) and the bill reader payment's P3 (`bill-payments.ts:1387-1414`, the
-    captured branch) catch an error for which `diskFullIn` (`packages/shared/src/engine-failure.ts:40-51`)
-    is true and throw the new code instead. The new error does not carry the disk-full error as a
-    cause, because the boundary checks `diskFullIn` before anything else and would answer
-    `storage.disk_full` (`error-boundary.ts:34-39`); the store's listener has already noted the
-    stop (Task 3). `cause` has one value today; slice 8's "Cobrado con tarjeta, pero … la hora del
-    equipo es anterior a la última venta" (design §4.8 a) can add a second. After the answer, the
+    datáfono" sale that fails answers `storage.disk_full` (no reader). Every path of
+    `POST /api/pay` that runs after a card has been charged catches an error for which `diskFullIn`
+    (`packages/shared/src/engine-failure.ts:40-51`) is true and throws the new code instead — all
+    four: `finalizeSettle` (`till-sale.ts:1357`, kind `settle`), `finalizeCapture` (`:1368`, which
+    rethrows every non-unique failure unchanged, `:1648-1652`), `finalizeRecovery` (`:1305`, kind
+    `recover`) and `finalizeSettleRecovery` (`:1308`, kind `recover-settle`); the two recovery
+    kinds exist only when a captured payment is on file (`till-sale.ts:1160-1173`). So does the
+    bill reader payment's P3 (`bill-payments.ts:1387-1414`, the captured branch). The new error
+    does not carry the disk-full error as a cause, because the boundary checks `diskFullIn` before
+    anything else and would answer `storage.disk_full` (`error-boundary.ts:34-39`); the store's
+    listener has already noted the stop (Task 3). The site that throws it logs
+    `("error", "sale.charged_not_recorded", { workingOrderId })`, because the boundary logs an
+    `AppError` at `warn` (`error-boundary.ts:45`) where it logged the full disk at `error`
+    (`:35`). `reason` has one value today; slice 8's "Cobrado con tarjeta, pero … la hora del
+    equipo es anterior a la última venta" (design §4.8 a) can add a second, and the till shows the
+    disk sentence only for `reason: "disk_full"` (Task 9a). After the answer, the
     card is filed without a second charge: on `/api/pay`, Pay again takes the recovery path (M3);
     on a bill, the payment stays pending and the pending-payment pass completes it from the
     provider's row once it can (`bill-payments-loop.ts:153-158`; read). **A cross-package
@@ -551,7 +643,7 @@ assertion should change. If one does, it belongs to this list.
   wrong date (M1: `200 received`).
 - Under such a clock, every server path that records a sale answering
   `fiscal.record_invalid {"fields":["FechaExpedicionFactura"],"codes":["FECHA_EXPEDICION_BEFORE_MINIMUM"]}`
-  (M1); it now answers `clock.unusable { clockAt }` at the issue reading, before the invoice number
+  (M1); it now answers `clock.unusable { clockAt, offsetMinutes }` at the issue reading, before the invoice number
   is allocated — on the cash and counter routes, a card's P3 and recovery, a bill's completion and
   an unpaid departure — and, under such a clock, a sale that fails for another reason checked after
   that point answers `clock.unusable` too (decision 6).
@@ -641,9 +733,10 @@ assertion should change. If one does, it belongs to this list.
 6. **Boot wiring.** The stop listens to both of the venue folder's files, reads free space once at
    start, and reaches both card routes; a refused start runs the unsubscribe (Task 8).
 7. **The new wire answer, `sale.charged_not_recorded`** (cross-package contract, server ↔ till).
-   Thrown only after a capture and only for a full disk, on both reader routes; the till shows
-   the after-the-charge sentence for it and never the sale-only one; Pay again files without a
-   second charge (Tasks 7b, 9a, 9b).
+   Thrown only after a capture and only for a full disk, on both reader routes and on every one
+   of `/api/pay`'s four after-the-charge paths (settle, capture, recover, recover-settle); the till
+   shows the after-the-charge sentence for it and never the sale-only one; Pay again files without
+   a second charge (Tasks 7b, 9a, 9b).
 8. **The fiscal guard.** `git diff main -- packages/fiscal-verifactu/src/backend.ts packages/core/src/record-sale.ts packages/fiscal-verifactu/src/chain.ts`
    shows only the added delegating method (Task 1).
 
@@ -663,9 +756,10 @@ assertion should change. If one does, it belongs to this list.
 - Modify: `packages/fiscal-verifactu/src/errors.ts` (the `ErrorParams` block)
 - Modify: every hand-built `FiscalBackend` the typecheck below names — at least
   `packages/core/src/record-sale.test.ts:153` and `packages/core/src/record-void.test.ts:168`
-  (`wrapBackend`), `packages/core/src/record-void.test.ts:377`, and
-  `apps/server/src/served-at-huella.test.ts:92` — adding `assertRecordableAt: () => {}` (or the
-  fake's, bound by hand as those helpers bind the rest). Setup only; no assertion changes.
+  (`wrapBackend`) and `packages/core/src/record-void.test.ts:377` — adding
+  `assertRecordableAt: () => {}` (or the fake's, bound by hand as those helpers bind the rest).
+  Setup only; no assertion changes. (`apps/server/src/served-at-huella.test.ts:92` returns
+  `new VerifactuBackend(…)`, which gains the method in this task, so it compiles unchanged.)
 
 **Interfaces:**
 - Produces, in `packages/fiscal/src/backend.ts`:
@@ -678,14 +772,15 @@ assertion should change. If one does, it belongs to this list.
   ```
   (`TrustedReading`, `packages/fiscal/src/clock.ts:26-28`.)
 - Produces, in `packages/fiscal-verifactu/src/errors.ts`:
-  `"clock.unusable": { clockAt: string }`, with a doc comment: the box's clock reads a date before
-  the first one AEAT accepts for an invoice (28-10-2024), so no sale can be recorded; `clockAt` is
-  the reading's instant, ISO 8601.
+  `"clock.unusable": { clockAt: string; offsetMinutes: number }`, with a doc comment: the box's
+  clock reads a date before the first one AEAT accepts for an invoice (28-10-2024), so no sale can
+  be recorded; `clockAt` is the reading's instant, ISO 8601, and `offsetMinutes` its offset, in
+  which the date was judged.
 - Produces, in `first-issue-date.ts`:
   ```ts
   /** 28-10-2024 as YYYYMMDD: `@waitron/verifactu` refuses an earlier FechaExpedicionFactura. */
   export const FIRST_ISSUE_DAY = 20241028;
-  /** Throws `clock.unusable` when the reading's date, in its own offset, is before {@link FIRST_ISSUE_DAY}. */
+  /** Throws `clock.unusable { clockAt, offsetMinutes }` when the reading's date, in its own offset, is before {@link FIRST_ISSUE_DAY}. */
   export function refuseBeforeFirstIssueDate(reading: { instant: Date; offsetMinutes: number }): void;
   ```
   It takes the date with the library's own `formatDate(instant, offsetMinutes)` (`DD-MM-YYYY`,
@@ -696,7 +791,7 @@ assertion should change. If one does, it belongs to this list.
 - [ ] **Step 1: Write the failing tests.**
   - In `first-issue-date.test.ts`, `describe("refuseBeforeFirstIssueDate")`:
     - `"refuses a reading in 2001 with the reading's instant"`:
-      `expect(() => refuseBeforeFirstIssueDate({ instant: new Date("2001-01-01T11:00:00.000Z"), offsetMinutes: 60 })).toThrow(expect.objectContaining({ code: "clock.unusable", params: { clockAt: "2001-01-01T11:00:00.000Z" } }))`.
+      `expect(() => refuseBeforeFirstIssueDate({ instant: new Date("2001-01-01T11:00:00.000Z"), offsetMinutes: 60 })).toThrow(expect.objectContaining({ code: "clock.unusable", params: { clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: 60 } }))`.
     - `it.each` over M4's boundary readings, each with its expected answer:
       `2024-10-27T22:59:59.999Z` +60 → refused; `2024-10-27T23:00:00.000Z` +60 → returns;
       `2024-10-27T23:30:00.000Z` 0 → refused; `2024-10-27T23:30:00.000Z` +60 → returns;
@@ -712,8 +807,9 @@ assertion should change. If one does, it belongs to this list.
       other blocking issues, STOP and report: the agreement test is then not discriminating.
     - `"VerifactuBackend refuses the same readings"`: a `VerifactuBackend` built as
       `packages/fiscal-verifactu/src/backend.test.ts` builds one; `assertRecordableAt` with the 2001
-      reading rejects `clock.unusable` with its `clockAt`; with `2024-10-27T23:00:00.000Z` +60 it
-      returns. (A pure check; no database record is written, so N8 does not apply.)
+      reading is written `expect(() => backend.assertRecordableAt(reading)).toThrow(expect.objectContaining({ code: "clock.unusable", params: { clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: 60 } }))`
+      (the method is synchronous and returns `void`, so not `rejects`); with
+      `2024-10-27T23:00:00.000Z` +60, `expect(() => …).not.toThrow()`. (A pure check; no database record is written, so N8 does not apply.)
   - In `packages/fiscal-none/src/backend.test.ts`: `"refuses no clock: a venue with no regime has no first date"`:
     `new NoneBackend().assertRecordableAt({ instant: new Date("2001-01-01T11:00:00Z"), offsetMinutes: 60 })`
     returns `undefined` and does not throw.
@@ -742,7 +838,7 @@ assertion should change. If one does, it belongs to this list.
 - [ ] **Step 5: Commit**
 
   ```bash
-  git add packages/fiscal packages/fiscal-none packages/fiscal-verifactu/src/first-issue-date.ts packages/fiscal-verifactu/src/first-issue-date.test.ts packages/fiscal-verifactu/src/errors.ts packages/fiscal-verifactu/src/backend.ts packages/core/src apps/server/src/served-at-huella.test.ts
+  git add packages/fiscal packages/fiscal-none packages/fiscal-verifactu/src/first-issue-date.ts packages/fiscal-verifactu/src/first-issue-date.test.ts packages/fiscal-verifactu/src/errors.ts packages/fiscal-verifactu/src/backend.ts packages/core/src
   git commit -s -m "The fiscal seat can say a clock reading is too early to record, and Veri*Factu knows its first day"
   ```
 
@@ -754,7 +850,11 @@ assertion should change. If one does, it belongs to this list.
   (`finalizeCapture`), `:1694` (`finalizeRecovery`); `apps/server/src/bill-payments.ts:685`
   (`issueWhenFullyPaid`); `apps/server/src/working-order.ts:6683-6695` (`priceForIssuance`, which
   gains a `backend` parameter) and its callers `apps/server/src/unpaid-departure.ts:118` and
-  `apps/server/src/testing/issue-order.ts:14`
+  `apps/server/src/testing/issue-order.ts:14`, and its test callers
+  `apps/server/src/department-transfer-api.test.ts:565`, `:1505`, `:1640`, `:1670`, `:1718` and
+  `apps/server/src/unpaid-invoice-delivery.test.ts:134` (`grep -rn "priceForIssuance" apps/server/src`;
+  setup, the new argument only). Open #1944 also edits `department-transfer-api.test.ts`; if it
+  lands first, find each call by name.
 - Modify: `apps/server/src/till-api.ts` (the status table, `:446`)
 - Test: `apps/server/src/issue-moment.test.ts`; create `apps/server/src/sale-clock.test.ts`
 
@@ -770,7 +870,7 @@ assertion should change. If one does, it belongs to this list.
   - `issue-moment.test.ts`: `"asks the regime about the one reading it rates at"`: a clock whose
     `now()` returns a fixed reading object and counts calls; a `fiscal` stub recording its argument
     → the stub got that same object (`toBe`), `now()` was called once. And `"rates nothing when the
-    regime refuses the reading"`: a stub throwing `new AppError("clock.unusable", { clockAt: "x" })`
+    regime refuses the reading"`: a stub throwing `new AppError("clock.unusable", { clockAt: "x", offsetMinutes: 0 })`
     → `issueMoment` throws that error.
   - `sale-clock.test.ts`, on `provisionBillVenue` with a counter zone offering one product (as M1's
     probe set up, `~/waitron-campaign-b/a798-3-plan-probe/srv/clock.test.ts:13-25`), the route's
@@ -778,7 +878,7 @@ assertion should change. If one does, it belongs to this list.
     `{ instant, offsetMinutes: 60 }`:
     - `"refuses a cash sale under a clock in 2001 by name, before the invoice number"`:
       `POST /api/sales` cash at `2001-01-01T11:00:00.000Z` →
-      `409 { code: "clock.unusable", params: { clockAt: "2001-01-01T11:00:00.000Z" } }`; the
+      `409 { code: "clock.unusable", params: { clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: 60 } }`; the
       counts of `sales` and `registros_facturacion`, and the series' `next_number`, read before and
       after, unchanged; no `working_orders` row with the request's id.
     - Control `"records the same sale at 00:00 local on 28-10-2024"`: `2024-10-27T23:00:00.000Z`
@@ -797,7 +897,8 @@ assertion should change. If one does, it belongs to this list.
 - [ ] **Step 4: Run the sale suites and watch them pass**
 
   Run: `pnpm --filter @waitron/server exec vitest run src/issue-moment.test.ts src/sale-clock.test.ts src/till-sale.test.ts src/till-sale-integrated.db.test.ts src/till-api.fiscal-sale-paths.test.ts src/bill-payments.test.ts src/bill-payments.card.test.ts src/bill-payments-loop.test.ts`
-  plus every `unpaid-departure*.test.ts` (`ls apps/server/src/unpaid-departure*.test.ts`) — PASS,
+  plus `src/department-transfer-api.test.ts src/unpaid-invoice-delivery.test.ts` and every
+  `unpaid-departure*.test.ts` (`ls apps/server/src/unpaid-departure*.test.ts`) — PASS,
   `Tests` counts shown. A test whose stub backend (`grep -rln "{} as FiscalBackend\|{} as unknown as FiscalBackend" apps/server/src`)
   now fails with `assertRecordableAt is not a function` gets `assertRecordableAt: () => {}` in its
   stub: setup, not an assertion; run those files too. Then
@@ -1004,7 +1105,10 @@ assertion should change. If one does, it belongs to this list.
   `0.00` that the test creates for the owes-nothing case (no fixture provides one: review N5). A
   real `createDiskFullState` over a settable `statfs` stub, noted by calling `noteRefused()`,
   except where a case says otherwise. Every case reads `venue.card.collectCalls.length` before and
-  after.
+  after. `BillVenue.appWith` is fixture setup, written in this step together with the `disk?`
+  members it passes (`IntegratedPayDeps`, `TillApiDeps`, and `/api/pay`'s `disk: deps.disk`), so
+  the step's run fails on the missing stop and not on `venue.appWith is not a function`; nothing
+  reads `disk` until Step 3.
   - `"refuses a walk-up card sale while a refused write is noted, and never asks the reader"`:
     noted, statfs 0 → `507 { code: "storage.disk_full" }`, collect unchanged, no `working_orders`
     row with the request's id, no `payments` row for it.
@@ -1053,7 +1157,7 @@ assertion should change. If one does, it belongs to this list.
   FAILS the same way, M2's answer. The controls, the recovery and the owes-nothing cases pass
   before and after.
 
-- [ ] **Step 3: Implement** the deps, the read before P1, the two refusals inside it and the check
+- [ ] **Step 3: Implement** the read before P1, the two refusals inside it and the check
   before the reader.
 
 - [ ] **Step 4: Run the card-pay suites and watch them pass**
@@ -1083,7 +1187,7 @@ assertion should change. If one does, it belongs to this list.
   counter zone, the route's clock set with `venue.appAt(clock)` to a `TrustedClock` returning a fixed
   `{ instant, offsetMinutes: 60 }`:
   - `"refuses a walk-up card sale under a clock in 2001, naming the clock, before the reader"`:
-    `409 { code: "clock.unusable", params: { clockAt: "2001-01-01T11:00:00.000Z" } }`, collect
+    `409 { code: "clock.unusable", params: { clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: 60 } }`, collect
     unchanged, no `working_orders` row with the id, no `payments` row (M1 printed `collect 1` and a
     payment row).
   - `"refuses at 23:59:59.999 local on 27-10-2024, and asks the reader at 00:00 local on 28-10-2024"`:
@@ -1124,7 +1228,11 @@ assertion should change. If one does, it belongs to this list.
 **Interfaces:**
 - `beginBillPayment`'s `now: Date` parameter becomes `reading: { instant: Date; offsetMinutes: number }`
   (both callers pass `deps.clock.now()`); every former use of `now` reads `reading.instant`. It
-  gains a last parameter `refusals: { diskFull: () => boolean }`.
+  gains a parameter `refusals: { diskFull: () => boolean }`, inserted before the optional
+  `attendance?: AttendanceRecorder` (`bill-payments.ts:1046`), not after it: a required parameter
+  after an optional one does not compile (TS1016; probe
+  `~/waitron-campaign-b/a798-3-plan-review/round2-check/tsc-param/probe.ts`, `tsc` 7.0.2, exit 1;
+  the same signature with `refusals` first compiles, exit 0).
 - At the existing `selectOrderInvoice` call (`:1078`), immediately before it:
   `backend.assertRecordableAt(reading);` then
   `if (state === "pending" && refusals.diskFull()) refuseForStop();`. Both run after the replay
@@ -1154,8 +1262,11 @@ assertion should change. If one does, it belongs to this list.
     collect unchanged, no `bill_payments` row; control → `200`, collect +1.
   - Window 2, as Task 5's (`noted()` `false` then `true`) → `507`, collect unchanged, the bill
     payment `failed`; control → `200`, collect +1.
+  The three clock cases below (reader, cash, manual card) are each a PART payment, one that does
+  not complete the bill: a completing payment already answers `409 clock.unusable` at P3 after
+  Task 2 (with collect +1 for a reader payment), so it would not fail before this task.
   - `"refuses a reader payment under a clock in 2001, before the reader"`: `appWith({ clock })` →
-    `409 { code: "clock.unusable", params: { clockAt: "2001-01-01T11:00:00.000Z" } }`, collect
+    `409 { code: "clock.unusable", params: { clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: 60 } }`, collect
     unchanged, no `bill_payments` row (M1 printed `200 received`, collect 1, for a part payment).
   - `"refuses a cash part payment and a manual card under such a clock"` → `409 clock.unusable`,
     no `bill_payments` row.
@@ -1189,28 +1300,51 @@ assertion should change. If one does, it belongs to this list.
 **Files:**
 - Modify: `apps/server/src/errors.ts` (the `sale.*` entries, beside `"sale.empty_basket"`, `:289`)
 - Modify: `apps/server/src/till-api.ts` (the status table)
-- Modify: `apps/server/src/till-sale.ts` (`payIntegrated`'s P3, `:1353-1381`)
+- Modify: `apps/server/src/till-sale.ts` (`payIntegrated`'s four after-the-charge paths: the
+  recovery returns at `:1305` (`finalizeRecovery`) and `:1308` (`finalizeSettleRecovery`), and
+  P3's `finalizeSettle` (`:1357`) and `finalizeCapture` (`:1368`))
 - Modify: `apps/server/src/bill-payments.ts` (`takeReaderBillPayment`'s P3, `:1387-1414`)
 - Create: `apps/server/src/card-charged-not-recorded.test.ts`
 
 **Interfaces:**
-- `"sale.charged_not_recorded": { workingOrderId: string; cause: "disk_full" }`, with a doc
-  comment: a card was charged on a connected reader and its sale could not be recorded; `cause`
+- `"sale.charged_not_recorded": { workingOrderId: string; reason: "disk_full" }`, with a doc
+  comment: a card was charged on a connected reader and its sale could not be recorded; `reason`
   says why. Status `507`.
-- On both routes, the P3 call is wrapped: an error for which `diskFullIn(error)` is true becomes
-  `new AppError("sale.charged_not_recorded", { workingOrderId, cause: "disk_full" })`, thrown with
-  no link to the original (decision 18); any other error is rethrown unchanged. On the bill route
-  only the `captured` branch (`completeBillPayment`) is wrapped.
+- On `/api/pay`, all four paths that run after a card was charged are wrapped —
+  `finalizeSettle`, `finalizeCapture`, `finalizeRecovery` and `finalizeSettleRecovery` (decision
+  18) — and on the bill route the P3 call: an error for which `diskFullIn(error)` is true becomes
+  `new AppError("sale.charged_not_recorded", { workingOrderId, reason: "disk_full" })`, thrown with
+  no link to the original (decision 18), after logging
+  `("error", "sale.charged_not_recorded", { workingOrderId })`; any other error is rethrown
+  unchanged. On the bill route only the `captured` branch (`completeBillPayment`) is wrapped. One
+  helper wraps all five calls.
 
 - [ ] **Step 1: Write the failing tests** in `card-charged-not-recorded.test.ts`, on
   `provisionBillVenue`. Each failure is made by
   `vi.spyOn(venue.backend, "recordSale").mockRejectedValueOnce(new AppError("storage.disk_full", {}))`
   (`venue.backend`, `bill-venue.ts:80`): the error the store throws for a full disk, met after the
-  charge.
+  charge. That spy reaches `finalizeCapture` and `finalizeRecovery`, whose core `recordSale` hands
+  the record to the backend. It does not reach the settle case: `finalizeSettle` calls
+  `settleSale`, imported straight from `@waitron/core` (`till-sale.ts:49`), which takes no backend
+  (`packages/core/src/settle-sale.ts:41`). For that case, `vi.mock("@waitron/core", …)` at the top
+  of the file returns the real module with `settleSale` replaced by a function that rejects
+  `new AppError("storage.disk_full", {})` once when a test arms it and otherwise calls the real
+  one.
   - `"says a card was charged when its sale then fails for a full disk"`: a walk-up `/api/pay` →
-    `507 { code: "sale.charged_not_recorded", params: { workingOrderId: <id>, cause: "disk_full" } }`,
+    `507 { code: "sale.charged_not_recorded", params: { workingOrderId: <id>, reason: "disk_full" } }`,
     collect +1, a captured `payments` row with no sale. Then, the spy restored, Pay again
     (`lines: []`) → `200 captured`, collect unchanged, the sale filed (M3's shape).
+  - `"says so when a placed order's settlement fails after the charge"`: a placed order with an
+    issued invoice, built as Task 5's settle case builds it (`issueOrderInvoice`,
+    `apps/server/src/testing/issue-order.ts:6-17`), `settleSale` armed to reject → `/api/pay` answers
+    `507 { code: "sale.charged_not_recorded", params: { workingOrderId: <id>, reason: "disk_full" } }`,
+    collect +1.
+  - `"says so when Pay again recovers a charged card on a still-full disk"`: a captured payment
+    with no sale on an open order (`insertCapturedPayment`, as
+    `till-sale-integrated.db.test.ts:304-314` does), the `recordSale` spy rejecting → Pay again
+    (`lines: []`) answers `507 { code: "sale.charged_not_recorded", params: { workingOrderId: <id>, reason: "disk_full" } }`,
+    collect unchanged (M3 measured `507 storage.disk_full` and `collect 0` here before this
+    slice).
   - Control `"passes any other failure after the charge through unchanged"`: the spy rejects
     `new Error("boom")` → `500 { code: "server.internal" }`.
   - `"says so on a bill's reader payment that would complete the bill"`: a reader payment for the
@@ -1223,11 +1357,11 @@ assertion should change. If one does, it belongs to this list.
 - [ ] **Step 2: Run them and watch them fail**
 
   Run: `pnpm --filter @waitron/server exec vitest run src/card-charged-not-recorded.test.ts`
-  Expected: the two full-disk cases FAIL with `507 storage.disk_full` where
+  Expected: the four full-disk cases FAIL with `507 storage.disk_full` where
   `sale.charged_not_recorded` was expected (the boundary answers any full disk so,
   `error-boundary.ts:34-39`); the controls pass before and after.
 
-- [ ] **Step 3: Implement** the code, its status and the two wraps.
+- [ ] **Step 3: Implement** the code, its status, the helper and the five wrapped calls.
 
 - [ ] **Step 4: Run them and the card suites and watch them pass**
 
@@ -1253,9 +1387,14 @@ assertion should change. If one does, it belongs to this list.
 - After `undoOnFailure.push(() => store.close());`:
   ```ts
   const diskFull = createDiskFullState({ dir: config.venueDir, now, log });
-  undoOnFailure.push(watchForDiskFull(diskFull, [store.venue, store.node]));
+  const stopWatchingDisk = watchForDiskFull(diskFull, [store.venue, store.node]);
+  undoOnFailure.push(async () => stopWatchingDisk());
   await noteFullAtStart(diskFull, { dir: config.venueDir, log });
   ```
+  `undoOnFailure` is `Array<() => Promise<void>>` (`boot.ts:816`) and `watchForDiskFull` returns
+  `() => void`, so the unsubscribe is wrapped: pushing it bare does not compile (TS2345; probe
+  `~/waitron-campaign-b/a798-3-plan-review/round2-check/tsc-undo/probe.ts`, `tsc` 7.0.2, exit 1;
+  the wrapped push compiles, exit 0).
   (`now` is `boot.ts:818`, `log` `:900`. CLAUDE.md §3: a duty pushes its stop onto `undoOnFailure`
   as soon as it exists.) `mountTillApi` gets `disk: diskFull`.
 
@@ -1265,12 +1404,15 @@ assertion should change. If one does, it belongs to this list.
     record their arguments and return the real results, and `watchForDiskFull`'s returned
     unsubscribe records that it ran; mock `./till-api.js` so `mountTillApi` records its deps; mock
     `@waitron/db`, which `boot.ts` imports `openVenueDatabase` from (`boot.ts:49-55`), so each store
-    `openVenueDatabase` returns is recorded in call order.
+    `openVenueDatabase` returns is recorded.
   - `"listens to both of the venue folder's files, reads its free space, and hands the stop to the
     till routes"`: after a start, `createDiskFullState` got `dir` equal to the started server's
     venue folder; `watchForDiskFull` got that state and exactly `[s.venue, s.node]` (`toBe` each),
-    where `s` is the store the call at `boot.ts:932` returned — the second a start makes; the
-    first, `:903`, is a probe closed at `:912`;
+    where `s` is the recorded store whose `venue` is the `db` in `mountTillApi`'s recorded deps
+    (boot passes `db`, which is `store.venue`, at `boot.ts:1656`). Do not pick `s` by its place in
+    the call order: a start opens other short-lived stores through the same import before the
+    long-lived one (the stamp probe at `boot.ts:903`, and `missingBeforeMigration` at `:926`,
+    which opens one at `append-only-watch.ts:31`);
     `noteFullAtStart` got that state and that folder; `mountTillApi`'s deps carry `disk` equal to
     that state.
   - `"a refused start stops listening"`: make a step after the wiring throw, as
@@ -1311,21 +1453,37 @@ assertion should change. If one does, it belongs to this list.
 **Interfaces:**
 - `CODE_MESSAGES` gains, both columns:
   - `"storage.disk_full"`: decision 10's refused-save sentence.
-  - `"sale.charged_not_recorded"`: decision 10's after-the-charge sentence.
+  - `"sale.charged_not_recorded"`: decision 10's after-the-charge sentence WITHOUT the cause (the
+    one shown for a `reason` other than `"disk_full"`).
   - `"clock.unusable"`: decision 11's sentence without the bracket — es "Venta no registrada: la
     hora del equipo es incorrecta. Avisa al encargado. Si ya has cobrado con tarjeta en el
     datáfono, devuelve el importe ahí." / en "Sale not recorded: the box's clock is wrong. Tell a
     manager. If you already charged a card on the terminal, refund it there."
-- `strings.ts` gains `"sale.disk_full"` (decision 10's sale-only sentence; English from decision 19)
-  and `"sale.clock_unusable"` (decision 11's dated sentence, with `{date}`).
-- `t.ts`: `export function clockUnusableText(clockAt: string): string` — `t("sale.clock_unusable")`
-  with `{date}` replaced by `clockAt` formatted as decision 11 says.
-- `till-app.ts`: `CounterError` gains `| { clockUnusable: string }`, rendered with
-  `clockUnusableText`. `function saleRefusalOf(error: unknown): CounterError | undefined` answers
-  `"sale.disk_full"` for `storage.disk_full`, `{ code: "sale.charged_not_recorded" }` for that code,
-  `{ clockUnusable: clockAt }` for `clock.unusable` carrying a string `clockAt`, and
-  `{ code: "clock.unusable" }` for one without; `undefined` otherwise. `#onConfirmPayment` and
-  `#collectCard` check it FIRST in their catch chains, ahead of `isPermanentSaleRefusal`.
+- `strings.ts` gains, both languages: `"sale.disk_full"` (decision 10's sale-only sentence;
+  English from decision 19); `"sale.disk_full_manual_card"` (that sentence followed by today's
+  card advice, word for word from `sale.refused`, `strings.ts:1350` and `:3041`: es "… avisa al
+  encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí." / en "…
+  tell a manager. If you already charged a card on the terminal, refund it there.", decision 10);
+  `"sale.charged_disk_full"` (decision 10's after-the-charge sentence with its cause, "… el equipo
+  no tiene espacio …"); and `"sale.clock_unusable"` (decision 11's dated sentence, with `{date}`).
+- `t.ts`: `export function clockUnusableText(clockAt: string, offsetMinutes: number): string` —
+  `t("sale.clock_unusable")` with `{date}` replaced by the date formatted in the reading's own
+  offset as decision 11 says: `new Date(Date.parse(clockAt) + offsetMinutes * 60_000)` formatted
+  with `Intl.DateTimeFormat(currentLocale(), { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })`,
+  never in the till's own time zone.
+- `till-app.ts`: `CounterError` gains `| { clockUnusable: { clockAt: string; offsetMinutes: number } }`,
+  rendered with `clockUnusableText`.
+  `function saleRefusalOf(error: unknown, tender: { manualCard: boolean }): CounterError | undefined`
+  answers: for `storage.disk_full`, `"sale.disk_full_manual_card"` when `tender.manualCard` and
+  `"sale.disk_full"` otherwise; for `sale.charged_not_recorded`, `"sale.charged_disk_full"` only when
+  its `reason` is `"disk_full"`, and `{ code: "sale.charged_not_recorded" }` (the cause-neutral
+  sentence) for any other or missing `reason`; for `clock.unusable` carrying a string `clockAt` and
+  a numeric `offsetMinutes`, `{ clockUnusable: { clockAt, offsetMinutes } }`, and
+  `{ code: "clock.unusable" }` for one without; `undefined` otherwise. `#onConfirmPayment` passes
+  `manualCard: tender.method === "card"` (its tender is `{ method: "cash" } | { method: "card"; externalRef? }`,
+  `apps/till/src/widgets/tender-pay.ts:53-56`: a card there is one staff charged on a terminal
+  the box does not talk to); `#collectCard` (the connected reader) passes `false`. Both check it
+  FIRST in their catch chains, ahead of `isPermanentSaleRefusal`.
 
 - [ ] **Step 1: Write the failing tests.**
   - `codes.test.ts`: `"names a full disk, a card charged but not recorded, and a wrong clock in both
@@ -1337,11 +1495,20 @@ assertion should change. If one does, it belongs to this list.
     - the counter cash sale (`api.recordSale` rejecting `{ code: "storage.disk_full", status: 507 }`)
       and the counter card pay (`api.pay` rejecting the same) each show `t("sale.disk_full")`, and
       not `codeMessage("storage.disk_full")`;
-    - the counter card pay rejecting `{ code: "sale.charged_not_recorded", workingOrderId: "…", cause: "disk_full", status: 507 }`
-      shows `codeMessage("sale.charged_not_recorded")`;
-    - rejecting `{ code: "clock.unusable", clockAt: "2001-01-01T11:00:00.000Z", status: 409 }` shows
-      the dated sentence with `01/01/2001` in it (the test runs in `es-ES`; restore the language
-      after, CLAUDE.md §4), and NOT `t("sale.refused")`.
+    - the counter's "Otro datáfono" sale (`#onConfirmPayment` with a `card` tender, `api.recordSale`
+      rejecting the same) shows `t("sale.disk_full_manual_card")`, which contains the card advice;
+    - the counter card pay rejecting `{ code: "sale.charged_not_recorded", workingOrderId: "…", reason: "disk_full", status: 507 }`
+      shows `t("sale.charged_disk_full")`; the same with `reason: "something_else"` shows
+      `codeMessage("sale.charged_not_recorded")` (the cause-neutral sentence) and not
+      `t("sale.charged_disk_full")`;
+    - rejecting `{ code: "clock.unusable", clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: 60, status: 409 }`
+      shows the dated sentence with `01/01/2001` in it (the test runs in `es-ES`; restore the
+      language after, CLAUDE.md §4), and NOT `t("sale.refused")`; and rejecting
+      `{ code: "clock.unusable", clockAt: "2024-10-27T23:30:00.000Z", offsetMinutes: 0, status: 409 }`
+      shows `27/10/2024`, and the same instant with `offsetMinutes: 60` shows `28/10/2024` — the
+      dates the record would carry (M4). Formatting in the browser's own time zone fails at least
+      one of the pair whatever that zone is, because it prints one date for the one instant
+      (decision 11's control).
 
 - [ ] **Step 2: Run them and watch them fail**
 
@@ -1374,21 +1541,35 @@ assertion should change. If one does, it belongs to this list.
   (beside `:10540` and `:11376`)
 
 **Interfaces:**
-- `wholeTabErrorOf`, `#onCollectOrder` and `#onFindBillPay` check `saleRefusalOf` (Task 9a) first.
-- `PayRefusal` gains `clockAt?: string`, copied in `bill-payment.ts` as `chargeable` is (`:252`).
-  `refusalText` answers `t("sale.disk_full")` for `storage.disk_full` and
-  `clockUnusableText(clockAt)` for `clock.unusable` with a `clockAt`; `sale.charged_not_recorded`
-  already reaches `codeMessage` at its end.
+- `wholeTabErrorOf`, `#onCollectOrder` and `#onFindBillPay` check `saleRefusalOf` (Task 9a) first,
+  passing `manualCard: true` when the tender they sent was an "Otro datáfono" card and `false`
+  otherwise (cash, or the connected reader). `wholeTabErrorOf(error)` knows no tender today
+  (`till-app.ts:588`), so it gains a `tender: { manualCard: boolean }` argument that each of its
+  callers (`till-app.ts:15958`, `:16059`, `:16078`, `:16152`) fills from the tender it sent.
+- `PayRefusal` gains `clockAt?: string`, `offsetMinutes?: number` and `reason?: string`, copied in
+  `bill-payment.ts` as `chargeable` is (`:252`), and `manualCard?: true`, which the caller that
+  sent a bill's manual-card contribution sets on the refusal before it is shown (`refusalOf` does
+  not know the tender; find that caller among `grep -n "refusalOf(" apps/till/src/till-app.ts`).
+  `refusalText` answers, for `storage.disk_full`, `t("sale.disk_full_manual_card")` when
+  `manualCard` and `t("sale.disk_full")` otherwise; `clockUnusableText(clockAt, offsetMinutes)`
+  for `clock.unusable` with both; `t("sale.charged_disk_full")` for `sale.charged_not_recorded`
+  with `reason: "disk_full"`; any other `sale.charged_not_recorded` already reaches `codeMessage`
+  at its end (the cause-neutral sentence).
 
 - [ ] **Step 1: Write the failing tests.**
   - `till-app-handheld-pay.test.ts`: rows in the `it.each` at `:538-552` (the presented bill's cash
-    send) for `storage.disk_full` and `clock.unusable` with `clockAt`, and a card case beside `:499`
-    (`pay` rejecting each of the three codes): the sheet shows `t("sale.disk_full")`, the dated
-    clock sentence, and `codeMessage("sale.charged_not_recorded")`.
+    send) for `storage.disk_full` and `clock.unusable` with `clockAt` and `offsetMinutes`, and a
+    card case beside `:499` (`pay` rejecting each of the three codes, `sale.charged_not_recorded`
+    with `reason: "disk_full"`): the sheet shows `t("sale.disk_full")`, the dated clock sentence,
+    and `t("sale.charged_disk_full")`.
   - `presented-pay-dialog.test.ts` beside `:557`: a reader payment refused with each of the three
-    shows the same sentences through `refusalText`.
+    shows the same sentences through `refusalText`; a manual-card contribution refused
+    `storage.disk_full` shows `t("sale.disk_full_manual_card")`; and `sale.charged_not_recorded`
+    with another `reason` shows `codeMessage("sale.charged_not_recorded")`.
   - `till-app.test.ts`: collecting an order and paying a found bill refused `storage.disk_full`
-    show `t("sale.disk_full")`, and refused `clock.unusable` with `clockAt` show the dated sentence.
+    show `t("sale.disk_full")` for cash and `t("sale.disk_full_manual_card")` for an "Otro
+    datáfono" card (one case each per surface), and refused `clock.unusable` with `clockAt` and
+    `offsetMinutes` show the dated sentence.
 
 - [ ] **Step 2: Run them and watch them fail** (`memory_pressure` first):
   `pnpm --filter @waitron/till exec vitest run src/till-app-handheld-pay.test.ts src/widgets/presented-pay-dialog.test.ts src/till-app.test.ts`
@@ -1540,17 +1721,22 @@ assertion should change. If one does, it belongs to this list.
 Not built otherwise. A sketch, so an answer needs no replanning; turn it into a full task, with its
 own failing tests and controls, when the answer comes. Both options keep Tasks 1-11.
 
-- **(c) Every sale refused while the stop holds.** One choke point already exists: every server
-  path that records a sale takes its issue reading in `issueMoment` (M6, Task 2). Give `issueMoment`
-  the stop too (`if (disk?.noted()) throw diskFullRefusal()` beside `assertRecordableAt`), and have
-  each route that records a sale read `await disk.full()` before its transaction, so freed space
-  clears the stop before the check: `/api/sales` and pay-working-order (`runPayWorkingOrder`,
-  `till-sale.ts:642`), collecting a placed order (`runCollectOrder`, `:2058`), `/api/pay` (already),
-  bill payments (`takeBillPayment`, `bill-payments.ts:1155`; `beginBillPayment`'s stop check without
-  `state === "pending"`), and an unpaid departure (`unpaid-departure.ts:118`). To settle with it:
-  whether the recovery of a card already charged (`kind: "recover"`) is refused too (recommend
-  not: it charges nothing, and refusing it only delays recording a charge), and whether the
-  pending-payment pass (`bill-payments-loop.ts:159`) skips its completions while stopped.
+- **(c) Every sale refused while the stop holds — but never one whose card was already charged.**
+  `issueMoment` is NOT the place: besides the routes that take money, it runs after a charge, in
+  `finalizeCapture` (P3 after a capture, `till-sale.ts:1554`), `finalizeRecovery` (`:1694`) and
+  `issueWhenFullyPaid` (`bill-payments.ts:685`) when a captured reader payment completes a bill,
+  on the route (`completeBillPayment`, `:1390`) or in the pending-payment pass
+  (`bill-payments-loop.ts:143`). Refusing there would leave a charged card unrecorded. Instead,
+  each route that records a sale reads `await disk.full()` before its first transaction, so freed
+  space clears the stop first, and refuses in that transaction before any money moves:
+  `/api/sales` and pay-working-order (`runPayWorkingOrder`, `till-sale.ts:642`), collecting a
+  placed order (`runCollectOrder`, `:2058`), `/api/pay` (already, at its two points inside P1),
+  bill payments (`takeBillPayment`, `bill-payments.ts:1155`; `beginBillPayment`'s stop check
+  without `state === "pending"`), and an unpaid departure (`unpaid-departure.ts:118`). Every path
+  after a charge goes on while the stop holds — `finalizeCapture`, `finalizeSettle`,
+  `finalizeRecovery`, `finalizeSettleRecovery`, the bill route's captured P3 and the
+  pending-payment pass's completions; on a route, a save after a charge that does not fit
+  answers `sale.charged_not_recorded` (Task 7b).
 - **(a) Every write refused while the stop holds.** One choke point: a middleware in
   `mountTillApi` beside the existing `app.use("/api/*", madeHereAnswer(…))` (`till-api.ts:1248`),
   refusing every non-GET request while `await disk.full()`. `mountTillApi` mounts the clock-in API
@@ -1580,5 +1766,5 @@ own failing tests and controls, when the answer comes. Both options keep Tasks 1
   called from the server (Tasks 2, 6, 7).
 - Build plan decision 10 (the dashboard's two `server.internal` readers): Task 10.
 - §8 slice 3's risks — fiscal invariants (the settle handlers, and now every sale path's issue
-  reading) and a refusal's parameters (`clock.unusable { clockAt }`,
-  `sale.charged_not_recorded { workingOrderId, cause }`) — are Review focus 1 to 8.
+  reading) and a refusal's parameters (`clock.unusable { clockAt, offsetMinutes }`,
+  `sale.charged_not_recorded { workingOrderId, reason }`) — are Review focus 1 to 8.
