@@ -611,9 +611,10 @@ export type IntegratedPayDeps = TillSaleDeps & {
   /** The device profile the route checked the request under, passed to `provider.collect`. */
   deviceProfileId?: string;
   /**
-   * Set by the till's routes: a full disk after `collect` returned a charge, or on SumUp's or
-   * Stripe's own save of one inside it, answers `sale.charged_not_recorded`, so staff are told not
-   * to charge again. Unset, it answers `storage.disk_full`.
+   * Set by the till's routes: a full disk after a card was charged — after `collect` returned a
+   * charge, while filing a charge an earlier attempt captured, or on the SumUp or Stripe terminal
+   * adapter's own save of the charge inside `collect` — answers `sale.charged_not_recorded`, so
+   * staff are told not to charge again. Unset, it answers `storage.disk_full`.
    */
   sayCardChargedOnFullDisk?: boolean;
 };

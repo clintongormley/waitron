@@ -2499,10 +2499,9 @@ reader for a new sale (`payIntegrated`); and on every bill payment, cash include
 - Of the engine's refusals, only result code 13 notes the stop (`asDiskFull`,
   `packages/store/src/disk-full.ts`, called from `Connections.refusal`); one reported as 14, 4874 or
   `ENOSPC` leaves it off.
-- SumUp writes the checkout's id after the checkout reaches the reader (T1.5,
+- SumUp saves the checkout's `client_transaction_id` after the checkout reaches the reader (T1.5,
   `packages/payments-sumup/src/provider.ts`); a full disk there answers `storage.disk_full` although
-  the reader can still take the card, which its pending pass captures later. No test pins that
-  answer. The on-device Stripe adapter and the simulator save a charge with no `ChargeNotSavedError`,
+  the reader may still take the card. No test pins that answer. The on-device Stripe adapter and the simulator save a charge with no `ChargeNotSavedError`,
   so a full disk on that save answers `storage.disk_full` too.
 - `apps/server/src/boot.disk-full-wiring.test.ts` checks the arguments boot hands the state, the
   watch and the mounts, not a real full disk on a box.
