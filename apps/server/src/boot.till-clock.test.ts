@@ -1,7 +1,9 @@
 import { once } from "node:events";
+import { request as httpsRequest } from "node:https";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
@@ -86,6 +88,19 @@ const { beforeServerStarts, startServer } = serverFixture();
 
 it("the real recovery listener serves its recovery status and no clock routes", async () => {
   const scratch = await mkdtemp(join(tmpdir(), "waitron-recovery-no-clock-"));
+  const tls = mintSelfSignedServerCert({
+    hostnames: ["waitron.local", "localhost"],
+    ipAddresses: ["127.0.0.1"],
+    now: new Date(),
+  });
+  await mkdir(join(scratch, "tls"));
+  for (const [name, value] of Object.entries({
+    "ca.crt": tls.caCertPem,
+    "ca.key": tls.caKeyPem,
+    "server.crt": tls.serverCertPem,
+    "server.key": tls.serverKeyPem,
+  }))
+    await writeFile(join(scratch, "tls", name), value);
   const requestedPort = await occupiedPort();
   const app = recoveryApp({
     state: { ...FRESH, level: "recovery", failures: 3 },
@@ -99,15 +114,37 @@ it("the real recovery listener serves its recovery status and no clock routes", 
   });
   try {
     const port = await listeningPort();
-    const origin = `http://127.0.0.1:${port}`;
-    const status = await fetch(`${origin}/recovery-api/status`);
+    const read = (path: string, method = "GET") =>
+      new Promise<Response>((resolve, reject) => {
+        const req = httpsRequest(
+          {
+            hostname: "127.0.0.1",
+            port,
+            path,
+            method,
+            ca: tls.caCertPem,
+            servername: "waitron.local",
+            timeout: 5000,
+          },
+          (res) => {
+            let body = "";
+            res.on("data", (chunk: Buffer) => {
+              body += chunk.toString();
+            });
+            res.on("end", () => resolve(new Response(body, { status: res.statusCode! })));
+          },
+        );
+        req.on("error", reject);
+        req.on("timeout", () => req.destroy(new Error("HTTPS recovery deadline")));
+        req.end();
+      });
+    const status = await read("/recovery-api/status");
     expect(status.status).toBe(200);
     expect(await status.json()).toMatchObject({ level: "recovery", failures: 3 });
     for (const path of ["state", "in", "out", "break-start", "break-end"])
-      expect(
-        (await fetch(`${origin}/api/clock/${path}`, { method: path === "state" ? "GET" : "POST" }))
-          .status,
-      ).toBe(404);
+      expect((await read(`/api/clock/${path}`, path === "state" ? "GET" : "POST")).status).toBe(
+        404,
+      );
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error === undefined ? resolve() : reject(error))),

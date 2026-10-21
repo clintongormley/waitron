@@ -152,6 +152,16 @@ and fresh current outside evidence are required for exact replay. An uncommitted
 burned; a new attempt takes a new event and allocation.
 
 
+## When the secure connection is unavailable
+
+Before entering recovery secrets, open `/setup/connection` at the server's known HTTP address on
+the venue network. Choose **Set up secure connection**, follow its public certificate instructions
+then choose **Reconnect** and reopen HTTPS without warnings. HTTP stays available during the
+certificate step. The page preserves usable existing trust; it explicitly asks
+for a new installation when the old authority cannot be reused. Certificate repair does not restore
+records, select a workspace or activate a fiscal identity. Continue the protected recovery procedure
+only after HTTPS works. See [the server connection guide](../../apps/server/README.md#repairing-the-secure-connection).
+
 ## Qualification and limits, 2026-10-14
 
 The container rehearsal ran the candidate's production `bin-restore.js` and `node-entry.js`,

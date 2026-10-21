@@ -6,13 +6,17 @@ import {
   lstat,
   open,
   readFile,
+  realpath,
   rename,
   rm,
   type FileHandle,
 } from "node:fs/promises";
 import { constants, existsSync } from "node:fs";
 import { join } from "node:path";
-import { generateKeyRing, type GeneratedKeyRing } from "@waitron/provisioning";
+import { generateKeyRing, readDurableHostJson, type GeneratedKeyRing } from "@waitron/provisioning";
+import { AppError } from "@waitron/shared";
+import { withRecoveryLock } from "./recovery-lock.js";
+import "./errors.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import {
   mintSelfSignedServerCert,
@@ -119,8 +123,8 @@ const exists = (p: string): Promise<boolean> =>
 /**
  * Write the box's self-signed CA, leaf and vault key ring ONCE under `stateDir`, then reuse them on
  * every later boot, because a fresh CA would break every already-trusting setup client and a fresh
- * key ring would strand every sealed credential. `server.key` guards all four TLS PEMs (when it is
- * absent all four are re-minted over whatever exists); `secrets.env` guards only itself.
+ * key ring would strand every sealed credential. A missing server key does not authorize replacing
+ * retained TLS or vault material.
  *
  * Each file is written 0600 through a newly created working copy. A real `tls/` folder ends 0700
  * whether or not it already existed, as `unpackBundleToDir` leaves it on a restore. A `tls/` that
@@ -128,6 +132,12 @@ const exists = (p: string): Promise<boolean> =>
  * the destination.
  */
 export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxTlsFiles> {
+  await mkdir(deps.stateDir, { recursive: true, mode: 0o700 });
+  return withRecoveryLock(deps.stateDir, () => ensureBoxSecretsLocked(deps));
+}
+
+async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTlsFiles> {
+  await assertNoPendingTlsRepair(deps.stateDir);
   const mint = deps.mint ?? mintSelfSignedServerCert;
   const makeKeyRing = deps.makeKeyRing ?? generateKeyRing;
   const listIpv4 = deps.listIpv4 ?? listBoxIpv4;
@@ -136,15 +146,22 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
   await mkdir(files.tlsDir, { recursive: true, mode: 0o700 });
   await tightenTlsDir(deps.stateDir);
 
-  // server.key is the presence sentinel for all four TLS files.
   if (!(await exists(files.keyFile))) {
+    for (const path of [
+      files.caCertFile,
+      files.caKeyFile,
+      files.certFile,
+      `${files.certFile}.previous`,
+      join(files.tlsDir, "repair-archive"),
+      join(deps.stateDir, "secrets.env"),
+    ]) {
+      if (await exists(path)) throw new AppError("setup.not_ready", {});
+    }
     const m = mint({
       hostnames: deps.hostnames,
       ipAddresses: leafIpv4s(listIpv4),
       now: deps.now(),
     });
-    // server.key is written LAST: a crash part-way leaves the sentinel absent, so the next boot
-    // re-mints all four.
     await writeFileAtomic(files.caCertFile, m.caCertPem, 0o600);
     await writeFileAtomic(files.caKeyFile, m.caKeyPem, 0o600);
     await writeFileAtomic(files.certFile, m.serverCertPem, 0o600);
@@ -179,6 +196,16 @@ export async function reissueBoxLeaf(deps: {
   now: () => Date;
   listIpv4: () => string[];
 }): Promise<void> {
+  return withRecoveryLock(deps.stateDir, () => reissueBoxLeafLocked(deps));
+}
+
+async function reissueBoxLeafLocked(deps: {
+  stateDir: string;
+  hostnames: string[];
+  now: () => Date;
+  listIpv4: () => string[];
+}): Promise<void> {
+  await assertNoPendingTlsRepair(deps.stateDir);
   const files = boxTlsPaths(deps.stateDir);
   const leaf = reissueServerLeaf({
     caCertPem: await readFile(files.caCertFile, "utf8"),
@@ -220,4 +247,18 @@ export async function reissueBoxLeaf(deps: {
     throw error;
   }
   await rm(previousCert, { force: true });
+}
+
+async function assertNoPendingTlsRepair(stateDir: string): Promise<void> {
+  let tlsDir: string;
+  try {
+    tlsDir = await realpath(join(stateDir, "tls"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+  const record = await readDurableHostJson(join(tlsDir, "repair-pending.json"), 131072);
+  if (record !== null && (record as { complete?: unknown }).complete !== true) {
+    throw new AppError("setup.not_ready", {});
+  }
 }

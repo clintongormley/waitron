@@ -1,16 +1,14 @@
-import { readFile, access } from "node:fs/promises";
 import { Hono } from "hono";
-import { caCertPath } from "./box-secrets.js";
+import { readBoxPublicCa } from "./box-tls-repair.js";
 import type { Logger } from "./logger.js";
 import { trustDeviceForRequest } from "./detect-device.js";
 import { CA_CONTENT_TYPE, CA_FILENAME, renderTrustPage } from "./trust-page.js";
+import { mountConnectionBootstrap, type ConnectionBootstrapDeps } from "./connection-bootstrap.js";
 
-/**
- * Public certificate help on the separate HTTP listener. It never redirects to HTTPS;
- * browsers may still upgrade navigation themselves, so the HTTPS listener mirrors these paths.
- * It serves public help and CA downloads, with no application forms or write routes.
- */
+/** HTTP exposes public connection setup; application and recovery inputs stay on HTTPS. */
 export interface LandingDeps {
+  landingPort?: number;
+  connectionHostnames?: string[];
   /** The persisted state dir (config.stateDir); the CA lives at `<stateDir>/tls/ca.crt`. */
   stateDir: string;
   /** The URLs a device can open the box on over HTTPS — the `.local` URL then one per detected IPv4. */
@@ -18,24 +16,45 @@ export interface LandingDeps {
   /** The box's canonical HTTPS URL, used by the "Continue to Waitron" link. */
   httpsUrl: string;
   log: Logger;
+  connection?: ConnectionBootstrapDeps;
 }
 
 /** Keep the established agent-download path as well as the HTTPS discovery alias. */
 const CA_DOWNLOAD_PATH = "/ca.crt";
 
-/**
- * Build the landing Hono app. Pure of I/O at construction time (it only reads the CA file per request
- * inside the route handlers), so the suite runs on a bare temp state dir with no boot.
- */
 export function buildLandingApp(deps: LandingDeps): Hono {
-  const caPath = caCertPath(deps.stateDir);
   const app = new Hono();
+  if (deps.connection !== undefined) {
+    mountConnectionBootstrap(app, deps.connection);
+    return app;
+  }
+
+  const known = deps.reachUrls.length ? deps.reachUrls : [deps.httpsUrl];
+  mountConnectionBootstrap(
+    app,
+    {
+      stateDir: deps.stateDir,
+      hostnames: deps.connectionHostnames ?? [new URL(deps.httpsUrl).hostname],
+      listIpv4: () =>
+        known
+          .map((url) => new URL(url).hostname)
+          .filter((host) => /^\d+\.\d+\.\d+\.\d+$/.test(host)),
+      now: () => new Date(),
+      origins: known.map(
+        (url) => new URL(`http://${new URL(url).hostname}:${deps.landingPort ?? 80}`).origin,
+      ),
+      reachUrls: known,
+      onRepaired: async () => {},
+      log: deps.log,
+    },
+    false,
+  );
 
   // A page view is not a deliberate download, so any read failure is `false` and nothing is logged;
   // the `/ca.crt` route below is the deliberate action and distinguishes ENOENT from other failures.
   const caExists = (): Promise<boolean> =>
-    access(caPath).then(
-      () => true,
+    readBoxPublicCa(deps.stateDir).then(
+      (pem) => pem !== null,
       () => false,
     );
 
@@ -54,7 +73,7 @@ export function buildLandingApp(deps: LandingDeps): Hono {
   app.on("GET", [CA_DOWNLOAD_PATH, "/setup-api/ca.crt"], async (c) => {
     let pem: string;
     try {
-      pem = await readFile(caPath, "utf8");
+      pem = (await readBoxPublicCa(deps.stateDir)) ?? "";
     } catch (error) {
       // Missing files need no operator log. Other read failures are logged without exposing paths.
       const code = (error as NodeJS.ErrnoException).code;
@@ -72,6 +91,7 @@ export function buildLandingApp(deps: LandingDeps): Hono {
         404,
       );
     }
+    if (!pem) return c.json({ error: "no_box_ca" }, 404);
     return c.body(pem, 200, {
       "Content-Type": CA_CONTENT_TYPE,
       "Content-Disposition": `attachment; filename="${CA_FILENAME}"`,

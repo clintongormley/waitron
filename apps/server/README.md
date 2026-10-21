@@ -63,6 +63,44 @@ stdout for a bind failure.) Either way there is no "boots half-configured and re
 background": a supervisor (systemd, Docker's restart policy) is expected to restart the process, and
 it will keep failing until whatever is wrong is fixed.
 
+## Repairing the secure connection
+
+If your server cannot serve its saved connection certificate, open its known HTTP address on the
+venue network and choose **Set up secure connection**. The public page is also at
+`/setup/connection`; interrupted setup opens it in a separate tab so your password draft stays in
+place. This HTTP page accepts only a certificate-repair action. Do not enter a password, recovery
+key or private certificate there.
+
+Repair keeps the existing certificate authority when its certificate and signing key remain usable.
+If your device already trusts that authority, keep its installed certificate. If the authority is lost
+or unusable, the page tells you to install and trust the new public certificate on each device.
+Follow the device's installation help, then open the HTTPS link and check that the page it opens
+has no certificate warning before recovering setup. An installer-supplied certificate needs your
+installer's attention; this action repairs only Waitron-managed material.
+
+Repair retains the original fixed TLS files under a private `tls/repair-archive/` directory and
+resumes a reserved replacement after interruption. It does not recreate the vault or change the
+selected workspace, recovery records or fiscal identity. The public HTTP guide stays available while you download
+and install the certificate, even if the repair answer was lost. Choose **Reconnect** when you are
+ready. A supervised process then restarts after sending that answer; a direct process repeats its
+admission checks internally. The guide retains its public certificate download when you open HTTPS.
+If that handoff fails,
+reopen the public page and choose **Reconnect**. Healthy certificate files are not rotated by that
+retry. Other boot failures can still prevent the application from starting.
+
+HTTP does not authenticate the server or the person requesting repair. The Origin and empty-body
+checks reject ordinary cross-site browser submissions; they do not protect against a hostile network
+participant or an arbitrary HTTP client. Use your known server address on the venue network, and
+keep all private recovery work on trusted HTTPS. Filesystem flushes and the shared recovery lock
+coordinate Waitron writers, not an administrator editing the files or a failed disk.
+Repair refuses a linked TLS folder or linked managed file. A healthy linked folder can still serve
+HTTPS; repairing a damaged linked layout from this page remains an open limitation.
+
+A new network address alone does not block startup when the saved certificate still covers the
+box's fixed hostnames. Use its hostname to reconnect; the public repair action can add current
+addresses under the retained authority. An interrupted repair refreshes an outdated saved leaf
+under the same reserved authority before continuing.
+
 ## The venue directory
 
 There is no database server, no connection string and no database role. One process opens **one

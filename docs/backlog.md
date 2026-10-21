@@ -356,11 +356,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   direction supersedes the custodian-only proposal. No plan or build is approved.
   [Detail](backlog/fiscal.md#a732-keep-old-data-and-start-fresh-on-this-box).
 
-- **A733. Set up secure connection from the first-setup repair page.** Required before go-live.
-  Guide certificate restoration when the box’s certificate is missing or unusable. Keep secrets
-  off HTTP and preserve existing trust material.
-  [Detail](backlog/fiscal.md#a733-set-up-secure-connection-from-the-first-setup-repair-page).
-
 - **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery,
   corrective-record resolution, filing investigation, outside evidence and fencing, and the complete
   old-backup/new-hardware operational exercise remain queued. Cloud allocation production
@@ -5036,6 +5031,12 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
     day it opened on.
 
 ### The box: backups, upgrades and recovery
+
+- **Public TLS repair refuses linked layouts.** Healthy linked `tls/` folders still serve HTTPS,
+  but a damaged linked folder or managed file cannot be repaired through the public guide.
+  Decide whether to support links contained within the state folder while retaining archive,
+  exclusion and path-containment checks; cover the restored-layout startup and repair path.
+  Found by A733's whole-branch review; see the server README's secure-connection section.
 
 _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 

@@ -108,7 +108,7 @@ async function fixture(
     if (tls)
       await ensureBoxSecrets({
         stateDir: roots.stateDir,
-        hostnames: ["localhost"],
+        hostnames: ["localhost", "waitron.local"],
         now: () => new Date(),
         listIpv4: () => ["127.0.0.1"],
       });
@@ -182,6 +182,7 @@ async function fixture(
       roots,
       host,
       actions,
+      origin,
       get,
       post,
       restart,
@@ -270,13 +271,17 @@ it.each(["first-setup-workspace.json", "first-setup-selection.json", "000004.jso
 it("HTTP refuses the empty-reset declaration despite forwarded HTTPS", async () => {
   const f = await fixture("first-setup-selection.json", false);
   try {
-    const inspection = await f.get();
+    const inspection = await f.actions.inspectWorkspaceSelection();
+    expect(inspection).not.toBeNull();
+    expect((await fetch(`${f.origin}/setup-api/first-setup/resolution/selection`)).status).toBe(
+      404,
+    );
     const response = await f.post(
       { ...inspection, register: noMaster },
       { "X-Forwarded-Proto": "https" },
     );
-    expect(response.status).toBe(403);
-    expect(await response.json()).toMatchObject({ error: { code: "setup.owner_required" } });
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("404 Not Found");
     expect(f.restart).not.toHaveBeenCalled();
   } finally {
     await f.dispose();

@@ -197,7 +197,7 @@ async function fixture(fault?: string) {
       if (server === undefined) {
         await ensureBoxSecrets({
           stateDir,
-          hostnames: ["localhost"],
+          hostnames: ["localhost", "waitron.local"],
           now: () => new Date(),
           listIpv4: () => ["127.0.0.1"],
         });

@@ -1,15 +1,17 @@
-import { readFile, access } from "node:fs/promises";
 import type { Hono } from "hono";
 import QRCode from "qrcode";
 import { buildReachInfo } from "./box-reach.js";
 import type { ReachInfo } from "./box-reach.js";
-import { caCertPath } from "./box-secrets.js";
 import type { Logger } from "./logger.js";
 import { trustDeviceForRequest } from "./detect-device.js";
+import { readBoxPublicCa } from "./box-tls-repair.js";
+import { mountConnectionBootstrap } from "./connection-bootstrap.js";
 import { CA_CONTENT_TYPE, CA_FILENAME, renderTrustPage } from "./trust-page.js";
 
 /** Public certificate files use a fixed state path; requests never choose a filesystem location. */
 export interface DiscoveryDeps {
+  connectionHostnames?: string[];
+  onConnectionRepaired?: () => Promise<void>;
   /** The persisted state dir; the CA lives at <stateDir>/tls/ca.crt. */
   stateDir: string;
   hostname: string; // "waitron.local"
@@ -33,7 +35,6 @@ const defaultRenderQrSvg = (text: string): Promise<string> =>
 
 /** Mount public certificate help/downloads and, when enabled, setup's discovery document. */
 export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): void {
-  const caPath = caCertPath(deps.stateDir);
   const renderQrSvg = deps.renderQrSvg ?? defaultRenderQrSvg;
 
   const getReach = (): ReachInfo =>
@@ -44,12 +45,38 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
       listIpv4: deps.listIpv4,
     });
 
+  const reach = getReach();
+  mountConnectionBootstrap(
+    app,
+    {
+      stateDir: deps.stateDir,
+      hostnames: deps.connectionHostnames ?? [deps.hostname],
+      listIpv4: () => getReach().addresses,
+      now: () => new Date(),
+      origins: [
+        ...new Set([
+          reach.hostnameUrl,
+          ...reach.ipUrls,
+          ...(deps.connectionHostnames ?? []).map(
+            (host) => new URL(`${reach.scheme}://${host}:${deps.port}`).origin,
+          ),
+          new URL(`${reach.scheme}://127.0.0.1:${deps.port}`).origin,
+        ]),
+      ],
+      reachUrls: [reach.hostnameUrl, ...reach.ipUrls],
+      onRepaired: deps.onConnectionRepaired ?? (async () => {}),
+      log,
+      repairAllowed: deps.serveBoxCa !== false,
+    },
+    false,
+  );
+
   // Page views omit unavailable downloads; explicit downloads log unexpected read failures.
   const caExists = (): Promise<boolean> =>
     deps.serveBoxCa === false
       ? Promise.resolve(false)
-      : access(caPath).then(
-          () => true,
+      : readBoxPublicCa(deps.stateDir).then(
+          (pem) => pem !== null,
           () => false,
         );
 
@@ -62,7 +89,7 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
     }
     let pem: string;
     try {
-      pem = await readFile(caPath, "utf8");
+      pem = (await readBoxPublicCa(deps.stateDir)) ?? "";
     } catch (error) {
       // Missing files need no operator log. Other read failures are logged without exposing paths.
       const code = (error as NodeJS.ErrnoException).code;
@@ -81,6 +108,7 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
         404,
       );
     }
+    if (!pem) return c.json({ error: "no_box_ca" }, 404);
     return c.body(pem, 200, {
       "Content-Type": CA_CONTENT_TYPE,
       "Content-Disposition": `attachment; filename="${CA_FILENAME}"`,

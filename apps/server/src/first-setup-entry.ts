@@ -1,6 +1,5 @@
 import { mountSetupSpa } from "./setup-spa.js";
 import { isUnset } from "./env-value.js";
-import { access } from "node:fs/promises";
 import { readModuleConfig } from "./module-config.js";
 import { withFirstSetupPublication } from "./first-setup-publication.js";
 import { Hono } from "hono";
@@ -21,7 +20,7 @@ import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
-import { caCertPath } from "./box-secrets.js";
+import { readBoxPublicCa } from "./box-tls-repair.js";
 
 async function needsResolution(host: ReturnType<typeof createFirstSetupModuleHost>) {
   const pair = await host.store.readResumable();
@@ -149,8 +148,8 @@ async function resolutionApp(
   app.get("/setup-api/discovery", async (c) =>
     c.json(
       {
-        caDownloadAvailable: await access(caCertPath(roots.stateDir)).then(
-          () => true,
+        caDownloadAvailable: await readBoxPublicCa(roots.stateDir).then(
+          (pem) => pem !== null,
           () => false,
         ),
       },

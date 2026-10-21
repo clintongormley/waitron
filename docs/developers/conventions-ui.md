@@ -1529,3 +1529,47 @@ changes.
 
 Nothing guards a new field: a new `/api/till` field moves the revision, but reaches an open till
 only once someone adds it to `#applyVenueSetup`.
+
+
+## Public secure-connection repair
+
+`connection-bootstrap.ts` mounts `/setup/connection` and the empty-body
+`POST /setup-api/connection/repair`, followed by an explicit empty-body
+`POST /setup-api/connection/continue`. A damaged retained box certificate admits only the public
+connection app on the main HTTP port and enabled landing port. The protected recovery app,
+Retry, setup inspection and private setup actions stay off that fallback. Normal discovery and
+landing apps mirror the connection guide; their CA downloads parse the public certificate and
+check its signing authority, validity and box constraints before offering it. Resolution discovery
+uses the same public-CA check. An operator TLS choice refuses box repair.
+
+The resolution screen opens the guide in a separate tab without passing its draft, owner token or
+password. The page sends no body and omits credentials. Its fixed EN/ES messages distinguish
+retained trust from a new trust installation; retained trust does not instruct you to remove the old
+certificate. The original `/setup/trust` help remains available. Repair leaves standalone HTTP alive for public CA download and reload. Reconnect triggers the
+post-flush handoff only after the installation guidance. The canonical public certificate travels in
+the repair result and healthy page reload, so the page retains its download as a Blob when that
+port becomes HTTPS. A failed direct handoff exposes Reconnect on a fresh public page, even though
+the repaired files are already healthy.
+
+`connection-bootstrap-page.test.ts` exercises the rendered script in Chromium, including refusal,
+retry, pending requests and both trust outcomes. `connection-bootstrap.entry.test.ts` binds actual
+HTTP and CA-verified HTTPS listeners. `box-tls-repair.process.test.ts` interrupts child processes
+after archive-file sync and the manifest, candidate and active-file renames, then resumes in a new
+process; it also runs two competing repair processes. These process interruptions do not simulate
+power loss or prove the storage device honours a flush. The Origin check does not authenticate an
+HTTP peer or prevent an arbitrary network client from requesting this public transport operation.
+
+
+Public CA downloads serialize the parsed certificate, rather than returning its source file.
+A valid certificate followed by a private key passed parsing and signature checks while the raw
+file download still included the key. The six surface/newline cases named "downloads only public
+certificate bytes" in `connection-bootstrap.test.ts` reproduce that boundary; they cover bootstrap,
+discovery and landing aliases with LF and CRLF PEM files. They do not audit every other PEM reader.
+
+
+Startup checks certificate validity and fixed hostnames without requiring every current network
+address. The repair action still includes current addresses. The "network address changes" real
+entry case checks that the hostname-valid saved pair continues serving verified HTTPS. The
+"reserved authority after" cases interrupt completion, then change the address or expire only the
+saved leaf; resumption signs a new leaf with the reserved CA rather than leaving an unfinished
+repair permanently refused. An expired or unusable reserved CA still refuses.

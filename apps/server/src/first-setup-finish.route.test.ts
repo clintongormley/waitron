@@ -139,7 +139,7 @@ async function fixture(realEntry = false, withoutBookings = false) {
     const rows = await suite.db.select().from(fiscalAllocations);
     await ensureBoxSecrets({
       stateDir: f.stateDir,
-      hostnames: ["localhost"],
+      hostnames: ["localhost", "waitron.local"],
       now: () => new Date(),
       listIpv4: () => ["127.0.0.1"],
     });
@@ -502,10 +502,8 @@ it.each(["reconfirm", "document", "document-kept", "finish", "publication"])(
           ...(action === "publication" ? {} : { body: "not JSON" }),
         },
       );
-      expect(response.status).toBe(403);
-      expect(await response.json()).toEqual({
-        error: { code: "setup.owner_required", params: {} },
-      });
+      expect(response.status).toBe(404);
+      expect(await response.text()).toBe("404 Not Found");
       expect(response.headers.get("Cache-Control")).toBe("no-store");
       await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
     } finally {

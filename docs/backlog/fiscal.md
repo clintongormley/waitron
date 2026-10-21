@@ -1444,11 +1444,3 @@ unreadable by the new account; grant no old login, decryption, restore or fiscal
 Missing or contradictory retained module identity stays unresolved; hardware-only isolation
 cannot clear the later activation hold. Retain used/uncertain hour floors and replacement
 declarations. Until implementation lands, this action remains unavailable from repair.
-
-## A733. Set up secure connection from the first-setup repair page
-
-Required before any venue goes live; owner 2026-10-15 at about 17:15. Guide restoration
-when the box’s certificate is missing or unusable. Preserve old material, prefer the retained CA
-when usable and guide installation/trust of the new public certificate. HTTP serves public
-connection/bootstrap information only and accepts no password or key. Until this item lands,
-explain that secure-connection restoration is not yet available from the repair page.

@@ -1,3 +1,4 @@
+import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { randomUUID, randomBytes } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -26,7 +27,7 @@ async function fixture(point = "first-setup-workspace.json", tls = true) {
     if (tls)
       await ensureBoxSecrets({
         stateDir: anchor.stateDir,
-        hostnames: ["localhost"],
+        hostnames: ["localhost", "waitron.local"],
         now: () => new Date(),
         listIpv4: () => ["127.0.0.1"],
       });
@@ -196,13 +197,19 @@ it.each(["first-setup-workspace.json", "first-setup-selection.json", "000004.jso
 it("HTTP rejects a complete selection password request despite forwarded HTTPS", async () => {
   const f = await fixture("first-setup-selection.json", false);
   try {
-    const inspection = await (await f.get()).json();
+    const admission = await resolveFirstSetupEntry(f.anchor, {});
+    expect(admission.kind).toBe("resolution");
+    if (admission.kind !== "resolution") throw new Error("Expected retained selection resolution");
+    const inspection = await (
+      await admission.app.request("https://localhost/setup-api/first-setup/resolution/selection")
+    ).json();
+    expect((await f.get()).status).toBe(404);
     const response = await f.post(
       { ...inspection, password: PASSWORD },
       { "X-Forwarded-Proto": "https" },
     );
-    expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ error: { code: "setup.owner_required", params: {} } });
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("404 Not Found");
     await expect(resolveFirstSetupWorkspace(f.anchor)).rejects.toMatchObject({
       code: "setup.attempt_uncertain",
     });
