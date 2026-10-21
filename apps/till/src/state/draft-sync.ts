@@ -802,8 +802,15 @@ export class DraftSync {
         { signal: limit.signal },
       );
     } catch (error) {
-      if (this.#ended || this.#invalidateSave(expectedEdit)) return "failed";
-      return await this.#refused(error);
+      if (this.#ended) return "failed";
+      if (!this.#invalidateSave(expectedEdit)) return await this.#refused(error);
+      const refusal = asRefusal(error);
+      if (refusal?.refused !== DRAFT_PERSON_REFUSAL) return "failed";
+      // The till closes this sync inside onRefused; while a save is out, closing retains the shown
+      // lines, which are now the newer edit's, over the candidate holding this person's.
+      this.#saving = false;
+      this.#options.onRefused(refusal.refused);
+      return refusal;
     } finally {
       this.#saving = false;
       limit.done();

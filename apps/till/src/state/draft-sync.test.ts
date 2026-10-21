@@ -565,6 +565,42 @@ describe("DraftSync: a refused save", () => {
     expect(server.listDrafts).toHaveBeenCalledOnce();
   });
 
+  it("still says the order's person is not signed in when a newer edit of the bill arrived while the save was out, and keeps their lines through the close that answers it", async () => {
+    let reject!: () => void;
+    const draft: DraftSync = new DraftSync({
+      api: server,
+      partyId: "v1",
+      billId: "wo-4",
+      personId: "p1",
+      rebuild,
+      onRefused: (code) => {
+        refused.push(code);
+        void draft.close();
+      },
+      requestLimitMs: LIMIT,
+    });
+    await draft.load();
+    server.saveDraft.mockImplementationOnce(
+      () =>
+        new Promise<never>((_resolve, fail) => {
+          reject = () => fail({ code: "draft.person_not_signed_in", status: 409 });
+        }),
+    );
+    draft.store.addProduct(beer, "1");
+    const queued = draft.flush();
+    await vi.waitFor(() => expect(server.saveDraft).toHaveBeenCalledOnce());
+
+    draft.applyBillSnapshot(server.snapshot(seed("p2", steak)), draft.generation);
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    reject();
+
+    expect(await queued).toEqual({ refused: "draft.person_not_signed_in" });
+    expect(refused).toEqual(["draft.person_not_signed_in"]);
+    expect(draft.candidate?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    await settle();
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+  });
+
   it("re-reads the draft another device changed and shows it, never saving over it", async () => {
     const draft = sync();
     await draft.load();
