@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Connections } from "./connections.js";
+import { asDiskFull } from "./disk-full.js";
 
 /**
  * One write transaction at a time.
@@ -10,6 +11,13 @@ import type { Connections } from "./connections.js";
  *
  * `begin immediate` rather than `begin`: it takes the write lock up front, so a transaction cannot
  * get partway through and then fail to upgrade.
+ *
+ * The queue rolls back only a transaction that is still open. A full disk at a statement or at
+ * `commit` can end the transaction inside the engine, which rolls the whole of it back itself (E1 and E7 in
+ * `docs/superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md`); a `rollback` issued then is refused "cannot rollback - no transaction is
+ * active", and that refusal would hide the full disk. A full disk that leaves the transaction open
+ * (E13, E14) is still rolled back here, or the next `begin immediate` would be refused. A body
+ * that returns after its transaction was ended is not reported as a success.
  */
 export function createWriteQueue(connections: Connections) {
   let tail: Promise<unknown> = Promise.resolve();
@@ -50,16 +58,43 @@ export function createWriteQueue(connections: Connections) {
       // (`./connections.ts`).
       return enqueue(() =>
         connections.asTransactionBody(async () => {
-          connections.write.exec("begin immediate");
+          try {
+            connections.write.exec("begin immediate");
+          } catch (error) {
+            connections.clearEnded();
+            throw asDiskFull(error) ?? error;
+          }
+          connections.clearEnded();
           let result: T;
           let mark: number | null;
           try {
             mark = connections.changeMark();
             result = await body();
-            connections.write.exec("commit");
+            const ended = connections.endedBy();
+            if (ended !== undefined || !connections.write.isTransaction) {
+              throw (
+                ended?.error ??
+                new Error("write queue: the engine ended this transaction before its body finished")
+              );
+            }
+            try {
+              connections.write.exec("commit");
+            } catch (error) {
+              const mapped = asDiskFull(error) ?? error;
+              if (!connections.write.isTransaction) connections.noteEnded(mapped);
+              throw mapped;
+            }
           } catch (error) {
-            connections.write.exec("rollback");
-            throw error;
+            if (connections.write.isTransaction) {
+              try {
+                connections.write.exec("rollback");
+              } catch {
+                // The failure that brought us here is the one the caller needs.
+              }
+            }
+            throw connections.endedBy()?.error ?? asDiskFull(error) ?? error;
+          } finally {
+            connections.clearEnded();
           }
           connections.reportIfChanged(mark);
           return result;

@@ -148,6 +148,55 @@ describe("the connection pair", () => {
   });
 });
 
+describe("the record of a transaction the engine ended", () => {
+  it("is empty on a fresh pair, keeps the first failure noted, and empties when cleared", () => {
+    const p = pair();
+    try {
+      expect(p.connections.endedBy()).toBeUndefined();
+      const a = new Error("a");
+      const b = new Error("b");
+      p.connections.noteEnded(a);
+      p.connections.noteEnded(b);
+      expect(p.connections.endedBy()).toEqual({ error: a });
+      expect(p.connections.endedBy()?.error).toBe(a);
+      p.connections.clearEnded();
+      expect(p.connections.endedBy()).toBeUndefined();
+    } finally {
+      p.close();
+    }
+  });
+
+  it("says whether the caller is inside one of the pair's running bodies", async () => {
+    const p = pair();
+    try {
+      expect(p.connections.insideBody()).toBe(false);
+      expect(p.connections.asTransactionBody(() => p.connections.insideBody())).toBe(true);
+
+      let resume!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        resume = resolve;
+      });
+      let detached!: Promise<boolean>;
+      await p.connections.asTransactionBody(async () => {
+        detached = gate.then(() => p.connections.insideBody());
+      });
+      let finish!: () => void;
+      const later = p.connections.asTransactionBody(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      resume();
+      expect(await detached).toBe(false);
+      finish();
+      await later;
+    } finally {
+      p.close();
+    }
+  });
+});
+
 describe("settle", () => {
   it("runs the success side at once for a body that is already finished", () => {
     const seen: string[] = [];

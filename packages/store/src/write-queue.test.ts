@@ -9,6 +9,47 @@ const open = () => {
   return db;
 };
 
+/** Caps the file a few pages past what it holds now, so one 64 KiB row cannot fit. */
+const full = (db: DatabaseSync) => {
+  const { page_count } = db.prepare("pragma page_count").get() as { page_count: number };
+  db.exec(`pragma max_page_count = ${page_count + 4}`);
+  return db;
+};
+
+const fill = (db: DatabaseSync) => db.exec("insert into t (who) values (zeroblob(65536))");
+
+/**
+ * Stands in for a disk that fills at `commit`. E7 and K in
+ * `docs/superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md` measured a real full disk
+ * answering this way: the commit refused with errcode 13 and the engine had already rolled the
+ * whole transaction back, leaving none open.
+ */
+const fullAtCommit = (real: DatabaseSync) => {
+  const execs: string[] = [];
+  const db = new Proxy(real, {
+    get(target, property) {
+      if (property === "exec") {
+        return (text: string) => {
+          execs.push(text);
+          if (text === "commit") {
+            target.exec("rollback");
+            throw Object.assign(new Error("database or disk is full"), {
+              errcode: 13,
+              code: "ERR_SQLITE_ERROR",
+            });
+          }
+          target.exec(text);
+        };
+      }
+      const value: unknown = Reflect.get(target, property, target);
+      return typeof value === "function"
+        ? (value as (...a: unknown[]) => unknown).bind(target)
+        : value;
+    },
+  });
+  return { db, execs };
+};
+
 const who = (db: DatabaseSync) =>
   db.prepare("select who from t order by id").all() as { who: string }[];
 
@@ -173,5 +214,109 @@ describe("the write queue", () => {
       db.prepare("insert into t (who) values (?)").run("after");
     });
     expect(who(db)).toEqual([{ who: "after" }]);
+  });
+});
+
+describe("when the engine ends the queue's transaction itself", () => {
+  it("hands back storage.disk_full, not the queue's own failed rollback, when a statement fills the disk", async () => {
+    const db = full(open());
+    const queue = createWriteQueue(connectionPair(db, db));
+    await expect(
+      queue.run(async () => {
+        db.prepare("insert into t (who) values (?)").run("A");
+        fill(db);
+      }),
+    ).rejects.toMatchObject({ code: "storage.disk_full" });
+    expect(who(db)).toEqual([]);
+  });
+
+  it("refuses to report success for a body that caught the full disk and returned", async () => {
+    const db = full(open());
+    const queue = createWriteQueue(connectionPair(db, db));
+    await expect(
+      queue.run(async () => {
+        db.prepare("insert into t (who) values (?)").run("A");
+        try {
+          fill(db);
+        } catch {
+          // Deliberately swallowed.
+        }
+        return "done";
+      }),
+    ).rejects.toThrow("write queue: the engine ended this transaction before its body finished");
+    expect(who(db)).toEqual([]);
+  });
+
+  it("hands back storage.disk_full when the disk fills at commit, and issues no rollback of its own", async () => {
+    const real = open();
+    const { db, execs } = fullAtCommit(real);
+    const queue = createWriteQueue(connectionPair(db, db));
+    await expect(
+      queue.run(async () => {
+        real.prepare("insert into t (who) values (?)").run("A");
+      }),
+    ).rejects.toMatchObject({ code: "storage.disk_full" });
+    expect(execs.slice(execs.indexOf("commit") + 1)).not.toContain("rollback");
+    expect(who(real)).toEqual([]);
+    expect(real.isTransaction).toBe(false);
+  });
+
+  it("still rolls back a commit the engine refused and left open", async () => {
+    const db = open();
+    db.exec("create table parent (id integer primary key)");
+    db.exec("create table child (id integer primary key, parent_id integer references parent(id))");
+    db.exec("pragma foreign_keys = on");
+    const queue = createWriteQueue(connectionPair(db, db));
+    await expect(
+      queue.run(async () => {
+        db.exec("pragma defer_foreign_keys = on");
+        db.exec("insert into child (id, parent_id) values (1, 999)");
+      }),
+    ).rejects.toThrow(/FOREIGN KEY constraint failed/);
+    expect((db.prepare("select count(*) as n from child").get() as { n: number }).n).toBe(0);
+    expect(db.isTransaction).toBe(false);
+    await expect(
+      queue.run(async () => {
+        db.prepare("insert into t (who) values (?)").run("after");
+      }),
+    ).resolves.toBeUndefined();
+    expect(who(db)).toEqual([{ who: "after" }]);
+  });
+
+  it("serves the caller queued behind a body that filled the disk", async () => {
+    const db = full(open());
+    const queue = createWriteQueue(connectionPair(db, db));
+    const first = queue.run(async () => {
+      fill(db);
+    });
+    const second = queue.run(async () => {
+      db.prepare("insert into t (who) values (?)").run("B");
+    });
+    await expect(first).rejects.toMatchObject({ code: "storage.disk_full" });
+    await expect(second).resolves.toBeUndefined();
+    expect(who(db)).toEqual([{ who: "B" }]);
+  });
+
+  it("rolls back a full disk that left the transaction open, and serves the next transaction", async () => {
+    const db = full(open());
+    db.exec("create table log (v blob)");
+    db.exec(
+      "create trigger t_big after insert on t when new.who = 'big' begin insert into log values (zeroblob(65536)); end",
+    );
+    const queue = createWriteQueue(connectionPair(db, db));
+    await expect(
+      queue.run(async () => {
+        db.prepare("insert into t (who) values (?)").run("A");
+        db.prepare("insert into t (who) values (?)").run("big");
+      }),
+    ).rejects.toMatchObject({ code: "storage.disk_full" });
+    expect(db.isTransaction).toBe(false);
+    expect(who(db)).toEqual([]);
+    await expect(
+      queue.run(async () => {
+        db.prepare("insert into t (who) values (?)").run("next");
+      }),
+    ).resolves.toBeUndefined();
+    expect(who(db)).toEqual([{ who: "next" }]);
   });
 });
