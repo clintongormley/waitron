@@ -76,3 +76,7 @@ cuenta.
 
 Un pedido de mostrador sigue visible después del cobro hasta que lo entregues o cierres. Cada
 pase sigue mostrando solo las estaciones y zonas de servicio que tiene asignadas.
+
+Tú decides cuándo pedir la preparación desde el terminal. En **Configuración del local**, la
+pestaña **Cocina** permite elegir si se marca como listo cada plato o la comanda completa y fijar
+los avisos de retraso predeterminados. Ya no se elige allí un modo de marcha para todo el local.

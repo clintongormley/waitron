@@ -2482,8 +2482,10 @@ work contributes neither signal, and separately routed extras count remaining pa
 Expo server items and course/group sections no longer expose Away. Real table and counter reads
 retain their ready work with identical projections after legacy Away/Done stamps. The floor
 server projection omits en-route; Serve and Undo still update ready/pending line counts, and old
-Away stamps leave those counts unchanged. Kitchen clients and floor client/display consumers
-still require coordinated retirement before PR A publication.
+Away stamps leave those counts unchanged. The dashboard Kitchen tab retains preparation mode
+and timing defaults and omits the retired firing-mode choice and its API/query contracts.
+Kitchen clients and floor client/display consumers still require coordinated retirement before
+PR A publication.
 Client/internal-helper retirement, Requested and scoped pass release, station configuration,
 ticket presentation and schema retirement remain. Recheck A756's
 settings and current lane reservations before each working slice. A803's station/pass additions follow it. The plan

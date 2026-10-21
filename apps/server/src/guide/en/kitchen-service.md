@@ -68,3 +68,7 @@ quantity no longer counts as food to serve, even when its charge stays on the bi
 
 A counter order stays visible after payment until you collect or close it. Each pass still shows
 only the stations and service zones assigned to it.
+
+You choose when to request cooking from the till. In **Venue settings**, the **Kitchen** tab
+lets you choose whether to mark preparation ready by line or by whole ticket, and set the default
+late flags. You no longer choose a venue-wide firing mode there.

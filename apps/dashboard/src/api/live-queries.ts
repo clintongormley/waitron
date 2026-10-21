@@ -486,7 +486,6 @@ export const QUERY_DEPENDENCIES = {
     "dining_tables",
     "floor_zones",
   ],
-  getFireControl: ["locations"],
   getBumpMode: ["locations"],
   getKitchenTimingDefaults: ["kitchen_timing_defaults"],
   listMyAbsences: ["absences"],

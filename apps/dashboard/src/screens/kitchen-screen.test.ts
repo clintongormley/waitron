@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
-import type { Course, DashboardApi, FireControl, Station } from "../api/client.js";
+import type { Course, DashboardApi, Station } from "../api/client.js";
 import { KitchenScreen } from "./kitchen-screen.js";
 
 afterEach(cleanupWidgets);
@@ -48,7 +48,6 @@ function stubApi(
   overrides: Partial<DashboardApi> = {},
   stations: Station[] = STATIONS,
   courses: Course[] = COURSES,
-  fireControl: FireControl = "waiter",
 ): DashboardApi {
   return {
     listStations: vi.fn().mockResolvedValue(stations.map((s) => ({ ...s }))),
@@ -82,8 +81,6 @@ function stubApi(
       forgottenAfterMinutes: 15,
     }),
     setKitchenTimingDefaults: vi.fn().mockResolvedValue(undefined),
-    getFireControl: vi.fn().mockResolvedValue({ mode: fireControl }),
-    setFireControl: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -104,16 +101,17 @@ describe("kitchen-screen", () => {
     expect(q(el, "[data-test=bump-line]")!.getAttribute("variant")).toBe("secondary");
   });
 
-  it("still reads fire control when the bump mode cannot be read, and says the read failed", async () => {
-    const api = stubApi(
-      { getBumpMode: vi.fn().mockRejectedValue({ code: "server.internal" }) },
-      STATIONS,
-      COURSES,
-      "expo",
-    );
+  it("still reads timing when the bump mode cannot be read, and says the read failed", async () => {
+    const api = stubApi({ getBumpMode: vi.fn().mockRejectedValue({ code: "server.internal" }) });
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
     await flush(el);
-    expect(q(el, "[data-test=fire-expo]")!.getAttribute("variant")).toBe("primary");
+    expect(
+      [...q(el, "[data-test=timing-values]")!.children].map((value) => value.textContent),
+    ).toEqual([
+      `${t("kitchen.station_warm")}: 5`,
+      `${t("kitchen.station_overdue")}: 10`,
+      `${t("kitchen.station_forgotten")}: 15`,
+    ]);
     expect(q(el, "[role=alert]")!.textContent).toContain(codeMessage("server.internal"));
   });
 
@@ -171,49 +169,16 @@ describe("kitchen-screen", () => {
       first.getBoundingClientRect().bottom,
     );
   });
-
-  it("seeds the fire-control toggle from the PERSISTED setting (getFireControl) and reflects it", async () => {
-    const api = stubApi({}, STATIONS, COURSES, "kitchen");
-    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-    await flush(el);
-    expect(api.getFireControl).toHaveBeenCalledTimes(1);
-    expect(q(el, "[data-test=fire-kitchen]")!.getAttribute("variant")).toBe("primary");
-    expect(q(el, "[data-test=fire-waiter]")!.getAttribute("variant")).toBe("secondary");
-  });
-
-  it("toggles the fire-control mode across kitchen, expo, and back to waiter", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-    await flush(el);
-    q(el, "[data-test=fire-kitchen]")!.click();
-    await flush(el);
-    expect(api.setFireControl).toHaveBeenNthCalledWith(1, "kitchen");
-    q(el, "[data-test=fire-expo]")!.click();
-    await flush(el);
-    expect(api.setFireControl).toHaveBeenNthCalledWith(2, "expo");
-    q(el, "[data-test=fire-waiter]")!.click();
-    await flush(el);
-    expect(api.setFireControl).toHaveBeenNthCalledWith(3, "waiter");
-  });
-
-  it("surfaces a rejected fire-control write as a localised role=alert banner", async () => {
-    const api = stubApi({ setFireControl: vi.fn().mockRejectedValue({ code: "server.internal" }) });
-    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-    await flush(el);
-    q(el, "[data-test=fire-kitchen]")!.click();
-    await flush(el);
-    expect(q(el, "[role=alert]")).not.toBeNull();
-  });
 });
 
-it("clears a failed fire-control load's message once the server answers again", async () => {
+it("clears a failed bump-mode load's message once the server answers again", async () => {
   const liveData = new LiveData();
   const api = Object.assign(
     stubApi({
-      getFireControl: vi
+      getBumpMode: vi
         .fn()
         .mockRejectedValueOnce({ code: "connection.failed" })
-        .mockResolvedValue({ mode: "kitchen" }),
+        .mockResolvedValue({ mode: "ticket" }),
     }),
     { liveData },
   );
@@ -223,17 +188,17 @@ it("clears a failed fire-control load's message once the server answers again", 
   );
   liveData.refresh();
   await vi.waitFor(() => expect(q(el, "[role=alert]")).toBeNull());
-  expect(q(el, "[data-test=fire-kitchen]")!.getAttribute("variant")).toBe("primary");
+  expect(q(el, "[data-test=bump-ticket]")!.getAttribute("variant")).toBe("primary");
 });
 
-it("keeps a later refusal when a failed fire-control load recovers", async () => {
+it("keeps a later refusal when a failed bump-mode load recovers", async () => {
   const liveData = new LiveData();
   const api = Object.assign(
     stubApi({
-      getFireControl: vi
+      getBumpMode: vi
         .fn()
         .mockRejectedValueOnce({ code: "connection.failed" })
-        .mockResolvedValue({ mode: "waiter" }),
+        .mockResolvedValue({ mode: "line" }),
       setBumpMode: vi.fn().mockRejectedValue({ code: "server.internal" }),
     }),
     { liveData },
@@ -247,7 +212,7 @@ it("keeps a later refusal when a failed fire-control load recovers", async () =>
     expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("server.internal")),
   );
   liveData.refresh();
-  await vi.waitFor(() => expect(api.getFireControl).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(api.getBumpMode).toHaveBeenCalledTimes(2));
   await flush(el);
   expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("server.internal"));
 });
@@ -256,18 +221,18 @@ it("keeps a save's connection failure when the reads that failed beside it recov
   const liveData = new LiveData();
   const api = Object.assign(
     stubApi({
-      getFireControl: vi
+      getBumpMode: vi
         .fn()
-        .mockResolvedValueOnce({ mode: "waiter" })
+        .mockResolvedValueOnce({ mode: "line" })
         .mockRejectedValueOnce({ code: "connection.failed" })
         .mockRejectedValueOnce({ code: "connection.failed" })
-        .mockResolvedValue({ mode: "kitchen" }),
+        .mockResolvedValue({ mode: "ticket" }),
       setBumpMode: vi.fn().mockRejectedValue({ code: "connection.failed" }),
     }),
     { liveData },
   );
   const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-  await vi.waitFor(() => expect(api.getFireControl).toHaveBeenCalledTimes(1));
+  await vi.waitFor(() => expect(api.getBumpMode).toHaveBeenCalledTimes(1));
   liveData.refresh();
   await vi.waitFor(() =>
     expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed")),
@@ -276,11 +241,11 @@ it("keeps a save's connection failure when the reads that failed beside it recov
   await vi.waitFor(() => expect(api.setBumpMode).toHaveBeenCalledTimes(1));
   await flush(el);
   liveData.refresh();
-  await vi.waitFor(() => expect(api.getFireControl).toHaveBeenCalledTimes(3));
+  await vi.waitFor(() => expect(api.getBumpMode).toHaveBeenCalledTimes(3));
   await flush(el);
   liveData.refresh();
   await vi.waitFor(() =>
-    expect(q(el, "[data-test=fire-kitchen]")!.getAttribute("variant")).toBe("primary"),
+    expect(q(el, "[data-test=bump-ticket]")!.getAttribute("variant")).toBe("primary"),
   );
   await flush(el);
   expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed"));
