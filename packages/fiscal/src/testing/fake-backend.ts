@@ -114,6 +114,8 @@ export class FakeFiscalBackend implements FiscalBackend {
     await db.execute(sql`delete from fake_node_registrations`);
   }
 
+  assertRecordableAt(): void {}
+
   async registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration> {
     const registrationId = nextId();
     await tx.execute(sql`

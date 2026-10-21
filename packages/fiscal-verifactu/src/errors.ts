@@ -347,5 +347,12 @@ declare module "@waitron/shared" {
 
     /** `installCertificate`: a malformed request body. Names the field, never its value. */
     "fiscal.certificate_request_invalid": { field: string };
+
+    /**
+     * The box's clock reads a date before the first one AEAT accepts for an invoice (28-10-2024),
+     * so no sale can be recorded. `clockAt` is the reading's instant, ISO 8601, and `offsetMinutes`
+     * its offset, in which the date was judged.
+     */
+    "clock.unusable": { clockAt: string; offsetMinutes: number };
   }
 }
