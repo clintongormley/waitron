@@ -2,6 +2,7 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 import { playwright } from "@vitest/browser-playwright";
 import type { BrowserCommand } from "vitest/node";
 import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
+import { venueThemeStartupProbe } from "@waitron/ui/test/venue-theme-startup.js";
 
 type ColorScheme = "light" | "dark" | null;
 type ReducedMotion = "reduce" | "no-preference" | null;
@@ -47,6 +48,7 @@ const browserProject = {
       "src/date-utils.test.ts",
       "src/dashboard-app.touch.test.ts",
     ],
+    provide: { startupEngines: (process.env["WAITRON_STARTUP_ENGINES"] ?? "chromium").split(",") },
     browser: {
       enabled: true,
       // On the provider: Vitest 4 silently ignores a `context` key on the instance.
@@ -57,6 +59,7 @@ const browserProject = {
         emulateColorScheme,
         emulateReducedMotion,
         ...parkPointerCommands,
+        probeVenueThemeStartup: venueThemeStartupProbe(new URL("./index.html", import.meta.url)),
       },
     },
   },
@@ -96,7 +99,7 @@ const nodeTimezoneProject = {
 
 export default defineConfig({
   // Pre-bundled so Vite cannot discover it mid-run and reload an in-flight browser test.
-  optimizeDeps: { include: ["axe-core"] },
+  optimizeDeps: { include: ["axe-core"], entries: ["src/main.ts"] },
   // Under an AI agent, Vite would print every browser console.error, console.warn, uncaught error
   // and unhandled rejection to the terminal, a passing test's deliberate ones included.
   server: { forwardConsole: false },
