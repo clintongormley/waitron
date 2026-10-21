@@ -17,7 +17,9 @@ elecciones que lo forman:
   los campos y a los bordes un ligero matiz del color de marca.
 - **Esquinas**: **Rectas**, **Estándar** o **Redondeadas**, para botones, campos y tarjetas.
 - **Colores fijados a mano**: los colores del tema que recibieron un valor propio en lugar de
-  calcularse a partir del color de marca, o **Ninguno**. Esta página no los fija.
+  calcularse a partir del color de marca, o **Ninguno**. Esta página no puede fijar un color a
+  mano, pero sus correcciones pueden sustituir uno que se lee mal por un tono legible, y **Usar el
+  aspecto de Waitron** los quita todos.
 
 La nota al pie de la tarjeta explica que un mismo aspecto se aplica al panel y a todas las cajas.
 Cada tema tiene una versión clara y una oscura, y cada pantalla muestra una de ellas, según su
@@ -88,10 +90,11 @@ cada color afectado. Ofrece tres opciones:
 - **Corregir y guardar** aplica todas las correcciones y después guarda. El diálogo solo la ofrece
   cuando corregirlo todo no dejaría ningún aviso.
 
-Una vez guardado, el panel que estás usando cambia al nuevo aspecto al momento. Los demás paneles
-abiertos a la vez lo siguen por su cuenta, y una caja con la sesión iniciada lo sigue la próxima
-vez que comprueba si su carta ha cambiado, cosa que una caja que muestra una carta hace cada 15
-segundos.
+Cuando el tema que guardaste es el que está en uso, el panel que estás usando cambia al nuevo
+aspecto al momento. Los demás paneles abiertos a la vez lo siguen por su cuenta, y una caja con la
+sesión iniciada lo sigue la próxima vez que comprueba si su carta ha cambiado, cosa que una caja
+que muestra una carta hace cada 15 segundos. Una caja que no muestra ninguna carta lo sigue cuando
+vuelve a abrir una, o cuando se reinicia.
 
 Si guardaste de todos modos, la tarjeta Aspecto conserva una línea de aviso por cada color que
 sigue leyéndose mal, para que también lo vea la próxima persona que abra la página.

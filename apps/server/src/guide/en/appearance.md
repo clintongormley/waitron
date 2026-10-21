@@ -16,7 +16,9 @@ choices it is made of:
   and borders a faint cast of the brand colour.
 - **Corners**: **Square**, **Standard** or **Round**, for buttons, fields and cards.
 - **Colours set by hand**: any of the theme's colours that were given a value of their own rather
-  than worked out from the brand colour, or **None**. This page does not set them.
+  than worked out from the brand colour, or **None**. This page cannot set a colour by hand, but
+  its fixes can replace one that is hard to read with a readable shade, and **Use Waitron's look**
+  removes them all.
 
 The note at the bottom of the card explains that one look covers the dashboard and every till.
 Each theme has a light version and a dark version, and each screen shows one of them, as its own
@@ -85,9 +87,10 @@ for each colour that is. It offers three choices:
 - **Fix and save** takes every fix, then saves. The dialog offers it only when fixing everything
   would leave no warning at all.
 
-Once saved, the dashboard you are using changes to the new look at once. Other dashboards open at
-the same time follow on their own, and a signed-in till follows the next time it checks its menu
-for changes, which a till showing a menu does every 15 seconds.
+When the theme you saved is the one in use, the dashboard you are using changes to the new look at
+once. Other dashboards open at the same time follow on their own, and a signed-in till follows the
+next time it checks its menu for changes, which a till showing a menu does every 15 seconds. A till
+that is not showing a menu follows when it next opens one, or when it restarts.
 
 If you saved anyway, the Look card keeps a warning line for each colour that is still hard to read,
 so the next person who opens the page sees it too.

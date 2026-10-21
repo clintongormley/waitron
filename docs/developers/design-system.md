@@ -2731,8 +2731,8 @@ and the staffing grid's block editor in the A761 entry):
   A689 brought the translations dialog's Translate all under it: it is drawn `secondary` while the
   latest suggestion read does not say the service is on, or while a run is being sent or
   translated, and keeps its own variant while its own press is being sent.
-  A841 slice 5 brought the Look card's Use Waitron's look under it: drawn `secondary` and disabled
-  while the draft already is Waitron's look.
+  A841 slice 5 brought the Look card's Use Waitron's look under it: drawn `secondary` throughout,
+  and disabled while the draft already is Waitron's look or a save is under way.
   Not covered: a button disabled only while a request is being sent, an action blocked by its own
   field checks and the sign-in screens. Nothing guards it across screens.
 
@@ -4020,7 +4020,8 @@ slice 5), built with `settingsCard` and `settingsRows`:
 - **The preview's Light and Dark panels are painted from the draft inside the card and nowhere
   else** (`apps/dashboard/src/widgets/theme-preview.ts`). Each panel is a theme root inside the
   preview's shadow root, painted by a constructed sheet adopted into that shadow root only. The draft
-  never reaches the page itself; the page repaints after a save.
+  never reaches the page itself; the page repaints after a save, and only while the saved theme is
+  the one in use.
 - **A readability warning is drawn with the warning icon in `--wt-color-warning`, never as a field
   error**, and never disables Save. A brand-colour warning with a fix carries the fix as a button
   below it, and a fix taken shows its shade with Undo; two or more warnings with fixes add a Fix all
