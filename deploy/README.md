@@ -250,8 +250,8 @@ what it can make again:
 - crash reports in the `logs` volume's `crash-reports` folder that are more than a week old;
 - whatever a backup run that was cut off left in `backup-staging` in the state folder, unless a
   running server's heartbeat shows it may still be using them. On a full disk that heartbeat cannot
-  be written, so from 30 seconds after the disk fills, a start beside a running server deletes
-  that server's backup in progress too, and that backup run fails.
+  be written, so from about half a minute after the disk fills, a start beside a running server
+  deletes that server's backup in progress too, and that backup run may fail.
 
 It deletes nothing else: never the database, the lock files or `recovery.json`. A finished backup is
 kept unless its local backup folder was set inside `backup-staging`, which Waitron does not yet

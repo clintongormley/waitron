@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { AppError, sqliteFailureOf } from "@waitron/shared";
+import { AppError, MAX_CAUSE_DEPTH, sqliteFailureOf } from "@waitron/shared";
 import {
   UNREACHABLE_RESULT_CODES,
   classifyBootFailure,
@@ -223,6 +223,18 @@ describe("fullDiskFailure", () => {
     expect(fullDiskFailure(Object.assign(new Error("open"), { code: "EACCES" }), 0)).toBe(false);
     expect(fullDiskFailure(engineError(5, "database is locked"), 0)).toBe(false);
     expect(fullDiskFailure(engineError(26, "file is not a database"), 0)).toBe(false);
+  });
+
+  it("does not look for ENOSPC past the cause-chain depth limit", () => {
+    const chainWithEnospcAt = (depth: number): Error => {
+      let error: Error = Object.assign(new Error("ENOSPC: no space left on device"), {
+        code: "ENOSPC",
+      });
+      for (let i = 0; i < depth; i += 1) error = new Error(`layer ${i}`, { cause: error });
+      return error;
+    };
+    expect(fullDiskFailure(chainWithEnospcAt(MAX_CAUSE_DEPTH - 1), 0)).toBe(true);
+    expect(fullDiskFailure(chainWithEnospcAt(MAX_CAUSE_DEPTH), 0)).toBe(false);
   });
 
   it("returns false on a self-referencing cause", () => {

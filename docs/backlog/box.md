@@ -615,12 +615,16 @@ encrypted copy in `<state>/backup-staging`. The run's own `finally` deletes them
 state or venue folder has under 256 MiB free at the start, and after a start whose failure was
 classified `storage.disk_full`, whatever the free space (`runAdmittedEntry`'s catch,
 `apps/server/src/node-entry.ts`; the slice's plan, decision 7). Either way it keeps them while the
-venue folder's holder file shows a fresh heartbeat. Otherwise they stay until the next backup run.
+venue folder's holder file shows a fresh heartbeat. Outside those two cases they stay
+indefinitely: each backup run deletes only its own files (the dump is named from the run's own
+time, `dumpFileName`, and the encrypted copy goes in a fresh `mkdtemp` folder, both in
+`apps/server/src/backup-sweep.ts`), and nothing else deletes from `backup-staging`.
 The first case is run on a real disk by the leftovers case of
 `apps/server/src/start-full-disk.e2e.test.ts`.
 
 **Owner question:** should every start delete them, whatever the free space? Built default: only
-in the two cases above, as the design scopes it
+in the two cases above. The design scoped the first (under 256 MiB free); the second is the slice's
+plan, decision 7
 ([design §11](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#11-found-while-reading-outside-this-design),
 [plan decision 16](../superpowers/plans/2026-10-21-a798-2-full-disk-at-start.md#decisions-this-plan-makes-that-the-spec-does-not)).
 
@@ -633,8 +637,9 @@ backup folder there, or inside it, loses its archives. Refuse such a folder. Rea
 
 ## A box whose first setup was retired into a new workspace keeps that workspace's backup staging through the clean-up before the count
 
-When a first-setup resolution chose a new workspace (`binding` not null), the clean-up `runEntry`
-runs before first-setup resolution reads the folders the process was given, so a `backup-staging`
+When a first-setup resolution chose a new workspace (`binding` not null), the clean-up that
+`runEntry` runs before first-setup resolution reads the folders the process was given, not the
+workspace's, so a `backup-staging`
 inside the workspace's state folder is not deleted by it. The forced clean-up after a start that
 failed on a full disk runs inside `runAdmittedEntry` with the workspace's folders, and the count
 check uses them too. Accepted for A798-B slice 2 (its plan's decision 15).

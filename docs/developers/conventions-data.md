@@ -2581,7 +2581,8 @@ heartbeat is written as a new file and a rename (`writeVenueHolder`,
 `packages/store/src/venue-holder.ts`). On a full HFS+ filesystem it failed with `ENOSPC` on
 `venue.holder.json.partial` and the file kept its earlier `heartbeatAt` (F13 in the
 [slice 2 plan](../superpowers/plans/2026-10-21-a798-2-full-disk-at-start.md#measured-for-this-plan)),
-so 30 s after the disk fills a running server's holder reads stale, and a start beside it deletes
+so about half a minute after the disk fills (30 s after its last heartbeat, which is rewritten
+every 5 s) a running server's holder reads stale, and a start beside it deletes
 its staging. Accepted (the plan's decision 5): that one backup run fails, and the database and every
 archive already at a destination are untouched. Between a full disk and 256 MiB free, where the
 heartbeat still writes, the guard holds. Read, not run: when `WAITRON_VENUE_DIR` puts the venue
