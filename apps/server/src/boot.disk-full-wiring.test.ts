@@ -23,6 +23,8 @@ const seen = vi.hoisted(() => ({
   noted: [] as { state: unknown; deps: { dir: string } }[],
   tillDeps: [] as unknown[],
   billDeps: [] as unknown[],
+  deviceDeps: [] as unknown[],
+  scheduleDeps: [] as unknown[],
   failMountTillApi: false,
 }));
 
@@ -78,6 +80,27 @@ vi.mock("./bill-payments-api.js", async (importOriginal) => {
     mountBillPaymentsApi: (...args: Parameters<typeof actual.mountBillPaymentsApi>) => {
       seen.billDeps.push(args[1]);
       return actual.mountBillPaymentsApi(...args);
+    },
+  };
+});
+
+vi.mock("./device-api.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./device-api.js")>();
+  return {
+    ...actual,
+    mountDeviceApi: (...args: Parameters<typeof actual.mountDeviceApi>) => {
+      seen.deviceDeps.push(args[1]);
+      return actual.mountDeviceApi(...args);
+    },
+  };
+});
+vi.mock("./schedule-api.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./schedule-api.js")>();
+  return {
+    ...actual,
+    mountScheduleApi: (...args: Parameters<typeof actual.mountScheduleApi>) => {
+      seen.scheduleDeps.push(args[1]);
+      return actual.mountScheduleApi(...args);
     },
   };
 });
@@ -149,6 +172,28 @@ describe("boot's full-disk stop wiring", () => {
       expect(tillDeps.disk).toBe(state);
       expect(seen.billDeps).toHaveLength(1);
       expect((seen.billDeps[0] as { disk?: DiskFullState }).disk).toBe(state);
+    } finally {
+      await server?.close();
+      await rm(scratch, { recursive: true, force: true });
+    }
+  });
+
+  it("hands the stop to the kitchen screens' and the schedule's routes", async () => {
+    beforeServerStarts();
+    seen.created.length = 0;
+    seen.deviceDeps.length = 0;
+    seen.scheduleDeps.length = 0;
+    const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-disk-full-wiring-"));
+    let server: StartedServer | undefined;
+    try {
+      const { env } = await startEnv(scratch);
+      server = await startServer(env, env);
+      expect(seen.created).toHaveLength(1);
+      const { state } = seen.created[0]!;
+      expect(seen.deviceDeps).toHaveLength(1);
+      expect((seen.deviceDeps[0] as { disk?: DiskFullState }).disk).toBe(state);
+      expect(seen.scheduleDeps).toHaveLength(1);
+      expect((seen.scheduleDeps[0] as { disk?: DiskFullState }).disk).toBe(state);
     } finally {
       await server?.close();
       await rm(scratch, { recursive: true, force: true });

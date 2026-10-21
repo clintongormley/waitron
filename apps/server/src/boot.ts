@@ -1817,6 +1817,7 @@ async function bootServer(
         pairingMode,
         devMode: config.devMode,
         tenantDomain: config.tenantDomain,
+        disk: diskFull,
       },
       log,
     );
@@ -2018,7 +2019,7 @@ async function bootServer(
     }
     return descriptions;
   };
-  mountScheduleApi(app, { db, describeShifts }, log);
+  mountScheduleApi(app, { db, describeShifts, disk: diskFull }, log);
   mountMeApi(
     app,
     {

@@ -16,6 +16,7 @@ import {
 } from "@waitron/workforce";
 import type { Logger } from "./logger.js";
 import { mountScheduleApi } from "./schedule-api.js";
+import { createDiskFullState, type DiskFullState } from "./disk-full-state.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import "./errors.js";
@@ -557,5 +558,57 @@ describe("mountScheduleApi — absences", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "absence.invalid" },
     });
+  });
+});
+
+describe("while a save refused for a full disk stands", () => {
+  const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+  function diskState(): DiskFullState {
+    return createDiskFullState({
+      dir: "/unused",
+      now: () => new Date(),
+      log: noopLog,
+      statfs: () => Promise.resolve({ bavail: 0, frsize: 1 }),
+    });
+  }
+
+  function notedState(): DiskFullState {
+    const disk = diskState();
+    disk.noteRefused();
+    return disk;
+  }
+
+  /** Each `/api/` write route sent with no cookie and `{}`, with what it answered. */
+  async function sweep(
+    disk: DiskFullState,
+  ): Promise<{ key: string; status: number; code: string }[]> {
+    const app = new Hono();
+    mountScheduleApi(app, { db: suite.db, disk }, noopLog);
+    const keys = new Map<string, { method: string; path: string }>();
+    for (const { method, path } of app.routes) {
+      if (WRITE_METHODS.has(method) && path.startsWith("/api/"))
+        keys.set(`${method} ${path}`, { method, path });
+    }
+    const fixed = "00000000-0000-4000-8000-000000000001";
+    const answers: { key: string; status: number; code: string }[] = [];
+    for (const [key, { method, path }] of keys) {
+      const res = await send(app, method, path.replace(/:[^/]+/g, fixed), { body: {} });
+      const json = (await res.json()) as { error?: { code: string } };
+      answers.push({ key, status: res.status, code: json.error?.code ?? "" });
+    }
+    return answers;
+  }
+
+  it("refuses every schedule request", async () => {
+    const answers = await sweep(notedState());
+    expect(answers.length).toBeGreaterThan(0);
+    expect(answers.filter((a) => a.status !== 507 || a.code !== "storage.disk_full")).toEqual([]);
+  });
+
+  it("refuses none of them while nothing is noted", async () => {
+    const answers = await sweep(diskState());
+    expect(answers.filter((a) => a.status === 507)).toEqual([]);
+    expect(answers.every((a) => a.code === "session.required")).toBe(true);
   });
 });

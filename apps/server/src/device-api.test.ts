@@ -41,6 +41,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { PENDING_CAP, acceptDeviceJoinRequest, denyJoinRequest } from "./join-requests.js";
 import { createPairingMode, type PairingMode } from "./pairing-mode.js";
+import { createDiskFullState, type DiskFullState } from "./disk-full-state.js";
 import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -4441,3 +4442,110 @@ it.each([false, true])(
     ).toMatchObject({ profileId: secondProfileId, adjusted: false });
   },
 );
+
+describe("while a save refused for a full disk stands", () => {
+  /** Written out here, never imported, so a route opened by mistake in `device-api.ts` fails the sweep. */
+  const EXPECTED_OPEN = new Set([
+    "POST /api/device/join",
+    "PUT /api/device/zones",
+    "PUT /api/device/equipment",
+    "POST /api/device/active-profile",
+    "PUT /api/device/battery",
+  ]);
+  const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+  function diskState(): DiskFullState {
+    return createDiskFullState({
+      dir: "/unused",
+      now: () => new Date(),
+      log: noopLog,
+      statfs: () => Promise.resolve({ bavail: 0, frsize: 1 }),
+    });
+  }
+
+  function notedState(): DiskFullState {
+    const disk = diskState();
+    disk.noteRefused();
+    return disk;
+  }
+
+  function mountWithDisk(cfg: TillConfig, disk: DiskFullState): Hono {
+    const app = new Hono();
+    const pairingMode = createPairingMode();
+    windows.set(app, pairingMode);
+    mountDeviceApi(app, { db: suite.db, cfg, secureCookies: false, pairingMode, disk }, noopLog);
+    return app;
+  }
+
+  /** Each `/api/` write route sent with no cookie and `{}`; the keys of those answering 507. */
+  async function sweep(disk: DiskFullState): Promise<{ all: string[]; refused: string[] }> {
+    const venue = await setupVenue(suite.db);
+    const app = mountWithDisk(venue.cfg, disk);
+    const fixed = randomUUID();
+    const keys = new Map<string, { method: string; path: string }>();
+    for (const { method, path } of app.routes) {
+      if (WRITE_METHODS.has(method) && path.startsWith("/api/"))
+        keys.set(`${method} ${path}`, { method, path });
+    }
+    const all: string[] = [];
+    const refused: string[] = [];
+    for (const [key, { method, path }] of keys) {
+      all.push(key);
+      const answer = await send(
+        app,
+        method as "POST" | "PUT" | "PATCH" | "DELETE",
+        path.replace(/:[^/]+/g, fixed),
+        { body: {} },
+      );
+      if (answer.status === 507) refused.push(key);
+    }
+    return { all, refused };
+  }
+
+  it("refuses every kitchen-screen write except the device's own housekeeping", async () => {
+    const { all, refused } = await sweep(notedState());
+    const mismatched = all.filter((key) => EXPECTED_OPEN.has(key) === refused.includes(key));
+    expect(mismatched).toEqual([]);
+    expect([...EXPECTED_OPEN].filter((key) => !all.includes(key))).toEqual([]);
+  });
+
+  it("refuses none of them while nothing is noted", async () => {
+    const { refused } = await sweep(diskState());
+    expect(refused).toEqual([]);
+  });
+
+  it("a station screen bumps nothing while the stop holds", async () => {
+    const venue = await setupVenue(suite.db);
+    const { items } = await fireOrder(venue);
+    const item = items[0]!;
+    const stateOf = async () => {
+      const [row] = await suite.db
+        .select({ state: ticketItems.state })
+        .from(ticketItems)
+        .where(eq(ticketItems.id, item));
+      return row!.state;
+    };
+    const enrolApp = mountApp(venue.cfg);
+    const { jar } = await enrolStationScreen(enrolApp, venue, [venue.defaultStationId]);
+    const before = await stateOf();
+
+    const refused = await send(
+      mountWithDisk(venue.cfg, notedState()),
+      "POST",
+      `/api/device/ticket-items/${item}/advance`,
+      { cookie: jar, body: { to: "preparing" } },
+    );
+    expect(refused.status).toBe(507);
+    expect(await refused.json()).toEqual({ error: { code: "storage.disk_full", params: {} } });
+    expect(await stateOf()).toBe(before);
+
+    const bumped = await send(
+      mountWithDisk(venue.cfg, diskState()),
+      "POST",
+      `/api/device/ticket-items/${item}/advance`,
+      { cookie: jar, body: { to: "preparing" } },
+    );
+    expect(bumped.status).toBe(204);
+    expect(await stateOf()).toBe("preparing");
+  });
+});

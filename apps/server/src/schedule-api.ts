@@ -1,5 +1,5 @@
 import type { WaitronModule } from "@waitron/module";
-import type { Hono } from "hono";
+import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
@@ -23,10 +23,14 @@ import {
   requireUuidParam,
 } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import { mountGatedWhileDiskFull } from "./disk-full-gate.js";
+import type { DiskFullState } from "./disk-full-state.js";
 
 export interface ScheduleApiDeps {
   db: Database;
   describeShifts?: WaitronModule["describeShifts"];
+  /** While a save refused for a full disk stands, every write here answers 507. */
+  disk?: DiskFullState;
 }
 
 /** The surface's whole 4xx contract; a registered code absent here defaults to 400. */
@@ -48,7 +52,8 @@ const run = createErrorBoundary(STATUS, "schedule.failed");
  * Mounts the STAFF-FACING schedule request routes. Every route takes the requester's `personId` from
  * `requireSession`, never from the request body: a staff member acts only as themselves.
  */
-export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger): void {
+export function mountScheduleApi(root: Hono, deps: ScheduleApiDeps, log: Logger): void {
+  const app = new Hono();
   const asStaff = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
       return fn(tx);
@@ -134,4 +139,5 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
       return c.json({ absenceId }, 201);
     }),
   );
+  mountGatedWhileDiskFull(root, app, { disk: deps.disk, log, open: new Set() });
 }
