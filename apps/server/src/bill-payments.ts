@@ -22,6 +22,7 @@ import {
   compareDecimal,
   decimal,
   decimalToCents,
+  diskFullIn,
   isAppError,
   MONEY_SCALE,
   multiplyDecimal,
@@ -1226,6 +1227,25 @@ function refuseForStop(workingOrderId: string, log: Logger | undefined): never {
   throw diskFullRefusal();
 }
 
+/**
+ * Runs work that follows a card charged on a connected reader. A full disk becomes
+ * `sale.charged_not_recorded`, so the till can say the card was charged; any other error passes
+ * through unchanged.
+ */
+export async function afterCardCharged<T>(
+  workingOrderId: string,
+  log: Logger | undefined,
+  work: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (!diskFullIn(error)) throw error;
+    log?.("error", "sale.charged_not_recorded", { workingOrderId });
+    throw new AppError("sale.charged_not_recorded", { workingOrderId, reason: "disk_full" });
+  }
+}
+
 /** {@link takeReaderBillPayment}'s deps: the fiscal ones, and the reader's provider. */
 export type ReaderBillPaymentDeps = BillPaymentDeps & {
   provider: PaymentProvider;
@@ -1407,20 +1427,27 @@ export async function takeReaderBillPayment(
       throw error;
     }
 
+    if (result.state === "captured") {
+      // A captured result carries its time (`PaymentResult`, provider.ts).
+      const settledAt = result.settledAt!;
+      // Wrapped outside the transaction: when a full disk ended it or refused its commit,
+      // `withTransaction` throws the store's own error (`failure` in `node-sqlite-adapter.ts`).
+      return await afterCardCharged(workingOrderId, deps.log, () =>
+        withTransaction(deps.db, async (tx) => {
+          const done = await completeBillPayment(
+            tx,
+            deps,
+            cfg,
+            payment.id,
+            settledAt,
+            undefined,
+            req.guests,
+          );
+          return resultOf(tx, deps, cfg, done.payment, done.invoice, done.total);
+        }),
+      );
+    }
     return await withTransaction(deps.db, async (tx) => {
-      if (result.state === "captured") {
-        // A captured result carries its time (`PaymentResult`, provider.ts).
-        const done = await completeBillPayment(
-          tx,
-          deps,
-          cfg,
-          payment.id,
-          result.settledAt!,
-          undefined,
-          req.guests,
-        );
-        return resultOf(tx, deps, cfg, done.payment, done.invoice, done.total);
-      }
       if (!NOT_CHARGED.has(result.state)) {
         return { ...(await resultOf(tx, deps, cfg, payment, null)), outcome: "timeout" };
       }

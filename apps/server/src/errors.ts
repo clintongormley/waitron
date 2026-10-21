@@ -288,6 +288,11 @@ declare module "@waitron/shared" {
     /** The till was asked to ring a sale with no lines; refused before any catalogue read or fiscal write. */
     "sale.empty_basket": Record<string, never>;
     /**
+     * A card was charged on a connected reader and its sale could not be recorded; `reason` says
+     * why.
+     */
+    "sale.charged_not_recorded": { workingOrderId: string; reason: "disk_full" };
+    /**
      * A tender method this till does not support. `method` echoes the request so a translator can
      * name what was attempted; it is caller-supplied text, never a secret.
      */

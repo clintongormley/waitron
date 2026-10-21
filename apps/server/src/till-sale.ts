@@ -79,7 +79,7 @@ import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js
 import { issueMoment } from "./issue-moment.js";
 import { cashChange, ZERO } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
-import { refuseBillWithPayments } from "./bill-payments.js";
+import { afterCardCharged, refuseBillWithPayments } from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
@@ -1319,16 +1319,15 @@ async function payIntegrated(
   }
   // P2 is skipped entirely: the card was already charged.
   if (prepared.kind === "recover") {
-    return finalizeRecovery(deps, cfg, req, prepared.captured, operatorId, prepared.attendanceKey);
+    const { captured, attendanceKey } = prepared;
+    return afterCardCharged(req.id, deps.log, () =>
+      finalizeRecovery(deps, cfg, req, captured, operatorId, attendanceKey),
+    );
   }
   if (prepared.kind === "recover-settle") {
-    return finalizeSettleRecovery(
-      deps,
-      cfg,
-      req,
-      prepared.captured,
-      prepared.outstanding,
-      prepared.attendanceKey,
+    const { captured, outstanding, attendanceKey } = prepared;
+    return afterCardCharged(req.id, deps.log, () =>
+      finalizeSettleRecovery(deps, cfg, req, captured, outstanding, attendanceKey),
     );
   }
 
@@ -1376,30 +1375,28 @@ async function payIntegrated(
 
   // ---- P3 (tx B) ----
   if (prepared.kind === "settle") {
+    const { outstanding, attendanceKey } = prepared;
     return {
       outcome: "captured",
-      ticket: await finalizeSettle(
-        deps,
-        cfg,
-        req,
-        prepared.outstanding,
-        tip,
-        result,
-        prepared.attendanceKey,
+      ticket: await afterCardCharged(req.id, deps.log, () =>
+        finalizeSettle(deps, cfg, req, outstanding, tip, result, attendanceKey),
       ),
     };
   }
-  const ticket = await finalizeCapture(
-    deps,
-    cfg,
-    req,
-    prepared.gross,
-    prepared.identities,
-    tip,
-    result,
-    operatorId,
-    prepared.wasPlaced,
-    prepared.attendanceKey,
+  const { gross, identities, wasPlaced, attendanceKey } = prepared;
+  const ticket = await afterCardCharged(req.id, deps.log, () =>
+    finalizeCapture(
+      deps,
+      cfg,
+      req,
+      gross,
+      identities,
+      tip,
+      result,
+      operatorId,
+      wasPlaced,
+      attendanceKey,
+    ),
   );
   return { outcome: "captured", ticket };
 }

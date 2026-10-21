@@ -428,6 +428,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "session.required": 401,
   "locale.unsupported": 400,
   "sale.empty_basket": 400,
+  "sale.charged_not_recorded": 507,
   "product.variant_required": 400,
   // A line never sent whose product sold out, refused at send and at pay.
   "product.unavailable": 409,
