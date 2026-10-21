@@ -1,6 +1,7 @@
 import { css, html, nothing, type TemplateResult } from "lit";
 import { CATEGORY_PALETTE } from "@waitron/ui";
 import { isStoredColor } from "@waitron/catalogue/src/color-inheritance.js";
+import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 
 const PALETTE_GROUP_SIZE = CATEGORY_PALETTE.length / 2;
@@ -125,6 +126,12 @@ export const colorFieldStyles = css`
   .custom input[type="color"].empty::-moz-color-swatch {
     visibility: hidden;
   }
+  .custom-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--wt-space-2);
+  }
   .field-error {
     color: var(--wt-color-danger);
   }
@@ -146,6 +153,18 @@ export interface ColorFieldOptions {
   customEvent?: "input" | "change";
   errorId: string;
   change: (color: string | null) => void;
+  /** Replaces "Colour" as the legend and the radio group's name. */
+  legend?: string;
+  /** Replaces the no-colour choice's label and chip; choosing it still reports null. */
+  noneChoice?: { label: string; chip: string };
+  /** A text field beside the custom input holding the colour as typed. */
+  code?: {
+    name: string;
+    label: string;
+    value: string;
+    error: string;
+    change(text: string): void;
+  };
 }
 
 /**
@@ -161,8 +180,21 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
       ? options.categoryColor
       : null;
   const labelId = `${name}-none-label`;
-  const fallback =
-    inherited === undefined || inherited === null
+  const { noneChoice, code } = options;
+  const legend = options.legend ?? t("editor.color");
+  const fallback = noneChoice
+    ? {
+        id: undefined,
+        before: isStoredColor(noneChoice.chip)
+          ? html`<span
+              class="chip"
+              aria-hidden="true"
+              style=${`background:${noneChoice.chip}`}
+            ></span>`
+          : nothing,
+        after: nothing,
+      }
+    : inherited === undefined || inherited === null
       ? null
       : {
           id: `${name}-none-value`,
@@ -188,9 +220,35 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
         change(value);
       }}
     ></button>`;
+  const custom = html`<label class="custom"
+    >${t("editor.color_custom")}
+    <input
+      type="color"
+      class=${
+        color === null
+          ? "empty"
+          : (CATEGORY_PALETTE as readonly string[]).includes(color)
+            ? ""
+            : "on"
+      }
+      name=${name}
+      aria-invalid=${error ? "true" : "false"}
+      aria-describedby=${errorId}
+      .value=${color ?? "#000000"}
+      .disabled=${busy}
+      @input=${(event: Event) => {
+        event.stopPropagation();
+        if (customEvent === "input") change((event.target as HTMLInputElement).value);
+      }}
+      @change=${(event: Event) => {
+        if (customEvent !== "change") return;
+        event.stopPropagation();
+        change((event.target as HTMLInputElement).value);
+      }}
+  /></label>`;
   return html`<fieldset class="color">
-    <legend>${t("editor.color")}</legend>
-    <div class="color-options" role="radiogroup" aria-label=${t("editor.color")}>
+    <legend>${legend}</legend>
+    <div class="color-options" role="radiogroup" aria-label=${legend}>
       <button
         type="button"
         class="swatch none ${color === null ? "on" : ""}"
@@ -207,11 +265,13 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
       >
         ${fallback?.before ?? nothing}<span id=${labelId}
           >${
-            inherited === undefined
-              ? t("editor.color_none")
-              : options.inheritedFrom === "default"
-                ? t("editor.color_use_default")
-                : t("editor.color_use_category")
+            noneChoice
+              ? noneChoice.label
+              : inherited === undefined
+                ? t("editor.color_none")
+                : options.inheritedFrom === "default"
+                  ? t("editor.color_use_default")
+                  : t("editor.color_use_category")
           }</span
         >${fallback?.after ?? nothing}
       </button>
@@ -221,32 +281,22 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
         )}
       </div>
     </div>
-    <label class="custom"
-      >${t("editor.color_custom")}
-      <input
-        type="color"
-        class=${
-          color === null
-            ? "empty"
-            : (CATEGORY_PALETTE as readonly string[]).includes(color)
-              ? ""
-              : "on"
-        }
-        name=${name}
-        aria-invalid=${error ? "true" : "false"}
-        aria-describedby=${errorId}
-        .value=${color ?? "#000000"}
-        .disabled=${busy}
-        @input=${(event: Event) => {
-          event.stopPropagation();
-          if (customEvent === "input") change((event.target as HTMLInputElement).value);
-        }}
-        @change=${(event: Event) => {
-          if (customEvent !== "change") return;
-          event.stopPropagation();
-          change((event.target as HTMLInputElement).value);
-        }}
-    /></label>
+    ${code ? html`<div class="custom-row">${custom}${codeInput(code, busy)}</div>` : custom}
     <span class="field-error" id=${errorId}>${error || nothing}</span>
   </fieldset>`;
+}
+
+function codeInput(code: NonNullable<ColorFieldOptions["code"]>, busy: boolean): TemplateResult {
+  return html`<wt-input
+    name=${code.name}
+    label=${code.label}
+    hide-label
+    .value=${code.value}
+    .error=${code.error}
+    .disabled=${busy}
+    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+      event.stopPropagation();
+      code.change(event.detail.value);
+    }}
+  ></wt-input>`;
 }

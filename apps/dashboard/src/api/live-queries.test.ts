@@ -1198,3 +1198,18 @@ for (const type of ["location_business_day_settings", "location_day_cutover_chan
     }
   });
 }
+
+it("refreshes the theme list on a theme change, passively after the first read", async () => {
+  expect(QUERY_DEPENDENCIES.listThemes).toEqual(["custom_themes"]);
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () => new Response(JSON.stringify({ themes: [], inUse: null }), { status: 200 }),
+  );
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  const query = dashboardQuery(api, "listThemes", []);
+  await query.read();
+  expect(new Headers(fetchImpl.mock.calls[0]![1].headers).has("x-waitron-live")).toBe(false);
+  await query.read();
+  expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+  expect(active).toHaveBeenCalledOnce();
+});

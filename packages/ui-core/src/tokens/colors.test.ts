@@ -126,8 +126,7 @@ test("a nested theme root does not inherit the outer root's scheme", async () =>
   // `color-scheme` is an inherited property, so a theme root nested inside a DARK one and carrying
   // no data-theme of its own would be drawn dark while its colour tokens resolve light — light
   // surfaces with dark-drawn radios and checkboxes. The base block's `color-scheme: light` is the
-  // only thing that stops it. Nothing nests a theme root today, so this case is constructed here
-  // rather than observed.
+  // only thing that stops it.
   await commands.emulateColorScheme("light");
   const outer = mount("dark");
   const inner = document.createElement("div");

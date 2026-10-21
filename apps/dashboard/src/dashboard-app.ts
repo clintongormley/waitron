@@ -80,6 +80,7 @@ import "./screens/courses-screen.js";
 import "./screens/department-receipt-editor.js";
 import "./screens/venue-details-panel.js";
 import "./screens/venue-defaults-panel.js";
+import "./screens/appearance-screen.js";
 import "./screens/content-languages-screen.js";
 import "./screens/kitchen-screen.js";
 import { VENUE_SETTINGS_TABS, TAB_LABELS } from "./screens/venue-settings-screen.js";
@@ -130,6 +131,7 @@ const CORE_SCREENS = [
   "menus",
   "courses",
   "units",
+  "appearance",
   "content-languages",
   "venue-settings",
   "approvals",
@@ -275,6 +277,7 @@ const NAV_GROUPS: NavGroup[] = [
     headerKey: "nav.group.configuration",
     icon: "gear",
     items: [
+      { screen: "appearance", labelKey: "nav.appearance", requiresPermission: "venue.view" },
       {
         screen: "content-languages",
         labelKey: "nav.content_languages",
@@ -2534,6 +2537,11 @@ export class DashboardApp extends LitElement {
           .api=${this.api}
           .readOnly=${!this.#sessionPermissions.includes("venue.configure")}
         ></dashboard-courses-screen>`;
+      case "appearance":
+        return html`<dashboard-appearance-screen
+          .api=${this.api}
+          .canEdit=${this.#sessionPermissions.includes("layout.configure")}
+        ></dashboard-appearance-screen>`;
       case "content-languages":
         return html`<dashboard-content-languages-screen
           .api=${this.api}
