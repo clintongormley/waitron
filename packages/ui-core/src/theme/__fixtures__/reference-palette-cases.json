@@ -467,6 +467,7 @@
           "text-muted",
           "primary-text",
           "danger",
+          "warning",
           "station-blue-dot",
           "station-indigo-dot",
           "station-purple-dot",

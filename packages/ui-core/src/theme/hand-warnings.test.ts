@@ -150,8 +150,8 @@ describe("a colour set by hand that is hard to read", () => {
       { kind: "colour", key: "field-line" },
       { kind: "colour", key: "primary-text" },
       { kind: "colour", key: "google-button-line" },
-      { kind: "colour", key: "success" },
       { kind: "colour", key: "danger" },
+      { kind: "colour", key: "warning" },
       { kind: "station-dots", count: 15 },
       { kind: "colour", key: "primary" },
       { kind: "colour", key: "focus" },
@@ -174,6 +174,11 @@ describe("a colour set by hand that is hard to read", () => {
     expect(groupAgainst(text.against)).toEqual([
       { kind: "colour", key: "surface-sunken" },
       { kind: "colour", key: "track" },
+      { kind: "colour", key: "tab-danger-tint" },
+      { kind: "colour", key: "tab-warning-tint" },
+      { kind: "colour", key: "tab-bill-tint" },
+      { kind: "colour", key: "tab-ready-tint" },
+      { kind: "colour", key: "tab-seated-tint" },
       { kind: "station-fills", count: 12 },
     ]);
 
@@ -481,8 +486,8 @@ describe("the brand colour's fix beside colours set by hand", () => {
       {
         field: "handSet.dark.field-line",
         mode: "dark",
-        against: ["field-fill", "surface", "bg"],
-        fix: "#585e6a",
+        against: ["field-fill", "surface", "bg", "table-calm"],
+        fix: "#747a87",
         blockedBy: [],
       },
       {

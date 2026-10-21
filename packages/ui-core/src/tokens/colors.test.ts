@@ -6,7 +6,6 @@ import {
   rulesIn,
   type ContrastGroupId,
 } from "../theme/contrast-rules.js";
-import { contrastRatio } from "../theme/colour.js";
 import { mountTokenRoot, token } from "./token-test-helpers.js";
 // The tokens barrel, not the package's — `token-test-helpers.ts` beside this file imports the same way.
 import { applyTokens } from "./index.js";
@@ -409,12 +408,7 @@ describe.each(["light", "dark"] as const)("table fill colours (%s)", (theme) => 
   });
 
   test("an outline or a pulse ring reads 3:1 or more on the surface", () => {
-    const el = mount(theme);
-    for (const mark of ["--wt-color-danger", "--wt-color-warning"])
-      expect(
-        contrastRatio(token(el, mark), token(el, "--wt-color-surface")),
-        mark,
-      ).toBeGreaterThanOrEqual(3);
+    expect(failures("table-marks", theme, mount(theme))).toEqual([]);
   });
 
   test("the OS preference gives them the same values as the explicit theme", async () => {
@@ -484,13 +478,7 @@ describe.each(["light", "dark"] as const)("map and zone tab colours (%s)", (them
   const calm = "--wt-color-table-calm";
 
   test("the calm fill keeps its text at 4.5:1 and its edge line at 3:1", () => {
-    const el = mount(theme);
-    expect(
-      contrastRatio(token(el, "--wt-color-on-table-calm"), token(el, calm)),
-    ).toBeGreaterThanOrEqual(4.5);
-    expect(
-      contrastRatio(token(el, "--wt-color-field-line"), token(el, calm)),
-    ).toBeGreaterThanOrEqual(3);
+    expect(failures("calm-fill", theme, mount(theme))).toEqual([]);
   });
 
   test("calm and free are different colours", () => {
@@ -501,21 +489,11 @@ describe.each(["light", "dark"] as const)("map and zone tab colours (%s)", (them
   });
 
   test("text on a ready table reads at 4.5:1", () => {
-    const el = mount(theme);
-    expect(
-      contrastRatio(token(el, "--wt-color-on-success"), token(el, "--wt-color-success")),
-    ).toBeGreaterThanOrEqual(4.5);
+    expect(failures("ready-text", theme, mount(theme))).toEqual([]);
   });
 
   test("each tab tint keeps the text at 4.5:1 and its bar at 3:1", () => {
-    const el = mount(theme);
-    for (const [tint, bar] of TAB_TINTS) {
-      expect(
-        contrastRatio(token(el, "--wt-color-text"), token(el, tint)),
-        tint,
-      ).toBeGreaterThanOrEqual(4.5);
-      expect(contrastRatio(token(el, bar), token(el, tint)), tint).toBeGreaterThanOrEqual(3);
-    }
+    expect(failures("tab-tints", theme, mount(theme))).toEqual([]);
   });
 
   test("each tab tint is its bar colour at 18% over the surface", () => {
