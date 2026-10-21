@@ -1707,6 +1707,14 @@ only the bill to the survivor refuses `draft.out_of_date`. Both the direct comma
 survivor's current edit state succeeds and retains the separately marked lines. These cases
 replace Task 7's unrun consumed-draft observation; they do not establish the till's recovery UI.
 
+Each order save names the person whose order it is, and the server refuses
+`draft.person_not_signed_in` (409) unless that is the person signed in on the device (owner, Q35,
+A791). When the till meets that refusal while it still shows that person, it locks to the sign-in
+screen and keeps their unsaved lines for their next sign-in, without signing out the device's
+session, which belongs to someone else. The server cases are in
+`apps/server/src/till-api.drafts.test.ts`; the app cases are in
+`apps/till/src/till-app-drafts.test.ts`.
+
 ### Permanent group numbers (A773)
 
 A group's display number is separate from its firing position. Reordering held groups keeps

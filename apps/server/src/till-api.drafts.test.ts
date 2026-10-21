@@ -632,6 +632,83 @@ describe("PUT /api/parties/:id/drafts", () => {
     });
   });
 
+  it("refuses 409 draft.person_not_signed_in for a new order saved for someone else, writing nothing", async () => {
+    const party = await seated();
+    const billId = (await mainBillOf(party.partyId))!;
+    const before = await snapshot();
+
+    const refused = await send(
+      venue.app,
+      adminCookie,
+      "PUT",
+      `/api/parties/${party.partyId}/drafts`,
+      {
+        billId,
+        draftId: null,
+        revision: 0,
+        lines: [dish("Pulpo")],
+        expectedEdit: { billId, editorVersion: 0, draftId: null, draftRevision: null },
+        personId: venue.operatorId,
+      },
+    );
+
+    expect(refused.status).toBe(409);
+    expect(refused.json).toEqual(
+      refusal("draft.person_not_signed_in", { personId: venue.operatorId }),
+    );
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("refuses 409 draft.person_not_signed_in for an empty save for someone else", async () => {
+    const party = await seated();
+    const billId = (await mainBillOf(party.partyId))!;
+    const before = await snapshot();
+
+    const refused = await send(
+      venue.app,
+      adminCookie,
+      "PUT",
+      `/api/parties/${party.partyId}/drafts`,
+      {
+        billId,
+        draftId: null,
+        revision: 0,
+        lines: [],
+        expectedEdit: { billId, editorVersion: 0, draftId: null, draftRevision: null },
+        personId: venue.operatorId,
+      },
+    );
+
+    expect(refused.status).toBe(409);
+    expect(refused.json).toEqual(
+      refusal("draft.person_not_signed_in", { personId: venue.operatorId }),
+    );
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("still saves the signed-in person's own new order, whatever case the id is written in", async () => {
+    const party = await seated();
+    const billId = (await mainBillOf(party.partyId))!;
+
+    const saved = await send(
+      venue.app,
+      venue.cookie,
+      "PUT",
+      `/api/parties/${party.partyId}/drafts`,
+      {
+        billId,
+        draftId: null,
+        revision: 0,
+        lines: [dish("Pulpo")],
+        expectedEdit: { billId, editorVersion: 0, draftId: null, draftRevision: null },
+        personId: venue.operatorId.toUpperCase(),
+      },
+    );
+
+    expect(saved.status).toBe(200);
+    expect(saved.json.draft).toMatchObject({ ownerId: venue.operatorId });
+  });
+
   it("saves the session's person's draft, whatever operator the body names", async () => {
     const party = await seated();
 

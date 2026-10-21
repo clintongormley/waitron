@@ -491,6 +491,11 @@ declare module "@waitron/shared" {
      */
     "draft.not_found": { draftId: string };
     /**
+     * A till saved an order for a person who is not the one signed in on the device; nothing was
+     * written.
+     */
+    "draft.person_not_signed_in": { personId: string };
+    /**
      * A group command needs a HELD group — a join, a move into or out of one, a fire, a reorder —
      * and this one has fired. `groupId` is the group named or the group a moved line sits in.
      */

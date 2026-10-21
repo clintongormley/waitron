@@ -2383,13 +2383,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   already lays itself out again (A768's default; the owner has not decided). Decide whether any of
   them should follow a profile edit made on the dashboard while the till is open.
 
-- **A791. A restart of the till does not end the person's session, so the till guards each draft
-  save itself (left open by A768, 2026-10-17).** After the till restarts to the lock screen with no
-  sign-out (a refused device, for one), the next person's sign-in drops the drafts of the person
-  before (`#dropOthersDrafts`, `apps/till/src/till-app.ts`). The new session cookie arrives with the
-  login answer, a moment before the till runs that drop, so a save timer firing in between would go
-  out as the new person (read, not run). The server takes the person from the session alone; a
-  save that named its draft's person, refused when it differs, would close the gap in one place.
+- **A take-over or a recall into the order acts as whoever the session is (left open by A791,
+  2026-10-21).** Both are started by a tap and sent after the order's save queue
+  (`apps/till/src/state/draft-sync.ts` `#takeOver` and `runCommand`); one started by one person and
+  sent after the next person's sign-in answer would act as the next person (read, not run). Whether
+  the lock screen always stops such a command first is not traced. If it does not, name the person
+  in those requests as A791 did for the save.
 
 - **A792. Two smaller points A768's last review left (2026-10-17).** Signing out with a kept,
   unsaved order on a dead connection now waits up to 150 s before the till tells the server (the
