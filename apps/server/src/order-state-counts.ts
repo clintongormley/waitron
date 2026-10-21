@@ -1,6 +1,8 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   lineServiceCancellations,
+  orderDraftLines,
+  orderDrafts,
   orderGroups,
   products,
   ticketItems,
@@ -8,7 +10,7 @@ import {
   workingOrders,
   type Transaction,
 } from "@waitron/db";
-import { productUnits, unitOwnerJoin, units } from "@waitron/catalogue";
+import { menuItems, productUnits, unitOwnerJoin, units } from "@waitron/catalogue";
 import { isRecalledDish } from "./draft-source.js";
 
 export interface OrderStateCounts {
@@ -157,6 +159,40 @@ export async function readOrderStateCounts(
       result.get(line.orderId)!,
       dishCounts(dish, extras.get(line.id) ?? [], line.collectedAt !== null),
     );
+  }
+  const drafted = await tx
+    .select({
+      billId: orderDrafts.billId,
+      quantity: orderDraftLines.quantity,
+      unitId: units.id,
+      hardwareUnit: units.hardwareUnit,
+      precision: units.precision,
+      measure: units.measure,
+    })
+    .from(orderDraftLines)
+    .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftLines.draftId))
+    .leftJoin(menuItems, eq(menuItems.id, orderDraftLines.menuItemId))
+    .leftJoin(products, eq(products.id, menuItems.productId))
+    .leftJoin(productUnits, unitOwnerJoin)
+    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .where(and(inArray(orderDrafts.billId, [...orderIds]), eq(orderDrafts.state, "open")));
+  for (const line of drafted) {
+    const dish: CountedLine = {
+      ticket: null,
+      quantity: line.quantity,
+      cancelled: 0,
+      servedQuantity: 0,
+      servedAt: null,
+      unitPrecision: null,
+      unit:
+        line.unitId === null
+          ? null
+          : { hardwareUnit: line.hardwareUnit, precision: line.precision!, measure: line.measure! },
+      recalled: false,
+      sentAt: null,
+      groupState: null,
+    };
+    add(result.get(line.billId!)!, dishCounts(dish, [], false));
   }
   return result;
 }
