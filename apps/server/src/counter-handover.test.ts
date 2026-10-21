@@ -12,6 +12,7 @@ import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/share
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
+  advanceTicketItem,
   listStationQueue,
   listCounterWaiting,
   markCollected,
@@ -816,6 +817,7 @@ describe("GET /api/orders/counter-waiting", () => {
       ],
       orderNumber: (await orderRow(sent)).orderNumber,
       label: null,
+      counts: { ordered: 1, unsent: 0, held: 0, waiting: 1, ready: 0 },
       status: "placed",
       openedAt: (await orderRow(sent)).openedAt,
       settledAt: null,
@@ -898,6 +900,22 @@ describe("GET /api/orders/counter-waiting", () => {
       { lineId: queued, stationId: stationOf.get(queued) },
       { lineId: otherQueued, stationId: stationOf.get(otherQueued) },
     ]);
+  });
+
+  it("counts a paid order's queued dish as waiting, and as ready once it is ready", async () => {
+    const id = await paidPrepay();
+    const oneDish = { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 };
+    expect((await waitingRow(id))?.counts).toEqual({ ...oneDish, waiting: 1 });
+
+    const [item] = venue.db.all<{ id: string }>(
+      sql`select id from ticket_items where working_order_id = ${id}`,
+    );
+    await inTx(venue, async (tx) => {
+      await advanceTicketItem(tx, venue.cfg, item!.id, "preparing");
+      await advanceTicketItem(tx, venue.cfg, item!.id, "ready");
+    });
+
+    expect((await waitingRow(id))?.counts).toEqual({ ...oneDish, ready: 1 });
   });
 
   it("lists no movable dishes on an order sent but not paid", async () => {

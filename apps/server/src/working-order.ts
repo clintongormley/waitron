@@ -4,6 +4,7 @@ import {
 } from "@waitron/catalogue/src/new-customer-text.js";
 import { prepareUnitSnapshot } from "@waitron/catalogue/src/unit-presentation.js";
 import { readOrderPreviewItems, type OrderPreviewItem } from "./order-preview.js";
+import { readOrderStateCounts, type OrderStateCounts } from "./order-state-counts.js";
 import { requireOrderBillEditor, type OrderEditAuthority } from "./bill-editing.js";
 import type { AllergyCommand, KitchenAllergyBlock, TicketAllergyCopy } from "@waitron/module";
 import {
@@ -4683,8 +4684,7 @@ export interface HeldOrderSummary {
    */
   label: string | null;
   tableLabel?: string;
-  /** Number of lines on the order, 0 for a lineless order. */
-  itemCount: number;
+  counts: OrderStateCounts;
   /** The GROSS total the operator saw; the filed `sale_lines.line_total` is net. */
   total: string;
   /** `total` less the money the bill has received. */
@@ -4785,7 +4785,6 @@ export async function listHeldOrders(
         partyId: workingOrders.partyId,
         deliveryTableId: workingOrders.deliveryTableId,
         deliveryTableLabel: workingOrders.deliveryTableLabel,
-        itemCount: sql<number>`cast(count(${workingOrderLines.id}) as int)`,
         // Cast to text for `rawCentsToDecimal`; see its doc comment.
         total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
         openedAt: workingOrders.openedAt,
@@ -4812,6 +4811,7 @@ export async function listHeldOrders(
     const signals = await readBillSignals(tx, ids, Date.now());
     const former = await readFormerNumbers(tx, ids);
     const items = await readOrderPreviewItems(tx, ids);
+    const counts = await readOrderStateCounts(tx, ids);
     return rows.map((row) => {
       const total = rawCentsToDecimal(row.total);
       return {
@@ -4819,7 +4819,7 @@ export async function listHeldOrders(
         orderNumber: row.orderNumber,
         label: row.label,
         partyId: row.partyId,
-        itemCount: row.itemCount,
+        counts: counts.get(row.id)!,
         openedAt: row.openedAt,
         ...optional("tableLabel", tableLabels.get(row.id) ?? undefined),
         items: items.get(row.id)!,
@@ -6899,6 +6899,7 @@ export function paysAfterSending(mode: string | undefined): boolean {
 /** A counter order the counter is still waiting on: sent and not paid, or paid and not handed over. */
 export interface CounterWaitingOrder {
   items: OrderPreviewItem[];
+  counts: OrderStateCounts;
   id: string;
   orderNumber: number;
   label: string | null;
@@ -7012,6 +7013,10 @@ export async function listCounterWaiting(
       tx,
       rows.map((row) => row.id),
     );
+    const counts = await readOrderStateCounts(
+      tx,
+      rows.map((row) => row.id),
+    );
     const movable = new Map<string, { lineId: string; stationId: string }[]>();
     for (const dish of dishes) {
       if (!stillMovable(dish, dish)) continue;
@@ -7030,6 +7035,7 @@ export async function listCounterWaiting(
         (!placed || paysAfterSending(modes.get(row.id)));
       waiting.push({
         items: items.get(row.id)!,
+        counts: counts.get(row.id)!,
         id: row.id,
         orderNumber: row.orderNumber,
         label: row.label,

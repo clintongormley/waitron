@@ -139,7 +139,7 @@ describe("A738 order previews", () => {
       ]);
     }
     expect(parked.find((order) => order.id === orders[3])).toMatchObject({
-      itemCount: 0,
+      counts: { ordered: 0, unsent: 0, held: 0, waiting: 0, ready: 0 },
       total: "0.00",
       items: [],
     });

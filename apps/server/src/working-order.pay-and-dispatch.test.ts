@@ -543,22 +543,31 @@ async function addNode(cfg: DeviceRequestConfig, name: string): Promise<DeviceRe
 }
 
 /**
- * A parked order's line count and summed `line_total` (the GROSS draft total the held list shows) —
- * read and summed in JS, NOT the SQL `listHeldOrders` runs, so its `itemCount`/`total` aggregate is
+ * A parked order's dishes ordered (its dish lines' quantities, in whole thousandths, summed) and summed
+ * `line_total` (the GROSS draft total the held list shows) — read and summed in JS, NOT the SQL
+ * `listHeldOrders` runs, so its `counts.ordered`/`total` aggregate is
  * validated rather than restated (CLAUDE.md §1). `line_total` counts whole cents, read raw and
  * converted per row by `rawCentsToDecimal`, then added exactly — giving the amount the caller
  * compares with the list's. The empty case is "0.00", the same literal `listHeldOrders` renders for
  * an order with no lines.
  */
-async function draftAggregate(id: string): Promise<{ itemCount: number; total: string }> {
-  const { rows } = await suite.db.execute<{ line_total: string }>(sql`
-    select cast(line_total as text) as line_total from working_order_lines where working_order_id = ${id}
+async function draftAggregate(id: string): Promise<{ ordered: number; total: string }> {
+  const { rows } = await suite.db.execute<{
+    line_total: string;
+    quantity: number;
+    parent_line_id: string | null;
+  }>(sql`
+    select cast(line_total as text) as line_total, quantity, parent_line_id
+    from working_order_lines where working_order_id = ${id}
   `);
   const total = rows.reduce<Decimal>(
     (sum, r) => addDecimal(sum, rawCentsToDecimal(r.line_total)),
     decimal("0.00"),
   );
-  return { itemCount: rows.length, total };
+  const ordered = rows
+    .filter((r) => r.parent_line_id === null)
+    .reduce((sum, r) => sum + Number(r.quantity) / 1000, 0);
+  return { ordered, total };
 }
 
 /**
@@ -1136,14 +1145,14 @@ describe("cross-till end-to-end", () => {
     // CROSS-TILL VISIBILITY: till B's held list shows the order parked on till A. The aggregate is
     // validated against a read summed in JS (`draftAggregate`), not the SQL under test.
     const agg = await draftAggregate(orderId);
-    expect(agg.itemCount).toBe(2);
+    expect(agg.ordered).toBe(2);
     const heldOnB = await listHeldOrders({ db: suite.db }, tillB);
     expect(heldOnB).toContainEqual(
       expect.objectContaining({
         id: orderId,
         orderNumber,
         label: "Mesa 7",
-        itemCount: agg.itemCount,
+        counts: expect.objectContaining({ ordered: agg.ordered }),
         total: agg.total,
       }),
     );
