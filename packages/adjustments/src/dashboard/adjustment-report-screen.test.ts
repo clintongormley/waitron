@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveData, setLocale, tableNoMatches } from "@waitron/dashboard-kit";
 import { formatMoney } from "@waitron/shared";
 import { applyTokens } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { AdjustmentsApi } from "./client.js";
 import { ADJUSTMENTS_STRINGS, kindTotalName, tf } from "./strings.js";
 import type { AdjustmentReportScreen } from "./adjustment-report-screen.js";
@@ -11,6 +12,7 @@ import {
   alexEntries,
   emptyReport,
   fixtureReport,
+  MIA,
   onePage,
   samEntry,
   SAM,
@@ -1362,5 +1364,182 @@ describe("live data", () => {
     expect(api.getReport).toHaveBeenCalledTimes(1);
     expect(api.listEntries).toHaveBeenCalledTimes(1);
     liveData.clear();
+  });
+});
+
+describe("the reason filter", () => {
+  type ReasonField = HTMLElement & {
+    value: string;
+    label: string;
+    options: { value: string; label: string }[];
+  };
+  const DAY = ["2026-09-29", "2026-09-29"] as const;
+  const staffMeal = () => ({
+    ...samEntry(),
+    approvedBy: { personId: MIA, name: "Mia" },
+  });
+
+  function reasonField(el: AdjustmentReportScreen): ReasonField {
+    return el.shadowRoot!.querySelector<ReasonField>('wt-combobox[name="reason"]')!;
+  }
+
+  async function chooseReason(el: AdjustmentReportScreen, value: string): Promise<void> {
+    await chooseOption(reasonField(el), value);
+    await settle(el);
+  }
+
+  async function showAll(el: AdjustmentReportScreen): Promise<void> {
+    part(el, "show-all")!.click();
+    await settle(el);
+  }
+
+  const entriesTable = (el: AdjustmentReportScreen) =>
+    part(el, "entries") as HTMLElement & { emptyMessage: string };
+
+  it("offers every reason the report counted, by name, after All reasons", async () => {
+    const el = await mount(fakeApi());
+    await showAll(el);
+    const field = reasonField(el);
+    expect(field).not.toBeNull();
+    expect(field.label).toBe("Reason");
+    expect(field.value).toBe("all");
+    expect(field.options.map((option) => option.label)).toEqual([
+      "All reasons",
+      "Cold food",
+      "Entry error",
+      "Staff meal",
+    ]);
+  });
+
+  it("Staff meal lists every staff meal with who gave it and who approved it", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await showAll(el);
+    api.listEntries.mockResolvedValue(onePage([staffMeal()]));
+    await chooseReason(el, "r-staff");
+    expect(api.listEntries).toHaveBeenLastCalledWith(...DAY, "everyone", { reasonId: "r-staff" });
+    const list = rows(part(el, "entries")!);
+    expect(list.map((each) => each.key)).toEqual(["e4"]);
+    expect(list[0]!.cells.Reason).toBe("Staff meal");
+    expect(list[0]!.cells["Requested by"]).toBe("Sam");
+    expect(list[0]!.cells["Approved by"]).toBe("Mia");
+  });
+
+  it("asks every further page, and every live read, for the chosen reason", async () => {
+    const liveData = new LiveData();
+    const refresh = fakeApi({
+      listEntries: vi.fn((_f: string, _t: string, _o: unknown, page?: { after?: string }) =>
+        Promise.resolve(
+          page?.after === "cx"
+            ? { entries: [staffMeal()], next: null }
+            : {
+                entries: [{ ...staffMeal(), id: "e6", createdAt: "2026-09-29T21:30:00.000Z" }],
+                next: "cx",
+              },
+        ),
+      ),
+    });
+    const api = fakeApi({
+      liveData,
+      listEntries: vi.fn((_f: string, _t: string, _o: unknown, page?: { after?: string }) =>
+        Promise.resolve(
+          page?.after === "c1" ? onePage([staffMeal()]) : { entries: alexEntries(), next: "c1" },
+        ),
+      ),
+    });
+    api.background = refresh;
+    const el = await mount(api);
+    await showAll(el);
+    await chooseReason(el, "r-staff");
+    part(el, "show-more")!.click();
+    await settle(el);
+    expect(api.listEntries).toHaveBeenLastCalledWith(...DAY, "everyone", {
+      after: "c1",
+      reasonId: "r-staff",
+    });
+    liveData.invalidate([{ type: "adjustments" }]);
+    await vi.waitFor(() => expect(refresh.listEntries).toHaveBeenCalledTimes(2));
+    await settle(el);
+    expect(refresh.listEntries.mock.calls).toEqual([
+      [...DAY, "everyone", { reasonId: "r-staff" }],
+      [...DAY, "everyone", { after: "cx", limit: 499, reasonId: "r-staff" }],
+    ]);
+    liveData.clear();
+  });
+
+  it("asks for every reason again, with no options, once All reasons is chosen", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await showAll(el);
+    await chooseReason(el, "r-staff");
+    await chooseReason(el, "all");
+    expect(api.listEntries.mock.lastCall).toEqual([...DAY, "everyone"]);
+    expect(reasonField(el).value).toBe("all");
+  });
+
+  it("keeps the choice for another person's list, and starts at All reasons once the list is closed", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await showAll(el);
+    await chooseReason(el, "r-staff");
+    await open(el, SAM);
+    expect(api.listEntries).toHaveBeenLastCalledWith(
+      ...DAY,
+      { personId: SAM },
+      { reasonId: "r-staff" },
+    );
+    expect(reasonField(el).value).toBe("r-staff");
+    part(el, "close-entries")!.click();
+    await settle(el);
+    await showAll(el);
+    expect(reasonField(el).value).toBe("all");
+    expect(api.listEntries.mock.lastCall).toEqual([...DAY, "everyone"]);
+  });
+
+  it("keeps a reason the new range does not hold, and says no row matches it", async () => {
+    const getReport = vi
+      .fn()
+      .mockImplementationOnce((range?: Range) => Promise.resolve(answer(fixtureReport, range)))
+      .mockImplementation((range?: Range) => Promise.resolve(answer(emptyReport, range)));
+    const api = fakeApi({ getReport });
+    const el = await mount(api);
+    await showAll(el);
+    await chooseReason(el, "r-staff");
+    api.listEntries.mockResolvedValue(onePage([]));
+    await pick(el, "from", "2026-09-01");
+    expect(api.listEntries).toHaveBeenLastCalledWith("2026-09-01", "2026-09-29", "everyone", {
+      reasonId: "r-staff",
+    });
+    expect(reasonField(el).value).toBe("r-staff");
+    expect(reasonField(el).options).toEqual([
+      { value: "all", label: "All reasons" },
+      { value: "r-staff", label: "Staff meal" },
+    ]);
+    expect(entriesTable(el).emptyMessage).toBe(tableNoMatches());
+    await chooseReason(el, "all");
+    expect(entriesTable(el).emptyMessage).toBe("No adjustments on these days.");
+  });
+
+  it("keeps the choice's change inside the screen", async () => {
+    const el = await mount(fakeApi());
+    await showAll(el);
+    const heard = vi.fn();
+    document.addEventListener("wt-change", heard);
+    try {
+      await chooseReason(el, "r-staff");
+    } finally {
+      document.removeEventListener("wt-change", heard);
+    }
+    expect(heard).not.toHaveBeenCalled();
+  });
+
+  it("names the field and All reasons in Spanish", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi());
+    await showAll(el);
+    expect(reasonField(el).label).toBe(ADJUSTMENTS_STRINGS.es["adjustment_report.column.reason"]);
+    expect(reasonField(el).options[0]!.label).toBe(
+      ADJUSTMENTS_STRINGS.es["adjustment_report.entries.all_reasons"],
+    );
   });
 });

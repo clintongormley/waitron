@@ -159,6 +159,17 @@ interface ListRead extends AdjustmentEntryPage {
   met: boolean;
 }
 
+/** What a list asked for; `reasonId` is absent while every reason is listed. */
+interface Listed {
+  from: string;
+  to: string;
+  of: EntriesOf;
+  reasonId?: string;
+}
+
+/** The Reason field's value while no reason is chosen; a reason's id is a UUID, never this. */
+const ALL_REASONS = "all";
+
 @customElement("dashboard-adjustment-report-screen")
 export class AdjustmentReportScreen extends LitElement {
   static override styles = [
@@ -287,8 +298,11 @@ export class AdjustmentReportScreen extends LitElement {
   @state() private entriesNext: string | null = null;
   @state() private loadingMore = false;
   @state() private moreError?: string;
+  /** The reason the list is narrowed to, under the name it had when chosen: a later range may
+   * hold no row for it. */
+  @state() private reasonFilter?: { id: string; name: string };
   /** What the shown list asked for, so a further page asks for the same rows. */
-  #listed?: { from: string; to: string; of: EntriesOf };
+  #listed?: Listed;
   /** Moved on whenever the list starts again from its first page, so a further page asked for
    * before then is dropped. */
   #pagesGeneration = 0;
@@ -377,17 +391,19 @@ export class AdjustmentReportScreen extends LitElement {
     this.entriesError = undefined;
     const from = this.from!;
     const to = this.to!;
-    this.#listed = { from, to, of };
+    const reasonId = this.reasonFilter?.id;
+    const listed: Listed = { from, to, of, ...(reasonId === undefined ? {} : { reasonId }) };
+    this.#listed = listed;
     void this.#entryQueries
       .watch(
         "entries",
         {
-          key: JSON.stringify(["adjustments:entries", from, to, of]),
+          key: JSON.stringify(["adjustments:entries", from, to, of, reasonId ?? null]),
           dependencies: QUERY_DEPENDENCIES.entries.map((type) => ({ type })),
           refreshMs: 60_000,
           read: firstReadThenPassive(
             () => this.api,
-            (api) => this.#readList(api, from, to, of),
+            (api) => this.#readList(api, listed),
           ),
         },
         (read) => this.#listRead(read),
@@ -403,11 +419,11 @@ export class AdjustmentReportScreen extends LitElement {
    * change to the location's day cutover or time zone can place one lower. A refresh reads from the
    * top until it meets a row already shown, at most a largest page of rows.
    */
-  async #readList(api: AdjustmentsApi, from: string, to: string, of: EntriesOf): Promise<ListRead> {
+  async #readList(api: AdjustmentsApi, listed: Listed): Promise<ListRead> {
     const generation = this.#pagesGeneration;
     const shown = new Set((this.entries ?? []).map((entry) => entry.id));
     const meets = (page: AdjustmentEntryPage) => page.entries.some((entry) => shown.has(entry.id));
-    const first = await api.listEntries(from, to, of);
+    const first = await this.#ask(api, listed);
     const entries = [...first.entries];
     let next = first.next;
     let met = meets(first);
@@ -418,7 +434,7 @@ export class AdjustmentReportScreen extends LitElement {
       entries.length < MAX_ENTRY_PAGE_SIZE &&
       generation === this.#pagesGeneration
     ) {
-      const page = await api.listEntries(from, to, of, {
+      const page = await this.#ask(api, listed, {
         after: next,
         limit: MAX_ENTRY_PAGE_SIZE - entries.length,
       });
@@ -458,6 +474,21 @@ export class AdjustmentReportScreen extends LitElement {
     this.entries = [...entries.slice(0, upTo + 1), ...shown.slice(last + 1)];
   }
 
+  /** With every reason listed, a first page passes no options at all. */
+  #ask(
+    api: AdjustmentsApi,
+    listed: Listed,
+    page: { after?: string; limit?: number } = {},
+  ): Promise<AdjustmentEntryPage> {
+    const options = {
+      ...page,
+      ...(listed.reasonId === undefined ? {} : { reasonId: listed.reasonId }),
+    };
+    return Object.keys(options).length === 0
+      ? api.listEntries(listed.from, listed.to, listed.of)
+      : api.listEntries(listed.from, listed.to, listed.of, options);
+  }
+
   /** Drops any further page still on its way, and what the list said about the last one. */
   #firstPage(): void {
     this.#pagesGeneration += 1;
@@ -469,14 +500,14 @@ export class AdjustmentReportScreen extends LitElement {
   /** The person's own request. Focus stays on Show more, or moves to the list's heading once there
    * is no more to show. */
   async #showMore(): Promise<void> {
-    const { from, to, of } = this.#listed!;
+    const listed = this.#listed!;
     const generation = this.#pagesGeneration;
     const button = this.renderRoot.querySelector<HTMLElement>('[data-test="show-more"]')!;
     const hadFocus = button.matches(":focus-within");
     this.loadingMore = true;
     this.moreError = undefined;
     try {
-      const page = await this.api.listEntries(from, to, of, { after: this.entriesNext! });
+      const page = await this.#ask(this.api, listed, { after: this.entriesNext! });
       if (generation !== this.#pagesGeneration) return;
       this.entries = [...this.entries!, ...page.entries];
       this.entriesNext = page.next;
@@ -519,6 +550,37 @@ export class AdjustmentReportScreen extends LitElement {
     this.entriesOf = undefined;
     this.entries = undefined;
     this.entriesError = undefined;
+    this.reasonFilter = undefined;
+  }
+
+  /** Every reason the range counted, by name, and the chosen one even when the range lost it. */
+  #reasonOptions(report: AdjustmentReport): { value: string; label: string }[] {
+    const reasons = report.overall.byReason.map((reason) => ({
+      id: reason.reasonId,
+      name: reason.reasonName,
+    }));
+    const chosen = this.reasonFilter;
+    if (chosen !== undefined && !reasons.some((reason) => reason.id === chosen.id)) {
+      reasons.push(chosen);
+    }
+    reasons.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+    return [
+      { value: ALL_REASONS, label: t("adjustment_report.entries.all_reasons") },
+      ...reasons.map((reason) => ({ value: reason.id, label: reason.name })),
+    ];
+  }
+
+  #onReasonChange(event: CustomEvent<{ value: string }>, report: AdjustmentReport): void {
+    event.stopPropagation();
+    const value = event.detail.value;
+    this.reasonFilter =
+      value === ALL_REASONS
+        ? undefined
+        : {
+            id: value,
+            name: this.#reasonOptions(report).find((option) => option.value === value)!.label,
+          };
+    this.#loadEntries(this.entriesOf!);
   }
 
   #personRows(report: AdjustmentReport): PersonRow[] {
@@ -875,7 +937,7 @@ export class AdjustmentReportScreen extends LitElement {
     </div>`;
   }
 
-  #entriesSection(): TemplateResult | typeof nothing {
+  #entriesSection(report: AdjustmentReport): TemplateResult | typeof nothing {
     const of = this.entriesOf;
     if (of === undefined) return nothing;
     const heading =
@@ -895,6 +957,14 @@ export class AdjustmentReportScreen extends LitElement {
           >${t("adjustment_report.entries.close")}</wt-button
         >
       </div>
+      <wt-combobox
+        name="reason"
+        label=${t("adjustment_report.column.reason")}
+        search="auto"
+        .options=${this.#reasonOptions(report)}
+        .value=${this.reasonFilter?.id ?? ALL_REASONS}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onReasonChange(event, report)}
+      ></wt-combobox>
       <wt-data-table
         data-test="entries"
         aria-label=${heading}
@@ -914,7 +984,7 @@ export class AdjustmentReportScreen extends LitElement {
         .rowKey=${(entry: AdjustmentEntry) => entry.id}
         .loading=${this.entries === undefined}
         .loadingMessage=${t("adjustment_report.loading")}
-        .emptyMessage=${t("adjustment_report.none")}
+        .emptyMessage=${this.reasonFilter === undefined ? t("adjustment_report.none") : tableNoMatches()}
         .noMatchesMessage=${tableNoMatches()}
         .errorMessage=${this.entriesError ?? ""}
       ></wt-data-table>
@@ -960,7 +1030,7 @@ export class AdjustmentReportScreen extends LitElement {
       }
       ${
         report
-          ? html`${this.#summary(report)}${this.#people(report)}${this.#entriesSection()}${this.#breakdowns(report)}`
+          ? html`${this.#summary(report)}${this.#people(report)}${this.#entriesSection(report)}${this.#breakdowns(report)}`
           : nothing
       }`;
   }
