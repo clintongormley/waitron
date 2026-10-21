@@ -2425,8 +2425,7 @@ export class TillFloorScreen extends LitElement {
   }
 
   /** "nearest" leaves a tab wider than the room between the edges where it is once it sticks out
-   * of both ends, so such a tab is brought to the strip's start instead: clear of the start edge
-   * when one will still be there, else as far as the ring's room. */
+   * of both ends, so such a tab is brought to the strip's start instead. */
   #showTab(key: string, side: TabsEdge): void {
     const strip = this.#tabsStrip!;
     const tabs = [...strip.querySelectorAll<HTMLElement>(".zone-tab")];
@@ -2437,13 +2436,12 @@ export class TillFloorScreen extends LitElement {
     const clear = parseFloat(style.scrollPaddingInlineStart);
     const box = tab.getBoundingClientRect();
     if (box.width > right - left - clear - parseFloat(style.scrollPaddingInlineEnd)) {
-      const edgeBefore = tabs
-        .slice(0, index)
-        .some((zoneTab) => this.#zone.marks.has(tabKey(zoneTab)));
+      const marked = (zoneTab: HTMLElement) => this.#zone.marks.has(tabKey(zoneTab));
+      const edgeBefore = tabs.slice(0, index).some(marked);
+      const edgeAfter = tabs.slice(index + 1).some(marked);
       const ring = parseFloat(style.paddingBlockStart);
       const spare = right - left - box.width;
-      // The tapped start edge stays over a tab the strip can hold until the tab is clear of it.
-      const aim = edgeBefore || (side === "start" && spare >= 1) ? clear : ring;
+      const aim = edgeBefore || (side === "start" && spare >= 1 && !edgeAfter) ? clear : ring;
       // Centred when the spare room is under a ring's at each end: the scroll lands on whole pixels,
       // so a tab within a pixel of the strip's width lands as one wider than it.
       const inset = spare < 1 ? aim : Math.min(aim, Math.max(spare / 2, spare - ring));

@@ -1125,6 +1125,48 @@ describe("till-floor-screen: the zone strip's edge", () => {
     );
   });
 
+  it.each([240, 251, 265])(
+    "one start-edge tap shows a %i px tab whole when a later tab has a state",
+    async (width) => {
+      const order = [
+        zone("z1", "Inside", 0),
+        zone("z2", "Bar", 1),
+        zone("z3", "Up", 2),
+        zone("z4", "Garden", 3),
+        zone("z5", "Patio", 4),
+      ];
+      await onPhone(
+        [
+          seated("t1", "z1"),
+          seated("t3", "z3", { timingBand: "forgotten" }),
+          seated("t5", "z5", { signals: [{ kind: "take_order" }] }),
+        ],
+        async (el) => {
+          const strip = stripOf(el);
+          const zoneTab = tabOf(el, "z3").closest<HTMLElement>(".zone-tab")!;
+          const tab = () => zoneTab.getBoundingClientRect();
+          const box = () => paddingBox(strip);
+          const named = () =>
+            (["start", "end"] as const).filter(
+              (side) => edgeOf(el, side)?.getAttribute("aria-label") === "Show Up",
+            );
+          await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
+          zoneTab.style.paddingRight = `${width - tab().width}px`;
+          await nextFrames();
+          strip.scrollLeft += tab().left - (box().left - 10);
+          await expect.poll(named).toEqual(["start"]);
+          expect(edgeOf(el, "end")?.getAttribute("aria-label")).toBe("Show Patio");
+          await userEvent.click(edgeOf(el, "start")!);
+          await expect.poll(named).toEqual([]);
+          expect(tab().left).toBeGreaterThanOrEqual(box().left);
+          expect(tab().right).toBeLessThanOrEqual(box().right);
+        },
+        true,
+        order,
+      );
+    },
+  );
+
   it("brings a tab within a pixel of the strip's width to its start, as one wider than the strip", async () => {
     const name = "Upstairs private dining room and bar";
     await onPhone(
