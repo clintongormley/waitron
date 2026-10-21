@@ -92,8 +92,8 @@ type TransferValidate = NonNullable<
   Extract<ModuleConfigurationTransfer, { kind: "tables" }>["validate"]
 >;
 
-// Typed as the contract's validate so the bundle the import supplies reaches a core check that
-// one day reads it.
+// The custom_themes rows' check lives in @waitron/layouts, which packages/db does not depend on,
+// so it joins the core module's check here.
 const validateCore: TransferValidate = CORE_CONFIGURATION_TRANSFER.validate;
 
 const CORE_TRANSFER: ModuleConfigurationTransfer = {

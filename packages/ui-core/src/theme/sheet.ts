@@ -4,8 +4,7 @@ import { THEME_TOKENS } from "./tokens.js";
 const COLOUR_VALUE = /^#[0-9a-f]{6}$/;
 const RADIUS_VALUE = /^\d+px$/;
 
-// A missing token fails its shape check, so this refuses any key set but exactly THEME_TOKENS,
-// and nothing but a derived value can reach the stylesheet text.
+// A missing token fails its shape check, so this refuses any key set but exactly THEME_TOKENS.
 function declarations(version: Readonly<Record<string, string>>, indent: string): string {
   const extra = Object.keys(version).find((key) => !THEME_TOKENS.includes(key));
   if (extra !== undefined) throw new RangeError(`not a theme token: ${extra}`);

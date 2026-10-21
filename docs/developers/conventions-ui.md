@@ -189,8 +189,7 @@ with no built setup app answers every other GET with its 200 placeholder
 ### The page's look, its token copies and its theme
 
 Each answer is one self-contained HTML page with no external file, sent with
-`Cache-Control: no-cache`. The page cannot load the apps' token files (`apps/server` does not
-depend on `@waitron/ui-core`), so `GUIDE_PAGE_TOKENS` (in `guide-pages.ts`) declares its own copies
+`Cache-Control: no-cache`. The page loads no file, so `GUIDE_PAGE_TOKENS` (in `guide-pages.ts`) declares its own copies
 of the `--wt-*` tokens it reads, each colour as `light-dark(<light>, <dark>)`, and every rule reads
 `var(--wt-…)`. Sizes are in px. Guard: `scripts/guide-page-tokens.test.ts`, weaker than its name: it
 reads `packages/ui-core/src/tokens/colors.css` and `structure.css` as text, finds a declaration by
@@ -1484,7 +1483,7 @@ when the open completes, because `#onFindBillOpen` abandons the open once Find a
 showing. Pinned by "a bill opened from Find a bill shows no loading line, and Back during its read
 stops it" in the same file.
 
-**The start read.** `GET /api/till` answers `readTillSetup` (`apps/server/src/till-setup.ts`) plus
+**The start read.** `GET /api/till` answers `completeTillSetup` (`apps/server/src/till-setup.ts`) plus
 `servers`, and `setupRevision`, a hash of every field but `servers` (`setupRevisionOf`).
 `/api/menu-state` names the same revision. When a poll names one the till has not applied,
 `#noteSetupRevision` reads `/api/till` again and `#applyVenueSetup` applies the venue's values:

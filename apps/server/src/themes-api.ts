@@ -68,6 +68,8 @@ function requireTheme(body: Record<string, unknown>): Record<string, unknown> {
 }
 
 export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): void {
+  // Deliberately unauthenticated: the answer is the stylesheet and hash of the theme in use, and
+  // carries no secrets.
   app.get("/api/theme", (c) =>
     run(c, log, async () => {
       const inUse = await withTransaction(deps.db, (tx) => readThemeInUse(tx));

@@ -1,8 +1,6 @@
 // Copies each package's `drizzle/` folder in beside the bundle: every *_MIGRATIONS descriptor
 // computes its folder from its own import.meta.url, and esbuild collapses them all onto dist/. Reads
 // the same manifest `@waitron/migrations` reads, so the two cannot disagree about names.
-// Also copies ui-core's package.json and its two token files (src/tokens/colors.css and
-// structure.css) under dist/node_modules/@waitron/ui-core/.
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
