@@ -958,7 +958,7 @@ action with `toContain`, and the new action contains it whole, so it keeps passi
   - `"a start whose leftovers free enough counts itself and boots"`: in `folder("leftovers")`, a
     `recovery.json` from an earlier start (`writeRecoveryState(FRESH)` then one real `runEntry`
     boot with room), `logs/waitron.log.1` to `.5` of 512 KiB each, an 8-day-old
-    `logs/crash-reports/holder-frozen-old.json`, a 2 MiB `backup-staging/x.dump`; record the inodes
+    `logs/crash-reports/holder-frozen-old.json`, a 2 MiB `backup-staging/waitron-20261020T000000Z.dump`; record the inodes
     of `recovery.lock` and `venue/venue.lock`; `fill()`. Assert `free()` < 65 536 first (the fill
     worked). Run `runEntry`: resolves, `startServer` called once, `serveRecovery` never; the
     leftovers gone and `waitron.log.1` kept; `recovery.json` `failures: 2` (the setup boot counted

@@ -22,6 +22,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { openVenueDatabase } from "@waitron/db";
 import { openVenueStore } from "@waitron/store";
 import { firstFiscalFixture } from "../test/first-fiscal.js";
+import { dumpFileName } from "./backup-keys.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { loadBoxEnv } from "./box-env.js";
 import { runEntry, serveRecovery, type RecoveryServeOptions } from "./node-entry.js";
@@ -140,7 +141,8 @@ describe("a start on a real full disk", () => {
     const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
     utimesSync(crash, eightDaysAgo, eightDaysAgo);
     mkdirSync(join(stateDir, "backup-staging"));
-    writeFileSync(join(stateDir, "backup-staging", "x.dump"), Buffer.alloc(2 * 1024 * 1024, 66));
+    const dump = join(stateDir, "backup-staging", dumpFileName(new Date("2026-10-20T00:00:00Z")));
+    writeFileSync(dump, Buffer.alloc(2 * 1024 * 1024, 66));
     const recoveryLock = join(stateDir, "recovery.lock");
     const venueLock = join(stateDir, "venue", "venue.lock");
     const inodes = [inodeOf(recoveryLock), inodeOf(venueLock)];
@@ -155,7 +157,7 @@ describe("a start on a real full disk", () => {
     for (let i = 2; i <= 5; i += 1)
       expect(() => statSync(join(logs, `waitron.log.${i}`))).toThrow();
     expect(() => statSync(crash)).toThrow();
-    expect(() => statSync(join(stateDir, "backup-staging", "x.dump"))).toThrow();
+    expect(() => statSync(dump)).toThrow();
     expect(statSync(join(logs, "waitron.log.1")).size).toBe(512 * 1024);
     // The setup start counted one, and its stayed-up clear is a stub that never fires.
     expect((await readRecoveryState(stateDir)).failures).toBe(2);

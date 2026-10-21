@@ -629,13 +629,6 @@ plan, decision 7
 ([design §11](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#11-found-while-reading-outside-this-design),
 [plan decision 16](../superpowers/plans/2026-10-21-a798-2-full-disk-at-start.md#decisions-this-plan-makes-that-the-spec-does-not)).
 
-## A local backup folder inside `<state>/backup-staging` is accepted, and a start's clean-up would delete it
-
-`parseEntry` and `parseDestinations` (`apps/server/src/backup-config.ts`) take any `local-fs`
-folder through `resolve`, with no check of where it is. A start's clean-up deletes every entry of
-`<state>/backup-staging` recursively (`freeSpaceAtStart`, `apps/server/src/start-space.ts`), so a
-backup folder there, or inside it, loses its archives. Refuse such a folder. Read, not run.
-
 ## A box whose first setup was retired into a new workspace keeps that workspace's backup staging through the clean-up before the count
 
 When a first-setup resolution chose a new workspace (`binding` not null), the clean-up that

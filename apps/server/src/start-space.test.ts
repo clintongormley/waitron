@@ -1,9 +1,10 @@
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { VenueHolder } from "@waitron/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { dumpFileName } from "./backup-keys.js";
 import {
   CRASH_REPORT_KEEP_MS,
   START_FREE_SPACE_FLOOR,
@@ -272,6 +273,87 @@ describe("freeSpaceAtStart", () => {
     const { deps: d, log } = deps({});
     await freeSpaceAtStart(d);
     expect(log).toHaveBeenCalledWith("warn", "storage.start_cleanup_failed", { errno: "ENOTDIR" });
+  });
+
+  it("deletes only the names a backup run makes in backup staging", async () => {
+    const stagingDir = join(stateDir, "backup-staging");
+    const dump = join(stagingDir, dumpFileName(new Date("2026-10-20T03:04:05Z")));
+    await touch(dump);
+    await touch(`${dump}.partial`);
+    const encrypt = await mkdtemp(join(stagingDir, "backup-encrypt-"));
+    await touch(join(encrypt, "artifact"));
+    const kept = [
+      // A local backup folder or a venue folder an operator set inside staging.
+      join(
+        stagingDir,
+        "retained",
+        "waitron-20261019T000000Z-1b4e28ba-2fa1-41d2-883f-0016d3cca427.backup.enc",
+      ),
+      join(stagingDir, "retained", dumpFileName(NOW)),
+      join(stagingDir, "venue", "venue.db"),
+      join(stagingDir, "waitron-20261019T000000Z-1b4e28ba-2fa1-41d2-883f-0016d3cca427.backup.enc"),
+      join(stagingDir, "notes.txt"),
+      join(stagingDir, `${dumpFileName(NOW)}.bak`),
+    ];
+    for (const path of kept) await touch(path);
+
+    const { deps: d, log } = deps({});
+    await freeSpaceAtStart(d);
+
+    for (const path of [dump, `${dump}.partial`, encrypt])
+      expect(existsSync(path), path).toBe(false);
+    for (const path of kept) expect(existsSync(path), path).toBe(true);
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "storage.start_space_low",
+      expect.objectContaining({ deleted: 3 }),
+    );
+  });
+
+  it("leaves alone a staging or crash-report folder that is a symbolic link, and what it points at", async () => {
+    const elsewhere = join(root, "elsewhere");
+    const dump = dumpFileName(new Date("2026-10-20T00:00:00Z"));
+    await touch(join(elsewhere, "staging", dump));
+    await touch(join(elsewhere, "crash", "holder-frozen-a.json"), 8 * DAY_MS);
+    await symlink(join(elsewhere, "staging"), join(stateDir, "backup-staging"));
+    await symlink(join(elsewhere, "crash"), join(logDir, "crash-reports"));
+    await touch(rotated(2));
+
+    const { deps: d, log } = deps({});
+    await freeSpaceAtStart(d);
+
+    expect(existsSync(join(elsewhere, "staging", dump))).toBe(true);
+    expect(existsSync(join(elsewhere, "crash", "holder-frozen-a.json"))).toBe(true);
+    expect(existsSync(rotated(2))).toBe(false);
+    expect(log).toHaveBeenCalledWith("warn", "storage.start_cleanup_skipped", {
+      folder: "backup-staging",
+    });
+    expect(log).toHaveBeenCalledWith("warn", "storage.start_cleanup_skipped", {
+      folder: "crash-reports",
+    });
+    expect(log).not.toHaveBeenCalledWith("warn", "storage.start_cleanup_skipped", {
+      folder: "logs",
+    });
+  });
+
+  it("leaves alone a log folder that is a symbolic link, with the crash reports inside it", async () => {
+    const elsewhere = join(root, "elsewhere-logs");
+    await touch(join(elsewhere, "waitron.log.2"));
+    await touch(join(elsewhere, "crash-reports", "holder-frozen-a.json"), 8 * DAY_MS);
+    const linked = join(stateDir, "linked-logs");
+    await symlink(elsewhere, linked);
+
+    const { deps: d, log } = deps({ logDir: linked });
+    await freeSpaceAtStart(d);
+
+    expect(existsSync(join(elsewhere, "waitron.log.2"))).toBe(true);
+    expect(existsSync(join(elsewhere, "crash-reports", "holder-frozen-a.json"))).toBe(true);
+    expect(log).toHaveBeenCalledWith("warn", "storage.start_cleanup_skipped", { folder: "logs" });
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "storage.start_space_low",
+      expect.objectContaining({ deleted: 0 }),
+    );
   });
 
   it("does nothing to folders that do not exist", async () => {

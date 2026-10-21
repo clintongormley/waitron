@@ -5165,10 +5165,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   does. **Owner question:** should every start delete them, whatever the free space? Found by A798.
   [Detail](backlog/box.md#a-backup-run-that-is-cut-off-leaves-a-plaintext-copy-of-the-whole-venue-database)
 
-- **A local backup folder inside `<state>/backup-staging` is accepted, and a start's clean-up
-  would delete it.** Refuse such a folder.
-  [Detail](backlog/box.md#a-local-backup-folder-inside-statebackup-staging-is-accepted-and-a-starts-clean-up-would-delete-it)
-
 - **A box whose first setup was retired into a new workspace keeps that workspace's backup staging
   through the clean-up before the count.** Accepted for A798-B slice 2.
   [Detail](backlog/box.md#a-box-whose-first-setup-was-retired-into-a-new-workspace-keeps-that-workspaces-backup-staging-through-the-clean-up-before-the-count)

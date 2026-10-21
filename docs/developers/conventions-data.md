@@ -2577,8 +2577,8 @@ open the folder with `exclusive: false`, so they take no lock and write no holde
 dies leaves its file behind; the next holder overwrites it.
 
 **A start below the free-space floor reads it too, and on a full disk that guards less than it
-seems.** With under 256 MiB free, a start deletes everything in `<state>/backup-staging` unless the
-holder file shows a fresh heartbeat (`freeSpaceAtStart`, `apps/server/src/start-space.ts`), so that a
+seems.** With under 256 MiB free, a start deletes the copies a backup run leaves in
+`<state>/backup-staging` unless the holder file shows a fresh heartbeat (`freeSpaceAtStart`, `apps/server/src/start-space.ts`), so that a
 start refused beside a running server does not delete that server's backup in progress. But the
 heartbeat is written as a new file and a rename (`writeVenueHolder`,
 `packages/store/src/venue-holder.ts`). On a full HFS+ filesystem it failed with `ENOSPC` on

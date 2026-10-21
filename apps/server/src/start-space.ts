@@ -1,6 +1,7 @@
-import { readdir, rm, stat } from "node:fs/promises";
+import { lstat, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { LOG_FILE_NAME, isVenueHolderFresh, type VenueHolder } from "@waitron/db";
+import { BACKUP_ENCRYPT_DIR_PREFIX, BACKUP_KEY_PREFIX } from "./backup-keys.js";
 import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
@@ -11,6 +12,9 @@ export const BACKUP_STAGING_DIR = "backup-staging";
 
 const ROTATED_LOG = new RegExp(`^${LOG_FILE_NAME.replaceAll(".", "\\.")}\\.(\\d+)$`);
 const CRASH_REPORT = /^holder-frozen-.*\.json$/;
+/** `dumpFileName`'s copy, and the `.partial` name `archiveTo` writes it under first
+ *  (`packages/store/src/archive.ts`). */
+const STAGED_DUMP = new RegExp(`^${BACKUP_KEY_PREFIX}\\d{8}T\\d{6}Z\\.dump(\\.partial)?$`);
 
 /** The lowest free space among `dirs` that can report; null when none can. */
 export async function lowestFreeBytes(
@@ -40,8 +44,9 @@ export interface StartSpaceDeps {
 
 /**
  * Below `floor` (or when forced), deletes what a start can make again: rotated logs but the newest,
- * crash reports older than {@link CRASH_REPORT_KEEP_MS}, and backup staging unless the venue
- * folder's holder heartbeat is fresh. Never throws.
+ * crash reports older than {@link CRASH_REPORT_KEEP_MS}, and the dumps and `backup-encrypt-*`
+ * folders a backup run leaves in backup staging, unless the venue folder's holder heartbeat is
+ * fresh. Never throws.
  */
 export async function freeSpaceAtStart(
   deps: StartSpaceDeps,
@@ -64,13 +69,16 @@ export async function freeSpaceAtStart(
     }
   };
 
-  for (const name of await entries(deps.logDir, failed)) {
+  const logs = await entries(deps.logDir, "logs", deps.log, failed);
+  for (const name of logs ?? []) {
     const match = ROTATED_LOG.exec(name);
     if (match !== null && Number(match[1]) >= 2) await remove(join(deps.logDir, name), false);
   }
 
   const crashDir = join(deps.logDir, "crash-reports");
-  for (const name of await entries(crashDir, failed)) {
+  const crashReports =
+    logs === null ? [] : await entries(crashDir, "crash-reports", deps.log, failed);
+  for (const name of crashReports ?? []) {
     if (!CRASH_REPORT.test(name)) continue;
     const path = join(crashDir, name);
     try {
@@ -86,8 +94,10 @@ export async function freeSpaceAtStart(
   const holder = deps.readVenueHolder(deps.venueDir);
   if (holder === null || !isVenueHolderFresh(holder, now)) {
     const stagingDir = join(deps.stateDir, BACKUP_STAGING_DIR);
-    for (const name of await entries(stagingDir, failed)) {
-      await remove(join(stagingDir, name), true);
+    for (const name of (await entries(stagingDir, BACKUP_STAGING_DIR, deps.log, failed)) ?? []) {
+      if (STAGED_DUMP.test(name)) await remove(join(stagingDir, name), false);
+      else if (name.startsWith(BACKUP_ENCRYPT_DIR_PREFIX))
+        await remove(join(stagingDir, name), true);
     }
   }
 
@@ -101,11 +111,24 @@ export async function freeSpaceAtStart(
   return { freeBytes: after, belowFloor: after !== null && after < deps.floor };
 }
 
-async function entries(dir: string, failed: (error: unknown) => void): Promise<string[]> {
+/**
+ * A clean-up folder's names; null when it is missing, cannot be listed, or is not a real folder. A
+ * symbolic link is skipped, because its listing and every deletion would land in its target.
+ */
+async function entries(
+  dir: string,
+  folder: string,
+  log: Logger,
+  failed: (error: unknown) => void,
+): Promise<string[] | null> {
   try {
+    if ((await lstat(dir)).isSymbolicLink()) {
+      log("warn", "storage.start_cleanup_skipped", { folder });
+      return null;
+    }
     return await readdir(dir);
   } catch (error) {
     if (errnoOf(error) !== "ENOENT") failed(error);
-    return [];
+    return null;
   }
 }
