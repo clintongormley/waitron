@@ -2,7 +2,7 @@ import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { VenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -140,6 +140,19 @@ async function startEnv(scratch: string) {
   return { env, venueDir };
 }
 
+beforeEach(() => {
+  seen.stores.length = 0;
+  seen.created.length = 0;
+  seen.watched.length = 0;
+  seen.unsubscribed = 0;
+  seen.noted.length = 0;
+  seen.tillDeps.length = 0;
+  seen.billDeps.length = 0;
+  seen.deviceDeps.length = 0;
+  seen.scheduleDeps.length = 0;
+  seen.failMountTillApi = false;
+});
+
 describe("boot's full-disk stop wiring", () => {
   it("listens to both of the venue folder's files, reads its free space, and hands the stop to the till routes", async () => {
     beforeServerStarts();
@@ -180,9 +193,6 @@ describe("boot's full-disk stop wiring", () => {
 
   it("hands the stop to the kitchen screens' and the schedule's routes", async () => {
     beforeServerStarts();
-    seen.created.length = 0;
-    seen.deviceDeps.length = 0;
-    seen.scheduleDeps.length = 0;
     const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-disk-full-wiring-"));
     let server: StartedServer | undefined;
     try {
@@ -202,9 +212,6 @@ describe("boot's full-disk stop wiring", () => {
 
   it("a refused start stops listening", async () => {
     beforeServerStarts();
-    seen.created.length = 0;
-    seen.watched.length = 0;
-    seen.unsubscribed = 0;
     seen.failMountTillApi = true;
     const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-disk-full-wiring-"));
     try {

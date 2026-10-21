@@ -13,7 +13,8 @@ export interface DiskFullState {
   noted(): boolean;
   /**
    * Whether a till write must be refused now. Reads the folder's free space only while a refusal
-   * is noted, and forgets the refusal at FULL_DISK_BYTES or more.
+   * is noted, and forgets the refusal only when that reading finds FULL_DISK_BYTES or more and no
+   * refusal was noted while it read; an unreadable reading keeps it.
    */
   full(): Promise<boolean>;
   /** When the refusal now noted was first noted; null when none is. */

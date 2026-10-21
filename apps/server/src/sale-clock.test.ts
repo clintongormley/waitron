@@ -74,7 +74,7 @@ function cashSale(iso: string, workingOrderId: string) {
   });
 }
 
-it("refuses a cash sale under a clock in 2001 by name, and records nothing", async () => {
+it("refuses a cash sale under a clock in 2001 by name, and records no sale, fiscal record, invoice number or order", async () => {
   const id = randomUUID();
   const before = ledger();
 

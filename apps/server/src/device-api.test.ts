@@ -4528,6 +4528,7 @@ describe("while a save refused for a full disk stands", () => {
     const enrolApp = mountApp(venue.cfg);
     const { jar } = await enrolStationScreen(enrolApp, venue, [venue.defaultStationId]);
     const before = await stateOf();
+    expect(before).not.toBe("preparing");
 
     const refused = await send(
       mountWithDisk(venue.cfg, notedState()),

@@ -196,6 +196,7 @@ describe("the sale routes while the full-disk stop holds", () => {
     const sold = await sale(venue.appWith({ disk: diskState() }), randomUUID(), cash);
     expect(sold.status).toBe(200);
     expect(count("sales")).toBe(sales + 1);
+    expect(nextNumbers()).toBe(numbers + 1);
   });
 
   it("refuses a manual card sale", async () => {
@@ -370,6 +371,32 @@ describe("the sale routes while the full-disk stop holds", () => {
     const disk = notedState({ bytes: FULL_DISK_BYTES });
 
     const answer = await sale(venue.appWith({ disk }), randomUUID(), cash);
+
+    expect(answer.status).toBe(200);
+    expect(disk.noted()).toBe(false);
+  });
+
+  it("collects a placed order again once the folder has 16 MiB free", async () => {
+    const disk = notedState({ bytes: FULL_DISK_BYTES });
+    const id = await placedOrder("Ensalada");
+
+    const answer = await send(
+      venue.appWith({ disk }),
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${id}/collect`,
+      { tender: { method: "cash", amount: "12.00" } },
+    );
+
+    expect(answer.status).toBe(200);
+    expect(disk.noted()).toBe(false);
+  });
+
+  it("takes a bill's cash payment again once the folder has 16 MiB free", async () => {
+    const disk = notedState({ bytes: FULL_DISK_BYTES });
+    const billId = await tabWith(venue, "Paella");
+
+    const answer = await contribution(billId, "cash")(venue.appWith({ disk }));
 
     expect(answer.status).toBe(200);
     expect(disk.noted()).toBe(false);

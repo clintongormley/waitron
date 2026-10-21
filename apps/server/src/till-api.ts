@@ -281,8 +281,8 @@ export interface TillApiDeps {
    */
   pool?: CardProviderPool;
   /**
-   * Read by the full-disk gate, the reader payments and, through the deps they pass, the cash,
-   * collect and bill-payment routes. Unset, nothing is refused for a full disk; a live boot always
+   * Read by the full-disk gate, the reader payments and, through the deps they pass, the cash and
+   * manual-card sale, collect and bill-payment routes. Unset, nothing is refused for a full disk; a live boot always
    * supplies it.
    */
   disk?: DiskFullState;
