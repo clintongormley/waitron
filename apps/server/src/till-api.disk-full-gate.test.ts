@@ -159,6 +159,17 @@ describe("the full-disk gate on the till's routes", () => {
     );
     expect(placed.status).toBe(200);
     expect(await statusOf(venue, id)).toBe("placed");
+
+    // The gate refuses a resend of a placement already made, before the route could answer it.
+    const resent = await send(
+      venue.appWith({ disk: notedState() }),
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${id}/place`,
+      {},
+    );
+    expect({ status: resent.status, json: resent.json }).toEqual(REFUSED);
+    expect(await statusOf(venue, id)).toBe("placed");
   });
 
   it("sends no round to the kitchen while the stop holds", async () => {
