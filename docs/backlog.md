@@ -5738,13 +5738,20 @@ Not in any track until the standalone primary is done.
 **The on-prem mirror.** Read this section as requirements slices 3–5 must meet, not as work
 outstanding on code that exists.
 
-- **A947. Go-live on two local boxes — design written, the owner's answers awaited.** The owner,
-  2026-10-21: "For go live I want one box with failover to another local box." The
-  [design](superpowers/specs/2026-10-21-a947-two-box-failover-design.md) re-cuts slices 3–5 into
-  pull requests (§11) and answers several entries below: the vault-ring question (the spare gets
-  the credentials key at joining), adding a spare with the internet down (the first copy over the
-  LAN), the stored primary key (A45), and the drain confirmations rejoin lost (the tail receipt).
-  Its four questions are in §12. No build before the owner approves it.
+- **A947. Go-live on two local boxes — design revised for the owner's answers; his approval of the
+  revision awaited.** The owner, 2026-10-21: "For go live I want one box with failover to another
+  local box." The [design](superpowers/specs/2026-10-21-a947-two-box-failover-design.md) re-cuts
+  slices 3–5 into pull requests (§11) and answers several entries below: the vault-ring question
+  (the spare gets the credentials key at joining), adding a spare with the internet down (the first
+  copy over the LAN), the stored primary key (A45), and the drain confirmations rejoin lost (the
+  tail receipt). All four questions are answered (§12): a manager switches from any till, signing
+  in with a passkey or a password plus authenticator code when enrolled — no recovery sheet; the
+  switch never waits for the next hour, because a promotion's series carry the hour and the minute
+  (`A-06XV-40`, §6.5, a fiscal slice the owner lands); any device, even a reloaded one, reaches the
+  switch (§6.6); the returning box hands over and becomes the spare by itself after three checks
+  (§7.2); a spare is a choice per venue. Found while revising: both boxes put the same address in
+  the membership chart, so a till's router sees one server (§2). No build before the owner
+  approves the revision.
   [Mock-ups](backlog/mockups/a947-two-box-failover/README.md) The membership, promotion and rejoin arc (#197–#272) is still in
 the tree. What remains, largest first:
 

@@ -246,8 +246,8 @@ Open:
 **Slices 3 and 4 rebuild failover**
 ([the topology design](../superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md)). **Until
 slice 3 a venue has ONE node and no failover at all.** **Owner, 2026-10-21 (A947): "For go live I want one box with
-failover to another local box"**, with the Cloud shortly after. Whether every later venue needs a
-second box is the A947 design's question 3. Slices 3–5 as re-cut by
+failover to another local box"**, with the Cloud shortly after. A second box is a choice for
+every later venue (the owner's answer to the A947 design's question 4). Slices 3–5 as re-cut by
 [the A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md) meet it. What stayed: `packages/membership` whole (documents, signing,
 canonicalisation, verification, trust), node enrolment and its rate limiting
 (`apps/server/src/node-enrol-api.ts`, `enrol-rate-limit.ts`), node retirement, and the

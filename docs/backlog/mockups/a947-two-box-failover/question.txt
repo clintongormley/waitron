@@ -1,3 +1,55 @@
+A947 — go-live on two local boxes: REVISED for your answers of 2026-10-21. One question.
+Design: docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md (revision note at the top).
+
+==========================================================================================
+Revision — question 1 of 1: approve the revised design?
+Pictures: 6-switch-series-worked-example.png first, then 2-take-over-dialog.png,
+7-reaching-the-switch.png and 4-old-main-returns.png.
+
+Example: Friday 23 October, Bar Santet. 21:39 the bar box's power supply trips. 21:40 Marta
+taps «Cambiar» on the terrace till, ticks "unplugged", and signs in with her password and the
+code on her phone (or her passkey) — no recovery sheet. The back-room box sells at 21:41 as
+A-06XV-40/1: your hour code 06XV plus the minute, 40. 21:47 the bar box is plugged back in:
+it hands over its three last-second sales, checks the back-room box has all three (same number,
+same fingerprint, one by one) and is healthy, archives its own database, wipes itself and
+becomes the spare — nobody asked. 21:55 the back-room box's disk fails; Marta switches again,
+and the bar box sells at once as A-06XV-55/1. Under the hour rule alone it would have waited
+until 22:00. AEAT sees three installation numbers (06RB, 06XV-40, 06XV-55), each with its own
+chain, nothing repeated.
+
+What changed, in short:
+- The switch's series carry the hour AND the minute, on every switch (not only a second one in
+  the hour) — so the switch never asks your setup question "has anyone set up a box in the
+  last hour?". The two forms can never be equal. Only two switches in the SAME minute wait,
+  for the next minute. Fiscal: its own pull request, which you land.
+- The switch asks for the manager's passkey, or password plus authenticator code if they have
+  one — the same on a till as on the dashboard. No installation code, no emergency key.
+- Any device can reach the switch, even after a reload: the spare answers waitron.local with
+  only its switch page while the main box is silent, and each box carries a QR label to its
+  own switch page. A passkey works on both (tested in Chromium with a software passkey;
+  real phones not yet). With no internet, a phone's
+  passkey cannot be used at a till (it needs an internet relay); the password, a passkey on the
+  device itself, or the manager's own phone scanning the label all work.
+- "Do we need the recovery key?" Only to restore a box from a backup (and to re-register one).
+  It does not help when nobody can sign in — that is the emailed reset or a reset on the box.
+- The returning box becomes the spare by itself after three checks. A manager may override only
+  the health check (e.g. no internet); never the "records arrived" check or the archive. The
+  archive is kept 90 days.
+- Found on the way: today both boxes give tills the same address, so a till sees one server,
+  not two. The revision gives each box its own name.
+
+- A (recommended) — approve. The build plan is written next; the fiscal slices (the switch's
+  series, promotion, the hand-over, the return, the tail, becoming the spare) wait for you to
+  land them.
+- B — approve, but use the minute form only for a second switch in the same hour; the first
+  switch of an hour keeps the plain four-symbol name and asks the "last hour" question.
+- Stop here — I'll write.
+
+==========================================================================================
+ANSWERED 2026-10-21 — the original four questions, kept as asked.
+Answers: 1 A (+ no hour-long wait); 2 passkey or password + code if enrolled, same on the till,
+no recovery code or emergency key; 3 by itself, after health checks; 4 A.
+
 A947 — go-live on two local boxes: four questions, asked one at a time.
 Design: docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md (§12).
 

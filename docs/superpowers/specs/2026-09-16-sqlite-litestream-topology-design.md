@@ -347,7 +347,9 @@ silent.
 > return and the fix for the prototype's failed tail-ship scenario (S2) are in
 > [the A947 design](2026-10-21-a947-two-box-failover-design.md) §6–§7. The fiscal step of a
 > promotion follows A679's hour-coded series (the standby stays dormant, and promotion selects a
-> fresh hour when it happens), not step 2's seat claim as written here.
+> fresh hour when it happens), not step 2's seat claim as written here. Revised the same day for
+> the owner's answers: a promotion's series carry the hour and the minute, so a switch never waits
+> for the next hour (A947 §6.5).
 
 Whether box B, a fresh cloud instance, or a box taking over from the cloud:
 
