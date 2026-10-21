@@ -64,8 +64,8 @@ silently drop test files). No migration. No product code changes.
 - **Do not split or edit `apps/server/src/first-fiscal-hour.e2e.test.ts`**: lane A733's worktree
   (`waitron-feat-a733-secure-connection-repair`, commits on 2026-10-21) changes it. Checked
   2026-10-21: `gh pr list` shows one open PR, #1921 (A796). `gh pr view 1921 --json files` lists
-  `docs/backlog.md`, which Task 5 also edits, and four `apps/server` test files this plan neither
-  splits nor moves. A scan of every local `waitron-feat-*` worktree's diff found A733 on that file,
+  `docs/backlog.md`, which Task 5 also edits, and four `apps/server` test files plus
+  `apps/server/src/payments-api.ts`, all modified, none added, none changed by this plan. A scan of every local `waitron-feat-*` worktree's diff found A733 on that file,
   A739 on `apps/server/src/invoice-pdf.ts` and A773-2 on
   `apps/server/src/testing/kitchen-table-order.ts`. This plan changes none of those three. The local
   `waitron-feat-a850-backup-verification` worktree (`git diff --name-status $(git merge-base HEAD
@@ -379,7 +379,7 @@ processes the tests start with `execFile`: those still derive for real.
   prefix before `[file-progress]` is ignored). Within one log, a later line for the same path
   replaces an earlier one. `start` and `still running` lines are ignored, and so is an `end` line
   with no seconds: the reporter writes `[file-progress] end <path> <state>` without a time when it
-  never saw the file start (`scripts/vitest-file-progress.mjs:55`).
+  never saw the file start (`scripts/vitest-file-progress.mjs:54`).
   `medianTable(logs: Map<string, number>[]): Record<string, number>`: per path, the median over the
   logs that hold it (the mean of the middle two for an even count), as `Math.round(x * 10) / 10`,
   keys in sorted order.
@@ -492,10 +492,11 @@ processes the tests start with `execFile`: those still derive for real.
   for Task 6's measured numbers. Until then, write a sentence saying the PR's own run is measured in
   the PR description.
 - [ ] **Step 2: Retire the stale claims across the whole file and the tree.** Run
-  `git grep -n -i -E "eleven|/11([^0-9]|$)|FILE COUNT|BaseSequencer|sha1 of" -- '*.md' '.github' 'scripts' ':!docs/superpowers' ':!docs/handoffs'`.
+  `git grep -n -i -E "eleven|/11([^0-9]|$)|FILE COUNT|BaseSequencer|sha1 of" -- '*.md' '.github' 'scripts' ':!docs/superpowers' ':!docs/handoffs' ':!docs/compliance' ':!docs/operations'`.
   (`\b` is not a word boundary in `git grep -E` here: `/11\b` matched nothing, not even
   `.github/workflows/ci.yml:959`'s `--shard=${{ matrix.shard }}/11`, which this pattern finds.) The
-  `/11` part also matches dates such as `08/11/2018` in the compliance docs; skip those. Check every
+  `/11` part also matches dates and task ranges in `docs/compliance` and `docs/operations`, which
+  the pathspecs exclude. Check every
   other hit. At minimum: "three-way and eleven-way" (around line 511) becomes sixteen-way;
   the "Vitest `--shard` splits by FILE COUNT" sentence (around line 520) gains "except
   `apps/server`, packed by duration since A938"; the A528 paragraph's "(Eleven since A801 …)" and
