@@ -1,17 +1,23 @@
 import {
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   realpathSync,
+  rmSync,
   statSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
 import { get as httpsGet } from "node:https";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { openVenueDatabase } from "@waitron/db";
+import { openVenueStore } from "@waitron/store";
+import { firstFiscalFixture } from "../test/first-fiscal.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { loadBoxEnv } from "./box-env.js";
 import { runEntry, serveRecovery, type RecoveryServeOptions } from "./node-entry.js";
@@ -48,7 +54,7 @@ function needDisk(ctx: { skip: (note?: string) => never }): SmallDisk {
 type StartServer = (env: NodeJS.ProcessEnv) => Promise<{ close(): Promise<void> }>;
 
 function entryDeps(stateDir: string, over: Partial<Parameters<typeof runEntry>[0]> = {}) {
-  const venueDir = join(stateDir, "venue");
+  const venueDir = over.venueDir ?? join(stateDir, "venue");
   return {
     args: [] as readonly string[],
     baseEnv: { WAITRON_HTTP_LANDING_PORT: "0" } as NodeJS.ProcessEnv,
@@ -90,6 +96,18 @@ async function startedBefore(small: SmallDisk, name: string): Promise<string> {
   await runEntry(setup);
   expect(setup.startServer).toHaveBeenCalledTimes(1);
   return stateDir;
+}
+
+/** Each layer of an error's cause chain that carries a `code` or an `errcode`. */
+function causeCodes(error: unknown): { code?: unknown; errcode?: unknown }[] {
+  const layers: { code?: unknown; errcode?: unknown }[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 10 && typeof current === "object" && current !== null; depth += 1) {
+    const layer = current as { code?: unknown; errcode?: unknown; cause?: unknown };
+    layers.push({ code: layer.code, errcode: layer.errcode });
+    current = layer.cause;
+  }
+  return layers;
 }
 
 const inodeOf = (path: string) => statSync(path).ino;
@@ -192,5 +210,120 @@ describe("a start on a real full disk", () => {
     const d = entryDeps(nothingDir!);
     await runEntry(d);
     expect(d.startServer).toHaveBeenCalledTimes(1);
+  });
+
+  it("a box whose first setup finished gets the full-disk page, not first-setup resolution", async (ctx) => {
+    const small = needDisk(ctx);
+    const f = await firstFiscalFixture(realpathSync(small.folder("finished")));
+    try {
+      let state = (await f.store.read())!;
+      for (const change of [
+        { kind: "activation-started" },
+        { kind: "committed", result: {} },
+        { kind: "publication" },
+        { kind: "complete" },
+      ] as const)
+        state = await f.store.update(state.frozen.attemptId, state.revision, change);
+      const db = new DatabaseSync(join(f.venueDir, "venue.db"));
+      try {
+        db.exec("pragma journal_mode = wal");
+        db.exec("create table tenants (country text, tax_id text)");
+        db.exec("create table locations (id text)");
+        db.exec("insert into tenants values ('ES', 'B00000000')");
+        db.exec("insert into locations values ('loc-1')");
+      } finally {
+        db.close();
+      }
+
+      small.fill();
+      const full = entryDeps(f.stateDir, { venueDir: f.venueDir });
+      await runEntry(full);
+      expect(full.startServer).not.toHaveBeenCalled();
+      expect(full.serveRecovery).toHaveBeenCalledTimes(1);
+      const app = vi.mocked(full.serveRecovery).mock.calls[0]![0];
+      expect(await (await app.request("/")).text()).toContain(TITLE);
+      expect((await app.request("/setup-api/status")).status).toBe(404);
+
+      small.unfill();
+      const room = entryDeps(f.stateDir, { venueDir: f.venueDir });
+      await runEntry(room);
+      expect(room.startServer).toHaveBeenCalledTimes(1);
+    } finally {
+      await f.dispose();
+    }
+  });
+
+  it.for([8192, 16384])(
+    "a database refused on a nearly full disk is recorded as a full disk (%i bytes left)",
+    async (leave, ctx) => {
+      const small = needDisk(ctx);
+      const venueDir = realpathSync(small.folder(`refused-${leave}`));
+      const store = await openVenueDatabase(venueDir);
+      await store.close();
+      const stateDir = realpathSync(mkdtempSync(join(tmpdir(), "wt-full-disk-state-")));
+      try {
+        const logDir = join(stateDir, "logs");
+        small.fill(leave);
+        const full = entryDeps(stateDir, { venueDir, logDir });
+        const error = await runEntry(full).then(
+          () => expect.unreachable("the start resolved"),
+          (rejection: unknown) => rejection,
+        );
+        expect((await readRecoveryState(stateDir)).lastErrorCode).toBe("storage.disk_full");
+        const layers = causeCodes(error);
+        const errcodes = layers.flatMap((l) => (typeof l.errcode === "number" ? [l.errcode] : []));
+        expect(errcodes).not.toContain(13);
+        expect(
+          layers.some((l) => l.code === "ENOSPC") ||
+            errcodes.some((code) => [10, 14].includes(code & 0xff)),
+          JSON.stringify(layers),
+        ).toBe(true);
+
+        small.unfill();
+        const room = entryDeps(stateDir, { venueDir, logDir });
+        await runEntry(room);
+        expect(room.startServer).toHaveBeenCalledTimes(1);
+      } finally {
+        rmSync(stateDir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("a commit on a real full disk is refused whole, and the next one is served once there is room", async (ctx) => {
+    const small = needDisk(ctx);
+    const store = await openVenueStore({
+      directory: realpathSync(small.folder("commit")),
+      venueSchema: {},
+      nodeSchema: {},
+    });
+    try {
+      const db = store.venue;
+      db.run(sql`create table sale (id integer primary key, body text, pad blob)`);
+      await store.withWriteLock(async () => {
+        db.run(sql`insert into sale (body) values ('committed before')`);
+      });
+      db.all(sql`pragma wal_checkpoint(truncate)`);
+      small.fill(16384);
+
+      let statementRan = false;
+      await expect(
+        store.withWriteLock(async () => {
+          db.run(sql`insert into sale (body, pad) values ('in transaction', zeroblob(65536))`);
+          statementRan = true;
+        }),
+      ).rejects.toMatchObject({ code: "storage.disk_full" });
+      expect(statementRan).toBe(true);
+      const bodies = () =>
+        db.all<{ body: string }>(sql`select body from sale order by id`).map((row) => row.body);
+      expect(bodies()).toEqual(["committed before"]);
+
+      small.unfill();
+      await store.withWriteLock(async () => {
+        db.run(sql`insert into sale (body) values ('after freeing')`);
+      });
+      expect(bodies()).toEqual(["committed before", "after freeing"]);
+    } finally {
+      await store.close();
+    }
   });
 });
