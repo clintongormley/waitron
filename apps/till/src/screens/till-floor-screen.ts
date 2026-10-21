@@ -2418,7 +2418,7 @@ export class TillFloorScreen extends LitElement {
       data-tabs-edge=${side}
       data-zone-state=${mark.kind}
       aria-label=${t("floor.show_zone").replace("{zone}", () => tab.name)}
-      @click=${() => this.#showTab(tab.key)}
+      @click=${() => this.#showTab(tab.key, side)}
     >
       ${renderFloorPulse(pulse, moving)}${side === "start" ? "‹" : nothing}${this.#markIcon(mark)}${side === "end" ? "›" : nothing}
     </button>`;
@@ -2426,9 +2426,8 @@ export class TillFloorScreen extends LitElement {
 
   /** "nearest" leaves a tab wider than the room between the edges where it is once it sticks out
    * of both ends, so such a tab is brought to the strip's start instead: clear of the start edge
-   * when an earlier tab with a state will put one there, else as far as the ring's room — but never
-   * so far that the strip cuts a tab it could hold whole. */
-  #showTab(key: string): void {
+   * when one will still be there, else as far as the ring's room. */
+  #showTab(key: string, side: TabsEdge): void {
     const strip = this.#tabsStrip!;
     const tabs = [...strip.querySelectorAll<HTMLElement>(".zone-tab")];
     const index = tabs.findIndex((zoneTab) => tabKey(zoneTab) === key);
@@ -2442,10 +2441,12 @@ export class TillFloorScreen extends LitElement {
         .slice(0, index)
         .some((zoneTab) => this.#zone.marks.has(tabKey(zoneTab)));
       const ring = parseFloat(style.paddingBlockStart);
-      const aim = edgeBefore ? clear : ring;
       const spare = right - left - box.width;
-      // Centred when the spare room is under a ring's at each end: the scroll lands on whole pixels.
-      const inset = spare < 0 ? aim : Math.min(aim, Math.max(spare / 2, spare - ring));
+      // The tapped start edge stays over a tab the strip can hold until the tab is clear of it.
+      const aim = edgeBefore || (side === "start" && spare >= 1) ? clear : ring;
+      // Centred when the spare room is under a ring's at each end: the scroll lands on whole pixels,
+      // so a tab within a pixel of the strip's width lands as one wider than it.
+      const inset = spare < 1 ? aim : Math.min(aim, Math.max(spare / 2, spare - ring));
       strip.scrollLeft += box.left - (left + inset);
     } else {
       tab.scrollIntoView({ inline: "nearest", block: "nearest" });
@@ -2512,17 +2513,24 @@ export class TillFloorScreen extends LitElement {
     const [start, end] = [edge("start"), edge("end")];
     const left = Math.max(span.left, start?.right ?? span.left);
     const right = Math.min(span.right, end?.left ?? span.right);
-    // No scroll puts a tab wider than this clear of both edges, so it is shown whenever it is whole.
-    const between = span.right - span.left - 2 * ((start ?? end)?.width ?? 0) - 2 * ring;
+    const edgeRoom = (start ?? end)?.width ?? 0;
+    const marked = tabs.map((tab) => this.#zone.marks.has(tabKey(tab)));
+    const [firstMarked, lastMarked] = [marked.indexOf(true), marked.lastIndexOf(true)];
     const sides = new Map<string, TabsEdge>();
     // A tab hidden at both ends goes to an end the strip itself cuts it at, if there is one.
-    for (const tab of tabs) {
+    for (const [i, tab] of tabs.entries()) {
       const box = tab.getBoundingClientRect();
+      const under = box.left < left ? "start" : box.right > right ? "end" : undefined;
       if (box.left < span.left) sides.set(tabKey(tab), "start");
       else if (box.right > span.right) sides.set(tabKey(tab), "end");
-      else if (box.width > between) continue;
-      else if (box.left < left) sides.set(tabKey(tab), "start");
-      else if (box.right > right) sides.set(tabKey(tab), "end");
+      else if (under !== undefined) {
+        // The edge over it, and one at the other end only if a tab beyond that end has a state:
+        // a whole tab too wide to clear those is shown.
+        const edges =
+          Number(under === "start" || firstMarked < i) + Number(under === "end" || lastMarked > i);
+        if (box.width <= span.right - span.left - 2 * ring - edges * edgeRoom)
+          sides.set(tabKey(tab), under);
+      }
     }
     const same =
       sides.size === this.#hiddenTabs.size &&
