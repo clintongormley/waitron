@@ -689,6 +689,13 @@ browser test** — most of these rules exist because a test passed while proving
 - **Draw every port a test needs in one `freePorts(n)` call, before binding any of them**
   (`apps/server/src/testing/free-ports.ts`), never two single draws before either is bound. Nothing
   guards it.
+- **In a suite whose `useVenueDb` sets `resetPerTest: false`, a port the system hands a test can be
+  one an earlier test's rows still name**, so a test that finds a row by address checks that the
+  row is its own. Cost: main run 39537349722's `test-server (16)` failed
+  `print-agent-e2e.test.ts`'s discovery check, which a forced port collision reproduces (A945).
+  Guard: that file's `portsNoPrinterNames` and pre-discovery row check, weaker than the rule — they
+  cover that one test. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#a-drawn-port-can-be-one-an-earlier-test-in-the-same-database-already-registered).
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
   `pnpm reap` sweeps these, scoped by ppid 1 AND the shapes vitest leaves in `ps`, never a bare `vitest` match.
 - **Concurrent coverage runs must not share a package's report directory, and an intentional second

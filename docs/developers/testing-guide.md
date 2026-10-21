@@ -260,7 +260,9 @@ v26.7.0) repeated 0 times in 20,000 pairs, so local runs did not show it. `freeP
 `apps/server/src/testing/free-ports.ts` holds every probe until the last port is drawn, which rules
 out a repeat within one call. It does not cover a port another worker takes between the release and
 the test's own bind, nor a port drawn to stay unused (an "unreachable peer") that another worker
-later binds. Nothing checks that a new suite uses the helper rather than its own copy. The S3 test
+later binds. Nor does it know about rows an earlier test left naming a port
+([below](#a-drawn-port-can-be-one-an-earlier-test-in-the-same-database-already-registered)).
+Nothing checks that a new suite uses the helper rather than its own copy. The S3 test
 server is the one caller that recovers from a port taken in that gap, because versitygw exits when
 its port is already bound and so can be started again on another (the stream loop test's section
 below, "The S3 test server knows its own server"). A Waitron server the suites start is not retried:
@@ -283,6 +285,23 @@ src/boot.till-clock.test.ts src/testing/free-ports.test.ts --reporter=dot` passe
 Each real-listener clock case keeps its configured port occupied and requests the actual bound
 port instead. This checks the test harness against the occupied-port condition; it does not
 identify which process took port 37003 in the original CI run or measure the race's frequency.
+
+### A drawn port can be one an earlier test in the same database already registered
+
+A file that keeps one database across its tests (`resetPerTest: false`) keeps the rows earlier
+tests left, and a port the system handed to an earlier test can be handed out again later. A row
+keyed by address then belongs to the earlier test while the later one reads it as its own. A945
+followed main CI run `39537349722`, `test-server (16)`: in `apps/server/src/print-agent-e2e.test.ts`,
+discovery after a delete reported a printer at the test's address as registered. Measured
+2026-10-21 on macOS (Node v26.11.1): with the final test edited to use the port of a printer an
+earlier test in the file had left registered, `pnpm --filter @waitron/server exec vitest run
+src/print-agent-e2e.test.ts` failed that same assertion, and the id discovery reported was the
+earlier printer's, not the deleted one's. The CI log does not say whose id it was, so a reused port
+is the explanation this reproduction supports, not a measurement of the CI run. That test now draws
+its ports again while a printer row names its printer port, giving up after 20 draws with an error
+naming that port and the rows there, and checks before discovery that the deleted printer is the
+only row at the address. With the collision forced, the file passed; with the redraw also removed,
+it failed at that check; with every draw forced to collide, it failed at once with that error. Nothing checks other suites for the same shape.
 
 ## Locate the unfinished package before diagnosing a silent shard as database contention.
 
