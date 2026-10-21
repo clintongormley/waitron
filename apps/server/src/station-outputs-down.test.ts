@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -160,7 +161,7 @@ async function waitingItem(
     resolveClient: () => Promise.reject(new Error("unused")),
   });
   await placeOrder(
-    { db: suite.db, backend, clock },
+    { admission: testTradingAdmission(), db: suite.db, backend, clock },
     await deviceRequestCfg(suite.db, venue.cfg),
     orderId,
     randomUUID(),

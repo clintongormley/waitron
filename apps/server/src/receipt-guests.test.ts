@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -334,7 +335,7 @@ async function fullInvoiceOfFour(label: string): Promise<{ billId: string; saleI
       .returning();
     const { invoice } = await completeBillPayment(
       tx,
-      { db: v.db, backend: v.backend, clock: v.clock },
+      { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
       v.cfg,
       payment!.id,
       new Date(),

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { createZone } from "./testing/service-zone.js";
@@ -96,6 +97,7 @@ const clock: TrustedClock = {
 
 function app(db: Database, log: Logger = () => {}): Hono {
   const deps: TillApiDeps = {
+    admission: testTradingAdmission(),
     db,
     // Unused: seating and finishing file nothing.
     backend: {} as FiscalBackend,

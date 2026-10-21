@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -682,7 +683,15 @@ function discardSaved(
   operatorId = venue.operatorId,
 ) {
   return inTx(venue, (tx) =>
-    discardDraft(tx, venue.cfg, saved.draft!.partyId, saved.draft!.id, operatorId, ask, "es-ES"),
+    discardDraft(
+      tx,
+      venue.cfg,
+      saved.draft!.partyId,
+      saved.draft!.id,
+      operatorId,
+      { ...ask, admission: testTradingAdmission() },
+      "es-ES",
+    ),
   );
 }
 

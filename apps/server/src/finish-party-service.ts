@@ -1,3 +1,4 @@
+import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -53,6 +54,7 @@ export interface CounterCollection {
 }
 
 export type FinishPartyArgs = Parameters<typeof finishTable>[1] & {
+  admission: TradingAdmission;
   submissionId?: string;
   cancellations?: FinishCancellation[];
   collect?: CounterCollection;
@@ -68,6 +70,8 @@ export async function finishPartyService(
   args: FinishPartyArgs,
   attendance?: OrderAttendance,
 ): Promise<FinishPartyAnswer> {
+  const { admission, ...command } = args;
+  await requireEconomicWrite(tx, cfg, admission);
   const run = () => finish(tx, cfg, args, attendance);
   if (args.submissionId === undefined) {
     if (args.cancellations !== undefined || args.collect !== undefined)
@@ -80,7 +84,7 @@ export async function finishPartyService(
     args.submissionId,
     "party.finish-service",
     {
-      ...args,
+      ...command,
       approver: undefined,
       refundApprovedBy: undefined,
       approverId: args.approver?.personId,
@@ -205,6 +209,7 @@ async function finish(
       dish.lineId,
       {
         ...item,
+        admission: args.admission,
         expectedEdit: args.expectedEdits.find((edit) => edit.billId === dish.billId)!,
         expectedPartyRevision: await partyRevision(tx, args.partyId),
         expectedBillRevision: bill!.revision,

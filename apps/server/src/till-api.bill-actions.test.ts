@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -358,7 +359,12 @@ describe("the bill action routes", () => {
   it("a paid bill is 409 bill.paid", async () => {
     const { partyId, main, second } = await twoBills();
     await takeBillPayment(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       second,
       {
@@ -415,7 +421,12 @@ describe("the bill action routes", () => {
   it("a split that leaves the source fully paid issues its invoice", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
     await takeBillPayment(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       tabId,
       {

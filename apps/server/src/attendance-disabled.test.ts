@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { expect, it } from "vitest";
 import { Hono } from "hono";
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
@@ -37,6 +38,7 @@ it("signs in normally in a venue where workforce has never been migrated", async
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       backend,
       clock,

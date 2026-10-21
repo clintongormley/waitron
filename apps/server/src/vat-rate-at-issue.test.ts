@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
@@ -335,14 +336,14 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     const newYear = randomUUID();
 
     at(EVE);
-    await recordTillSale(deps(), v.cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: eve,
       zoneId: v.counter.zoneId,
       lines: one(v, v.products.cana),
       tender: { method: "cash", amount: "2.50" },
     });
     at(NEW_YEAR);
-    await recordTillSale(deps(), v.cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: newYear,
       zoneId: v.counter.zoneId,
       lines: one(v, v.products.cana),
@@ -371,7 +372,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     ]);
 
     at(NEW_YEAR);
-    await recordTillSale(deps(), v.cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: tabId,
       lines: [],
       tender: { method: "cash", amount: "14.38" },
@@ -399,10 +400,22 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
         personId: OPERATOR,
       }),
     };
-    await takeBillPayment(deps(), v.cfg, tabId, cash("2.50"), operator);
+    await takeBillPayment(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      tabId,
+      cash("2.50"),
+      operator,
+    );
 
     at(NEW_YEAR);
-    const { invoice } = await takeBillPayment(deps(), v.cfg, tabId, cash("2.50"), operator);
+    const { invoice } = await takeBillPayment(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      tabId,
+      cash("2.50"),
+      operator,
+    );
 
     expect(invoice).not.toBeNull();
     expect(await filed(tabId)).toMatchObject({
@@ -418,7 +431,12 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     at("2026-12-31T22:59:30.000Z");
 
     const out = await payWorkingOrderIntegrated(
-      { ...deps(), provider: stubProvider(() => at(MIDNIGHT)), readerRef: "reader_1" },
+      {
+        admission: testTradingAdmission(),
+        ...deps(),
+        provider: stubProvider(() => at(MIDNIGHT)),
+        readerRef: "reader_1",
+      },
       v.cfg,
       { id, lines: [] },
     );
@@ -434,17 +452,27 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     at(EVE);
     const before = await park(v, one(v, v.products.cana));
     const after = await park(v, one(v, v.products.cana));
-    await placeOrder(deps(), v.cfg, before, OPERATOR);
-    await issueOrderInvoice(deps(), v.cfg, before, OPERATOR);
+    await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, before, OPERATOR);
+    await issueOrderInvoice(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      before,
+      OPERATOR,
+    );
 
     at(NEW_YEAR);
-    await collectOrder(deps(), v.cfg, {
+    await collectOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id: before,
       lines: [],
       tender: { method: "cash", amount: "2.50" },
     });
-    await placeOrder(deps(), v.cfg, after, OPERATOR);
-    await issueOrderInvoice(deps(), v.cfg, after, OPERATOR);
+    await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, after, OPERATOR);
+    await issueOrderInvoice(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      after,
+      OPERATOR,
+    );
 
     expect(await filed(before)).toMatchObject({ issuedAt: EVE, vatBreakdown: CANA_AT_10 });
     expect(await filed(after)).toMatchObject({ issuedAt: NEW_YEAR, vatBreakdown: CANA_AT_4 });
@@ -454,10 +482,10 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     const v = await setupVenue("ticket_then_pay");
     at(EVE);
     const id = await park(v, one(v, v.products.cana));
-    await placeOrder(deps(), v.cfg, id, OPERATOR);
+    await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
 
     at(NEW_YEAR);
-    await collectOrder(deps(), v.cfg, {
+    await collectOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
       lines: [],
       tender: { method: "cash", amount: "2.50" },
@@ -474,14 +502,14 @@ describe("the day is the invoice's own, read once", () => {
     const onTheDot = randomUUID();
 
     at(new Date(Date.parse(MIDNIGHT) - 1).toISOString());
-    await recordTillSale(deps(), v.cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: early,
       zoneId: v.counter.zoneId,
       lines: one(v, v.products.cana),
       tender: { method: "cash", amount: "2.50" },
     });
     at(MIDNIGHT);
-    await recordTillSale(deps(), v.cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: onTheDot,
       zoneId: v.counter.zoneId,
       lines: one(v, v.products.cana),
@@ -501,7 +529,7 @@ describe("the day is the invoice's own, read once", () => {
     at(new Date(Date.parse(MIDNIGHT) - 1).toISOString());
     time.tickMs = 1;
 
-    await recordTillSale(deps(), v.cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: id,
       lines: [],
       tender: { method: "cash", amount: "2.50" },
@@ -521,14 +549,14 @@ describe("the day is the invoice's own, read once", () => {
 
     // 23:30 UTC on 31 December: already 1 January two hours east, still 31 December in UTC.
     at("2026-12-31T23:30:00.000Z", 120);
-    await recordTillSale(deps(), v.cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: east,
       zoneId: v.counter.zoneId,
       lines: one(v, v.products.cana),
       tender: { method: "cash", amount: "2.50" },
     });
     at("2026-12-31T23:30:00.000Z", 0);
-    await recordTillSale(deps(), v.cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: utc,
       zoneId: v.counter.zoneId,
       lines: one(v, v.products.cana),
@@ -546,7 +574,7 @@ describe("publishing a menu before a rate's legal date", () => {
     at(EVE);
     await withTransaction(suite.db, (tx) => offerProducts(tx, v.cfg));
     const eve = await park(v, one(v, v.products.cana));
-    await recordTillSale(deps(), v.cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: eve,
       lines: [],
       tender: { method: "cash", amount: "2.50" },
@@ -554,7 +582,7 @@ describe("publishing a menu before a rate's legal date", () => {
 
     at(NEW_YEAR);
     const newYear = await park(v, one(v, v.products.cana));
-    await recordTillSale(deps(), v.cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: newYear,
       lines: [],
       tender: { method: "cash", amount: "2.50" },

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
@@ -67,6 +68,7 @@ function app(
 ) {
   const app = new Hono();
   const deps: TillApiDeps = {
+    admission: testTradingAdmission(),
     db: suite.db,
     backend: v.backend,
     clock: v.clock,
@@ -137,7 +139,7 @@ describe("till attendance recorder admission", () => {
         await order(v, tabId, "Burger");
         await placeByHand(v, tabId);
         await issueOrderInvoice(
-          { db: suite.db, backend: v.backend, clock: v.clock },
+          { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
           v.cfg,
           tabId,
           OPERATOR,
@@ -630,6 +632,7 @@ describe("till refund attendance", () => {
       mountPaymentsApi(
         management,
         {
+          admission: testTradingAdmission(),
           db: suite.db,
           backend: v.backend,
           clock: v.clock,

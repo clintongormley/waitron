@@ -1,5 +1,6 @@
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { withIssuanceTransaction } from "@waitron/core";
+import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import { refuseRecalledWrite } from "./draft-source.js";
 import { currentZoneDevice } from "./device-zones.js";
 import type { LiveEvents } from "./live-api.js";
@@ -269,6 +270,7 @@ import {
 } from "./zone-access.js";
 
 export interface TillApiDeps {
+  admission: TradingAdmission;
   attendance?: AttendanceRecorder;
   liveEvents?: LiveEvents;
   db: Database;
@@ -1366,7 +1368,13 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     );
   }
   // What a write that leaves a bill fully paid issues its invoice with (bill payments design §7).
-  const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, log };
+  const fiscal = {
+    db: deps.db,
+    backend: deps.backend,
+    admission: deps.admission,
+    clock: deps.clock,
+    log,
+  };
   mountBillPaymentsApi(app, deps, log, run, pinThrottle);
   mountAdjustmentsApi(app, deps, log, run, pinThrottle);
   mountLineCancelApi(app, deps, log, run, pinThrottle);
@@ -1799,6 +1807,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           {
             db: deps.db,
             backend: deps.backend,
+            admission: deps.admission,
             clock: deps.clock,
             log,
             attendance: deps.attendance,
@@ -1866,6 +1875,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           {
             db: deps.db,
             backend: deps.backend,
+            admission: deps.admission,
             clock: deps.clock,
             provider,
             ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
@@ -1991,7 +2001,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const sendCfg = sendingCfg(cfg, c, session.device);
       const revision = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
         updateHeldOrder(
-          { db: deps.db },
+          { db: deps.db, admission: deps.admission },
           sendCfg,
           id,
           {
@@ -2166,7 +2176,14 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<{ expectedEdit: BillEditExpected | null }>(c);
       const result = await placeOrder(
-        { db: deps.db, backend: deps.backend, clock: deps.clock, log, attendance: deps.attendance },
+        {
+          db: deps.db,
+          backend: deps.backend,
+          admission: deps.admission,
+          clock: deps.clock,
+          log,
+          attendance: deps.attendance,
+        },
         sendingCfg(cfg, c, session.device),
         id,
         personId,
@@ -2715,6 +2732,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         {
           db: deps.db,
           backend: deps.backend,
+          admission: deps.admission,
           clock: deps.clock,
           log,
           attendance: deps.attendance,
@@ -2755,7 +2773,14 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{ reason: string; override?: unknown }>(c);
       const override = parseOverrideField(body.override);
       await cancelPlacedOrder(
-        { db: deps.db, backend: deps.backend, clock: deps.clock, log, attendance: deps.attendance },
+        {
+          db: deps.db,
+          backend: deps.backend,
+          admission: deps.admission,
+          clock: deps.clock,
+          log,
+          attendance: deps.attendance,
+        },
         cfg,
         id,
         body.reason,
@@ -2962,6 +2987,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             sendingCfg(requestCfg(deps.cfg, current), c, device),
             {
               ...resolution,
+              admission: deps.admission,
               approver: withCheck(approver, checked),
               refundApprovedBy: refund?.viaOverride === true ? refund.authorizedBy : null,
               partyId,
@@ -3609,6 +3635,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const draft = await withIssuanceTransaction(
         deps.db,
         async (tx) => {
+          await requireEconomicWrite(tx, deps.cfg, deps.admission);
           await checkZones(tx, deps.cfg, session, [{ partyId }]);
           const result = await saveDraft(
             tx,
@@ -3650,6 +3677,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await withIssuanceTransaction(
         deps.db,
         async (tx) => {
+          await requireEconomicWrite(tx, deps.cfg, deps.admission);
           await checkZones(tx, deps.cfg, session, [{ partyId }]);
           const split = await splitDraft(
             tx,
@@ -3791,6 +3819,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         withIssuanceTransaction(
           deps.db,
           async (tx) => {
+            await requireEconomicWrite(tx, deps.cfg, deps.admission);
             await checkZones(tx, deps.cfg, session, [{ partyId }]);
             const result = await submitDraft(
               tx,
@@ -4027,6 +4056,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const saved = await withIssuanceTransaction(
         deps.db,
         async (tx) => {
+          await requireEconomicWrite(tx, deps.cfg, deps.admission);
           await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
           const revision = await updateOrderLine(
             tx,
@@ -4035,7 +4065,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             lineNo,
             patch,
             copy,
-            { operatorId: personId, expectedEdit },
+            { operatorId: personId, expectedEdit, admission: deps.admission },
             deps.attendance === undefined
               ? undefined
               : { recorder: deps.attendance, clock: deps.clock },
@@ -4151,8 +4181,10 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await withIssuanceTransaction(
         deps.db,
         async (tx) => {
+          await requireEconomicWrite(tx, deps.cfg, deps.admission);
           await checkZones(tx, deps.cfg, session, [{ orderId: billId }]);
           const split = await splitBill(tx, cfg, billId, transfers, {
+            admission: deps.admission,
             ...command,
             expectedEdit: parseBillEditExpected(body.expectedEdit),
           });

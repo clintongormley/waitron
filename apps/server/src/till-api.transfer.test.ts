@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { billActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -123,6 +124,7 @@ function systemClock(): TrustedClock {
 
 function deps(db: Database): TillApiDeps {
   return {
+    admission: testTradingAdmission(),
     db,
     // Unused: the transfer route touches no fiscal path.
     backend: {} as FiscalBackend,

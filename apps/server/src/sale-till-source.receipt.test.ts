@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { eq } from "drizzle-orm";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 // Sale writes and receipt reads through the real device-authenticated sale route, against a real
@@ -235,6 +236,7 @@ async function enrolTillDeviceId(cfg: TradingContext, name: string): Promise<str
 
 function apiDeps(cfg: TradingContext): TillApiDeps {
   return {
+    admission: testTradingAdmission(),
     db: suite.db,
     backend,
     clock,

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedOrderWriteBody } from "./testing/order-writer-fixture.js";
 import { observedGroupSubmitBody, placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { createZone } from "./testing/service-zone.js";
@@ -162,6 +163,7 @@ function systemClock(): TrustedClock {
 
 function deps(db: Database): TillApiDeps {
   return {
+    admission: testTradingAdmission(),
     db,
     // Never called by the table/tab routes — none files a fiscal doc under this suite's `prepay` cfg.
     backend: {} as FiscalBackend,

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -487,6 +488,7 @@ describe("the till's watcher routes", () => {
     mountTillApi(
       f.app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         cfg: f.v.cfg,
         backend: f.v.backend,

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
@@ -300,7 +301,15 @@ async function setupLunch(): Promise<Lunch> {
   const app = new Hono();
   mountTillApi(
     app,
-    { db: suite.db, backend, clock, cfg, secureCookies: false, venueLocale: LOCALE },
+    {
+      admission: testTradingAdmission(),
+      db: suite.db,
+      backend,
+      clock,
+      cfg,
+      secureCookies: false,
+      venueLocale: LOCALE,
+    },
     () => {},
   );
   return {

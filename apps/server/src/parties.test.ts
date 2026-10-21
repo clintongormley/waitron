@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -1671,7 +1672,12 @@ describe("money received against a bill before its invoice", () => {
   ): Promise<string> {
     const tendered = toScale(sumDecimals([decimal(applied), decimal(tip)]), MONEY_SCALE);
     const result = await takeBillPayment(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       { ...venue.cfg, tipsEnabled: true },
       billId,
       {

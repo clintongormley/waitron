@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { updateHeldOrder, placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -86,7 +87,7 @@ async function party(label: string, count: number): Promise<{ partyId: string; b
   const { partyId, tabId } = await seat(v, await v.table(label));
   const bills = [tabId];
   for (let i = 1; i < count; i++) {
-    await updateHeldOrder({ db: v.db }, v.cfg, tabId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: v.db }, v.cfg, tabId, {
       revision: (await billRow(v, tabId)).revision,
       lines: [{ menuItemId: v.item("Agua"), quantity: "1" }],
       operatorId: OPERATOR,
@@ -160,6 +161,7 @@ async function cancelLine(billId: string, name: string) {
       tx,
       v.cfg,
       {
+        admission: testTradingAdmission(),
         expectedEdit: await readBillEditState(tx, billId),
         orderId: billId,
         submissionId: randomUUID(),
@@ -321,7 +323,12 @@ describe("the numbers an order's sent dishes were sent under, on the counter rea
     expect(held.find((o) => o.id === o41)).toMatchObject({ formerNumbers: [n40] });
     expect(held.find((o) => o.id === o40)).not.toHaveProperty("formerNumbers");
 
-    await placeOrder({ db: v.db, backend: v.backend, clock: v.clock }, v.cfg, o41, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
+      v.cfg,
+      o41,
+      OPERATOR,
+    );
 
     const waiting = await listCounterWaiting({ db: v.db }, v.cfg);
     expect(waiting.find((o) => o.id === o41)).toMatchObject({ formerNumbers: [n40] });

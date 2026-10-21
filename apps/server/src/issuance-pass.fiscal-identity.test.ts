@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { getTableColumns, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -192,7 +193,7 @@ async function fileOneSale(db: Database) {
     resolveClient: () => Promise.reject(new Error("resolveClient must never be called")),
   });
 
-  await recordTillSale({ db, backend, clock: fixedClock }, cfg, {
+  await recordTillSale({ admission: testTradingAdmission(), db, backend, clock: fixedClock }, cfg, {
     workingOrderId: WORKING_ORDER_ID,
     zoneId: offers.zoneId,
     lines: [

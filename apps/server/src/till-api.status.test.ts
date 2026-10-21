@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { createZone } from "./testing/service-zone.js";
 
 import { Hono } from "hono";
@@ -97,6 +98,7 @@ function systemClock(): TrustedClock {
 
 function deps(db: Database): TillApiDeps {
   return {
+    admission: testTradingAdmission(),
     db,
     backend: {} as FiscalBackend,
     clock: systemClock(),

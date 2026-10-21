@@ -1,4 +1,5 @@
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -156,7 +157,13 @@ describe("off-bill cancellation beside charged service cancellation", () => {
       await expect(
         inTx(venue, async (tx) => {
           if (operation === "preview") await previewAdjustment(tx, args, venue.venueLocale);
-          else await applyAdjustment(tx, venue.cfg, args, venue.venueLocale);
+          else
+            await applyAdjustment(
+              tx,
+              venue.cfg,
+              { ...args, admission: testTradingAdmission() },
+              venue.venueLocale,
+            );
         }),
       ).rejects.toMatchObject({ code: "adjustment.quantity_invalid" });
       expect(await snapshot(order)).toEqual(before);
@@ -170,7 +177,14 @@ describe("off-bill cancellation beside charged service cancellation", () => {
       const before = await snapshot(order);
       const args = await ask(order, quantity);
       await expect(
-        inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, args, venue.venueLocale)),
+        inTx(venue, (tx) =>
+          applyAdjustment(
+            tx,
+            venue.cfg,
+            { ...args, admission: testTradingAdmission() },
+            venue.venueLocale,
+          ),
+        ),
       ).rejects.toMatchObject({ code: "adjustment.quantity_invalid" });
       expect(await snapshot(order)).toEqual(before);
     },
@@ -182,7 +196,14 @@ describe("off-bill cancellation beside charged service cancellation", () => {
       const order = await fixture(4, 1, 0, release);
       const before = await snapshot(order);
       const args = await ask(order, "2");
-      await inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, args, venue.venueLocale));
+      await inTx(venue, (tx) =>
+        applyAdjustment(
+          tx,
+          venue.cfg,
+          { ...args, admission: testTradingAdmission() },
+          venue.venueLocale,
+        ),
+      );
       const after = await snapshot(order);
       expect(
         after.lines.map(({ id, quantity, lineTotal, servedQuantity, servedAt }) => ({
@@ -211,7 +232,14 @@ describe("off-bill cancellation beside charged service cancellation", () => {
       expect(after.party[0]!.revision).toBe(before.party[0]!.revision + 1);
       expect(after.bill[0]!.revision).toBe(before.bill[0]!.revision + 1);
       expect(
-        await inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, args, venue.venueLocale)),
+        await inTx(venue, (tx) =>
+          applyAdjustment(
+            tx,
+            venue.cfg,
+            { ...args, admission: testTradingAdmission() },
+            venue.venueLocale,
+          ),
+        ),
       ).toMatchObject({ revision: after.bill[0]!.revision });
       expect(await snapshot(order)).toEqual(after);
     },
@@ -220,7 +248,14 @@ describe("off-bill cancellation beside charged service cancellation", () => {
   it("clamps actual serving to the active remainder rather than the still-charged bill quantity", async () => {
     const order = await fixture(4, 1, 3);
     const args = await ask(order, "2");
-    await inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, args, venue.venueLocale));
+    await inTx(venue, (tx) =>
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        { ...args, admission: testTradingAdmission() },
+        venue.venueLocale,
+      ),
+    );
     const after = await snapshot(order);
     expect(
       after.lines.map(({ servedQuantity, servedAt }) => ({ servedQuantity, servedAt })),
@@ -237,7 +272,14 @@ describe("off-bill cancellation beside charged service cancellation", () => {
       const order = await fixture(3, 2, 1, release);
       const before = await snapshot(order);
       const args = await ask(order, "1");
-      await inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, args, venue.venueLocale));
+      await inTx(venue, (tx) =>
+        applyAdjustment(
+          tx,
+          venue.cfg,
+          { ...args, admission: testTradingAdmission() },
+          venue.venueLocale,
+        ),
+      );
       const after = await snapshot(order);
       expect(
         after.lines.map(({ id, quantity, servedQuantity, servedAt, lineTotal }) => ({
@@ -267,6 +309,7 @@ describe("off-bill cancellation beside charged service cancellation", () => {
             tx,
             venue.cfg,
             {
+              admission: testTradingAdmission(),
               ...args,
               submissionId: randomUUID(),
               expectedRevision: after.bill[0]!.revision,
@@ -282,7 +325,14 @@ describe("off-bill cancellation beside charged service cancellation", () => {
   it("keeps the ordinary un-cancelled dish's proportional tickets and serving", async () => {
     const order = await fixture(4, 0, 3);
     const args = await ask(order, "2");
-    await inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, args, venue.venueLocale));
+    await inTx(venue, (tx) =>
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        { ...args, admission: testTradingAdmission() },
+        venue.venueLocale,
+      ),
+    );
     const after = await snapshot(order);
     expect(after.cancellations).toEqual([]);
     expect(after.lines.map((line) => line.servedQuantity)).toEqual([2000, 4000]);
@@ -329,7 +379,14 @@ describe("off-bill cancellation beside charged service cancellation", () => {
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2026-10-17T12:00:00.000Z"));
       try {
-        await inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, args, venue.venueLocale));
+        await inTx(venue, (tx) =>
+          applyAdjustment(
+            tx,
+            venue.cfg,
+            { ...args, admission: testTradingAdmission() },
+            venue.venueLocale,
+          ),
+        );
         const expected = { groupId: held.groups[0]!.id, dueAt };
         expect((await inTx(venue, (tx) => readCurrentOrders(tx, order.partyId))).reminder).toEqual(
           expected,

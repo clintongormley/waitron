@@ -1992,6 +1992,7 @@ async function bootServer(
     {
       db,
       backend: nodeBackend,
+      admission: tradingAdmission,
       liveEvents,
       clock: tillClock,
       cfg: tradingContext,
@@ -2228,6 +2229,7 @@ async function bootServer(
       {
         db,
         backend: nodeBackend,
+        admission: tradingAdmission,
         clock: tillClock,
         cfg: tradingContext,
         ring,
@@ -3289,6 +3291,7 @@ async function bootServer(
             recoverAutomaticCardPayments({
               db,
               backend: nodeBackend,
+              admission: tradingAdmission,
               clock: tillClock,
               cfg: tradingContext,
               pool: cardPool,
@@ -3305,6 +3308,7 @@ async function bootServer(
         settlePendingBillPayments({
           db,
           backend: nodeBackend,
+          admission: tradingAdmission,
           clock: tillClock,
           cfg: tradingContext,
           refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),

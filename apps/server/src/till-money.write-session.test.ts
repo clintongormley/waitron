@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { createHash, randomUUID } from "node:crypto";
 import { setImmediate as yieldTurn } from "node:timers/promises";
@@ -78,7 +79,7 @@ async function requestFor(path: Path, cardRefund = false) {
   if (path === "collection") {
     const deps = { db: suite.db, backend: venue.backend, clock: venue.clock };
     await parkOrder(deps, venue.cfg, { id, zoneId: counter.zoneId, lines: lines() });
-    await placeOrder(deps, venue.cfg, id, venue.adminId);
+    await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.adminId);
     return { id, path: `/api/working-orders/${id}/collect`, body: { tender: cash } };
   }
   const billId = await tabWith(venue, "Ensalada");
@@ -336,7 +337,12 @@ it.each(
     const request = await requestFor(issued ? "collection" : "integrated pay");
     if (issued) {
       await issueOrderInvoice(
-        { db: suite.db, backend: venue.backend, clock: venue.clock },
+        {
+          admission: testTradingAdmission(),
+          db: suite.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
         venue.cfg,
         request.id,
         venue.adminId,

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
@@ -357,6 +358,7 @@ describe("A669 submit HTTP assignments", () => {
         mountTillApi(
           app,
           {
+            admission: testTradingAdmission(),
             db: v.db,
             cfg: v.cfg,
             backend: v.backend,

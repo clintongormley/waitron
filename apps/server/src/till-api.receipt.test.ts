@@ -1,4 +1,5 @@
 import { receiptLabelsFor } from "@waitron/country-packs";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -277,6 +278,7 @@ async function setupVenue(): Promise<{
 
 function apiDeps(cfg: TradingContext): TillApiDeps {
   return {
+    admission: testTradingAdmission(),
     db: suite.db,
     backend,
     clock,

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 // Pinned before anything loads: a clock not replaced here would stamp the host's offset.
 process.env.TZ = "Europe/Madrid";
 
@@ -143,7 +144,12 @@ async function adjust(venue: AdjustmentVenue, billId: string, lineNo: number, as
       ...rest,
       ...(amount === undefined ? {} : { amount: decimal(amount) }),
     };
-    return applyAdjustment(tx, venue.cfg, args, venue.venueLocale);
+    return applyAdjustment(
+      tx,
+      venue.cfg,
+      { ...args, admission: testTradingAdmission() },
+      venue.venueLocale,
+    );
   });
 }
 
@@ -172,7 +178,12 @@ async function fileFullComps(db: Database) {
     await adjust(venue, billId, 3, { action: "discount_amount", amount: "1.25" });
     at(0);
     const ticket = await payWorkingOrder(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       { id: billId, tender: { method: "cash", amount: "2.00" }, lines: [] },
     );

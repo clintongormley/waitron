@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -117,6 +118,7 @@ beforeEach(async () => {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       backend: v.backend,
       clock: v.clock,

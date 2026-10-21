@@ -1,4 +1,5 @@
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -1640,7 +1641,7 @@ describe("a prep station's own print-MOVED-slips choice", () => {
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
     await stationPrints(v, "Grill", false);
     const { partyId, tabId } = await seat(v, await v.table("Mesa 33"));
-    await updateHeldOrder({ db: v.db }, v.cfg, tabId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: v.db }, v.cfg, tabId, {
       revision: (await billRow(v, tabId)).revision,
       lines: [{ menuItemId: v.item("Agua"), quantity: "1" }],
       operatorId: OPERATOR,

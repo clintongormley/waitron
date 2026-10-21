@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import {
@@ -2099,7 +2100,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   it("the same change through the whole-order save is never a silent delete", async () => {
     const { cfg, tabId, ticket, lineId, cafeOffer } = await tabWithFiredCafe();
 
-    await updateHeldOrder({ db }, cfg, tabId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
       operatorId: OPERATOR,
       revision: await revisionOf(tabId),
       lines: [
@@ -2155,7 +2156,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   it("removing a sent, not-started line from the whole-order save voids it with a notice", async () => {
     const { cfg, tabId, ticket, aguaOffer } = await tabWithFiredCafe();
 
-    await updateHeldOrder({ db }, cfg, tabId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
       operatorId: OPERATOR,
       revision: await revisionOf(tabId),
       lines: [{ menuItemId: aguaOffer, quantity: "1" }],
@@ -2185,7 +2186,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
       });
     }
     await expect(
-      updateHeldOrder({ db }, cfg, tabId, {
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
         operatorId: OPERATOR,
         revision: await revisionOf(tabId),
         lines: [{ menuItemId: aguaOffer, quantity: "1" }],
@@ -2216,7 +2217,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
       ),
     ).rejects.toMatchObject({ code: "ticket.already_fired", params: { workingOrderId: tabId } });
     await expect(
-      updateHeldOrder({ db }, cfg, tabId, {
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
         operatorId: OPERATOR,
         revision: await revisionOf(tabId),
         lines: [{ workingOrderLineId: lineId, menuItemId: cafeOffer, quantity: "2" }],
@@ -2479,7 +2480,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   it("changing a sent line's dish voids it with a notice and sends the new dish", async () => {
     const { cfg, tabId, ticket, lineId, aguaOffer } = await tabWithFiredCafe();
 
-    await updateHeldOrder({ db }, cfg, tabId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
       operatorId: OPERATOR,
       revision: await revisionOf(tabId),
       lines: [{ workingOrderLineId: lineId, menuItemId: aguaOffer, quantity: "1" }],
@@ -2795,7 +2796,7 @@ describe("new work an edit adds reaches the kitchen as a round's would (plan D10
   it("a whole-order save that changes the only fired dish of a later course sends a new dish of that course at once", async () => {
     const { cfg, tabId, waterLineId, cafeLineId, cafeOffer, aguaOffer } = await tabWithFiredMains();
 
-    await updateHeldOrder({ db }, cfg, tabId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
       operatorId: OPERATOR,
       lines: [
         { workingOrderLineId: waterLineId, menuItemId: aguaOffer, quantity: "1" },
@@ -2815,7 +2816,7 @@ describe("new work an edit adds reaches the kitchen as a round's would (plan D10
   it("a line a whole-order save adds to a tab whose every line is held is held too, and Send and its group's fire release them", async () => {
     const { cfg, tabId, partyId, lineId, cafeOffer, aguaOffer } = await tabWithHeldCafe();
 
-    await updateHeldOrder({ db }, cfg, tabId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
       operatorId: OPERATOR,
       lines: [
         { workingOrderLineId: lineId, menuItemId: cafeOffer, quantity: "1" },
@@ -2839,7 +2840,7 @@ describe("new work an edit adds reaches the kitchen as a round's would (plan D10
   it("replacing the dish of a held line on a tab whose every line is held keeps the new dish held until its group fires", async () => {
     const { cfg, tabId, partyId, lineId, aguaId, aguaOffer } = await tabWithHeldCafe();
 
-    await updateHeldOrder({ db }, cfg, tabId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
       operatorId: OPERATOR,
       lines: [{ workingOrderLineId: lineId, menuItemId: aguaOffer, quantity: "1" }],
       revision: await revisionOf(tabId),
@@ -2992,7 +2993,7 @@ describe("every write to an open order's lines counts on its revision, a served 
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, tabId))
       .orderBy(workingOrderLines.lineNo);
-    await updateHeldOrder({ db }, cfg, tabId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
       lines: [
         { workingOrderLineId: lines[0]!.id, menuItemId: cafeOffer, quantity: "3", note: "a" },
         { workingOrderLineId: lines[1]!.id, menuItemId: cafeOffer, quantity: "1" },
@@ -3011,7 +3012,7 @@ describe("every write to an open order's lines counts on its revision, a served 
       .orderBy(workingOrderLines.lineNo);
     const copy = await revisionOf(tabId);
 
-    await updateHeldOrder({ db }, cfg, tabId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
       lines: [
         { workingOrderLineId: lines[0]!.id, menuItemId: cafeOffer, quantity: "3" },
         { workingOrderLineId: lines[1]!.id, menuItemId: cafeOffer, quantity: "1" },
@@ -3162,7 +3163,7 @@ describe("a line write on an order whose card payment is in flight is refused, a
       asApp(tabs.cfg, (tx) => updateOrderLine(tx, tabs.cfg, tabs.tabId, 1, {}, revision)),
     ).rejects.toMatchObject({ code: "order.payment_in_flight" });
     await expect(
-      updateHeldOrder({ db }, tabs.cfg, tabs.tabId, {
+      updateHeldOrder({ admission: testTradingAdmission(), db }, tabs.cfg, tabs.tabId, {
         lines: [
           { workingOrderLineId: lines[0]!.id, menuItemId: tabs.cafeOffer, quantity: "3" },
           { workingOrderLineId: lines[1]!.id, menuItemId: tabs.cafeOffer, quantity: "1" },

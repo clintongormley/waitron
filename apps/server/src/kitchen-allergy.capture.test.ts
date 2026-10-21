@@ -1,4 +1,5 @@
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
@@ -496,6 +497,7 @@ describe("A669 capture", () => {
           .from(workingOrders)
           .where(eq(workingOrders.id, p.tabId));
         await updateOrderLine(tx, v.cfg, p.tabId, 1, { extras: selection }, order!.revision, {
+          admission: testTradingAdmission(),
           operatorId: OPERATOR,
           expectedEdit: await readBillEditState(tx, p.tabId),
         });
@@ -549,6 +551,7 @@ describe("A669 capture", () => {
       await inTx(v, async (tx) => {
         const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, p.tabId));
         await updateOrderLine(tx, v.cfg, p.tabId, 1, { extras: selection }, order!.revision, {
+          admission: testTradingAdmission(),
           operatorId: OPERATOR,
           expectedEdit: await readBillEditState(tx, p.tabId),
         });
@@ -586,6 +589,7 @@ describe("A669 capture", () => {
           .from(workingOrderLines)
           .where(eq(workingOrderLines.id, original.lineId));
         await updateOrderLine(tx, v.cfg, p.tabId, line!.lineNo, { extras: [] }, order!.revision, {
+          admission: testTradingAdmission(),
           operatorId: OPERATOR,
           expectedEdit: await readBillEditState(tx, p.tabId),
         });
@@ -638,6 +642,7 @@ describe("A669 capture", () => {
     await inTx(v, async (tx) => {
       const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, p.tabId));
       await updateOrderLine(tx, v.cfg, p.tabId, 1, { extras: selection }, order!.revision, {
+        admission: testTradingAdmission(),
         operatorId: OPERATOR,
         expectedEdit: await readBillEditState(tx, p.tabId),
       });
@@ -696,6 +701,7 @@ describe("A669 capture", () => {
         .from(workingOrders)
         .where(eq(workingOrders.id, p.tabId));
       await updateOrderLine(tx, v.cfg, p.tabId, 1, { note: "New dish note" }, order!.revision, {
+        admission: testTradingAdmission(),
         operatorId: OPERATOR,
         expectedEdit: await readBillEditState(tx, p.tabId),
       });
@@ -734,6 +740,7 @@ describe("A669 capture", () => {
         .from(workingOrders)
         .where(eq(workingOrders.id, p.tabId));
       await updateOrderLine(tx, v.cfg, p.tabId, 1, { note: "Changed note" }, order!.revision, {
+        admission: testTradingAdmission(),
         operatorId: OPERATOR,
         expectedEdit: await readBillEditState(tx, p.tabId),
       });

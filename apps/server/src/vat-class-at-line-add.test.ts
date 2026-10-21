@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, placeOrder } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
@@ -337,7 +338,7 @@ function stubProvider(onCollect: () => Promise<void>): PaymentProvider {
 }
 
 function cardDeps(provider: PaymentProvider): IntegratedPayDeps {
-  return { ...deps(), provider, readerRef: "reader_1" };
+  return { admission: testTradingAdmission(), ...deps(), provider, readerRef: "reader_1" };
 }
 
 describe("a product's VAT class changed with no new publish: the sale files the class its line was added at", () => {
@@ -346,7 +347,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     await setVat(v.products.cana, "general");
     const id = randomUUID();
 
-    await recordTillSale(deps(), v.cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: id,
       zoneId: v.counter.zoneId,
       lines: one(v, v.products.cana),
@@ -364,7 +365,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     expect(storedAtAdd[0]!.vatClass).toBe("reduced");
     await setVat(v.products.cana, "general");
 
-    const ticket = await payWorkingOrder(deps(), v.cfg, {
+    const ticket = await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
       lines: [],
       tender: { method: "cash", amount: "2.50" },
@@ -379,7 +380,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     await setVat(v.products.cana, "super_reduced");
     await reprintSale(deps(), v.cfg, id);
     await printSaleReceipt(deps(), v.cfg, id, false);
-    const replay = await payWorkingOrder(deps(), v.cfg, {
+    const replay = await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
       lines: [],
       tender: { method: "cash", amount: "2.50" },
@@ -413,7 +414,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     await setVat(v.products.queso, "super_reduced");
     await setVat(v.products.cana, "general");
 
-    await payWorkingOrder(deps(), v.cfg, {
+    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id: tabId,
       lines: [],
       tender: { method: "cash", amount: "13.25" },
@@ -439,7 +440,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     ]);
     await setVat(v.products.cafe, "general");
 
-    await payWorkingOrder(deps(), v.cfg, {
+    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
       lines: [],
       tender: { method: "cash", amount: "2.20" },
@@ -519,8 +520,13 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     const v = await setupVenue("ticket_then_pay");
     const before = await park(v, one(v, v.products.cana));
     const after = await park(v, one(v, v.products.cana));
-    await placeOrder(deps(), v.cfg, before, OPERATOR);
-    await issueOrderInvoice(deps(), v.cfg, before, OPERATOR);
+    await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, before, OPERATOR);
+    await issueOrderInvoice(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      before,
+      OPERATOR,
+    );
     const placed = await filed(before);
     const storedAtPlacing = await stored(before);
     await setVat(v.products.cana, "general");
@@ -529,7 +535,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     const spy = await sessionPrepareSpy(prepared);
     let ticket;
     try {
-      ticket = await collectOrder(deps(), v.cfg, {
+      ticket = await collectOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
         id: before,
         lines: [],
         tender: { method: "cash", amount: "2.50" },
@@ -537,8 +543,13 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     } finally {
       spy.restore();
     }
-    await placeOrder(deps(), v.cfg, after, OPERATOR);
-    await issueOrderInvoice(deps(), v.cfg, after, OPERATOR);
+    await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, after, OPERATOR);
+    await issueOrderInvoice(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      after,
+      OPERATOR,
+    );
 
     expect(placed).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
     expect(await filed(before)).toEqual(placed);
@@ -553,10 +564,10 @@ describe("a product's VAT class changed with no new publish: the sale files the 
   it("ticket-then-pay: an order placed at 10% and changed before collect files 10% at collect, and a replay rebuilds the same receipt", async () => {
     const v = await setupVenue("ticket_then_pay");
     const id = await park(v, one(v, v.products.cana));
-    await placeOrder(deps(), v.cfg, id, OPERATOR);
+    await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
     await setVat(v.products.cana, "general");
 
-    const ticket = await collectOrder(deps(), v.cfg, {
+    const ticket = await collectOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
       lines: [],
       tender: { method: "cash", amount: "2.50" },
@@ -565,7 +576,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
     expect(await rates(id)).toEqual([1000]);
     expect((await stored(id)).map((line) => line.vatClass)).toEqual(["reduced"]);
-    const replay = await collectOrder(deps(), v.cfg, {
+    const replay = await collectOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
       lines: [],
       tender: { method: "cash", amount: "2.50" },
@@ -577,7 +588,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
   it("ticket-then-pay by card: a placed order collected on the reader after the change files 10%", async () => {
     const v = await setupVenue("ticket_then_pay");
     const id = await park(v, one(v, v.products.cana));
-    await placeOrder(deps(), v.cfg, id, OPERATOR);
+    await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
     await setVat(v.products.cana, "general");
 
     const out = await payWorkingOrderIntegrated(
@@ -626,7 +637,7 @@ describe("an edit prices only what it adds", () => {
       .where(eq(workingOrderLines.workingOrderId, id));
     const revision = await withTransaction(suite.db, (tx) => readOrderRevision(tx, id));
 
-    await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
       lines: [
         {
           workingOrderLineId: dish!.id,
@@ -642,7 +653,7 @@ describe("an edit prices only what it adds", () => {
       ],
       revision,
     });
-    await payWorkingOrder(deps(), v.cfg, {
+    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
       lines: [],
       tender: { method: "cash", amount: "10.75" },
@@ -666,7 +677,7 @@ describe("an edit prices only what it adds", () => {
       .where(eq(workingOrderLines.workingOrderId, id));
     const revision = await withTransaction(suite.db, (tx) => readOrderRevision(tx, id));
 
-    await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
       lines: [
         {
           workingOrderLineId: kept!.id,
@@ -677,7 +688,7 @@ describe("an edit prices only what it adds", () => {
       ],
       revision,
     });
-    await payWorkingOrder(deps(), v.cfg, {
+    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
       lines: [],
       tender: { method: "cash", amount: "7.50" },
@@ -704,7 +715,7 @@ describe("a new version published with the new class", () => {
       .where(eq(workingOrderLines.workingOrderId, id));
     const revision = await withTransaction(suite.db, (tx) => readOrderRevision(tx, id));
 
-    await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
       lines: [
         {
           workingOrderLineId: kept!.id,
@@ -715,7 +726,7 @@ describe("a new version published with the new class", () => {
       ],
       revision,
     });
-    await payWorkingOrder(deps(), v.cfg, {
+    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
       lines: [],
       tender: { method: "cash", amount: "5.00" },
@@ -738,7 +749,7 @@ describe("a new version published with the new class", () => {
       ]),
     );
 
-    await payWorkingOrder(deps(), v.cfg, {
+    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id: tabId,
       lines: [],
       tender: { method: "cash", amount: "5.00" },

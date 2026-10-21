@@ -1,3 +1,4 @@
+import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import { and, asc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
 import {
   kitchenCourses,
@@ -967,7 +968,7 @@ export async function discardDraft(
   partyId: string,
   draftId: string,
   operatorId: string,
-  input: DiscardDraftInput,
+  input: DiscardDraftInput & { admission: TradingAdmission },
   venueLocale: string,
   attempts?: PinAttempts,
   attendance?: OrderAttendance,
@@ -978,11 +979,12 @@ export async function discardDraft(
   adjustmentIds: string[];
   party: { id: string; revision: number } | null;
 }> {
+  await requireEconomicWrite(tx, cfg, input.admission);
   const id = uuid(draftId, "draftId");
   const expectedEdit = parseBillEditExpected(input.expectedEdit);
   if (expectedEdit.draftId !== id) throw invalid("expectedEdit.draftId");
   if (input.revision !== expectedEdit.draftRevision) throw invalid("revision");
-  const { submissionId, approver, ...command } = input;
+  const { submissionId, approver, admission, ...command } = input;
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
@@ -1029,6 +1031,7 @@ export async function discardDraft(
           tx,
           cfg,
           {
+            admission,
             orderId: billId,
             expectedEdit: await readBillEditState(tx, billId),
             expectedRevision: await readOrderRevision(tx, billId),

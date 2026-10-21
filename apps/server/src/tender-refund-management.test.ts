@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
@@ -55,6 +56,7 @@ beforeEach(async () => {
   mountPaymentsApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: store.db,
       cfg: venue.cfg,
       clock: venue.clock,

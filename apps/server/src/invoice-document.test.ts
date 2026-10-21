@@ -1,4 +1,5 @@
 import { receiptLabelsFor } from "@waitron/country-packs";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -279,6 +280,7 @@ describe("stored invoice document projection", () => {
         tx,
         venue.cfg,
         {
+          admission: testTradingAdmission(),
           expectedEdit: await readBillEditState(tx, billId),
           orderId: billId,
           submissionId: randomUUID(),
@@ -321,7 +323,13 @@ describe("stored invoice document projection", () => {
           deviceId: venue.cfg.origin.deviceId,
         })
         .returning();
-      await completeBillPayment(tx, venue, venue.cfg, payment!.id, new Date());
+      await completeBillPayment(
+        tx,
+        { ...venue, admission: testTradingAdmission() },
+        venue.cfg,
+        payment!.id,
+        new Date(),
+      );
       const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
       return sale!.id;
     });
@@ -968,7 +976,13 @@ describe("the guests a full invoice prints", () => {
           deviceId: venue.cfg.origin.deviceId,
         })
         .returning();
-      await completeBillPayment(tx, venue, venue.cfg, payment!.id, new Date());
+      await completeBillPayment(
+        tx,
+        { ...venue, admission: testTradingAdmission() },
+        venue.cfg,
+        payment!.id,
+        new Date(),
+      );
       const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
       return sale!.id;
     });

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
@@ -242,7 +243,12 @@ describe("floor hierarchy deletion", () => {
     await pay(v, collected, "20.00");
     await inTx(v, (tx) => handOverOrder(tx, v.cfg, collected));
     const abandoned = await delivery(table, "E abandoned");
-    await placeOrder({ db: v.db, backend: v.backend, clock: v.clock }, v.cfg, abandoned, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
+      v.cfg,
+      abandoned,
+      OPERATOR,
+    );
     await inTx(v, (tx) =>
       tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, abandoned)),
     );

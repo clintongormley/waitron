@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
@@ -213,6 +214,7 @@ async function setup(withVariant = false, shape?: "grouped") {
       tx,
       venue.cfg,
       {
+        admission: testTradingAdmission(),
         expectedEdit: await readBillEditState(tx, tabId),
         orderId: tabId,
         expectedRevision: bill!.revision,

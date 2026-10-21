@@ -1,3 +1,4 @@
+import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   adjustmentLines,
@@ -1347,12 +1348,13 @@ interface LineReduction {
 export async function applyAdjustment(
   tx: Transaction,
   cfg: TradingContext,
-  args: AdjustmentArgs,
+  args: AdjustmentArgs & { admission: TradingAdmission },
   venueLocale: string,
   attempts?: PinAttempts,
   attendance?: OrderAttendance,
 ): Promise<{ adjustmentIds: string[]; revision: number }> {
-  const { submissionId, approver, ...command } = args;
+  const { submissionId, approver, admission, ...command } = args;
+  await requireEconomicWrite(tx, cfg, admission);
   const expectedEdit =
     args.expectedEdit == null ? args.expectedEdit : parseBillEditExpected(args.expectedEdit);
   const sourceDraftId = sourceDraftIdOf(args.sourceDraftId);

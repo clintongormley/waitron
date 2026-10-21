@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { readBillEditState } from "./bill-editing.js";
 import { Hono } from "hono";
@@ -356,6 +357,7 @@ beforeAll(async () => {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       backend: v.backend,
       clock: v.clock,
@@ -1860,7 +1862,13 @@ describe("the bill and invoice lookups", () => {
         .returning({ id: billPayments.id });
       await completeBillPayment(
         tx,
-        { db: suite.db, backend: v.backend, clock: v.clock, log: noopLog },
+        {
+          admission: testTradingAdmission(),
+          db: suite.db,
+          backend: v.backend,
+          clock: v.clock,
+          log: noopLog,
+        },
         v.cfg,
         payment!.id,
         new Date(),

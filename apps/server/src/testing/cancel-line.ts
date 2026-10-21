@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./trading-admission.js";
 import { readBillEditState } from "../bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
@@ -144,6 +145,7 @@ export async function cancelLine(
     tx,
     cfg,
     {
+      admission: testTradingAdmission(),
       orderId,
       expectedEdit: await readBillEditState(tx, orderId),
       submissionId: randomUUID(),

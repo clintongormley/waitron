@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { updateHeldOrder } from "./testing/order-writer-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -380,7 +381,7 @@ describe("permanent station deletion", () => {
     expect(await inTx(v, (tx) => readRestOfOrder(tx, [ready.order.id]))).toEqual(beforeRest);
     expect(beforeRest.get(ready.order.id)!.map((row) => row.stationName)).toEqual(["Delete me"]);
     await expect(
-      updateHeldOrder({ db: v.db }, v.cfg, first.order.id, {
+      updateHeldOrder({ admission: testTradingAdmission(), db: v.db }, v.cfg, first.order.id, {
         revision: first.order.revision,
         lines: [],
       }),

@@ -1,4 +1,5 @@
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { deleteCourse } from "./course-delete.js";
@@ -588,7 +589,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
       lines: ["Burger", "Vino"].map((name) => ({ menuItemId: v.item(name), quantity: "1" })),
       operatorId: OPERATOR,
     });
-    await placeOrder(deps, v.cfg, id, OPERATOR);
+    await placeOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
     const before = await lineRows(id);
     expect(before.every((l) => l.sentAt !== null && l.groupId === null)).toBe(true);
 

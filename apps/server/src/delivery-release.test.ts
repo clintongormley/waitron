@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -40,11 +41,15 @@ async function settledDelivery(v: PartyVenue, tableId: string): Promise<string> 
       zoneId: v.counter.zoneId,
     }),
   );
-  await payWorkingOrder({ db: v.db, backend: v.backend, clock: v.clock }, v.cfg, {
-    id,
-    lines: [],
-    tender: { method: "cash", amount: "12.00" },
-  });
+  await payWorkingOrder(
+    { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
+    v.cfg,
+    {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "12.00" },
+    },
+  );
   return id;
 }
 
@@ -173,14 +178,18 @@ describe("an order whose delivery table was let go", () => {
       ),
     );
     const deps = { db: v.db, backend: v.backend, clock: v.clock };
-    await placeOrder(deps, v.cfg, id, OPERATOR);
+    await placeOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
     await inTx(v, (tx) => handOverOrder(tx, v.cfg, id));
     await inTx(v, (tx) => releaseDeliveries(tx, t7, "Terrace 7"));
 
     expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, id))).toBe("Terrace 7");
     expect((await inTx(v, (tx) => readReceiptOrder(tx, v.cfg, id))).orderLabel).toBe("Terrace 7");
 
-    await collectOrder(deps, v.cfg, { id, lines: [], tender: { method: "cash", amount: "12.00" } });
+    await collectOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "12.00" },
+    });
 
     expect(await billRow(v, id)).toMatchObject({
       status: "settled",

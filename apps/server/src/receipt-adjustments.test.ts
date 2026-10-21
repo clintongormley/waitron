@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -63,6 +64,7 @@ async function adjust(billId: string, ask: Ask): Promise<void> {
       tx,
       venue.cfg,
       {
+        admission: testTradingAdmission(),
         expectedEdit: await readBillEditState(tx, billId),
         orderId: billId,
         submissionId: randomUUID(),
@@ -140,8 +142,15 @@ async function invoiceOf(billId: string) {
           deviceId: venue.cfg.origin.deviceId,
         })
         .returning();
-      return (await completeBillPayment(tx, venue, venue.cfg, payment!.id, new Date())).invoice!
-        .lines;
+      return (
+        await completeBillPayment(
+          tx,
+          { ...venue, admission: testTradingAdmission() },
+          venue.cfg,
+          payment!.id,
+          new Date(),
+        )
+      ).invoice!.lines;
     });
   } finally {
     await inTx(venue, (tx) =>
@@ -203,7 +212,15 @@ describe("receiptLines", () => {
             deviceId: venue.cfg.origin.deviceId,
           })
           .returning();
-        return (await completeBillPayment(tx, venue, venue.cfg, payment!.id, new Date())).invoice!;
+        return (
+          await completeBillPayment(
+            tx,
+            { ...venue, admission: testTradingAdmission() },
+            venue.cfg,
+            payment!.id,
+            new Date(),
+          )
+        ).invoice!;
       });
       const replay = await inTx(venue, (tx) =>
         readSettledTicket(venue.backend, tx, venue.cfg, billId),
@@ -336,7 +353,15 @@ describe("receiptLines", () => {
             deviceId: venue.cfg.origin.deviceId,
           })
           .returning();
-        return (await completeBillPayment(tx, venue, venue.cfg, payment!.id, new Date())).invoice!;
+        return (
+          await completeBillPayment(
+            tx,
+            { ...venue, admission: testTradingAdmission() },
+            venue.cfg,
+            payment!.id,
+            new Date(),
+          )
+        ).invoice!;
       });
       const changedIdentity = await inTx(venue, async (tx) => {
         const stored = await readStoredOrder(tx, billId);
@@ -585,7 +610,12 @@ describe("receiptLines", () => {
     });
     await adjust(billId, { action: "discount_percent", percentBp: 1000 });
     const result = await payWorkingOrder(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       { id: billId, tender: { method: "cash", amount: "23.85" }, lines: [] },
     );
@@ -625,7 +655,12 @@ describe("receiptLines", () => {
     /** Pays the bill in cash and returns the result and its printed goods, up to the first rule. */
     async function payAndPrint(billId: string, amount: string) {
       const result = await payWorkingOrder(
-        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
         venue.cfg,
         { id: billId, tender: { method: "cash", amount }, lines: [] },
       );
@@ -767,11 +802,20 @@ describe("receiptLines", () => {
       action: "discount_percent",
       percentBp: 1000,
     });
-    await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
-      id: billId,
-      tender: { method: "cash", amount: "13.30" },
-      lines: [],
-    });
+    await payWorkingOrder(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      {
+        id: billId,
+        tender: { method: "cash", amount: "13.30" },
+        lines: [],
+      },
+    );
 
     const saved = await inTx(venue, async (tx) => {
       const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
@@ -801,7 +845,12 @@ describe("receiptLines", () => {
       amount: "1.00",
     });
     const result = await payWorkingOrder(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       { id: billId, tender: { method: "cash", amount: "11.49" }, lines: [] },
     );
@@ -911,7 +960,12 @@ describe("receiptLines", () => {
       percentBp: 1000,
     });
     const result = await payWorkingOrder(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       { id: billId, tender: { method: "cash", amount: "9.00" }, lines: [] },
     );

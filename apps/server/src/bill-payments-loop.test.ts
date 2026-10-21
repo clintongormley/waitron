@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -71,6 +72,7 @@ function receiptPrinter(name: string) {
 
 const settle = () =>
   settlePendingBillPayments({
+    admission: testTradingAdmission(),
     db: venue.db,
     backend: venue.backend,
     clock: venue.clock,

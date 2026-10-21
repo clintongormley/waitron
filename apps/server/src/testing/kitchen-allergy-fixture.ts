@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -93,6 +94,7 @@ export async function kitchenFixture(db: Database) {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db,
       cfg: v.cfg,
       backend: v.backend,

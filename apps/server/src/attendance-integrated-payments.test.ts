@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { newId, sales, tenders, withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -79,7 +80,13 @@ async function bill(issued: boolean) {
   const { tabId } = await seat(v, await v.table("Integrated attendance"));
   await order(v, tabId, "Burger");
   await placeByHand(v, tabId);
-  if (issued) await issueOrderInvoice(deps(), v.cfg, tabId, OPERATOR);
+  if (issued)
+    await issueOrderInvoice(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      tabId,
+      OPERATOR,
+    );
   return { id: tabId, lines: [] };
 }
 function evidence(
@@ -126,7 +133,12 @@ describe("integrated whole-order attendance", () => {
         at("2026-01-06T18:00:00Z");
         return collect(params);
       });
-      const result = await payWorkingOrderIntegrated(deps(), v.cfg, req, collector);
+      const result = await payWorkingOrderIntegrated(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        req,
+        collector,
+      );
       expect(result.outcome).toBe("captured");
       const rows = await operations();
       expect(rows).toEqual([{ sequence: 1, key: expect.any(String), ...evidence("qualifying") }]);
@@ -137,7 +149,14 @@ describe("integrated whole-order attendance", () => {
         "2026-01-05",
       ]);
       at("2026-01-07T18:00:00Z");
-      expect(await payWorkingOrderIntegrated(deps(), v.cfg, req, v.operator)).toEqual(result);
+      expect(
+        await payWorkingOrderIntegrated(
+          { ...deps(), admission: testTradingAdmission() },
+          v.cfg,
+          req,
+          v.operator,
+        ),
+      ).toEqual(result);
       expect(await operations()).toEqual(rows);
       expect(provider.collectCalls).toHaveLength(1);
     },
@@ -147,16 +166,30 @@ describe("integrated whole-order attendance", () => {
     const req = request();
     at();
     provider.failNextCollect();
-    expect(await payWorkingOrderIntegrated(deps(), v.cfg, req, collector)).toEqual({
+    expect(
+      await payWorkingOrderIntegrated(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        req,
+        collector,
+      ),
+    ).toEqual({
       outcome: "declined",
     });
     const [refused] = await operations();
     expect(refused).toEqual({ sequence: 1, key: expect.any(String), ...evidence("refused") });
     expect(await paymentFacts()).toEqual([]);
     at("2026-01-05T15:00:00Z");
-    expect((await payWorkingOrderIntegrated(deps(), v.cfg, req, v.operator)).outcome).toBe(
-      "captured",
-    );
+    expect(
+      (
+        await payWorkingOrderIntegrated(
+          { ...deps(), admission: testTradingAdmission() },
+          v.cfg,
+          req,
+          v.operator,
+        )
+      ).outcome,
+    ).toBe("captured");
     expect(await operations()).toEqual([
       refused,
       {
@@ -177,17 +210,29 @@ describe("integrated whole-order attendance", () => {
     const interrupted = vi
       .spyOn(provider, "collect")
       .mockRejectedValueOnce(new Error("transport stopped before row"));
-    await expect(payWorkingOrderIntegrated(deps(), v.cfg, req, collector)).rejects.toThrow(
-      "transport stopped before row",
-    );
+    await expect(
+      payWorkingOrderIntegrated(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        req,
+        collector,
+      ),
+    ).rejects.toThrow("transport stopped before row");
     const [old] = await operations();
     expect(old).toMatchObject(evidence("pending"));
     expect(await suite.db.select().from(payments)).toEqual([]);
     interrupted.mockRestore();
     at("2026-01-05T15:00:00Z");
-    expect((await payWorkingOrderIntegrated(deps(), v.cfg, req, v.operator)).outcome).toBe(
-      "captured",
-    );
+    expect(
+      (
+        await payWorkingOrderIntegrated(
+          { ...deps(), admission: testTradingAdmission() },
+          v.cfg,
+          req,
+          v.operator,
+        )
+      ).outcome,
+    ).toBe("captured");
     expect(await operations()).toEqual([
       { ...old, outcome: "refused" },
       {
@@ -207,14 +252,24 @@ describe("integrated whole-order attendance", () => {
       const req = await bill(issued);
       at();
       provider.crashNextCollect("captured");
-      await expect(payWorkingOrderIntegrated(deps(), v.cfg, req, collector)).rejects.toThrow(
-        "fake provider",
-      );
+      await expect(
+        payWorkingOrderIntegrated(
+          { ...deps(), admission: testTradingAdmission() },
+          v.cfg,
+          req,
+          collector,
+        ),
+      ).rejects.toThrow("fake provider");
       expect(await operations()).toEqual([
         { sequence: 1, key: expect.any(String), ...evidence("pending") },
       ]);
       at("2026-01-06T18:00:00Z");
-      const recovered = await payWorkingOrderIntegratedOrchestration(deps(), v.cfg, req, OPERATOR);
+      const recovered = await payWorkingOrderIntegratedOrchestration(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        req,
+        OPERATOR,
+      );
       expect(recovered.outcome).toBe("captured");
       expect(await operations()).toEqual([
         { sequence: 1, key: expect.any(String), ...evidence("qualifying") },
@@ -227,7 +282,14 @@ describe("integrated whole-order attendance", () => {
     const req = request();
     at();
     provider.stallNextCollect();
-    expect(await payWorkingOrderIntegrated(deps(), v.cfg, req, collector)).toEqual({
+    expect(
+      await payWorkingOrderIntegrated(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        req,
+        collector,
+      ),
+    ).toEqual({
       outcome: "timeout",
     });
     expect(await operations()).toEqual([
@@ -245,7 +307,14 @@ describe("integrated whole-order attendance", () => {
     );
     at("2026-01-06T18:00:00Z");
     expect(
-      (await payWorkingOrderIntegratedOrchestration(deps(), v.cfg, req, OPERATOR)).outcome,
+      (
+        await payWorkingOrderIntegratedOrchestration(
+          { ...deps(), admission: testTradingAdmission() },
+          v.cfg,
+          req,
+          OPERATOR,
+        )
+      ).outcome,
     ).toBe("captured");
     expect(await operations()).toEqual([
       { sequence: 1, key: expect.any(String), ...evidence("qualifying") },
@@ -256,13 +325,28 @@ describe("integrated whole-order attendance", () => {
     const req = request();
     at();
     provider.crashNextCollect("captured");
-    await expect(payWorkingOrderIntegrated(deps(), v.cfg, req, collector)).rejects.toThrow(
-      "fake provider",
-    );
+    await expect(
+      payWorkingOrderIntegrated(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        req,
+        collector,
+      ),
+    ).rejects.toThrow("fake provider");
     at("2026-01-06T18:00:00Z");
     const outcomes = await Promise.all([
-      payWorkingOrderIntegratedOrchestration(deps(), v.cfg, req, OPERATOR),
-      payWorkingOrderIntegratedOrchestration(deps(), v.cfg, req, OPERATOR),
+      payWorkingOrderIntegratedOrchestration(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        req,
+        OPERATOR,
+      ),
+      payWorkingOrderIntegratedOrchestration(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        req,
+        OPERATOR,
+      ),
     ]);
     expect(outcomes[0]).toEqual(outcomes[1]);
     expect(outcomes[0]!.outcome).toBe("captured");
@@ -278,7 +362,13 @@ describe("integrated whole-order attendance", () => {
     provider.crashNextCollect("captured");
     await expect(
       payWorkingOrderIntegrated(
-        { db: suite.db, backend: v.backend, clock: v.clock, provider },
+        {
+          admission: testTradingAdmission(),
+          db: suite.db,
+          backend: v.backend,
+          clock: v.clock,
+          provider,
+        },
         v.cfg,
         req,
         collector,
@@ -286,7 +376,14 @@ describe("integrated whole-order attendance", () => {
     ).rejects.toThrow("fake provider");
     at("2026-01-06T18:00:00Z");
     expect(
-      (await payWorkingOrderIntegratedOrchestration(deps(), v.cfg, req, OPERATOR)).outcome,
+      (
+        await payWorkingOrderIntegratedOrchestration(
+          { ...deps(), admission: testTradingAdmission() },
+          v.cfg,
+          req,
+          OPERATOR,
+        )
+      ).outcome,
     ).toBe("captured");
     expect(await operations()).toEqual([]);
   });
@@ -294,11 +391,23 @@ describe("integrated whole-order attendance", () => {
   it("settled integrated replay does not read a new action clock", async () => {
     const req = request();
     at();
-    const first = await payWorkingOrderIntegrated(deps(), v.cfg, req, collector);
+    const first = await payWorkingOrderIntegrated(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      req,
+      collector,
+    );
     vi.spyOn(v.clock, "now").mockImplementation(() => {
       throw new Error("Current action clock unavailable");
     });
-    expect(await payWorkingOrderIntegrated(deps(), v.cfg, req, collector)).toEqual(first);
+    expect(
+      await payWorkingOrderIntegrated(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        req,
+        collector,
+      ),
+    ).toEqual(first);
     expect(await operations()).toHaveLength(1);
   });
 
@@ -311,9 +420,16 @@ describe("integrated whole-order attendance", () => {
         .insert(paymentPolicy)
         .values({ offlineMode: "accept_offline", offlineAmountCap: 2000 });
       provider.offlineNextCollect();
-      expect((await payWorkingOrderIntegrated(deps(), v.cfg, req, collector)).outcome).toBe(
-        accept ? "captured" : "network_unavailable",
-      );
+      expect(
+        (
+          await payWorkingOrderIntegrated(
+            { ...deps(), admission: testTradingAdmission() },
+            v.cfg,
+            req,
+            collector,
+          )
+        ).outcome,
+      ).toBe(accept ? "captured" : "network_unavailable");
       const before = await operations();
       expect(before).toEqual([
         { sequence: 1, key: expect.any(String), ...evidence(accept ? "qualifying" : "refused") },
@@ -336,7 +452,12 @@ describe("integrated whole-order attendance", () => {
       throw new AppError("attendance.invalid", { reason: "capture refused" });
     };
     await expect(
-      payWorkingOrderIntegrated(deps(refusing), v.cfg, req, collector),
+      payWorkingOrderIntegrated(
+        { ...deps(refusing), admission: testTradingAdmission() },
+        v.cfg,
+        req,
+        collector,
+      ),
     ).rejects.toMatchObject({ code: "attendance.invalid" });
     expect(provider.collectCalls).toEqual([]);
     expect(await operations()).toEqual([]);
@@ -353,7 +474,12 @@ describe("integrated whole-order attendance", () => {
         throw new AppError("attendance.invalid", { reason: "qualification refused" });
     };
     await expect(
-      payWorkingOrderIntegrated(deps(refusing), v.cfg, req, collector),
+      payWorkingOrderIntegrated(
+        { ...deps(refusing), admission: testTradingAdmission() },
+        v.cfg,
+        req,
+        collector,
+      ),
     ).rejects.toMatchObject({ code: "attendance.invalid" });
     expect(await suite.db.select().from(sales)).toEqual([]);
     expect(await suite.db.select().from(tenders)).toEqual([]);
@@ -363,7 +489,14 @@ describe("integrated whole-order attendance", () => {
     ]);
     at("2026-01-06T18:00:00Z");
     expect(
-      (await payWorkingOrderIntegratedOrchestration(deps(), v.cfg, req, OPERATOR)).outcome,
+      (
+        await payWorkingOrderIntegratedOrchestration(
+          { ...deps(), admission: testTradingAdmission() },
+          v.cfg,
+          req,
+          OPERATOR,
+        )
+      ).outcome,
     ).toBe("captured");
     expect(await operations()).toEqual([
       { sequence: 1, key: expect.any(String), ...evidence("qualifying") },
@@ -372,9 +505,15 @@ describe("integrated whole-order attendance", () => {
 
   it("an unattributed orchestration captures money without inventing worker activity", async () => {
     at();
-    expect((await payWorkingOrderIntegratedOrchestration(deps(), v.cfg, request())).outcome).toBe(
-      "captured",
-    );
+    expect(
+      (
+        await payWorkingOrderIntegratedOrchestration(
+          { ...deps(), admission: testTradingAdmission() },
+          v.cfg,
+          request(),
+        )
+      ).outcome,
+    ).toBe("captured");
     expect(await operations()).toEqual([]);
     expect(await suite.db.select().from(attendanceDayWork)).toEqual([]);
   });
@@ -435,7 +574,13 @@ describe("integrated whole-order attendance", () => {
       const venue = await setupPartyVenue(withoutWorkforce.db);
       const card = new FakePaymentProvider(withoutWorkforce.db);
       const result = await payWorkingOrderIntegrated(
-        { db: withoutWorkforce.db, backend: venue.backend, clock: venue.clock, provider: card },
+        {
+          admission: testTradingAdmission(),
+          db: withoutWorkforce.db,
+          backend: venue.backend,
+          clock: venue.clock,
+          provider: card,
+        },
         venue.cfg,
         {
           id: newId(),

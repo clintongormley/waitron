@@ -1,4 +1,5 @@
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder, addTabRound } from "./testing/order-writer-fixture.js";
 import {
   recallLines,
@@ -607,12 +608,16 @@ describe("payWorkingOrder", () => {
     const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
 
-    const res = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    const res = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+    );
 
     // First sale of a fresh venue's series → A/1. Change is 5.00 tendered − 1.50.
     expect(res.invoiceNumber).toBe("A/1");
@@ -660,11 +665,15 @@ describe("payWorkingOrder", () => {
     const parkedTotal = (await draftAggregate(id)).total;
     expect(parkedTotal).toBe("3.50"); // 1.50 café + 2.00 agua, locked
 
-    const res = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    const res = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "5.00" },
+      },
+    );
 
     // The LOCKED composition, filed from the stored lines: 1.50 + 2.00 = 3.50. Round-trip invariant —
     // the filed total EQUALS the gross the customer was shown at park (`parkedTotal`).
@@ -714,18 +723,22 @@ describe("payWorkingOrder", () => {
     // (`updateWorkingOrder` → `updateHeldOrder`), re-locking the new composition. WITHOUT this sync the
     // retrieved-order pay path files the pre-edit lock and the edit is SILENTLY DROPPED (the till-app
     // side is pinned by `retrieve → edit → pay re-syncs …`).
-    await updateHeldOrder({ db: suite.db }, cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, cfg, id, {
       revision: await revisionOf(id),
       lines: [{ menuItemId: cafe.menuItemId, quantity: "2" }],
     });
     expect((await draftAggregate(id)).total).toBe("3.00"); // the lock now reflects the edit
 
     // Pay the retrieved order (no client basket — files from the stored lock, which is now the edit).
-    const res = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    const res = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "5.00" },
+      },
+    );
 
     // The EDIT is what was charged AND filed: 3.00 (café×2), never the pre-edit 1.50. Its receipt line
     // list carries the edited quantity, and the immutable record's total matches — the edit reached the
@@ -766,11 +779,15 @@ describe("payWorkingOrder", () => {
     });
 
     // Pay — files at the LOCKED 1.50, never the new 9.99.
-    const res = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    const res = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "5.00" },
+      },
+    );
 
     expect(res.total).toBe("1.50"); // the lock, not 9.99
     expect(res.tender).toEqual({ method: "cash", change: "3.50" });
@@ -797,7 +814,7 @@ describe("payWorkingOrder", () => {
     };
     const deps = { db: suite.db, backend, clock };
 
-    const first = await payWorkingOrder(deps, cfg, req);
+    const first = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, req);
     // The filed breakdown is the difference-method figure (0.95).
     expect(first.total).toBe("5.50");
     expect(first.vatBreakdown).toEqual([{ rate: "21.00", base: "4.55", tax: "0.95" }]);
@@ -824,7 +841,7 @@ describe("payWorkingOrder", () => {
     ]);
 
     // The retry — same id, same body. Files NOTHING; returns the first ticket.
-    const second = await payWorkingOrder(deps, cfg, req);
+    const second = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, req);
 
     expect(second.invoiceNumber).toBe(first.invoiceNumber);
     expect(second.total).toBe(first.total);
@@ -865,8 +882,16 @@ describe("payWorkingOrder", () => {
     // admits the second only once the first has committed, so the second reads `settled` and REPLAYS
     // — which is the branch this case exists to pin. Neither errors.
     const [resA, resB] = await Promise.all([
-      payWorkingOrder({ db: suite.db, backend, clock }, cfg, req),
-      payWorkingOrder({ db: suite.db, backend, clock }, cfg, req),
+      payWorkingOrder(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        req,
+      ),
+      payWorkingOrder(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        req,
+      ),
     ]);
 
     // Same ticket from both; exactly ONE sale and ONE registro — the loser replayed, did not file.
@@ -890,8 +915,16 @@ describe("payWorkingOrder", () => {
       tender: { method: "cash" as const, amount: "5.00" },
     };
     const [resA, resB] = await Promise.all([
-      payWorkingOrder({ db: suite.db, backend, clock }, cfg, req),
-      payWorkingOrder({ db: suite.db, backend, clock }, cfg, req),
+      payWorkingOrder(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        req,
+      ),
+      payWorkingOrder(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        req,
+      ),
     ]);
 
     expect(resA.invoiceNumber).toBe(resB.invoiceNumber);
@@ -913,7 +946,7 @@ describe("payWorkingOrder", () => {
     });
 
     await expect(
-      payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
+      payWorkingOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
         id,
         zoneId,
         lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
@@ -939,11 +972,15 @@ describe("payWorkingOrder", () => {
     // line-add snapshot), so this garbage basket — an unknown offer — is not looked at and the pay
     // SUCCEEDS on the stored café×1. The guard against anyone re-reading `req.lines` for a retrieved
     // order.
-    const res = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      lines: [{ menuItemId: UUID_NOT_IN_CAT, quantity: "1" }],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    const res = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [{ menuItemId: UUID_NOT_IN_CAT, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+    );
 
     // Filed the stored lock (1.50), not the garbage basket — settled exactly once.
     expect(res.total).toBe("1.50");
@@ -959,7 +996,7 @@ describe("payWorkingOrder", () => {
     const deps = { db: suite.db, backend, clock };
 
     await expect(
-      payWorkingOrder(deps, cfg, {
+      payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
         id: randomUUID(),
         lines: [],
         tender: { method: "cash", amount: "0" },
@@ -971,7 +1008,7 @@ describe("payWorkingOrder", () => {
     // is how an untrusted till can send one past the widened `"cash" | "card"` type at runtime.
     for (const method of ["voucher", "transfer", "other"] as const) {
       await expect(
-        payWorkingOrder(deps, cfg, {
+        payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
           id: randomUUID(),
           zoneId,
           lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
@@ -1022,12 +1059,16 @@ describe("card tender (manual / datáfono)", () => {
     const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
 
-    const res = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }], // café → 1.50 gross
-      tender: { method: "card", amount: "1.50", externalRef: "OP-12345" },
-    });
+    const res = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }], // café → 1.50 gross
+        tender: { method: "card", amount: "1.50", externalRef: "OP-12345" },
+      },
+    );
 
     // A card charges the exact amount on the terminal — nothing is handed back.
     expect(res.total).toBe("1.50");
@@ -1059,15 +1100,19 @@ describe("card tender (manual / datáfono)", () => {
     // exact total on the separate terminal, so both the filed tender and the payment carry 3.50, not
     // 5.00 — there is no over-tender/change path for card. Same state, divergent inputs (CLAUDE.md §1):
     // 5.00 ≠ 3.50, so a would-be pass-through of `req.tender.amount` would show here.
-    const res = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      zoneId,
-      lines: [
-        { menuItemId: cafe.menuItemId, quantity: "1" },
-        { menuItemId: agua.menuItemId, quantity: "1" },
-      ],
-      tender: { method: "card", amount: "5.00" },
-    });
+    const res = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        zoneId,
+        lines: [
+          { menuItemId: cafe.menuItemId, quantity: "1" },
+          { menuItemId: agua.menuItemId, quantity: "1" },
+        ],
+        tender: { method: "card", amount: "5.00" },
+      },
+    );
 
     expect(res.total).toBe("3.50");
     expect(res.tender.method).toBe("card");
@@ -1088,11 +1133,11 @@ describe("card tender (manual / datáfono)", () => {
     };
     const deps = { db: suite.db, backend, clock };
 
-    const first = await payWorkingOrder(deps, cfg, req);
+    const first = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, req);
     // The retry — same id, same body (a lost first response). The `sales_working_order_id_key`
     // idempotency replays the ORIGINAL ticket and files NOTHING: no second sale, no second registro,
     // and — the card-specific part — no second captured payment.
-    const second = await payWorkingOrder(deps, cfg, req);
+    const second = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, req);
 
     expect(second.invoiceNumber).toBe(first.invoiceNumber);
     expect(second.total).toBe(first.total);
@@ -1124,7 +1169,7 @@ describe("cross-till end-to-end", () => {
     // Sale 1 (A/1): a walk-up cash sale on till A, so the node's huella chain already has one link
     // before the cross-till sale — `checkIntegrity` at the end verifies a chain of TWO that spans two
     // DIFFERENT devices, the concrete proof the chain is per-node, not per-device.
-    const walkUp = await payWorkingOrder(deps, tillA, {
+    const walkUp = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, tillA, {
       id: randomUUID(),
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
@@ -1168,7 +1213,7 @@ describe("cross-till end-to-end", () => {
     // PAY on till B (Sale 2, A/2): file the retrieved order from its STORED locked lines (design §2 —
     // `req.lines` is ignored; `retrieved.lines` is passed only to mirror the real till round-trip). The
     // series is per-node, so till B's sale continues till A's chain — A/1 then A/2.
-    const paid = await payWorkingOrder(deps, tillB, {
+    const paid = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, tillB, {
       id: orderId,
       // A retrieved order IGNORES req.lines (design §2); these are passed only to mirror the till
       // round-trip, which sends each retrieved line's offer.
@@ -1236,7 +1281,7 @@ describe("cross-till end-to-end", () => {
     // Node B retrieves the foreign-node order and edits it like its own.
     expect((await getHeldOrder({ db: suite.db }, nodeB, orderId)).id).toBe(orderId);
     await expect(
-      updateHeldOrder({ db: suite.db }, nodeB, orderId, {
+      updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, nodeB, orderId, {
         revision: await revisionOf(orderId),
         lines: [{ menuItemId: cafe.menuItemId, quantity: "2" }],
       }),
@@ -1299,7 +1344,12 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     await suite.db.execute(sql`update order_service_contexts
       set service_mode = 'ticket_then_pay' where working_order_id = ${id}`);
 
-    const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    const placed = await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
 
     expect(placed).toEqual({ id, status: "placed" });
     expect(await saleCount(id)).toBe(0);
@@ -1319,7 +1369,12 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     });
     await suite.db.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
 
-    const placed = await placeOrder({ db: suite.db, backend, clock }, { ...cfg }, id, OPERATOR);
+    const placed = await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      { ...cfg },
+      id,
+      OPERATOR,
+    );
 
     expect(placed).toEqual({ id, status: "placed" });
     expect(await saleCount(id)).toBe(0);
@@ -1335,7 +1390,12 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
 
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
 
@@ -1343,7 +1403,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     // reads status = 'placed' and refuses with `working_order.not_open` (its own app check); the
     // `require_open_parent` trigger is the DB backstop underneath — placing freezes for free (design §3).
     await expect(
-      updateHeldOrder({ db: suite.db }, cfg, id, {
+      updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, cfg, id, {
         revision: await revisionOf(id),
         lines: [{ menuItemId: cafe.menuItemId, quantity: "2" }],
       }),
@@ -1377,9 +1437,14 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
 
-    await expect(placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR)).resolves.toEqual({
+    await expect(placeOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, id, OPERATOR)).resolves.toEqual({
       id,
       status: "placed",
     });
@@ -1389,7 +1454,12 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     // branch), and opens no log.
     const missing = randomUUID();
     await expect(
-      placeOrder({ db: suite.db, backend, clock }, cfg, missing, OPERATOR),
+      placeOrder(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        missing,
+        OPERATOR,
+      ),
     ).rejects.toMatchObject({
       code: "working_order.not_open",
       params: { workingOrderId: missing },
@@ -1405,10 +1475,15 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
 
     await cancelPlacedOrder(
-      { db: suite.db, backend, clock },
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
       id,
       "customer left",
@@ -1440,7 +1515,12 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
 
     // `order_amendments` carries NO DB CHECK forcing a reason on `order_cancelled` (the column is
     // nullable — null is the genesis's own legitimate value), so the APP contract is the only thing
@@ -1450,7 +1530,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     for (const reason of ["", "   "]) {
       await expect(
         cancelPlacedOrder(
-          { db: suite.db, backend, clock },
+          { admission: testTradingAdmission(), db: suite.db, backend, clock },
           cfg,
           id,
           reason,
@@ -1482,7 +1562,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     });
     await expect(
       cancelPlacedOrder(
-        { db: suite.db, backend, clock },
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
         cfg,
         openId,
         "changed mind",
@@ -1496,15 +1576,19 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
 
     // A SETTLED (walk-up) order — also not placed.
     const settledId = randomUUID();
-    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id: settledId,
-      zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id: settledId,
+        zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+    );
     await expect(
       cancelPlacedOrder(
-        { db: suite.db, backend, clock },
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
         cfg,
         settledId,
         "changed mind",
@@ -1519,7 +1603,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     const missing = randomUUID();
     await expect(
       cancelPlacedOrder(
-        { db: suite.db, backend, clock },
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
         cfg,
         missing,
         "changed mind",
@@ -1537,12 +1621,16 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
 
     // A walk-up settles open → settled in one transaction (till-sale.ts), never passing through
     // `placed`, so placing's log never opens. Prepay fires preparation in that same sale transaction.
-    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+    );
 
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await readAmendments(id)).toHaveLength(0); // no placing → no log (design §3)
@@ -1567,12 +1655,16 @@ describe("prepare & collect — zone payment timing", () => {
       where zone_id = ${collectZone.zoneId}`);
 
     const prepayId = randomUUID();
-    const prepay = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id: prepayId,
-      zoneId: prepayZoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    const prepay = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id: prepayId,
+        zoneId: prepayZoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "1.50" },
+      },
+    );
     expect(prepay.invoiceNumber).toBe("A/1");
     expect(await orderState(prepayId)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(prepayId)).toBe(1);
@@ -1586,16 +1678,25 @@ describe("prepare & collect — zone payment timing", () => {
     const { rows: contexts } = await suite.db.execute<{ service_mode: string }>(sql`
       select service_mode from order_service_contexts where working_order_id = ${collectId}`);
     expect(contexts).toEqual([{ service_mode: "ticket_then_pay" }]);
-    const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, collectId, OPERATOR);
+    const placed = await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      collectId,
+      OPERATOR,
+    );
     expect(placed).not.toHaveProperty("invoiceNumber");
     expect(await orderState(collectId)).toEqual({ status: "placed", settledAtSet: false });
     expect(await saleCount(collectId)).toBe(0);
 
-    const collected = await collectOrder({ db: suite.db, backend, clock }, cfg, {
-      id: collectId,
-      lines: [],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    const collected = await collectOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id: collectId,
+        lines: [],
+        tender: { method: "cash", amount: "1.50" },
+      },
+    );
     expect(collected.invoiceNumber).toBe("A/2");
     expect(await orderState(collectId)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(collectId)).toBe(1);
@@ -1609,12 +1710,16 @@ describe("prepare & collect — zone payment timing", () => {
     const { cfg, cafe, zoneId } = await modeVenue("prepay");
     const id = randomUUID();
 
-    const res = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    const res = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+    );
 
     expect(res.invoiceNumber).toBe("A/1");
     expect(res.total).toBe("1.50");
@@ -1635,12 +1740,16 @@ describe("prepare & collect — zone payment timing", () => {
     const { cfg, cafe, zoneId } = await modeVenue("prepay");
     const id = randomUUID();
 
-    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "1.50" },
+      },
+    );
 
     const abbreviation = { es: "ud" };
     const labels = await frozenUnitLabels(id);
@@ -1663,7 +1772,12 @@ describe("prepare & collect — zone payment timing", () => {
       ],
     });
 
-    const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    const placed = await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
     expect(placed).toEqual({ id, status: "placed" });
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
 
@@ -1671,11 +1785,15 @@ describe("prepare & collect — zone payment timing", () => {
     expect(await registroCount(id)).toBe(0);
     expect(await outstanding()).toEqual([]);
 
-    const collected = await collectOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "3.50" },
-    });
+    const collected = await collectOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "3.50" },
+      },
+    );
     expect(collected.invoiceType).toBe("F2");
     expect(collected.invoiceNumber).toBe("A/1");
     expect(collected.total).toBe("3.50");
@@ -1717,11 +1835,15 @@ describe("prepare & collect — zone payment timing", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "1.50" },
+      },
+    );
     const [sale] = await suite.db
       .select({ id: sales.id })
       .from(sales)
@@ -1747,11 +1869,15 @@ describe("prepare & collect — zone payment timing", () => {
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
-    const paid = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    const paid = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "1.50" },
+      },
+    );
     expect(paid.qr).not.toBe("");
     expect(paid.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
   });
@@ -1764,15 +1890,24 @@ describe("prepare & collect — zone payment timing", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
 
     // 5.00 cash against the 1.50 invoice: the SALE settles at the invoice total (1.50) and 3.50 is
     // drawer change — settling at the tendered cash would over-report the fiscal total (§5).
-    const collected = await collectOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    const collected = await collectOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "5.00" },
+      },
+    );
     expect(collected.total).toBe("1.50");
     expect(collected.tender).toEqual({ method: "cash", change: "3.50" });
     expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50" }]);
@@ -1790,12 +1925,21 @@ describe("prepare & collect — zone payment timing", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, cardId, OPERATOR);
-    const collected = await collectOrder({ db: suite.db, backend, clock }, cfg, {
-      id: cardId,
-      lines: [],
-      tender: { method: "card", amount: "1.50", externalRef: "OP-INV-1" },
-    });
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      cardId,
+      OPERATOR,
+    );
+    const collected = await collectOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id: cardId,
+        lines: [],
+        tender: { method: "card", amount: "1.50", externalRef: "OP-INV-1" },
+      },
+    );
     expect(collected.tender.method).toBe("card");
     expect(await orderState(cardId)).toEqual({ status: "settled", settledAtSet: true });
 
@@ -1819,8 +1963,13 @@ describe("prepare & collect — zone payment timing", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, cashId, OPERATOR);
-    await collectOrder({ db: suite.db, backend, clock }, cfg, {
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      cashId,
+      OPERATOR,
+    );
+    await collectOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
       id: cashId,
       lines: [],
       tender: { method: "cash", amount: "1.50" },
@@ -1838,8 +1987,18 @@ describe("prepare & collect — zone payment timing", () => {
     });
 
     const results = await Promise.allSettled([
-      placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR),
-      placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR),
+      placeOrder(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        id,
+        OPERATOR,
+      ),
+      placeOrder(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        id,
+        OPERATOR,
+      ),
     ]);
     expect(results).toEqual([
       { status: "fulfilled", value: { id, status: "placed" } },
@@ -1860,15 +2019,30 @@ describe("prepare & collect — zone payment timing", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
 
     const req = { id, lines: [], tender: { method: "cash" as const, amount: "1.50" } };
     // Two overlapping collects of the placed order. The write queue admits the second only once the
     // first has committed, so it sees `settled` and REPLAYS the ticket — neither errors and there
     // is ONE settlement. The equal invoice numbers below are what witness the replay.
     const [rA, rB] = await Promise.all([
-      collectOrder({ db: suite.db, backend, clock }, cfg, req, OPERATOR),
-      collectOrder({ db: suite.db, backend, clock }, cfg, req, OPERATOR),
+      collectOrder(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        req,
+        OPERATOR,
+      ),
+      collectOrder(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        req,
+        OPERATOR,
+      ),
     ]);
     expect(rA.invoiceNumber).toBe(rB.invoiceNumber);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
@@ -1890,7 +2064,12 @@ describe("prepare & collect — zone payment timing", () => {
     });
 
     // PLACE → NO fiscal document (design §3). The order freezes at `placed` with nothing filed.
-    const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    const placed = await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
     expect(placed.status).toBe("placed");
     expect(placed).not.toHaveProperty("invoiceNumber"); // no invoice issued at placing
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
@@ -1898,11 +2077,15 @@ describe("prepare & collect — zone payment timing", () => {
     expect(await outstanding()).toEqual([]); // no issued invoice → nothing outstanding
 
     // COLLECT → file `recordSale` IMMEDIATE, placed → settled.
-    const collected = await collectOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    const collected = await collectOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "1.50" },
+      },
+    );
     expect(collected.invoiceNumber).toBe("A/1"); // the FIRST filing is at collect
     expect(collected.total).toBe("1.50");
     expect(collected.tender).toEqual({ method: "cash", change: "0.00" });
@@ -1931,15 +2114,30 @@ describe("prepare & collect — zone payment timing", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
 
     const req = { id, lines: [], tender: { method: "cash" as const, amount: "1.50" } };
     // Two overlapping collects, both of which would FILE. The write queue admits the second only once
     // the first has committed, so it sees `settled` and REPLAYS — ONE sale. The equal invoice
     // numbers below are what witness the replay.
     const [rA, rB] = await Promise.all([
-      collectOrder({ db: suite.db, backend, clock }, cfg, req, OPERATOR),
-      collectOrder({ db: suite.db, backend, clock }, cfg, req, OPERATOR),
+      collectOrder(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        req,
+        OPERATOR,
+      ),
+      collectOrder(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        req,
+        OPERATOR,
+      ),
     ]);
     expect(rA.invoiceNumber).toBe(rB.invoiceNumber);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
@@ -1948,7 +2146,12 @@ describe("prepare & collect — zone payment timing", () => {
 
     // A further SEQUENTIAL collect of the now-settled order deterministically hits the settled-replay
     // branch: it returns the same ticket and files nothing. Exact cash has zero change.
-    const replay = await collectOrder({ db: suite.db, backend, clock }, cfg, req, OPERATOR);
+    const replay = await collectOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      req,
+      OPERATOR,
+    );
     expect(replay.invoiceNumber).toBe("A/1");
     expect(replay.tender).toEqual({ method: "cash", change: "0.00" });
     expect(await saleCount(id)).toBe(1);
@@ -1969,18 +2172,27 @@ describe("prepare & collect — zone payment timing", () => {
     });
     // PLACE fires one ticket item to the default station; the order shows on that station's queue and
     // its handover marker is unset.
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
     expect(
       (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
     ).toEqual([id]);
     expect(await collectedAtSet(id)).toBe(false);
 
     // COLLECT → Mode T files immediate at collect.
-    const collected = await collectOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    const collected = await collectOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "1.50" },
+      },
+    );
 
     expect(collected.invoiceNumber).toBe("A/1");
     expect(collected.total).toBe("1.50");
@@ -2008,18 +2220,27 @@ describe("prepare & collect — zone payment timing", () => {
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     // PLACE issues the deferred invoice AND fires the ticket item to the default station.
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
     expect(
       (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
     ).toEqual([id]);
     expect(await collectedAtSet(id)).toBe(false);
 
     // COLLECT → settle the EXISTING invoice (file NOTHING new).
-    const collected = await collectOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    const collected = await collectOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "1.50" },
+      },
+    );
     expect(collected.invoiceNumber).toBe("A/1"); // the SAME deferred invoice, read back
     expect(await saleCount(id)).toBe(1); // no second file at collect
     expect(await registroCount(id)).toBe(1);
@@ -2044,7 +2265,7 @@ describe("prepare & collect — zone payment timing", () => {
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await expect(
-      collectOrder({ db: suite.db, backend, clock }, cfg, {
+      collectOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
         id: openId,
         lines: [],
         tender: { method: "cash", amount: "1.50" },
@@ -2058,7 +2279,7 @@ describe("prepare & collect — zone payment timing", () => {
     // An ABSENT id (the undefined branch) → the same fail-closed code.
     const missing = randomUUID();
     await expect(
-      collectOrder({ db: suite.db, backend, clock }, cfg, {
+      collectOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
         id: missing,
         lines: [],
         tender: { method: "cash", amount: "1.50" },
@@ -2076,9 +2297,14 @@ describe("prepare & collect — zone payment timing", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, placedId, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      placedId,
+      OPERATOR,
+    );
     await expect(
-      collectOrder({ db: suite.db, backend, clock }, cfg, {
+      collectOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
         id: placedId,
         lines: [],
         tender: { method: "voucher" as unknown as "cash", amount: "1.50" },
@@ -2097,7 +2323,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     const { cfg, cafe, zoneId } = await modeVenue("prepay");
     const id = randomUUID();
     await payWorkingOrder(
-      { db: suite.db, backend, clock },
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
       {
         id,
@@ -2156,7 +2382,12 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
         { menuItemId: agua.menuItemId, quantity: "1" },
       ],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR); // fires two items → default station
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    ); // fires two items → default station
     const station = await defaultStationId(cfg);
     const items = await ticketItemIdsFor(id);
     expect(items).toHaveLength(2);
@@ -2188,7 +2419,12 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Mesa 7",
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id1, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id1,
+      OPERATOR,
+    );
 
     const id2 = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
@@ -2197,7 +2433,12 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Mesa 3",
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id2, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id2,
+      OPERATOR,
+    );
 
     // Both orders show, oldest first, each one line, at `queued`, carrying the order's label + queued_at.
     const queue = await asTenant(cfg, (tx) => listStationQueue(tx, station));
@@ -2232,7 +2473,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     // CANCEL order 2 (placed → abandoned) — its ticket item is UNCHANGED (cancel never touches
     // `ticket_items`), but `listStationQueue`'s `status != 'abandoned'` join retires it.
     await cancelPlacedOrder(
-      { db: suite.db, backend, clock },
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
       id2,
       "customer left",
@@ -2257,7 +2498,12 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Node A order",
     });
-    await placeOrder({ db: suite.db, backend, clock }, nodeA, idA, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      nodeA,
+      idA,
+      OPERATOR,
+    );
 
     const idB = randomUUID();
     await parkOrder({ db: suite.db }, nodeB, {
@@ -2266,7 +2512,12 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Node B order",
     });
-    await placeOrder({ db: suite.db, backend, clock }, nodeB, idB, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      nodeB,
+      idB,
+      OPERATOR,
+    );
 
     const queueA = await asTenant(nodeA, (tx) => listStationQueue(tx, station));
     const queueB = await asTenant(nodeB, (tx) => listStationQueue(tx, station));
@@ -2284,7 +2535,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     // `sendToPrep` lets that call send the same stored dish.
     await setDefaultStationActive(cfg, false);
     await payWorkingOrder(
-      { db: suite.db, backend, clock },
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
       {
         id,
@@ -2354,7 +2605,12 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", ()
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Node A order",
     });
-    await placeOrder({ db: suite.db, backend, clock }, nodeA, idA, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      nodeA,
+      idA,
+      OPERATOR,
+    );
 
     const idB = randomUUID();
     await parkOrder({ db: suite.db }, nodeB, {
@@ -2363,7 +2619,12 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", ()
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Node B order",
     });
-    await placeOrder({ db: suite.db, backend, clock }, nodeB, idB, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      nodeB,
+      idB,
+      OPERATOR,
+    );
 
     const expoA = await asTenant(nodeA, (tx) => listExpoQueue(tx, nodeA));
     const expoB = await asTenant(nodeB, (tx) => listExpoQueue(tx, nodeB));
@@ -2430,7 +2691,7 @@ describe("paying a counter order never sent, in a zone that sends before payment
     const id = randomUUID();
 
     await payWorkingOrder(
-      { db: suite.db, backend, clock },
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
       {
         id,
@@ -2457,7 +2718,7 @@ describe("paying a counter order never sent, in a zone that sends before payment
     const id = randomUUID();
 
     const ticket = await payWorkingOrder(
-      { db: suite.db, backend, clock },
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
       {
         id,
@@ -2489,11 +2750,15 @@ describe("paying a counter order never sent, in a zone that sends before payment
     });
     expect(await ticketItemIdsFor(id)).toEqual([]);
 
-    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "3.50" },
-    });
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "3.50" },
+      },
+    );
 
     expect(await ticketItemIdsFor(id)).toHaveLength(2);
     expect(await linesSent(id)).toEqual([true, true]);
@@ -2510,10 +2775,20 @@ describe("paying a counter order never sent, in a zone that sends before payment
       tender: { method: "cash" as const, amount: "5.00" },
     };
 
-    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, req, OPERATOR);
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      req,
+      OPERATOR,
+    );
     const items = await ticketItemIdsFor(id);
     expect(items).toHaveLength(1);
-    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, req, OPERATOR);
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      req,
+      OPERATOR,
+    );
 
     expect(await ticketItemIdsFor(id)).toEqual(items);
     expect(await kitchenJobCount(printerId)).toBe(1);
@@ -2543,7 +2818,11 @@ describe("paying a counter order never sent, in a zone that sends before payment
       });
       const req = { id, lines: [], tender: { method: "cash" as const, amount: "5.00" } };
 
-      const first = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, req);
+      const first = await payWorkingOrder(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        req,
+      );
 
       const sent = [
         { lineNo: 1, lineCourse: primeros, itemCourse: primeros, fired: true, state: "queued" },
@@ -2553,7 +2832,11 @@ describe("paying a counter order never sent, in a zone that sends before payment
       expect(await linesSent(id)).toEqual([true, true]);
       expect(await kitchenJobCount(printerId)).toBe(1);
 
-      const again = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, req);
+      const again = await payWorkingOrder(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        req,
+      );
 
       expect(again.invoiceNumber).toBe(first.invoiceNumber);
       expect(await tabSnapshot(id)).toEqual(sent);
@@ -2576,7 +2859,7 @@ describe("markCollected (the counter handover)", () => {
 
     // Pay and fire at order (open → settled in one transaction — the Mode-P walk-up).
     await payWorkingOrder(
-      { db: suite.db, backend, clock },
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
       {
         id,
@@ -2647,7 +2930,7 @@ describe("markCollected (the counter handover)", () => {
       ),
     );
     await payWorkingOrder(
-      { db: suite.db, backend, clock },
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
       {
         id,
@@ -2668,7 +2951,7 @@ describe("markCollected (the counter handover)", () => {
     const { cfg, cafe, zoneId } = await modeVenue("prepay");
     const id = randomUUID();
     await payWorkingOrder(
-      { db: suite.db, backend, clock },
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
       {
         id,

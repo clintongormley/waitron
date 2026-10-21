@@ -1,4 +1,5 @@
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedRelocationSender } from "./testing/table-action-fixture.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { observedOrderSender } from "./testing/order-writer-fixture.js";
@@ -1702,6 +1703,7 @@ describe("made-here route wiring", () => {
       }),
     );
     const pass = await settlePendingBillPayments({
+      admission: testTradingAdmission(),
       db: venue.db,
       backend: venue.backend,
       clock: venue.clock,

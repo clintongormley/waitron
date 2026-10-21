@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { createOpenOrder } from "./working-order.js";
@@ -260,7 +261,7 @@ it("rechecks a real sale after GET before accepting any clock patch", async () =
     resolveClient: () => Promise.reject(new Error("Local sale contacted AEAT")),
   });
   const cfg = await deviceRequestCfg(suite.db, venue.cfg);
-  await recordTillSale({ db: suite.db, backend, clock }, cfg, {
+  await recordTillSale({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
     zoneId: offers.zoneId,
     lines: [{ menuItemId: offers.offerFor(venue.cafeId), quantity: "1" }],
     tender: { method: "cash", amount: "1.50" },

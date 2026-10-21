@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
@@ -146,6 +147,7 @@ function systemClock(): TrustedClock {
 
 function deps(db: Database): TillApiDeps {
   return {
+    admission: testTradingAdmission(),
     db,
     // Unused: these routes touch no fiscal path.
     backend: {} as FiscalBackend,
@@ -509,6 +511,7 @@ describe("a split-off check after the till that made it has forgotten it", () =>
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db,
         backend: new VerifactuBackend({
           clock,

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -41,6 +42,7 @@ async function setup(role: "manager" | "staff" = "manager") {
   mountPaymentsApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       backend: new FakeFiscalBackend(suite.db),
       clock: systemClock(),

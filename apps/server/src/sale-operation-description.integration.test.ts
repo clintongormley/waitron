@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -110,12 +111,22 @@ const payBill = (id: string, method: "cash" | "card", entry?: "reader") =>
 it("integrated capture files the department description and replay keeps its filed facts", async () => {
   const provider = new SimulatorPaymentProvider(venue.db);
   const input = request();
-  const first = await payIntegrated({ ...deps(), provider }, venue.cfg, input);
+  const first = await payIntegrated(
+    { admission: testTradingAdmission(), ...deps(), provider },
+    venue.cfg,
+    input,
+  );
   expect(first.outcome).toBe("captured");
   expect(records(input.id)).toEqual([{ description: "Dining meals" }]);
   const before = facts();
   await authored("New dining menu");
-  expect(await payIntegrated({ ...deps(), provider }, venue.cfg, input)).toEqual(first);
+  expect(
+    await payIntegrated(
+      { admission: testTradingAdmission(), ...deps(), provider },
+      venue.cfg,
+      input,
+    ),
+  ).toEqual(first);
   expect(facts()).toEqual(before);
   expect(records(input.id)).toEqual([{ description: "Dining meals" }]);
 });
@@ -155,10 +166,14 @@ it.each(["cash", "card"] as const)(
   "an immediate %s sale files the department value rather than the location value",
   async (method) => {
     const input = request();
-    const result = await payWorkingOrder(deps(), venue.cfg, {
-      ...input,
-      tender: { method, amount: "3.00" },
-    });
+    const result = await payWorkingOrder(
+      { ...deps(), admission: testTradingAdmission() },
+      venue.cfg,
+      {
+        ...input,
+        tender: { method, amount: "3.00" },
+      },
+    );
     expect(result.total).toBe("3.00");
     expect(records(input.id)).toEqual([{ description: "Dining meals" }]);
   },
@@ -178,7 +193,11 @@ it("a zone moved before capture selects the same current department for descript
     return department.id;
   });
   const result = await payIntegrated(
-    { ...deps(), provider: new SimulatorPaymentProvider(venue.db) },
+    {
+      admission: testTradingAdmission(),
+      ...deps(),
+      provider: new SimulatorPaymentProvider(venue.db),
+    },
     venue.cfg,
     { id, lines: [], simulationOutcome: "captured" },
   );
@@ -208,22 +227,37 @@ it("recovery files the current department description without charging the card 
   const provider = new SimulatorPaymentProvider(venue.db);
   const collect = vi.spyOn(provider, "collect");
   await authored("Recovered dining meals");
-  expect((await payIntegrated({ ...deps(), provider }, venue.cfg, { id, lines: [] })).outcome).toBe(
-    "captured",
-  );
+  expect(
+    (
+      await payIntegrated({ admission: testTradingAdmission(), ...deps(), provider }, venue.cfg, {
+        id,
+        lines: [],
+      })
+    ).outcome,
+  ).toBe("captured");
   expect(records(id)).toEqual([{ description: "Recovered dining meals" }]);
   expect(collect).not.toHaveBeenCalled();
   const before = facts();
   await authored();
-  expect((await payIntegrated({ ...deps(), provider }, venue.cfg, { id, lines: [] })).outcome).toBe(
-    "captured",
-  );
+  expect(
+    (
+      await payIntegrated({ admission: testTradingAdmission(), ...deps(), provider }, venue.cfg, {
+        id,
+        lines: [],
+      })
+    ).outcome,
+  ).toBe("captured");
   expect(facts()).toEqual(before);
 });
 
 it("unpaid issuance files the department description and correction uses its retained department", async () => {
   const id = await open();
-  await issueOrderInvoice(deps(), venue.cfg, id, venue.operatorId);
+  await issueOrderInvoice(
+    { ...deps(), admission: testTradingAdmission() },
+    venue.cfg,
+    id,
+    venue.operatorId,
+  );
   expect(records(id)).toEqual([{ description: "Dining meals" }]);
   await authored("Corrected dining service");
   await withTransaction(venue.db, async (tx) => {
@@ -241,7 +275,13 @@ it("unpaid issuance files the department description and correction uses its ret
   );
   await withTransaction(venue.db, async (tx) => {
     const invoice = await readOrderInvoice(tx, id);
-    await creditWholeInvoice(tx, deps(), venue.cfg, invoice!, { sessionId: session.id });
+    await creditWholeInvoice(
+      tx,
+      { ...deps(), admission: testTradingAdmission() },
+      venue.cfg,
+      invoice!,
+      { sessionId: session.id },
+    );
   });
   expect(records(id)).toEqual([
     { description: "Dining meals" },
@@ -253,21 +293,33 @@ it("a department with no description files the fiscal seat's default, for the sa
   await authored();
   const cfg = { ...venue.cfg, operationDescriptionDefault: "Seat default" };
   const id = await open();
-  await issueOrderInvoice(deps(), cfg, id, venue.operatorId);
+  await issueOrderInvoice(
+    { ...deps(), admission: testTradingAdmission() },
+    cfg,
+    id,
+    venue.operatorId,
+  );
   expect(records(id)).toEqual([{ description: "Seat default" }]);
   const session = await withTransaction(venue.db, (tx) =>
     loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" }),
   );
   await withTransaction(venue.db, async (tx) => {
     const invoice = await readOrderInvoice(tx, id);
-    await creditWholeInvoice(tx, deps(), cfg, invoice!, { sessionId: session.id });
+    await creditWholeInvoice(tx, { ...deps(), admission: testTradingAdmission() }, cfg, invoice!, {
+      sessionId: session.id,
+    });
   });
   expect(records(id)).toEqual([{ description: "Seat default" }, { description: "Seat default" }]);
 });
 
 it("a correction refuses a missing retained-department description without a new record", async () => {
   const id = await open();
-  await issueOrderInvoice(deps(), venue.cfg, id, venue.operatorId);
+  await issueOrderInvoice(
+    { ...deps(), admission: testTradingAdmission() },
+    venue.cfg,
+    id,
+    venue.operatorId,
+  );
   const session = await withTransaction(venue.db, (tx) =>
     loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" }),
   );
@@ -275,9 +327,15 @@ it("a correction refuses a missing retained-department description without a new
   const before = facts();
   await expect(
     withTransaction(venue.db, async (tx) =>
-      creditWholeInvoice(tx, deps(), venue.cfg, (await readOrderInvoice(tx, id))!, {
-        sessionId: session.id,
-      }),
+      creditWholeInvoice(
+        tx,
+        { ...deps(), admission: testTradingAdmission() },
+        venue.cfg,
+        (await readOrderInvoice(tx, id))!,
+        {
+          sessionId: session.id,
+        },
+      ),
     ),
   ).rejects.toMatchObject({ code: "department.operation_description_required" });
   expect(facts()).toEqual(before);
@@ -293,7 +351,9 @@ it("a description cleared during capture leaves payment recovery pending, then r
   });
   const input = request();
   const before = facts();
-  await expect(payIntegrated({ ...deps(), provider }, venue.cfg, input)).rejects.toMatchObject({
+  await expect(
+    payIntegrated({ admission: testTradingAdmission(), ...deps(), provider }, venue.cfg, input),
+  ).rejects.toMatchObject({
     code: "department.operation_description_required",
   });
   const after = facts();
@@ -309,7 +369,12 @@ it("a description cleared during capture leaves payment recovery pending, then r
   });
   await authored("Recovered new menu");
   expect(
-    (await payIntegrated({ ...deps(), provider }, venue.cfg, { id: input.id, lines: [] })).outcome,
+    (
+      await payIntegrated({ admission: testTradingAdmission(), ...deps(), provider }, venue.cfg, {
+        id: input.id,
+        lines: [],
+      })
+    ).outcome,
   ).toBe("captured");
   expect(records(input.id)).toEqual([{ description: "Recovered new menu" }]);
   expect(charged).toHaveBeenCalledTimes(1);
@@ -317,22 +382,36 @@ it("a description cleared during capture leaves payment recovery pending, then r
 
 it("a concurrent winner is replayed even when its department description is subsequently cleared", async () => {
   const id = await tabWith(venue, "Caña");
-  await placeOrder(deps(), venue.cfg, id, venue.operatorId);
+  await placeOrder(
+    { ...deps(), admission: testTradingAdmission() },
+    venue.cfg,
+    id,
+    venue.operatorId,
+  );
   const provider = new SimulatorPaymentProvider(venue.db);
   const collect = provider.collect.bind(provider);
   let winningFacts: ReturnType<typeof facts> | undefined;
   const charged = vi.spyOn(provider, "collect").mockImplementationOnce(async (input) => {
     const result = await collect(input);
-    await payIntegrated({ ...deps(), provider }, venue.cfg, { id, lines: [] }, venue.operatorId);
+    await payIntegrated(
+      { admission: testTradingAdmission(), ...deps(), provider },
+      venue.cfg,
+      { id, lines: [] },
+      venue.operatorId,
+    );
     winningFacts = facts();
     await authored();
     return result;
   });
-  const result = await payIntegrated({ ...deps(), provider }, venue.cfg, {
-    id,
-    lines: [],
-    simulationOutcome: "captured",
-  });
+  const result = await payIntegrated(
+    { admission: testTradingAdmission(), ...deps(), provider },
+    venue.cfg,
+    {
+      id,
+      lines: [],
+      simulationOutcome: "captured",
+    },
+  );
   expect(result.outcome).toBe("captured");
   expect(charged).toHaveBeenCalledTimes(1);
   expect(records(id)).toEqual([{ description: "Dining meals" }]);
@@ -358,13 +437,18 @@ it.each(["cash", "integrated"] as const)(
     const cfg = { ...venue.cfg, operationDescriptionRequired: false };
     const input = request();
     if (method === "cash") {
-      await payWorkingOrder({ ...deps(), backend }, cfg, {
+      await payWorkingOrder({ admission: testTradingAdmission(), ...deps(), backend }, cfg, {
         ...input,
         tender: { method: "cash", amount: "3.00" },
       });
     } else {
       await payIntegrated(
-        { ...deps(), backend, provider: new SimulatorPaymentProvider(venue.db) },
+        {
+          admission: testTradingAdmission(),
+          ...deps(),
+          backend,
+          provider: new SimulatorPaymentProvider(venue.db),
+        },
         cfg,
         input,
       );
@@ -410,12 +494,12 @@ it.each(["cash", "integrated"] as const)(
     const before = facts();
     const pay =
       method === "cash"
-        ? payWorkingOrder({ ...deps(), backend }, cfg, {
+        ? payWorkingOrder({ admission: testTradingAdmission(), ...deps(), backend }, cfg, {
             id,
             lines: [],
             tender: { method: "cash", amount: "3.00" },
           })
-        : payIntegrated({ ...deps(), backend, provider }, cfg, {
+        : payIntegrated({ admission: testTradingAdmission(), ...deps(), backend, provider }, cfg, {
             id,
             lines: [],
             simulationOutcome: "captured",
@@ -440,7 +524,11 @@ it.each([undefined, "", "   "])(
     const collect = vi.spyOn(provider, "collect");
     const before = facts();
     await expect(
-      payIntegrated({ ...deps(), provider }, venue.cfg, request()),
+      payIntegrated(
+        { admission: testTradingAdmission(), ...deps(), provider },
+        venue.cfg,
+        request(),
+      ),
     ).rejects.toMatchObject({ code: "department.operation_description_required" });
     expect(collect).not.toHaveBeenCalled();
     expect(facts()).toEqual(before);
@@ -465,7 +553,14 @@ it("missing description refuses unpaid issuance without allocating an invoice", 
   const id = await open();
   await authored();
   const before = facts();
-  await expect(issueOrderInvoice(deps(), venue.cfg, id, venue.operatorId)).rejects.toMatchObject({
+  await expect(
+    issueOrderInvoice(
+      { ...deps(), admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    ),
+  ).rejects.toMatchObject({
     code: "department.operation_description_required",
   });
   expect(facts()).toEqual(before);
@@ -489,7 +584,10 @@ it("missing description leaves an unfiled capture recoverable without touching t
   const collect = vi.spyOn(provider, "collect");
   const before = facts();
   await expect(
-    payIntegrated({ ...deps(), provider }, venue.cfg, { id, lines: [] }),
+    payIntegrated({ admission: testTradingAdmission(), ...deps(), provider }, venue.cfg, {
+      id,
+      lines: [],
+    }),
   ).rejects.toMatchObject({ code: "department.operation_description_required" });
   expect(facts()).toEqual(before);
   expect(collect).not.toHaveBeenCalled();

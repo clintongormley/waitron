@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { createOpenOrder } from "./working-order.js";
 import { deviceId } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
@@ -98,16 +99,28 @@ async function direct(
   const operator = { personId: venue.operatorId, sessionId: session!.id };
   const cfg = { ...venue.cfg, origin: { ...venue.cfg.origin, deviceId: deviceId(venue.deviceId) } };
   if (mode === "preview")
-    return previewBillPayment(deps(), cfg, billId, request as BillPaymentAsk, operator.personId);
+    return previewBillPayment(
+      { ...deps(), admission: testTradingAdmission() },
+      cfg,
+      billId,
+      request as BillPaymentAsk,
+      operator.personId,
+    );
   if (mode === "reader")
     return takeReaderBillPayment(
-      { ...deps(), provider: venue.card },
+      { admission: testTradingAdmission(), ...deps(), provider: venue.card },
       cfg,
       billId,
       request as BillPaymentRequest,
       operator,
     );
-  return takeBillPayment(deps(), cfg, billId, request as BillPaymentRequest, operator);
+  return takeBillPayment(
+    { ...deps(), admission: testTradingAdmission() },
+    cfg,
+    billId,
+    request as BillPaymentRequest,
+    operator,
+  );
 }
 async function http(mode: Mode, billId: string, body: unknown) {
   const res = await venue.app.request(
@@ -337,7 +350,7 @@ describe("payment preview actor", () => {
       before = frozen();
     await expect(
       previewBillPayment(
-        deps(),
+        { ...deps(), admission: testTradingAdmission() },
         venue.cfg,
         p.tabId,
         ask("preview", await edit(p.tabId)),

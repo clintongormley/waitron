@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { deviceId as brandDeviceId } from "@waitron/shared";
 import { issueOrderInvoice } from "./testing/issue-order.js";
@@ -216,7 +217,12 @@ async function placed(
   expect(parked.status).toBe(200);
   if (issued) {
     await issueOrderInvoice(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       { ...venue.cfg, origin: { source: "device", deviceId: brandDeviceId(venue.deviceId) } },
       id,
       venue.operatorId,
@@ -491,7 +497,12 @@ describe("cancelling a placed order whose invoice was issued", () => {
         .where(and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.lineNo, 1))),
     );
     await issueOrderInvoice(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       { ...venue.cfg, origin: { source: "device", deviceId: brandDeviceId(venue.deviceId) } },
       id,
       venue.operatorId,
@@ -1136,6 +1147,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: venue.db,
         backend: venue.backend,
         clock: venue.clock,
@@ -1540,7 +1552,13 @@ describe("cancelling an invoiced order while a card is paying it", () => {
     const original = await invoiceOf(id);
     const provider = new CardAtTheReader();
     const paying = payWorkingOrderIntegrated(
-      { db: venue.db, backend: venue.backend, clock: venue.clock, provider },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        provider,
+      },
       venue.cfg,
       { id, lines: [] },
     );

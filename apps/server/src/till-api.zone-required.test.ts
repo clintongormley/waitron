@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -169,6 +170,7 @@ function systemClock(): TrustedClock {
 
 async function post(venue: Venue, path: string, body: object): Promise<Response> {
   const deps: TillApiDeps = {
+    admission: testTradingAdmission(),
     db: suite.db,
     backend: {
       clockBehindLatestRecord: async () => null,

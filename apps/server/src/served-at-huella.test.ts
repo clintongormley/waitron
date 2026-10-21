@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { describe, expect, it } from "vitest";
@@ -263,7 +264,7 @@ async function openServeAndPay(
     });
   }
 
-  await payWorkingOrder({ db, backend, clock }, cfg, {
+  await payWorkingOrder({ admission: testTradingAdmission(), db, backend, clock }, cfg, {
     id: tabId,
     lines: [],
     tender: { method: "cash", amount: "10.00" },
@@ -370,7 +371,7 @@ async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; 
       .where(eq(workingOrders.id, tabId));
   });
 
-  await payWorkingOrder({ db, backend, clock }, cfg, {
+  await payWorkingOrder({ admission: testTradingAdmission(), db, backend, clock }, cfg, {
     id: tabId,
     lines: [],
     tender: { method: "cash", amount: "10.00" },
@@ -517,7 +518,7 @@ async function openWithExtraAndPay(
     ]);
   });
 
-  await payWorkingOrder({ db, backend, clock }, cfg, {
+  await payWorkingOrder({ admission: testTradingAdmission(), db, backend, clock }, cfg, {
     id: tabId,
     lines: [],
     tender: { method: "cash", amount: "10.00" },

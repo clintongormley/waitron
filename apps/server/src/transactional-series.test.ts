@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -64,7 +65,7 @@ function deps(v: BillVenue, backend = v.backend) {
 async function issue(v: BillVenue, path: string, id: string, backend = v.backend) {
   const lines = [{ menuItemId: v.offerFor("Caña"), quantity: "1" }];
   if (path === "walk-up") {
-    return payWorkingOrder(deps(v, backend), v.cfg, {
+    return payWorkingOrder({ ...deps(v, backend), admission: testTradingAdmission() }, v.cfg, {
       id,
       zoneId: v.zoneId,
       lines,
@@ -91,10 +92,15 @@ async function issue(v: BillVenue, path: string, id: string, backend = v.backend
     return result.json;
   }
   if (path === "unpaid invoice") {
-    await issueOrderInvoice(deps(v, backend), v.cfg, id, v.operatorId);
+    await issueOrderInvoice(
+      { ...deps(v, backend), admission: testTradingAdmission() },
+      v.cfg,
+      id,
+      v.operatorId,
+    );
     return;
   }
-  return payWorkingOrder(deps(v, backend), v.cfg, {
+  return payWorkingOrder({ ...deps(v, backend), admission: testTradingAdmission() }, v.cfg, {
     id,
     lines: [],
     tender: { method: "cash", amount: "3.00" },

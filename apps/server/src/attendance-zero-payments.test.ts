@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { collectOrderOrchestration } from "./till-sale.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -93,7 +94,13 @@ async function bill(issued = false) {
   const { tabId } = await seat(v, await v.table("Attendance collection"));
   await order(v, tabId, "Burger");
   await placeByHand(v, tabId);
-  if (issued) await issueOrderInvoice(deps(), v.cfg, tabId, OPERATOR);
+  if (issued)
+    await issueOrderInvoice(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      tabId,
+      OPERATOR,
+    );
   return tabId;
 }
 
@@ -122,7 +129,7 @@ describe("a human zero-owing command remains attendance evidence", () => {
       const id = await zeroBill(true);
       at();
       const ticket = await collectOrder(
-        deps(),
+        { ...deps(), admission: testTradingAdmission() },
         v.cfg,
         { id, lines: [], tender: tender(method) },
         collector,
@@ -135,7 +142,12 @@ describe("a human zero-owing command remains attendance evidence", () => {
         throw new Error("New clock unavailable");
       });
       expect(
-        await collectOrder(deps(), v.cfg, { id, lines: [], tender: tender(method) }, v.operator),
+        await collectOrder(
+          { ...deps(), admission: testTradingAdmission() },
+          v.cfg,
+          { id, lines: [], tender: tender(method) },
+          v.operator,
+        ),
       ).toEqual(ticket);
       expect(await operations()).toEqual([evidence(id)]);
     },
@@ -160,7 +172,12 @@ describe("a human zero-owing command remains attendance evidence", () => {
           ? { id, lines: request(id).lines, zoneId: v.counter.zoneId }
           : { id, lines: [] };
       at();
-      const result = await payWorkingOrderIntegrated(integrated, v.cfg, req, collector);
+      const result = await payWorkingOrderIntegrated(
+        { ...integrated, admission: testTradingAdmission() },
+        v.cfg,
+        req,
+        collector,
+      );
       expect(result.outcome).toBe("captured");
       if (result.outcome !== "captured") throw new Error("Expected local settlement");
       expect(result.ticket.total).toBe("0.00");
@@ -171,7 +188,14 @@ describe("a human zero-owing command remains attendance evidence", () => {
       vi.spyOn(v.clock, "now").mockImplementation(() => {
         throw new Error("New clock unavailable");
       });
-      expect(await payWorkingOrderIntegrated(integrated, v.cfg, req, v.operator)).toEqual(result);
+      expect(
+        await payWorkingOrderIntegrated(
+          { ...integrated, admission: testTradingAdmission() },
+          v.cfg,
+          req,
+          v.operator,
+        ),
+      ).toEqual(result);
       expect(await operations()).toEqual([evidence(id)]);
     },
   );
@@ -182,7 +206,12 @@ describe("a human zero-owing command remains attendance evidence", () => {
     };
     at();
     await expect(
-      collectOrder(deps(refusal), v.cfg, { id, lines: [], tender: tender("cash") }, collector),
+      collectOrder(
+        { ...deps(refusal), admission: testTradingAdmission() },
+        v.cfg,
+        { id, lines: [], tender: tender("cash") },
+        collector,
+      ),
     ).rejects.toMatchObject({ code: "attendance.invalid" });
     expect(
       (await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id)))[0]!.status,
@@ -196,7 +225,7 @@ describe("a human zero-owing command remains attendance evidence", () => {
     at();
     const expectedEdit = await withTransaction(suite.db, (tx) => readBillEditState(tx, id));
     await expect(
-      collectOrderOrchestration(deps(), v.cfg, {
+      collectOrderOrchestration({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
         id,
         lines: [],
         tender: tender("cash"),

@@ -1,3 +1,4 @@
+import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import { eq, inArray } from "drizzle-orm";
 import {
   lineServiceCancellations,
@@ -82,7 +83,7 @@ export async function cancelItem(
   cfg: TradingContext,
   partyId: string,
   lineId: string,
-  ask: CancelItemAsk,
+  ask: CancelItemAsk & { admission: TradingAdmission },
   operatorId: string,
   attendance?: OrderAttendance,
   policy: {
@@ -91,6 +92,7 @@ export async function cancelItem(
     completeAdjustment?: (billId: string) => Promise<void>;
   } = { venueLocale: cfg.locale },
 ): Promise<CancelItemAnswer> {
+  await requireEconomicWrite(tx, cfg, ask.admission);
   if (ask.outcome !== "remove_charge" && ask.outcome !== "keep_charge") throw invalid("outcome");
   if (ask.preparationStarted !== undefined && typeof ask.preparationStarted !== "boolean")
     throw invalid("preparationStarted");
@@ -305,6 +307,7 @@ export async function cancelItem(
           tx,
           cfg,
           {
+            admission: ask.admission,
             orderId: bill!.id,
             expectedEdit,
             expectedRevision: ask.expectedBillRevision,

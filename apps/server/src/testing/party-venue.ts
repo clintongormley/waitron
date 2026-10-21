@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./trading-admission.js";
 import { addTabRound } from "./order-writer-fixture.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { randomUUID } from "node:crypto";
@@ -342,7 +343,7 @@ export async function pay(
   amount: string,
   ...guestCount: [] | [number | null]
 ): Promise<void> {
-  await payWorkingOrder({ db: v.db, backend: v.backend, clock: v.clock }, v.cfg, {
+  await payWorkingOrder({ admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock }, v.cfg, {
     id: billId,
     lines: [],
     tender: { method: "cash", amount },
@@ -497,7 +498,7 @@ export async function cashContribution(
   amount: string,
 ): Promise<string> {
   const result = await takeBillPayment(
-    { db: v.db, backend: v.backend, clock: v.clock },
+    { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
     v.cfg,
     billId,
     {

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
@@ -252,7 +253,7 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
     });
 
     // Paying by id files the stored lines; `lines` is ignored.
-    const res = await payWorkingOrder(deps, cfg, {
+    const res = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
       id: tabId,
       lines: [],
       tender: { method: "cash", amount: "5.00" },
@@ -280,7 +281,7 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
     });
 
     await expect(
-      payWorkingOrder(deps, cfg, {
+      payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
         id: tabId,
         lines: [],
         tender: { method: "cash", amount: "5.00" },
@@ -353,7 +354,7 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     const { cfg: cfgA, cafe: cafeA, counter: counterA } = await setupVenue();
     const nifA = await nifOf();
     const walkUpId = randomUUID();
-    await payWorkingOrder(depsA, cfgA, {
+    await payWorkingOrder({ ...depsA, admission: testTradingAdmission() }, cfgA, {
       id: walkUpId,
       zoneId: counterA.zoneId,
       lines: [{ menuItemId: counterA.offerFor(cafeA.id), quantity: "1" }],
@@ -368,7 +369,7 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
         lines: [{ menuItemId: tablesB.offerFor(cafeB.id), quantity: "1" }],
       });
     });
-    await payWorkingOrder(depsB, cfgB, {
+    await payWorkingOrder({ ...depsB, admission: testTradingAdmission() }, cfgB, {
       id: tabId,
       lines: [],
       tender: { method: "cash", amount: "5.00" },
@@ -408,7 +409,7 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
     const deps = { db: suite.db, backend, clock };
 
     const id = randomUUID();
-    const res = await recordTillSale(deps, cfg, {
+    const res = await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
       workingOrderId: id,
       zoneId: counter.zoneId,
       lines: [{ menuItemId: counter.offerFor(cafe.id), quantity: "1" }],
@@ -433,7 +434,7 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
 
     // The column's foreign key would also refuse; this asserts the domain code checked before it.
     await expect(
-      recordTillSale(deps, cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
         workingOrderId: orderId,
         zoneId: counter.zoneId,
         lines: [{ menuItemId: counter.offerFor(cafe.id), quantity: "1" }],
@@ -461,7 +462,7 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
     const nifA = await nifOf();
     const tableA = await seedTable(cfgA, "H2col-A");
     const deliveredId = randomUUID();
-    await recordTillSale(depsA, cfgA, {
+    await recordTillSale({ ...depsA, admission: testTradingAdmission() }, cfgA, {
       workingOrderId: deliveredId,
       zoneId: counterA.zoneId,
       lines: [{ menuItemId: counterA.offerFor(cafeA.id), quantity: "1" }],
@@ -471,7 +472,7 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
 
     const { cfg: cfgB, cafe: cafeB, counter: counterB } = await secondVenueSharingNif(nifA);
     const walkUpId = randomUUID();
-    await recordTillSale(depsB, cfgB, {
+    await recordTillSale({ ...depsB, admission: testTradingAdmission() }, cfgB, {
       workingOrderId: walkUpId,
       zoneId: counterB.zoneId,
       lines: [{ menuItemId: counterB.offerFor(cafeB.id), quantity: "1" }],
@@ -554,7 +555,7 @@ describe("a sent line is payable whatever its availability; an unsent one is not
     const { billId: checkId } = await withTransaction(suite.db, (tx) =>
       splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
     );
-    const check = await payWorkingOrder(deps, cfg, {
+    const check = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
       id: checkId,
       lines: [],
       tender: { method: "cash", amount: "12.00" },
@@ -563,7 +564,7 @@ describe("a sent line is payable whatever its availability; an unsent one is not
 
     // The tab still holds the unsent Burger, which blocks it and files nothing.
     await expect(
-      payWorkingOrder(deps, cfg, {
+      payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
         id: tabId,
         lines: [],
         tender: { method: "cash", amount: "50.00" },
@@ -595,7 +596,7 @@ describe("a sent line is payable whatever its availability; an unsent one is not
 
     // Removing the held Burger lets the tab pay its fired Burger and the bottle.
     await withTransaction(suite.db, (tx) => cancelLine(tx, cfg, tabId, 3));
-    const tab = await payWorkingOrder(deps, cfg, {
+    const tab = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
       id: tabId,
       lines: [],
       tender: { method: "cash", amount: "15.00" },

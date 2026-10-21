@@ -1,4 +1,5 @@
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { createOpenOrder } from "./working-order.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -387,6 +388,7 @@ describe("party Recall to draft", () => {
         tx,
         venue.cfg,
         {
+          admission: testTradingAdmission(),
           expectedEdit: await readBillEditState(tx, p.tabId),
           orderId: p.tabId,
           expectedRevision: bill!.revision,
@@ -931,6 +933,7 @@ describe("party Recall to draft", () => {
         tx,
         venue.cfg,
         {
+          admission: testTradingAdmission(),
           expectedEdit: await readBillEditState(tx, p.tabId),
           orderId: p.tabId,
           expectedRevision: bill!.revision,

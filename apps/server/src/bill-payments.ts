@@ -1,4 +1,6 @@
 import { withIssuanceTransaction } from "@waitron/core";
+import { prepareIssueClock } from "@waitron/fiscal";
+import { requireEconomicWrite } from "./trading-admission.js";
 import { parseBillEditExpected, requireOrderBillEditor } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
@@ -667,6 +669,7 @@ async function issueWhenFullyPaid(
     guestCount?: GuestCountChoice;
   },
 ): Promise<{ invoice: TillSaleResult | null; total?: Decimal }> {
+  await requireEconomicWrite(tx, cfg, deps.admission);
   const notYet = { invoice: null, total: options.total };
   const [order] = await tx
     .select({
@@ -696,7 +699,7 @@ async function issueWhenFullyPaid(
     refuseUnsentUnavailable: options.moneyMoved !== true,
   });
   const { priced, clock } = issueMoment(
-    deps.clock,
+    await prepareIssueClock(tx, cfg, deps.clock),
     await issuancePass(tx, cfg, workingOrderId, stored),
     deps.backend,
   );

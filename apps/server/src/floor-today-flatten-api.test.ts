@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedTableActionBody } from "./testing/table-action-fixture.js";
 import { Hono } from "hono";
 import { and, asc, eq, sql } from "drizzle-orm";
@@ -61,6 +62,7 @@ beforeAll(async () => {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: v.db,
       backend: v.backend,
       clock,

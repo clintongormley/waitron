@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { configureZone, createDepartment, setRoutingCell } from "@waitron/venue-service";
@@ -277,7 +278,7 @@ async function placedCounterOrder(...names: string[]): Promise<string> {
     lines: names.map((name) => ({ menuItemId: v.item(name), quantity: "1" })),
     operatorId: OPERATOR,
   });
-  await placeOrder(deps, v.cfg, id, OPERATOR);
+  await placeOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
   return id;
 }
 

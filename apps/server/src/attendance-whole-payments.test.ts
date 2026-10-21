@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { newId, sales, tenders, withTransaction, workingOrders } from "@waitron/db";
@@ -88,7 +89,13 @@ async function bill(issued = false) {
   const { tabId } = await seat(v, await v.table("Attendance collection"));
   await order(v, tabId, "Burger");
   await placeByHand(v, tabId);
-  if (issued) await issueOrderInvoice(deps(), v.cfg, tabId, OPERATOR);
+  if (issued)
+    await issueOrderInvoice(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      tabId,
+      OPERATOR,
+    );
   return tabId;
 }
 
@@ -96,7 +103,7 @@ describe("accepted whole-order payment attendance", () => {
   it("an unattributed orchestration does not invent a collector", async () => {
     at();
     const req = request();
-    const ticket = await payWorkingOrder(deps(), v.cfg, {
+    const ticket = await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id: req.workingOrderId,
       lines: req.lines,
       zoneId: req.zoneId,
@@ -114,8 +121,18 @@ describe("accepted whole-order payment attendance", () => {
       at();
       const pay = () =>
         path === "collection"
-          ? collectOrder(deps(), v.cfg, { id, lines: [], tender: tender("cash") }, collector)
-          : recordTillSale(deps(), v.cfg, request(id), collector);
+          ? collectOrder(
+              { ...deps(), admission: testTradingAdmission() },
+              v.cfg,
+              { id, lines: [], tender: tender("cash") },
+              collector,
+            )
+          : recordTillSale(
+              { ...deps(), admission: testTradingAdmission() },
+              v.cfg,
+              request(id),
+              collector,
+            );
       const first = await pay();
       const before = await operations();
       vi.spyOn(v.clock, "now").mockImplementation(() => {
@@ -132,7 +149,12 @@ describe("accepted whole-order payment attendance", () => {
     async (method) => {
       at();
       const req = { ...request(), tender: tender(method) };
-      const ticket = await recordTillSale(deps(), v.cfg, req, collector);
+      const ticket = await recordTillSale(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        req,
+        collector,
+      );
       expect(ticket.total).toBe("12.00");
       expect(ticket.tender).toEqual(
         method === "cash"
@@ -146,7 +168,12 @@ describe("accepted whole-order payment attendance", () => {
     const { tabId } = await seat(v, await v.table("Retrieved attendance"));
     await order(v, tabId, "Burger");
     at();
-    const ticket = await recordTillSale(deps(), v.cfg, { ...request(tabId), lines: [] }, collector);
+    const ticket = await recordTillSale(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      { ...request(tabId), lines: [] },
+      collector,
+    );
     expect(ticket.total).toBe("12.00");
     expect(await operations()).toEqual([evidence(tabId)]);
   });
@@ -157,7 +184,7 @@ describe("accepted whole-order payment attendance", () => {
       const before = await suite.db.select().from(sales);
       at();
       const ticket = await collectOrder(
-        deps(),
+        { ...deps(), admission: testTradingAdmission() },
         v.cfg,
         { id, lines: [], tender: tender("cash") },
         collector,
@@ -183,10 +210,22 @@ describe("accepted whole-order payment attendance", () => {
   it("replays a counter sale without new attendance or a later instant", async () => {
     const req = request();
     at();
-    const first = await recordTillSale(deps(), v.cfg, req, collector);
+    const first = await recordTillSale(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      req,
+      collector,
+    );
     const before = await operations();
     at("2026-01-06T18:00:00Z");
-    expect(await recordTillSale(deps(), v.cfg, req, v.operator)).toEqual(first);
+    expect(
+      await recordTillSale(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        req,
+        v.operator,
+      ),
+    ).toEqual(first);
     expect(await operations()).toEqual(before);
     expect(before).toHaveLength(1);
     expect((await suite.db.select().from(attendanceDayWork)).map((r) => r.businessDay)).toEqual([
@@ -197,10 +236,17 @@ describe("accepted whole-order payment attendance", () => {
     const id = await bill(true);
     at();
     const req = { id, lines: [], tender: tender("cash") };
-    const first = await collectOrder(deps(), v.cfg, req, collector);
+    const first = await collectOrder(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      req,
+      collector,
+    );
     const before = await operations();
     at("2026-01-06T18:00:00Z");
-    expect(await collectOrder(deps(), v.cfg, req, v.operator)).toEqual(first);
+    expect(
+      await collectOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, req, v.operator),
+    ).toEqual(first);
     expect(await operations()).toEqual(before);
     expect(before).toHaveLength(1);
   });
@@ -208,7 +254,7 @@ describe("accepted whole-order payment attendance", () => {
     at();
     await expect(
       recordTillSale(
-        deps(),
+        { ...deps(), admission: testTradingAdmission() },
         v.cfg,
         { ...request(), tender: { method: "cash", amount: "1.00" } },
         collector,
@@ -229,8 +275,18 @@ describe("accepted whole-order payment attendance", () => {
         throw new AppError("attendance.invalid", { reason: "capture refused" });
       };
       const payment = issued
-        ? collectOrder(deps(refusing), v.cfg, { id, lines: [], tender: tender("cash") }, collector)
-        : recordTillSale(deps(refusing), v.cfg, request(id), collector);
+        ? collectOrder(
+            { ...deps(refusing), admission: testTradingAdmission() },
+            v.cfg,
+            { id, lines: [], tender: tender("cash") },
+            collector,
+          )
+        : recordTillSale(
+            { ...deps(refusing), admission: testTradingAdmission() },
+            v.cfg,
+            request(id),
+            collector,
+          );
       await expect(payment).rejects.toMatchObject({ code: "attendance.invalid" });
       expect(await operations()).toEqual([]);
       expect(await suite.db.select().from(attendanceDayWork)).toEqual([]);
@@ -242,7 +298,7 @@ describe("accepted whole-order payment attendance", () => {
   );
   it("without a recorder a counter sale writes no workforce operations", async () => {
     const ticket = await recordTillSale(
-      { db: suite.db, backend: v.backend, clock: v.clock },
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
       v.cfg,
       request(),
       collector,

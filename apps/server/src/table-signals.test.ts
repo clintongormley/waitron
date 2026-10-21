@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -1243,7 +1244,7 @@ describe("a bill request", () => {
       begin select raise(abort, 'clearing refused'); end`);
     try {
       const paid = await takeBillPayment(
-        { db: v.db, backend: v.backend, clock: v.clock, log },
+        { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock, log },
         v.cfg,
         tabId,
         {

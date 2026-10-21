@@ -1,4 +1,5 @@
 import { withIssuanceTransaction } from "@waitron/core";
+import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 // Side-effect only: loads this host's errors.ts augmentation for the codes these routes throw.
 import "./errors.js";
 // The registry of `device_profile.not_found` and `device_profile.invalid`, which these routes throw.
@@ -111,6 +112,7 @@ import {
  * The routes never import a provider package. `fetch` is injected by tests; the live host omits it and the seats fall back to the global.
  */
 export interface PaymentsApiDeps {
+  admission: TradingAdmission;
   db: Database;
   /** For filing the sale of a stuck payment the provider reports captured. */
   backend: FiscalBackend;
@@ -328,6 +330,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           managementSessionId: sessionId,
           permission: PAYMENTS_MANAGE,
         });
+        await requireEconomicWrite(tx, deps.cfg, deps.admission);
         return fn(tx, authorizedBy);
       },
       log,
@@ -1138,6 +1141,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         {
           db: deps.db,
           backend: deps.backend,
+          admission: deps.admission,
           clock: deps.clock,
           provider: withoutCollect(provider),
           log,
@@ -1169,6 +1173,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   const fiscal = {
     db: deps.db,
     backend: deps.backend,
+    admission: deps.admission,
     clock: deps.clock,
     cfg: deps.cfg,
     log,

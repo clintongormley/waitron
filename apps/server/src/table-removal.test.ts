@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
@@ -828,7 +829,12 @@ describe("tablesTied", () => {
   it("is false for an abandoned order with kitchen items never collected", async () => {
     const t1 = await v.table("Abandoned 1", await zone());
     const order = await delivery(t1);
-    await placeOrder({ db: v.db, backend: v.backend, clock: v.clock }, v.cfg, order, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
+      v.cfg,
+      order,
+      OPERATOR,
+    );
     // What cancelling a placed order leaves (`cancelPlacedOrder`): abandoned, its items fired.
     await inTx(v, (tx) =>
       tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, order)),

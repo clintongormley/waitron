@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -100,6 +101,7 @@ function app() {
   mountTillApi(
     hono,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       cfg,
       backend: {} as TillApiDeps["backend"],

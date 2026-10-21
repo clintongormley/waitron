@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -35,6 +36,7 @@ function api(attendance: AttendanceRecorder | undefined = recordAttendanceFact) 
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       cfg: v.cfg,
       backend: v.backend,
@@ -159,6 +161,7 @@ describe("till order attendance admission", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         cfg: v.cfg,
         backend: v.backend,

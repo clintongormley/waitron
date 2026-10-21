@@ -1,3 +1,4 @@
+import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { workingOrderLines, workingOrders } from "@waitron/db";
@@ -167,8 +168,9 @@ export async function splitBill(
   cfg: OriginConfig,
   billId: string,
   transfers: Transfers,
-  command: BillCommand & { expectedEdit: BillEditExpected },
+  command: BillCommand & { expectedEdit: BillEditExpected; admission: TradingAdmission },
 ): Promise<{ billId: string }> {
+  await requireEconomicWrite(tx, cfg, command.admission);
   if (transfers.length === 0) throw new AppError("sale.empty_basket", {});
   assertDistinctTransferLines(billId, transfers);
   const path = await guardPathParty(tx, billId, command);

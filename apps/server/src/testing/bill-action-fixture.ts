@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./trading-admission.js";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { readBillEditState } from "../bill-editing.js";
 import {
@@ -54,6 +55,7 @@ export async function splitBill(
   command: BillCommand & { expectedEdit?: BillEditExpected },
 ) {
   return split(tx, cfg, billId, transfers, {
+    admission: testTradingAdmission(),
     ...command,
     expectedEdit: command.expectedEdit ?? (await readBillEditState(tx, billId)),
   });

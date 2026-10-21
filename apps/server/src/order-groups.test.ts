@@ -1,4 +1,5 @@
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateOrderLine as updateOrderLineCommand } from "./working-order.js";
 import { updateHeldOrder } from "./working-order.js";
@@ -3098,7 +3099,7 @@ async function saveWhole(
   lines: Awaited<ReturnType<typeof keptLines>> | ReturnType<typeof line>[],
   operatorId: string | undefined,
 ) {
-  return updateHeldOrderForTest({ db }, v.cfg, orderId, {
+  return updateHeldOrderForTest({ admission: testTradingAdmission(), db }, v.cfg, orderId, {
     lines,
     revision: await billRevisionOf(orderId),
     operatorId,
@@ -3471,6 +3472,7 @@ describe("edits inside groups (D19)", () => {
             { quantity: "3" },
             await billRevisionOf(s.tabId),
             {
+              admission: testTradingAdmission(),
               operatorId: undefined,
               expectedEdit: await readBillEditState(tx, s.tabId),
             },
@@ -3522,9 +3524,14 @@ describe("credit (D5)", () => {
     const cfg = {} as TradingContext;
     const issue = { fiscal: {} as TillSaleDeps, saleCfg: {} as DeviceRequestConfig };
     const unnamed = { lines: [], revision: 0, expectedEdit: null };
-    expectTypeOf(updateHeldOrder).toBeCallableWith({ db }, cfg, "order", unnamed);
     expectTypeOf(updateHeldOrder).toBeCallableWith(
-      { db },
+      { admission: testTradingAdmission(), db },
+      cfg,
+      "order",
+      unnamed,
+    );
+    expectTypeOf(updateHeldOrder).toBeCallableWith(
+      { admission: testTradingAdmission(), db },
       cfg,
       "order",
       { ...unnamed, operatorId: MIA },

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedRelocationSender } from "./testing/table-action-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
@@ -56,6 +57,7 @@ function api(attendance?: AttendanceRecorder) {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       cfg: v.cfg,
       backend: v.backend,

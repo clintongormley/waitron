@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
@@ -164,7 +165,12 @@ describe("the public cancellation read and command", () => {
     async (quantity, refundHandoff) => {
       const p = await fixture("fire");
       await payWorkingOrder(
-        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
         venue.cfg,
         { id: p.billId, tender: { method: "cash", amount: "26.00" }, lines: [] },
       );
@@ -190,11 +196,20 @@ describe("the public cancellation read and command", () => {
 
   it("refuses the paid refund handoff without refund permission before cancelling food", async () => {
     const p = await fixture();
-    await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
-      id: p.billId,
-      tender: { method: "cash", amount: "26.00" },
-      lines: [],
-    });
+    await payWorkingOrder(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      {
+        id: p.billId,
+        tender: { method: "cash", amount: "26.00" },
+        lines: [],
+      },
+    );
     const body = await bodyFor(p, { outcome: "keep_charge", refundHandoff: true });
     const before = await frozen();
     const answer = await post(p, body);
@@ -289,7 +304,12 @@ describe("the public cancellation read and command", () => {
     async (who) => {
       const p = await fixture();
       await payWorkingOrder(
-        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
         venue.cfg,
         {
           id: p.billId,
@@ -580,7 +600,12 @@ describe("the public cancellation read and command", () => {
     const second = await fixture("fire");
     for (const p of [first, second])
       await payWorkingOrder(
-        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
         venue.cfg,
         { id: p.billId, tender: { method: "cash", amount: "26.00" }, lines: [] },
       );
@@ -607,11 +632,20 @@ describe("the public cancellation read and command", () => {
         .set({ lineNo: sql`${workingOrderLines.lineNo} + 10` })
         .where(eq(workingOrderLines.workingOrderId, p.billId)),
     );
-    await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
-      id: p.billId,
-      tender: { method: "cash", amount: "26.00" },
-      lines: [],
-    });
+    await payWorkingOrder(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      {
+        id: p.billId,
+        tender: { method: "cash", amount: "26.00" },
+        lines: [],
+      },
+    );
     const before = await frozen();
     const result = await send(venue.app, venue.cookie.staff, "GET", path(p, true));
     expect(result.status).toBe(200);
@@ -630,7 +664,12 @@ describe("the public cancellation read and command", () => {
           : [{ name: "Pizza", olives: 2 }, { name: "Water" }],
       );
       await payWorkingOrder(
-        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
         venue.cfg,
         { id: other.billId, tender: { method: "cash", amount: "26.00" }, lines: [] },
       );
@@ -688,7 +727,12 @@ describe("the public cancellation read and command", () => {
     async (release) => {
       const p = await fixture(release);
       await payWorkingOrder(
-        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
         venue.cfg,
         {
           id: p.billId,
@@ -884,6 +928,7 @@ describe("the public cancellation read and command", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: venue.db,
         backend: venue.backend,
         clock: venue.clock,
@@ -1041,6 +1086,7 @@ describe("the public cancellation read and command", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: venue.db,
         backend: venue.backend,
         clock: venue.clock,
@@ -1213,6 +1259,7 @@ describe("the public cancellation read and command", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: venue.db,
         backend: venue.backend,
         clock: venue.clock,

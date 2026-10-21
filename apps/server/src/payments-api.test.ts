@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, isNull, sql } from "drizzle-orm";
@@ -219,6 +220,7 @@ function mountApp(
   mountPaymentsApi(
     app,
     {
+      admission: testTradingAdmission(),
       db,
       ...saleDeps(),
       cfg: cfgOf(venue),
@@ -911,6 +913,7 @@ describe("an injected fetch is threaded to the seat", () => {
     mountPaymentsApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         ...saleDeps(),
         cfg: cfgOf(venue),
@@ -1020,6 +1023,7 @@ describe("add reader — races with a concurrent disconnect", () => {
     mountPaymentsApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         ...saleDeps(),
         cfg: cfgOf(venue),
@@ -1081,6 +1085,7 @@ describe("unpair reader — retryable after a failed vendor unpair", () => {
     mountPaymentsApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         ...saleDeps(),
         cfg: cfgOf(venue),

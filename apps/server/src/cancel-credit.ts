@@ -1,3 +1,5 @@
+import { prepareIssueClock } from "@waitron/fiscal";
+import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { eq } from "drizzle-orm";
 import { readLiveSeriesIdTx, saleLines, sales } from "@waitron/db";
@@ -43,11 +45,13 @@ export async function readOrderInvoice(
  */
 export async function creditWholeInvoice(
   tx: Transaction,
-  deps: { backend: FiscalBackend; clock: TrustedClock },
+  deps: { backend: FiscalBackend; clock: TrustedClock; admission: TradingAdmission },
   cfg: DeviceRequestConfig,
   invoice: IssuedInvoice,
   authz: AuthzInput,
 ): Promise<void> {
+  await requireEconomicWrite(tx, cfg, deps.admission);
+  const clock = await prepareIssueClock(tx, cfg, deps.clock);
   const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "rectificative"));
   const total = centsToDecimal(-invoice.total);
   const lines = reversedLines(
@@ -71,7 +75,7 @@ export async function creditWholeInvoice(
     lines,
     wholeInvoice: true,
     authz,
-    clock: deps.clock,
+    clock,
   });
   await settleSale(tx, { saleId: invoice.id, tenders: [] });
 }

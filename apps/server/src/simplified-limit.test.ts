@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
@@ -89,6 +90,7 @@ useVenueDb({
     mountTillApi(
       limited,
       {
+        admission: testTradingAdmission(),
         db,
         backend: venue.backend,
         clock: venue.clock,

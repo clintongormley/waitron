@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
@@ -74,7 +75,12 @@ describe("payment reservations and previously received money", () => {
   it.each(["cash", "card"] as const)("refuses a new placed-bill %s collection", async (method) => {
     const billId = await tabWith(venue, "Tarta");
     await unsent(billId);
-    await placeOrder(deps(), venue.cfg, billId, venue.operatorId);
+    await placeOrder(
+      { ...deps(), admission: testTradingAdmission() },
+      venue.cfg,
+      billId,
+      venue.operatorId,
+    );
     const paid = await send(
       venue.app,
       venue.cookie,
@@ -126,7 +132,7 @@ describe("payment reservations and previously received money", () => {
     );
     const calls = venue.card.collectCalls.length;
     const result = await payWorkingOrderIntegratedOrchestration(
-      { ...deps(), provider: venue.card },
+      { admission: testTradingAdmission(), ...deps(), provider: venue.card },
       venue.cfg,
       { id: billId, lines: [] },
     );
@@ -202,14 +208,26 @@ describe("payment reservations and previously received money", () => {
       .set({ unitPriceGross: 500 })
       .where(eq(workingOrderLines.workingOrderId, billId));
     const issued = await inTx(venue, (tx) =>
-      issueIfFullyPaid(tx, deps(), venue.cfg, billId, venue.operatorId),
+      issueIfFullyPaid(
+        tx,
+        { ...deps(), admission: testTradingAdmission() },
+        venue.cfg,
+        billId,
+        venue.operatorId,
+      ),
     );
     expect(issued).toBeNull();
     expect(registroCount(venue, billId)).toBe(0);
     expect(await statusOf(venue, billId)).toBe("open");
     await venue.db.delete(orderDraftLines).where(eq(orderDraftLines.draftId, draft.id));
     const after = await inTx(venue, (tx) =>
-      issueIfFullyPaid(tx, deps(), venue.cfg, billId, venue.operatorId),
+      issueIfFullyPaid(
+        tx,
+        { ...deps(), admission: testTradingAdmission() },
+        venue.cfg,
+        billId,
+        venue.operatorId,
+      ),
     );
     expect(after).toMatchObject({ total: "5.00" });
     expect(registroCount(venue, billId)).toBe(1);
@@ -436,7 +454,12 @@ describe("unsent dishes block new payments on their own bill", () => {
       .where(eq(orderDraftLines.draftId, ana.id));
 
     await expect(
-      previewBillPayment(deps(), venue.cfg, billId, ask("items", "cash")),
+      previewBillPayment(
+        { ...deps(), admission: testTradingAdmission() },
+        venue.cfg,
+        billId,
+        ask("items", "cash"),
+      ),
     ).rejects.toMatchObject({
       code: "bill.unsent_dishes",
       params: {
@@ -444,7 +467,12 @@ describe("unsent dishes block new payments on their own bill", () => {
       },
     });
     await expect(
-      previewBillPayment(deps(), venue.cfg, otherBillId, ask("contribution", "cash")),
+      previewBillPayment(
+        { ...deps(), admission: testTradingAdmission() },
+        venue.cfg,
+        otherBillId,
+        ask("contribution", "cash"),
+      ),
     ).rejects.toMatchObject({
       code: "bill.unsent_dishes",
       params: {
@@ -502,7 +530,7 @@ describe("unsent dishes block new payments on their own bill", () => {
       const billId = await tabWith(venue, "Tarta");
       await unsent(billId);
       await expect(
-        payWorkingOrder(deps(), venue.cfg, {
+        payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, venue.cfg, {
           id: billId,
           lines: [],
           tender: { method, amount: "18.00" },
@@ -517,10 +545,14 @@ describe("unsent dishes block new payments on their own bill", () => {
     await unsent(billId);
     const calls = venue.card.collectCalls.length;
     await expect(
-      payWorkingOrderIntegratedOrchestration({ ...deps(), provider: venue.card }, venue.cfg, {
-        id: billId,
-        lines: [],
-      }),
+      payWorkingOrderIntegratedOrchestration(
+        { admission: testTradingAdmission(), ...deps(), provider: venue.card },
+        venue.cfg,
+        {
+          id: billId,
+          lines: [],
+        },
+      ),
     ).rejects.toMatchObject({ code: "bill.unsent_dishes", params: { billId } });
     expect(venue.card.collectCalls.length).toBe(calls);
     const [bill] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
@@ -537,11 +569,15 @@ describe("unsent dishes block new payments on their own bill", () => {
         await venue.db.delete(orderDraftLines).where(eq(orderDraftLines.draftId, draft.id));
       if (state === "submitted" || state === "discarded")
         await venue.db.update(orderDrafts).set({ state }).where(eq(orderDrafts.id, draft.id));
-      const result = await payWorkingOrder(deps(), venue.cfg, {
-        id: billId,
-        lines: [],
-        tender: { method: "cash", amount: "18.00" },
-      });
+      const result = await payWorkingOrder(
+        { ...deps(), admission: testTradingAdmission() },
+        venue.cfg,
+        {
+          id: billId,
+          lines: [],
+          tender: { method: "cash", amount: "18.00" },
+        },
+      );
       expect(result.total).toBe("18.00");
       expect(await statusOf(venue, billId)).toBe("settled");
       expect(registroCount(venue, billId)).toBe(1);

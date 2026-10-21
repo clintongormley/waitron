@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -43,6 +44,7 @@ function mountApp(pinThrottle?: PinThrottle): Hono {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       pinThrottle,
       backend: v.backend,

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -177,8 +178,18 @@ describe("dashboard receipt reprint", () => {
     const party = await seatedWith(venue, "Caña");
     await guestsOf(party.partyId, 5);
     const billId = party.tabId;
-    await placeOrder(venue, venue.cfg, billId, venue.operatorId);
-    await issueOrderInvoice(venue, venue.cfg, billId, venue.operatorId);
+    await placeOrder(
+      { ...venue, admission: testTradingAdmission() },
+      venue.cfg,
+      billId,
+      venue.operatorId,
+    );
+    await issueOrderInvoice(
+      { ...venue, admission: testTradingAdmission() },
+      venue.cfg,
+      billId,
+      venue.operatorId,
+    );
     expect((await collect(venue, billId, "3.00")).status).toBe(200);
     await guestsOf(party.partyId, 2);
     const answer = await post(venue.adminDashboard, billId, venue.printerId);

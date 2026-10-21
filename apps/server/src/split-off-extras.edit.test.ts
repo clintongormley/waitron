@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import {
   recallLines,
@@ -116,7 +117,7 @@ async function removeFirst(venue: Venue) {
     rows: (await state(tx, id)).lines.filter((row) => row.parentLineId === null),
     currentRevision: await revision(tx, id),
   }));
-  return updateHeldOrder({ db }, venue.cfg, id, {
+  return updateHeldOrder({ admission: testTradingAdmission(), db }, venue.cfg, id, {
     revision: currentRevision,
     operatorId: OPERATOR,
     lines: [{ ...line(venue, "water"), workingOrderLineId: rows[1]!.id }],
@@ -741,7 +742,7 @@ describe("editing split-off extras", () => {
     const dishes = vi.spyOn(VENUE_SERVICE, "resolveMakers");
     const extras = vi.spyOn(VENUE_SERVICE, "resolveExtraMakers");
     try {
-      await updateHeldOrder({ db }, venue.cfg, id, {
+      await updateHeldOrder({ admission: testTradingAdmission(), db }, venue.cfg, id, {
         revision: await withTransaction(db, (tx) => revision(tx, id)),
         operatorId: OPERATOR,
         lines: [

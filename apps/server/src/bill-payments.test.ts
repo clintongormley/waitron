@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import crypto, { randomUUID } from "node:crypto";
@@ -327,7 +328,13 @@ function cash(amount: string, over: Partial<BillPaymentRequest> = {}): BillPayme
 }
 
 function take(billId: string, request: BillPaymentRequest) {
-  return takeBillPayment(fiscal(), venue.cfg, billId, request, venue.operator);
+  return takeBillPayment(
+    { ...fiscal(), admission: testTradingAdmission() },
+    venue.cfg,
+    billId,
+    request,
+    venue.operator,
+  );
 }
 
 async function codeOf(promise: Promise<unknown>): Promise<string | undefined> {
@@ -428,14 +435,24 @@ describe("invoice selection before reserving new bill money", () => {
     });
     if (method === "reader") {
       return takeReaderBillPayment(
-        { ...fiscal(), provider: new SimulatorPaymentProvider(suite.db) },
+        {
+          admission: testTradingAdmission(),
+          ...fiscal(),
+          provider: new SimulatorPaymentProvider(suite.db),
+        },
         cfg,
         billId,
         req,
         venue.operator,
       );
     }
-    return takeBillPayment(fiscal(), cfg, billId, req, venue.operator);
+    return takeBillPayment(
+      { ...fiscal(), admission: testTradingAdmission() },
+      cfg,
+      billId,
+      req,
+      venue.operator,
+    );
   }
 
   it.each(["cash", "manual", "reader"] as const)(
@@ -589,15 +606,20 @@ describe("the writers with no route of their own", () => {
     });
 
     const refused = await codeOf(
-      updateHeldOrder({ db: suite.db }, venue.cfg, billId, {
+      updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, venue.cfg, billId, {
         lines: [keep(2, "Tarta"), keep(3, "Caña")],
         revision: order!.revision,
       }),
     );
-    const saved = await updateHeldOrder({ db: suite.db }, venue.cfg, billId, {
-      lines: [keep(1, "Chuletón"), keep(2, "Tarta")],
-      revision: order!.revision,
-    });
+    const saved = await updateHeldOrder(
+      { admission: testTradingAdmission(), db: suite.db },
+      venue.cfg,
+      billId,
+      {
+        lines: [keep(1, "Chuletón"), keep(2, "Tarta")],
+        revision: order!.revision,
+      },
+    );
 
     expect(refused).toBe("bill.line_paid");
     expect(saved).toBe(order!.revision + 1);
@@ -698,7 +720,7 @@ describe("a bill holding money", () => {
     );
 
     const code = await codeOf(
-      payWorkingOrder(fiscal(), venue.cfg, {
+      payWorkingOrder({ ...fiscal(), admission: testTradingAdmission() }, venue.cfg, {
         id: billId,
         lines: [],
         tender: { method: "cash", amount: "25.00" },
@@ -716,7 +738,7 @@ describe("a bill holding money", () => {
     );
 
     const code = await codeOf(
-      collectOrder(fiscal(), venue.cfg, {
+      collectOrder({ ...fiscal(), admission: testTradingAdmission() }, venue.cfg, {
         id: billId,
         lines: [],
         tender: { method: "cash", amount: "25.00" },
@@ -783,7 +805,15 @@ describe("settling a card payment of part of the bill", () => {
     });
 
     const completing = await captureError(() =>
-      inTx((tx) => completeBillPayment(tx, fiscal(), venue.cfg, failed, new Date())),
+      inTx((tx) =>
+        completeBillPayment(
+          tx,
+          { ...fiscal(), admission: testTradingAdmission() },
+          venue.cfg,
+          failed,
+          new Date(),
+        ),
+      ),
     );
     const failing = await captureError(() =>
       inTx((tx) => failBillPayment(tx, received, new Date())),
@@ -804,10 +834,17 @@ describe("the guests a manager's confirmation stores", () => {
     const paymentId = await insertPayment(billId, { applied: 300 });
 
     const done = await inTx((tx) =>
-      completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date(), {
-        attestedBy: OPERATOR,
-        note: "El datáfono muestra la operación",
-      }),
+      completeBillPayment(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        paymentId,
+        new Date(),
+        {
+          attestedBy: OPERATOR,
+          note: "El datáfono muestra la operación",
+        },
+      ),
     );
 
     expect(done.invoice).not.toBeNull();
@@ -912,7 +949,15 @@ describe("the invoice at full payment", () => {
       state: "received",
       receivedAt: new Date().toISOString(),
     });
-    await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+    await inTx((tx) =>
+      issueIfFullyPaid(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        billId,
+        OPERATOR,
+      ),
+    );
     const invoice = (await inTx((tx) => readOrderInvoice(tx, billId)))!;
     const session = await inTx(async (tx) => {
       const [admin] = await tx
@@ -942,7 +987,15 @@ describe("the invoice at full payment", () => {
     expect(rectificativeBefore).toBeDefined();
 
     await expect(
-      inTx((tx) => creditWholeInvoice(tx, fiscal(), venue.cfg, invoice, { sessionId: session.id })),
+      inTx((tx) =>
+        creditWholeInvoice(
+          tx,
+          { ...fiscal(), admission: testTradingAdmission() },
+          venue.cfg,
+          invoice,
+          { sessionId: session.id },
+        ),
+      ),
     ).rejects.toMatchObject({ code: "sale.correction_unsupported" });
 
     expect(
@@ -978,7 +1031,13 @@ describe("the invoice at full payment", () => {
     });
     const paymentId = await insertPayment(billId, { applied: 300 });
     const completed = await inTx((tx) =>
-      completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+      completeBillPayment(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        paymentId,
+        new Date(),
+      ),
     );
     expect(completed.invoice).toMatchObject({ invoiceType: "F1", total: "3.00" });
     const wildcardBill = await tabWith("Caña");
@@ -993,7 +1052,15 @@ describe("the invoice at full payment", () => {
       },
     });
     const wildcardPayment = await insertPayment(wildcardBill, { applied: 300 });
-    await inTx((tx) => completeBillPayment(tx, fiscal(), venue.cfg, wildcardPayment, new Date()));
+    await inTx((tx) =>
+      completeBillPayment(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        wildcardPayment,
+        new Date(),
+      ),
+    );
     const [saved] = await inTx((tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
     );
@@ -1011,7 +1078,13 @@ describe("the invoice at full payment", () => {
     const app = new Hono();
     mountTillApi(
       app,
-      { ...fiscal(), cfg: venue.cfg, secureCookies: false, venueLocale: LOCALE },
+      {
+        admission: testTradingAdmission(),
+        ...fiscal(),
+        cfg: venue.cfg,
+        secureCookies: false,
+        venueLocale: LOCALE,
+      },
       () => {},
     );
     const snapshot = () =>
@@ -1073,7 +1146,13 @@ describe("the invoice at full payment", () => {
       });
       const paymentId = await insertPayment(billId, { applied: 300 });
       const completed = await inTx((tx) =>
-        completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+        completeBillPayment(
+          tx,
+          { ...fiscal(), admission: testTradingAdmission() },
+          venue.cfg,
+          paymentId,
+          new Date(),
+        ),
       );
       expected.unshift({ workingOrderId: billId, invoiceNumber: completed.invoice!.invoiceNumber });
     }
@@ -1091,7 +1170,13 @@ describe("the invoice at full payment", () => {
     const f2Id = await tabWith("Caña");
     const f2Payment = await insertPayment(f2Id, { applied: 300 });
     const f2 = await inTx((tx) =>
-      completeBillPayment(tx, fiscal(), venue.cfg, f2Payment, new Date()),
+      completeBillPayment(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        f2Payment,
+        new Date(),
+      ),
     );
     expect(f2.invoice).toMatchObject({ invoiceType: "F2" });
     const session = await inTx(async (tx) => {
@@ -1108,7 +1193,13 @@ describe("the invoice at full payment", () => {
     const app = new Hono();
     mountTillApi(
       app,
-      { ...fiscal(), cfg: venue.cfg, secureCookies: false, venueLocale: LOCALE },
+      {
+        admission: testTradingAdmission(),
+        ...fiscal(),
+        cfg: venue.cfg,
+        secureCookies: false,
+        venueLocale: LOCALE,
+      },
       () => {},
     );
     const lookup = (q: string) =>
@@ -1154,7 +1245,13 @@ describe("the invoice at full payment", () => {
       });
       const paymentId = await insertPayment(billId, { applied: 300 });
       const completed = await inTx((tx) =>
-        completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+        completeBillPayment(
+          tx,
+          { ...fiscal(), admission: testTradingAdmission() },
+          venue.cfg,
+          paymentId,
+          new Date(),
+        ),
       );
       return { billId, invoiceNumber: completed.invoice!.invoiceNumber };
     };
@@ -1178,7 +1275,13 @@ describe("the invoice at full payment", () => {
     const app = new Hono();
     mountTillApi(
       app,
-      { ...fiscal(), cfg: venue.cfg, secureCookies: false, venueLocale: LOCALE },
+      {
+        admission: testTradingAdmission(),
+        ...fiscal(),
+        cfg: venue.cfg,
+        secureCookies: false,
+        venueLocale: LOCALE,
+      },
       () => {},
     );
     const found = async (q: string) => {
@@ -1218,7 +1321,13 @@ describe("the invoice at full payment", () => {
     const app = new Hono();
     mountTillApi(
       app,
-      { ...fiscal(), cfg: venue.cfg, secureCookies: false, venueLocale: LOCALE },
+      {
+        admission: testTradingAdmission(),
+        ...fiscal(),
+        cfg: venue.cfg,
+        secureCookies: false,
+        venueLocale: LOCALE,
+      },
       () => {},
     );
     const anonymous = await app.request("/api/invoices/lookup?q=FF/1");
@@ -1252,7 +1361,13 @@ describe("the invoice at full payment", () => {
     });
     const paymentId = await insertPayment(billId, { applied: 300 });
     const completed = await inTx((tx) =>
-      completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+      completeBillPayment(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        paymentId,
+        new Date(),
+      ),
     );
     expect(completed.invoice).toMatchObject({ invoiceType: "F1", total: "3.00" });
     const originalDomicile = (await inTx((tx) => tx.select().from(tenants)))[0]!.taxpayerDomicile;
@@ -1282,7 +1397,13 @@ describe("the invoice at full payment", () => {
       const app = new Hono();
       mountTillApi(
         app,
-        { ...fiscal(), cfg: venue.cfg, secureCookies: false, venueLocale: LOCALE },
+        {
+          admission: testTradingAdmission(),
+          ...fiscal(),
+          cfg: venue.cfg,
+          secureCookies: false,
+          venueLocale: LOCALE,
+        },
         () => {},
       );
       for (let read = 0; read < 2; read++) {
@@ -1332,7 +1453,13 @@ describe("the invoice at full payment", () => {
     const paymentId = await insertPayment(billId, { applied: 300 });
 
     const completed = await inTx((tx) =>
-      completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+      completeBillPayment(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        paymentId,
+        new Date(),
+      ),
     );
     const [filed] = await inTx((tx) =>
       tx
@@ -1417,7 +1544,13 @@ describe("the invoice at full payment", () => {
         }
         const paymentId = await insertPayment(billId, { applied: 300 });
         const completed = await inTx((tx) =>
-          completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+          completeBillPayment(
+            tx,
+            { ...fiscal(), admission: testTradingAdmission() },
+            venue.cfg,
+            paymentId,
+            new Date(),
+          ),
         );
         const [sale] = await inTx((tx) =>
           tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
@@ -1441,7 +1574,16 @@ describe("the invoice at full payment", () => {
           );
           expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).toContain("Cliente SL");
         }
-        expect(await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId))).toBeNull();
+        expect(
+          await inTx((tx) =>
+            issueIfFullyPaid(
+              tx,
+              { ...fiscal(), admission: testTradingAdmission() },
+              venue.cfg,
+              billId,
+            ),
+          ),
+        ).toBeNull();
         const replay = await inTx((tx) => readSettledTicket(backend, tx, venue.cfg, billId));
         expect(replay.invoiceNumber).toBe(completed.invoice!.invoiceNumber);
         expect(
@@ -1481,7 +1623,13 @@ describe("the invoice at full payment", () => {
     });
     const paymentId = await insertPayment(billId, { applied: 300 });
     const completed = await inTx((tx) =>
-      completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+      completeBillPayment(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        paymentId,
+        new Date(),
+      ),
     );
     const before = await inTx((tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
@@ -1539,7 +1687,13 @@ describe("the invoice at full payment", () => {
         });
         const paymentId = await insertPayment(billId, { applied: 300 });
         const completed = await inTx((tx) =>
-          completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+          completeBillPayment(
+            tx,
+            { ...fiscal(), admission: testTradingAdmission() },
+            venue.cfg,
+            paymentId,
+            new Date(),
+          ),
         );
         const before = await inTx((tx) =>
           tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
@@ -1606,7 +1760,13 @@ describe("the invoice at full payment", () => {
       });
       const paymentId = await insertPayment(billId, { applied: 300 });
       const completed = await inTx((tx) =>
-        completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+        completeBillPayment(
+          tx,
+          { ...fiscal(), admission: testTradingAdmission() },
+          venue.cfg,
+          paymentId,
+          new Date(),
+        ),
       );
       expect(completed.invoice!.invoiceType).toBe("F1");
       const [sale] = await inTx((tx) =>
@@ -1644,7 +1804,15 @@ describe("the invoice at full payment", () => {
       },
     });
     const paymentId = await insertPayment(billId, { applied: 300 });
-    await inTx((tx) => completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()));
+    await inTx((tx) =>
+      completeBillPayment(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        paymentId,
+        new Date(),
+      ),
+    );
     const [sale] = await inTx((tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
     );
@@ -1688,7 +1856,15 @@ describe("the invoice at full payment", () => {
       },
     });
     const paymentId = await insertPayment(billId, { applied: 300 });
-    await inTx((tx) => completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()));
+    await inTx((tx) =>
+      completeBillPayment(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        paymentId,
+        new Date(),
+      ),
+    );
     const [sale] = await inTx((tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
     );
@@ -1769,7 +1945,15 @@ describe("the invoice at full payment", () => {
         },
       });
       const paymentId = await insertPayment(billId, { applied: 300 });
-      await inTx((tx) => completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()));
+      await inTx((tx) =>
+        completeBillPayment(
+          tx,
+          { ...fiscal(), admission: testTradingAdmission() },
+          venue.cfg,
+          paymentId,
+          new Date(),
+        ),
+      );
       const [sale] = await inTx((tx) =>
         tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
       );
@@ -1812,7 +1996,13 @@ describe("the invoice at full payment", () => {
     const billId = await tabWith("Caña");
     const paymentId = await insertPayment(billId, { applied: 300 });
     const completed = await inTx((tx) =>
-      completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+      completeBillPayment(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        paymentId,
+        new Date(),
+      ),
     );
     const replay = await inTx((tx) => readSettledTicket(backend, tx, venue.cfg, billId));
     for (const invoice of [completed.invoice!, replay]) {
@@ -1835,7 +2025,13 @@ describe("the invoice at full payment", () => {
     });
     const paymentId = await insertPayment(billId, { applied: 2800 });
     const completed = await inTx((tx) =>
-      completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+      completeBillPayment(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        paymentId,
+        new Date(),
+      ),
     );
     const replay = await inTx((tx) => readSettledTicket(backend, tx, venue.cfg, billId));
     for (const invoice of [completed.invoice!, replay]) {
@@ -1861,7 +2057,13 @@ describe("the invoice at full payment", () => {
     });
     const paymentId = await insertPayment(billId, { applied: 2800 });
     const completed = await inTx((tx) =>
-      completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+      completeBillPayment(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        paymentId,
+        new Date(),
+      ),
     );
     const replay = await inTx((tx) => readSettledTicket(backend, tx, venue.cfg, billId));
 
@@ -1895,7 +2097,13 @@ describe("the invoice at full payment", () => {
     });
     const paymentId = await insertPayment(billId, { applied: 300 });
     const completed = await inTx((tx) =>
-      completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+      completeBillPayment(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        paymentId,
+        new Date(),
+      ),
     );
     const before = await inTx((tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
@@ -2022,7 +2230,15 @@ describe("the invoice at full payment", () => {
       }));
 
       await expect(
-        inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR)),
+        inTx((tx) =>
+          issueIfFullyPaid(
+            tx,
+            { ...fiscal(), admission: testTradingAdmission() },
+            venue.cfg,
+            billId,
+            OPERATOR,
+          ),
+        ),
       ).rejects.toMatchObject({ code: "invoice.recipient_invalid", params: { field } });
 
       const after = await inTx(async (tx) => ({
@@ -2395,7 +2611,13 @@ describe("the invoice at full payment", () => {
         await stageEmail(billId);
         const paymentId = await insertPayment(billId, { applied: 300 });
         const result = await inTx((tx) =>
-          completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+          completeBillPayment(
+            tx,
+            { ...fiscal(), admission: testTradingAdmission() },
+            venue.cfg,
+            paymentId,
+            new Date(),
+          ),
         );
         expect(result.invoice).toMatchObject({ invoiceType: "F1" });
         const [sale] = await inTx((tx) =>
@@ -2637,7 +2859,7 @@ describe("the invoice at full payment", () => {
           inTx(async (tx) => {
             const result = await completeBillPayment(
               tx,
-              fiscal(),
+              { ...fiscal(), admission: testTradingAdmission() },
               venue.cfg,
               paymentId,
               new Date(),
@@ -2678,7 +2900,13 @@ describe("the invoice at full payment", () => {
           })),
         ).toEqual(before);
         const result = await inTx((tx) =>
-          completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+          completeBillPayment(
+            tx,
+            { ...fiscal(), admission: testTradingAdmission() },
+            venue.cfg,
+            paymentId,
+            new Date(),
+          ),
         );
         expect(result.invoice).toMatchObject({ invoiceType: "F1", total: "3.00" });
         const [sale] = await inTx((tx) =>
@@ -2695,7 +2923,15 @@ describe("the invoice at full payment", () => {
             : { status: "queued" }),
           designation: "original",
         });
-        await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+        await inTx((tx) =>
+          issueIfFullyPaid(
+            tx,
+            { ...fiscal(), admission: testTradingAdmission() },
+            venue.cfg,
+            billId,
+            OPERATOR,
+          ),
+        );
         expect(
           await inTx((tx) =>
             tx.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.saleId, sale!.id)),
@@ -2726,7 +2962,15 @@ describe("the invoice at full payment", () => {
       receivedAt: new Date().toISOString(),
     });
 
-    const issued = await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+    const issued = await inTx((tx) =>
+      issueIfFullyPaid(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        billId,
+        OPERATOR,
+      ),
+    );
 
     expect(issued).toMatchObject({ invoiceType: "F1" });
 
@@ -2756,7 +3000,15 @@ describe("the invoice at full payment", () => {
     expect(paid.invoice).toBeDefined();
     expect(paid.invoice!.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
 
-    const again = await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+    const again = await inTx((tx) =>
+      issueIfFullyPaid(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        billId,
+        OPERATOR,
+      ),
+    );
 
     expect(again).toBeNull();
     expect(
@@ -2784,7 +3036,15 @@ describe("the invoice at full payment", () => {
     );
     await inTx((tx) => cancelLine(tx, venue.cfg, billId, 1));
 
-    const issued = await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+    const issued = await inTx((tx) =>
+      issueIfFullyPaid(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        billId,
+        OPERATOR,
+      ),
+    );
 
     expect(issued).toBeNull();
     expect(await statusOf(billId)).toBe("open");
@@ -2801,7 +3061,15 @@ describe("the invoice at full payment", () => {
       receivedAt: new Date().toISOString(),
     });
 
-    const issued = await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+    const issued = await inTx((tx) =>
+      issueIfFullyPaid(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        billId,
+        OPERATOR,
+      ),
+    );
 
     expect(issued).toMatchObject({ total: "3.00" });
     expect(await statusOf(billId)).toBe("settled");
@@ -2868,7 +3136,7 @@ describe("the invoice at full payment", () => {
         ]);
       });
       const issued = await inTx((tx) =>
-        issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR),
+        issueIfFullyPaid(tx, { admission: testTradingAdmission(), ...fiscal() }, venue.cfg, billId, OPERATOR),
       );
       expect(issued).toMatchObject({ total: "43.00" });
       const [sale] = await inTx((tx) =>
@@ -2950,7 +3218,15 @@ describe("the receipt's payments, taken within one millisecond", () => {
     const tenderIds = vi.spyOn(crypto, "randomUUID").mockImplementation(tenderId);
     syncBuiltinESMExports();
     try {
-      await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+      await inTx((tx) =>
+        issueIfFullyPaid(
+          tx,
+          { ...fiscal(), admission: testTradingAdmission() },
+          venue.cfg,
+          billId,
+          OPERATOR,
+        ),
+      );
     } finally {
       tenderIds.mockRestore();
       syncBuiltinESMExports();
@@ -3002,7 +3278,15 @@ describe("the receipt's payments, taken within one millisecond", () => {
       );
     }
 
-    await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+    await inTx((tx) =>
+      issueIfFullyPaid(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        billId,
+        OPERATOR,
+      ),
+    );
 
     const [line] = await tenderLinesOf(billId);
     expect(line!.refunds.map((refund) => refund.amount)).toEqual(
@@ -3114,7 +3398,15 @@ describe("the bill's payments, taken within one millisecond", () => {
         },
       ]);
     });
-    await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+    await inTx((tx) =>
+      issueIfFullyPaid(
+        tx,
+        { ...fiscal(), admission: testTradingAdmission() },
+        venue.cfg,
+        billId,
+        OPERATOR,
+      ),
+    );
     const before = await inTx((tx) => tx.select({ id: printJobs.id }).from(printJobs));
 
     await printSalePaymentSlip(suite.db, venue.cfg, billId);
@@ -3207,4 +3499,28 @@ async function invoiceContactDepartment() {
       .where(eq(departments.locationId, venue.cfg.locationId)),
   );
   return rows.find((row) => row.isDefault)!.id;
+}
+
+async function withSavedIssueZone<T>(
+  tx: Transaction,
+  offsetMinutes: number,
+  issue: () => Promise<T>,
+): Promise<T> {
+  const zones: Record<number, string> = { 60: "Etc/GMT-1", 0: "Etc/UTC", [-480]: "Etc/GMT+8" };
+  const [location] = await tx
+    .select()
+    .from(locations)
+    .where(eq(locations.id, venue.cfg.locationId));
+  await tx
+    .update(locations)
+    .set({ timeZone: zones[offsetMinutes] })
+    .where(eq(locations.id, venue.cfg.locationId));
+  try {
+    return await issue();
+  } finally {
+    await tx
+      .update(locations)
+      .set({ timeZone: location!.timeZone })
+      .where(eq(locations.id, venue.cfg.locationId));
+  }
 }

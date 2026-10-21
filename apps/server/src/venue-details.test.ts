@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { ALLOCATED_FISCAL_RESTORE } from "@waitron/fiscal-verifactu";
@@ -203,7 +204,7 @@ async function prepareSale(observeClock?: () => void) {
   });
   const cfg = await deviceRequestCfg(suite.db, venue.cfg);
   return () =>
-    recordTillSale({ db: suite.db, backend, clock }, cfg, {
+    recordTillSale({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
       zoneId: offers.zoneId,
       lines: [{ menuItemId: offers.offerFor(venue.cafeId), quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
@@ -1181,7 +1182,7 @@ describe("venue detail consumer reads", () => {
       deploymentEnvironment: "preproduction",
       resolveClient: () => Promise.reject(Error("No external filing permitted")),
     });
-    await recordTillSale({ db: suite.db, backend, clock }, cfg, {
+    await recordTillSale({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
       zoneId: offers.zoneId,
       lines: [{ menuItemId: offers.offerFor(venue.cafeId), quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
@@ -1569,7 +1570,12 @@ describe("open kitchen work during venue corrections", () => {
     const { rows } = await suite.db.execute<{ id: string }>(
       sql`select id from persons where role = 'manager' limit 1`,
     );
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, rows[0]!.id);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      rows[0]!.id,
+    );
     const retained = () => ({
       orders: suite.db.all(sql`select * from working_orders order by id`),
       lines: suite.db.all(sql`select * from working_order_lines order by id`),

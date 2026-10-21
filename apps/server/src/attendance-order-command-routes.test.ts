@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import {
   placeOrder,
@@ -52,6 +53,7 @@ function api(attendance?: AttendanceRecorder) {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       cfg: v.cfg,
       backend: v.backend,
@@ -75,7 +77,12 @@ async function prepare(action: Action) {
     lines: [{ menuItemId: v.offerFor("Ensalada"), quantity: "1" }],
   });
   if (action === "cancel")
-    await placeOrder({ db: suite.db, backend: v.backend, clock: v.clock }, v.cfg, id, v.adminId);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
+      v.cfg,
+      id,
+      v.adminId,
+    );
   return id;
 }
 function command(app: Hono, id: string, action: Action) {

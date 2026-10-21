@@ -1,4 +1,5 @@
 import { withIssuanceTransaction } from "@waitron/core";
+import { requireEconomicWrite } from "./trading-admission.js";
 import { parseBillEditExpected } from "./bill-editing.js";
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -142,7 +143,13 @@ export function mountAdjustmentsApi(
   run: Run,
   pinThrottle: PinThrottle,
 ): void {
-  const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, log };
+  const fiscal = {
+    db: deps.db,
+    backend: deps.backend,
+    clock: deps.clock,
+    admission: deps.admission,
+    log,
+  };
 
   app.post("/api/parties/:id/drafts/:did/discard", (c) =>
     run(c, log, async () => {
@@ -174,6 +181,7 @@ export function mountAdjustmentsApi(
         withIssuanceTransaction(
           deps.db,
           async (tx) => {
+            await requireEconomicWrite(tx, deps.cfg, deps.admission);
             await checkZones(tx, deps.cfg, session, [{ partyId }]);
             const applied = await discardDraft(
               tx,
@@ -182,6 +190,7 @@ export function mountAdjustmentsApi(
               draftId,
               session.personId,
               {
+                admission: deps.admission,
                 submissionId,
                 revision,
                 expectedRevision,
@@ -235,11 +244,12 @@ export function mountAdjustmentsApi(
         return withIssuanceTransaction(
           deps.db,
           async (tx) => {
+            await requireEconomicWrite(tx, deps.cfg, deps.admission);
             await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
             const applied = await applyAdjustment(
               tx,
               cfg,
-              { ...ask, submissionId, ...(approver === undefined ? {} : { approver }) },
+              { ...ask, admission: deps.admission, submissionId, ...(approver === undefined ? {} : { approver }) },
               deps.venueLocale,
               attempts,
               deps.attendance === undefined

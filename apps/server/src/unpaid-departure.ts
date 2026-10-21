@@ -1,3 +1,4 @@
+import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import { inArray } from "drizzle-orm";
@@ -64,6 +65,7 @@ export interface RecordedDeparture {
 export async function recordUnpaidDeparture(
   tx: Transaction,
   deps: {
+    admission: TradingAdmission;
     db: Database;
     backend: FiscalBackend;
     clock: TrustedClock;
@@ -75,6 +77,7 @@ export async function recordUnpaidDeparture(
   req: UnpaidDepartureRequest,
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
 ): Promise<{ state: "closed"; departures: RecordedDeparture[] }> {
+  await requireEconomicWrite(tx, cfg, deps.admission);
   const { authorizedBy } = await authorize(
     tx,
     { sessionId: operator.sessionId, permission: "sale.void", override: req.override },
@@ -137,6 +140,7 @@ export async function recordUnpaidDeparture(
       cfg,
       invoice,
       operator.personId,
+      deps.admission,
       deps.log,
     );
     saleOf.set(invoice.id, saleId);

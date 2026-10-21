@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, inArray } from "drizzle-orm";
@@ -207,7 +208,7 @@ async function cashSale(venue: Venue, deviceId: string): Promise<void> {
   const cfg = { ...venue.cfg, origin: deviceOrigin(deviceId) };
   const offers = await inTx((tx) => offerProducts(tx, cfg));
   await recordTillSale(
-    { db: suite.db, backend, clock },
+    { admission: testTradingAdmission(), db: suite.db, backend, clock },
     cfg,
     {
       zoneId: offers.zoneId,

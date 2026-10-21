@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
@@ -59,7 +60,7 @@ it.each(["cash", "integrated"] as const)(
     if (method === "cash") {
       expect(
         (
-          await payWorkingOrder(deps, venue.cfg, {
+          await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, {
             ...request,
             tender: { method: "cash", amount: "2.00" },
           })
@@ -69,7 +70,11 @@ it.each(["cash", "integrated"] as const)(
       expect(
         (
           await payWorkingOrderIntegratedOrchestration(
-            { ...deps, provider: new SimulatorPaymentProvider(suite.db) },
+            {
+              admission: testTradingAdmission(),
+              ...deps,
+              provider: new SimulatorPaymentProvider(suite.db),
+            },
             venue.cfg,
             { ...request, simulationOutcome: "captured" },
           )
