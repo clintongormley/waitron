@@ -284,6 +284,13 @@ question directly: a cloud primary needs no second instance; the store is the mi
 
 ### 4.4 On-prem primary → on-prem mirror
 
+> **Pointer, 2026-10-21 (A947).** The owner made this topology the go-live one: "one box with
+> failover to another local box". The refreshed design is
+> [2026-10-21-a947-two-box-failover-design.md](2026-10-21-a947-two-box-failover-design.md). It
+> keeps this section's shape, with one change: box A streams over S3 to a small S3 store on box B
+> rather than over SFTP, because slice 2 built the generations, the pointer's conditional write and
+> the rebuild on S3, and SFTP has no conditional write.
+
 The one topology the store-as-hub does not cover on its own, because the second box exists to survive
 the internet going away.
 
@@ -335,6 +342,12 @@ silent.
 ## 5. Promotion, return, and the tail shipper
 
 ### 5.1 Promotion — one procedure for every node
+
+> **Pointer, 2026-10-21 (A947).** For two boxes on one site, the switch, the hand-over, the fenced
+> return and the fix for the prototype's failed tail-ship scenario (S2) are in
+> [the A947 design](2026-10-21-a947-two-box-failover-design.md) §6–§7. The fiscal step of a
+> promotion follows A679's hour-coded series (the standby stays dormant, and promotion selects a
+> fresh hour when it happens), not step 2's seat claim as written here.
 
 Whether box B, a fresh cloud instance, or a box taking over from the cloud:
 
@@ -820,6 +833,10 @@ Several specs, not one. Each gets its own spec and plan.
    > Slice 2 landed as designed, finished in #652: the stream to the owner's bucket,
    > the rebuild from it, freshness, and the restart reset. It streams to an owner-supplied bucket
    > only, not to Waitron Cloud, and promotes nothing.
+
+> **Pointer, 2026-10-21 (A947).** Slices 3–5 are re-cut for go-live on two local boxes in
+> [the A947 design](2026-10-21-a947-two-box-failover-design.md) §11: 3 the spare keeps a copy,
+> 4 switching, 5 the old main box comes back (with copy-up last). The Cloud topologies follow.
 
 3. **Seats and promotion.** A cloud instance or a box promoted from the store.
 4. **Return, tail shipper, rejoin.**

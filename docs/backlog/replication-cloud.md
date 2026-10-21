@@ -245,9 +245,10 @@ Open:
 
 **Slices 3 and 4 rebuild failover**
 ([the topology design](../superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md)). **Until
-slice 3 a venue has ONE node and no failover at all.** The "MVP for go-live" requirement of two boxes
-plus cloud failover is met by slices 3–5, not before, and it is accepted for exactly as long as
-Waitron is pre-production. What stayed: `packages/membership` whole (documents, signing,
+slice 3 a venue has ONE node and no failover at all.** **Owner, 2026-10-21 (A947): "For go live I want one box with
+failover to another local box"**, with the Cloud shortly after. Whether every later venue needs a
+second box is the A947 design's question 3. Slices 3–5 as re-cut by
+[the A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md) meet it. What stayed: `packages/membership` whole (documents, signing,
 canonicalisation, verification, trust), node enrolment and its rate limiting
 (`apps/server/src/node-enrol-api.ts`, `enrol-rate-limit.ts`), node retirement, and the
 `ledger` / `state` / `local` classification — which no longer chooses a database file: every table

@@ -1,0 +1,72 @@
+A947 — go-live on two local boxes: four questions, asked one at a time.
+Design: docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md (§12).
+
+In short: the main box sells and streams everything it writes to the spare box, about a second
+behind, with no internet needed. When the main box dies, a manager switches the venue to the spare
+from any till; open tables are still there. When the old main box comes back it hands over the few
+sales the spare never saw, and becomes the new spare. Nothing is filed twice and no invoice number
+is reused: the spare is switched on under a fresh hour-coded series of its own, chosen at the
+moment of the switch (your A679 answer of 2026-10-16), never the main box's.
+
+==========================================================================================
+Question 1 of 4 — who switches to the spare box?
+Picture: 5-q1-who-switches.png (also 1-main-not-answering.png and 2-take-over-dialog.png)
+
+Example: Friday 21:40, the main box's power supply fails in the middle of service.
+
+- A (recommended) — a manager switches, from any till. After 20 seconds every till shows a red
+  strip "El equipo principal no responde"; a manager taps «Cambiar al equipo de reserva», unplugs
+  the main box, types the main box's installation code from its recovery sheet, and their password and
+  authenticator code. About two minutes without selling (up to an hour if a second switch falls in
+  the same clock hour, by your hour-code rule). If the main box is in fact still up (one till's cable is out), the
+  dialog refuses and offers a hand-over that loses nothing.
+- B — the boxes switch by themselves after about a minute. Faster when the main box really died.
+  But two boxes cannot tell "the main box is dead" from "the main box is cut off", so a pulled
+  cable or a failed switch between two rooms leaves both boxes selling, each to the tills it can
+  reach: fiscally safe, but two sets of open tables. It also needs your W41s-4 answer changed,
+  because that take-over asks a person for confirmations, the recovery sheet's code and a
+  re-authentication.
+- Stop here — I'll write.
+
+==========================================================================================
+Question 2 of 4 — what proves it is a manager at the switch?
+Picture: 2-take-over-dialog.png
+
+Example: Friday 21:41, Marta is the manager on shift. Her dashboard password is in her head and
+her authenticator app is on her phone in her locker.
+
+- A (recommended) — her password and authenticator code, typed at the till, as switching a box
+  over already asks today; if no such manager is on shift, the emergency key from the recovery pack
+  instead. It is the proof your W41s answer asked for ("fresh administrator re-authentication"),
+  for a step that switches on a fiscal identity that can never be reused.
+- B — her till PIN, the one she signs in with all evening. Quicker mid-service, and any shift
+  manager has it; but a PIN is short, often seen by colleagues, and it would change what you
+  approved for W41s.
+- Stop here — I'll write.
+
+==========================================================================================
+Question 3 of 4 — when the old main box comes back, what does it do by itself?
+Picture: 4-old-main-returns.png
+
+Example: Saturday 10:05 the repaired main box is plugged back in. It holds three sales from Friday
+21:39 that never reached the spare.
+
+- A (recommended) — it hands over the three sales by itself (it has already stopped selling and
+  filing, so this is safe), then waits for a manager to tap «Convertir en equipo de reserva»,
+  because that wipes it.
+- B — it does both by itself: hands over, wipes itself and becomes the spare with nobody touching
+  it. Quicker, but a box wipes itself on its own judgement that the hand-over is complete.
+- C — it does nothing until a manager starts the hand-over from the dashboard.
+- Stop here — I'll write.
+
+==========================================================================================
+Question 4 of 4 — must every venue have a spare box?
+Picture: 3-servers-screen.png
+
+Example: a small café with one counter, after the first venue.
+
+- A (recommended) — a choice. Setup offers "Add a spare box" and the Servers screen shows it; a
+  one-box venue keeps today's "only one copy" warning and, if the box dies, is restored from its
+  bucket or archive onto a new box. The first venue has two.
+- B — required. Setup does not finish until a second box has joined.
+- Stop here — I'll write.

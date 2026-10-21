@@ -5548,7 +5548,16 @@ Not in any track until the standalone primary is done.
   [Detail](backlog/replication-cloud.md#the-tunnels-stand-in-relay-pairs-with-sockets-that-have-already-gone)
 
 **The on-prem mirror.** Read this section as requirements slices 3–5 must meet, not as work
-outstanding on code that exists. The membership, promotion and rejoin arc (#197–#272) is still in
+outstanding on code that exists.
+
+- **A947. Go-live on two local boxes — design written, the owner's answers awaited.** The owner,
+  2026-10-21: "For go live I want one box with failover to another local box." The
+  [design](superpowers/specs/2026-10-21-a947-two-box-failover-design.md) re-cuts slices 3–5 into
+  pull requests (§11) and answers several entries below: the vault-ring question (the spare gets
+  the credentials key at joining), adding a spare with the internet down (the first copy over the
+  LAN), the stored primary key (A45), and the drain confirmations rejoin lost (the tail receipt).
+  Its four questions are in §12. No build before the owner approves it.
+  [Mock-ups](backlog/mockups/a947-two-box-failover/README.md) The membership, promotion and rejoin arc (#197–#272) is still in
 the tree. What remains, largest first:
 
 - **Status, alarms and the operator surface for replication.** An operator needs to see whether the
