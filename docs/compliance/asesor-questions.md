@@ -2,9 +2,9 @@
 
 **2026-10-17, A664:** You adopted the [revised proposal](../superpowers/specs/2026-10-16-a664-data-retention-design.md#owner-decision-2026-10-17-adopted-for-specialist-review) for specialist review. [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) awaits the relevant fiscal/commercial, labour and privacy decisions. You will send it; no enquiry has been sent by this campaign. The historical Word copies have not been changed.
 
-**2026-10-21, A798-B (a clock behind the last sale):** [Q51](#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21) (a chain whose record times step back once, when a manager restarts payments) and [Q52](#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21) (what to do about sales recorded under a restart whose clock later proved wrong) were added after Q47, as the [A798 design](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md) §10 asks. Neither behaviour is built yet. Neither is in the shortened list or the Word copies, and no enquiry has been sent.
-
 **2026-10-18, A793 (tips):** [Q13](#q13-propinas--outside-the-vat-base-and-off-the-invoice-added-2026-07-31) gained an open part (d) on suggested tip percentages and a default service charge; [Q49](#q49-card-tips-in-the-venues-books--income-or-money-owed-to-staff-added-2026-10-18) (how card tips are booked) and [Q50](#q50-a-fixed-service-charge-on-the-bill--allowed-by-consumer-law-added-2026-10-18) (a fixed "service" charge under consumer law) were added after Q13. The research behind them is [research/2026-10-18-a793-tips.md](research/2026-10-18-a793-tips.md). None is in the shortened list or the Word copies yet, and no enquiry has been sent.
+
+**2026-10-21, A798-B (a clock behind the last sale):** [Q51](#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21) (a chain whose record times step back once, when a manager restarts payments) and [Q52](#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21) (what to do about sales recorded under a restart whose clock later proved wrong) were added after Q47, as the [A798 design](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md) §10 asks. Neither behaviour is built yet. Neither is in the shortened list or the Word copies, and no enquiry has been sent.
 
 Companion to [verifactu-findings.md](verifactu-findings.md), which records what is already
 settled. **Do not ask about anything in that document** — it is sourced from AEAT and BOE
@@ -3345,8 +3345,9 @@ database, the box takes no payment and writes no record. That case has two cause
 apart by its own clock: the clock is wrong now (a power cut reset it), or the clock is right now and
 the last record was stamped by a clock that ran ahead (someone set the date a day wrong). For the
 second, the owner chose (2026-10-20) to let a manager restart payments, but only with fresh proof
-that the clock is right now (AEAT's time, or at least two tills or handhelds, each within a minute of
-the box) and only when the box is at most 24 hours behind the last record
+that the clock is right now (AEAT's time, or at least two tills or handhelds that reported in the
+last five minutes, each within a minute of the box) and only when the box is at most 24 hours
+behind the last record
 ([design §4.8 b](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#b-who-can-fix-it-and-how)).
 The next record in the chain then carries a generation time earlier than the record before it, by up
 to 24 hours, and the records after it do too until real time passes the last one. Nothing already
@@ -3358,17 +3359,22 @@ Our own reading is that a chain runs in the order records are generated
 ([findings](verifactu-findings.md), "Chain position is unrelated to invoice number"), and the house
 reading of Orden HAC/1177/2024 art. 16.4 lists "chronological generation order on recovery" among the
 duties during an outage (same file, the art. 16.4 table). AEAT's validation document, as we read it,
-checks `FechaHoraHusoGenRegistro` only against AEAT's own clock, upper bound only (findings,
-"Clock tolerance is enforced at submission"). We have found nothing that says what AEAT does with a
-generation time earlier than the previous record's. Not tested in AEAT's preproduction environment.
+describes only one check on `FechaHoraHusoGenRegistro`: an upper bound against AEAT's own clock
+(findings, "Nothing rejects a late record, but a late one is flagged", in "There is no submission
+deadline"). In AEAT's preproduction environment on 2026-10-12, though, records sent more than five
+minutes after they were generated came back accepted with errors under code 2004 (same paragraph,
+and "Clock tolerance is enforced at submission"). We have found nothing that says what AEAT does
+with a generation time earlier than the previous record's. That case was not tested in AEAT's
+preproduction environment.
 
 > Nuestro SIF deja de cobrar y de generar registros de facturación cuando la hora del equipo es más
 > de un minuto anterior a la fecha y hora de generación (`FechaHoraHusoGenRegistro`) del último
 > registro que conserva. Puede ocurrir que la hora actual sea la correcta y que el último registro se
 > generase con un reloj adelantado (por ejemplo, con la fecha puesta un día por delante por error). En
 > ese caso, una persona responsable puede reanudar los cobros, pero solo si hay una prueba reciente de
-> que la hora actual es correcta (la hora de la AEAT, o la de al menos dos dispositivos de venta, con
-> menos de un minuto de diferencia) y si la diferencia con el último registro no supera las 24 horas.
+> que la hora actual es correcta (la hora de la AEAT, o la de al menos dos dispositivos de venta que
+> hayan comunicado su hora en los últimos cinco minutos, cada uno con menos de un minuto de
+> diferencia) y si la diferencia con el último registro no supera las 24 horas.
 > Desde ese momento, el siguiente registro de la cadena lleva una fecha y hora de generación anterior a
 > la del registro que le precede (hasta 24 horas antes), y los siguientes también, hasta que la hora
 > real alcance la del último registro. No se modifica ningún registro ya generado, ni su huella ni su
