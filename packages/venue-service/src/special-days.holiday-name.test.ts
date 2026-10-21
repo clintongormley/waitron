@@ -1,13 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import {
-  CATALOGUE_MIGRATIONS,
-  buildMenuDocument,
-  createCatalogue,
-  menuDocumentHash,
-  publishMenu,
-} from "@waitron/catalogue";
+import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import type { CountryPack } from "@waitron/country";
 import {
   CORE_MIGRATIONS,
@@ -19,9 +13,8 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { createDepartment, listVenueReadiness, type VenueScope } from "./operations.js";
+import { listVenueReadiness, type VenueScope } from "./operations.js";
 import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { listSpecialDays, readSpecialDay, saveSpecialDay, specialDaysOn } from "./special-days.js";
 
@@ -125,18 +118,7 @@ async function venue() {
     })
     .returning({ id: locations.id });
   const cfg: VenueScope = { locationId: brandLocationId(location!.id) };
-  return scoped(async (tx) => {
-    const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
-    ).id;
-    const period = async (name: string) => {
-      const menuId = (await createCatalogue(tx, { name })).id;
-      const { document } = await buildMenuDocument(tx, menuId);
-      await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
-      return (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId, staffMenuIds: [] })).id;
-    };
-    return { cfg, restaurant, lunch: await period("Lunch"), dinner: await period("Dinner") };
-  });
+  return { cfg };
 }
 type Venue = Awaited<ReturnType<typeof venue>>;
 

@@ -46,13 +46,13 @@ const yearOf = (date: LocalDate) => Number(date.slice(0, 4));
 const followsHoliday = (rule: SpecialDayDateRule) =>
   rule.repeats && rule.holidayName !== undefined && rule.holidayName !== null;
 
-/** The holiday lists the rules need over `years` (by default their `holidayHorizon`): none, and
- *  nothing read, when no rule is a repeating date that follows a holiday's name. */
+/** The holiday lists the rules need over the years given: none, and nothing read, when no rule is
+ *  a repeating date that follows a holiday's name. */
 async function holidayDatesFor(
   tx: Transaction,
   cfg: VenueScope,
   rules: readonly SpecialDayDateRule[],
-  [fromYear, toYear]: readonly [number, number] = holidayHorizon(rules),
+  [fromYear, toYear]: readonly [number, number],
   place?: LocationPlace,
 ): Promise<HolidayDates> {
   const named = rules.filter(followsHoliday);
@@ -79,15 +79,12 @@ function holidayNameOn(holidays: HolidayDates, date: LocalDate): string | null {
   return null;
 }
 
-/** The years a check over every future occurrence walks, from the earliest date: 400 from it, or
- *  from `walkFrom` when that is later. No years without rules. */
-function holidayHorizon(
-  rules: readonly { date: LocalDate }[],
-  walkFrom = -Infinity,
-): [number, number] {
+/** The years a check over every future occurrence walks: 400 from the earliest date. No years
+ *  without rules. */
+function holidayHorizon(rules: readonly { date: LocalDate }[]): [number, number] {
   if (rules.length === 0) return [1, 0];
   const first = Math.min(...rules.map((rule) => yearOf(rule.date)));
-  return [first, Math.min(Math.max(first, walkFrom) + 400, 9999)];
+  return [first, Math.min(first + 400, 9999)];
 }
 
 /** Where a special-day date falls in `year`: a one-off only in its own year, a repeating one from
