@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import { countText, currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillHeldOrders } from "./held-orders.js";
 import type { FloorZone, HeldOrderSummary, TableParty, TableState } from "../api/client.js";
@@ -189,7 +190,11 @@ describe("till-held-orders", () => {
     it("says them in Spanish", async () => {
       setLocale("es");
       const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [ana] });
-      expect(chips(rowOf(el, 7))).toEqual(["Bar: 2 listos", "Kitchen: 1 listo", "Con retraso"]);
+      const row = rowOf(el, 7);
+      expect(chips(row)).toEqual([es["signal.wait_overdue"]]);
+      expect(row.querySelector('[data-count="ready"]')!.textContent!.trim()).toBe(
+        countText(3, "order_counts.ready", "order_counts.ready_one"),
+      );
     });
   });
 
