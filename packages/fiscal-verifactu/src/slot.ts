@@ -10,7 +10,7 @@ import { claimReminder, reportReminder } from "./certificate-reminders.js";
 import { readCertificateCard } from "./certificate-card.js";
 import { installCertificate } from "./certificate-install.js";
 import { drain as runDrain, resetInFlightClaims } from "./drain.js";
-import { parseAeatCert, sealAeatSecret } from "./provisioning-secret.js";
+import { parseAeatCert, sealAeatSecret, validateSetupAeatCert } from "./provisioning-secret.js";
 import {
   validateLegalName,
   validateOperationDescription,
@@ -86,9 +86,7 @@ export const FISCAL_SLOT: FiscalContribution = {
   // `validate` writes nothing and runs BEFORE `provisionVenue` mints the unrepairable SIF/chain.
   provisioningSecret: {
     required: (environment) => environment === "production",
-    validate: (raw) => {
-      parseAeatCert(raw);
-    },
+    validate: validateSetupAeatCert,
     seal: (deps, raw) => sealAeatSecret(deps, raw),
   },
   // The operator-typed fields that reach AEAT verbatim, refused where the operator types them — the

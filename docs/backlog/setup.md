@@ -3,35 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "The setup wizard, onboarding and the demo venue". This file holds
 their full text.
 
-## A852. Setup accepts certificate files filing cannot use
-
-- Found by A795's design (§2.1, §2.3 of
-  [the design](../superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md)). The
-  wizard's certificate screen checks only that a file was chosen and the passphrase is not empty
-  (`apps/setup/src/screens/cert-screen.ts`), and the server's `parseAeatCert` never opens the file.
-  Measured 2026-10-18 (P1): a wrong passphrase, 600 random bytes, a file with no private key and an
-  expired certificate were all accepted by `parseAeatCert`. A preproduction setup then seals them as
-  given (`setup-api.ts`, the seal step, read). A production setup cannot finish with one: it requires
-  an accepted fiscal test (`assertFiscalReady`, which throws `setup.fiscal_test_required` otherwise,
-  `apps/server/src/fiscal-readiness.ts:129-135`, read). For a wrong passphrase and random bytes the
-  test's filing pass fails before it reaches AEAT (measured, P5 against a local server), and a file
-  with no key cannot be opened at all (measured, P2); that AEAT refuses an expired one is assumed.
-- For a wrong passphrase, a production setup's fiscal test then seals it, records a test sale and
-  runs a filing pass; the connection fails with `mac verify failure` (measured with `mtlsFetch`
-  against a local server), the pass backs the record off without a skip (measured through the real
-  filing pass with an expired certificate against a server refusing during the connection), and
-  `submitFiscalReadiness` reads no acceptance and no AEAT refusal as `uncertain`
-  (`apps/server/src/fiscal-readiness-runner.ts`, read, not run end to end). The wizard shows "The
-  result is uncertain. Wait a moment and retry", which can never succeed.
-- Fix: open the file in the setup route before the test with A795's checks — it opens, the old RC2
-  encryption, a private key, its details, and its dates (design §3.5 steps 2–4) — and put each
-  refusal under its field. A795 built the opening as `openCertificateFile`
-  (`packages/fiscal-verifactu/src/certificate-file.ts`), which A852 reuses: it refuses a wrong
-  passphrase, the old RC2 encryption, a file with no private key and one that is not a certificate,
-  and returns the details and dates. It refuses no date; A795's expired and not-yet-valid refusals
-  are in `checkLocally` (`packages/fiscal-verifactu/src/certificate-install.ts`), which is not
-  exported, so A852 either exports it or repeats the two comparisons.
-
 ## `#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`
 
 - `apps/setup` code, found by #567. `#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`, so a

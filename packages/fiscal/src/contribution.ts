@@ -134,9 +134,8 @@ export interface FiscalContribution {
   readonly provisioningSecret?: {
     /** Whether a provision in `environment` must carry the secret. */
     required(environment: DeploymentEnvironment): boolean;
-    /** Validate the secret's SHAPE, throwing `setup.request_invalid` naming the offending field,
-     * and writing NOTHING. Run BEFORE `provisionVenue` mints the unrepairable SIF/hash chain
-     * (CLAUDE.md §5). */
+    /** Validate the secret locally without writes, naming the offending field on refusal.
+     * Run BEFORE `provisionVenue` mints the unrepairable SIF/hash chain (CLAUDE.md §5). */
     validate(raw: unknown): void;
     /** Seal the secret into the venue's vault in its own transaction, re-validating it. `nodeId`
      * is the node whose vault holds the secret. */

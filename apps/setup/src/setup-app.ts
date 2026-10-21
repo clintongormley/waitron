@@ -33,6 +33,7 @@ import "./screens/mode-screen.js";
 import "./screens/admin-screen.js";
 import "./screens/venue-screen.js";
 import "./screens/cert-screen.js";
+import type { CertificateRefusal } from "./screens/cert-screen.js";
 import "./screens/review-screen.js";
 import "./screens/provisioning-screen.js";
 import "./screens/reset-screen.js";
@@ -654,6 +655,7 @@ export class SetupApp extends LitElement {
   @state() private fiscalTestRejections: { code: string | null; message: string | null }[] = [];
   @state() private fiscalTestRunning = false;
   @state() private fiscalTestError?: Message;
+  @state() private certificateRefusal?: CertificateRefusal;
   #fiscalTestGeneration = 0;
   @state() private emailError?: Message;
 
@@ -951,7 +953,8 @@ export class SetupApp extends LitElement {
       this.firstOwnerError = () => initialOwnerStrings[setupLocale()].scope;
       destination = "first-owner";
     }
-    if (this.firstFinishing && destination === "fiscal-test") destination = "email";
+    if (this.firstFinishing && destination === "fiscal-test")
+      destination = this.#firstSession?.recoveryRequired ? "first-owner" : "email";
     if (destination === "first-owner") this.firstFinishing = false;
     if (this.#firstSession && destination === "review" && !this.firstReady && !this.firstFinishing)
       destination = "first-setup";
@@ -982,6 +985,7 @@ export class SetupApp extends LitElement {
     this.cloudRetryConfirmation = undefined;
     this.configurationError = undefined;
     this.fiscalTestError = undefined;
+    this.certificateRefusal = undefined;
     this.emailError = undefined;
     this.resetBusy = false;
     this.resetOutcome = undefined;
@@ -1424,6 +1428,7 @@ export class SetupApp extends LitElement {
         (finishing && firstGeneration !== this.#firstGeneration)
       )
         return;
+      if (this.#mapCertificateError(error)) return;
       if (this.#firstSession) {
         this.firstFinishing = false;
         this.firstReady = false;
@@ -1877,12 +1882,29 @@ export class SetupApp extends LitElement {
       if (!current()) return;
       this.fiscalTestStatus = result.status === "not-applicable" ? "accepted" : result.status;
       this.fiscalTestRejections = result.status === "rejected" ? (result.rejections ?? []) : [];
-    } catch {
+    } catch (error) {
       if (!current()) return;
+      if (this.#mapCertificateError(error)) return;
       this.fiscalTestError = say("shell.fiscal_test.could_not_run");
     } finally {
       if (current()) this.fiscalTestRunning = false;
     }
+  }
+
+  #mapCertificateError(error: unknown): boolean {
+    const { code, params } = (error ?? {}) as Partial<ApiError>;
+    if (
+      code !== "setup.certificate_refused" ||
+      (params?.field !== "pfxBase64" && params?.field !== "passphrase")
+    )
+      return false;
+    this.#invalidateFiscalTest();
+    this.certificateRefusal = {
+      field: params.field,
+      reason: typeof params.reason === "string" ? params.reason : "unreadable",
+    };
+    this.screen = "cert";
+    return true;
   }
 
   /**
@@ -2384,6 +2406,7 @@ export class SetupApp extends LitElement {
         return html`<setup-cert-screen
           data-test="screen-cert"
           .draft=${this.draft}
+          .refusal=${this.certificateRefusal}
         ></setup-cert-screen>`;
       case "review":
         return html`<setup-review-screen

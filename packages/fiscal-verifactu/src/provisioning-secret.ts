@@ -3,6 +3,7 @@ import { withTransaction, type Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { isCertKind, type CertKind } from "./aeat-transport.js";
 import { openCertificateFile } from "./certificate-file.js";
+import { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
 import { latestInstall, nextInstalledAt, recordInstall } from "./certificate-record.js";
 import "./errors.js";
 
@@ -68,6 +69,22 @@ export function parseAeatCert(raw: unknown): AeatCert {
   };
   validateAeatCert(parsed);
   return parsed;
+}
+
+export function validateSetupAeatCert(raw: unknown): void {
+  const cert = parseAeatCert(raw);
+  const pfx = Buffer.from(cert.pfxBase64, "base64");
+  const refuse = (reason: string, field = "pfxBase64"): never => {
+    throw new AppError("setup.certificate_refused", { field, reason });
+  };
+  if (pfx.length > CERTIFICATE_MAX_BYTES) refuse("too_large");
+  const opened = openCertificateFile(pfx, cert.passphrase);
+  if (!opened.ok) {
+    return refuse(opened.reason, opened.reason === "passphrase_wrong" ? "passphrase" : "pfxBase64");
+  }
+  const now = Date.now();
+  if (now >= opened.details.validUntil.getTime()) refuse("expired");
+  if (now < opened.details.validFrom.getTime()) refuse("not_yet_valid");
 }
 
 /**
