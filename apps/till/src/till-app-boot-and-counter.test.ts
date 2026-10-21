@@ -332,7 +332,7 @@ describe("till-app session activity", () => {
       expect(screen!.initialDevicePass).toBe(board);
       expect(screen!.runsPass).toBe(runsPass);
       expect(screen!.deviceName).toBe("Pantalla Pase");
-      expect(screen!.fireControl).toBe("expo");
+      expect("fireControl" in screen!).toBe(false);
       expect(getDevicePassScreen).toHaveBeenCalledTimes(1);
       expect(getDeviceStationScreen).not.toHaveBeenCalled();
     },

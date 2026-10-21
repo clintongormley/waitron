@@ -2473,7 +2473,10 @@ food without a legacy dispatch fallback.
 The pass no longer offers Done, All done or their Undo, including automatic Done after legacy Away.
 Ready still drives device-refusal screen switching; table serving retains its own Undo.
 The pass also omits Away actions and ignores legacy dispatch stamps when showing dishes, allergy markers and late flags.
-Expo Fire and shared kitchen client/controller retirement remain before PR A publication.
+The pass no longer initiates held work, and its kitchen allergy controller is removed.
+The app no longer reads or forwards Fire control. The till client omits the retired course/device
+Fire, Away and Done methods; its dispatch fields and unused catalogue labels still need retirement
+before PR A publication.
 Lane G's first build branch has service lifetime, backend retirement of the old kitchen Fire,
 Away and Done routes, and counter release of every course on Send or payment. Existing table
 holding checks use seated parties; counter retries retain their existing sale and print counts.

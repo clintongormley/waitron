@@ -373,8 +373,7 @@ async function mountWithRouter(): Promise<{ el: TillApp; switchServer: () => Pro
   return { el, switchServer };
 }
 
-const venue = (el: TillApp) =>
-  el as unknown as { courses: { id: string }[]; bumpMode: string; fireControl: string };
+const venue = (el: TillApp) => el as unknown as { courses: { id: string }[]; bumpMode: string };
 
 const courseIds = (list: { id: string }[]) => list.map((each) => each.id);
 

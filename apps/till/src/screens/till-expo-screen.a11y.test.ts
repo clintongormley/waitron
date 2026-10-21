@@ -304,7 +304,9 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     expect(el.shadowRoot!.querySelector(".lever")).not.toBeNull();
     await expectNoA11yViolations(host);
     expect(el.shadowRoot!.querySelector("[data-done], [data-all-done], [data-undo]")).toBeNull();
-    expect(api.markDevicePassDone).not.toHaveBeenCalled();
+    expect(
+      (api as TillApi & { markDevicePassDone: ReturnType<typeof vi.fn> }).markDevicePassDone,
+    ).not.toHaveBeenCalled();
     await expectNoA11yViolations(host);
   });
 

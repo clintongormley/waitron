@@ -98,7 +98,9 @@ const barraQueue: StationQueueGroup[] = [
   },
 ];
 
-function stubApi(overrides: Record<string, unknown> = {}): TillApi {
+function stubApi(
+  overrides: Record<string, unknown> = {},
+): TillApi & { fireCourse: ReturnType<typeof vi.fn> } {
   return {
     previewPartyAllergy: vi.fn(async (partyId: string) => ({
       partyId,
@@ -133,7 +135,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     fireCourse: vi.fn().mockResolvedValue(undefined),
     reprintOrder: vi.fn().mockResolvedValue(undefined),
     ...overrides,
-  } as unknown as TillApi;
+  } as unknown as TillApi & { fireCourse: ReturnType<typeof vi.fn> };
 }
 
 // Captured before any test fakes timers, so `flush` still yields a real macrotask under fake ones.

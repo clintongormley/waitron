@@ -95,19 +95,19 @@ describe("A669 allergy client", () => {
     ]);
   });
 
-  it("sends the allergy command and cancellation signal on a session course Fire", async () => {
+  it("A773 sends the allergy command and cancellation signal on waiter group Fire", async () => {
     const fetcher = vi.fn().mockImplementation(reply);
     const abort = new AbortController();
-    await new TillApi("", fetcher).fireCourse("bill-1", "course-1", command, {
+    await new TillApi("", fetcher).fireGroup("party-1", "group-1", command, {
       signal: abort.signal,
     });
     expect(JSON.parse(fetcher.mock.calls[0]![1].body)).toEqual(command);
     expect(fetcher.mock.calls[0]![1].signal).toBe(abort.signal);
   });
-  it("keeps a device course Fire free of person-owned allergy edits", async () => {
+  it("A773 retains device Ready without person-owned allergy edits", async () => {
     const fetcher = vi.fn().mockImplementation(reply);
-    await new TillApi("", fetcher).fireDeviceCourse("bill-1", "course-1");
-    expect(fetcher.mock.calls[0]![0]).toBe("/api/device/orders/bill-1/courses/course-1/fire");
+    await new TillApi("", fetcher).bumpDeviceCourseReady("bill-1", "course-1");
+    expect(fetcher.mock.calls[0]![0]).toBe("/api/device/orders/bill-1/courses/course-1/ready");
     expect(JSON.parse(fetcher.mock.calls[0]![1].body)).toEqual({});
   });
 

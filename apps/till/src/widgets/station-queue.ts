@@ -56,8 +56,6 @@ const COLUMNS: readonly TicketState[] = ["queued", "preparing", "ready"];
  *  order at the station. */
 export type BumpMode = "line" | "ticket";
 
-export type FireControlMode = "waiter" | "kitchen" | "expo";
-
 interface FlatItem {
   item: StationQueueItem;
   group: StationQueueGroup;

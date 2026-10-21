@@ -12851,9 +12851,7 @@ describe("till-app", () => {
       expect(counter(el)!.store.lines).toHaveLength(1);
     });
 
-    it("threads the venue fire_control from boot to the expo screen (an expo-fire venue gets the fire lever)", async () => {
-      // A venue configured `expo` must reach the expo screen's `.fireControl` so its held-course Fire
-      // lever turns on — proving #boot's `fireControl` threads here too, not just to the station screen.
+    it("A773 boot leaves the retired Fire-control property off the pass", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, fireControl: "expo" }),
       });
@@ -12863,7 +12861,7 @@ describe("till-app", () => {
       const screen = el.shadowRoot!.querySelector("till-expo-screen") as unknown as {
         fireControl: string;
       };
-      expect(screen.fireControl).toBe("expo");
+      expect("fireControl" in screen).toBe(false);
     });
   });
 

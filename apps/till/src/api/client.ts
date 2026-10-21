@@ -171,11 +171,6 @@ export interface TillInfo {
    * offers a whole-ticket bump).
    */
   bumpMode: "line" | "ticket";
-  /**
-   * Which surface offers the course fire action: `waiter` (the tab), `kitchen` (the station display) or
-   * `expo` (the pass).
-   */
-  fireControl: "waiter" | "kitchen" | "expo";
   /** The venue's ACTIVE kitchen courses, by `displayOrder`; `[]` for a venue with none. */
   courses: TillCourse[];
   cardProvider: "none" | "stripe_terminal" | "stripe_on_device" | "sumup_cloud" | "simulator";
@@ -3400,22 +3395,6 @@ export class TillApi {
     );
   }
 
-  /** Marks dishes Done on the device's pass screen, or takes the mark back with `done: false`. */
-  async markDevicePassDone(ticketItemIds: string[], done: boolean): Promise<void> {
-    await this.#request<void>("/api/device/pass-screen/done", "POST", { ticketItemIds, done });
-  }
-
-  /**
-   * A kitchen display's course levers → `POST /api/device/orders/:id/courses/:courseId/fire`,
-   * `/ready` and `/away`. Kitchen displays only; each checks the device's profile action
-   * (`device.forbidden_action`) and the order's zone against its pass screen
-   * (`kitchen_screen.zone_not_allowed`), and a device that no longer has a pass screen
-   * (`kitchen_screen.not_allowed`).
-   */
-  async fireDeviceCourse(orderId: string, courseId: string): Promise<void> {
-    await this.#request<void>(`/api/device/orders/${orderId}/courses/${courseId}/fire`, "POST", {});
-  }
-
   async bumpDeviceCourseReady(orderId: string, courseId: string): Promise<void> {
     await this.#request<void>(
       `/api/device/orders/${orderId}/courses/${courseId}/ready`,
@@ -3424,34 +3403,12 @@ export class TillApi {
     );
   }
 
-  async markDeviceCourseAway(orderId: string, courseId: string): Promise<void> {
-    await this.#request<void>(`/api/device/orders/${orderId}/courses/${courseId}/away`, "POST", {});
-  }
-
-  /** A kitchen display's group levers → `POST /api/device/parties/:id/groups/:gid/fire`, `/ready`
-   * and `/away`, refused as {@link fireDeviceCourse} is, plus the command refusals. */
-  fireDeviceGroup(
-    partyId: string,
-    groupId: string,
-    command: GroupCommand,
-  ): Promise<{ revision: number }> {
-    return this.#request(`/api/device/parties/${partyId}/groups/${groupId}/fire`, "POST", command);
-  }
-
   bumpDeviceGroupReady(
     partyId: string,
     groupId: string,
     command: GroupCommand,
   ): Promise<{ revision: number }> {
     return this.#request(`/api/device/parties/${partyId}/groups/${groupId}/ready`, "POST", command);
-  }
-
-  markDeviceGroupAway(
-    partyId: string,
-    groupId: string,
-    command: GroupCommand,
-  ): Promise<{ revision: number }> {
-    return this.#request(`/api/device/parties/${partyId}/groups/${groupId}/away`, "POST", command);
   }
 
   /**
@@ -3574,26 +3531,6 @@ export class TillApi {
   }
 
   /**
-   * FIRE a HELD course of an order → `POST /api/orders/:id/courses/:courseId/fire`. On a seated
-   * party's order, each held group holding a dish of that course on that order fires whole; the
-   * course's lines held outside a group are released. NON-FISCAL; idempotent — a course with nothing held is a 200 no-op. A malformed or unknown course id rejects
-   * `course.not_found`; a malformed order id `working_order.not_found`.
-   */
-  async fireCourse(
-    orderId: string,
-    courseId: string,
-    command?: AllergyCommand,
-    options: ReadOptions = {},
-  ): Promise<void> {
-    await this.#request<void>(
-      `/api/orders/${orderId}/courses/${courseId}/fire`,
-      "POST",
-      command ?? {},
-      options.signal,
-    );
-  }
-
-  /**
    * The cross-station expo/pass queue → `GET /api/expo/queue`: orders aggregated into courses, or
    * into groups for a seated party's bill, ACROSS all stations, oldest first. See {@link ExpoOrder}
    * for what the server excludes.
@@ -3610,16 +3547,6 @@ export class TillApi {
    */
   async bumpCourseReady(orderId: string, courseId: string): Promise<void> {
     await this.#request<void>(`/api/orders/${orderId}/courses/${courseId}/ready`, "POST", {});
-  }
-
-  /**
-   * DISPATCH a plated course to the floor → `POST /api/orders/:id/courses/:courseId/away`: stamps
-   * `away_at` on every `ready` item of the order and course, skipping already-away ones. NON-FISCAL.
-   * UNLIKE {@link bumpCourseReady} it existence-checks the course, so a malformed or unknown course id
-   * rejects `course.not_found` (404); a malformed order id `working_order.not_found`.
-   */
-  async markCourseAway(orderId: string, courseId: string): Promise<void> {
-    await this.#request<void>(`/api/orders/${orderId}/courses/${courseId}/away`, "POST", {});
   }
 
   /**
@@ -4061,16 +3988,6 @@ export class TillApi {
     command: GroupCommand,
   ): Promise<{ revision: number }> {
     return this.#request(`/api/parties/${partyId}/groups/${groupId}/ready`, "POST", command);
-  }
-
-  /** The pass sends a group's ready items to the floor → `POST /api/parties/:partyId/groups/:groupId/away`.
-   * Rejects `group.not_found` and the command refusals. */
-  markGroupAway(
-    partyId: string,
-    groupId: string,
-    command: GroupCommand,
-  ): Promise<{ revision: number }> {
-    return this.#request(`/api/parties/${partyId}/groups/${groupId}/away`, "POST", command);
   }
 
   /**

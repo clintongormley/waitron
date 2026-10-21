@@ -507,7 +507,7 @@ the server checks each at the route, never trusting the till's copy:
   `packages/venue-service/src/kitchen-screens.ts`): a kitchen display runs exactly one
   (`kitchen_screen.required` without one); a till or handheld may choose none, or a station screen
   and one of a pass screen or a pass monitor, which then narrow its Station and Pass screens. A
-  pass screen draws Fire, Ready and Away only when its profile has "Run the pass"
+  pass screen draws Ready only when its profile has "Run the pass"
   (`run-the-pass`, a screen setting, not an action). A kitchen display's station screen draws
   Move to station on each waiting dish only when its profile has `take-orders`; a till's own
   Station screen draws none (A439). What reaches a station still comes from the
@@ -1514,8 +1514,8 @@ stops it" in the same file.
 `servers`, and `setupRevision`, a hash of every field but `servers` (`setupRevisionOf`).
 `/api/menu-state` names the same revision. When a poll names one the till has not applied,
 `#noteSetupRevision` reads `/api/till` again and `#applyVenueSetup` applies the venue's values:
-receipt languages and invoice language, venue name and tax id, onboarding intent, bump mode, fire
-control, courses, card provider, card readers and the default reader, tips, the simplified-invoice
+receipt languages and invoice language, venue name and tax id, onboarding intent, bump mode,
+courses, card provider, card readers and the default reader, tips, the simplified-invoice
 limit and full invoices. Every read of the setup is numbered when sent, and an answer is skipped
 once a read sent after it has been applied. A draft line keeps the course it was given, name
 included, after a refresh deletes that course. `themeHash`, the hash `/api/theme` answers for
@@ -1553,7 +1553,7 @@ Fixed until the till starts again (a reload, or a server switch, which runs `#bo
   no poll (backlog A785); it takes the theme in use when it starts.
 
 Pinned by `apps/till/src/till-app-setup-refresh.test.ts` ("A768 the till follows the venue's setup
-revision"): courses reach an open table, bump mode and fire control reach the station screen, the
+revision"): courses reach an open table, bump mode reaches the station screen, the
 same revision reads nothing, a failed read is tried again, and an older read never undoes a newer
 one across a poll, a profile switch, a change of zones and a server switch. The default reader is
 checked only beside a profile switch. No test checks the refresh of the other values in the list

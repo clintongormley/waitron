@@ -2444,8 +2444,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   dish without an en-route subtraction or separate count, and table-state precedence ignores legacy
   dispatch. Floor list cards keep the complete ready count and omit the en-route badge, retaining
   station-ready chip de-duplication. The floor client contract and default fixtures omit dispatch;
-  regression fixtures still supply old counts to check that they have no effect. Kitchen client
-  retirement remains before PR A can be published.
+  regression fixtures still supply old counts to check that they have no effect. The app omits Fire-control
+  state and bindings, and the till client omits retired course/device Fire, Away and Done methods.
+  Client dispatch fields, unused labels and the complete consumer audit remain before PR A publication.
   Add Requested and pass release,
   remove Away/Done, and finish the station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before
   each slice. The plan carries A797's completed Q42 amendments; its revised design, pictures and FYI landed on 2026-10-21. A803's pass/station tail follows this build.

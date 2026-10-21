@@ -161,9 +161,21 @@ function fixture(kind: "group" | "course", deviceMode = false) {
     getFindBill: vi.fn().mockResolvedValue({ workingOrderId: "bill-1", partyId: party.id }),
     previewPartyAllergy: vi.fn<TillApi["previewPartyAllergy"]>().mockResolvedValue(view()),
     fireGroup: vi.fn<TillApi["fireGroup"]>().mockResolvedValue({ revision: 8 }),
-    fireCourse: vi.fn<TillApi["fireCourse"]>().mockResolvedValue(undefined),
-    fireDeviceGroup: vi.fn<TillApi["fireDeviceGroup"]>().mockResolvedValue({ revision: 8 }),
-    fireDeviceCourse: vi.fn<TillApi["fireDeviceCourse"]>().mockResolvedValue(undefined),
+    fireCourse: vi
+      .fn<(orderId: string, courseId: string) => Promise<void>>()
+      .mockResolvedValue(undefined),
+    fireDeviceGroup: vi
+      .fn<
+        (
+          partyId: string,
+          groupId: string,
+          command: { submissionId: string; expectedPartyRevision: number },
+        ) => Promise<{ revision: number }>
+      >()
+      .mockResolvedValue({ revision: 8 }),
+    fireDeviceCourse: vi
+      .fn<(orderId: string, courseId: string) => Promise<void>>()
+      .mockResolvedValue(undefined),
     deviceMode,
   };
 }

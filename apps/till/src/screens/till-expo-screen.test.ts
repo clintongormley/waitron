@@ -236,7 +236,16 @@ function stubApi(queue: ExpoOrder[] = [threeCourseOrder], overrides: Record<stri
     markDeviceCourseAway: vi.fn().mockResolvedValue(undefined),
     reprintOrder: vi.fn().mockResolvedValue(undefined),
     ...overrides,
-  } as unknown as TillApi;
+  } as unknown as TillApi &
+    Record<
+      | "fireCourse"
+      | "markCourseAway"
+      | "fireDeviceCourse"
+      | "markDeviceCourseAway"
+      | "markDevicePassDone"
+      | "markGroupAway",
+      ReturnType<typeof vi.fn>
+    >;
 }
 
 function identity(kitchenScreens: ResolvedKitchenScreen[]): DeviceIdentity {
