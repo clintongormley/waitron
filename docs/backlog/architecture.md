@@ -406,7 +406,7 @@ run to install the new trigger. Owner question Q5 of A483.
   `working_orders_tenant_status_idx`, `registros_tenant_node_secuencia_uq`, and four in identity:
   `persons_tenant_email_uq`, `persons_tenant_live_display_name_uq`,
   `persons_tenant_pending_email_uq` and `persons_tenant_google_subject_uq`. (The `tenants*`,
-  `tenant_themes*`, `tenant_receipts*` and `tenant_credentials*` names are correct and stay.) This is
+  `tenant_receipts*` and `tenant_credentials*` names are correct and stay.) This is
   its own slice, not a tidy-up: THREE of the four `persons_*` names are matched BY NAME in production
   error translation — `persons_tenant_email_uq`, `persons_tenant_live_display_name_uq` and
   `persons_tenant_pending_email_uq`, whose names are held in `packages/identity/src/person-constraints.ts`

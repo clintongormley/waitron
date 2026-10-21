@@ -3177,11 +3177,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   All eight questions and the extra one are answered (Q8 revised the same morning; section 19). The
   build is 14 slices, only slice 2 adding a migration (design section 16). Slice 1 landed
   2026-10-21 (#1927): the theme derivation, the contrast rules shared with `colors.test.ts`, the
-  sweeps and the token-list guard, in `@waitron/ui-core/theme`. Next: slice 2 (the stored themes
-  and the server). Its plan decides how the server and its tsx scripts read the token files, which
-  slice 1 imports as `?raw` (Vite handles that; tsx and `scripts/bundle-node.mjs` do not), makes
-  `apps/server` depend on `@waitron/ui-core`, and retires `THEMEABLE_TOKENS` with
-  `packages/layouts/src/theme-registry.test.ts`.
+  sweeps and the token-list guard, in `@waitron/ui-core/theme`. Slice 2 landed
+  2026-10-21 (#1932): custom themes stored in `custom_themes` (`tenant_themes` retired), their
+  routes, the theme in use served at `/api/theme`, the till's `themeHash`, and configuration copies
+  at format 6. Next: slice 3 (delivery).
 
 - **A841 slice 1 tidy-ups its review left (#1927's finish-branch, 2026-10-21).** Optional, no
   behaviour change: `checkRules` (`packages/ui-core/src/theme/contrast-rules.ts`) and `failing`
@@ -3191,6 +3190,16 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   reading `STATIONS`. Separately, the design's mock-up pictures still show Café Limón's light fix as
   `#9f8b18` and Bar Lucía's dark fix as `#417c59`; the code now gives `#9d8a15` and `#437e5b` (a dated
   note in the design says so). Redraw them when the editor's slice is built.
+
+- **A841 slice 2 points its review left (#1932's finish-branch, 2026-10-21) — decide before
+  slice 3.** `custom_themes.in_use` is a nullable number with a CHECK of 1 and a plain unique index
+  (`packages/db/drizzle/0182_create_custom_themes.sql`), where other "at most one chosen row" columns
+  are a not-null flag with a unique index limited to rows set to 1; the design chose this on
+  purpose. A malformed theme id answers `theme.not_found` (404), not `shared.invalid_id` (400), as
+  the plan pins, so the permission check still runs first. Also left: building ui-core's token files
+  into the server bundle instead of shipping them beside it (the simplify reviewer rated it medium
+  risk for that branch), and a few optional tidy-ups the same reviewer listed, not recorded
+  individually.
 
 - **Uploaded font files for themes (owner, 2026-10-20, A841 Q7 B) — after A841.** A theme's
   Typeface may also be a font file the venue uploads, so every screen draws the bar's own face. The
@@ -4631,13 +4640,11 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   background image or gradient, content too short or not text — passes, so contrast in those
   places is checked by nobody.
 
-- **`--wt-color-primary-text` has fixed light and dark values that do not follow
-  `--wt-color-primary`, and a tenant theme cannot set it** — left open by A218 (#1082). The same
-  holds for `--wt-color-primary-hover` and `--wt-color-danger-hover` (A306), and the disabled
-  colours (A535), so a tenant or deployment that sets only `--wt-color-primary` or
-  `--wt-color-danger` gets Waitron's default blue or red on a hovered or disabled primary or danger
-  `wt-button`.
-  [Detail](backlog/dashboard.md#--wt-color-primary-text-has-fixed-light-and-dark-values-that-do-not-follow---wt-color-primary-and-a-tenant-theme-cannot-set-it)
+- **A deployment that overrides `--wt-color-primary` or `--wt-color-danger` by hand keeps
+  Waitron's default hover, text and disabled colours, and no theme writes the danger ones** — left
+  open by A218 (#1082), A306 and A535. A custom theme (A841 slice 2) works out its own
+  `--wt-color-primary-text`, `-primary-hover` and the two primary disabled colours.
+  [Detail](backlog/dashboard.md#a-deployment-that-overrides---wt-color-primary-or---wt-color-danger-by-hand-keeps-waitrons-default-hover-text-and-disabled-colours)
 
 - **One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
   bottom** — left open by A334 (#1416, held reorder drags scroll at the list edge). A 2026-10-09
@@ -6508,10 +6515,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
 
 - **`tenant_receipts`: decide the remaining DELETE restriction (A805 follow-up).**
-  Check the intended retention and mutation paths before adding enforcement.
-  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
-
-- **`tenant_themes`: decide the remaining DELETE restriction (A805 follow-up).**
   Check the intended retention and mutation paths before adding enforcement.
   [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
 

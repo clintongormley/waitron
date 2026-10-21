@@ -1227,17 +1227,18 @@ still asks, and a full page's own Cancel leaves without asking too.
   **Next action:** reproduce the permission-grant window through a real attestation route, then
   decide whether the refused early read must still join a person-specific turn.
 
-## `--wt-color-primary-text` has fixed light and dark values that do not follow `--wt-color-primary`, and a tenant theme cannot set it
+## A deployment that overrides `--wt-color-primary` or `--wt-color-danger` by hand keeps Waitron's default hover, text and disabled colours
 
-- **`--wt-color-primary-text` has fixed light and dark values that do not follow
-  `--wt-color-primary`, and a tenant theme cannot set it** — left open by A218 (#1082):
-  (`THEMEABLE_TOKENS`, `packages/layouts/src/theme.ts`) — no screen applies a stored tenant theme
-  yet. The same holds for `--wt-color-primary-hover` and `--wt-color-danger-hover` (A306), and the
-  disabled colours `--wt-color-primary-disabled`, `--wt-color-on-primary-disabled`,
-  `--wt-color-danger-disabled` and `--wt-color-on-danger-disabled` (A535), which
-  do not follow `--wt-color-primary` and `--wt-color-danger`, so a tenant or deployment that sets
-  only `--wt-color-primary` or `--wt-color-danger` gets Waitron's default blue or red on a hovered or
-  disabled primary or danger `wt-button`.
+- **A deployment that overrides `--wt-color-primary` or `--wt-color-danger` by hand keeps
+  Waitron's default hover, text and disabled colours** — left open by A218 (#1082), A306 and A535.
+  Since A841 slice 2 (#1932) a custom theme works out `--wt-color-primary-text`,
+  `--wt-color-primary-hover`, `--wt-color-primary-disabled` and `--wt-color-on-primary-disabled`
+  from its own button colour (`THEME_COLOURS`, `packages/ui-core/src/theme/tokens.ts`); no screen
+  applies a stored theme until slice 3 (delivery). Two gaps stay: a deployment that sets
+  `--wt-color-primary` or `--wt-color-danger` by hand (design-system.md, "Retheming a deployment")
+  still gets Waitron's default blue or red on a hovered or disabled primary or danger `wt-button`;
+  and no theme writes `--wt-color-danger-hover`, `--wt-color-danger-disabled` or
+  `--wt-color-on-danger-disabled`.
 
 ## One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the bottom
 

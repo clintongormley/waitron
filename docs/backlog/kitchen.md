@@ -288,7 +288,7 @@ change; check that against the code when PR 8 is picked up.
   "Venue setting: Print" or "Venue setting: Don't print", "Print", and "Don't print". Spanish matches.
 - Configuration bundles use version 4. Older exports must be exported again from a compatible
   source; there is no conversion of station-order settings. **2026-10-19:** A757 slice 2 moved the
-  export to version 5.
+  export to version 5. **2026-10-21:** A841 slice 2 moved it to version 6.
 
 The populated predecessor test carries ticket, printer, timing and staffing references through the
 native column drop and compares every recorded table value except the retired column. Run
