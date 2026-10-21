@@ -37,7 +37,6 @@ import {
 import { submitDraft, type FreshDraftLineInput } from "./order-drafts.js";
 import {
   createOpenOrder,
-  fireCourse,
   fireableLineColumns,
   fireLines,
   sendLines,
@@ -329,14 +328,13 @@ describe("A669 capture", () => {
     expectCopies(p.tabId);
   });
 
-  it.each(["line", "group", "held-line", "course"] as const)(
+  it.each(["line", "group", "held-line", "all-lines"] as const)(
     "captures %s release after an unprinted hold using the latest guest",
     async (path) => {
       const p = await party();
-      const course = await inTx(v, async (tx) => {
+      await inTx(v, async (tx) => {
         const result = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 1 });
         await setProductCourse(tx, v.cfg, v.productId("Burger"), result.id);
-        return result.id;
       });
       const ask = await command(p, "hold");
       const result = await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, ask));
@@ -359,23 +357,28 @@ describe("A669 capture", () => {
         expectedPartyRevision: await revisionOf(v, p.partyId),
         operatorId: OPERATOR,
       };
-      if (path === "line")
+      if (path === "line" || path === "all-lines")
         await v.db
           .update(workingOrderLines)
           .set({ groupId: null })
           .where(eq(workingOrderLines.workingOrderId, p.tabId));
+      if (path === "line" || path === "all-lines") {
+        const [dish] = await v.db
+          .select({ groupId: workingOrderLines.groupId })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.id, held!.lineId));
+        expect(dish!.groupId).toBeNull();
+      }
       await inTx(v, async (tx) => {
         if (path === "group") await fireGroup(tx, v.cfg, p.partyId, result.groups[0]!.id, release);
         else if (path === "held-line")
           await fireHeldLine(tx, v.cfg, p.partyId, held!.lineId, release);
-        else if (path === "course")
-          await fireCourse(tx, v.cfg, p.tabId, course, { personId: OPERATOR }, undefined, release);
         else
           await sendLines(
             tx,
             v.cfg,
             p.tabId,
-            [1],
+            path === "all-lines" ? [] : [1],
             {
               operatorId: OPERATOR,
               expectedEdit: await readBillEditState(tx, p.tabId),
