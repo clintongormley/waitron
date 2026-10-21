@@ -3213,3 +3213,40 @@ describe("receipt presentation address failure", () => {
     }
   });
 });
+
+describe("saved-zone immediate replay", () => {
+  it("returns the saved cash invoice while admission is closed without a new issue reading", async () => {
+    const { cfg, waterOfferId } = await setupVenue();
+    const admission = testTradingAdmission();
+    const reading = clock.now();
+    const source: TrustedClock = {
+      ...clock,
+      now: () => ({ ...reading, instant: new Date("2026-10-14T23:30:00Z"), offsetMinutes: 0 }),
+    };
+    const id: string = randomUUID();
+    const req = {
+      id,
+      lines: [{ menuItemId: waterOfferId, quantity: "1" }],
+      tender: { method: "cash" as const, amount: "2.25" },
+    };
+    const first = await payWorkingOrder(
+      { db: suite.db, backend, clock: source, admission },
+      cfg,
+      req,
+    );
+    const before = await suite.db.select().from(registrosFacturacion);
+    expect(before).toHaveLength(1);
+    expect(before[0]).toMatchObject({ fechaExpedicionFactura: "2026-10-15", offsetMinutos: 120 });
+    admission.requireRestart();
+    const unreadable = {
+      ...source,
+      now: () => {
+        throw new Error("replay must not read a new clock");
+      },
+    };
+    expect(
+      await payWorkingOrder({ db: suite.db, backend, clock: unreadable, admission }, cfg, req),
+    ).toEqual(first);
+    expect(await suite.db.select().from(registrosFacturacion)).toEqual(before);
+  });
+});

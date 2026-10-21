@@ -1,4 +1,6 @@
 import type { RecipientIdentifierType } from "@waitron/country-packs";
+import { prepareIssueClock } from "@waitron/fiscal";
+import { requireEconomicWrite } from "./trading-admission.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { requireOrderBillEditor } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
@@ -704,6 +706,7 @@ async function runPayWorkingOrder(
         if (locked?.status === "settled") {
           return readSettledTicket(deps.backend, tx, cfg, req.id);
         }
+        await requireEconomicWrite(tx, cfg, deps.admission);
         if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
         const reading = deps.clock.now();
         await deps.backend.refuseWhileClockBehind(tx, reading);
@@ -981,7 +984,7 @@ async function fileImmediateSale(
     orderId: workingOrderId,
   });
   const { priced, clock } = issueMoment(
-    deps.clock,
+    await prepareIssueClock(tx, cfg, deps.clock),
     await issuancePass(tx, cfg, workingOrderId, order),
     deps.backend,
   );
@@ -1188,6 +1191,9 @@ async function payIntegrated(
     }
     const reading = deps.clock.now();
     await deps.backend.refuseWhileClockBehind(tx, reading);
+
+    await requireEconomicWrite(tx, cfg, deps.admission);
+    await prepareIssueClock(tx, cfg, deps.clock);
 
     if (locked !== undefined && locked.status !== "open" && locked.status !== "placed") {
       throw new AppError("working_order.not_open", { workingOrderId: req.id });
@@ -1618,7 +1624,12 @@ async function finalizeCapture(
           .from(workingOrders)
           .where(eq(workingOrders.id, req.id));
         if (locked?.status === "settled") return readSettledTicket(deps.backend, tx, cfg, req.id);
-        const { priced, clock } = issueMoment(deps.clock, grossInP1, deps.backend);
+        await requireEconomicWrite(tx, cfg, deps.admission);
+        const { priced, clock } = issueMoment(
+          await prepareIssueClock(tx, cfg, deps.clock),
+          grossInP1,
+          deps.backend,
+        );
         const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
         const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
           log: deps.log,
@@ -1762,11 +1773,12 @@ async function finalizeRecovery(
         };
       }
 
+      await requireEconomicWrite(tx, cfg, deps.admission);
       const order = await priceStoredOrderForIssuance(tx, req.id, {
         refuseUnsentUnavailable: false,
       });
       const { priced, clock } = issueMoment(
-        deps.clock,
+        await prepareIssueClock(tx, cfg, deps.clock),
         await issuancePass(tx, cfg, req.id, order),
         deps.backend,
       );
@@ -1966,6 +1978,7 @@ async function finalizeSettle(
   /* v8 ignore stop */
   try {
     return await withTransaction(deps.db, async (tx) => {
+      await requireEconomicWrite(tx, cfg, deps.admission);
       await settleSale(tx, {
         saleId: outstanding.saleId,
         tenders: [
@@ -2040,6 +2053,7 @@ async function finalizeSettleRecovery(
       };
     }
 
+    await requireEconomicWrite(tx, cfg, deps.admission);
     const capturedAmount = decimal(captured.amount);
 
     if (compareDecimal(capturedAmount, outstanding.amountDue) < 0) {
@@ -2168,6 +2182,7 @@ async function runCollectOrder(
       const reading = deps.clock.now();
       await deps.backend.refuseWhileClockBehind(tx, reading);
 
+      await requireEconomicWrite(tx, cfg, deps.admission);
       const attendanceAt = deps.attendance === undefined ? undefined : reading.instant;
 
       if (locked === undefined || locked.status !== "placed") {
