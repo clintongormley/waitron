@@ -372,7 +372,9 @@ failure log is `push-final-attempt.log` in Lane G's A668-5 receipts.
   [Receipt](../developers/ci-and-gates.md#the-upgrade-deadline-grows-with-the-walk),
   [processor time](../developers/ci-and-gates.md#the-upgrade-budget-counts-the-walks-own-processor-time).
 
-- **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
+- **Job-sharding levers:** `--shard` splits by FILE COUNT, except in `apps/server`, whose shards are
+  packed by measured duration since A938
+  ([how](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)); bump `shard: [1..N]` and the denominator
   together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard
   dominates.
 - **The package suites' databases stay on the runner's disk, except in `test-venue-service` and

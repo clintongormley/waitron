@@ -508,7 +508,7 @@ list.
 Before calling a package green, verify its CI coverage result on the current head. Run
 `pnpm --filter <pkg> test:coverage` locally when investigating a failure. There is no single `test`
 job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-server`
-(`apps/server`) as three-way and eleven-way file shards, each with a `-merge` job that enforces the thresholds on
+(`apps/server`) as three-way and sixteen-way file shards, each with a `-merge` job that enforces the thresholds on
 the merged blob (#216) — the files that need either downloaded binary (the stream loop and pause tests, the S3 rehearsal
 scenarios, the rehearsal's send gate and interrupt suites, and the S3 test server's suite) run in `test-server-stream` instead, whose
 blob joins the same merge. `test-dashboard` and `test-venue-service` are four-way and `test-till`
@@ -517,7 +517,8 @@ coverage bars are enforced in the merge job, not in a shard. Then the
 dedicated mixed database/browser jobs (`test-fiscal-verifactu`, `test-bookings`, `test-media`, `test-payments-stripe`,
 `test-payments-sumup`, `test-adjustments`, `test-staffing`), the unsharded browser jobs (`test-ui`, `test-setup`) and
 `test-light-a` / `test-light-b` for everything else (bins in `scripts/changed-scope.mjs`). Vitest
-`--shard` splits by FILE COUNT, so shard imbalance is the real limit, and `N` must never exceed a
+`--shard` splits by FILE COUNT (except `apps/server`, packed by duration since A938: see "The server's
+shards: sixteen, packed by measured duration" below), so shard imbalance is the real limit, and `N` must never exceed a
 package's test-file count (guard: "run no more shards than the package has test files" in
 `scripts/ci-workflow.test.mjs`, weaker than its name — it counts files named `*.test.ts`, not what
 the Vitest config includes).
@@ -559,6 +560,8 @@ using the package root and CI's 11-shard count. Its outputs covered every file o
 78 files per shard. Removing the three added files put the original recovery-host file in shard
 9, matching CI run `39344124324`. Repeating with the CI checkout root kept the new assignment.
 That selector experiment establishes file placement, not test success or runtime in CI.
+(Since A938, 2026-10-21, the server no longer uses `BaseSequencer.shard`: see "The server's shards:
+sixteen, packed by measured duration" below.)
 
 ### Every package test job prints which file is running
 
@@ -960,7 +963,8 @@ lines in runs 38177927525, 38171667214 and 38170124439: `src/bill-payments.test.
   shard is luck. A simulation of that split over the three runs' per-file times, with the two fixes
   above applied, left the busiest of six shards with about 870 s of file time (the old shard 5 held
   about 1,080 s, the old shard 2 about 740 s at a 3.7-minute median) and the busiest of eight with
-  about 690 s. (Eleven since A801: see "Runners come in two speeds…" below.)
+  about 690 s. (Eleven since A801: see "Runners come in two speeds…" below. Sixteen, packed by
+  duration, since A938: see "The server's shards: sixteen, packed by measured duration" below.)
 
 Guards, each weaker than the rule: the 90-second warning above names a slow FILE but never fails a
 job; the "pin each sharded package's shard count" case in `scripts/ci-workflow.test.mjs` holds the
@@ -1037,7 +1041,9 @@ them, and `restore.test.ts` encrypts each distinct archive once. On shard 7's 92
 coverage and four workers, alternating old and new code twice on a busy machine (load average
 14–22): 670 and 747 s of CPU before, 650 and 554 s after. `test-server` went from eight shards to eleven: the same
 replay put the busiest of eleven at 864 file-seconds before the fixture change (nine: 1,136; ten:
-953; twelve: 945, because a cluster of heavy files then falls together).
+953; twelve: 945, because a cluster of heavy files then falls together). (Sixteen, packed by
+duration, since A938, 2026-10-21: see "The server's shards: sixteen, packed by measured duration"
+below.)
 
 What this does not fix: `src/invoice-pdf.test.ts` took 162 s on run 39068745456, a floor under
 whichever shard holds it. Local wall times were no guide here: the same old code took 138.7 s and
@@ -1084,6 +1090,134 @@ Measured on run 39404947291, which is this change plus a one-line comment in
 which CI's `changes` job answers `code=false` and runs no package's tests: the seven test steps took
 72 to 199 s and the jobs 108 to 240 s, and `test-till-merge` passed over the seven blobs. The
 busiest was shard 4, as the replay put it, and at 240 s its job sits at the four-minute line.
+
+### The server's shards: sixteen, packed by measured duration
+
+A938 (2026-10-21). On six `main` runs (39425472781, 39444354037, 39449527877, 39500330558,
+39503634628, 39507125783) the slowest of the eleven `test-server (N)` jobs took 349 to 410 s, and on
+branch run 39502248529 `test-server (11)` took 454 s. A job's time here is its `completed_at` minus
+its `started_at` in `gh api "repos/clintongormley/waitron/actions/runs/<run>/jobs?per_page=100&filter=latest"`.
+A file's time is the seconds on its `[file-progress] end` line in the job log, and a shard's
+"file-seconds" is the sum of its files' times. The measurement notes are in
+`/Users/clintongormley/waitron-campaign-b/a938-measure.md` and the replay scripts and their input in
+`/Users/clintongormley/waitron-campaign-b/a938-model/`, outside the repository.
+
+- **Not the setup.** Over the 66 shard jobs of those six runs, a job's time minus its test step's
+  time was 35 to 74 s, median 48 s.
+- **More work, from one change.** The slowest job of each `main` run was 241 to 294 s on the runs
+  from 2026-10-19 12:00Z up to A679 (#1752, run 39381991396), and 349 to 415 s from it on. A679
+  added 61 server test files, which took 1,754 of about 10,000 file-seconds on run 39507125783.
+- **A few heavy files, much of their time spent deriving the same key again.** Over the six runs
+  (the lower middle of six values): `src/first-fiscal-hour.e2e.test.ts` 197 s, which boots the real
+  entry point twice per restart test; `src/hour-recovery-placement-1/2/3.test.ts` 169, 154 and
+  149 s, which asked for 121, 133 and 94 repeated scrypt derivations at N=2^17 on identical inputs,
+  from the test helper and from the product's preview, validate and restore steps each decrypting
+  the same archive; `src/first-setup-unused-pdf.test.ts` 151 s, one 84 s test building three
+  fixtures; `src/invoice-pdf.test.ts` 119 s, its time in `width()`
+  (`apps/server/src/invoice-page.ts:47`), about 4.5 times slower under coverage.
+- **The split put heavy files together.** Vitest 4.1.11 sorts the files by the sha1 of each path and
+  cuts the list into equal counts (`BaseSequencer.shard`), so which files share a shard depends only
+  on their names. `python3 -I replay2.py files.txt` in the model folder replays that split
+  (`replay-verify.py` reproduces every file's shard in all six runs). It estimates a job as 0.262 ×
+  its shard's file-seconds + 48 s, which predicts 362 to 395 s for the slowest job against a
+  measured 349 to 410 s. "Random p90" is the worst run's 90th percentile over 300 random orderings
+  of each run's file names (A929's method):
+
+  | shards | slowest job, today's names / random p90 | the same, with the key cache below |
+  | ------ | --------------------------------------- | ---------------------------------- |
+  | 11     | 395 / 417 s                             | 371 / 386 s                        |
+  | 14     | 333 / 357 s                             | 329 / 330 s                        |
+  | 16     | 298 / 330 s                             | 298 / 302 s                        |
+  | 18     | 303 / 316 s                             | 303 / 288 s                        |
+  | 20     | 269 / 293 s                             | 258 / 265 s                        |
+  | 24     | 259 / 260 s                             | 259 / 240 s                        |
+
+  Even with the cache, the hash split reaches about 240 s only at about 24 shards, and today's names
+  at 24 still give 259 s, because heavy files fall together by hash.
+
+**The change has two parts.**
+
+1. **A derived-key cache for the tests.** `apps/server/src/testing/derived-key-cache.ts`, installed
+   for every server test file by `apps/server/src/testing/derived-key-cache-setup.ts` through the
+   config's `setupFiles`, answers a scrypt derivation whose passphrase, salt and cost it has already
+   seen from memory; any other input is derived for real, and a failure is never stored. The cache
+   lasts one test file: a review probe ran three files under the default config and each started at
+   zero, while under `--no-isolate` they shared it. The setup file runs only in Vitest's own workers,
+   so a child process a test starts with `execFile` derives for real (read, not measured). Measured
+   locally on `src/hour-recovery-placement-1.test.ts` with coverage, with the setup line in and out
+   alternately at a load average of about 9 to 12: 70.0 and 69.7 s with it, 95.2 and 111.8 s
+   without. That file asked for 164 keys, and 43 were derived. One N=2^17 derivation took about 175
+   to 182 ms on the Mac it ran on (Node v26.11.1). The product still derives the archive's key once
+   in each of preview, validate and restore; deriving it once per restore is a behaviour change on
+   the restore path, left in the backlog.
+2. **Packing by measured time.** `apps/server/vitest.config.ts` names
+   `scripts/vitest-duration-sequencer.mjs` as its sequencer, with the committed table
+   `apps/server/test-durations.json` (seconds per test file, keyed by its path under `apps/server`).
+   Every shard computes the same packing and keeps its own part: files are taken longest estimate
+   first (ties by path) and each goes into the shard whose estimates sum least so far. Each shard
+   prints one line, `[duration-sequencer] shard i/n: <files> files, <seconds> estimated s, <k> absent
+   from the table`, followed by the absent files' names.
+
+**Why packing, and why 16.** `python3 -I balanced.py files.txt old.kv` and
+`python3 -I firsttable.py files.txt` in the model folder pack each run with a table built from the
+other five (leave one out), so the table never sees the run it is judged on, and judge the run on its
+own times with the cache's saving applied. "Sim" is a simulation of four files at a time
+(`maxWorkers: 4`), longest first, plus 48 s:
+
+| shards | busiest file-seconds per run | slowest job (0.262 ×) | slowest job (sim) | median job (sim) |
+| ------ | ---------------------------- | --------------------- | ----------------- | ---------------- |
+| 14     | 722–793                      | 237–256 s             | 230–260 s         | 212–227 s        |
+| 15     | 675–739                      | 225–242 s             | 221–260 s         | 202–217 s        |
+| **16** | **622–676**                  | **211–225 s**         | **214–260 s**     | **194–208 s**    |
+| 17     | 596–669                      | 204–223 s             | 205–260 s         | 186–195 s        |
+
+The sim's 260 s ceiling at every count is one file: `src/first-fiscal-hour.e2e.test.ts` took 255 s on
+its slowest run, and no packing goes below its longest file. Fifteen puts the modelled slowest at
+242 s, at the line, and the suite is growing: from run 39169930434 (2026-10-18; 745 files, 6,339
+file-seconds) to run 39507125783 (872 files, 9,957 file-seconds) the file count grew 17% and the
+file-seconds 57%. Sixteen gives 211 to 225 s with room to grow. The repository is public
+(`gh repo view --json visibility` printed `PUBLIC`), so the five extra jobs run on standard runners at
+no charge.
+
+**A file absent from the table is packed at the table's mean and started first in its shard.**
+`python3 -I stale.py` in the model folder judged a table taken from run 39169930434, from before
+A679, which lacks 137 of today's 872 files (2,541 file-seconds, a quarter of the suite). Worst shard
+job per run, simulated: at 16 shards, 292 to 332 s with the absent files started by their estimate,
+230 to 260 s with them started first (at 15: 297 to 353 s against 249 to 267 s). So even a table
+missing a quarter of the suite does better than the hash split did (349 to 410 s). A stale table
+makes the shards less even; it does not drop or repeat a file.
+
+**Refreshing the table.** When a server shard drifts past 4 minutes, or the `[duration-sequencer]`
+lines name many absent files, rebuild the table from the newest six successful `main` runs that ran
+`test-server` (their jobs include `test-server (1)`), keeping the logs outside the worktree:
+
+```bash
+dir=$(mktemp -d); for run in <six run ids>; do
+  gh api "repos/clintongormley/waitron/actions/runs/$run/jobs?per_page=100&filter=latest" \
+    --jq '.jobs[] | select(.name | startswith("test-server (")) | .id' |
+  while read -r id; do gh run view --repo clintongormley/waitron --job "$id" --log > "$dir/$run-$id.log"; done
+done
+node scripts/test-durations.mjs apps/server/test-durations.json "$dir"/*.log
+pnpm exec prettier --check apps/server/test-durations.json
+```
+
+`scripts/test-durations.mjs` takes each file's median over the logs (the mean of the middle two for
+an even count), rounded to 0.1 s, at least 0.1 s. The first table came from the six runs named at the
+top of this section: 66 logs, 872 paths. The first refresh expected is when the
+`a850-backup-verification` branch lands with its new server test files.
+
+**Guards, each weaker than its name.** The "apps/server's config packs every server test file into
+exactly one shard" case in `scripts/vitest-duration-sequencer.test.mjs` checks that the config's table
+equals the JSON, that every value is a number above zero, and that every `*.test.ts` file it finds by
+walking `apps/server/src`, `test` and `scripts` lands in exactly one shard for every count from 2 to
+24. It never runs Vitest, so it does not see what the config's include and CI's `--exclude` select,
+and it never checks that the table is fresh. The "pin each sharded package's shard count" case in
+`scripts/ci-workflow.test.mjs` holds the count at 16 by reading `ci.yml` as text. A change to the
+sequencer runs the server's tests on a pull request because `ROOT_SCOPE_CONSUMERS` in
+`scripts/changed-scope.mjs` lists it. Nothing checks, on every run, that each server test file ran in
+exactly one shard.
+
+The pull request's own CI run is measured in its description (A938).
 
 ### A cheap job can still be the critical path
 
@@ -1900,7 +2034,7 @@ every other gate false. `test-server`'s and `test-server-stream`'s `if:` ask for
 request, PR #682: its run for `1081bbb7c`, which changed `ci.yml`, docs and root scripts but neither
 installer, skipped the shards and `test-server-stream`; its next run, 36231025265, for a commit
 that added one line to `scripts/setup-litestream.mjs`, ran both and `test-server-merge`. The cost, read from the jobs' `if:` lines
-in `.github/workflows/ci.yml`: on a pull request an installer change runs the server shards (three then, six from A441, eight from A528, eleven since A801),
+in `.github/workflows/ci.yml`: on a pull request an installer change runs the server shards (three then, six from A441, eight from A528, eleven from A801, sixteen since A938),
 `test-server-stream`, `test-server-merge`, and `typecheck` and `bundle-smoke`, which ask for
 `code` alone; on its merge to `main` those two run again, the forced global scope runs every test job and `mutation-shared`, and
 the push runs `image` and, once `ci` passes, `publish`, which moves `:main` unless
