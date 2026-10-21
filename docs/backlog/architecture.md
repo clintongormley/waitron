@@ -494,26 +494,13 @@ after it; `releaseDeliveries` (`apps/server/src/delivery-release.ts`); `follower
 unscoped on purpose so a stray booking under another location cannot block a table's final delete
 (`25ecf900b`) — scoping it needs that case answered first.
 
-## A913. Find the non-English text in general code, then propose fixes
-
-**A913. Find the non-English text in general code, then propose fixes (owner, 2026-10-19).**
-General code is English only (CLAUDE.md §3; the owner's decisions are in
-[conventions-data.md](../developers/conventions-data.md#general-code-is-english-only)). A docs-only
-audit of `packages/*` and `apps/*` lists every Spanish, Catalan or other non-English text outside
-the allowed homes, sorted into: what is allowed; the packages written for Spain (`workforce-es`,
-`country-es`, `reporting`'s modelo 303); user-visible text outside a translation file; starter and
-demo content; identifiers or comments; and the three exemptions the comments in
-`packages/db/src/english-only.ts` argue for (`dashboard-kit`'s `{ en, es }` values, `provisioning`'s
-tests, and all of `apps/*`, argued from `apps/server` being where general code is wired to
-Veri\*Factu). It says what `scripts/english-only.test.ts` misses, and asks the owner which to fix and where the packages written for Spain stand. Examples
-already seen: `packages/dashboard-kit/src/table-strings.ts` holds a Spanish `{ en, es }` value
-outside the translation files the rule names, and `packages/venue-service/src/service-steps.ts`
-seeds Spanish starter steps (A900).
+## A913's fix items: general code English only
 
 **Audit done 2026-10-20 on main `a3be14ba4`: [english-only-audit.md](english-only-audit.md).** The
-owner answered all eight points on 2026-10-20 (the campaign's questions file has the words): 1, 2,
-4, 7 and 8 as recommended; 3, 5 and 6 in the owner's own words, recorded in
-[conventions-data.md](../developers/conventions-data.md#general-code-is-english-only). The items
+owner answered points 2–8 on 2026-10-20 (the campaign's questions file has the words): 2, 4, 7 and 8
+as recommended; 3, 5 and 6 in the owner's own words, recorded in
+[conventions-data.md](../developers/conventions-data.md#general-code-is-english-only). Point 1
+follows from the owner's 2026-10-19 rule and A918's answer. The items
 below carry them out, one pull request each unless an item says otherwise. File and line references
 are the audit's, taken on `a3be14ba4`; re-find them on current `main`. Every item follows the rule
 for its own diff (grep it for non-English text before pushing — the guard will not see most of it
@@ -534,9 +521,9 @@ until A977).
   the pack. Look for other Spain-only logic of this shape while there. It changes words printed on a
   full invoice and no filed field — under the owner's 2026-10-21 rule a truly fiscal PR (invoices)
   waits for the owner to land it; the PR says which it is.
-- **A964 — point 3(3), and the first of point 2.** Create `apps/server/src/i18n/`. Kitchen tickets
+- **A964 — point 3(3), and the first of point 2.** Kitchen tickets
   (`apps/server/src/kitchen-ticket.ts:166–464`, about 25 words) and the order-number slip move into
-  it, in English with translations, and follow the venue's language rather than
+  the existing `apps/server/src/i18n/` (it holds `kitchen-allergy.ts` already), in English with translations, and follow the venue's language rather than
   `WAITRON_TILL_LOCALE` (`apps/server/src/till-config.ts:83`; setup never writes it,
   `trading-config.ts:33–41`). Trace every reader of that setting before changing it — the card slip's
   dates and money read it too. Which venue setting picks a kitchen's language is the plan's first
@@ -545,22 +532,24 @@ until A977).
   (`packages/country-es/src/receipt-labels.ts`) gain English, shown on English screens, never printed
   on a Spanish receipt; say in the plan where each is shown. The card payment slip's words
   (`apps/server/src/payment-slip.ts:21–55`, no English, no language choice) and the refund receipt's
-  heading table (`tender-refund-receipt.ts:94–99`) move into Spain's receipt words and print in the
-  receipt language; the sample receipt (`sample-receipt.ts:14–39`) takes the receipt language. If it
+  heading table (`tender-refund-receipt.ts:94–99`, already keyed by language) move into Spain's
+  receipt words, and the slip prints in the receipt language; the sample receipt (`sample-receipt.ts:14–39`) takes the receipt language.
+  An earlier owner ruling calls its «Mesa 6» and «Café y tostada» internal sample values
+  ([printers.md](printers.md), A754); ask whether point 3 changes that before translating them. If it
   changes a word printed on a simplified or full invoice, the owner lands it (2026-10-21 rule).
 - **A966 — point 2: emails.** `account-email.ts:38–72, 125` and `attendance-email.ts:18–22, 46, 49`
   move into `apps/server/src/i18n/`. No visible change. After A964.
-- **A967 — point 2: printed pages.** The working-time PDF's frame (`attendance-export-pdf.ts:29–160`),
-  the category sales report (`category-sales-page.ts:48–65`), the printer test and ruler pages
-  (`printer-test-page.ts:26–29`, `test-page.ts:21–25`). No visible change. After A964.
+- **A967 — point 2: printed pages, in two pull requests.** The working-time PDF's frame
+  (`attendance-export-pdf.ts:29–160`) and the category sales report (`category-sales-page.ts:48–65`);
+  then the printer test and ruler pages (`printer-test-page.ts:26–29`, `test-page.ts:21–25`). No
+  visible change. After A964.
 - **A968 — point 2: the guide's frame and the recovery page.** `guide-pages.ts:73–85` and
   `recovery-surface.ts:107–425` (about 50 strings). The recovery page is served when the box cannot
   start, so its strings must load without the database. No visible change. After A964.
 - **A969 — point 2's sibling in a package.** `packages/dashboard-kit/src/codes.ts:9`,
   `alert-messages.ts:21` and `table-strings.ts` hold `{ en, es }` pairs in generic code; move them
   into a strings file.
-- **A970 — point 5: `workforce-es`.** The working-time export's ~68 label pairs
-  (`packages/workforce-es/src/record-export.ts`) move to a translation file; the access-holder values
+- **A970 — point 5: `workforce-es`.** The access-holder values
   `trabajador`, `representantes_legales`, `inspeccion_trabajo` (`registro-jornada.ts:26–31`) print
   untranslated in the English export (from reading, `attendance-export-pdf.ts:120, 141`) — run the
   export first, then give them labels. Spanish identifiers and the `convenio_config` table stay
@@ -570,10 +559,12 @@ until A977).
   test), the area label «Lleida, fuera del territorio de Arán» (Waitron's wording), and the notices
   (`spain.ts:199–235`, already `{ en, es }`). A holiday carrying an English name beside the official
   one may need a schema change — ask before adding one.
-- **A972 — point 6: demo data per country pack and region. DESIGN FIRST, then ask the owner.** The
-  demo (`apps/server/src/demo-seed.ts`, `apps/server/scripts/demo-seed/`) moves into `country-es` as
-  Spain's demo; region demos ("catalán demo in Catalunya") — say which regions get their own and which
-  share Spain's default; setup picks the demo from the venue's country and region the way it already
+- **A972 — point 6: demo data per country pack and region. DESIGN FIRST, then ask the owner.**
+  Spain's pack already names its demo (`demo.dataSet`, `packages/country-es/src/spain.ts`); the data
+  set itself (`apps/server/scripts/demo-seed/data-sets/casa-delgado-es.ts` and the menu, floor and
+  staff it draws from) moves into `country-es`, and the seeding code stays shared. Today's demo
+  already writes customer text in the area's languages (W109). Region demos ("catalán demo in
+  Catalunya"): say which regions get their own and which share Spain's default; setup picks the demo from the venue's country and region the way it already
   derives other geography values (A833 landed: setup and the demo start only for a country with a
   pack). English provided. The ~33 staff and kitchen names with no English (`menu.ts`) and «Menú del
   Día» in an English slot (`menu.ts:840`) are fixed there. After A918.
@@ -582,9 +573,8 @@ until A977).
 - **A974 — Bucket E and F: comments, identifiers, file names.** The audit's tables list them
   (`apps/server`, `apps/dashboard`, `apps/till`, `packages/db` schema comments, `venue-service`,
   `catalogue`, `purchasing`, `packages/ui/demo/main.ts`, setup's receipt-language names
-  `apps/setup/src/receipt-languages.ts:6–9`, which disagree with the venue screen). Not
-  `packages/core/src/record-substitution.ts:43–67` («factura de canje» quoted with no source): it is
-  the fiscal core, so it is left to the owner. Low priority.
+  `apps/setup/src/receipt-languages.ts:6–9`, which disagree with the venue screen, and
+  `packages/core/src/record-substitution.ts:43–67`). Low priority.
 - **A975 — developer tools and demo scripts.** `apps/server/scripts/dev-setup.ts:213–316`, the
   `*-demo.ts` scripts, `cloud-integration-fixture.ts`, `receipt-look.ts`, the README's example values
   (`apps/server/README.md:152–156`). The demo seed itself is A972's. Low priority; A977 cannot scan
@@ -593,7 +583,7 @@ until A977).
   then read a screen take their text from the strings file. Accent tests, AEAT names and official
   text stay. Low priority. The rest of the test cleanup is one low-priority item per package, taken
   from A977's list.
-- **A977 — point 8, after A918 and A963–A973 land.** Widen `scripts/english-only.test.ts` to every
+- **A977 — point 8, after A918 and A963–A975 land.** Widen `scripts/english-only.test.ts` to every
   text file under `packages/` and `apps/`, exempting only the homes (the packages written for Spain,
   `fiscal-verifactu`, translation files), add an accented-letter check, and keep a list of test
   folders still to clean that may only get shorter. Fix the wrong comment at
