@@ -1554,3 +1554,10 @@ after archive-file sync and the manifest, candidate and active-file renames, the
 process; it also runs two competing repair processes. These process interruptions do not simulate
 power loss or prove the storage device honours a flush. The Origin check does not authenticate an
 HTTP peer or prevent an arbitrary network client from requesting this public transport operation.
+
+
+Public CA downloads serialize the parsed certificate, rather than returning its source file.
+A valid certificate followed by a private key passed parsing and signature checks while the raw
+file download still included the key. The six surface/newline cases named "downloads only public
+certificate bytes" in `connection-bootstrap.test.ts` reproduce that boundary; they cover bootstrap,
+discovery and landing aliases with LF and CRLF PEM files. They do not audit every other PEM reader.

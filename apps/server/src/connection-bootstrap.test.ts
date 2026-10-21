@@ -1,3 +1,5 @@
+import { buildLandingApp } from "./landing-app.js";
+import { mountDiscovery } from "./discovery-api.js";
 import { EventEmitter } from "node:events";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -228,3 +230,45 @@ it("offers a continuation retry after a failed post-repair handoff without rotat
   await vi.waitFor(() => expect(f.onRepaired).toHaveBeenCalledTimes(2));
   expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(ca);
 });
+
+it.each(
+  (["bootstrap", "discovery", "landing"] as const).flatMap((surface) =>
+    (["LF", "CRLF"] as const).map((ending) => ({ surface, ending })),
+  ),
+)(
+  "$surface downloads only public certificate bytes from $ending PEM with a private key",
+  async ({ surface, ending }) => {
+    const f = await fixture(true);
+    const publicCert =
+      ending === "LF" ? material.caCertPem.replaceAll("\r\n", "\n") : material.caCertPem;
+    const combined = publicCert + material.caKeyPem;
+    await writeFile(join(f.stateDir, "tls/ca.crt"), combined);
+    const discovery = new Hono();
+    mountDiscovery(
+      discovery,
+      {
+        stateDir: f.stateDir,
+        hostname: "waitron.local",
+        port: 8080,
+        secure: true,
+        listIpv4: () => [],
+      },
+      () => {},
+    );
+    const landing = buildLandingApp({
+      stateDir: f.stateDir,
+      reachUrls: ["https://waitron.local:8080"],
+      httpsUrl: "https://waitron.local:8080",
+      log: () => {},
+    });
+    const app = { bootstrap: f.app, discovery, landing }[surface];
+    for (const path of ["/ca.crt", "/setup-api/ca.crt"]) {
+      const response = await app.request(path);
+      expect(response.status).toBe(200);
+      const bytes = await response.text();
+      expect(bytes).not.toContain("PRIVATE KEY");
+      expect(bytes).toBe(publicCert);
+    }
+    expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(combined);
+  },
+);

@@ -109,7 +109,13 @@ function caPublic(bytes: Buffer | null, now: Date): X509Certificate | null {
 }
 export async function readBoxPublicCa(stateDir: string, now = new Date()): Promise<string | null> {
   const pem = await fs.readFile(join(stateDir, "tls", "ca.crt"), "utf8");
-  return caPublic(Buffer.from(pem), now) === null ? null : pem;
+  const ca = caPublic(Buffer.from(pem), now);
+  // A parsed certificate is public; the rest of its source file may contain private material.
+  return ca === null
+    ? null
+    : ca
+        .toString()
+        .replaceAll("\n", pem.includes("-----BEGIN CERTIFICATE-----\r\n") ? "\r\n" : "\n");
 }
 
 function signingAuthority(s: Snapshot, now: Date): boolean {

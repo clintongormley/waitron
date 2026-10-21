@@ -1,9 +1,12 @@
 import type { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
-import { readFile } from "node:fs/promises";
 import { X509Certificate } from "node:crypto";
-import { inspectBoxTls, repairBoxTls, type BoxTlsRepairDeps } from "./box-tls-repair.js";
-import { caCertPath } from "./box-secrets.js";
+import {
+  inspectBoxTls,
+  repairBoxTls,
+  readBoxPublicCa,
+  type BoxTlsRepairDeps,
+} from "./box-tls-repair.js";
 import { CA_CONTENT_TYPE, CA_FILENAME, renderTrustPage } from "./trust-page.js";
 import { trustDeviceForRequest } from "./detect-device.js";
 import { connectionLocale } from "./connection-bootstrap-page.js";
@@ -85,8 +88,8 @@ export function mountConnectionBootstrap(
       const status = await inspectBoxTls(deps);
       if (status.caAvailable) {
         try {
-          const pem = await readFile(caCertPath(deps.stateDir), "utf8");
-          if (new X509Certificate(pem).fingerprint256 === status.fingerprint)
+          const pem = await readBoxPublicCa(deps.stateDir, deps.now());
+          if (pem !== null && new X509Certificate(pem).fingerprint256 === status.fingerprint)
             return c.body(pem, 200, {
               "Content-Type": CA_CONTENT_TYPE,
               "Content-Disposition": `attachment; filename="${CA_FILENAME}"`,
