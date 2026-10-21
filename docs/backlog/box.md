@@ -396,6 +396,8 @@ still goes through a mail server only when one is set, otherwise to the box's ca
 (`resolveInvoiceEmailDelivery`, `apps/server/src/email-delivery.ts`); the setup wizard and the
 dashboard's Account email page still cannot set one there (`apps/server/src/email-settings-api.ts`), so
 this item stays open.)
+(2026-10-22, A987: design on main, waiting on the owner's decisions:
+[2026-10-22-a987-prepare-venue-email-design.md](../superpowers/specs/2026-10-22-a987-prepare-venue-email-design.md).)
 
 ## Decisions and deliberate limits
 

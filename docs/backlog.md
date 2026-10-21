@@ -5708,7 +5708,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **A venue preparing to go live sends real email through SMTP (owner 2026-10-03) — OPEN.** "Later
   prepare should use a real SMTP server": a prepare venue would send invitations and password resets
   through SMTP instead of capturing them on the box, and the top bar's inbox link (A227) would become
-  demo-only again. Not built.
+  demo-only again. Not built. A987: design on main, waiting on the owner's decisions
+  ([design](superpowers/specs/2026-10-22-a987-prepare-venue-email-design.md)).
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
 
 - **A blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }`** — left open by
