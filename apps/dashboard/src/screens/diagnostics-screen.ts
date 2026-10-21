@@ -57,14 +57,13 @@ export class DiagnosticsScreen extends LitElement {
       .log code {
         font-family: inherit;
       }
-      /* Level colouring — only real tokens (there is no dedicated warning token, so warn borrows the
-         primary accent). Unknown levels fall through to the inherited text colour. */
+      /* Unknown levels fall through to the inherited text colour. */
       .lvl-error,
       .lvl-fatal {
         color: var(--wt-color-danger);
       }
       .lvl-warn {
-        color: var(--wt-color-primary);
+        color: var(--wt-color-primary-text);
       }
       .lvl-info {
         color: var(--wt-color-text);

@@ -211,7 +211,7 @@ export class BackupScreen extends LitElement {
         color: var(--wt-color-text);
       }
       .on {
-        color: var(--wt-color-primary);
+        color: var(--wt-color-primary-text);
         font-weight: var(--wt-font-weight-bold);
       }
       .off,

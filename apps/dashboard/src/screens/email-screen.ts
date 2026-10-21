@@ -68,7 +68,7 @@ export class EmailScreen extends LitElement {
         font: inherit;
       }
       .message a {
-        color: var(--wt-color-primary);
+        color: var(--wt-color-primary-text);
       }
       .error {
         color: var(--wt-color-danger);

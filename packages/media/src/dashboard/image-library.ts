@@ -374,7 +374,7 @@ export class ImageLibrary extends LitElement {
         margin-block: var(--wt-space-4);
       }
       a {
-        color: var(--wt-color-primary);
+        color: var(--wt-color-primary-text);
         overflow-wrap: anywhere;
       }
     `,

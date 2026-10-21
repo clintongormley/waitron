@@ -185,7 +185,7 @@ export class LoginScreen extends LitElement {
         justify-content: flex-end;
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
-        color: var(--wt-color-primary);
+        color: var(--wt-color-primary-text);
         font-size: var(--wt-font-size-sm);
       }
 
