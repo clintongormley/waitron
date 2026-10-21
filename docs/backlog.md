@@ -120,7 +120,7 @@ come after the list above:
   upgrades and recovery_): upgrade testing with rows the product itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
   installer (B3); what the box does when a part fails but it can still sell (A798-B, the build:
   [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md) revision 6; every owner
-  question answered; slice 1 of 10 built).
+  question answered; slices 1 and 2 of 10 built).
 - **The displays and the printers walked at the real box** (_The till, devices and table service_;
   _Printers, the print agent and receipts_) — till, handheld and KDS through
   [ui-review.md](ui-review.md), and the first physical print since #327.
@@ -5374,7 +5374,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   2026-10-20). It adds a module seat for staff notices and one
   migration in the Veri*Factu module's set. Slice 1 of 10 (a full disk reported as
   `storage.disk_full`; nothing a body writes through the write queue after one that ended its
-  transaction can commit, except as the entry below says) landed in #1936; slice 2 is next. Open asesor questions:
+  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 is next. Open asesor questions:
   [Q51](compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21)
   and
   [Q52](compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21).
