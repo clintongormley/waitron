@@ -626,10 +626,12 @@ Each task's checklist means: write the named red assertions; run its exact comma
 
 ### Task 27: Finish evidence, branch review and release handoff
 
+Completed on 21 October 2026; see [the implementing release and handoff](#task-27-completion-and-implementing-release--21-october-2026).
+
 **Files:** update current implementation claims only where made stale in `docs/backlog.md`, `docs/backlog/box.md`, `docs/developers/conventions-data.md`, `docs/developers/testing-guide.md`, and execution receipts in this plan. No Cloud file or campaign-state edits. Historical docs get dated pointers, not rewritten history.
 **Consumes:** preceding counted checks and installed controls. **Produces:** reviewable Waitron branch, exact implementing-release/interface handoff and explicit release gates. No runtime interface added.
 
-- [ ] Run these protected commands **unedited**, preserving original assertions and golden bytes:
+- [x] Run these protected commands **unedited**, preserving original assertions and golden bytes:
 
   ```bash
   pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts
@@ -639,11 +641,11 @@ Each task's checklist means: write the named red assertions; run its exact comma
 
   Require counted passing Tests, no update/snapshot flags or skipped cases. Failure is a blocker, not permission to change issued data or H2 paths.
 
-- [ ] Run focused changed-owner/server suites, `pnpm --filter @waitron/store --filter @waitron/module --filter @waitron/db --filter @waitron/reporting --filter @waitron/composition --filter @waitron/server --filter @waitron/catalogue --filter @waitron/media --filter @waitron/identity --filter @waitron/credentials --filter @waitron/payments --filter @waitron/fiscal-verifactu --filter @waitron/fiscal-none --filter @waitron/venue-service --filter @waitron/adjustments --filter @waitron/workforce --filter @waitron/workforce-es --filter @waitron/staffing --filter @waitron/scheduler --filter @waitron/bookings typecheck`, `pnpm --filter @waitron/composition exec vitest run src/composition.test.ts src/backup-verification.test.ts`, and `pnpm exec vitest run scripts/workspace-cycles.test.ts scripts/module-seams.test.ts scripts/classification-complete.test.ts scripts/append-only-migration-sets.test.ts scripts/apply-migrations-callers.test.ts`. Inspect base-to-tip names: no protected edits or migrations expected. No whole-workspace run solely to finish; CI owns package coverage.
-- [ ] Re-read whole changed paths and prose call chains. Audit all generated owners, data-effect declarations, private outputs, complete preservation policies and genuine acceptance. Fix valid findings with red/green. Keep A850 open when only this plan lands; remove its backlog entry only when implementation actually lands, leaving independently gated Cloud release work explicit.
-- [ ] Stage exact changed docs and `git commit -s -m "docs: record backup verification contract and limits"`. Announce readiness for `finish-branch`. When owner/controller requests it, perform initial reorientation/rebase as required, **one normal Claude run-it whole-branch review** in an installed throwaway checkout with complete candidate tree, normal hook and current-head CI coverage. Read completed findings, not wrapper exit. A850's FULL classification does not import W41s' two-review rule. No automatic merge.
-- [ ] Give lane D exact implementing Waitron revision/release, boot-free dist export, canonical wire vectors, full target/composition/migration/policy digests, complete owner coverage and measured acceptance receipts. Cloud must implement strict child/image/claim admission, lease/deadline/deletion fences, transactions, unavailable-vs-invalid, historical retention versus current qualification, every traced API/UI/alert consumer and real resource cleanup. These are external dependencies, not A850 tasks.
-- [ ] Keep snapshots unavailable until a joint pinned genuine runtime proof captures, publishes, verifies, cleans up and admits an exact archive, **with continuous source absent**, then exercises target-bound snapshot recovery. Require all five spec outcomes plus wrong/missing key, missing external key, malformed/truncated/duplicate/forged output, wrong image, timeout/OOM/quota/cancel/death/uncertain cleanup and independent Cloud guard omissions. Data verification grants no route movement or trading; separate authorised activation proof remains required. Do not enable the dormant backup deployment/enforcement profile here.
+- [x] Run focused changed-owner/server suites, `pnpm --filter @waitron/store --filter @waitron/module --filter @waitron/db --filter @waitron/reporting --filter @waitron/composition --filter @waitron/server --filter @waitron/catalogue --filter @waitron/media --filter @waitron/identity --filter @waitron/credentials --filter @waitron/payments --filter @waitron/fiscal-verifactu --filter @waitron/fiscal-none --filter @waitron/venue-service --filter @waitron/adjustments --filter @waitron/workforce --filter @waitron/workforce-es --filter @waitron/staffing --filter @waitron/scheduler --filter @waitron/bookings typecheck`, `pnpm --filter @waitron/composition exec vitest run src/composition.test.ts src/backup-verification.test.ts`, and `pnpm exec vitest run scripts/workspace-cycles.test.ts scripts/module-seams.test.ts scripts/classification-complete.test.ts scripts/append-only-migration-sets.test.ts scripts/apply-migrations-callers.test.ts`. Inspect base-to-tip names: no protected edits or migrations expected. No whole-workspace run solely to finish; CI owns package coverage.
+- [x] Re-read whole changed paths and prose call chains. Audit all generated owners, data-effect declarations, private outputs, complete preservation policies and genuine acceptance. Fix valid findings with red/green. Keep A850 open when only this plan lands; remove its backlog entry only when implementation actually lands, leaving independently gated Cloud release work explicit.
+- [x] Stage exact changed docs and `git commit -s -m "docs: record backup verification contract and limits"`. Announce readiness for `finish-branch`. When owner/controller requests it, perform initial reorientation/rebase as required, **one normal Claude run-it whole-branch review** in an installed throwaway checkout with complete candidate tree, normal hook and current-head CI coverage. Read completed findings, not wrapper exit. A850's FULL classification does not import W41s' two-review rule. No automatic merge.
+- [x] Give lane D exact implementing Waitron revision/release, boot-free dist export, canonical wire vectors, full target/composition/migration/policy digests, complete owner coverage and measured acceptance receipts. Cloud must implement strict child/image/claim admission, lease/deadline/deletion fences, transactions, unavailable-vs-invalid, historical retention versus current qualification, every traced API/UI/alert consumer and real resource cleanup. These are external dependencies, not A850 tasks.
+- [x] Keep snapshots unavailable until a joint pinned genuine runtime proof captures, publishes, verifies, cleans up and admits an exact archive, **with continuous source absent**, then exercises target-bound snapshot recovery. Require all five spec outcomes plus wrong/missing key, missing external key, malformed/truncated/duplicate/forged output, wrong image, timeout/OOM/quota/cancel/death/uncertain cleanup and independent Cloud guard omissions. Data verification grants no route movement or trading; separate authorised activation proof remains required. Do not enable the dormant backup deployment/enforcement profile here.
 
 ## Exact remaining owner and release gates
 
@@ -1204,3 +1206,59 @@ The rebase preserves all 142 existing non-Markdown A850 paths byte for byte; its
 conflict keeps both backlog sections. The completed 551-second Claude review remains applicable.
 The closed clock-fixture approval backlog entry is removed. Normal push validation and
 current-head CI are still required before landing; the release and Cloud gates above remain.
+
+
+### Task 27 completion and implementing release — 21 October 2026
+
+A850 landed in [PR #1939](https://github.com/clintongormley/waitron/pull/1939) as
+`5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa`. The preceding Task 27 checkpoints describe
+intermediate states. Waitron's implementation and handoff are complete; the separately owned
+Cloud integration and joint acceptance gates remain open.
+
+Before merging, CI [39628969104](https://github.com/clintongormley/waitron/actions/runs/39628969104)
+completed with 66 successful jobs and one skipped job at
+`7a8237ef70d7b326c5288d0539e24c63947c2106`. Licence and sign-off
+[39628969068](https://github.com/clintongormley/waitron/actions/runs/39628969068) also passed.
+The normal push hook passed in 312 seconds, including 7,904 root tests and coverage,
+formatting, lint and types. The completed 551-second Claude review and its corrections were
+retained. The final continuation added incident documentation.
+The earlier failed CI metadata check remains an incident, not a claimed source repair.
+
+After merging, `pnpm --filter @waitron/server build` completed at the exact merged revision.
+Importing `apps/server/dist/backup-verification.js` and calling
+`currentBackupVerificationTarget()` returned the following measured release identity:
+
+| Field               | Value                                                              |
+| ------------------- | ------------------------------------------------------------------ |
+| Release             | `waitron-5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa`                 |
+| Source revision     | `5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa`                         |
+| Runtime fingerprint | `163574c6d3100c2a37db14eb56a111842aa85d27caf70802a2fd43e19126109f` |
+| Composition digest  | `519fdde2da8bb7d1b365ede2dc190a671a164eda5bac203e855a276836072a14` |
+| Migration digest    | `90d24ce8260e99c3a2bb1a356fbacb269611f1699db361a9b518ec74748542ea` |
+| Policy digest       | `1ef4524067150927adc411e1bee08f00d87a28eae33f9ec03b145412c255b73f` |
+| Target digest       | `27b6669fe7367c9619bd71fb7ac6ce0edcd97d5a7f3c6e83d953468ed62932c5` |
+
+The compiled target and exported `BACKUP_VERIFICATION_MODULES` contain the same owners:
+adjustments, bookings, catalogue, core, credentials, fiscal-none, fiscal-verifactu, identity,
+media, payments, scheduler, staffing, venue-service, workforce and workforce-es. Every exported
+owner declares verification. The import probe reported only its output pipe as an active
+resource and exited.
+
+Pin this source revision when building the verifier. Read the complete target from that
+bundle rather than reconstructing it from this table. The bundle also exports
+`verifyBackupArtifact`, `backupVerificationRequestDigest`, `readBackupVerificationRequest`,
+`readBackupVerificationResult` and `buildBackupVerificationTarget`. Use the literal `VECTOR` in
+[the private protocol tests](../../../apps/server/src/backup-verification-protocol.test.ts)
+and [the recorded canonical digest rules](#task-4-execution-and-private-protocol-vector-20-october-2026).
+The [v2 recovery tests](../../../apps/server/src/cloud-recovery-v2.test.ts) exercise the exact
+request and subsequent proof arrays, signatures, descriptor comparisons and preserved v1 bytes.
+
+The local build is not an image-publication receipt. The merge's own CI
+[39631561036](https://github.com/clintongormley/waitron/actions/runs/39631561036) was created for
+that exact merged revision and was still pending at this handoff. Cloud must obtain the exact
+published image digest before pinning an image. Its child isolation, resource and cleanup
+checks, strict result and current-claim admission, coordinated v2 exchange and genuine
+capture-to-recovery proof with the continuous source absent remain release gates.
+Keep snapshots unavailable and deployment enforcement off until those checks pass. Separate
+recovery and fiscal activation authority still applies. No historical trust root or external
+vault-key contract is supplied by this release.
