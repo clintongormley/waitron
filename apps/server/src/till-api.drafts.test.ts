@@ -1123,6 +1123,31 @@ describe("a malformed body", () => {
   );
 
   it.each([
+    ["personId", { draftId: null, revision: 0, lines: [], billId: ID }],
+    ["personId", { draftId: null, revision: 0, lines: [], billId: ID, personId: "ana" }],
+    ["personId", { draftId: null, revision: 0, lines: [], billId: ID, personId: 7 }],
+  ] as const)(
+    "refuses a save 400 management.request_invalid naming %s for %j",
+    async (field, body) => {
+      const party = await seated();
+      await newDraft(ana, party.partyId, [dish("Caña")]);
+      const before = await snapshot();
+
+      const refused = await send(
+        venue.app,
+        adminCookie,
+        "PUT",
+        `/api/parties/${party.partyId}/drafts`,
+        body,
+      );
+
+      expect(refused.status).toBe(400);
+      expect(refused.json).toEqual(refusal("management.request_invalid", { field }));
+      expect(await snapshot()).toEqual(before);
+    },
+  );
+
+  it.each([
     ["body", "revision"],
     ["revision", {}],
     ["revision", { revision: -1 }],

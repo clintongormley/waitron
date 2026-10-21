@@ -3506,6 +3506,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = asObject(await readRawJsonBody<unknown>(c));
       const draftId = requireDraftId(body.draftId);
       const revision = requireRevision(body.revision);
+      requireBodyUuid(body.personId, "personId");
       const draft = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
         const result = await saveDraft(
