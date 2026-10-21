@@ -11,6 +11,7 @@ import { eq } from "drizzle-orm";
 import {
   locations,
   newId,
+  orderGroups,
   orderGroupEvents,
   parties,
   printJobs,
@@ -67,18 +68,17 @@ const actions = [
   "ticket-ready",
   "station-preparing",
   "station-ready",
-  "course-fire",
+  "group-fire",
   "course-ready",
-  "course-away",
   "group-ready",
-  "group-away",
   "served",
   "unserved",
   "group-served",
   "station-move",
   "hand-over",
 ] as const;
-type Action = (typeof actions)[number];
+const retiredActions = ["course-fire", "course-away", "group-away"] as const;
+type Action = (typeof actions)[number] | (typeof retiredActions)[number];
 function api(attendance?: AttendanceRecorder) {
   const app = new Hono();
   mountTillApi(
@@ -105,7 +105,13 @@ async function prepare(action: Action) {
   await withTransaction(suite.db, async (tx) => {
     await recallLines(tx, v.cfg, party.tabId, [1]);
     await setLineCourse(tx, v.cfg, party.tabId, 1, courseId);
-    if (action !== "course-fire") await sendLines(tx, v.cfg, party.tabId, [1]);
+    if (action === "group-fire")
+      await tx
+        .update(orderGroups)
+        .set({ state: "held", firedAt: null })
+        .where(eq(orderGroups.id, line!.groupId!));
+    if (action !== "course-fire" && action !== "group-fire")
+      await sendLines(tx, v.cfg, party.tabId, [1]);
     if (action.endsWith("-away")) await bumpCourseReady(tx, v.cfg, party.tabId, courseId);
     if (action === "unserved")
       await markServed(tx, v.cfg, party.partyId, [{ lineId: line!.id, quantity: "1" }], {
@@ -184,6 +190,7 @@ async function state() {
     commands: await suite.db.select().from(serviceCommands),
     parties: await suite.db.select().from(parties),
     groups: await suite.db.select().from(orderGroupEvents),
+    orderGroups: await suite.db.select().from(orderGroups),
     moves: await suite.db.select().from(ticketItemMoves),
     facts: await suite.db.select().from(attendanceOperationFacts),
     days: await suite.db.select().from(attendanceDayWork),
@@ -302,7 +309,7 @@ describe("kitchen service attendance", () => {
       ]),
     ).toEqual([
       [
-        "order",
+        action === "group-fire" ? "draft" : "order",
         v.operatorId,
         v.cfg.locationId,
         "order",
@@ -320,8 +327,7 @@ describe("kitchen service attendance", () => {
       expect(after.orders.find((r) => r.id === order.tabId)!.collectedAt).not.toBeNull();
     if (action.endsWith("-preparing")) expect(ticket.state).toBe("preparing");
     if (action.endsWith("-ready")) expect(ticket.state).toBe("ready");
-    if (action.endsWith("-away")) expect(ticket.awayAt).not.toBeNull();
-    if (action === "course-fire") expect(ticket.firedAt).not.toBeNull();
+    if (action === "group-fire") expect(ticket.firedAt).not.toBeNull();
     if (action === "station-move") expect(ticket.stationId).toBe(destination);
     if (action === "served" || action === "group-served" || action === "unserved")
       expect(line.servedQuantity).toBe(action === "unserved" ? 0 : 1000);
@@ -357,7 +363,7 @@ describe("kitchen service attendance", () => {
     expect((await state()).facts).toEqual(before.facts);
     expect((await state()).days).toEqual(before.days);
   });
-  it.each(["group-ready", "group-away", "group-served", "station-move"] as const)(
+  it.each(["group-ready", "group-served", "station-move"] as const)(
     "a new %s submission with nothing left to change is not new activity",
     async (action) => {
       const order = await prepare(action),
@@ -380,6 +386,30 @@ describe("kitchen service attendance", () => {
     expect(await command(api(), action, order)).toMatchObject({ status: 200 });
     expect((await state()).facts).toEqual([]);
     expect((await state()).days).toEqual([]);
+  });
+  it.each(
+    retiredActions.flatMap((action) =>
+      (["enabled", "refusing", "disabled"] as const).map((capture) => ({ action, capture })),
+    ),
+  )("$action is retired with $capture attendance capture", async ({ action, capture }) => {
+    const order = await prepare(action);
+    const before = await state();
+    const recorder = vi.fn<AttendanceRecorder>(async (tx, fact) => {
+      await recordAttendanceFact(tx, fact);
+      if (capture === "refusing")
+        throw new AppError("attendance.invalid", { reason: "kitchen capture refused" });
+    });
+    const app = api(capture === "disabled" ? undefined : recorder);
+    vi.spyOn(v.clock, "now").mockImplementation(() => {
+      throw new Error("retired kitchen command clock read");
+    });
+    for (const submissionId of [order.submissionId, order.submissionId, newId()]) {
+      expect(await command(app, action, { ...order, submissionId })).toMatchObject({
+        status: 404,
+      });
+      expect(await state()).toEqual(before);
+    }
+    expect(recorder).not.toHaveBeenCalled();
   });
 });
 

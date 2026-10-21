@@ -142,7 +142,7 @@ export interface OrderGroup {
   firedAt: string | null;
   remindAt: string | null;
   /**
-   * Present only while kitchen work remains and every remaining fired component is ready.
+   * Present while released dishes remain and every component is ready to serve.
    */
   ready?: true;
   /** Dishes with active service, excluding recalled sources. */
@@ -1354,15 +1354,13 @@ async function readGroups(
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(and(eq(orderGroups.partyId, partyId), isNull(workingOrderLines.parentLineId), ...scope))
     .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
-  const remaining = and(
-    eq(ticketItems.madeHere, false),
-    gt(firedQuantity, workingOrderLines.servedQuantity),
-  );
+  const remaining = gt(firedQuantity, workingOrderLines.servedQuantity);
+  const ready = or(eq(ticketItems.madeHere, true), eq(ticketItems.state, "ready"));
   const kitchen = await tx
     .select({
       groupId: workingOrderLines.groupId,
       remaining: sql<number>`count(*) filter (where ${remaining})`,
-      ready: sql<number>`count(*) filter (where ${remaining} and ${ticketItems.state} = 'ready')`,
+      ready: sql<number>`count(*) filter (where ${remaining} and ${ready})`,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
