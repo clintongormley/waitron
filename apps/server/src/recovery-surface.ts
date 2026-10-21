@@ -271,6 +271,18 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "Pulsa «Reintentar un arranque normal». Si vuelve a fallar, reinicia el equipo: eso puede arreglar un disco o un volumen que no se activó. Si sigue fallando, pide ayuda a quien instaló este equipo: la base de datos del equipo es un archivo en su disco, y el software no puede leerlo.",
     },
   },
+  "storage.disk_full": {
+    "en-GB": {
+      title: "The box's disk is full, so Waitron cannot save anything.",
+      action:
+        "Ask whoever installed this box to free some space (old backups, earlier versions of Waitron) or fit a bigger disk. Your sales are not touched.",
+    },
+    "es-ES": {
+      title: "El disco del equipo está lleno, así que Waitron no puede guardar nada.",
+      action:
+        "Pide a quien instaló este equipo que libere espacio (copias antiguas, versiones anteriores de Waitron) o ponga un disco mayor. Tus ventas no se tocan.",
+    },
+  },
   "migrations.incomplete": {
     // Deliberately no restore: a restore runs the migrations itself, so it can raise this code.
     "en-GB": {

@@ -1,4 +1,4 @@
-import { isAppError, sqliteFailureOf } from "@waitron/shared";
+import { diskFullIn, isAppError, sqliteFailureOf } from "@waitron/shared";
 import "./errors.js";
 
 /**
@@ -27,6 +27,7 @@ const UNREACHABLE = new Set(UNREACHABLE_RESULT_CODES);
  * come from the database.
  */
 export function classifyBootFailure(error: unknown): string {
+  if (diskFullIn(error)) return "storage.disk_full";
   if (isAppError(error)) return error.code;
   const failure = sqliteFailureOf(error);
   if (failure !== null) {

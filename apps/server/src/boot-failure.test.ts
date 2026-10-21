@@ -66,6 +66,18 @@ describe("classifyBootFailure on the engine the box runs", () => {
     expect(classifyBootFailure(error)).toBe("unknown");
   });
 
+  it("names a database at its page limit as a full disk", () => {
+    const error = realSqliteError((dir) => {
+      const db = new DatabaseSync(join(dir, "venue.db"));
+      db.exec("create table filler (data blob)");
+      const { page_count } = db.prepare("pragma page_count").get() as { page_count: number };
+      db.exec(`pragma max_page_count = ${page_count + 2}`);
+      db.exec("insert into filler values (zeroblob(65536))");
+    });
+    expect(sqliteFailureOf(error)?.errcode).toBe(13);
+    expect(classifyBootFailure(error)).toBe("storage.disk_full");
+  });
+
   it("reads the engine's failure through a wrapper", () => {
     const inner = realSqliteError((dir) => {
       const db = new DatabaseSync(join(dir, "venue.db"));
@@ -82,6 +94,16 @@ describe("classifyBootFailure", () => {
     expect(classifyBootFailure(new AppError("server.config_missing", { variable: "X" }))).toBe(
       "server.config_missing",
     );
+  });
+
+  it("names a full disk under a wrapper", () => {
+    expect(
+      classifyBootFailure(
+        new Error("Failed to run the query 'ROLLBACK'", {
+          cause: new AppError("storage.disk_full", {}),
+        }),
+      ),
+    ).toBe("storage.disk_full");
   });
 
   it("pins the unreachable-database codes to SQLITE_CANTOPEN alone", () => {
