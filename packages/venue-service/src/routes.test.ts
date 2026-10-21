@@ -4242,7 +4242,7 @@ describe("department description setup in the live model", () => {
   );
 });
 
-it("A724: the station planning route returns last orders with its period end offset", async () => {
+it("A724: the station planning route returns last orders at its period's own end", async () => {
   const f = await fixture();
   const expected = await withTransaction(db, async (tx) => {
     const cfg = { locationId: f.locationId };
@@ -4295,7 +4295,7 @@ it("A724: the station planning route returns last orders with its period end off
     return {
       stationId: station!.id,
       departmentId,
-      ranges: [{ periodId, startsAt: "12:00", endsAt: "15:30" }],
+      ranges: [{ periodId, startsAt: "12:00", endsAt: "16:00" }],
     };
   });
   const response = await send(

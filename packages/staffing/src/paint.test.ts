@@ -524,8 +524,8 @@ describe("special-day staffing", () => {
       ),
     ).toEqual({
       special_days: 1,
-      special_day_dates: 1,
-      seasons: 2,
+      special_day_dates: 0,
+      seasons: 1,
       staffing_days: 1,
       department_days: 2,
       zone_days: 2,
@@ -852,7 +852,7 @@ it("A724 returns period identity and station sending hours for the chosen season
   const v = await guideVenue();
   const read = await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId));
   expect(read.guides[`department:${v.departmentId}`]![5]).toEqual([lunchGuide(v)]);
-  expect(read.guides[`station:${v.stationId}`]![5]).toEqual([lunchGuide(v, "15:30")]);
+  expect(read.guides[`station:${v.stationId}`]![5]).toEqual([lunchGuide(v)]);
   expect(read.guides[`station:${v.passId}`]![5]).toEqual([]);
 });
 
@@ -869,7 +869,7 @@ it("A724 returns dated station guides without removing staffing on a closed date
   });
   const read = await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId));
   expect(read.guides[`department:${v.departmentId}`]![v.aug14]).toEqual([lunchGuide(v)]);
-  expect(read.guides[`station:${v.stationId}`]![v.aug14]).toEqual([lunchGuide(v, "15:30")]);
+  expect(read.guides[`station:${v.stationId}`]![v.aug14]).toEqual([lunchGuide(v)]);
   expect(read.guides[`station:${v.stationId}`]![v.aug15]).toEqual([]);
   expect(
     read.areas
@@ -918,7 +918,7 @@ it("A724 guides a station by the edited special day, including zone openings", a
   expect(read.guides[`department:${v.departmentId}`]![v.aug14]).toEqual([lunchGuide(v)]);
   expect(read.guides[`station:${v.stationId}`]![v.aug14]).toEqual([
     { ...lunchGuide(v), startsAt: "13:00", endsAt: "14:00" },
-    { ...lunchGuide(v), startsAt: "15:00", endsAt: "15:30" },
+    { ...lunchGuide(v), startsAt: "15:00", endsAt: "16:00" },
   ]);
 });
 
@@ -960,7 +960,7 @@ it("A724 keeps the sending department identity of every station range", async ()
   });
   const read = await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId));
   expect(read.guides[`station:${v.stationId}`]![5]).toEqual([
-    lunchGuide(v, "15:30"),
+    lunchGuide(v),
     {
       ...extra,
       periodName: "Evening",
@@ -1008,7 +1008,7 @@ it("A724 adjacent periods with the same colour keep their own names and endpoint
     { ...lunchGuide(v), periodId: tea, periodName: "Tea", startsAt: "16:00", endsAt: "18:00" },
   ]);
   expect(read.guides[`station:${v.stationId}`]![5]).toEqual([
-    lunchGuide(v, "15:30"),
+    lunchGuide(v),
     { ...lunchGuide(v), periodId: tea, periodName: "Tea", startsAt: "16:00", endsAt: "18:00" },
   ]);
 });
