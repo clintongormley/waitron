@@ -62,6 +62,16 @@ describe("the test-side derived-key cache", () => {
     const otherSalt = deriveKey("keyed-pass", Buffer.alloc(16, 7), cheap);
     expect(since(before).derived).toBe(1);
     expect(otherSalt).not.toEqual(lower);
+
+    before = derivedKeyStats();
+    const otherR = deriveKey("keyed-pass", salt, { ...cheap, r: 4 });
+    expect(since(before).derived).toBe(1);
+    expect(otherR).not.toEqual(lower);
+
+    before = derivedKeyStats();
+    const shorter = deriveKey("keyed-pass", salt, { ...cheap, keylen: 16 });
+    expect(since(before).derived).toBe(1);
+    expect(shorter).toHaveLength(16);
   });
 
   it("a call that must throw still throws after a success", () => {
@@ -76,6 +86,19 @@ describe("the test-side derived-key cache", () => {
     const second = deriveKey("mutate-pass", salt, cheap);
     expect(second).toEqual(expected);
     expect(second.some((byte) => byte !== 0)).toBe(true);
+    second.fill(0);
+    expect(deriveKey("mutate-pass", salt, cheap)).toEqual(expected);
+  });
+
+  it("a caller changing its async key does not change the next caller's", async () => {
+    const first = await deriveKeyAsync("mutate-async-pass", salt, cheap);
+    const expected = Buffer.from(first);
+    first.fill(0);
+    const second = await deriveKeyAsync("mutate-async-pass", salt, cheap);
+    expect(second).toEqual(expected);
+    expect(second.some((byte) => byte !== 0)).toBe(true);
+    second.fill(0);
+    expect(await deriveKeyAsync("mutate-async-pass", salt, cheap)).toEqual(expected);
   });
 
   it("a failed derivation is not stored", async () => {
