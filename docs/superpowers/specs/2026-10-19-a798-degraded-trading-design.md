@@ -1401,6 +1401,8 @@ dated earlier than the one before it is a question for the asesor either way.
 
 For the runner to file; none is acted on here.
 
+**2026-10-21:** A942 implements the outage header in [its implementation plan](../plans/2026-10-21-a942-aeat-outage-flag.md). Item 1 and §2's local-only flag observation describe the earlier code; the original observations remain below.
+
 1. **`Incidencia="S"` is never sent to AEAT.** The house reading of art. 16.4 lists it among the
    duties during an outage (`verifactu-findings.md:359`); the drain raises only a local `incidencia`
    column (`drain.ts:978-993`), and the batch header it builds carries the taxpayer alone

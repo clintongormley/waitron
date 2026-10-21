@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { newId, readDeploymentEnvironment, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recordIncident } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
@@ -106,7 +106,11 @@ export interface DrainDeps {
 /** A due `envios` row joined to enough of its registro to rebuild and order it. `probe` marks a
  * brake-held record `claimProbes` sent while it stays `detenido`, with the code of the run that
  * holds it. */
-type DueRow = RegistroRow & { intentos: number; probe?: { runCode: string } };
+type DueRow = RegistroRow & {
+  technical_incidence: number;
+  intentos: number;
+  probe?: { runCode: string };
+};
 
 /**
  * Is there anything to send, read before the drain opens its own transaction? Lone stale claims
@@ -152,10 +156,17 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
     // and the host's awaiting-certificate flag must tell that apart from a pass with none.
     result.tenantsWithWork += 1;
     try {
+      await flushTechnicalFailure(deps.db, deps.environment);
       const client = await deps.resolveClient();
       await drainDue(deps.db, client, deps.environment, now, result, maxPorEnvio, deps.skipRetryMs);
       bumpNextDue(result, await nextProbeAt(deps.db, now, deps.environment));
     } catch (error) {
+      rememberTechnicalFailure(deps.db, deps.environment, now, []);
+      try {
+        await flushTechnicalFailure(deps.db, deps.environment);
+      } catch {
+        // Retain bounded process-local evidence until the database accepts it.
+      }
       // Contained: reported in `skipped` rather than thrown, so the host still schedules a retry.
       result.skipped.push({ errorCode: codeOf(error) });
     }
@@ -202,7 +213,7 @@ async function drainDue(
   // Commits before anything else in this pass reads `envios`, so a recovered row is an ordinary
   // `pendiente` row to the later transactions.
   await countOnCommit(db, result, async (tx, counts) => {
-    await recoverStaleClaims(tx, now);
+    await recoverStaleClaims(tx, now, environment);
     await releaseSettledBrakeHolds(tx, now, counts);
   });
 
@@ -231,10 +242,20 @@ async function drainDue(
     // chains the environment guard just blocked, and the growing `blockedSifIds` lets the next
     // SELECT reach past them. Bounded: each empty round either blocks a new chain or moves its rows
     // to `detenido` (`haltOpenChainClaims`), and the next SELECT sees neither.
-    let claimed: { sendable: DueRow[]; rawCount: number; deferred: boolean };
+    let claimed: {
+      sendable: DueRow[];
+      rawCount: number;
+      deferred: boolean;
+      incidentToken?: string | null;
+    };
     for (;;) {
       try {
+        let flushedFailure: TechnicalFailure | undefined;
         claimed = await countOnCommit(db, result, async (tx, counts) => {
+          flushedFailure = technicalFailures.get(db)?.get(environment);
+          if (flushedFailure !== undefined) {
+            await openTechnicalIncident(tx, environment, flushedFailure.now, flushedFailure.ids);
+          }
           const c = await claimBatch(
             tx,
             now,
@@ -259,8 +280,22 @@ async function drainDue(
           if (waitPending && sendable.length > 0 && sendable.length < maxPorEnvio) {
             throw deferredBatch;
           }
-          return { sendable, rawCount: c.rawCount, deferred: c.deferred };
+          const incidentToken = await technicalIncidentToken(tx);
+          if (incidentToken !== null && sendable.length > 0) {
+            await tx.execute(sql`
+              update envios set technical_incidence = true
+              where registro_id in ${sendable.map((row) => row.id)}
+            `);
+            for (const row of sendable) row.technical_incidence = 1;
+          }
+          return {
+            sendable,
+            rawCount: c.rawCount,
+            deferred: c.deferred,
+            incidentToken,
+          };
         });
+        if (flushedFailure !== undefined) forgetTechnicalFailure(db, environment, flushedFailure);
       } catch (error) {
         if (error !== deferredBatch) throw error;
         claimed = { sendable: [], rawCount: 0, deferred: true };
@@ -283,7 +318,10 @@ async function drainDue(
       break;
     }
 
-    const cabecera = cabeceraFor(batch[0]!);
+    const cabecera = cabeceraFor(
+      batch[0]!,
+      batch.some((row) => row.technical_incidence === 1),
+    );
     const registros: EnvioRegistro[] = batch.map(toEnvioRegistro);
     try {
       const respuesta = await client.submit(cabecera, registros);
@@ -295,6 +333,7 @@ async function drainDue(
 
       dueCount = await countOnCommit(db, result, async (tx, counts) => {
         await persistResponse(tx, batch, resolved, respuesta.CSV ?? null, now, counts);
+        await closeTechnicalIncident(tx, environment, now, claimed.incidentToken ?? null);
         return countDue(tx, now, environment);
       });
       // `@waitron/verifactu` leaves the wait undefined when AEAT's reply has no usable one. The
@@ -309,7 +348,19 @@ async function drainDue(
       // stop. A probe's next send is an hour after its stamped `enviado_en`, so it leaves the
       // count; the batch's ordinary rows stay counted, so the next sending slot is still reported
       // unless a retry instant `backoffBatch` recorded is earlier.
-      await countOnCommit(db, result, (tx, counts) => backoffBatch(tx, batch, now, counts));
+      const failure = rememberTechnicalFailure(
+        db,
+        environment,
+        now,
+        batch.map((row) => row.id),
+      );
+      await countOnCommit(db, result, async (tx, counts) => {
+        await openTechnicalIncident(tx, environment, failure.now, [
+          ...new Set([...failure.ids, ...batch.map((row) => row.id)]),
+        ]);
+        await backoffBatch(tx, batch, now, counts);
+      });
+      forgetTechnicalFailure(db, environment, failure);
       dueCount = Math.max(0, dueCount - batch.filter((row) => row.probe !== undefined).length);
       break;
     }
@@ -415,8 +466,8 @@ function bumpNextDue(result: CommittedCounts, at: Date | null): void {
  * record needed operator attention, even though it will most likely be resubmitted and accepted
  * within the same pass. Raises the flag only, never an `incidents` row.
  */
-async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
-  await requeueClaims(tx, now, new Date(now.getTime() - RECUPERACION_ENVIANDO_MS));
+async function recoverStaleClaims(tx: Transaction, now: Date, environment: Entorno): Promise<void> {
+  await requeueClaims(tx, now, new Date(now.getTime() - RECUPERACION_ENVIANDO_MS), environment);
 }
 
 /**
@@ -428,7 +479,13 @@ async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
  * fingerprint before treating that reply as confirmation of our record.
  */
 export async function resetInFlightClaims(db: Database, now: Date): Promise<void> {
-  await withTransaction(db, (tx) => requeueClaims(tx, now, null));
+  const environment = await readDeploymentEnvironment(db);
+  await withTransaction(db, async (tx) => {
+    if (environment !== null && (await pendingWasSendable(tx, now, environment))) {
+      await openTechnicalIncident(tx, environment, now, []);
+    }
+    await requeueClaims(tx, now, null, environment);
+  });
 }
 
 /** `enviando` rows back to `pendiente`, due `now`, with `incidencia` raised — only those claimed
@@ -437,9 +494,23 @@ async function requeueClaims(
   tx: Transaction,
   now: Date,
   claimedBefore: Date | null,
+  environment: Entorno | null,
 ): Promise<void> {
   const stale =
     claimedBefore === null ? sql.empty() : sql` and enviado_en < ${claimedBefore.toISOString()}`;
+  const interrupted = await tx.execute<{ id: string; entorno: Entorno | null }>(sql`
+    select r.id, r.entorno from envios e join registros_facturacion r on r.id = e.registro_id
+    where e.estado = 'enviando'${claimedBefore === null ? sql.empty() : sql` and e.enviado_en < ${claimedBefore.toISOString()}`}
+  `);
+  for (const env of new Set(interrupted.rows.map((row) => row.entorno))) {
+    if (env === null || (environment !== null && env !== environment)) continue;
+    await openTechnicalIncident(
+      tx,
+      env,
+      now,
+      interrupted.rows.filter((row) => row.entorno === env).map((row) => row.id),
+    );
+  }
   await tx.execute(sql`
     update envios set estado = 'pendiente', incidencia = true, proximo_intento_en = ${now.toISOString()}
     where estado = 'enviando'${stale}
@@ -520,7 +591,7 @@ async function claimBatch(
     ),
     candidate as materialized (
       select r.id, r.sif_id, r.secuencia, r.nombre_razon_emisor, r.fecha_hora_huso_gen_registro,
-        e.intentos, w.leads_its_name
+        e.intentos, e.technical_incidence, w.leads_its_name
       from envios e
       join registros_facturacion r on r.id = e.registro_id
       join waiting w on w.id = r.id
@@ -563,7 +634,7 @@ async function claimBatch(
       order by fecha_hora_huso_gen_registro, sif_id, secuencia
       limit 1
     )
-    select r.*, c.intentos,
+    select r.*, c.intentos, c.technical_incidence,
       (c.leads_its_name and c.nombre_razon_emisor = (select nombre_razon_emisor from target))
         as claimable
     from candidate c
@@ -630,6 +701,50 @@ async function claimBatch(
     rawCount: rows.length,
     deferred: false,
   };
+}
+
+// The rollback reuses claim/hold/name/cap rules without retaining claims, acknowledgements or
+// incidents. A separate eligibility query can drift from those rules as they change.
+async function pendingWasSendable(
+  tx: Transaction,
+  now: Date,
+  environment: Entorno,
+): Promise<boolean> {
+  await tx.execute(sql`savepoint pending_outage_probe`);
+  try {
+    const flujo = await readFlujo(tx);
+    const gateOpen =
+      flujo.proximoEnvioEn === null || flujo.proximoEnvioEn.getTime() <= now.getTime();
+    const counts = emptyDrainResult();
+    await releaseSettledBrakeHolds(tx, now, counts);
+    const blocked = new Set<string>();
+    for (;;) {
+      const claimed = await claimBatch(
+        tx,
+        now,
+        environment,
+        counts,
+        blocked,
+        MAX_REGISTROS_POR_ENVIO,
+        !gateOpen,
+      );
+      if (claimed.deferred) return false;
+      const kept = await haltOpenChainClaims(tx, claimed.sendable, now, counts);
+      const probes = await claimProbes(
+        tx,
+        now,
+        environment,
+        MAX_REGISTROS_POR_ENVIO - kept.length,
+        kept[0]?.nombre_razon_emisor ?? null,
+      );
+      const size = kept.length + probes.length;
+      if (size > 0) return gateOpen || size >= MAX_REGISTROS_POR_ENVIO;
+      if (claimed.rawCount === 0) return false;
+    }
+  } finally {
+    await tx.execute(sql`rollback to pending_outage_probe`);
+    await tx.execute(sql`release pending_outage_probe`);
+  }
 }
 
 /**
@@ -895,7 +1010,7 @@ async function claimProbes(
       order by r.fecha_hora_huso_gen_registro, r.sif_id
       limit 1
     )
-    select r.*, e.intentos, due.run_code as probe_run_code
+    select r.*, e.intentos, e.technical_incidence, due.run_code as probe_run_code
     from due
     join registros_facturacion r on r.id = due.id
     join envios e on e.registro_id = r.id
@@ -997,6 +1112,101 @@ async function backoffBatch(
   }
 }
 
+async function technicalIncidentToken(tx: Transaction): Promise<string | null> {
+  const { rows } = await tx.execute<{ technical_incident_token: string | null }>(sql`
+    select technical_incident_token from envio_flujo where id = 1
+  `);
+  return rows[0]?.technical_incident_token ?? null;
+}
+
+async function markTechnicalCohort(
+  tx: Transaction,
+  environment: Entorno,
+  now: Date,
+  attemptedIds: string[] = [],
+): Promise<void> {
+  await tx.execute(sql`
+    update envios set technical_incidence = true
+    where registro_id in (
+      select r.id from registros_facturacion r
+      join envios e on e.registro_id = r.id
+      where r.entorno = ${environment}
+        and not ${cancelsRefusedOriginal("r")}
+        and (e.estado in ('pendiente', 'enviando')
+          or r.id in (select id from (${dueProbes(now, environment)}))
+          ${attemptedIds.length === 0 ? sql.empty() : sql`or r.id in ${attemptedIds}`})
+    )
+  `);
+}
+
+async function openTechnicalIncident(
+  tx: Transaction,
+  environment: Entorno,
+  now: Date,
+  attemptedIds: string[],
+): Promise<void> {
+  await tx.execute(sql`
+    insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg, technical_incident_token)
+    values (1, ${now.toISOString()}, 0, ${newId()})
+    on conflict (id) do update set technical_incident_token = excluded.technical_incident_token
+  `);
+  await markTechnicalCohort(tx, environment, now, attemptedIds);
+}
+
+async function closeTechnicalIncident(
+  tx: Transaction,
+  environment: Entorno,
+  now: Date,
+  observedToken: string | null,
+): Promise<void> {
+  if ((await technicalIncidentToken(tx)) === null) return;
+  await markTechnicalCohort(tx, environment, now);
+  if (observedToken === null) return;
+  await tx.execute(sql`
+    update envio_flujo set technical_incident_token = null
+    where id = 1 and technical_incident_token = ${observedToken}
+  `);
+}
+
+// At most one failed metadata transaction per environment is retained: no more work is claimed
+// until it can commit. A process loss cannot preserve this uncommitted evidence.
+type TechnicalFailure = { now: Date; ids: string[] };
+const technicalFailures = new WeakMap<Database, Map<Entorno, TechnicalFailure>>();
+
+function rememberTechnicalFailure(
+  db: Database,
+  environment: Entorno,
+  now: Date,
+  ids: string[],
+): TechnicalFailure {
+  let failures = technicalFailures.get(db);
+  if (failures === undefined) {
+    failures = new Map();
+    technicalFailures.set(db, failures);
+  }
+  const failure = failures.get(environment) ?? { now, ids };
+  failures.set(environment, failure);
+  return failure;
+}
+
+function forgetTechnicalFailure(
+  db: Database,
+  environment: Entorno,
+  failure: TechnicalFailure,
+): void {
+  const failures = technicalFailures.get(db);
+  if (failures?.get(environment) === failure) failures.delete(environment);
+}
+
+async function flushTechnicalFailure(db: Database, environment: Entorno): Promise<void> {
+  const failure = technicalFailures.get(db)?.get(environment);
+  if (failure === undefined) return;
+  await withTransaction(db, (tx) =>
+    openTechnicalIncident(tx, environment, failure.now, failure.ids),
+  );
+  forgetTechnicalFailure(db, environment, failure);
+}
+
 function toEnvioRegistro(row: RegistroRow): EnvioRegistro {
   const record = fromRegistroRow(row);
   // RefExterna is our registro id. Not a huella input, so safe to attach after hashing.
@@ -1007,8 +1217,11 @@ function toEnvioRegistro(row: RegistroRow): EnvioRegistro {
 }
 
 /** The obligado emisor is on every stored row (`nombre_razon_emisor`/`id_emisor_factura`). */
-function cabeceraFor(row: RegistroRow): Cabecera {
-  return { ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura } };
+function cabeceraFor(row: RegistroRow, technicalIncidence: boolean): Cabecera {
+  return {
+    ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura },
+    ...(technicalIncidence ? { RemisionVoluntaria: { Incidencia: "S" as const } } : {}),
+  };
 }
 
 /** The error AEAT reports for the copy it stored under an invoice key. */

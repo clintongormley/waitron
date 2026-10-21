@@ -143,12 +143,6 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
-- **The outage flag `Incidencia="S"` is never sent to AEAT.** The house reading of Orden art. 16.4
-  (`docs/compliance/verifactu-findings.md`) lists it among the duties during an outage; the drain sets
-  only a local `incidencia` column (`packages/fiscal-verifactu/src/drain.ts`), and the batch header names
-  the taxpayer alone, though `@waitron/verifactu` can send the flag. Found by A798 (read, and confirmed
-  by its claim check). [Design §11](superpowers/specs/2026-10-19-a798-degraded-trading-design.md#11-found-while-reading-outside-this-design)
-
 - **A696. Invoice issue dates and record offsets follow the process zone.**
   Every new invoice date/offset, ordinary receipt and till must use the saved venue zone,
   DST included; old records stay unchanged. The owner's 2026-10-15 ~22:25 direction replaces
