@@ -7,6 +7,7 @@ import {
   VENUE_THEME_TIME_LIMIT_MS,
   applyVenueTheme,
   followVenueTheme,
+  readVenueTheme,
   startVenueTheme,
 } from "./venue-theme.js";
 
@@ -304,6 +305,83 @@ describe("applyVenueTheme", () => {
     applyVenueTheme("nonsense");
     expect(bg()).toBe(GREEN_LIGHT_BG);
     expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual(GREEN);
+  });
+});
+
+describe("readVenueTheme", () => {
+  const refusing = () => vi.fn(() => Promise.reject(new TypeError("Failed to fetch")));
+
+  async function startupSettled(fetchImpl: ReturnType<typeof vi.fn>): Promise<void> {
+    await fetchImpl.mock.results[0]!.value.catch(() => undefined);
+    await macrotask();
+  }
+
+  it("an answer a read hands in is refused once something was applied after the read was sent", async () => {
+    const startup = refusing();
+    startVenueTheme(document.documentElement, { fetchImpl: startup });
+    await startupSettled(startup);
+    let reply!: (answer: unknown) => void;
+    const pending = readVenueTheme(() => new Promise((resolve) => (reply = resolve)));
+    await vi.waitFor(() => expect(reply).toBeDefined());
+    applyVenueTheme(LEMON);
+    reply(GREEN);
+    const reading = await pending;
+    applyVenueTheme(reading.answer, reading.sentAt);
+    expect(bg()).toBe(LEMON_LIGHT_BG);
+    expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual(LEMON);
+  });
+
+  it("an answer a read hands in applies when nothing was applied after the read was sent", async () => {
+    const startup = refusing();
+    startVenueTheme(document.documentElement, { fetchImpl: startup });
+    await startupSettled(startup);
+    applyVenueTheme(LEMON);
+    const reading = await readVenueTheme(() => Promise.resolve(GREEN));
+    applyVenueTheme(reading.answer, reading.sentAt);
+    expect(bg()).toBe(GREEN_LIGHT_BG);
+    expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual(GREEN);
+  });
+
+  it("the first read after a start takes the start-up fetch's answer instead of asking again", async () => {
+    const { fetchImpl, calls } = byHand();
+    startVenueTheme(document.documentElement, { fetchImpl });
+    const read = vi.fn(() => Promise.resolve(LEMON));
+    const pending = readVenueTheme(read);
+    calls[0]!.answer(GREEN);
+    expect((await pending).answer).toEqual(GREEN);
+    expect(read).not.toHaveBeenCalled();
+    expect(bg()).toBe(GREEN_LIGHT_BG);
+    expect((await readVenueTheme(read)).answer).toEqual(LEMON);
+    expect(read).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["failed", (call: { refuse: () => void }) => call.refuse()],
+    [
+      "answered with the wrong shape",
+      (call: { answer: (body: unknown) => void }) => call.answer({ hash: "h" }),
+    ],
+  ])("a read asks itself when the start-up fetch %s", async (_, end) => {
+    const { fetchImpl, calls } = byHand();
+    startVenueTheme(document.documentElement, { fetchImpl });
+    const read = vi.fn(() => Promise.resolve(LEMON));
+    const pending = readVenueTheme(read);
+    end(calls[0]!);
+    const reading = await pending;
+    expect(read).toHaveBeenCalledOnce();
+    applyVenueTheme(reading.answer, reading.sentAt);
+    expect(bg()).toBe(LEMON_LIGHT_BG);
+  });
+
+  it("a read asks itself when the start-up fetch was dropped by a restart", async () => {
+    const first = byHand();
+    startVenueTheme(document.documentElement, { fetchImpl: first.fetchImpl });
+    const read = vi.fn(() => Promise.resolve(LEMON));
+    const pending = readVenueTheme(read);
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+    first.calls[0]!.answer(GREEN);
+    expect((await pending).answer).toEqual(LEMON);
+    expect(read).toHaveBeenCalledOnce();
   });
 });
 

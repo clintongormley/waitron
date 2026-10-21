@@ -117,7 +117,10 @@ dependency on `media_images`"): it is one more name in the same `QUERY_DEPENDENC
 **D6. The signed-out dashboard gets the theme at start-up only; at sign-in the live read's first read
 applies the latest answer.** A signed-out shell runs no live stream (`liveUpdates.start()` is called
 from `#applyMe`, `apps/dashboard/src/dashboard-app.ts:1171`), and a passive poll for a signed-out
-page would be a new request pattern the design does not ask for.
+page would be a new request pattern the design does not ask for. (Changed after review,
+2026-10-21: the live read's first read takes the start-up fetch's answer when that fetch got one,
+and sends nothing; the live stream's opening re-reads it, and that read applies a switch made since
+start-up.)
 
 **D7. The till follows through `followVenueTheme(hash)`, called from `#applyVenueSetup` and on every
 menu-state answer, and it fetches only when the hash differs from the one applied.** `#applyVenueSetup`
@@ -133,7 +136,10 @@ origin is the primary.
 **D8. An older fetch never undoes a newer answer.** Every fetch is numbered when sent; its answer
 applies only if nothing was applied after it was sent (a later fetch's answer, or an answer the
 dashboard's live read handed in). The same rule as the till's setup reads ("an answer is skipped once
-a read sent after it has been applied", `docs/developers/conventions-ui.md:1491-1493`).
+a read sent after it has been applied", `docs/developers/conventions-ui.md:1491-1493`). (Extended
+after review, 2026-10-21: an answer the live read hands in is numbered when that read is sent, and
+applies only if nothing was applied after it, through `readVenueTheme` and `applyVenueTheme`'s
+`sentAt`.)
 
 **D9. Before `startVenueTheme` has run on a page, `applyVenueTheme` and `followVenueTheme` do
 nothing.** So the setup app, and every existing dashboard and till test that mounts the shell

@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { applyTokens, startVenueTheme, VENUE_THEME_STORAGE_KEY } from "@waitron/ui";
-import { LiveData } from "@waitron/dashboard-kit";
+import {
+  applyTokens,
+  followVenueTheme,
+  startVenueTheme,
+  VENUE_THEME_STORAGE_KEY,
+} from "@waitron/ui";
+import { LiveConnection, LiveData } from "@waitron/dashboard-kit";
 import {
   FIXTURE_ANSWER,
   FIXTURE_LIGHT_BG,
@@ -18,7 +23,7 @@ const SECOND_ANSWER = {
   logo: null,
 };
 
-const rejecting = vi.fn(() => Promise.reject(new TypeError("Failed to fetch")));
+const rejecting = vi.fn<typeof fetch>(() => Promise.reject(new TypeError("Failed to fetch")));
 
 const bg = (): string =>
   getComputedStyle(document.documentElement).getPropertyValue("--wt-color-bg").trim();
@@ -73,8 +78,8 @@ async function flush(el: DashboardApp): Promise<void> {
   await el.updateComplete;
 }
 
-async function mount(api: DashboardApi): Promise<DashboardApp> {
-  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+async function mount(api: DashboardApi, liveUpdates?: LiveConnection): Promise<DashboardApp> {
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, liveUpdates });
   await flush(el);
   return el;
 }
@@ -200,4 +205,52 @@ it("a failed read keeps the page and is recorded", async () => {
     expect(record).toHaveBeenCalledWith("warn", "theme.load_failed", { code: "connection.failed" }),
   );
   expect(bg()).toBe(FIXTURE_LIGHT_BG);
+});
+
+it("a live answer sent before a newer theme was applied does not bring the older one back", async () => {
+  const api = stubApi();
+  const el = await mount(api);
+  await vi.waitFor(() => expect(bg()).toBe(FIXTURE_LIGHT_BG));
+  let answer!: (value: typeof FIXTURE_ANSWER) => void;
+  api.getVenueTheme.mockImplementation(
+    () => new Promise<typeof FIXTURE_ANSWER>((resolve) => (answer = resolve)),
+  );
+  const calls = api.getVenueTheme.mock.calls.length;
+  api.liveData.invalidate([{ type: "custom_themes" }]);
+  await vi.waitFor(() => expect(api.getVenueTheme).toHaveBeenCalledTimes(calls + 1));
+  rejecting.mockImplementationOnce(() =>
+    Promise.resolve(new Response(JSON.stringify(SECOND_ANSWER))),
+  );
+  followVenueTheme(SECOND_ANSWER.hash);
+  await vi.waitFor(() => expect(bg()).toBe("#fff3f3"));
+  answer(FIXTURE_ANSWER);
+  await flush(el);
+  await flush(el);
+  expect(bg()).toBe("#fff3f3");
+  expect(JSON.parse(localStorage.getItem(VENUE_THEME_STORAGE_KEY)!).hash).toBe(SECOND_ANSWER.hash);
+});
+
+it("sign-in takes the start-up answer, and the live stream's opening reads the latest", async () => {
+  startVenueTheme(document.documentElement, {
+    fetchImpl: () => Promise.resolve(new Response(JSON.stringify(FIXTURE_ANSWER))),
+  });
+  await vi.waitFor(() => expect(bg()).toBe(FIXTURE_LIGHT_BG));
+  const api = stubApi({ getVenueTheme: vi.fn().mockResolvedValue(SECOND_ANSWER) });
+  const streams: (EventTarget & { url: string; close(): void })[] = [];
+  const liveUpdates = new LiveConnection(api.liveData, {
+    open: (url) => {
+      const stream = Object.assign(new EventTarget(), { url, close: () => undefined });
+      streams.push(stream);
+      return stream;
+    },
+  });
+  const el = await mount(api, liveUpdates);
+  await vi.waitFor(() => expect(streams.at(-1)?.url).toContain("custom_themes"));
+  await flush(el);
+  expect(api.getVenueTheme).not.toHaveBeenCalled();
+  expect(bg()).toBe(FIXTURE_LIGHT_BG);
+  streams.at(-1)!.dispatchEvent(new Event("open"));
+  await vi.waitFor(() => expect(bg()).toBe("#fff3f3"));
+  expect(api.getVenueTheme).toHaveBeenCalledOnce();
+  liveUpdates.stop();
 });

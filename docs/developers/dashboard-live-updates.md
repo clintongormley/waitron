@@ -142,7 +142,12 @@ Reusing an already cached query issues no request and therefore does not extend 
 2026-10-21, A841 slice 3: the shell's venue theme read (`DashboardApi.getVenueTheme`, watched from
 `dashboard-app.ts`) sends EVERY read passively, its first included, through
 `DashboardApi.background`, unlike `DashboardQueries`' usual active first read. Do not move it back
-to the active client.
+to the active client. Its reads go through `readVenueTheme` (`packages/ui/src/venue-theme.ts`): the
+first after the page's start takes the start-up fetch's answer when that fetch got one, and sends
+nothing; the live stream's `open` re-reads every watched query, which is what applies a theme
+switched since start-up ("sign-in takes the start-up answer…" in
+`apps/dashboard/src/dashboard-app.venue-theme.test.ts`). An answer the read hands in is dropped if a
+theme was applied after that read was sent.
 
 Test an external identity event with the view already mounted. Check the displayed value and an
 unsaved draft, then disconnect the view and confirm later events stop issuing reads. Query and

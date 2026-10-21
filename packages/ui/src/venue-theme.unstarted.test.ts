@@ -27,3 +27,24 @@ it("following before start sends nothing", () => {
   followVenueTheme("x");
   expect(spy).not.toHaveBeenCalled();
 });
+
+it("loading the module creates no stylesheet", async () => {
+  const made = vi.fn();
+  vi.stubGlobal(
+    "CSSStyleSheet",
+    class extends CSSStyleSheet {
+      constructor(options?: CSSStyleSheetInit) {
+        super(options);
+        made();
+      }
+    },
+  );
+  const fresh = (await import(
+    /* @vite-ignore */ `./venue-theme.ts?unstarted=${Date.now()}`
+  )) as typeof import("./venue-theme.js");
+  expect(made).not.toHaveBeenCalled();
+  fresh.startVenueTheme(document.createElement("div"), {
+    fetchImpl: () => new Promise<Response>(() => {}),
+  });
+  expect(made).toHaveBeenCalledOnce();
+});

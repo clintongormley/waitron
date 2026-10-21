@@ -37,7 +37,7 @@ import "@waitron/ui/src/components/wt-help-switch.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { currentLocale, setLocale, t, fill } from "./i18n/t.js";
 import { codeOf, codeMessage } from "./i18n/codes.js";
-import { applyVenueTheme, setContentLanguages } from "@waitron/ui";
+import { applyVenueTheme, readVenueTheme, setContentLanguages } from "@waitron/ui";
 import { DashboardQueries } from "./api/query-controller.js";
 import { diag } from "./diagnostics.js";
 import { signalAcceptedPasskeys } from "./passkey-signals.js";
@@ -1199,7 +1199,9 @@ export class DashboardApp extends LitElement {
 
   #watchVenueTheme(): void {
     void this.#venueThemeQueries
-      .watch("getVenueTheme", [], (answer) => applyVenueTheme(answer))
+      .watchSent("getVenueTheme", [], readVenueTheme, ({ answer, sentAt }) =>
+        applyVenueTheme(answer, sentAt),
+      )
       .catch(() => undefined);
   }
 

@@ -77,6 +77,21 @@ describe("management live events", () => {
     await vi.waitFor(() => expect(bus.subscriberCount).toBe(0));
   });
 
+  it("sends a change made once the response is handed back, before its body is read", async () => {
+    const { app, path, cookie, bus } = await fixture();
+    const response = await app.request(path, { headers: { cookie } });
+    bus.publish({ resources: [{ type: "printers", id: "p1" }] });
+    const reader = response.body!.getReader();
+    try {
+      expect(new TextDecoder().decode((await reader.read()).value)).toContain("event: ready");
+      expect(new TextDecoder().decode((await reader.read()).value)).toBe(
+        'event: change\ndata: [{"type":"printers","id":"p1"}]\n\n',
+      );
+    } finally {
+      await reader.cancel();
+    }
+  });
+
   it("does not extend the session and closes it when the next change finds it expired", async () => {
     const { app, path, cookie, bus, session } = await fixture();
     // The clock is read in JavaScript and the instant bound: this engine has neither `now()` nor an
