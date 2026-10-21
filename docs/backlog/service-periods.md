@@ -37,18 +37,6 @@ leaves the authorising person unstored (decision 14). The station-day and period
 hold the choice, but no person ID. Decide whether to retain that identity before adding a history
 view; this is separate from checking the manager's permission and PIN before a write.
 
-## Sending grace when a period extension is replaced or expires
-
-Decide whether a positive end offset should keep an earlier period's dishes sendable after you
-extend another period, and after an extended last period reaches the business-day changeover.
-The approved slice 3 decision 4 keeps one extension per department and day, replaces that row,
-and reads only today's extension. Two real-store probes on 2026-10-09 observed the resulting
-limit: Lunch extended to 14:45 with a +15-minute offset was sendable at 14:50 before extending
-Afternoon, then was not; a night period extended to 06:00 was sendable at 05:59, then was not
-at 06:05 despite its +15-minute offset. These probes measured the current behavior; they do not
-settle which behavior you want. Retaining an earlier or yesterday's effective end needs a decision
-about the row's meaning and cleanup before changing the reader or writer.
-
 ## Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly implemented through A261
 
 Tabs without tables and the remaining department-name survey stay open. Re-check the advisor
@@ -82,8 +70,7 @@ it left off its list instead, which adds a field to the shared preview type.
 Left open by A506-4, #1597.
 
 With named days gone (A506-5), the rule "special day, then season" is still written out in
-`day-resolver.ts` (twice, for departments and for zones), `business-day-schedule.ts` and
-`period-end-offset.ts`, and the end-offset check relies on list order for it; special-day paint is
+`day-resolver.ts` (twice, for departments and for zones) and `business-day-schedule.ts`; special-day paint is
 read by four separately written queries in `special-days.ts` and `business-day-schedule.ts`;
 `specialDateIn` and `sharedSpecialDate` live in the database module `special-days.ts` rather than
 the browser-safe repeat rules, which leaves import loops with `business-day-schedule.ts` and
@@ -112,16 +99,6 @@ holiday of that name" when the cause is that the year's whole list has not shipp
 The Year's missing-holiday warning (`#warnings`,
 `packages/venue-service/src/dashboard/opening-hours-year.ts`) uses the same sentence and the same
 name, though its read carries the special day's own `name`; a fix covers both.
-
-## The end-offset check accepts a cutoff past the changeover
-
-Left open by A506-9, #1651.
-
-The end-offset check accepts a period whose cutoff runs past the changeover: A506-9's LOOK saved
-Late 00:30–03:00 with a 180-minute offset, a cutoff of 06:00 past a 05:00 changeover. The check
-compares a cutoff only with the start of the next period (`findEndOffsetClash`,
-`period-end-offset.ts`, reached from the "runs into what follows it" checks in
-`menu-timetable.ts`). Decide whether a cutoff past the changeover is refused.
 
 ## A date another manager removed stays in the special-day draft
 
@@ -368,10 +345,6 @@ code, not run again here.
   `special_day.invalid` (reason `order`): `saveSpecialDay` parses one-off dates under the starts
   already in force (`settledClock`). Task 11 left it unchanged, per its implementer, read in the
   code.
-- **A870, past one-off days.** On a date before today's business day, the last-orders check counts
-  weekly, season and repeating special-day ranges as absent only on a venue holding a start change
-  (a waiting one included); on a venue holding none it checks a past one-off day over its season's
-  ranges as before, so the same paint can be refused on one venue and accepted on the other.
 - **A872, repeated work.** A preview or a Save (`apps/server/src/business-day-start.ts`) works the
   plan out with `planBusinessDayStart`, and `clockTransitionAt`
   (`apps/server/src/business-day-changeover.ts`) works it out again, then once more for each of up
