@@ -13,17 +13,17 @@ const cheap = { ...SCRYPT_PARAMS, N: 2 ** 14 };
 const plaintext = Buffer.from("venue configuration");
 
 describe("the test-side derived-key cache", () => {
-  let artifact: Buffer;
-
   it("derives a repeated archive key once", () => {
     const before = derivedKeyStats();
-    artifact = encryptArtifact(plaintext, "right-pass");
+    const artifact = encryptArtifact(plaintext, "right-pass");
     expect(decryptArtifact(artifact, "right-pass")).toEqual(plaintext);
     expect(decryptArtifact(artifact, "right-pass")).toEqual(plaintext);
     expect(since(before)).toEqual({ requested: 3, derived: 1 });
   });
 
   it("still refuses a wrong passphrase, deriving it for real", () => {
+    const artifact = encryptArtifact(plaintext, "refused-pass");
+    expect(decryptArtifact(artifact, "refused-pass")).toEqual(plaintext);
     const before = derivedKeyStats();
     expect(() => decryptArtifact(artifact, "wrong-pass")).toThrow(
       expect.objectContaining({ code: "recovery.passphrase_invalid" }),
@@ -69,9 +69,57 @@ describe("the test-side derived-key cache", () => {
     expect(otherR).not.toEqual(lower);
 
     before = derivedKeyStats();
+    const otherP = deriveKey("keyed-pass", salt, { ...cheap, p: 2 });
+    expect(since(before).derived).toBe(1);
+    expect(otherP).toEqual(
+      scryptSync("keyed-pass", salt, 32, { N: 2 ** 14, r: 8, p: 2, maxmem: cheap.maxmem }),
+    );
+    expect(otherP).not.toEqual(lower);
+
+    before = derivedKeyStats();
     const shorter = deriveKey("keyed-pass", salt, { ...cheap, keylen: 16 });
     expect(since(before).derived).toBe(1);
     expect(shorter).toHaveLength(16);
+  });
+
+  // Node applies its default to an undefined cost and refuses NaN, Infinity and null, so a key
+  // that spells those alike would answer a call real scrypt refuses.
+  const unset = { ...cheap, N: undefined as unknown as number };
+  const refused = [NaN, Infinity, null].map((N) => ({ ...cheap, N: N as unknown as number }));
+
+  function scryptRefusal(params: typeof cheap): unknown {
+    try {
+      scryptSync("probe", salt, 32, params);
+    } catch (error) {
+      return (error as { code?: unknown }).code;
+    }
+    throw new Error("real scrypt accepted the parameters");
+  }
+
+  it.each(refused)("refuses N = $N after an unset N succeeded", (params) => {
+    const code = scryptRefusal(params);
+    const passphrase = `unset-sync-${String(params.N)}`;
+    expect(deriveKey(passphrase, salt, unset)).toHaveLength(32);
+    expect(() => deriveKey(passphrase, salt, params)).toThrow(expect.objectContaining({ code }));
+  });
+
+  it.each(refused)("rejects N = $N after an unset N succeeded, async", async (params) => {
+    const code = scryptRefusal(params);
+    const passphrase = `unset-async-${String(params.N)}`;
+    expect(await deriveKeyAsync(passphrase, salt, unset)).toHaveLength(32);
+    await expect(deriveKeyAsync(passphrase, salt, params)).rejects.toThrow(
+      expect.objectContaining({ code }),
+    );
+  });
+
+  it("derives a salt given as text from its own bytes, not a Buffer salt's", () => {
+    const hex = salt.toString("hex");
+    expect(deriveKey("text-salt-pass", salt, cheap)).toHaveLength(32);
+    const before = derivedKeyStats();
+    expect(deriveKey("text-salt-pass", hex as unknown as Buffer, cheap)).toEqual(
+      scryptSync("text-salt-pass", hex, 32, { N: 2 ** 14, r: 8, p: 1, maxmem: cheap.maxmem }),
+    );
+    expect(since(before).derived).toBe(1);
   });
 
   it("a call that must throw still throws after a success", () => {

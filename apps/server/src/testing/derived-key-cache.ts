@@ -13,9 +13,14 @@ const slot = Symbol.for("waitron.derivedKeyCache");
 const holder = globalThis as typeof globalThis & { [slot]?: CacheState };
 const state: CacheState = (holder[slot] ??= { keys: new Map(), requested: 0, derived: 0 });
 
-function cacheKey(passphrase: string, salt: Buffer, params: ScryptParams): string {
+// Undefined when the inputs are of a kind whose spelling here could match another input that
+// scrypt treats differently; such a call is derived for real and not stored.
+function cacheKey(passphrase: string, salt: Buffer, params: ScryptParams): string | undefined {
   const { N, r, p, keylen, maxmem } = params;
-  return JSON.stringify([passphrase, salt.toString("hex"), N, r, p, keylen, maxmem]);
+  const numbers: unknown[] = [N, r, p, keylen, maxmem];
+  const plain = numbers.every((value) => typeof value === "number" || value === undefined);
+  if (typeof passphrase !== "string" || !Buffer.isBuffer(salt) || !plain) return undefined;
+  return JSON.stringify([passphrase, salt.toString("hex"), ...numbers.map(String)]);
 }
 
 export function derivedKeyStats(): { requested: number; derived: number } {
@@ -28,11 +33,11 @@ export function cachedKdf(real: KdfModule): KdfModule {
     deriveKey(passphrase: string, salt: Buffer, params: ScryptParams = real.SCRYPT_PARAMS) {
       state.requested += 1;
       const key = cacheKey(passphrase, salt, params);
-      const stored = state.keys.get(key);
+      const stored = key === undefined ? undefined : state.keys.get(key);
       if (stored !== undefined) return Buffer.from(stored);
       state.derived += 1;
       const derived = real.deriveKey(passphrase, salt, params);
-      state.keys.set(key, Buffer.from(derived));
+      if (key !== undefined) state.keys.set(key, Buffer.from(derived));
       return derived;
     },
     async deriveKeyAsync(
@@ -42,11 +47,11 @@ export function cachedKdf(real: KdfModule): KdfModule {
     ) {
       state.requested += 1;
       const key = cacheKey(passphrase, salt, params);
-      const stored = state.keys.get(key);
+      const stored = key === undefined ? undefined : state.keys.get(key);
       if (stored !== undefined) return Buffer.from(stored);
       state.derived += 1;
       const derived = await real.deriveKeyAsync(passphrase, salt, params);
-      state.keys.set(key, Buffer.from(derived));
+      if (key !== undefined) state.keys.set(key, Buffer.from(derived));
       return derived;
     },
   };
