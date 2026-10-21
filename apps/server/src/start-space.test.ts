@@ -35,6 +35,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  // Drops a queued one-off rejection a failed case left unused; stat delegates to the real one again.
+  vi.mocked(stat).mockReset();
   await rm(root, { recursive: true, force: true });
 });
 
@@ -214,6 +216,22 @@ describe("freeSpaceAtStart", () => {
     expect(log).toHaveBeenCalledWith("warn", "storage.start_space_low", {
       freeBytesBefore: 5000,
       freeBytesAfter: 5000,
+      deleted: 1,
+      floor: 1000,
+    });
+  });
+
+  it("deletes when told to even when no folder can report", async () => {
+    await touch(rotated(2));
+    const { deps: d, log } = deps({
+      force: true,
+      statfs: statfsStub({ [stateDir]: [new Error("x")], [venueDir]: [new Error("y")] }),
+    });
+    expect(await freeSpaceAtStart(d)).toEqual({ freeBytes: null, belowFloor: false });
+    expect(existsSync(rotated(2))).toBe(false);
+    expect(log).toHaveBeenCalledWith("warn", "storage.start_space_low", {
+      freeBytesBefore: null,
+      freeBytesAfter: null,
       deleted: 1,
       floor: 1000,
     });
