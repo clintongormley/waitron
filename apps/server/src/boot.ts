@@ -153,6 +153,7 @@ import { singletonPass } from "./singleton-pass.js";
 import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
+import { createDiskFullState, noteFullAtStart, watchForDiskFull } from "./disk-full-state.js";
 import { mountNodeApi } from "./node-api.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { mountDeviceApi } from "./device-api.js";
@@ -931,6 +932,10 @@ async function bootServer(
   // beside it.
   const store = await openVenueDatabase(config.venueDir);
   undoOnFailure.push(() => store.close());
+  const diskFull = createDiskFullState({ dir: config.venueDir, now, log });
+  const stopWatchingDisk = watchForDiskFull(diskFull, [store.venue, store.node]);
+  undoOnFailure.push(async () => stopWatchingDisk());
+  await noteFullAtStart(diskFull, { dir: config.venueDir, log });
   const db = store.venue;
   // After migrating, which reinstalls a missing trigger but leaves a same-name altered one in place.
   assertAppendOnlyIntact(db, appendOnlyTables);
@@ -1664,6 +1669,7 @@ async function bootServer(
       secureCookies,
       cardProvider,
       pool: cardPool,
+      disk: diskFull,
       providers: CARD_PROVIDERS,
       venueLocale,
       onboardingIntent: config.onboardingIntent,
