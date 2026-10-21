@@ -25,7 +25,7 @@ export class HardToReadDialog extends LitElement {
   @property({ attribute: false }) lines: string[] = [];
   @property({ type: Boolean }) canFix = false;
   @property({ attribute: false }) opener: HTMLElement | null = null;
-  // `wt-dialog` reports a close made from script a frame later, and drops that report when the
+  // `wt-dialog` reports a close made from script one task later, and drops that report when the
   // dialog is opened again first, so a reopening disarms this.
   #closedByButton = false;
 

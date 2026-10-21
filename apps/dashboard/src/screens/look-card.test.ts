@@ -719,6 +719,7 @@ describe("saving a draft that is hard to read", () => {
     await closed;
     await el.updateComplete;
     expect(dialogOf(el).open).toBe(false);
+    expect(hardToRead(el).open).toBe(false);
     expect(saveTheme).not.toHaveBeenCalled();
     expect(codeField(el).value).toBe("#f2d300");
     expect(editing(el)).toBe(true);
