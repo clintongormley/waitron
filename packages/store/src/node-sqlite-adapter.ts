@@ -144,8 +144,10 @@ export function adaptNodeSqlite(connections: Connections) {
      * `transaction()` would open a fresh top-level one that commits by itself (E8 N2). So the
      * failure that ended it is recorded (`Connections.noteEnded`), and from then until the
      * outermost level finishes, a statement or a `transaction()` from inside a body throws that
-     * failure without running. A full disk that left the transaction open is not recorded: code
-     * that catches it may carry on.
+     * failure without running. The record is the connection pair's, not the body's: an outermost
+     * `transaction()` opened outside the queue while a queue body's transaction is ended clears it
+     * early, and that body's later statements then run and commit by themselves (decision 16). A
+     * full disk that left the transaction open is not recorded: code that catches it may carry on.
      *
      * A nested level whose transaction the engine ended throws an error of its own, never the
      * object its body threw: a caller that tells "my body's failure, already undone" from "the
@@ -342,9 +344,9 @@ type Executable = {
  * **A transaction opened ON A TRANSACTION does not go through Drizzle at all**, and that is the
  * point of `openNested`. Drizzle's own nested transaction releases its savepoint the moment the
  * body RETURNS, so an `async` body's earlier writes would be released rather than rolled back when
- * it later throws. Routing that level through the client shim gives one `settle`-aware savepoint
- * discipline at every level. The nested body is handed the object it was called on, which keeps the
- * recursion finite.
+ * it later throws. Routing that level through the client shim gives every level the same savepoint
+ * handling, which finishes an `async` body when its promise settles. The nested body is handed the
+ * object it was called on, which keeps the recursion finite.
  */
 function addExecute<T extends Executable>(target: T, openNested: NestedOpener, nested = false): T {
   const openTransaction = target.transaction.bind(target);

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { diskFullIn } from "@waitron/shared";
+import { sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { afterEach, describe, expect, it } from "vitest";
 import { connectionPair } from "./connections.js";
@@ -21,7 +22,7 @@ const open = async () => {
   opened.push(store);
   const db = store.venue;
   db.execute("create table sale (id integer primary key, body text unique, pad blob)");
-  const insert = (body: string) => db.execute(`insert into sale (body) values ('${body}')`);
+  const insert = (body: string) => db.execute(sql`insert into sale (body) values (${body})`);
   const fill = () => db.execute("insert into sale (body, pad) values ('fill', zeroblob(65536))");
   const bodies = () =>
     db.execute<{ body: string }>("select body from sale order by id").rows.map((row) => row.body);
@@ -248,6 +249,45 @@ describe("an engine rollback that ends the transaction", () => {
     expect(run).not.toMatchObject(DISK_FULL);
     expect(bodies()).toEqual([]);
   });
+  it("tells a nested caller storage.disk_full when its body caught the full disk and returned", async () => {
+    const { store, db, insert, fill, bodies, limit, errorOf } = await open();
+    limit(4);
+    let filled: unknown;
+    let nested: unknown;
+    await expect(
+      store.venue.withWriteLock(async () => {
+        nested = await errorOf(() =>
+          db.transaction(async () => {
+            insert("inner");
+            filled = await errorOf(fill);
+          }),
+        );
+      }),
+    ).rejects.toMatchObject(DISK_FULL);
+    expect(filled).toBeDefined();
+    expect(nested).toMatchObject(DISK_FULL);
+    expect(nested).not.toBe(filled);
+    expect(bodies()).toEqual([]);
+  });
+
+  it("hands back storage.disk_full from a top-level transaction whose body caught the full disk and returned", async () => {
+    const { db, insert, fill, bodies, limit, errorOf } = await open();
+    limit(4);
+    await expect(
+      db.transaction(async () => {
+        insert("x");
+        await errorOf(fill);
+      }),
+    ).rejects.toMatchObject(DISK_FULL);
+    expect(bodies()).toEqual([]);
+    await expect(
+      db.transaction(async () => {
+        insert("y");
+      }),
+    ).resolves.toBeUndefined();
+    expect(bodies()).toEqual(["y"]);
+  });
+
   it("keeps a running body's record of a full disk when a rollback is issued from outside it", async () => {
     const { store, db, fill, bodies, limit, errorOf } = await open();
     limit(4);
@@ -447,6 +487,46 @@ describe("a full disk at the adapter's own commit", () => {
     expect(execs).toEqual(["begin deferred", "commit"]);
     expect(real.prepare("select who from t").all()).toEqual([]);
     expect(real.isTransaction).toBe(false);
+  });
+});
+
+describe("a full disk on the read connection", () => {
+  it("hands back storage.disk_full for a read from outside a running body", async () => {
+    const write = new DatabaseSync(":memory:");
+    write.exec("create table t (who text)");
+    const read = new Proxy(new DatabaseSync(":memory:"), {
+      get(target, property) {
+        if (property === "prepare") {
+          return () => {
+            throw Object.assign(new Error("database or disk is full"), {
+              errcode: 13,
+              code: "ERR_SQLITE_ERROR",
+            });
+          };
+        }
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === "function"
+          ? (value as (...a: unknown[]) => unknown).bind(target)
+          : value;
+      },
+    });
+    const db = drizzleNodeSqlite(connectionPair(write, read), { schema: {} });
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const body = db.transaction(async () => {
+      await released;
+    });
+    let outside: unknown;
+    try {
+      db.execute("select who from t");
+    } catch (error) {
+      outside = error;
+    }
+    release();
+    await body;
+    expect(outside).toMatchObject(DISK_FULL);
   });
 });
 
