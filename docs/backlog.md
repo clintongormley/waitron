@@ -111,8 +111,10 @@ come after the list above:
   (S3, S6, S10 cover Q27–Q29).**
 - **Design the fixed screens for each kind of device** (A182 part 1, under _The till, devices and
   table service_). The Counter cleanup is built; A738 custom items and A739 paying remain.
-  The handheld, kitchen screen and pass were designed on 2026-10-18 as **A797**, waiting for the owner's answer to Q42 (lane C's questions
-  file): [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
+  The handheld, kitchen screen and pass are **A797**: the owner answered Q42 on 2026-10-18 and the
+  design was revised for it on 2026-10-21, asking only **Q51** (lane C's questions file); slices
+  the notes settle may be built now, A773-2 builds the pass's part, and the phone's order screen
+  waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [mockups](backlog/mockups/a797-device-screens/).
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
   upgrades and recovery_): upgrade testing with rows the product itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
@@ -2344,8 +2346,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A773-2. Firing and the pass.** The [reviewed implementation plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
   is ready; the build remains. Add Requested and pass release, remove Away/Done, and finish the
   station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before
-  each slice. The plan carries A797's completed Q42 amendments; its revised pictures/design remain
-  a UI prerequisite. A803's pass/station tail follows this build.
+  each slice. The plan carries A797's completed Q42 amendments; A797's design was revised on
+  2026-10-21 (§7 there splits the work), and its redrawn pictures and owner FYI remain a UI prerequisite. A803's pass/station tail follows this build.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held
@@ -3053,8 +3055,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).**
   Counter custom items (A738 residual) and the payment window (A739) remain. The handheld,
-  kitchen screen and pass were designed on 2026-10-18 as **A797**, waiting for the owner's answer to Q42 (lane C's questions
-  file); nothing is built until then:
+  kitchen screen and pass are **A797**, designed 2026-10-18 and revised 2026-10-21 for the owner's
+  Q42 answer; open question **Q51** (lane C's questions file) holds back slices 6–7;
+  10–11 wait for A803's slice 3 and 12–12b follow A773-2.
+  Build slices in four groups (the owner's order): short names, the phone's bar, zones and
+  Ready bar; the kitchen's cards, Overview and columns; the phone's order screen after A803's
+  slice 3; the pass, built by A773-2:
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate
   durable post-invoice payment-refund path. The screen designer was

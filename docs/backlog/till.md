@@ -1010,8 +1010,16 @@ the bill-specific draft handles that race.
   Start from the screens in `apps/till/src/screens/` and [the fixed-screen contract](../developers/design-system.md#fixed-device-screens).
   Decide how each workflow fits narrow and wide screens and what a venue may choose per device.
   Counter's custom-item residual (A738) and payment window (A739) remain. The handheld, kitchen
-  screen and pass were designed on 2026-10-18 as A797, waiting for the owner's answer to Q42 (lane C's questions
-  file); nothing is built until then:
+  screen and pass are A797: designed 2026-10-18, revised 2026-10-21 for the owner's answer to Q42
+  (approved with changes). Open question **Q51** (lane C's questions file) asks only what the notes
+  left open: the automatic short name, the bar's table button, the Ready bar's warning time, the
+  pass's other-station dishes setting, dashes for unoccupied tables, words with two meanings and
+  the Spanish. Build slices (design §8), in the owner's order: (1) table short names (migration),
+  the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
+  kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
+  A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits
+  the work). Slices 6–7, the Ready bar's warning, wait for Q51 (c); slices 10–11 wait for A803's
+  slice 3; slices 12 and 12b follow A773-2; the rest build now with the recommended answers:
   [design](../superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](mockups/a797-device-screens/). Menu Device Home Page, receipt configuration and the floor-plan editor stay
   separate. The owner's screen-designer decision is retained under Decisions and deliberate limits.
@@ -1431,8 +1439,9 @@ owner, on the running till:
 Two owner suggestions are open; settle them here:
 
 - "Dashes should maybe be used for any table which is unoccupied" (owner, 2026-10-18, Q42 notes) —
-  Free, Reserved and Needs clearing all dashed, told apart by colour and cue. To weigh in the A797
-  revision with a picture, beside A757's rule of dashes for Needs clearing only, in both themes.
+  Free, Reserved and Needs clearing all dashed, told apart by colour and cue. Weighed in A797's
+  revision (2026-10-21, pictures `08-unoccupied-dashes`), asked as Q51 (e); a small slice in
+  A757's area if approved.
 - "It feels like we need a key of the different states when we click the ?" (owner, 2026-10-18) —
   with help on, the floor shows a badge, “What the colours mean”, that opens a key of every table
   state.
@@ -2426,7 +2435,8 @@ from the [approved design](../superpowers/specs/2026-10-16-a773-courses-and-grou
 The build remains: service lifetime and waiter authority, Requested and scoped pass release,
 station configuration, then tickets and schema retirement. Recheck A756's settings and current
 lane reservations before each working slice. A803's station/pass additions follow it. The plan
-records A797's completed Q42 amendments; its revised design/pictures remain a UI prerequisite.
+records A797's completed Q42 amendments; A797's design was revised on 2026-10-21, and its redrawn
+pictures and owner FYI remain a UI prerequisite.
 This plan adds no runtime behavior. The table panel and per-bill editing contracts belong to
 [A773-1's plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and the
 [ownership amendment](../superpowers/specs/2026-10-17-a773-one-editor-design.md).
