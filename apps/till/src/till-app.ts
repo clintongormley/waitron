@@ -1467,7 +1467,10 @@ function saleRefusalOf(error: unknown, tender: { manualCard: boolean }): Counter
         ? "sale.charged_disk_full"
         : { code: "sale.charged_not_recorded" };
     case "clock.unusable":
-      return typeof refusal.clockAt === "string" && typeof refusal.offsetMinutes === "number"
+      return typeof refusal.clockAt === "string" &&
+        Number.isFinite(Date.parse(refusal.clockAt)) &&
+        typeof refusal.offsetMinutes === "number" &&
+        Number.isFinite(refusal.offsetMinutes)
         ? { clockUnusable: { clockAt: refusal.clockAt, offsetMinutes: refusal.offsetMinutes } }
         : { code: "clock.unusable" };
     default:

@@ -10086,7 +10086,7 @@ describe("till-app", () => {
       expect(text).not.toContain(t("sale.disk_full_manual_card"));
     });
 
-    it("an Otro datáfono sale refused for a full disk adds the card advice", async () => {
+    it("a sale on a terminal the box does not talk to, refused for a full disk, adds the card advice", async () => {
       const { el } = await mountApp({ recordSale: vi.fn().mockRejectedValue(diskFull) });
       const c = await toCounter(el);
       c.store.addProduct(cafe, "2");
@@ -10095,9 +10095,10 @@ describe("till-app", () => {
       await flush(el);
       const text = el.shadowRoot!.querySelector('[role="alert"]')!.textContent!;
       expect(text).toContain(t("sale.disk_full_manual_card"));
-      expect(t("sale.disk_full_manual_card")).toContain(
-        "Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
-      );
+      const refused = t("sale.refused");
+      const cardAdvice = refused.slice(refused.lastIndexOf(". ") + 2);
+      expect(cardAdvice.length).toBeGreaterThan(0);
+      expect(t("sale.disk_full_manual_card").endsWith(` ${cardAdvice}`)).toBe(true);
     });
 
     it("a card charged but not recorded for a full disk names the disk", async () => {
@@ -10129,7 +10130,7 @@ describe("till-app", () => {
         offsetMinutes: 60,
         status: 409,
       });
-      expect(text).toContain("01/01/2001");
+      expect(text).toContain(t("sale.clock_unusable").replace("{date}", "01/01/2001"));
       expect(text).not.toContain(t("sale.refused"));
     });
 
@@ -10145,9 +10146,19 @@ describe("till-app", () => {
           offsetMinutes,
           status: 409,
         });
-        expect(text).toContain(date);
+        expect(text).toContain(t("sale.clock_unusable").replace("{date}", date));
       },
     );
+
+    it("a wrong clock whose reading does not parse shows the code table's sentence", async () => {
+      const text = await payCash({
+        code: "clock.unusable",
+        clockAt: "not a time",
+        offsetMinutes: 60,
+        status: 409,
+      });
+      expect(text).toContain(codeMessage("clock.unusable"));
+    });
 
     it("a wrong clock without a reading shows the code table's sentence", async () => {
       const text = await payCash({
