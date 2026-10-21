@@ -693,6 +693,11 @@ it.each([false, true])(
 it("the built register-till command activates its selected hour and replays without allocating again", async () => {
   const { env, venueDir, recoveryKey } = await selectedRegistrationCommand();
   await cp(new URL("./assets", import.meta.url), join(root, "assets"), { recursive: true });
+  const uiCore = join(root, "node_modules/@waitron/ui-core");
+  await mkdir(join(uiCore, "src/tokens"), { recursive: true });
+  for (const file of ["package.json", "src/tokens/colors.css", "src/tokens/structure.css"]) {
+    await cp(new URL(`../../../packages/ui-core/${file}`, import.meta.url), join(uiCore, file));
+  }
   const binary = join(root, "register-till.mjs");
   const buildScript = join(root, "build-command.mjs");
   await writeFile(
