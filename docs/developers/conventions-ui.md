@@ -1053,10 +1053,31 @@ recorded with the refusal (`refusedTriggers`) and shown under that line, one lin
 that holds a name: "Missing triggers:" and "Changed triggers:". `/recovery-api/status` reports
 `refused`, not the names.
 
+**A full disk at start** (A798-B slice 2). A start that finds under 256 MiB free first deletes what
+it can make again: rotated logs but the newest, crash reports older than a week, and backup staging
+(`apps/server/src/start-space.ts`). If it is still below that floor and cannot write its count back
+unchanged because the disk is full, it serves the page AT ONCE under `storage.disk_full`, and writes
+nothing. The count was not raised, so where the page would say "Failed N times." it says "Level:
+recovery. This start was not counted: the disk is full." («Nivel: recovery. Este arranque no se ha
+contado: el disco está lleno.»). The full-disk action begins "The box has deleted what it could make
+again, and that was not enough." («El equipo ha quitado lo que podía volver a crear, y no ha
+bastado.»). The Spanish says «quitado», not the design's «borrado», because the page's never-wipe
+check (`NEVER_WIPE_ES`, `apps/server/src/recovery-surface.test.ts`) refuses every word starting
+«borra». The sentence holds however the page was reached, because a start whose failure is
+classified `storage.disk_full` deletes the same leftovers, whatever the free space, before it
+records the failure.
+
+Every recovery page `runEntry` serves, the one served at once and the ordinary one, shows the free
+space just below the status line: "Free space on the box's disk: 1.2 MB." («Espacio libre en el
+disco del equipo: 1,2 MB.»). It is read again on every `GET /`, from the lower of the state and
+venue folders, in decimal megabytes with at most one decimal, formatted for the page's language,
+and reads "unknown" («desconocido») when the filesystem cannot say. `/recovery-api/status` does not
+carry it. Anyone on the venue's network can now read the box's free space, as they can the log tail.
+
 Strings on the page that come from outside the image: the error CODE, `lastFailureAt`, the LOG TAIL,
 the last failure's detail and the recorded trigger names, all HTML-escaped; the trigger names also
-pass through `redactSecrets`. The failure count also does, read as a number, and
-so does a recorded holder kind, which on the page only selects a fixed name from a closed table.
+pass through `redactSecrets`. The failure count also does, read as a number, as
+does the free space, and so does a recorded holder kind, which on the page only selects a fixed name from a closed table.
 `/recovery-api/status` returns the kind itself; the read of `recovery.json` keeps it only when it is one of `VENUE_HOLDER_KINDS`, and keeps the
 trigger names only beside `refused` and only as two lists of strings. The
 browser's `Accept-Language` also reaches the page, and only selects the language

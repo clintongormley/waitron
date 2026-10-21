@@ -200,6 +200,10 @@ result.
   (the lock's holder file), free afterwards 4,096. With 16, 24, 32 and 48 KiB left: rejected
   `errcode 4874 | disk I/O error`, free afterwards 8,192 (40,960 for 48 KiB). Every one recorded
   `lastErrorCode: "unknown"`. Failing case for "today names these a full disk": `storage.disk_full`.
+  - Contrary, 2026-10-21, macOS 26.6.2 on HFS+ (Task 5b's real-disk file, its 8 KiB row through
+    the branch's `runEntry`, read by a temporary log): the start failed with errcode 14 (`unable to
+    open database file`), not `ENOSPC` on the holder file; the 16 KiB row failed with 4874 as above.
+    So no real-disk row drives the `ENOSPC` branch; it rests on the unit tests.
 
 **Not measured, and how the plan makes CI measure it:**
 

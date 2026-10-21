@@ -2371,10 +2371,13 @@ itself and keeps nothing.
 **Weaker than the rule.**
 
 - Nothing was measured on Linux's filesystems, which is what the box runs.
-- The commit point is tested on a stand-in: a `Proxy` over a real in-memory connection whose
+- The commit point is tested here on a stand-in: a `Proxy` over a real in-memory connection whose
   `commit` runs the real `rollback` and then throws errcode 13. Through the old queue it printed the
   same lines the real disk image did (E8's last case). No page-limit shape TRIED met the limit at
-  commit (E3, E3b); slice 2's real-disk harness is to add an at-commit case (the plan's decision 1).
+  commit (E3, E3b). Since slice 2 a real disk meets it: the at-commit case in
+  `apps/server/src/start-full-disk.e2e.test.ts` passes on a 32 MiB HFS+ image, and on a tmpfs it is
+  unmeasured until that file's first CI run
+  ([testing-guide.md](testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem)).
 - The change-feed shape in E13 was a copy of its trigger, not the feed itself.
 - **The record of an ended transaction belongs to the connection pair, not to the body.** An
   outermost `db.transaction` opened outside the write queue, while a queue body's transaction is
@@ -2396,6 +2399,62 @@ itself and keeps nothing.
   less `*.test.*` files, re-run 2026-10-21 at `475d06c38`, found seven calls, every one under a
   `test/` or `src/testing/` folder — weaker than "none in product code": a receiver with another
   name is not matched. The backlog holds the ways to close it.
+
+### A full disk is not one error code
+
+Slice 1 knows a full disk by result code 13, "database or disk is full". At start that is often
+not what arrives: the disk fills while the start is opening files, and the engine and the system
+then report the failure in other ways. Measured 2026-10-21 for A798-B slice 2 on macOS 26.6.2 and on
+Linux in Docker (engine and filesystem probes only), Node v26.11.1
+([plan, "Measured for this plan"](../superpowers/plans/2026-10-21-a798-2-full-disk-at-start.md#measured-for-this-plan),
+which names each probe and how it ran):
+
+- **13**, `database or disk is full`, on Linux tmpfs and ext4 at `begin immediate` on the existing
+  `recovery.lock` and `venue.lock` (F2, F5, F11).
+- **14**, `unable to open database file`, on HFS+ at the same two locks, at the database's open and
+  at a plain read (F2, F5, F11).
+- **4874**, `disk I/O error` (SQLite's `SQLITE_IOERR_SHMSIZE`, primary code 10), when the database is
+  opened with a few KiB left, on HFS+, APFS, tmpfs and ext4 (F5, F6, F11, F14).
+- **`ENOSPC`**, from the system rather than the engine: writing the venue lock's holder file with
+  8 KiB left on HFS+ (F14), writing `recovery.json.tmp` (F2), and on APFS the rename onto
+  `recovery.json` (F2).
+- **APFS refused writes while reporting 1,228,800 bytes free** (F1), so "free space is zero" is not
+  the test either.
+- **14 also comes with plenty of room**: opening `recovery.lock` in a missing state folder, or in a
+  folder this user cannot write that holds no `recovery.lock` yet (F12, macOS and Linux tmpfs with
+  GBs free). The same unwritable folder already holding the lock gave 1544 (`attempt to write a
+  readonly database`) and `EACCES`.
+
+Which one arrives depends on the filesystem and on the step: F11 shows that on HFS+, with 4 to 16 KiB
+free, the first-setup inspection's read-only open fails with 4874 and then the count and the venue
+lock fail with 14.
+
+**How the start names one.** `fullDiskFailure(error, freeBytes)` (`apps/server/src/boot-failure.ts`)
+holds when `diskFullIn` does (13, or `storage.disk_full` already in the cause chain), whatever the
+free space. Otherwise it holds only when the lower of the state and venue folders' free space is
+under `FULL_DISK_BYTES`, 16 MiB, and the cause chain carries an engine result code whose primary
+code (`errcode & 0xff`) is 10 or 14, or an `ENOSPC`. `classifyStartFailure` uses it to turn
+`provisioning.database_unreachable` or `unknown` into `storage.disk_full`; a known `AppError` keeps
+its own code. The start's write-back of its unchanged count uses it to decide whether to serve the
+recovery page at once (`countWritable`, `apps/server/src/node-entry.ts`). Why 16 MiB: every
+full-disk failure measured happened with at most 48 KiB free on HFS+, tmpfs and ext4 (F6, F11, F14)
+and with about 1.2 MB reported free on APFS (F1, F2, F5), and a missing folder raises 14 with room
+to spare, so the clean-up floor of 256 MiB cannot be the test.
+
+**Accepted risk** (the plan's decision 6): a missing or unmounted venue folder, an unwritable folder
+(both 14), or a failing disk (the I/O family) on a disk that ALSO has under 16 MiB free is reported
+as a full disk. Freeing space does not fix it, and the next start after space is freed reports it by
+its own code.
+
+`ENOSPC` is deliberately not in `diskFullIn` (`@waitron/shared`): that would change what every
+route answers, so a route behind `createErrorBoundary` whose failure is the system's `ENOSPC`
+still answers `server.internal` (backlog).
+
+Guards: the `fullDiskFailure`, `classifyStartFailure` and `startFailureCode` cases in
+`apps/server/src/boot-failure.test.ts`, on stubbed errors and free space; and the refused-open rows
+of `apps/server/src/start-full-disk.e2e.test.ts`, which on HFS+ failed with 14 at 8 KiB left and
+4874 at 16 KiB. No real-disk case drives the `ENOSPC` branch: F14's `ENOSPC` at 8 KiB did not
+repeat there.
 
 ## A refusal under result code 1811 is identified by its words
 
@@ -2513,6 +2572,22 @@ nothing checks that a new entry point names itself. `waitron-break-glass` and `w
 open the folder with `exclusive: false`, so they take no lock and write no holder file. A holder that
 dies leaves its file behind; the next holder overwrites it.
 
+**A start below the free-space floor reads it too, and on a full disk that guards less than it
+seems.** With under 256 MiB free, a start deletes everything in `<state>/backup-staging` unless the
+holder file shows a fresh heartbeat (`freeSpaceAtStart`, `apps/server/src/start-space.ts`), so that a
+start refused beside a running server does not delete that server's backup in progress. But the
+heartbeat is written as a new file and a rename (`writeVenueHolder`,
+`packages/store/src/venue-holder.ts`). On a full HFS+ filesystem it failed with `ENOSPC` on
+`venue.holder.json.partial` and the file kept its earlier `heartbeatAt` (F13 in the
+[slice 2 plan](../superpowers/plans/2026-10-21-a798-2-full-disk-at-start.md#measured-for-this-plan)),
+so 30 s after the disk fills a running server's holder reads stale, and a start beside it deletes
+its staging. Accepted (the plan's decision 5): that one backup run fails, and the database and every
+archive already at a destination are untouched. Between a full disk and 256 MiB free, where the
+heartbeat still writes, the guard holds. Read, not run: when `WAITRON_VENUE_DIR` puts the venue
+folder on another disk, a full venue disk with room on the state disk still makes the start delete
+(it acts on the lower of the two folders' free space) while the heartbeat goes stale, so a running
+server whose backup had room loses its staging.
+
 **Two limits, on purpose.** A start refused `provisioning.database_in_use`
 (`apps/server/src/node-entry.ts`) reads the file with `readVenueHolder` and `/health` with
 `readVenueHolderAsync`, one parser behind both, and both call the
@@ -2552,7 +2627,7 @@ variable set it writes no file, and neither does a program that did not name its
 line to their own error output only. The recovery page reads only `waitron.log`.
 
 **`recovery.json` has a lock of its own.** Every change to the recovery count (the count before a
-boot, the classified failure, a refused start's undo, the stayed-up clear, the recovery page's
+boot, the start's write-back of an unchanged count below the free-space floor, the classified failure, a refused start's undo, the stayed-up clear, the recovery page's
 retry, the append-only check's refusal while trading) is one read and one write while holding `recovery.lock` in the state folder
 (`apps/server/src/recovery-lock.ts`). It is the same `begin immediate` technique, but it polls
 instead of setting a busy timeout, because the engine's busy wait stops the whole thread: a second
