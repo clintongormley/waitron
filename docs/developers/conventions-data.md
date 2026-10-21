@@ -116,9 +116,21 @@ English-only check refused them only because «cliente» is on `FISCAL_VOCABULAR
 reported nothing; `export const obligado = 1;` reported `obligado`. So a Spanish word nobody listed
 passes, and only review stops it.
 
-**Not settled.** Three packages written for Spain — `workforce-es` (labour terms, declared vocabulary),
-`country-es` and `reporting`'s modelo-303 form (both outside the scan) — carry Spanish today. Whether
-each is a home, or its text moves to a translation file, is the owner's call after the A913 audit.
+**The packages written for Spain, and country packs (owner, answering the A913 audit, 2026-10-20).**
+In the owner's words: "The Spanish specific packs are fine to house official quotes and Spanish
+specific terms. Also, I think in country packs we should also always provide English, even though it
+is not an official language." And: "The receipt in Spain should always be printed in the receipt
+language (eg catalán), not English. Anything that lives in the non Spanish country pack/or verifactu
+[fiscal] package should be in English only, with translations provided in an i18n file." And: "Each
+country pack should have country specific demo data", then: "Even region specific demo data, eg
+catalán demo in Catalunya." So `country-es`, `workforce-es` and `reporting`'s modelo 303 are homes, like
+the Veri\*Factu package, for text official only in Spain (BOE holiday names, INE province names,
+AEAT's form descriptions), for Spanish-specific terms, and for Spain-only printed text with its
+translations in Spain's official languages; Spain-only text or logic found in general code moves
+into them. Every country pack must also carry English for the words it shows (Spain's
+does not yet), and a receipt in Spain prints in the venue's receipt language, never English; A963 and A965 fix what
+does not yet. The fixes are queued as A918 and A963–A977
+([A913 in the backlog](../backlog/architecture.md#a913s-fix-items-general-code-english-only)).
 
 ## Spanish domain terms are deliberate, and a module declares its own
 
@@ -3146,9 +3158,9 @@ belonging to another tenant". Printer routes enforce the same check; their regre
 
 ## `packages/fiscal` guards a different axis from the English-only rule
 
-`packages/fiscal-verifactu` is Spanish by design; `packages/reporting` (the modelo-303 form, Spain's
-VAT return) and `packages/workforce-es` carry Spanish today, and whether they keep it is open
-([General code is English only](#general-code-is-english-only)). Since 2026-09-07 the
+`packages/fiscal-verifactu` is Spanish by design; `packages/reporting`'s modelo-303 form (Spain's
+VAT return) and `packages/workforce-es` are homes for text official only in Spain and for
+Spanish-specific terms ([General code is English only](#general-code-is-english-only)). Since 2026-09-07 the
 English-only guard (`scripts/english-only.test.ts`) scans comment prose as well as identifiers in
 the generic packages, leaving only `«…»` quotes and backtick citations exempt.
 `packages/fiscal/src/no-regime-vocabulary.test.ts` enforces a different axis — a domain's vocabulary

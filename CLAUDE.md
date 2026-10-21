@@ -422,15 +422,20 @@ called weaker than its name, the topic file lists what it does not see.
 - **General code is English only** (owner, 2026-09-07 and 2026-10-19): no Spanish, Catalan or other
   non-English text in any general package or app — not in a literal, comment, identifier, file
   name, seed or starter content, or test. It belongs only in `packages/fiscal-verifactu`, AEAT's
-  wire-protocol names, and translation files (such as a module's `dashboard/strings.ts`, an app's
-  `apps/<app>/src/i18n/`, and the guides under `apps/server/src/guide/<language>/`). Starter
+  wire-protocol names, translation files (such as a module's `dashboard/strings.ts`, an app's
+  `apps/<app>/src/i18n/`, and the guides under `apps/server/src/guide/<language>/`), and the
+  packages written for Spain (`country-es`, `workforce-es`, `reporting`'s modelo 303), which hold
+  text official only in Spain, Spanish-specific terms, and Spain-only printed text in Spain's
+  official languages (owner, 2026-10-20, A913). Every country pack must also provide English, and demo
+  data belongs in its country's pack — neither is true yet (A965, A971, A972); a receipt in Spain
+  prints in the venue's receipt language, never English; A963 and A965 fix what does not
+  yet. Starter
   content a module writes into a new venue is English, translated when the box is set up; a test
   of a non-English screen reads its expected text from the strings file. A Spanish domain term has one declaring home, its module's
   vocabulary; a fiscal term never goes in the base list. Cost: A758-1's starter reasons «Cambio del
   cliente» were refused only because «cliente» is a declared fiscal word. Guard:
   `scripts/english-only.test.ts`, weaker than its name — it refuses only listed words, scans only
-  the packages `GENERIC_PACKAGES` names and never `apps/*`, so review greps the diff. Whether
-  `workforce-es`, `country-es` and `reporting` keep their Spanish is open (backlog A913). Detail:
+  the packages `GENERIC_PACKAGES` names and never `apps/*`, so review greps the diff. Detail:
   [conventions-data.md](docs/developers/conventions-data.md).
 - **The composition list lives in `@waitron/composition`, and it is the only place that names every
   module.** Generic code reaches the regime through the descriptor's `provisioning` and `fiscal`

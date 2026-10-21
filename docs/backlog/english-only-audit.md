@@ -2,8 +2,12 @@
 
 Audited 2026-10-20 on main `a3be14ba4`. A dated record: it describes the tree as it was that day.
 The rule it checks is in [conventions-data.md](../developers/conventions-data.md#general-code-is-english-only);
-the backlog entry is [A913](architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes).
+the backlog entry is [A913](architecture.md#a913s-fix-items-general-code-english-only).
 Nothing here changes code. The owner chooses what to fix; each fix then becomes its own item.
+
+_2026-10-20: the owner answered points 2–8, and point 1 follows from earlier answers; the rule's homes are now in
+[conventions-data.md](../developers/conventions-data.md#general-code-is-english-only) and the fixes
+are A918 and A963–A977 ([backlog](architecture.md#a913s-fix-items-general-code-english-only))._
 
 ## In plain English
 

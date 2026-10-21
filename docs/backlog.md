@@ -2181,7 +2181,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   "Starts" column heads. The owner sees at land that deleting a course deletes the steps that start
   from it, and that a step left first that started after the step before then starts When seated. The starter names are English when the venue's first receipt language is English and
   Spanish otherwise (`packages/venue-service/src/service-steps.ts`), which the English-only rule
-  (owner, 2026-10-19) does not allow; A913 lists it. Not put to the owner (plan's question 3): a department created
+  (owner, 2026-10-19) does not allow; A918 fixes it. Not put to the owner (plan's question 3): a department created
   later in the dashboard gets the starter steps. Also for the owner, from #1891's look and review: the
   start box cuts labels short — "Repeats after the last order" at every width (Chromium on macOS:
   the text needs 176 px and the box gives 150 on a desktop), and several more at phone width once
@@ -2329,14 +2329,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   A758-1).** `override.pick_supervisor` became "Choose who approves" but stays «Elige a un
   responsable» (`apps/till/src/i18n/strings.ts`). Not wrong; reword the Spanish to match.
 
-- **A918. Starter content in the venue's languages at setup (owner question, left open by A758-1).**
+- **A918. Starter content in the venue's languages at setup (left open by A758-1).**
   Starter content a module writes into a new venue is English, translated when the box is set up
   (owner, 2026-10-19), but nothing translates it yet: A758-1's nine void and comp reasons are English
-  on every venue. The owner is asked how (lane C's questions, 2026-10-20): (A) each module ships a
-  translation file of its starter names and setup writes every content language the venue has; (B)
-  Cloud's Translate all runs at the end of setup; (C) English until someone translates. The same
-  answer covers the kitchen station, device profiles, service steps and units
-  ([audit](backlog/english-only-audit.md)).
+  on every venue. The owner chose (2026-10-20): each module ships a translation file of its starter
+  names, setup writes every language the venue uses from it, and the English-only check is to allow
+  those files. It
+  covers reasons, the kitchen station «Cocina», device profiles, service steps, seasons and units, and
+  is A913's point 1 ([audit](backlog/english-only-audit.md), Bucket D; [A913's
+  items](backlog/architecture.md#a913s-fix-items-general-code-english-only)).
 
 - **A912. A new venue's set-up report still says "default cancel reason ready" (left open by
   A758-1).** It now seeds nine starter reasons (`packages/adjustments/src/provisioning.ts`; pinned
@@ -4871,7 +4872,7 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 
 - **The payment slip was left alone.** Its words («JUSTIFICANTE DE PAGO», «Importe», «Cobrado»)
   stay Spanish (`apps/server/src/payment-slip.ts`), and its date and amounts still follow
-  `WAITRON_TILL_LOCALE` (`apps/server/src/payment-slip-print.ts`).
+  `WAITRON_TILL_LOCALE` (`apps/server/src/payment-slip-print.ts`). See A964 and A965.
   [Detail](backlog/languages.md#the-payment-slip-was-left-alone)
 
 - **The translations need a native or official check before go-live.** Apart from the Catalan
@@ -4886,7 +4887,7 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
   paper it drops to its own line wherever it prints in words.
 
 - The sample receipt the preview draws keeps its Spanish content («Mesa 6», «MUESTRA/1»,
-  «Café y tostada») in every language; only its fixed words change.
+  «Café y tostada») in every language; only its fixed words change. A965 asks whether that stays.
 
 ### Alerts, logging and diagnostics
 
@@ -6394,13 +6395,56 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   dev-stack slots and Santet venue through the plan; leave the owner's physical `waitron.local`
   off/quarantined, image pinned, for the owner to reset on return after 2 November.
 
-- **A913. Find the non-English text in general code, then propose fixes (owner, 2026-10-19).**
-  General code is English only (CLAUDE.md §3; the owner's decisions are in
-  [conventions-data.md](developers/conventions-data.md#general-code-is-english-only)). A docs-only
-  audit lists every non-English text in `packages/*` and `apps/*` outside the allowed homes and asks
-  the owner which to fix. **Audit done 2026-10-20** ([the audit](backlog/english-only-audit.md));
-  waiting on the owner's choice of what to fix and the policy for the packages written for Spain.
-  [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+- **A913's fix items: general code English only (owner's answers, 2026-10-20).** The audit
+  ([english-only-audit.md](backlog/english-only-audit.md)) and the owner's answers became the
+  items below and A918. A918 and A963–A965 come first: they change what a venue sees. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **A963. A full invoice's address: Spain's rule moves to Spain's pack, the till stores a country
+  code.** `apps/server/src/invoice-selection.ts` refuses an address not ending «España» with a
+  five-digit postcode; the till appends «España». Changes printed invoice text. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **A964. Kitchen tickets and the order-number slip follow the venue's language, from
+  `apps/server/src/i18n/`.** Today they follow `WAITRON_TILL_LOCALE`, which setup never writes, so
+  an installed box prints them in Spanish. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **A965. Spain's receipt words gain English; the card slip prints in the receipt language, and the
+  refund receipt's heading moves into Spain's pack.** [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **A966. The server's emails move into `apps/server/src/i18n/`** (account and missed-clocking
+  emails). No visible change. After A964. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **A967. The server's printed reports and test pages move into `apps/server/src/i18n/`**
+  (working-time PDF frame, category sales, printer test and ruler pages), in two pull requests.
+  After A964. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **A968. The guide's frame and the recovery page move into `apps/server/src/i18n/`.** The recovery
+  page must still load without the database. After A964. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **A969. `dashboard-kit`'s fallback error and alert text moves into a strings file.** [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **A970. Three `workforce-es` access-holder values get English labels.** [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **A971. Spain's pack provides English for every word it shows** (holiday names, area labels,
+  notices) — check first; a holiday with two names may need a schema change. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **A972. Demo data per country pack and region — DESIGN FIRST, then ask the owner.** Spain's
+  pack already names its demo; the data set itself (`apps/server/scripts/demo-seed/data-sets/`)
+  moves into `country-es`, plus region demos ("catalán demo in Catalunya"). After A918. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **A973. `settle-invoice-first.ts` writes English.** An operator script that can write «Comida»,
+  «Descuento» and «Supervisora» into a production venue's filed records. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **A974. Comments, identifiers and file names in general code to English** (Bucket E and F of the
+  audit). Low priority. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **A975. Developer tools and demo scripts to English** (`dev-setup.ts`, the `*-demo.ts` scripts,
+  README examples). Low priority; needed before A977 can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **A976. The server's test venues default to English** — the first test cleanup; later ones go
+  package by package from A977's list. Low priority. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **A977. Widen the English-only guard to every text file, after A918 and A963–A975.** Accented
+  letters too; a shrinking-only list of test folders still to clean. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; revised design awaits agreement).**
   [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md) and [mockups](backlog/mockups/a646-modules-page/README.md).
