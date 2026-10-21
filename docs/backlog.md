@@ -2384,12 +2384,19 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   already lays itself out again (A768's default; the owner has not decided). Decide whether any of
   them should follow a profile edit made on the dashboard while the till is open.
 
-- **A take-over or a recall into the order acts as whoever the session is (left open by A791,
+- **A take-over or a recall into the order acts as whoever the session is (left open by A791 #1943,
   2026-10-21).** Both are started by a tap and sent after the order's save queue
   (`apps/till/src/state/draft-sync.ts` `#takeOver` and `runCommand`); one started by one person and
   sent after the next person's sign-in answer would act as the next person (read, not run). Whether
   the lock screen always stops such a command first is not traced. If it does not, name the person
   in those requests as A791 did for the save.
+
+- **A sign-out while an order save is waiting may keep the wrong lines (left open by A791 #1943,
+  2026-10-21).** If someone signs out while a save of their order is still out and a newer version
+  of the bill has already reached the till, their kept unsaved lines could be replaced by the ones
+  on screen (suspected by reading `DraftSync.#saveNow`'s error handling in
+  `apps/till/src/state/draft-sync.ts`, not reproduced). Reproduce it with a test before changing
+  anything; #1943 fixed the same mix-up for its own refusal only.
 
 - **A792. Two smaller points A768's last review left (2026-10-17).** Signing out with a kept,
   unsaved order on a dead connection now waits up to 150 s before the till tells the server (the
