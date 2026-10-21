@@ -106,6 +106,33 @@ it("opens the required fields quiet and blocks an unchanged programmatic save", 
   expect(writes).toEqual([]);
 });
 
+it("shows no end offset field", async () => {
+  const el = await mount(true);
+  expect(el.shadowRoot!.querySelector("[name=endOffsetMinutes]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=offset-explanation]")).toBeNull();
+  expect(save(el).disabled).toBe(true);
+});
+
+it("a save sends no end offset", async () => {
+  const sent: { periodId: string | null; input: Record<string, unknown> }[] = [];
+  const listen = (el: PeriodDialog) =>
+    el.addEventListener("period-save", (e) => sent.push((e as CustomEvent).detail));
+  const fresh = await mount();
+  listen(fresh);
+  await change(fresh, "name", { value: "Dinner" });
+  await change(fresh, "menuId", { value: "lunch" });
+  save(fresh).click();
+  await fresh.updateComplete;
+  fresh.remove();
+  const stored = await mount(true);
+  listen(stored);
+  await change(stored, "name", { value: "Late lunch" });
+  save(stored).click();
+  await stored.updateComplete;
+  expect(sent.map(({ periodId }) => periodId)).toEqual([null, "p1"]);
+  for (const { input } of sent) expect(Object.keys(input)).not.toContain("endOffsetMinutes");
+});
+
 it("headed Edit period · Restaurant for a period and Add period · Restaurant for a new one", async () => {
   const edit = await mount(true);
   expect(edit.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Edit period · Restaurant");
@@ -129,11 +156,11 @@ it("shows what the chosen customer menu includes under it, and nothing for a men
   expect(includes()).toBeNull();
 });
 
-it("orders Name, Colour, Customer menu, Staff-only menus, End offset, in English and Spanish", async () => {
+it("orders Name, Colour, Customer menu, Staff-only menus, in English and Spanish", async () => {
   const el = await mount(true);
   const order = () =>
     [...el.shadowRoot!.querySelectorAll("[name]")].map((node) => node.getAttribute("name"));
-  expect(order()).toEqual(["name", "colour", "menuId", "staffMenuIds", "endOffsetMinutes"]);
+  expect(order()).toEqual(["name", "colour", "menuId", "staffMenuIds"]);
   expect(field(el, "menuId").label).toBe("Customer menu");
   setLocale("es");
   el.requestUpdate();
@@ -178,7 +205,6 @@ it("sends the changed period's trimmed name, colour and staff menus once", async
         colour: "green",
         menuId: "lunch",
         staffMenuIds: ["deli", "drinks"],
-        endOffsetMinutes: 0,
       },
     },
   ]);
@@ -291,7 +317,6 @@ it("Enter on the native name field submits the changed period", async () => {
         colour: "blue",
         menuId: "lunch",
         staffMenuIds: ["deli"],
-        endOffsetMinutes: 0,
       },
     },
   ]);
@@ -319,7 +344,6 @@ it("draws Save in the footer and a native click submits the changed period", asy
         colour: "blue",
         menuId: "lunch",
         staffMenuIds: ["deli"],
-        endOffsetMinutes: 0,
       },
     },
   ]);
@@ -525,22 +549,6 @@ it("with no colour chosen, the chooser shows none and its first tile is the tab 
   ).toEqual([0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]);
 });
 
-it("LOOK L9: the end-offset explanation is small muted hint text", async () => {
-  const el = await mount(true);
-  const name =
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!;
-  await name.updateComplete;
-  const text = getComputedStyle(name.shadowRoot!.querySelector("input")!).color;
-  const explanation = getComputedStyle(
-    el.shadowRoot!.querySelector("[data-test=offset-explanation]")!,
-  );
-  expect(explanation.fontSize).toBe(
-    getComputedStyle(el).getPropertyValue("--wt-font-size-sm").trim(),
-  );
-  expect(explanation.color).not.toBe(text);
-  expect(parseFloat(explanation.marginTop)).toBeLessThan(0);
-});
-
 it("a Save refused only for its colour moves focus to the colour field", async () => {
   const el = document.createElement("period-dialog");
   el.menus = menus;
@@ -582,7 +590,6 @@ it("no Floor plan field when adding or editing, and a save sends no floor plan",
   expect(writes).toHaveLength(1);
   expect(Object.keys(writes[0]!.input).sort()).toEqual([
     "colour",
-    "endOffsetMinutes",
     "menuId",
     "name",
     "staffMenuIds",
@@ -654,138 +661,6 @@ it("departed controls cannot edit, submit or close a reopened period", async () 
   expect(writes).toEqual([]);
 });
 
-it.each([0, -15, 14])(
-  "opens the saved offset %s on the native required text field",
-  async (offset) => {
-    const el = await mount(true);
-    el.period = { ...period, id: `offset-${offset}`, endOffsetMinutes: offset };
-    await el.updateComplete;
-    const control =
-      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=endOffsetMinutes]")!;
-    await control.updateComplete;
-    const native = control.shadowRoot!.querySelector("input")!;
-    expect(native.value).toBe(String(offset));
-    expect(native.name).toBe("endOffsetMinutes");
-    expect(control.required).toBe(true);
-    expect(save(el).disabled).toBe(true);
-  },
-);
-
-it("starts new periods at zero and sends an offset-only edit as a JSON number on Enter", async () => {
-  const fresh = await mount();
-  expect(field(fresh, "endOffsetMinutes").value).toBe("0");
-  fresh.remove();
-  const el = await mount(true);
-  const writes: unknown[] = [];
-  el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
-  await change(el, "endOffsetMinutes", { value: "+014" });
-  expect(save(el).variant).toBe("primary");
-  expect(save(el).disabled).toBe(false);
-  const control =
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=endOffsetMinutes]")!;
-  await control.updateComplete;
-  control
-    .shadowRoot!.querySelector("input")!
-    .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
-  expect(JSON.parse(JSON.stringify(writes))).toEqual([
-    {
-      periodId: "p1",
-      input: {
-        name: "Lunch",
-        colour: "blue",
-        menuId: "lunch",
-        staffMenuIds: ["deli"],
-        endOffsetMinutes: 14,
-      },
-    },
-  ]);
-  expect(
-    el.commitSubmitted({
-      name: "Lunch",
-      colour: "blue",
-      menuId: "lunch",
-      staffMenuIds: ["deli"],
-      endOffsetMinutes: 14,
-    }),
-  ).toBe(true);
-  await el.updateComplete;
-  expect(save(el).disabled).toBe(true);
-  await change(el, "endOffsetMinutes", { value: "-15" });
-  expect(save(el).disabled).toBe(false);
-  await change(el, "endOffsetMinutes", { value: "0014" });
-  expect(save(el).disabled).toBe(true);
-});
-
-it("equivalent signed zero does not make an unchanged period saveable", async () => {
-  const el = await mount(true);
-  const writes: unknown[] = [];
-  el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
-  await change(el, "endOffsetMinutes", { value: "-000" });
-  expect(save(el).variant).toBe("secondary");
-  expect(save(el).disabled).toBe(true);
-  save(el).click();
-  expect(writes).toEqual([]);
-});
-
-it.each(["", "1.5", "1e2", "-", "1440", "-1440", "Infinity"])(
-  "preserves invalid offset %j and blocks saving until corrected",
-  async (text) => {
-    const el = await mount(true);
-    const writes: unknown[] = [];
-    el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
-    await change(el, "endOffsetMinutes", { value: text });
-    save(el).click();
-    await el.updateComplete;
-    expect(field(el, "endOffsetMinutes").value).toBe(text);
-    expect(field(el, "endOffsetMinutes").error).toBe("Enter whole minutes from -1439 to 1439.");
-    expect(
-      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
-        .error,
-    ).toBe("Correct the highlighted fields to continue.");
-    expect(writes).toEqual([]);
-    expect(save(el).disabled).toBe(true);
-    await change(el, "endOffsetMinutes", { value: "-1439" });
-    expect(field(el, "endOffsetMinutes").error).toBe("");
-    expect(save(el).disabled).toBe(false);
-  },
-);
-
-it("marks an offset placement refusal and leaves retry enabled", async () => {
-  const el = await mount(true);
-  await change(el, "endOffsetMinutes", { value: "15" });
-  save(el).click();
-  el.refusal = {
-    code: "menu_period.invalid",
-    params: { field: "endOffsetMinutes", reason: "placement" },
-  };
-  await el.updateComplete;
-  expect(field(el, "endOffsetMinutes").error).toBe(
-    "Change the offset so orders end after this period starts and before the next period starts.",
-  );
-  expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
-      .error,
-  ).toBe("Correct the highlighted fields to continue.");
-  expect(save(el).disabled).toBe(false);
-  await change(el, "endOffsetMinutes", { value: "14" });
-  expect(field(el, "endOffsetMinutes").error).toBe("");
-});
-
-it("shows the Spanish offset label, explanation and local validation", async () => {
-  setLocale("es");
-  const el = await mount(true);
-  setLocale("es");
-  el.requestUpdate();
-  await el.updateComplete;
-  const control =
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=endOffsetMinutes]")!;
-  expect(control.label).toBe("Desfase del final del periodo (minutos)");
-  expect(el.shadowRoot!.textContent).toContain("Negativo: deja de añadir platos antes del final.");
-  await change(el, "endOffsetMinutes", { value: "" });
-  save(el).click();
-  await el.updateComplete;
-  expect(control.error).toBe("Introduce minutos enteros entre -1439 y 1439.");
-});
 it("labels its submit with submitLabel when one is given, else Save", async () => {
   const el = await mount();
   expect(save(el).textContent!.trim()).toBe("Save");
@@ -1070,7 +945,6 @@ it("from the Periods window, Add asks for the department first, preselects a lon
     colour: "orange",
     menuId: "lunch",
     staffMenuIds: [],
-    endOffsetMinutes: 0,
   });
   setLocale("es");
   el.requestUpdate();
@@ -1286,7 +1160,7 @@ async function mountPlanned(floorPlanSetId: string | null = null, departmentId =
 const shownText = (control: HTMLElement) =>
   control.shadowRoot!.querySelector<HTMLElement>(".value")!;
 
-it("draws Floor plan after End offset and before Painted in, not required, for a department with tables", async () => {
+it("draws Floor plan after Staff-only menus and before Painted in, not required, for a department with tables", async () => {
   const el = await mountEdit((dialog) => {
     dialog.period = { ...structuredClone(period), floorPlanSetId: null };
     dialog.departmentId = "restaurant";
@@ -1301,7 +1175,6 @@ it("draws Floor plan after End offset and before Painted in, not required, for a
     "colour",
     "menuId",
     "staffMenuIds",
-    "endOffsetMinutes",
     "floorPlanSetId",
     "painted-in",
   ]);

@@ -676,34 +676,6 @@ it("a refused field stays with the row the request named, not the row now at tha
 });
 
 it.each([
-  [
-    {
-      code: "season.invalid",
-      params: { field: "seasons", reason: "end_offset", seasonId: "autumn", weekday: 5 },
-    },
-    "A period’s end offset would run into Autumn on Friday.",
-  ],
-  [
-    {
-      code: "season.invalid",
-      params: { field: "seasons", reason: "end_offset", date: "2026-12-24", specialDayId: "sd1" },
-    },
-    "A period’s end offset would run into Christmas dinners on Thu, 24 Dec 2026.",
-  ],
-  [
-    {
-      code: "season.invalid",
-      params: { field: "seasons", reason: "end_offset", date: "2031-12-24", specialDayId: "other" },
-    },
-    "A period’s end offset would run into Wed, 24 Dec 2031.",
-  ],
-  [
-    {
-      code: "season.invalid",
-      params: { field: "seasons", reason: "end_offset", date: "2026-12-24" },
-    },
-    "A period’s end offset would run into Thu, 24 Dec 2026.",
-  ],
   [{ code: "hours.clock_changed" }, "The business-day start changed. Reload hours."],
   [clockChangeConflict, clockChangeConflictSentence],
   [
@@ -716,7 +688,7 @@ it.each([
   ],
   [{ code: "network.unavailable" }, "The change could not be saved."],
 ])(
-  "says an end-offset clash, a changed business-day start, a clash with a waiting one and the last season at the bottom (%o)",
+  "says a changed business-day start, a clash with a waiting one and the last season at the bottom (%o)",
   async (refusal, message) => {
     const saveSeasons = vi.fn(async () => {
       throw refusal;

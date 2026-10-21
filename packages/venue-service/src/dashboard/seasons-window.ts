@@ -657,7 +657,7 @@ export class SeasonsWindow extends LitElement {
           ? ""
           : t("prep.save_error")
         : (clockChangeConflictText(this.refusal.refusal) ??
-          seasonRefusalText(this.refusal.refusal, this.seasons, this.specialDays));
+          seasonRefusalText(this.refusal.refusal));
     return html`<wt-form-actions
       slot="footer"
       .error=${[refusal, marked ? t("prep.fix_fields") : ""].filter(Boolean).join(" ")}

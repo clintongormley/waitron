@@ -5,7 +5,6 @@ import { t } from "./strings.js";
 
 type Model = OpeningHoursModel;
 type Department = Model["departments"][number];
-type Period = Department["periods"][number];
 
 export function listOf(names: readonly string[]): string {
   return new Intl.ListFormat(currentLocale().startsWith("es") ? "es-ES" : "en-GB", {
@@ -60,11 +59,7 @@ export function ownerName(model: Model, key: string): string {
   );
 }
 
-export function refusalReason(code: string, reason: unknown, period: Period | undefined): string {
-  if (reason === "end_offset")
-    return period
-      ? format("menu.offset_timetable_named", { period: period.name })
-      : t("menu.offset_timetable");
+export function refusalReason(code: string, reason: unknown): string {
   if (reason === "clock_skips") return t("menu.time_skipped");
   if (reason === "outside_hours") return t("opening.closed_outside");
   if (code === "zone_closed_time.invalid") return t("opening.closed_invalid");

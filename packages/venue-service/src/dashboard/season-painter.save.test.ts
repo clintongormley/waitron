@@ -230,7 +230,7 @@ it("a department refusal on a day shows that department, marks the day's heading
   const { painter, writes, navigations } = await mount(withBar(), [
     {
       code: "menu_timetable.invalid",
-      params: { field: "departments.1.days.2.slots", reason: "end_offset", periodId: "q1" },
+      params: { field: "departments.1.days.2.slots" },
     },
   ]);
   await drag(painter, "1", 0, 60);
@@ -241,7 +241,7 @@ it("a department refusal on a day shows that department, marks the day's heading
   await save(painter, writes);
   const sent = (writes[0]!.body as { departments: { departmentId: string }[] }).departments;
   expect(sent.map(({ departmentId }) => departmentId)).toEqual(["d1", "d3"]);
-  const message = "Change the end offset of Drinks to fit these times.";
+  const message = "Check this day's time ranges and periods.";
   expect(button(painter, "follows")).toBeNull();
   expect(grid(painter).periods.map(({ id }) => id)).toEqual(["q1"]);
   expect([...grid(painter).columnErrors]).toEqual([["3", message]]);
@@ -255,21 +255,6 @@ it("a department refusal on a day shows that department, marks the day's heading
   await drag(painter, "3", 10 * 60, 11 * 60);
   expect(grid(painter).columnErrors.size).toBe(0);
   expect(frame(painter).refusal).toBe("");
-});
-
-it("an end-offset refusal naming no period of the department keeps the unnamed wording", async () => {
-  const { painter, writes } = await mount(withBar(), [
-    {
-      code: "menu_timetable.invalid",
-      params: { field: "departments.0.days.2.slots", reason: "end_offset", periodId: "gone" },
-    },
-  ]);
-  await pick(painter, "d3");
-  await drag(painter, "3", 7 * 60, 9 * 60);
-  await save(painter, writes);
-  expect(frame(painter).refusal).toBe(
-    "Bar, Wednesday: Change this period’s end offset to fit these time ranges.",
-  );
 });
 
 it("a zone refusal on a day shows that zone and marks its heading; the next save clears it", async () => {
@@ -443,12 +428,6 @@ it("ignores a save's late refusal once the painter has stepped to another season
 });
 
 it.each([
-  [
-    "menu_timetable.invalid",
-    { field: "departments.0.days", reason: "end_offset" },
-    "Restaurant: Change this period’s end offset to fit these time ranges.",
-    [],
-  ],
   [
     "menu_timetable.invalid",
     { field: "departments.0.days.0.slots.0.startsAt", reason: "clock_skips" },

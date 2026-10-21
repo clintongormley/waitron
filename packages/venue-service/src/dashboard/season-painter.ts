@@ -569,10 +569,7 @@ export class SeasonPainter extends LitElement {
     const owner = zoned ? zoneKey(id) : departmentKey(id);
     const weekday = match[3] === undefined ? undefined : WEEK_DISPLAY_ORDER[Number(match[3])];
     const name = ownerName(this.model, owner);
-    const period = departmentOf(this.model, owner)?.periods.find(
-      ({ id }) => id === params?.periodId,
-    );
-    const reason = refusalReason(code, params?.reason, period);
+    const reason = refusalReason(code, params?.reason);
     this.refused = {
       message:
         weekday === undefined

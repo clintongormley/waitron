@@ -206,7 +206,6 @@ it("creates the changed draft and closes it before refreshing the list", async (
         colour: "red",
         menuId: "lunch",
         staffMenuIds: [],
-        endOffsetMinutes: 0,
       },
     },
   ]);
@@ -232,7 +231,6 @@ it("updates the existing period and preserves every other submitted value", asyn
         colour: "green",
         menuId: "lunch",
         staffMenuIds: ["staff"],
-        endOffsetMinutes: 0,
       },
     },
   ]);
@@ -286,7 +284,6 @@ it("places a refused period name under Name with the bottom explanation and retr
     colour: "green",
     menuId: "lunch",
     staffMenuIds: ["staff"],
-    endOffsetMinutes: 0,
   };
   expect(writes).toEqual([body, body]);
 });
@@ -521,7 +518,6 @@ it.each([
           colour: expected,
           menuId: "lunch",
           staffMenuIds: [],
-          endOffsetMinutes: 0,
         },
       },
     ]);
@@ -571,7 +567,7 @@ it("marks the new period's missing name, menu and department above the buttons w
   expect(writes).toEqual([]);
 });
 
-it("sends an offset-only edit through the real period client and closes before a failed refresh", async () => {
+it("sends a colour-only edit through the real period client and closes before a failed refresh", async () => {
   const writes: unknown[] = [];
   let reads = 0;
   const el = await mount((async (path, method, body) => {
@@ -582,7 +578,7 @@ it("sends an offset-only edit through the real period client and closes before a
     writes.push({ path, method, body });
   }) as DashboardRequest);
   const dialog = await edit(el, "p1");
-  await change(dialog, "endOffsetMinutes", "-15");
+  await change(dialog, "colour", "purple");
   submit(dialog);
   await expect
     .poll(() => writes)
@@ -592,10 +588,9 @@ it("sends an offset-only edit through the real period client and closes before a
         method: "PATCH",
         body: {
           name: "Lunch",
-          colour: "green",
+          colour: "purple",
           menuId: "lunch",
           staffMenuIds: ["staff"],
-          endOffsetMinutes: -15,
         },
       },
     ]);
@@ -626,7 +621,6 @@ it("+ Add period on a venue with two departments asks for the department and cre
       colour: "red",
       menuId: "lunch",
       staffMenuIds: [],
-      endOffsetMinutes: 0,
     },
   });
   await el.updateComplete;
@@ -645,7 +639,6 @@ it("+ Add period on a venue with two departments asks for the department and cre
         colour: "orange",
         menuId: "lunch",
         staffMenuIds: [],
-        endOffsetMinutes: 0,
       },
     },
   ]);

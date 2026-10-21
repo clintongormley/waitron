@@ -1036,14 +1036,9 @@ export class SpecialDayPainter extends LitElement {
     }
     if (id === undefined) return false;
     const owner = zoned ? zoneKey(id) : departmentKey(id);
-    const period = this.model.departments
-      .find((department) => department.id === id)
-      ?.periods.find((entry) => entry.id === params.periodId);
     const reason =
-      params.reason === "end_offset" ||
-      params.reason === "clock_skips" ||
-      params.reason === "outside_hours"
-        ? refusalReason("special_day.invalid", params.reason, period)
+      params.reason === "clock_skips" || params.reason === "outside_hours"
+        ? refusalReason("special_day.invalid", params.reason)
         : t("opening.check_day");
     const name = ownerName(this.model, owner);
     const column = date !== undefined && this.draft.dates.some((entry) => entry.date === date);

@@ -35,15 +35,12 @@ import { clockChangeConflictText } from "./clock-change-conflict.js";
 
 type Draft = Omit<MenuPeriodInput, "endOffsetMinutes" | "floorPlanSetId"> & {
   colour: CalendarColour;
-  endOffsetMinutes: string;
   /** Empty for the department's default set. */
   floorPlanSetId: string;
   /** Empty unless the dialog asks for the department. */
   departmentId: string;
 };
 type Department = { id: string; name: string; colourUsers: readonly ColourUser[] };
-const offsetNumber = (text: string): number | undefined =>
-  /^[+-]?\d+$/.test(text) ? Number(text) : undefined;
 type Field = keyof Draft;
 const copy = (value: Draft): Draft => ({ ...value, staffMenuIds: [...value.staffMenuIds] });
 const empty = (users: readonly ColourUser[] = NO_COLOUR_USERS): Draft => ({
@@ -51,7 +48,6 @@ const empty = (users: readonly ColourUser[] = NO_COLOUR_USERS): Draft => ({
   colour: firstUnusedCalendarColour(users),
   menuId: "",
   staffMenuIds: [],
-  endOffsetMinutes: "0",
   floorPlanSetId: "",
   departmentId: "",
 });
@@ -61,7 +57,6 @@ const fields: Field[] = [
   "colour",
   "menuId",
   "staffMenuIds",
-  "endOffsetMinutes",
   "floorPlanSetId",
 ];
 
@@ -108,8 +103,7 @@ export class PeriodDialog extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-2);
       }
-      [data-test="menu-includes"],
-      [data-test="offset-explanation"] {
+      [data-test="menu-includes"] {
         margin: calc(-1 * var(--wt-space-3)) 0 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -184,7 +178,6 @@ export class PeriodDialog extends LitElement {
             colour: this.period.colour,
             menuId: this.period.menuId,
             staffMenuIds: [...this.period.staffMenuIds],
-            endOffsetMinutes: String(this.period.endOffsetMinutes),
             floorPlanSetId: this.period.floorPlanSetId ?? "",
             departmentId: "",
           }
@@ -207,7 +200,6 @@ export class PeriodDialog extends LitElement {
           a.name === b.name &&
           a.colour === b.colour &&
           a.menuId === b.menuId &&
-          a.endOffsetMinutes === b.endOffsetMinutes &&
           this.shownPlan(a.floorPlanSetId) === this.shownPlan(b.floorPlanSetId) &&
           a.departmentId === b.departmentId &&
           a.staffMenuIds.length === b.staffMenuIds.length &&
@@ -222,12 +214,7 @@ export class PeriodDialog extends LitElement {
     }
   }
   private get input(): Draft {
-    const offset = offsetNumber(this.draft.endOffsetMinutes);
-    return {
-      ...this.draft,
-      name: this.draft.name.trim(),
-      endOffsetMinutes: offset === undefined ? this.draft.endOffsetMinutes : String(offset),
-    };
+    return { ...this.draft, name: this.draft.name.trim() };
   }
   private get shownColourUsers(): readonly ColourUser[] {
     if (!this.choosesDepartment) return this.colourUsers;
@@ -264,9 +251,6 @@ export class PeriodDialog extends LitElement {
     if (!this.input.name) errors.name = t("menu.name_required");
     if (!this.input.menuId) errors.menuId = t("menu.menu_required");
     if (!CALENDAR_COLOURS.includes(this.input.colour)) errors.colour = t("hours.colour_required");
-    const offset = offsetNumber(this.draft.endOffsetMinutes);
-    if (offset === undefined || !Number.isSafeInteger(offset) || Math.abs(offset) > 1439)
-      errors.endOffsetMinutes = t("menu.offset_invalid");
     return errors;
   }
   private refusalField(): Field | undefined {
@@ -301,8 +285,6 @@ export class PeriodDialog extends LitElement {
       if (this.refusal?.code === "catalogue.not_found") return t("opening.active_menus_required");
       if (this.refusal?.code === "department.not_found") return t("menu.department_gone");
       if (field === "floorPlanSetId") return t("floor_plans.set_gone");
-      if (field === "endOffsetMinutes" && this.refusal?.params?.reason === "placement")
-        return t("menu.offset_placement");
       return t("menu.field_refused");
     }
     return this.attempted ? (this.ownErrors[field] ?? "") : "";
@@ -339,7 +321,6 @@ export class PeriodDialog extends LitElement {
           periodId: this.period?.id ?? null,
           input: {
             ...input,
-            endOffsetMinutes: offsetNumber(this.draft.endOffsetMinutes)!,
             ...(this.floorPlanSets &&
             !(
               this.shownPlan(floorPlanSetId) === "" &&
@@ -361,7 +342,6 @@ export class PeriodDialog extends LitElement {
     const submitted: Draft = {
       ...input,
       colour: input.colour ?? this.submitted!.colour,
-      endOffsetMinutes: String(input.endOffsetMinutes ?? this.submitted!.endOffsetMinutes),
       floorPlanSetId:
         input.floorPlanSetId === undefined
           ? this.submitted!.floorPlanSetId
@@ -581,19 +561,6 @@ export class PeriodDialog extends LitElement {
               if (current()) this.changed("staffMenuIds", [...event.detail.values]);
             }}
           ></wt-combobox>
-          <wt-input
-            name="endOffsetMinutes"
-            label=${t("menu.end_offset")}
-            required
-            .value=${this.draft.endOffsetMinutes}
-            .error=${this.error("endOffsetMinutes")}
-            ?disabled=${this.busy}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              if (current()) this.changed("endOffsetMinutes", event.detail.value);
-            }}
-          ></wt-input>
-          <p data-test="offset-explanation">${t("menu.offset_explanation")}</p>
           ${this.floorPlanField(current)} ${this.paintedInSection()}
         </div>
         <wt-form-actions

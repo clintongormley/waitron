@@ -103,9 +103,6 @@ const en = {
   "season.start_required": "Choose a day and a month.",
   "season.last": "A venue keeps at least one season.",
   "season.not_found": "This season no longer exists.",
-  "season.offset_day": "A period’s end offset would run into {name} on {date}.",
-  "season.offset_date": "A period’s end offset would run into {date}.",
-  "season.offset_season": "A period’s end offset would run into {season} on {weekday}.",
   "season.delete_loses": "The hours of {departments} in it are lost.",
   "season.delete_loses_none": "No department has hours in it.",
   "season.open_window": "Seasons…",
@@ -735,14 +732,6 @@ const en = {
   "menu.inactive": "(inactive)",
   "menu.no_departments": "No departments yet. Add one in Departments and zones.",
   "menu.period_name": "Name",
-  "menu.end_offset": "Period end offset (minutes)",
-  "menu.offset_explanation":
-    "Negative: stop new dishes before the end. Positive: send leftovers after the end. 0: use the period end.",
-  "menu.offset_invalid": "Enter whole minutes from -1439 to 1439.",
-  "menu.offset_placement":
-    "Change the offset so orders end after this period starts and before the next period starts.",
-  "menu.offset_timetable": "Change this period’s end offset to fit these time ranges.",
-  "menu.offset_timetable_named": "Change the end offset of {period} to fit these times.",
   "menu.actions": "Actions",
   "period.title": "Periods",
   "period.open_window": "Periods…",
@@ -1011,9 +1000,6 @@ const es: Record<keyof typeof en, string> = {
   "season.start_required": "Elige un día y un mes.",
   "season.last": "Un local conserva al menos una temporada.",
   "season.not_found": "Esta temporada ya no existe.",
-  "season.offset_day": "El desfase del final de un periodo invadiría {name} el {date}.",
-  "season.offset_date": "El desfase del final de un periodo invadiría el {date}.",
-  "season.offset_season": "El desfase del final de un periodo invadiría {season} el {weekday}.",
   "season.delete_loses": "Se pierden los horarios de {departments} en ella.",
   "season.delete_loses_none": "Ningún departamento tiene horarios en ella.",
   "season.open_window": "Temporadas…",
@@ -1659,16 +1645,6 @@ const es: Record<keyof typeof en, string> = {
   "menu.inactive": "(inactivo)",
   "menu.no_departments": "Todavía no hay departamentos. Añade uno en Departamentos y zonas.",
   "menu.period_name": "Nombre",
-  "menu.end_offset": "Desfase del final del periodo (minutos)",
-  "menu.offset_explanation":
-    "Negativo: deja de añadir platos antes del final. Positivo: envía los platos pendientes después del final. 0: usa el final del periodo.",
-  "menu.offset_invalid": "Introduce minutos enteros entre -1439 y 1439.",
-  "menu.offset_placement":
-    "Cambia el desfase para que los pedidos terminen después del inicio de este periodo y antes del inicio del siguiente.",
-  "menu.offset_timetable":
-    "Cambia el desfase del final de este periodo para ajustarlo a estos horarios.",
-  "menu.offset_timetable_named":
-    "Cambia el desfase del final de {period} para ajustarlo a estos horarios.",
   "menu.actions": "Acciones",
   "period.title": "Periodos",
   "period.open_window": "Periodos…",

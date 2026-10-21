@@ -81,26 +81,17 @@ export class PeriodDeleteDialog extends LitElement {
   private get replacementName(): string {
     return this.impact?.replacements.find((entry) => entry.id === this.replacement)?.name ?? "";
   }
-  private offsetSentence(periodId: unknown): string {
-    const name = this.impact?.replacements.find((entry) => entry.id === periodId)?.name;
-    return name
-      ? format("menu.offset_timetable_named", { period: name })
-      : t("menu.offset_timetable");
-  }
   /** The refusal worded for under Replace with, or "" when it names no field here. */
   private fieldError(): string {
     const refusal = this.refusal;
     if (refusal?.params?.field !== "replacementPeriodId") return "";
     if (refusal.code === "menu_period.invalid") return t("period.replace_invalid");
-    if (refusal.code === "menu_timetable.invalid" && refusal.params.reason === "end_offset")
-      return this.offsetSentence(refusal.params.periodId);
     return "";
   }
   private bottomError(): string {
     const refusal = this.refusal;
     if (!refusal || (this.readError && !this.impact)) return this.readError;
     if (this.fieldError()) return t("prep.fix_fields");
-    const params = refusal.params ?? {};
     switch (refusal.code) {
       case "hours.clock_changed":
         return t("period.delete_clock_changed");
@@ -110,8 +101,6 @@ export class PeriodDeleteDialog extends LitElement {
         return t("menu.period_gone");
       case "department.not_found":
         return t("menu.department_gone");
-      case "menu_timetable.invalid":
-        if (params.reason === "end_offset") return this.offsetSentence(params.periodId);
     }
     return t("menu.save_error");
   }
