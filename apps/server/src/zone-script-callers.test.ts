@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { readFileSync, rmSync } from "node:fs";
 import { settleInvoiceFirst } from "../scripts/settle-invoice-first.js";
 import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
@@ -26,6 +27,10 @@ let builtDir: string | undefined;
 beforeAll(async () => {
   builtDir = await mkdtemp(join(tmpdir(), "zone-script-bundles-"));
   await symlink(resolve("node_modules"), join(builtDir, "node_modules"));
+  await writeFile(
+    join(builtDir, "matrix-zone.cjs"),
+    `require('node:fs').writeFileSync(process.env.ZONE_PROCESS_MATRIX_OBSERVED, JSON.stringify({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));`,
+  );
 });
 afterAll(async () => {
   if (builtDir !== undefined) await rm(builtDir, { recursive: true, force: true });
@@ -60,7 +65,11 @@ async function bundle(name: string, contents: string, direct = false, outputDir 
   return outfile;
 }
 function run(binary: string, args: string[] = [], env: Record<string, string> = {}) {
-  const result = spawnSync(process.execPath, [binary, ...args], {
+  const matrixZone = process.env.ZONE_PROCESS_MATRIX_TZ;
+  const observed = join(builtDir!, "matrix-observed.json");
+  const hostArgs = matrixZone ? ["--require", join(builtDir!, "matrix-zone.cjs")] : [];
+  rmSync(observed, { force: true });
+  const result = spawnSync(process.execPath, [...hostArgs, binary, ...args], {
     env: {
       ...Object.fromEntries(
         Object.entries(process.env).filter(
@@ -70,11 +79,15 @@ function run(binary: string, args: string[] = [], env: Record<string, string> = 
       WAITRON_ENV: "preproduction",
       WAITRON_VENUE_DIR: venueDir(),
       TZ: process.env.ZONE_PROCESS_MATRIX_TZ || "UTC",
+      ZONE_PROCESS_MATRIX_OBSERVED: observed,
       ...env,
     },
     encoding: "utf8",
     timeout: 90_000,
   });
+  if (matrixZone) {
+    expect(JSON.parse(readFileSync(observed, "utf8"))).toEqual({ timeZone: matrixZone });
+  }
   return { status: result.status, output: result.stdout + result.stderr };
 }
 const products = [
@@ -85,6 +98,11 @@ describe("saved-zone script callers", () => {
     "backdates each historical sale across DST at %s",
     async (at) => {
       vi.stubEnv("TZ", process.env.ZONE_PROCESS_MATRIX_TZ || "UTC");
+      if (process.env.ZONE_PROCESS_MATRIX_TZ) {
+        expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe(
+          process.env.ZONE_PROCESS_MATRIX_TZ,
+        );
+      }
       vi.useFakeTimers({ toFake: ["Date"], now: new Date(at) });
       const venue = await provision();
       const result = await seedSales(suite.db, {
