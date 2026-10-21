@@ -1130,7 +1130,8 @@ async function payIntegrated(
     throw diskFullRefusal();
   };
   // Read before the queue wait; `noted()` then catches a refusal noted while this pay waited.
-  const preRead = (await deps.disk?.full()) ?? false;
+  // Awaited only while a refusal is noted: otherwise P1 enters the write queue in this turn.
+  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
   const stopped = () => preRead || (deps.disk?.noted() ?? false);
   // ---- P1 (tx A) ----
   const prepared = await withTransaction(deps.db, async (tx) => {

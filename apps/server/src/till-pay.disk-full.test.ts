@@ -254,9 +254,13 @@ describe("POST /api/pay while the full-disk stop holds", () => {
   });
 
   describe("a refusal noted while the payment waits for the write queue", () => {
-    /** Wraps a real state; its `full()` queues a write body, ahead of the payment's, that runs `queued`. */
+    /**
+     * Wraps a real state holding a refusal its free space has outgrown, so the payment's pre-read
+     * forgets it; its `full()` queues a write body, ahead of the payment's, that runs `queued`.
+     */
     function queuingState(queued: (state: DiskFullState) => void) {
-      const state = diskState({ bytes: 0 });
+      const state = diskState({ bytes: FULL_DISK_BYTES });
+      state.noteRefused();
       let pending: Promise<void> = Promise.resolve();
       const disk: DiskFullState = {
         noteRefused: () => state.noteRefused(),

@@ -14,6 +14,7 @@ import {
   paymentAttemptIsLive,
   payWorkingOrderIntegratedOrchestration,
 } from "./testing/whole-payment-fixture.js";
+import { createDiskFullState, type DiskFullState } from "./disk-full-state.js";
 import "./errors.js";
 
 let venue: BillVenue;
@@ -248,9 +249,9 @@ describe("a placed order's collect while its card is in flight", () => {
 });
 
 /** A card payment of `id` through the orchestration, with `provider` as its reader. */
-function payWith(provider: FakePaymentProvider, id: string) {
+function payWith(provider: FakePaymentProvider, id: string, disk?: DiskFullState) {
   return payWorkingOrderIntegratedOrchestration(
-    { db: venue.db, backend: venue.backend, clock: venue.clock, provider },
+    { db: venue.db, backend: venue.backend, clock: venue.clock, provider, disk },
     venue.cfg,
     { id, lines: [] },
   );
@@ -513,6 +514,33 @@ describe("where a placed order's card registers itself as in flight", () => {
       let live: boolean | undefined;
       try {
         paying = payWith(reader, id);
+        live = await withTransaction(venue.db, async () => paymentAttemptIsLive(venue.db, id));
+      } finally {
+        release();
+      }
+      const paid = await paying;
+
+      expect(live).toBe(true);
+      expect(paid).toMatchObject({ outcome: "captured" });
+    },
+  );
+
+  it.each(KINDS)(
+    "$label: the same holds with a full-disk state that has nothing noted",
+    async ({ kind }) => {
+      const id = await placed(kind);
+      const disk = createDiskFullState({
+        dir: "/nonexistent",
+        now: () => new Date(),
+        log: () => {},
+        statfs: () => Promise.reject(new Error("nothing noted: free space is not read")),
+      });
+      const reader = new FakePaymentProvider(venue.db);
+      const release = reader.holdNextCollect();
+      let paying: ReturnType<typeof payWith> | undefined;
+      let live: boolean | undefined;
+      try {
+        paying = payWith(reader, id, disk);
         live = await withTransaction(venue.db, async () => paymentAttemptIsLive(venue.db, id));
       } finally {
         release();
