@@ -3258,7 +3258,17 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   at format 6. Slice 3 landed 2026-10-21 (#1940): the theme in use reaches the screens — the dashboard and
   the till apply the browser's stored copy at start and fetch `/api/theme` without waiting on it;
   an open dashboard follows through a passive live read of `custom_themes`, and a signed-in till
-  through its `themeHash` once per poll. Next: slice 4 (primary-coloured text), then slice 5 (the editor).
+  through its `themeHash` once per poll. Slice 4 landed 2026-10-21: text painted in the brand colour
+  reads `--wt-color-primary-text`, and a root guard (`scripts/primary-coloured-text.test.ts`) refuses
+  `color: var(--wt-color-primary)` outside a list of icons and spinners. Next: slice 5 (the editor).
+
+- **Two icons painted in the brand colour sit, in one state each, on a fill no contrast rule checks
+  them against (A841 slice 4).** The till's card-waiting spinner on `--wt-color-surface-sunken`
+  (Waitron's light blue measured 3.28:1 there; a venue theme could go under 3:1), and the data
+  table's column-chooser eye icon while its row is dragged, on `--wt-color-surface-lifted`
+  (`packages/ui/src/components/wt-data-table.ts:684-688`; read, not measured). The spinner is marked
+  decorative beside text saying what is happening, so WCAG 1.4.11 may not ask for 3:1 at all. Decide
+  whether the theme's contrast rules should cover either fill.
 
 - **WebKit in CI for A841's start-up checks (lane A ruling, 2026-10-21).** The dashboard's and the
   till's `venue-theme-startup.test.ts` run in Chromium in CI; WebKit was measured once, locally
