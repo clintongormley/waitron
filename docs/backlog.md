@@ -159,8 +159,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Q53, pending their answer; production boxes run releases only. The first slice is fiscal and the
   owner lands it: records carry the producer instead of the taxpayer's name and NIF
   (`packages/fiscal-verifactu/src/backend.ts:641-653`), the release's version instead of `0.0.0`,
-  and `TipoUsoPosibleMultiOT = N`. The revision's two questions (approve; how A993 names its new
-  installation) are in the mock-ups folder's `question.txt`. No build before the owner approves.
+  and `TipoUsoPosibleMultiOT = N`. The second revision (2026-10-22) folds in the owner's 22:25
+  answers — five-symbol minute names, no installation code on the recovery sheet — and its two
+  questions (approve; A993's offline start) are in the mock-ups folder's `question.txt`. No build
+  before the owner approves.
   [Mock-ups](backlog/mockups/a940-declaracion-responsable/README.md)
 
 - **A993. A change of the system's identity opens a new installation by itself — designed in A940
@@ -175,11 +177,13 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   that start step can authorise (CLAUDE.md §5's "does not mint an installation number" sentence is
   amended in the same change); a guard, proven by deletion, refuses to add a record to a chain
   opened under another identity. Corrections of invoices issued before the change join the new
-  chain; the design asks for asesor Q53(d)(2) to be widened to cover that. The name is settled:
-  the owner decided at about 22:25 on 2026-10-21 that every series name is five symbols for the
-  UTC minute (A947 §6.5), so A947's slice 4a lands first; A940's design is revised for it next.
-  After A940's slice 1; before the first production venue goes
-  live. A move between fiscal modules stays a refused start until the first non-Veri\*Factu mode.
+  chain; the design asks for asesor Q53(d)(2) to be widened to cover that. The name is A947's
+  five-symbol UTC minute (A947 §6.5), so A947's slice 4a lands first; no new recovery sheet is
+  asked for. Because A947 needs a second clock for every name and a start has nobody present, the
+  design recommends that the upgrade make the change before the new release serves, only while it
+  can read the internet's clock, and otherwise change nothing and start the old release again — the
+  owner's choice, A940's second-revision question 2. After A940's slice 1; before the first
+  production venue goes live. A move between fiscal modules stays a refused start until the first non-Veri\*Factu mode.
   [Design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md#56-when-the-systems-identity-changes-a-new-installation-by-itself-a993)
 
 - **A696. Invoice issue dates and record offsets follow the process zone.**

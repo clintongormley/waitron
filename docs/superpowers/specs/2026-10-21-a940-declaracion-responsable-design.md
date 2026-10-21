@@ -1,11 +1,55 @@
 # A940 — The software's declaración responsable, inside the app and outside it
 
-**Date:** 2026-10-21, revised the same day for the owner's answers. **Status:** design; all four
-questions answered (§11); the revision awaits the owner's approval, and item d)'s wording awaits
-the asesor (tax adviser) on Q53. Nothing in it is built. **Items:** A940, and A993 for the automatic
-identity change (§5.6).
+**Date:** 2026-10-21, revised the same day for the owner's answers and again on 2026-10-22 for his
+answers of about 22:25. **Status:** design; all four questions answered (§11); the second revision
+awaits the owner's approval and his choice on A993's offline start (its question 2), and item d)'s
+wording awaits the asesor (tax adviser) on Q53. Nothing in it is built. **Items:** A940, and A993
+for the automatic identity change (§5.6).
 
 **Mock-ups:** [`docs/backlog/mockups/a940-declaracion-responsable/`](../../backlog/mockups/a940-declaracion-responsable/README.md).
+
+> **Second revision 2026-10-22 — the owner's 22:25 answers.** On 2026-10-21 at about 22:25 the
+> owner decided two things for A947 (the two-box design) that change this design too. A947 was
+> revised first and that revision has landed
+> ([A947 design](2026-10-21-a947-two-box-failover-design.md), its "second revision" note). Three
+> words used below: an **installation code** is the short name a box's invoices carry, such as the
+> `0CNNW` in `A-0CNNW/1`, which AEAT (the tax agency) receives as the installation number; the
+> **recovery sheet** is the page printed when a box is set up, holding its recovery key; a **second
+> clock** is a time reading from another machine — the internet's, or the browser of a till or
+> phone that is not the box itself. What changed, section by section:
+>
+> - **§5.6, the name: five symbols for the UTC minute, always.** A993's automatic change names its
+>   new installation exactly as every other new installation is now named, by A947 §6.5's rules,
+>   with no question asked. The four-symbol hour code, the hour-and-minute form (`06XV-40`) and
+>   A679's setup question "Has anyone set up a Waitron box for this business in the last hour?" are
+>   gone from this design. **The first revision's question 2 — how the automatic change names its
+>   installation — is moot and is withdrawn**; its three options are deleted from §5.6. The worked
+>   example now reads `0CNNW` → `0JMV7`.
+> - **§5.6, after the change: no new recovery sheet.** The sheet keeps only the box's recovery key
+>   (A947 §6.7), and a new installation does not change that key, so nothing asks a manager to
+>   print a new sheet. The «Nueva instalación fiscal» notice stays, without its print button. The
+>   rule that the change must not make a new recovery key stands.
+> - **§5.6, when the change is made — the new design problem, and the new question 2.** A947 now
+>   needs a second clock every time a box takes a name, and a start has nobody present. At a one-box
+>   venue whose till is the box's own screen (the USB installer's default, B3), with no internet,
+>   the first revision's design would sell nothing until a phone opened a page: something outside
+>   the venue blocking a sale, which CLAUDE.md §5 forbids. This revision weighs four ways out, each
+>   with a worked example, and recommends **A: the upgrade makes the change itself, before the new
+>   release serves, and only while it can read the internet's clock; when it cannot, it changes
+>   nothing and the old release goes on selling under the old identity until a later attempt
+>   can.** A release reaches a box only by download (checked in §5.6), so the internet is normally
+>   there at that moment. The first revision's "a manager confirms the clock" path is gone: A947
+>   allows no confirmation. One case still waits on an outside clock, disclosed in §5.6: a new
+>   release started some other way than through the upgrade.
+> - **§5.4** (the runbook's first line), **§8** (cases for the upgrade's step), **§10** (slice 1b
+>   needs A947's slice 4a and carries the upgrade's step), **§11** and **§12** follow.
+> - **Picture 5 redrawn**: five-symbol names, the upgrade reading the internet's clock, no print
+>   button, and what happens with no internet. `question.txt` asks two questions, one at a time:
+>   approve this revision; and A993's offline start.
+> - **Still needed, unchanged:** from the owner, his full name, NIF (Spanish tax number) and a
+>   postal address he is content to publish — slice 1 needs the first two, the first release all
+>   three; from the asesor, the answer to Q53, which item d)'s wording and the widened Q53(d)(2)
+>   (§5.6) wait for.
 
 > **Revision 2026-10-21 — owner's answers.** All four questions were answered through the campaign
 > watcher between about 14:35 and 15:00. What changed, section by section:
@@ -547,9 +591,10 @@ spare box on site) are kept only when the release can do them; d) still describe
 ours the version can call in production (none today; a release that adds one changes d) and has
 the wording checked again); AEAT's FAQ and worked example are re-read for changes; and the
 repository is still public (§7.1). A release that changes the producer or the two-character code
-says so in the runbook's first line: every filing box opens a new installation at its first start
-on it (§5.6), the main boxes of one taxpayer's venues are upgraded one at a time, and each venue's
-spare in the same visit as its main box.
+says so in the runbook's first line: every filing box opens a new installation when it is upgraded
+to it, and only while it can read the internet's clock — until then it keeps the old release
+(§5.6); the main boxes of one taxpayer's venues are upgraded one at a time, in different minutes,
+and each venue's spare in the same visit as its main box.
 
 ### 5.5 How a box runs a release
 
@@ -586,11 +631,13 @@ box's previous row (`allocation.ts:77-88` today). That is a migration on a fisca
 go-live no data is carried forward (CLAUDE.md §3, the no-backwards-compatibility rule), and a row
 opened before A993, with nothing stored, counts as different from any running identity.
 
-**What every start does**, before the box trades, inside the fiscal module — **only on the node
-that files.** Today filing runs only while a node's role is primary: the drain runs behind
+**What every start does — and, under the recommended timing, the upgrade's step before it**
+("When the change is made", below), before the box trades, inside the fiscal module — **only on
+the node that files.** Today filing runs only while a node's role is primary: the drain runs behind
 `singletonPass` (`apps/server/src/boot.ts:2518-2519`), which runs the pass only when
 `node_roles.singleton_role` is `primary` and gives any other node an empty pass
-(`apps/server/src/singleton-pass.ts:4-15`). The start-time step takes the same gate. A
+(`apps/server/src/singleton-pass.ts:4-15`). The start-time step and the upgrade's step take the
+same gate. A
 following spare (A947) that starts on a new release opens nothing and changes nothing: the gate
 keeps it out, it is held dormant with no series of its own until promotion (A947 §2,
 `packages/fiscal-verifactu/src/hour-dormant-standby.ts`), and the main box's rows it follows are
@@ -604,7 +651,7 @@ not its to change. When it is promoted, its activation writes the running releas
   (`packages/fiscal-verifactu/src/allocation.ts:432-461`): the old SIF row is revoked; the node's
   chain head is emptied, so the next record is the first of a new chain («PrimerRegistro» = S); the
   old invoice series are retired and new ones start at 1. Getting there is new work (next
-  paragraph). The old chain is closed, never
+  paragraph), and when it happens is "When the change is made", below. The old chain is closed, never
   rewritten: records already made on it keep the identity they were made under and are sent
   unchanged (W41s's rule, "Retry the original stored fiscal content",
   [W41s design](2026-10-04-fiscal-prevention-and-offline-recovery-design.md) §4), so a backlog the
@@ -634,23 +681,27 @@ operation has no operator (`:432`), and requires the four-symbol hour form, the 
 slice:
 
 1. **A new action, `identity-change`**, beside the four.
-2. **An authority with no person in it**, which only the start-time step can create, and only when
-   the live SIF row's stored identity differs from the running release's (or has nothing stored).
-   It is made inside the step's own transaction, bound to the node, the old SIF row's id and the
-   running release's version, and used once. No route, operation host, recovery path or tool can
-   ask for one: every other caller that offers `identity-change` is refused, and so is the step
-   itself when the identities match. Each refusing case is proven by deletion (delete the check that
-   the identities differ, or the check that the caller is the start-time step, and its case must
-   fail), beside the case that must still pass: a start under a changed identity activates.
-3. **The new name form** (the naming choice below; with the recommended one, A947's slice 4a teaches
-   the admission the hour-and-minute form).
+2. **An authority with no person in it**, which only the identity-change step can create — run by
+   the upgrade before the new release serves, or by a start that finds the change not yet made
+   ("When the change is made", below) — and only when the live SIF row's stored identity differs
+   from the running release's (or has nothing stored). It is made inside the step's own
+   transaction, bound to the node, the old SIF row's id and the running release's version, and
+   used once. No route, operation host or recovery path can ask for one: every other caller that
+   offers `identity-change` is refused, and so is the step itself when the identities match. Each
+   refusing case is proven by deletion (delete the check that the identities differ, or the check
+   that the caller is the identity-change step, and its case must fail), beside the case that must
+   still pass: the step under a changed identity activates.
+3. **The five-symbol minute name**, which A947's slice 4a teaches the admission for every action
+   (A947 §11, slice 4a, which lists `allocation-envelope.ts:195-197,448`); A993 lands after it.
 
 CLAUDE.md §5 says, in its re-registration rule, "the box does not mint an installation number from
-its clock or a counter". That sentence stops being true, so the same A993 change amends it, to read:
-"…the box does not mint an installation number from its clock or a counter, except at a start on
-the filing node that finds the chain's stored identity missing or different from the running
-release's (A993); no route, tool or person can request it." Installing such a release is what
-triggers it. That edit is part of the fiscal pull request the owner reviews.
+its clock or a counter". A947's slice 4a amends that sentence first, because from then on every
+allocation names its installation from the clock (A947 §11, slice 4a). A993 adds, in its own
+fiscal pull request, which the owner reviews, the one allocation no person asks for: "…one
+allocation needs no person: an identity change, made only on the filing node, by the upgrade's
+step or at a start, when the chain's stored identity is missing or different from the running
+release's (A993); no route can request it, and the step refuses when the identities match."
+Installing such a release is what triggers it.
 
 **What happens to an invoice issued under the old identity.** Its records already made go out
 unchanged, under the old installation and producer: each record stores its own software block
@@ -679,48 +730,140 @@ producer, code and mode with the running release's, and refuses on any differenc
 `sif.identity_mismatch`, beside the existing `sif.not_registered` at
 `packages/fiscal-verifactu/src/registro-sif.ts:180`). Records already on a closed chain are not
 being added, so sending them is untouched. It is built test-first and proven by deletion: with the
-comparison deleted, a case that changes the running identity without the start-time step must
+comparison deleted, a case that changes the running identity without the identity-change step must
 fail because a sale chains under the old identity; and the case it must not refuse — the same
 identity, a sale recorded — stays green.
 
-**How the new installation is named: the one choice the box cannot make alone.** A679 names every
-new installation by the current UTC hour, strictly later than every hour the box knows of, and
-before choosing asks a person "Has anyone set up a Waitron box for this business in the last
-hour?" — waiting until the next hour on Yes or "I don't know" (A679 design, "What you see and
-keep"). That question is about the taxpayer's other venues, which a box starting on its own cannot
-know. The installation number must still differ from every earlier installation of the taxpayer,
-of any producer: «Deberá distinguirlo de otros posibles SIF utilizados para realizar la facturación
-del obligado a expedir facturas … incluso aunque en dichas instalaciones se emplee el mismo SIF de
-un productor» (Orden, annex block 2.6, `NumeroInstalacion`, read by eye). Three ways, put to the
-owner as the revision's second question:
+**How the new installation is named.** As every new installation is now named (the owner, about
+22:25 on 2026-10-21): five symbols counting the whole UTC minutes since 1 January 2026, chosen and
+checked by A947's rules — [A947 design](2026-10-21-a947-two-box-failover-design.md) §6.5, "One rule
+for choosing the minute" (rules 1–5) and "The clock check in this design". No question is asked and
+there is no other form. For this kind of allocation the box reads its own live database, which
+holds every installation code its venue has used, switches to a spare included (A947 §6.5, "What
+the box can read"); so the extra wait A947 §6.7 adds for a first setup or a restore, which cannot
+see every earlier name, does not apply. Normally the box takes the current minute. By A947's rules
+3 and 4 it waits, at most 150 seconds, when a code it knows is a little later than its clock, and
+refuses when one is further ahead; under the recommended timing below, the old release goes on
+selling meanwhile. The installation number must still differ from every earlier installation of
+the taxpayer, of any producer: «Deberá distinguirlo de otros posibles SIF utilizados para realizar
+la facturación del obligado a expedir facturas … incluso aunque en dichas instalaciones se emplee
+el mismo SIF de un productor» (Orden, annex block 2.6, `NumeroInstalacion`, read by eye).
+Disclosed limit, as A947 discloses it (§6.5, "What it does not prevent"): two of the same
+taxpayer's venues taking a name in the same UTC minute with the same series prefixes would take the
+same name, so the runbook (§5.4) has one taxpayer's main boxes upgraded one at a time, in
+different minutes.
 
-1. **Recommended: A947's promotion name** — the hour, a hyphen and the minute (`06XV-40`), with
-   A947's check against every code the box knows
-   ([A947 design](2026-10-21-a947-two-box-failover-design.md) §6.5, its slice 4a). No question and
-   no wait for the next hour: normally the box takes the current minute and invoices again as soon
-   as it has started. Not always at once: A947's rules 3 and 4 make it wait, up to about three
-   minutes, when a name it knows is a little later than its clock, and refuse — naming the minute
-   from which it will be allowed — when a known name is more than three minutes ahead. **Decision:**
-   after such a refusal the box keeps running without issuing invoices and tries the change again
-   by itself at the minute it named (and on its next start, if it restarts first); the dashboard
-   shows that minute. No person is needed unless the clock check fails (below). Disclosed limit, as A947 discloses for its switches: two of the same
-   taxpayer's venues changing identity in the same UTC minute, with the same series prefixes,
-   would take the same names. The runbook (§5.4) has the main boxes of one taxpayer's venues
-   upgraded one at a time. It depends on the owner approving A947's revision; today the only venue
-   is the owner's own. [Dated pointer, 2026-10-22: the owner's answer of 2026-10-21 ~22:25 replaces this: every series name is to be five symbols for the UTC minute, with no "last hour" question and no code on the recovery sheet, once A947's slice 4a and its test land; see the A947 design's second revision, §6.5 and §6.7. Not rewritten here. A947 also notes a decision for A940: at a one-box venue with no internet, A993's change at start-up would need a phone's clock before the first sale (A947 §13).]
-2. A679's four-symbol hour, taking the "I don't know" path: the box invoices nothing until the next
-   UTC hour — up to an hour without invoices after the upgrade — and two boxes of one taxpayer
-   changing identity in the same hour still collide.
-3. A manager answers A679's question on the dashboard after the upgrade; the box invoices nothing
-   until one does.
+**When the change is made: at the upgrade, while the box can read the internet's clock**
+(recommended; the second revision's question 2).
 
-**The clock.** A start has no browser to compare with, so the box compares its own clock with the
-authenticated internet reading A679 already uses (an AEAT or configured Waitron address, a
-five-second limit). Installing a release pulls its image from the internet (§5.5), so the box is
-normally online then. If the readings disagree by more than A679's 120 seconds, or none can be
-taken, the change waits and the dashboard asks a manager to confirm the time with A679's own
-dialog; until then the box issues no invoice. Disclosed: an offline first start on an
-identity-changing release stops invoicing until a manager confirms the clock.
+*The problem.* A947's clock check (§6.5) needs a second clock every time a box takes a name — the
+internet's, or the browser of a device that is not the box — and refuses a box clock more than 30
+seconds from it, ahead or behind, with no confirmation. The first revision made the change at a
+start, when nobody is present, so the only second clock it could have is the internet's. At a
+one-box venue whose counter till is the box's own screen (B3's default; that browser shares the
+box's clock and does not count, A947 §6.5, the clock check's rule 1), with no internet, the start
+would sell nothing until a phone on the venue's network opened a page: something outside blocking
+a sale, which CLAUDE.md §5 forbids ("Nothing EXTERNAL may block a sale").
+
+*What was checked for this revision.*
+
+- **A release reaches a box only by download.** Today `waitron.sh install` fetches the box's files
+  and pulls or builds its images — each step stopping the script when the network fails — before
+  `docker compose up` starts anything (`deploy/waitron.sh:607-630`; the pull and its failure at
+  `:329-330`); a failed pull leaves the running containers as they were, since nothing has been stopped
+  yet, though the box's files may already be the new ones (read, not run). `grep -n 'docker load' deploy/waitron.sh` finds no way to install an image from
+  a file. A release will pull its published image by its tag (§5.5). B3's stick fetches the newest
+  release over the network — "every install now has the internet, and so network time" (B3 §5.4)
+  — and it erases the box, so what follows is a first setup or a restore with a person at the setup
+  wizard, under A947's rules, never A993. B3's host service checks for a release once a day over
+  the internet (B3 §14), and A950, not yet designed, installs it later in a quiet hour
+  (`docs/backlog/box.md`, "Automatic upgrades that can be undone until the first order"), when the
+  line may be down. So the internet is there when a release is fetched, but not always when it is
+  switched on.
+- **The guard** ("The guard", above) refuses a record when the chain's stored identity differs
+  from the running release's. So while the change waits, the new release can sell nothing at all,
+  unless the guard is weakened.
+- **What a record says about its producer and version.** The Orden's annex, block 2.6 (read by eye
+  from the BOE's image): `NIF` is «NIF de la persona o entidad productora», under the note «dato de
+  la persona o entidad productora del sistema informático de facturación (SIF) empleado»; `Version`
+  is «Identificación de la versión del sistema informático de facturación (SIF) que se ejecuta en el
+  sistema informático de facturación utilizado». AEAT's FAQ: «Cada versión, por pequeña variación
+  que introduzca, es un producto distinto de los anteriores, con un funcionamiento particular, por
+  lo que es necesario que el productor de dicha versión del SIF certifique expresamente que dicha
+  versión cumple con los requisitos exigidos». In plain English: a record names the producer of the
+  version that is running, and that producer declares that version.
+
+*The four ways, on one example.* Bar Lucía S.L. has one box, whose screen is its counter till; it
+was set up on 16 October 2026 at 13:40 Madrid time as `0CNNW`. Release 1.4.0 names a future
+Waitron company as producer. The box fetched it the night before, and the upgrade switches it on
+at 11:15 Madrid on Monday 1 March 2027 (10:15 UTC; Madrid is one hour ahead of UTC until 28 March),
+while the fibre is down until 14:00. With the internet up, all four do the same: close `0CNNW`
+(last receipt `A-0CNNW/1234`), take `0JMV7`, first receipt `A-0JMV7/1`.
+
+- **A — recommended: the upgrade makes the change, only while it can read the internet's clock;
+  until then the old release goes on selling.** The upgrade stops the app, as it must anyway, and
+  runs a one-off command from the new image — beside the image's existing commands such as
+  `waitron-restore` and `waitron-rejoin` (`apps/server/package.json:8-14`) — before the new release
+  serves. The command first compares the chain's stored identity with the new release's, reading
+  only. If they match, it does nothing. If they differ, it reads the internet's clock and applies
+  A947 §6.5's clock check and minute rules **before it changes anything in the database,
+  migrations included**: once the new release has migrated the database, the old one refuses to
+  start on it (`assertNotAhead`, `apps/server/src/node-entry.ts:245`, CLAUDE.md §3). With a usable
+  reading it migrates and makes the change in one transaction, and the upgrade starts the new
+  release. Without one — no internet, a box clock more than 30 seconds out, or A947's rule 4
+  refusing — it exits having changed nothing; the upgrade starts the old release again from its own
+  image, still on the box under its own tag (§5.5); and the upgrade reports «Actualización a 1.4.0
+  pendiente: hace falta internet para abrir la nueva instalación fiscal» — today `waitron.sh
+  install` prints it and stops with an error, and A950 reports it wherever it reports a failed
+  upgrade (one of its open questions, "Where the failure is reported"). The next attempt —
+  the person running `waitron.sh install` again, or A950's next quiet hour — tries again.
+  *Example:* at 11:15 the command finds no internet; 1.3.2 starts again and the bar sells all day
+  on `A-0CNNW/1235` onwards, every record naming the owner and version 1.3.2, both true. At the
+  next morning's attempt, 09:05 Madrid on 2 March, the fibre is back: `0JP45`, first receipt
+  `A-0JP45/1`. *Cost:* an identity-changing release can reach a box late, and until it does the box
+  runs the old release, which its own declaration covers. I found nothing in the sources this
+  design quotes that sets a date by which a venue must take a new release. The guard is
+  unchanged. One step in `waitron.sh install` now, and the same step in A950's updater.
+- **B — the new release sells on the old installation, under the old identity, until it can read a
+  second clock.** The guard would have to let 1.4.0 add records to a chain opened under the old
+  producer, and those records would name the owner as producer of version 1.4.0, which he has not
+  declared — the Waitron company has; §8's "records and declaration agree" test would fail too. On
+  the annex and FAQ wording above, such a record names a producer who did not produce the version
+  running. *Example:* from 11:15 the bar sells `A-0CNNW/1235` onwards on 1.4.0, each record naming
+  the owner; at 14:00 the internet returns and the box changes to `0JN0C`. *Cost:* records the
+  sources' wording does not allow, on our reading, so it would need the asesor's yes first; and two
+  guards weakened. Not recommended.
+- **C — the new release starts and waits for a till's or phone's clock.** It sells nothing until a
+  device that is not the box answers a clock check. *Example:* the bar's only till is the box's own
+  screen, which does not count, so nothing is sold until the manager opens the box's page on her
+  phone. At a venue with a separate till it ends as soon as that till answers — which is new work:
+  today only the setup and restore pages take a browser's reading
+  (`packages/fiscal-verifactu/src/hour-setup-clock.ts:96-115`). *Cost:* at a one-box venue a sale
+  waits on a phone, which CLAUDE.md §5 forbids. Not recommended.
+- **D — this one change uses only the box's own clock.** The box's own database knows every name
+  its venue has used, so the "strictly later" rule still stops a clock that is behind the newest of
+  them. Nothing stops a clock that is fast: its name lies in the future and is taken again
+  later by a box with a right clock that cannot see it (A947 §6.7, cases F1 and F2, run on today's
+  code). *Example:* the bar's box takes `0JMV7` at once at 11:15 with nothing to compare against;
+  had its clock been two hours fast, another of the business's boxes taking a name at the true
+  11:15 without knowing of it (a restore from an older backup, say) could take `0JMV7` again. *Cost:* an exception to A947's "every time a box takes a name", for a rare event. Not
+  recommended.
+
+A fifth way was weighed and left out: reserve the name while the old release is still running and
+the box is online, when the release is fetched, and use it at the later upgrade with no clock. It
+removes A's delay, but adds a reservation and a rule that cancels it when a later name appears in
+between (a switch to the spare, say) — more fiscal code, to save a delay that costs no sale.
+
+**Under A, what a start does.** Every start still compares the identities (above). After an
+upgrade through its step they match. If they differ — only when the new release was started some
+other way, for instance `docker compose up` typed by hand — the start makes the change itself,
+under A947's rules, with the internet's clock, and **until then does not trade**; its recovery page
+says «Esta versión abre una nueva instalación fiscal y necesita la hora de internet: conecta el
+equipo a internet». Disclosed: on that path a sale does wait on something outside, as with §5.1's
+refusal of a test build; the upgrade's step is what keeps a venue off it. Whether that page should
+also take a phone's clock, as in C, is left open (§12). The first revision's decision that after a
+rule-4 refusal "the box keeps running without issuing invoices" is replaced: under A, the old
+release keeps selling.
 
 **Why no person has to approve it, when W41s asks one for a promotion.** W41s asks for a person
 where another machine may still hold the identity being replaced. A declared restore needs the
@@ -729,28 +872,32 @@ re-authentication (W41s §2 and §9.3). A promotion needs the manager's proof an
 fenced (A947 §6.2). W41s allows an automatic switch only with an outside grant of sole selling
 authority and the previous seller's acknowledged fencing (§9.3). None of that is in question at an
 identity change: the same box, holding its venue folder's lock (one process owns a venue folder,
-CLAUDE.md §3, `openVenueStore` in `packages/store/src/index.ts`), retires the identity only it
+CLAUDE.md §3, `openVenueStore` in `packages/store/src/index.ts`; the upgrade's one-off command, which
+changes the folder's files, takes `lockVenueDatabase` before its first change, as CLAUDE.md §3 asks
+of such a command), retires the identity only it
 issued on and opens the next in the same transaction; no data is rewound (a start on an image
 older than the database's migrations is refused, `assertNotAhead`, CLAUDE.md §3); and no other
 machine's right to sell changes. The one case none of these paths can see — a cloned disk still
-selling — is A679's own disclosed limit ("Old box returns or disk is cloned"). What W41s and A679
-asked a person for that still applies is the naming question and the clock, handled above.
+selling — is A679's own disclosed limit ("Old box returns or disk is cloned"). Of what W41s and
+A679 asked a person for, the naming question is gone for every allocation (A947 §6.5), and the
+clock is checked against the internet's, as above.
 
 **How it fits A679.** The new installation is a new activation: the release floor, the
 strictly-later rule, recording the name as spent before activating, and keeping production and
-preproduction apart all apply unchanged. The one row of A679's table it changes is "Ordinary
+preproduction apart all apply unchanged; the name is A947's five-symbol minute form, as for every
+allocation. The one row of A679's table it changes is "Ordinary
 reboot, update or exact publication Finish | Keep the existing activation": an update that changes
 the identity is not ordinary.
 
 **After the change.**
 
 - The dashboard shows managers a notice, «Nueva instalación fiscal», with the old and new
-  installation codes and the reason ("new producer in version 1.4.0"), and asks for the box's
-  recovery sheet to be printed again: the sheet prints "only this node's current installation
-  code", which the recovery form asks for (A679 design, "Owner PDF decisions, 2026-10-19").
-  Reprinting allocates nothing (A679's table: "PDF download, print or key reissue | Allocate
-  nothing"). **Requirement on A993: the step must not make a new recovery key.** Activation today
-  writes none: the key's verifier is kept per node (`readBreakGlassVerifier(db, nodeId)`,
+  installation codes and the reason ("new producer in version 1.4.0"). It asks for nothing: the
+  recovery sheet carries only the box's node recovery key, printed once per box, and the restore
+  form no longer asks for an installation code (A947 §6.7; A947's slice 4a takes the code off both,
+  and only if its committed test passes). A new installation does not change that key, so no new
+  sheet is needed. **Requirement on A993: the step must not make a new recovery key.** Activation
+  today writes none: the key's verifier is kept per node (`readBreakGlassVerifier(db, nodeId)`,
   `packages/db/src/deployment.ts:196`), `grep -rln setBreakGlassVerifier apps/server/src
   packages/*/src | grep -v '\.test\.'` lists only `packages/db` (which defines it),
   `apps/server/src/break-glass.ts`, `apps/server/src/recovery-document-api.ts` and
@@ -758,8 +905,6 @@ the identity is not ordinary.
   packages/fiscal-verifactu/src/allocation*.ts` answers 0 for every file. But other paths do make
   one — adoption mints a key (`mintBreakGlassKey`, `apps/server/src/adopt.ts:152`) — so A993 must
   not reach any of them, and a case checks that the verifier is unchanged after the step.
-  Whether an old sheet's printed code still lets a recovery through was not traced; the notice asks
-  for a new sheet either way.
   (Picture 5.)
 - The box keeps the old version's declaration (§7.3).
 - A spare box (A947) follows the new rows and, not filing, opens nothing (above). Upgrade it in the
@@ -773,7 +918,7 @@ the identity is not ordinary.
 production venue goes live, so every production chain stores its identity from its first record.
 Slice 1 itself changes the producer the records name (from the taxpayer to the owner); any
 preproduction chain open then changes producer part-way through, in AEAT's test service only, and
-opens a new chain at its first start on A993 because its row has nothing stored.
+opens a new chain when the box is first upgraded to A993, because its row has nothing stored.
 
 ## 6. Inside the app, on every terminal
 
@@ -891,14 +1036,25 @@ migration (slice 5).
   after slice 1 and checks the submission header names the taxpayer, not the producer.
 - **No record joins a chain opened under another identity** (§5.6, A993): proven by deleting the
   comparison, with the same-identity sale as the case it must still allow.
-- **Only the start-time step activates without a person** (§5.6): every other caller offering
-  `identity-change` is refused, and so is the step when the identities match, each proven by
-  deletion; a following spare's start opens nothing.
-- **A start on a changed identity opens a new installation** (§5.6): a case that starts the box
-  under a release with a different producer and checks that the old SIF row is revoked, the old
-  series retired, the next record is the first of a new chain and the old chain's unsent record is
-  still sent with its old producer; and a case that starts under the same identity and checks that
-  nothing is allocated.
+- **Only the identity-change step activates without a person** (§5.6): every other caller
+  offering `identity-change` is refused, and so is the step when the identities match, each proven
+  by deletion; a following spare's start, and the upgrade's step on a spare, open nothing.
+- **A changed identity opens a new installation** (§5.6): a case that runs the upgrade's step
+  under a release with a different producer, with a usable internet reading, and checks that the
+  old SIF row is revoked, the old series retired, the new installation code is the five-symbol
+  minute of the box's clock, the next record is the first of a new chain and the old chain's unsent
+  record is still sent with its old producer; and a case under the same identity that checks that
+  nothing is allocated and no clock is read.
+- **An upgrade that cannot read a clock changes nothing** (§5.6, way A): a case that runs the step
+  under a changed identity with the internet's clock unavailable, and checks that the database's
+  files and migration journal are as they were and that the old release then starts and records a
+  sale on its own chain. Proven by deletion: with the clock check moved after the migration, the
+  case must fail, because the old release then refuses the migrated database
+  (`provisioning.database_ahead`). The same case with a box clock 31 seconds out, ahead and behind,
+  changes nothing either.
+- **A start that finds the change not made does not trade without a second clock** (§5.6, "Under
+  A, what a start does"): a case that starts the new release under a changed identity with no
+  internet and checks that no sale is recorded and the old chain gains nothing.
 
 ## 9. What is NOT a release
 
@@ -917,7 +1073,7 @@ Each slice is one pull request.
 | Slice | What | Path |
 | --- | --- | --- |
 | 1 | `software-identity.ts`; the records carry the producer — the owner personally, his name and NIF, which he still has to supply — not the taxpayer; the name "Waitron"; the release's version; `TipoUsoPosibleSoloVerifactu` = S (unchanged), `TipoUsoPosibleMultiOT` = N (was S), `IndicadorMultiplesOT` = N (unchanged); the cancellation reader and the drain's grouping keep the taxpayer's name | FULL, **fiscal: the owner lands it** |
-| 1b | **A993**, the automatic identity change (§5.6): each chain stores its producer and mode; every start compares; a difference opens a new installation; the guard; the dashboard notice | FULL, **fiscal: the owner lands it** |
+| 1b | **A993**, the automatic identity change (§5.6): each chain stores its producer and mode; the upgrade's one-off step and every start compare; a difference opens a new installation under A947's five-symbol rules, only with a second clock (way A, if the owner chooses it); `waitron.sh install` runs the step and puts the old release back when it changes nothing; the guard; the dashboard notice | FULL, **fiscal: the owner lands it** |
 | 2 | The template, `functions.md`, the renderer, the "agree" and "headings" guards, `pnpm release prepare` and `tag`, and the release runbook | FULL |
 | 3 | `/legal/declaration` (HTML, PDF, plain text) in every mode and on the landing and recovery listeners; About Waitron on the dashboard, the till's More menu, the ⓘ corners and the setup wizard; guides in English and Spanish | LIGHT |
 | 4 | CI on a `v*` tag: the version and the rendered declaration in the image, the PDF and text on the GitHub Release; `waitron.sh install v<version>` pulls the published image; production refuses an unreleased build; the "never changes" guard | FULL (the box's start path) |
@@ -925,9 +1081,10 @@ Each slice is one pull request.
 | 6 | `@waitron/verifactu`'s own declaration, one per library release, in `waitron-io/verifactu` | That repository's own flow |
 | — | Cut `v1.0.0` with `pnpm release`, once the owner approves the revision, the asesor has answered Q53 and the producer's three facts are in | The owner |
 
-Slices 1, 2 and 6 can be built side by side. Slice 1b needs slice 1 and the owner's naming choice
-(with the recommended choice, A947's slice 4a first), and lands before the first production venue
-goes live. Slice 3 needs 2's renderer; slice 4 needs 2 and 3; slice 5 needs 3.
+Slices 1, 2 and 6 can be built side by side. Slice 1b needs slice 1, A947's slice 4a (the
+five-symbol minute name and its clock check) and the owner's answer on the offline start (the
+second revision's question 2), and lands before the first production venue goes live; A950's
+updater, when it is built, runs the same step. Slice 3 needs 2's renderer; slice 4 needs 2 and 3; slice 5 needs 3.
 
 ## 11. Questions for the owner — all four answered 2026-10-21
 
@@ -959,8 +1116,13 @@ Asked one at a time through the campaign watcher; the original text is in the mo
    failing over from on site to the cloud needs a different code, is Q53(e).
 4. **Production boxes run releases only. Answered: A**, "Releases only." §5.1 stands.
 
-**The revision's questions** (in `question.txt`): approve the revised design; and how the
-automatic identity change names its new installation (§5.6).
+**The first revision's questions** (in `question.txt`): approve the revised design; and how the
+automatic identity change names its new installation — the second withdrawn on 2026-10-22, the
+owner having settled the name form at about 22:25 on 2026-10-21 (A947 §6.5).
+
+**The second revision's questions** (in `question.txt`, asked one at a time): approve this
+revision; and, for A993, what happens when the change cannot read a second clock (§5.6, ways A to
+D, A recommended).
 
 ## 12. What this design does not settle, for the builder
 
@@ -984,8 +1146,24 @@ automatic identity change names its new installation (§5.6).
   with the asesor's answer.
 - **B3's note for A940** ([B3 design](2026-10-21-b3-usb-installer-design.md), "A note for
   A940") still applies to the new d): once the USB stick ships the operating system, d)'s «Linux y
-  Docker» and its no-hardware sentence change with it. B3 cites this file's line numbers as they
-  were before this revision; the sentences it points at are now in §4's item d) and §7.2.
+  Docker» and its no-hardware sentence change with it. B3 cites this file's line numbers; the
+  second revision moved them and updated B3's citations. B3 §4 also decides that the declaration's
+  PDF does not go on the stick and hands §7.2's last sentence back to A940; that sentence is not
+  changed by this revision.
+- **The upgrade's step (§5.6, way A), for the builder:** how `waitron.sh install` puts the old
+  release back (today it records a branch's image in `.env`, `deploy/waitron.sh:352-353`, and a
+  release's tag is slice 4's work, §5.5); how the one-off command reaches the fiscal module without
+  `apps/server` importing it (§5.3's composition rule); and that it reads the stored identity
+  without writing, so that nothing changes before the clock has passed.
+- **A950's rollback after the change.** If A950 puts back its snapshot after the step but before
+  the first order, the restored database no longer records that the new code was spent. Nothing
+  was filed under it (A950 files nothing before its check passes), and the next attempt takes a
+  later minute under A947's clock check. A950's design should say so.
+- **The start's fallback** (§5.6, "Under A, what a start does"): whether its recovery page should
+  also take a phone's clock, which is new work (way C), and its exact wording.
+- **"No new sheet" rests on A947's slice 4a.** That slice takes the installation code off the
+  recovery sheet and the restore form only if its committed test passes (A947 §6.7). If it does
+  not, the code stays on the sheet and the notice's reprint question comes back with it.
 
 ## Provenance
 
@@ -995,7 +1173,7 @@ automatic identity change names its new installation (§5.6).
 | AEAT, page listing the example (one file listed on 2026-10-21) | https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/informacion-tecnica/ejemplo-declaracion-responsable.html | That V0.5.1 is the current one |
 | AEAT FAQ, «Certificación de los sistemas informáticos: declaración responsable», labelled «Actualizadas a 21 de octubre de 2026» | https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/preguntas-frecuentes/certificacion-sistemas-informaticos-declaracion-responsable.html | Every version; no signature; inside and outside; keep all; item e); hardware; components; the two-character code (its «no se podrá repetir en otro SIF distinto del mismo productor» sentence re-fetched and found word for word on 2026-10-21, revision) |
 | AEAT FAQ, general (sanction) | https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/preguntas-frecuentes.html | €1,000 per system without a declaration |
-| Orden HAC/1177/2024, art. 15 and annex block 2.6 (consolidated text, last updated 28/10/2024; the annex is published as images and was read by eye) | https://www.boe.es/buscar/act.php?id=BOE-A-2024-22138 | Title, items a)–l), annex 2.a)–d), where it must be, the records' twin fields; the code's restrictions pointer and `NumeroInstalacion`'s wording (§2, §5.6) |
+| Orden HAC/1177/2024, art. 15 and annex block 2.6 (consolidated text, last updated 28/10/2024; the annex is published as images and was read by eye) | https://www.boe.es/buscar/act.php?id=BOE-A-2024-22138 | Title, items a)–l), annex 2.a)–d), where it must be, the records' twin fields; the code's restrictions pointer and `NumeroInstalacion`'s wording (§2, §5.6); the `NIF` note and `Version` wording (§5.6, second revision) |
 | AEAT developer FAQ v1.3 §4, pp. 9–10, pinned copy | `docs/compliance/sources/FAQs-Desarrolladores-v1.3-2025-12-04.pdf`, indexed in `docs/compliance/verifactu-faq-notes.md` §1–3; pages 9–10 re-read with `pdftotext` on 2026-10-21 | What identifies a system; a version is not a new system; the code unique only with the producer's NIF (§2, §5.6) |
 | AEAT, «Validaciones» v1.2.2 (PDF dated 8 April 2026; SHA-256 `426eb926…3513440`) | https://www.agenciatributaria.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/Validaciones_Errores_Veri-Factu.pdf | §3.1.5, p. 17: the characters `IdSistemaInformatico` may hold (§2) |
 | AEAT schema `SuministroInformacion.xsd`, the `verifactu` repository's copy at `2dc7609` | `schemas/SuministroInformacion.xsd:236`, `:665-669` | `IdSistemaInformatico` is `TextMax2Type`, no pattern (§2) |
@@ -1007,3 +1185,24 @@ day; re-read it before cutting `v1.0.0`. For the revision, the «Validaciones» 
 with `curl` and its text extracted with `pdftotext`; the quote in §2 is from that text. The annex
 2.6 wording quoted in §2 and §5.6 comes from the first draft's by-eye reading of the BOE's images,
 not re-read for the revision.
+
+For the second revision: the annex's `NIF` note and `Version` wording and the FAQ's «Cada versión…»
+sentence quoted in §5.6 ("When the change is made") were copied from the first draft's research
+notes (kept outside the repository, `~/waitron-campaign/a940-design/research-external.md` §4.1 and
+§5.2), not re-fetched. The five-symbol codes in §5.6 and picture 5 come from a script reproducing
+`encodeHourIdentity`'s alphabet and digit order (`packages/fiscal-verifactu/src/hour-identity.ts:3-21`)
+at minute resolution, run 2026-10-22 under Node v26.11.1:
+
+```
+node -e 'const E=Date.parse("2026-01-01T00:00:00Z"),A="0123456789ABCDEFGHJKMNPQRSTVWXYZ",M=60000;
+const enc=(ms,n,u)=>{let m=Math.floor((ms-E)/u),s="";for(let i=0;i<n;i++){s=A[m%32]+s;m=Math.floor(m/32)}return s};
+for (const t of ["2026-10-16T11:40:00Z","2027-03-01T10:15:00Z","2027-03-01T13:00:00Z","2027-03-02T08:05:00Z"]) console.log(t, enc(Date.parse(t),4,3600000), enc(Date.parse(t),5,M));'
+2026-10-16T11:40:00Z 06RB 0CNNW
+2027-03-01T10:15:00Z 09YA 0JMV7
+2027-03-01T13:00:00Z 09YD 0JN0C
+2027-03-02T08:05:00Z 09Z0 0JP45
+```
+
+The hour column is the control: `06RB` is what the real function printed for that instant in A947's
+probe (A947 §6.5), and `09YA` is the hour code the first revision used for 1 March 2027 at 11:15
+Madrid. Madrid's offset that day (UTC+1) is from Node's `Intl` with the zone `Europe/Madrid`.
