@@ -31,7 +31,6 @@ import "./errors.js";
 let venue: BillVenue;
 let counter: ZoneOffers;
 let dishId = "";
-let freeId = "";
 
 useVenueDb({
   resetPerTest: false,
@@ -50,19 +49,9 @@ useVenueDb({
         unitPrice: "10.00",
         vatClass: "general",
       });
-      // Task 12c's owes-nothing case reuses this offer.
-      const free = await createProduct(tx, {
-        catalogueId: cat.id,
-        categoryId: category.id,
-        name: "Water",
-        pricingUnit: "each",
-        unitPrice: "0.00",
-        vatClass: "general",
-      });
       dishId = dish.id;
-      freeId = free.id;
       await assignCatalogueToLocation(tx, venue.cfg.locationId, cat.id);
-      counter = await offerProducts(tx, venue.cfg, { productIds: [dishId, freeId] });
+      counter = await offerProducts(tx, venue.cfg, { productIds: [dishId] });
     });
   },
 });

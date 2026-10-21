@@ -121,7 +121,7 @@ export interface DeviceApiDeps {
   tenantDomain?: string;
   /** The battery route's clock; tests inject one to step past the one-minute limit. */
   now?: () => Date;
-  /** While a save refused for a full disk stands, every `/api/` write here but the device's own housekeeping answers 507. */
+  /** While the full-disk stop holds (`DiskFullState.full()`), every `/api/` write here but the device's own housekeeping answers 507. */
   disk?: DiskFullState;
 }
 

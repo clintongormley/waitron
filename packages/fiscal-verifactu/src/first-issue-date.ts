@@ -1,3 +1,4 @@
+import "./errors.js";
 import { AppError } from "@waitron/shared";
 import { formatDate } from "@waitron/verifactu";
 

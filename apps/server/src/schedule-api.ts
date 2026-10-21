@@ -29,7 +29,7 @@ import type { DiskFullState } from "./disk-full-state.js";
 export interface ScheduleApiDeps {
   db: Database;
   describeShifts?: WaitronModule["describeShifts"];
-  /** While a save refused for a full disk stands, every write here answers 507. */
+  /** While the full-disk stop holds (`DiskFullState.full()`), every write here answers 507. */
   disk?: DiskFullState;
 }
 
