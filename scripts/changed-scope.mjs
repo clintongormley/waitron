@@ -59,6 +59,7 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
   ["scripts/npm-bundle-notices.mjs", ["apps/dashboard", "apps/setup", "apps/till"]],
   ["scripts/setup-litestream.mjs", ["apps/server"]],
   ["scripts/setup-s3-test-server.mjs", ["apps/server"]],
+  ["scripts/vitest-duration-sequencer.mjs", ["apps/server"]],
   [
     "scripts/vitest-shard-coverage-merge.mjs",
     ["apps/dashboard", "apps/till", "packages/venue-service"],

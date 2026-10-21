@@ -747,6 +747,12 @@ describe("the CLI", () => {
     },
   );
 
+  it("selects the server, whose Vitest config loads scripts/vitest-duration-sequencer.mjs", () => {
+    expect(run("scripts/vitest-duration-sequencer.mjs\n").stdout).toBe(
+      "code=true\nscope=packages\npackages=@waitron/server\nroot=true\ndeploy=false\n",
+    );
+  });
+
   it("selects the real browser packages whose test:merge loads scripts/vitest-shard-coverage-merge.mjs", () => {
     expect(run("scripts/vitest-shard-coverage-merge.mjs\n").stdout).toBe(
       "code=true\nscope=packages\npackages=@waitron/dashboard @waitron/till @waitron/venue-service\n" +

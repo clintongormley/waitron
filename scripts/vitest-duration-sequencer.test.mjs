@@ -1,4 +1,7 @@
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
+import serverConfig from "../apps/server/vitest.config.ts";
 import {
   balancedShards,
   defaultEstimate,
@@ -190,5 +193,45 @@ describe("durationSequencer", () => {
     expect(written).toEqual([
       "[duration-sequencer] shard 1/3: 2 files, 60 estimated s, 0 absent from the table\n",
     ]);
+  });
+});
+
+describe("apps/server's wiring", () => {
+  const serverRoot = join(import.meta.dirname, "..", "apps", "server");
+
+  function serverTestFiles() {
+    const found = [];
+    const walk = (dir) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name !== "node_modules") walk(path);
+        } else if (entry.name.endsWith(".test.ts") && statSync(path).isFile()) {
+          found.push(relative(serverRoot, path).split(sep).join("/"));
+        }
+      }
+    };
+    for (const top of ["src", "test", "scripts"]) {
+      if (existsSync(join(serverRoot, top))) walk(join(serverRoot, top));
+    }
+    return found;
+  }
+
+  it("apps/server's config packs every server test file into exactly one shard", () => {
+    const table = JSON.parse(readFileSync(join(serverRoot, "test-durations.json"), "utf8"));
+    const wired = serverConfig.test.sequence.sequencer.table;
+    expect(wired).toEqual(table);
+    for (const value of Object.values(wired)) {
+      expect(Number.isFinite(value) && value > 0).toBe(true);
+    }
+
+    const paths = serverTestFiles();
+    expect(paths.length).toBeGreaterThan(0);
+    const sorted = [...paths].sort();
+    for (let count = 2; count <= 24; count += 1) {
+      const packed = balancedShards(paths, wired, count).flat();
+      expect(new Set(packed).size).toBe(packed.length);
+      expect([...packed].sort()).toEqual(sorted);
+    }
   });
 });

@@ -1873,7 +1873,7 @@ describe("the sharded jobs", () => {
       "@waitron/dashboard": 4,
       "@waitron/db": 3,
       "@waitron/provisioning": 6,
-      "@waitron/server": 11,
+      "@waitron/server": 16,
       "@waitron/venue-service": 4,
       "@waitron/till": 7,
     });

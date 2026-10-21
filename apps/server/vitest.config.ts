@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
+import { durationSequencer } from "../../scripts/vitest-duration-sequencer.mjs";
 
 export default defineConfig({
   test: {
@@ -26,6 +28,11 @@ export default defineConfig({
     // (dist/chunks/rpc.MzXet3jl.js:117), so that call has no timeout. See
     // docs/developers/ci-and-gates.md → "A shard can exit 1 with every one of its tests passing".
     maxWorkers: 4,
+    sequence: {
+      sequencer: durationSequencer(
+        JSON.parse(readFileSync(new URL("./test-durations.json", import.meta.url), "utf8")),
+      ),
+    },
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
