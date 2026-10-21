@@ -1992,7 +1992,7 @@ describe("the invoice at full payment", () => {
     }
   });
 
-  it("does not add an F1 issue offset to an F2 original or replay", async () => {
+  it("returns the saved issue offset on an F2 original and replay", async () => {
     const billId = await tabWith("Caña");
     const paymentId = await insertPayment(billId, { applied: 300 });
     const completed = await inTx((tx) =>
@@ -2005,9 +2005,10 @@ describe("the invoice at full payment", () => {
       ),
     );
     const replay = await inTx((tx) => readSettledTicket(backend, tx, venue.cfg, billId));
+    const [saved] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, billId));
     for (const invoice of [completed.invoice!, replay]) {
       expect(invoice.invoiceType).toBe("F2");
-      expect(invoice).not.toHaveProperty("issuedOffsetMinutes");
+      expect(invoice.issuedOffsetMinutes).toBe(saved!.issuedOffsetMinutes);
     }
   });
 

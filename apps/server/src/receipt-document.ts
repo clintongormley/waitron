@@ -238,8 +238,8 @@ export function buildReceiptDocument({
   if (simplified && result.operationDate === undefined) {
     const date =
       paperWidth === "58mm"
-        ? receiptDateTimeNumeric(result.issuedAt, locale)
-        : receiptDateTime(result.issuedAt, locale);
+        ? receiptDateTimeNumeric(result.issuedAt, locale, result.issuedOffsetMinutes)
+        : receiptDateTime(result.issuedAt, locale, result.issuedOffsetMinutes);
     // Two spaces at least, or the invoice number running into the date reads as one figure.
     row(result.invoiceNumber, date, 0, undefined, 2);
   } else {
@@ -250,8 +250,7 @@ export function buildReceiptDocument({
     } else {
       row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });
     }
-    const offset = simplified ? undefined : result.issuedOffsetMinutes;
-    row(label.date, receiptDateTime(result.issuedAt, locale, offset));
+    row(label.date, receiptDateTime(result.issuedAt, locale, result.issuedOffsetMinutes));
     if (result.operationDate !== undefined) {
       row(label.operationDate, receiptDay(result.operationDate, locale));
     }

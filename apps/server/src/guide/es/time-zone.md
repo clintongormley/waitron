@@ -17,3 +17,7 @@ Confirma que la zona horaria elegida es correcta y pulsa **Guardar**. Se conserv
 Waitron guarda la zona y solicita un reinicio. Las ventas siguen detenidas hasta que se superen las comprobaciones de arranque. Pulsa **Recargar** después del reinicio. Si la página no puede consultar el estado actual, pulsa **Consultar estado**; lo guardado se conserva.
 
 Si se pierde la respuesta al guardar, la página consulta el estado guardado antes de ofrecer otro intento. No es necesario confirmar otra vez una zona ya guardada. Las facturas y los cobros anteriores conservan sus fechas e importes registrados.
+
+## Fechas de los recibos {#receipts}
+
+Tu recibo y sus reimpresiones muestran la fecha y hora registradas al emitir la factura. Un cambio posterior de zona no modifica esa fecha ni la fecha de la factura en el código QR.

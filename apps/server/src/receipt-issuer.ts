@@ -4,10 +4,21 @@ import { sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import type { SaleId } from "@waitron/shared";
+import type { TillSaleResult } from "./till-sale.js";
 
-export async function readReceiptIssuer(backend: FiscalBackend, tx: Transaction, saleId: SaleId) {
+export async function readReceiptIssuer(
+  backend: FiscalBackend,
+  tx: Transaction,
+  saleId: SaleId,
+): Promise<
+  Partial<
+    Pick<
+      TillSaleResult,
+      "issuer" | "recipient" | "invoiceType" | "operationDate" | "issuedOffsetMinutes"
+    >
+  >
+> {
   const filed = await backend.filedReceiptFor(tx, saleId);
-  if (!filed?.issuer) return {};
   const [sale] = await tx
     .select({
       domicile: sales.taxpayerDomicile,
@@ -23,6 +34,8 @@ export async function readReceiptIssuer(backend: FiscalBackend, tx: Transaction,
     })
     .from(sales)
     .where(eq(sales.id, saleId));
+  const issueOffset = sale === undefined ? {} : { issuedOffsetMinutes: sale.issuedOffsetMinutes };
+  if (!filed?.issuer) return issueOffset;
   const issueDay =
     sale === undefined
       ? undefined
@@ -30,7 +43,7 @@ export async function readReceiptIssuer(backend: FiscalBackend, tx: Transaction,
           .toISOString()
           .slice(0, 10);
   return {
-    ...(sale?.recipientTaxId != null ? { issuedOffsetMinutes: sale.issuedOffsetMinutes } : {}),
+    ...issueOffset,
     ...(sale?.recipientTaxId != null &&
     sale.operationDate !== null &&
     sale.operationDate !== issueDay

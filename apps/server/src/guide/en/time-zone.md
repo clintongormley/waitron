@@ -17,3 +17,7 @@ Confirm that the selected time zone is correct, then choose **Save**. This prese
 Waitron saves the zone and requests a restart. Trading stays stopped until startup checks pass. Choose **Reload** after the restart. If the page cannot read the latest status, choose **Check status**; a successful save stays saved.
 
 If the save reply is lost, the page checks the saved status before offering another save. A zone already saved does not need a second confirmation. Old invoices and payment facts keep their recorded dates and amounts.
+
+## Receipt dates {#receipts}
+
+Your receipt and its reprints show the date and time recorded when the invoice was issued. A later zone change does not change that date or the invoice date in its QR code.
