@@ -47,7 +47,11 @@ export default defineConfig({
     clearMocks: false,
     // A crashed Stryker run leaves mutated copies of the source, tests included, in .stryker-tmp.
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
-    provide: { startupEngines: (process.env["WAITRON_STARTUP_ENGINES"] ?? "chromium").split(",") },
+    provide: {
+      startupEngines: (process.env["WAITRON_STARTUP_ENGINES"] ?? "chromium")
+        .split(",")
+        .map((engine) => engine.trim()),
+    },
     browser: {
       enabled: true,
       provider: playwright({}),

@@ -48,7 +48,11 @@ const browserProject = {
       "src/date-utils.test.ts",
       "src/dashboard-app.touch.test.ts",
     ],
-    provide: { startupEngines: (process.env["WAITRON_STARTUP_ENGINES"] ?? "chromium").split(",") },
+    provide: {
+      startupEngines: (process.env["WAITRON_STARTUP_ENGINES"] ?? "chromium")
+        .split(",")
+        .map((engine) => engine.trim()),
+    },
     browser: {
       enabled: true,
       // On the provider: Vitest 4 silently ignores a `context` key on the instance.

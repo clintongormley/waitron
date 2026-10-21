@@ -2225,8 +2225,8 @@ fetched without holding anything** (B4: I chose the stored copy).
   Measured 2026-10-21 in slice 3: Playwright 1.64.1, Chromium 156.0.8078.4 and WebKit 27.2, the real
   `index.html` and `main.ts` of each app, `WAITRON_STARTUP_ENGINES=chromium,webkit`: all eight cases
   passed in WebKit in both apps (`Tests 16 passed (16)` each) — the stored copy's first themed frame
-  was `#edf6f0` (dashboard 363 ms, till 331 ms after navigation, modules served unbundled by the
-  Vitest server, so not a production timing), the dark device's `#0b110d`, no
+  was `#edf6f0` (dashboard 363 ms, till 331 ms after navigation; one run each, on a Mac, with
+  modules served unbundled by the Vitest server, so not a production build), the dark device's `#0b110d`, no
   stored copy and a malformed one `#f7f7f8`, the late answer repainted and was stored, and a
   refused, failed or non-JSON answer kept the stored copy. See
   `apps/dashboard/src/venue-theme-startup.test.ts`, `apps/till/src/venue-theme-startup.test.ts` and

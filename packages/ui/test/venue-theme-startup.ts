@@ -15,6 +15,8 @@ export interface StartupScenario {
 export interface StartupProbeResult {
   readonly engine: string;
   readonly firstThemedBg: string | null;
+  /** `performance.now()` in the page when the first themed frame was sampled. */
+  readonly firstThemedAtMs: number | null;
   readonly bgAfter: string;
   readonly storedAfter: string | null;
   readonly themeRequests: number;
@@ -137,9 +139,6 @@ export function venueThemeStartupProbe(indexHtml: URL): BrowserCommand<[StartupS
       await subject.waitForTimeout(SETTLE_MS);
       const firstThemed = (await readFrames()).find(([themed]) => themed);
       const firstThemedBg = firstThemed?.[1] ?? null;
-      console.log(
-        `start-up probe ${browser.browserType().name()} ${browser.version()} ${scenario.colorScheme} stored=${scenario.stored === null ? "none" : scenario.stored.slice(0, 8)} answer=${scenario.answer}: first themed frame ${firstThemedBg} at ${firstThemed?.[2].toFixed(0)} ms`,
-      );
       if (scenario.answer === "late") {
         await subject
           .waitForFunction(
@@ -163,6 +162,7 @@ export function venueThemeStartupProbe(indexHtml: URL): BrowserCommand<[StartupS
       return {
         engine: `${browser.browserType().name()} ${browser.version()}`,
         firstThemedBg,
+        firstThemedAtMs: firstThemed?.[2] ?? null,
         themeRequests,
         ...settled,
       };
