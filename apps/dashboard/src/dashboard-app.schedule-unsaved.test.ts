@@ -38,6 +38,7 @@ async function mount(path = "/manage/my-schedule") {
         onboardingIntent: "prepare",
       }),
       getGoogleConfig: async () => ({ configured: false }),
+      getVenueTheme: async () => ({ hash: "waitron", css: "", logo: null }),
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
       getStaffRoster: async () => [{ personId: "p1", displayName: "Ada" }],
       listMyShifts: async () => [],

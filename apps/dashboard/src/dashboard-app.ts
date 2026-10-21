@@ -37,7 +37,7 @@ import "@waitron/ui/src/components/wt-help-switch.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { currentLocale, setLocale, t, fill } from "./i18n/t.js";
 import { codeOf, codeMessage } from "./i18n/codes.js";
-import { setContentLanguages } from "@waitron/ui";
+import { applyVenueTheme, setContentLanguages } from "@waitron/ui";
 import { DashboardQueries } from "./api/query-controller.js";
 import { diag } from "./diagnostics.js";
 import { signalAcceptedPasskeys } from "./passkey-signals.js";
@@ -942,6 +942,11 @@ export class DashboardApp extends LitElement {
     () => this.api,
     (error) => diag.record("warn", "alerts.load_failed", { code: codeOf(error) }),
   );
+  readonly #venueThemeQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => diag.record("warn", "theme.load_failed", { code: codeOf(error) }),
+  );
   /** The last element focused outside the pop-up: where focus returns when the pop-up, holding
    * focus, is closed. Both of its buttons are removed on press, which would drop focus to the page. */
   #focusBeforeToast: HTMLElement | null = null;
@@ -1189,6 +1194,13 @@ export class DashboardApp extends LitElement {
     if (mayApplyLocale) setLocale(resolveActiveLocale(me.locale, me.sessionDefault));
     this.#loadContentLanguages();
     this.#watchAlerts();
+    this.#watchVenueTheme();
+  }
+
+  #watchVenueTheme(): void {
+    void this.#venueThemeQueries
+      .watch("getVenueTheme", [], (answer) => applyVenueTheme(answer))
+      .catch(() => undefined);
   }
 
   #loadContentLanguages(): void {
@@ -1337,6 +1349,7 @@ export class DashboardApp extends LitElement {
     this.leave.forceReset();
     navigationGuardFor(window)?.reset();
     this.#languageQueries.release("getContentLanguages");
+    this.#venueThemeQueries.release("getVenueTheme");
     this.#clearAlerts();
     this.contentLanguagesReady = false;
     this.contentLanguageError = null;

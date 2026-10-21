@@ -35,6 +35,7 @@ async function mount(modules: string[], permissions: string[], role = "superviso
       modules,
     }),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
+    getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),

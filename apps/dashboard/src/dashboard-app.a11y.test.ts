@@ -57,6 +57,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       venueName: "Deli Test SL",
     }),
     getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+    getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),

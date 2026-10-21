@@ -2,7 +2,7 @@ import type { TenderRefundView, StuckTenderRefundRow } from "./tender-refund-typ
 import type { AllergenDeclaration as AllergenEntry } from "@waitron/catalogue/src/allergens.js";
 export type { AllergenEntry };
 import type { BusinessDayClock, DepartmentReceiptWrite } from "@waitron/shared";
-import type { PlanPlacement } from "@waitron/ui";
+import type { PlanPlacement, VenueThemeAnswer } from "@waitron/ui";
 import type { CatalogueSettings } from "@waitron/catalogue/src/settings-types.js";
 export type { CatalogueSettings };
 import type {
@@ -2417,6 +2417,10 @@ export class DashboardApi {
 
   getContentLanguages(): Promise<ContentLanguages> {
     return this.#request<ContentLanguages>("/api/content-languages", "GET");
+  }
+
+  getVenueTheme(): Promise<VenueThemeAnswer> {
+    return this.background.#request<VenueThemeAnswer>("/api/theme", "GET");
   }
 
   getContentLanguageRules(): Promise<ContentLanguageRules> {

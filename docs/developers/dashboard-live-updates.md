@@ -139,6 +139,11 @@ directly passes `{ passive: true }` as its fourth argument for background GETs. 
 appropriate when time passing or process-local state can change a query without a database event.
 Reusing an already cached query issues no request and therefore does not extend the session.
 
+2026-10-21, A841 slice 3: the shell's venue theme read (`DashboardApi.getVenueTheme`, watched from
+`dashboard-app.ts`) sends EVERY read passively, its first included, through
+`DashboardApi.background`, unlike `DashboardQueries`' usual active first read. It starts on its own
+at sign-in, so no read of it may count as activity; do not move it back to the active client.
+
 Test an external identity event with the view already mounted. Check the displayed value and an
 unsaved draft, then disconnect the view and confirm later events stop issuing reads. Query and
 transport tests cover sharing, reconnect and missed-event recovery; new data dependencies still
