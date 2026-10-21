@@ -5159,34 +5159,26 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   a planned "re-trust every device" event — devices pair again in place of their old entries, and the
   old name only points at the new one for 14 days. Five slices; no migration.
 
-- **A backup run that is cut off leaves a plaintext copy of the whole venue database** (owner-only file)
-  and its encrypted copy in `<state>/backup-staging`: the run's own `finally` deletes them
-  (`apps/server/src/backup-sweep.ts`), and the start deletes them only when its disk has under
-  256 MiB free (A798-B slice 2, `apps/server/src/start-space.ts`). Read, not run. Found by A798,
-  whose "Liberar espacio" deletes them. **Owner question:** should every start delete them, whatever
-  the free space? A start beside a running server would still keep them while that server's
-  heartbeat is fresh. Built default: only below 256 MiB, as the design scopes it.
-  [Design §11](superpowers/specs/2026-10-19-a798-degraded-trading-design.md#11-found-while-reading-outside-this-design),
-  [plan decision 16](superpowers/plans/2026-10-21-a798-2-full-disk-at-start.md#decisions-this-plan-makes-that-the-spec-does-not)
+- **A backup run that is cut off leaves a plaintext copy of the whole venue database**, and its
+  encrypted copy, in `<state>/backup-staging` until a start deletes them under 256 MiB free or after
+  a start that failed on a full disk, or the next backup run does. **Owner question:** should every
+  start delete them, whatever the free space? Found by A798.
+  [Detail](backlog/box.md#a-backup-run-that-is-cut-off-leaves-a-plaintext-copy-of-the-whole-venue-database)
 
-- **A local backup folder inside `<state>/backup-staging` is accepted, and a start below 256 MiB
-  free would delete it.** `parseEntry` and `parseDestinations` (`apps/server/src/backup-config.ts`)
-  take any `local-fs` folder through `resolve`, and the start deletes everything in
-  `backup-staging` recursively when its disk is low (A798-B slice 2). Refuse such a folder. Read,
-  not run.
+- **A local backup folder inside `<state>/backup-staging` is accepted, and a start's clean-up
+  would delete it.** Refuse such a folder.
+  [Detail](backlog/box.md#a-local-backup-folder-inside-statebackup-staging-is-accepted-and-a-starts-clean-up-would-delete-it)
 
 - **A box whose first setup was retired into a new workspace keeps that workspace's backup staging
-  at start.** The start's clean-up reads the folders the process was given, not the workspace's
-  resolved ones, so a `backup-staging` inside the workspace's state folder is never deleted there.
-  Accepted for A798-B slice 2 (its plan's decision 15); the count check already uses the resolved
-  folders.
+  through the clean-up before the count.** Accepted for A798-B slice 2.
+  [Detail](backlog/box.md#a-box-whose-first-setup-was-retired-into-a-new-workspace-keeps-that-workspaces-backup-staging-through-the-clean-up-before-the-count)
 
 - **The connection-bootstrap path on a full disk was not run.** A798-B slice 2's probes ran the
   recovery page on a full disk with freshly made certificates only (`needsConnectionBootstrap`,
   `apps/server/src/node-entry.ts`).
 
 - **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
-  (`@waitron/shared`) knows a full disk by the engine's code 13 alone; A798-B slice 2 names `ENOSPC`
+  (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; A798-B slice 2 names `ENOSPC`
   a full disk at start only (`fullDiskFailure`, `apps/server/src/boot-failure.ts`), because adding
   it to `diskFullIn` changes every route's answer. A798-B slice 5's watch is the natural home.
 

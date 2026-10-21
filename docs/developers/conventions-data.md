@@ -2413,8 +2413,9 @@ which names each probe and how it ran):
   `recovery.lock` and `venue.lock` (F2, F5, F11).
 - **14**, `unable to open database file`, on HFS+ at the same two locks, at the database's open and
   at a plain read (F2, F5, F11).
-- **4874**, `disk I/O error` (SQLite's `SQLITE_IOERR_SHMSIZE`, primary code 10), when the database is
-  opened with a few KiB left, on HFS+, APFS, tmpfs and ext4 (F5, F6, F11, F14).
+- **4874**, `disk I/O error` (SQLite's `SQLITE_IOERR_SHMSIZE`, primary code 10): when the database
+  is opened with a few KiB left, on HFS+, tmpfs and ext4 (F6, F11, F14); at the open on a full APFS
+  disk that still reported about 1.2 MB free (F5); and at a read on a full tmpfs or ext4 (F5).
 - **`ENOSPC`**, from the system rather than the engine: writing the venue lock's holder file with
   8 KiB left on HFS+ (F14), writing `recovery.json.tmp` (F2), and on APFS the rename onto
   `recovery.json` (F2).

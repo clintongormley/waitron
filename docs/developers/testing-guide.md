@@ -1125,8 +1125,9 @@ and its restore keeps its two-minute no-progress bound (`RESTORE_STALL_MS`,
 A box whose disk fills has to start well enough to say so: delete what it can make again, then
 either boot or show the recovery page under `storage.disk_full` (A798-B slice 2). The unit tests in
 `apps/server/src/start-space.test.ts`, `boot-failure.test.ts` and `node-entry.full-disk.test.ts`
-test the product code with stubbed free space and stubbed errors, and are what the coverage bar
-counts, because the real-disk file is skipped where it cannot run. What only a real disk can show
+test the product code with stubbed free space and stubbed errors. Every product line is covered by
+them, never by the real-disk file alone, because that file is skipped on a Linux machine without
+a small filesystem. In CI the real-disk file's coverage joins the server's merge too. What only a real disk can show
 is which error the engine and the system actually raise when the disk is full, and whether the start
 then does the right thing. That is `apps/server/src/start-full-disk.e2e.test.ts`, and it needs a
 filesystem small enough to fill in a second.
@@ -1164,17 +1165,17 @@ runner's user, the run step names it in `WAITRON_FULL_DISK_DIR`, and every `test
 excludes the file. Guard: the stream job's cases in `scripts/ci-workflow.test.mjs`, weaker than
 their name: they read `ci.yml` as text, so a step an `if:` switches off still passes them. Before the
 branch's first CI run, the mount had been run only in a privileged Linux container on Docker
-Desktop by the task's reviewer (2026-10-21), where the 32 MiB tmpfs mounted and the fill reached
+Desktop during the slice's review (2026-10-21), where the 32 MiB tmpfs mounted and the fill reached
 `ENOSPC`. **How these cases behave on a GitHub runner's tmpfs is unmeasured until that run**; the
 pull request records what it printed.
 
-**A run you interrupt can leave its image attached.** The task's reviewer stopped a run with
-Ctrl-C (2026-10-21) and found the image still attached afterwards. `pnpm reap` does not look for
+**A run you interrupt can leave its image attached.** A run stopped with Ctrl-C during the
+slice's review (2026-10-21) left its image still attached afterwards. `pnpm reap` does not look for
 it. Find it, detach it by its mount path, then remove its folder:
 
 ```bash
 hdiutil info | grep wt-full-disk      # image-path …/wt-full-disk-XXXXXX/disk.dmg, and /dev/diskN …/wt-full-disk-XXXXXX/mnt
-hdiutil detach <mount>                # the …/mnt path from the /dev/diskN line
+hdiutil detach <mount>                # the …/mnt path from the /dev/diskN line; add -force if it reports busy
 rm -rf <the wt-full-disk-XXXXXX folder above it>
 ```
 

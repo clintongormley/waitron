@@ -688,7 +688,8 @@ browser test** — most of these rules exist because a test passed while proving
   [testing-guide.md](docs/developers/testing-guide.md#the-stream-loop-test-skips-locally-without-its-two-binaries-and-a-skip-reads-as-a-pass).
 - **The full-disk start tests need a small real filesystem**: on macOS they make one with
   `hdiutil`; on Linux they read `WAITRON_FULL_DISK_DIR`, are SKIPPED locally without it, and FAIL
-  in CI. An interrupted macOS run can leave its image attached, and `pnpm reap` does not detach it.
+  in CI. Cost avoided: a local Linux skip reads as a pass. An interrupted macOS run can leave its
+  image attached, and `pnpm reap` does not detach it.
   Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem).
 - **On Vitest 4.1.11 a browser's `connectTimeout` is read only from the OUTER config's
