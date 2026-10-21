@@ -17381,7 +17381,6 @@ export class TillApp extends LitElement {
       .selectedFilters=${this.selectedFilters}
       .courses=${this.courses}
       .stations=${this.stations}
-      .fireControl=${this.fireControl}
       .tables=${this.tables}
       .zones=${this.zones}
       .orderId=${this.activeTabId}
@@ -17517,7 +17516,6 @@ export class TillApp extends LitElement {
           .selectedFilters=${this.selectedFilters}
           .courses=${this.courses}
           .stations=${this.stations}
-          .fireControl=${this.fireControl}
           .tables=${this.tables}
           .zones=${this.zones}
           .orderId=${this.activeTabId}

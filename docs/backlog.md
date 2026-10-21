@@ -2453,7 +2453,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The station screen ignores the retired Fire events without opening an allergy window or making
   cooking requests. Its public Fire-control property and the station widget property are retired;
   boot and setup refresh retain preparation mode without passing that control. Legacy-mode
-  regression inputs remain test-only. Expo still uses the shared allergy controller until its own retirement.
+  regression inputs remain test-only. The table screen also omits Fire control and both app
+  bindings; its waiter Fire actions remain independent of that retired setting. Expo still uses
+  the shared allergy controller until its own retirement.
   The newly landed floor map counts ready food without a legacy dispatch fallback.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 

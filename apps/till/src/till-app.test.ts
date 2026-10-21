@@ -9081,7 +9081,7 @@ describe("till-app", () => {
         ]);
       });
 
-      it("boots the venue courses + fire mode and threads them to the table-order screen", async () => {
+      it("boots the venue courses without the retired table Fire-control setting", async () => {
         const courses = [{ id: "c1", name: "Entrantes", displayOrder: 0 }];
         const { el } = await mountApp({
           getTill: vi.fn().mockResolvedValue({ ...till, courses, fireControl: "waiter" }),
@@ -9090,7 +9090,7 @@ describe("till-app", () => {
         });
         const screen = await toTableOrder(el, openTable);
         expect(screen.courses).toEqual(courses);
-        expect(screen.fireControl).toBe("waiter");
+        expect("fireControl" in screen).toBe(false);
       });
 
       const heldCourseLine: TabLine = {

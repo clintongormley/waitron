@@ -2467,7 +2467,9 @@ from the [approved design](../superpowers/specs/2026-10-16-a773-courses-and-grou
 The station queue no longer offers course/group Fire buttons; held work stays non-advanceable.
 The station screen and widget no longer expose Fire control, and their app bindings omit it.
 Boot and setup refresh still apply preparation mode. Legacy-mode regression inputs remain
-test-only. The newly landed floor map counts ready food without a legacy dispatch fallback.
+test-only. The table screen also omits Fire control and both app bindings; its waiter Fire
+actions remain independent of that retired setting. The newly landed floor map counts ready
+food without a legacy dispatch fallback.
 Lane G's first build branch has service lifetime, backend retirement of the old kitchen Fire,
 Away and Done routes, and counter release of every course on Send or payment. Existing table
 holding checks use seated parties; counter retries retain their existing sale and print counts.

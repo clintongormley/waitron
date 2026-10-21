@@ -139,7 +139,7 @@ function servedMenu(
   return servedMenus([{ id, name, isDefault, versionId: `${id}-v1` }], offers)[0]!;
 }
 
-const mount = async (over: Partial<TillTableOrderScreen> = {}) => {
+const mount = async (over: Partial<TillTableOrderScreen> & { fireControl?: string } = {}) => {
   const draftStore = new DraftStore();
   const mounted = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
     products,
@@ -1674,7 +1674,9 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
     }
 
-    async function mountSentGroups(over: Partial<TillTableOrderScreen> = {}) {
+    async function mountSentGroups(
+      over: Partial<TillTableOrderScreen> & { fireControl?: string } = {},
+    ) {
       const lines = over.lines ?? tabLines;
       const known = over.groups ?? groups;
       const mounted = await mount({

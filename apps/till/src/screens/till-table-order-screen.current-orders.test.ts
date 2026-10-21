@@ -59,7 +59,7 @@ async function mountCurrent(over: Partial<TillTableOrderScreen> = {}) {
   return mounted;
 }
 
-async function mountSent(over: Partial<TillTableOrderScreen> = {}) {
+async function mountSent(over: Partial<TillTableOrderScreen> & { fireControl?: string } = {}) {
   const mounted = await mount({ groups, currentOrders: current(), now, ...over });
   await sentPanelFor(mounted.el);
   return mounted;

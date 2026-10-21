@@ -130,7 +130,6 @@ import type {
   PartyBill,
 } from "../api/client.js";
 import type { ConfirmPaymentDetail, RetainedTender } from "../widgets/tender-pay.js";
-import type { FireControlMode } from "../widgets/station-queue.js";
 import { heldGroupIds, inHeldGroup } from "../state/held-groups.js";
 import { itemCount, type DraftEntry, type DraftGroup } from "../state/draft-groups.js";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
@@ -1096,7 +1095,6 @@ export class TillTableOrderScreen extends LitElement {
   /** Injectable clock for a fired group's age; unset reads the ticking clock. */
   @property({ attribute: false }) now?: number;
   @property({ type: Number }) serviceVisit = 0;
-  @property() fireControl: FireControlMode = "waiter";
   @property() orderId?: string;
   @property() kitchenNote: string | null = null;
   @property({ type: Number }) kitchenNoteRevision = 0;
