@@ -22,7 +22,7 @@ is the online storage the box copies its whole database to once the venue sets o
 **The venue is the controller and carries the legal duties.** Waitron, the company, holds none of
 a self-hosted venue's data, so it is neither controller nor processor of it. It becomes a processor
 once Waitron Cloud stores or backs up the venue's data, a support session sees it, or a bug report
-carries it to Waitron. Whether passing the venue's encrypted remote-access traffic through
+carries it to Waitron (for bug reports Waitron may instead be a controller: Q57). Whether passing the venue's encrypted remote-access traffic through
 Waitron's relay also makes it one is a question for the specialist (§3, Q57).
 
 **What the venue must do:** publish a privacy notice and give a short version of it to staff,
@@ -300,7 +300,7 @@ marta-lopez-2026-10-05.zip
 
 `time-record` reuses the existing export (`apps/server/src/attendance-export-api.ts:77-80`).
 `actions.csv` lists sale numbers and amounts, never another person's data. The JSON files are the
-Article 20 copy. Every export is recorded in the requests register (S5).
+Article 20 copy. Every export is recorded in the requests register (S5) if O7 is yes.
 
 **Worked example, invoice customer.** Jordi Puig, a self-employed electrician with NIF
 12345678Z, asks what the restaurant holds about him. Today nobody can search by NIF: the orders
@@ -412,7 +412,7 @@ Required where the controller's "actividades principales" are "el tratamiento a 
 categorías especiales de datos" (R22), and for the sectors Spanish law lists (R29), which do not
 include restaurants. Core activities are the controller's primary business, not processing done
 as an ancillary activity (R41); one doctor or lawyer with their clients' data is not "a gran
-escala" (R42). A restaurant's primary business is serving food, and its allergy notes support it,
+escala" (R42, said of impact assessments). A restaurant's primary business is serving food, and its allergy notes support it,
 so on our reading no officer is required; Q54(d) confirms.
 
 ### 4.8 Security of processing
@@ -452,7 +452,7 @@ Missing-clock emails (`apps/server/src/attendance-email.ts:40-50`) touch the rig
 | Duty | What exists |
 | --- | --- |
 | Staff deactivation | two routes set `suspended` and end sessions and open links: _Deactivate_ (`apps/server/src/management-api.ts:1194` → `packages/identity/src/staff.ts:228-255`) and the edit route with `status: "suspended"` (`management-api.ts:1142-1179` → `updatePersonDetails`, `staff.ts:148-226`, revoking at `:224-225`); no hard delete anywhere |
-| Secret wipe | only on _reset login_ and re-inviting a suspended person (`staff.ts:296-320`, `:322-357`) |
+| Full secret wipe | only on _reset login_ and re-inviting a suspended person (`staff.ts:296-320`, `:322-357`); the manager's reset-PIN route deletes the PIN hash alone and ends open sessions (`staff.ts:257-275`) |
 | Working-time export | own record and manager's, PDF or CSV (`apps/server/src/attendance-export-api.ts:77-80`, `report.export` at `:45-52`) |
 | Invoice PDF | one at a time (`apps/server/src/orders-api.ts:364-383`) |
 | Booking end | cancel is a status; no delete verb (`packages/bookings/src/schema/bookings.ts:20-25`) |
@@ -471,8 +471,8 @@ Missing-clock emails (`apps/server/src/attendance-email.ts:40-50`) touch the rig
 2. **The privacy-notice link cannot be set on a box.** It is read only from the server's
    environment (`apps/server/src/config.ts:503`). The box's compose file passes listed variables
    into the container and this one is not among them (`deploy/compose.yml:21-41`), and the file
-   setup writes holds only node, location, environment and keys
-   (`apps/server/src/trading-config.ts:18-28`). So neither the box's `.env` nor setup can set it,
+   setup writes holds only node, location, environment, onboarding intent and keys
+   (`apps/server/src/trading-config.ts:33-41`). So neither the box's `.env` nor setup can set it,
    and invitations go out without it (`apps/server/src/account-email.ts:131`). Fixed by S1.
 3. **Records with no end.** Ended sessions are never deleted; a passkey challenge that is not used
    "lapse[s] by its TTL" and stays (`packages/identity/src/passkey.ts:70-79`); incidents are never
@@ -499,16 +499,16 @@ goes in `packages/country-es` with English beside it.
 | Slice | What | Migration | Fiscal | Permission | Tests | Gate |
 | --- | --- | --- | --- | --- | --- | --- |
 | **S1** Notice settings | dashboard setting for the notice link and the controller's privacy email, replacing the environment variable; link in invoice emails; EN and ES guide page with §4.1's templates | yes (a settings row) | no: the email body is not the invoice | `venue.configure` | setting round-trip; the link in invitation, invoice email, login and profile; an empty setting shows nothing | none |
-| **S2** Staff export | §4.2's ZIP | no | no | O5 | a fixture with a distinct value in every table that names the person, each asserted present; no hash string present (negative control: put one in and see it fail) | none |
-| **S3** Customer by NIF | search sales by recipient NIF; export §4.2 | maybe (an index on `sales`) | no: reads only | O5 | sole-trader fixture; `es 12345678z`, `ES12345678Z` and `12345678 Z` all find it; a company NIF is found too; nothing from other customers | none |
-| **S4** Wipe at deactivation | delete §5.2 item 1's secrets on both deactivation routes, reusing reset login's statements. **Auth change: a risk trigger, full review** | no | no | `person.manage` | each secret gone after _Deactivate_ and after the edit route; time entries untouched; re-inviting still works; sign-in refused | **O2** |
+| **S2** Staff export | §4.2's ZIP | no | no | O5 | a fixture with a distinct value in every table that names the person, each asserted present; no hash string present (negative control: put one in and see it fail) | O5 |
+| **S3** Customer by NIF | search sales by recipient NIF; export §4.2 | maybe (an index on `sales`) | no: reads only | O5 | sole-trader fixture; `es 12345678z`, `ES12345678Z` and `12345678 Z` all find it; a company NIF is found too; nothing from other customers | O5 |
+| **S4** Wipe at deactivation | delete §5.2 item 1's secrets on both deactivation routes, reusing reset login's statements; `suspendPerson` (`packages/identity/src/staff.ts:538-551`), which no route calls, the package index does not export and only its tests use, is deleted or made to wipe too, so a later route cannot bypass the wipe. **Auth change: a risk trigger, full review** | no | no | `person.manage` | each secret gone after _Deactivate_ and after the edit route; time entries untouched; re-inviting still works; sign-in refused | **O2** |
 | **S5** Requests register | received, kind, person, one-month due date (R9), answer, restriction note (R26); exports logged here | yes | no | O5 | due date at one month; overdue shown; restriction visible | **O7** |
 | **S6** Record and breach material | per O10: a dashboard page, or guide templates; never a risk verdict | no | no | O5 | per O10 | **O10** |
 | **S7** Bucket check | after setup, read the bucket's default encryption and region; show "encrypted", "not encrypted" or "unknown" (when the provider does not answer or the keys may not ask), and "EU", "outside the EU" or "unknown"; warn, never block | no | no | `system.manage` | an S3 test server answering each way, and refusing the question | **O8** |
 | **S8** Allergy hint | the "who" field's placeholder says "seat or description, not a name" | no | no | none | EN and ES strings | **O6** |
 | **S9** Booking and allergy erasure on request | §4.3(c) | no | no | O5 | each field cleared; allergy text moved before notes are cleared; allergy evidence kept | **G3** |
 | **S10** Log check | probe whether any logged error detail carries a name or email: an email-server refusal, and error parameters such as `person.email_taken` and `person.display_name_taken` (`packages/identity/src/staff.ts:53-66`); mask it if so | no | no | none | a failing probe first | none |
-| **S11** Former employee's contact clearing | O1(c): clear email and phone a year after deactivation; needs a stored date and a review list | yes | no | O5 | the date set by both routes; cleared only after the year | **O1, G2, G3** |
+| **S11** Former employee's contact clearing | O1(c): clear email and phone a year after deactivation; needs a stored date and a review list; `suspendPerson` (`staff.ts:538-551`, unrouted, used only by tests) is deleted or made to set the date too, as in S4 | yes | no | O5 | the date set by both routes; cleared only after the year | **O1, G2, G3** |
 
 The bug-report design (backlog A9) carries O9's rules into its own slices. O4's option (b) would
 be a fiscal slice and is not proposed.
@@ -577,15 +577,19 @@ a year later; that change waits until the labour and privacy specialists agree.
 
 **O2. Delete sign-in details when someone is deactivated.** A manager deactivates Marta on
 30 September. With **yes**, her PIN, password, two-factor codes, Google link and passkeys are
-deleted in the same step. The product already deletes exactly these when a manager resets
+deleted in the same step. The product already deletes these, and the recovery codes and pending
+passkey challenges besides, when a manager resets
 someone's login or re-invites a person who had been deactivated, so this only does the same thing
 one step earlier, as a security measure. With **no**, they stay, as today, and keep being copied
 to the backup storage. **Recommended: yes.** No working-time record or other evidence is touched,
 the details are useless once she cannot sign in, and the privacy specialist is told and can object.
 
 **O3. Where the full privacy notice lives.** A customer reads the short line and wants the
-details. The box cannot serve the page itself, because customers outside the restaurant cannot
-reach it. **(a) The venue's own web page**, its address entered in a dashboard setting.
+details. The box cannot serve the page itself today. Without remote access, customers outside the
+restaurant cannot reach it; with it, public HTTPS ends at Waitron's gateway, which forwards only
+an allowlist of paths, and the only public endpoint so far is `GET /public/availability`, which
+answers whether the venue is available. Menus, bookings and the customer-facing remote setup
+screen "remain separate work" (`docs/developers/cloud-connection.md:165-170`). **(a) The venue's own web page**, its address entered in a dashboard setting.
 **(b) Later, a page Waitron Cloud hosts for each Cloud-connected venue** from the venue's own
 text. **Recommended: (a) now, (b) later** through lane D.
 
@@ -595,8 +599,8 @@ wording. **(b) A dedicated line printed only on full invoices,** which changes w
 prints and so is a tax change. **Recommended: (a).**
 
 **O5. Who may download or erase a person's data.** A shift manager is asked by a customer for "all
-my data". **(a) A new permission for data requests, held only by admins unless you give it to
-others.** **(b) The existing staff-management permission**, which managers hold. **(c) The
+my data". **(a) A new permission for data requests, held only by admins; giving it to another role later is
+a code change** (each role's permissions are fixed in code, `packages/identity/src/permissions.ts:46-80`). **(b) The existing staff-management permission**, which managers hold. **(c) The
 existing report-export permission.** **Recommended: (a).** A staff download holds pay rates and
 sick-leave notes, and a separate permission makes it clear who handled each request.
 
@@ -621,7 +625,7 @@ offered. **(a) Automatic reports carry only the error, the Waitron version and l
 personal details masked; anything a person typed travels only in a report the manager has read and
 chosen to send.** **(b) Everything in the bundle, always.** **Recommended: (a).** It keeps the
 personal data Waitron receives to a minimum and matches your 2026-09-24 decision that the public
-issue carries only the error, the version and the error code.
+issue carries only the stack, the Waitron version and the error code (`docs/backlog/alerts.md:41-43`).
 
 **O10. The record of processing and the breach checklist: a dashboard page, or templates in the
 help guide?** The venue's adviser is drafting the written record and a breach plan.
@@ -691,7 +695,7 @@ corrigenda were not checked. The English column renders the OJ English text.
 | R21 | tell the people when high risk | GDPR 34(1) | "probable que … entrañe un alto riesgo" | "likely to result in a high risk" |
 | R22 | DPO | GDPR 37(1)(c), corrected 2018 | "las actividades principales del responsable o del encargado consistan en el tratamiento a gran escala de categorías especiales de datos con arreglo al artículo 9 o de datos personales relativos a condenas" | "the core activities of the controller … consist of processing on a large scale of special categories of data pursuant to Article 9 and personal data relating to criminal convictions" (the English says "and"; the corrected Spanish says "o") |
 | R23 | layered notice | LOPDGDD 11.1-2 ([BOE](https://www.boe.es/buscar/act.php?id=BOE-A-2018-16673)) | "información básica"; "La identidad del responsable"; "La finalidad"; "La posibilidad de ejercer los derechos" | basic information: controller, purpose, rights, and a link to the rest |
-| R24 | means to exercise rights; proof on the controller; free | LOPDGDD 12.2, 12.4, 12.7; GDPR 12(5) | "La prueba del cumplimiento del deber de responder … recaerá sobre el responsable"; "Serán gratuitas … sin perjuicio de lo dispuesto en los artículos 12.5 y 15.3 del Reglamento"; GDPR 12(5): "Cuando las solicitudes sean manifiestamente infundadas o excesivas" | proof of answering lies with the controller; free of charge, except that manifestly unfounded or excessive requests may be charged for or refused |
+| R24 | means to exercise rights; proof on the controller; free | LOPDGDD 12.2, 12.4, 12.7; GDPR 12(5) | "La prueba del cumplimiento del deber de responder … recaerá sobre el responsable"; "Serán gratuitas … sin perjuicio de lo dispuesto en los artículos 12.5 y 15.3 del Reglamento (UE) 2016/679 y en los apartados 3 y 4 del artículo 13 de esta ley orgánica"; GDPR 12(5): "Cuando las solicitudes sean manifiestamente infundadas o excesivas" | proof of answering lies with the controller; free of charge, except as GDPR 12(5) (manifestly unfounded or excessive requests), 15(3) (further copies) and LOPDGDD 13.3 (repeated access requests) and 13.4 (a costlier means the person chooses) allow |
 | R25 | ask to specify; repetitive | LOPDGDD 13.1, 13.3 | "que el afectado especifique los datos"; "en más de una ocasión durante el plazo de seis meses" | ask which data; more than once in six months may be repetitive |
 | R26 | restriction must show | LOPDGDD 16.2 | "debe constar claramente en los sistemas de información del responsable" | must appear clearly in the controller's systems |
 | R27 | blocking | LOPDGDD 32.1-3 | "estará obligado a bloquear los datos cuando proceda a su rectificación o supresión"; "impedir su tratamiento, incluyendo su visualización, excepto para la puesta a disposición de los datos a los jueces y tribunales, el Ministerio Fiscal o las Administraciones Públicas competentes … para la exigencia de posibles responsabilidades derivadas del tratamiento y solo por el plazo de prescripción de las mismas"; "Transcurrido ese plazo deberá procederse a la destrucción de los datos" | the controller must block data when it corrects or erases it: nobody may process or view it, except to put it at the disposal of courts, the prosecutor or competent authorities to pursue liabilities arising from the processing, and only while those liabilities can still be pursued; then it must be destroyed |
@@ -709,8 +713,8 @@ corrigenda were not checked. The English column renders the OJ English text.
 | R39 | a full invoice names the recipient | RD 1619/2012 art. 6.1(c) ([BOE](https://www.boe.es/buscar/act.php?id=BOE-A-2012-14696)) | "Nombre y apellidos, razón o denominación social completa, tanto del obligado a expedir factura como del destinatario" | the full names of issuer and recipient |
 | R40 | keep issued invoice copies | RD 1619/2012 art. 19.1(b) | "Las copias o matrices de las facturas expedidas" | copies of issued invoices (A664 F12, re-checked) |
 | R41 | core activities | GDPR recital 97 | "las actividades principales de un responsable están relacionadas con sus actividades primarias y no están relacionadas con el tratamiento de datos personales como actividades auxiliares" | "the core activities of a controller relate to its primary activities and do not relate to the processing of personal data as ancillary activities" |
-| R42 | not large scale | GDPR recital 91 | "no debe considerarse a gran escala si lo realiza, respecto de datos personales de pacientes o clientes, un solo médico, otro profesional de la salud o abogado" | "should not be considered to be on a large scale if the processing concerns personal data from patients or clients by an individual physician, other health care professional or lawyer" |
-| R43 | a processor deciding purposes becomes a controller | GDPR 28(10) | "si un encargado del tratamiento infringe el presente Reglamento al determinar los fines y medios del tratamiento, será considerado responsable del tratamiento con respecto a dicho tratamiento" | "if a processor infringes this Regulation by determining the purposes and means of processing, the processor shall be considered to be a controller in respect of that processing" |
+| R42 | not large scale (said of impact assessments) | GDPR recital 91 | "no debe considerarse a gran escala si lo realiza, respecto de datos personales de pacientes o clientes, un solo médico, otro profesional de la salud o abogado" | "should not be considered to be on a large scale if the processing concerns personal data from patients or clients by an individual physician, other health care professional or lawyer" |
+| R43 | a processor that infringes this Regulation by determining the purposes and means of processing is considered a controller for that processing | GDPR 28(10) | "si un encargado del tratamiento infringe el presente Reglamento al determinar los fines y medios del tratamiento, será considerado responsable del tratamiento con respecto a dicho tratamiento" | "if a processor infringes this Regulation by determining the purposes and means of processing, the processor shall be considered to be a controller in respect of that processing" |
 | R44 | transmission is processing | GDPR 4(2) | "conservación … comunicación por transmisión" | "storage … disclosure by transmission" |
 | R45 | works committee reports beforehand on control systems | ET 64.5(f), 62.2 | "emitir informe, con carácter previo a la ejecución por parte del empresario de las decisiones adoptadas por este, sobre las siguientes cuestiones: … f) La implantación y revisión de sistemas de organización y control del trabajo"; 62.2: staff delegates "tendrán las mismas competencias establecidas para los comités de empresa" | the works committee may report, before the employer acts, on introducing or revising systems of work organisation and control; staff delegates have the same powers |
 

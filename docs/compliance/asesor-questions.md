@@ -669,7 +669,7 @@ restaurant's staff and invoice processing is not occasional. Art. 37.1.c require
 actividades principales» consist of «el tratamiento a gran escala de categorías especiales de
 datos»; recital 97 says core activities are the controller's primary activities, «no …
 el tratamiento de datos personales como actividades auxiliares», and recital 91 says one doctor,
-health professional or lawyer is not «a gran escala». (a) and (b) are open; (c) and (d) ask you
+health professional or lawyer is not «a gran escala» (said of impact assessments). (a) and (b) are open; (c) and (d) ask you
 to confirm our reading.
 
 > Un restaurante anota, cuando el cliente lo comunica, las alergias de los comensales de una mesa
@@ -690,7 +690,7 @@ to confirm our reading.
 >
 > **(d)** Confírmenos que no debe designar delegado de protección de datos: su actividad
 > principal es la restauración, las notas de alergias son auxiliares (considerando 97), no trata
-> categorías especiales «a gran escala» (art. 37.1.c RGPD; considerando 91) y no figura en la
+> categorías especiales «a gran escala» (art. 37.1.c RGPD; considerando 91, dicho de las evaluaciones de impacto) y no figura en la
 > lista del art. 34.1 LOPDGDD.
 
 ---
@@ -700,17 +700,18 @@ to confirm our reading.
 **Why we ask.** The design proposes keeping a former employee's email for one year after she
 leaves, the period in ET art. 59.1 («Las acciones derivadas del contrato de trabajo que no tengan
 señalado plazo especial prescribirán al año de su terminación»), then clearing it and keeping her
-name with her time record. It also proposes deleting her PIN, password, two-factor secret,
-passkeys and recovery codes when the account is deactivated: the software already deletes exactly
-these when a manager resets a login or re-invites a suspended person, so this extends existing
+name with her time record. It also proposes deleting her PIN, password, two-factor secret and
+enrolments, Google link, passkeys, recovery codes and pending passkey challenges when the account
+is deactivated: the software already deletes exactly these when a manager resets a login or re-invites a suspended person, so this extends existing
 security behaviour (GDPR art. 32) rather than setting a retention period.
 
 > **(a)** ¿Es proporcionado conservar el correo electrónico de una extrabajadora durante un año
 > desde la baja (art. 59.1 ET), para atender sus solicitudes y enviarle su registro de jornada, y
 > después borrarlo conservando su nombre junto al registro? ¿Debe borrarse antes o conservarse más?
 >
-> **(b)** Proponemos borrar sus credenciales de acceso (PIN, contraseña, segundo factor, llaves de
-> acceso y códigos de recuperación) en el momento de la baja, como medida de seguridad, sin tocar
+> **(b)** Proponemos borrar sus credenciales de acceso (PIN, contraseña, segundo factor,
+> vinculación con Google, llaves de acceso, códigos de recuperación y desafíos de llave de acceso
+> pendientes) en el momento de la baja, como medida de seguridad, sin tocar
 > el registro de jornada ni otros registros. ¿Tiene alguna objeción?
 
 ---
@@ -726,8 +727,9 @@ tratamiento y solo por el plazo de prescripción de las mismas». When erasure i
 art. 17.3.b, nothing is erased. Two cases: a former employee's time record, which ET art. 34.9
 keeps four years and says «permanecerán a disposición de las personas trabajadoras, de sus
 representantes legales y de la Inspección de Trabajo y Seguridad Social»; and an invoice
-customer's name, NIF and address, which a full invoice must carry (RD 1619/2012 art. 6.1.c),
-whose copy must be kept (art. 19.1.b), and which the filed record has already sent to AEAT. In
+customer's name, NIF and address, which a full invoice must carry (RD 1619/2012 art. 6.1.c, d
+and e), whose copy must be kept (art. 19.1.b), and whose name and NIF the filed record has
+already sent to AEAT. In
 Waitron the sale and the filed record cannot be changed.
 
 > **(a)** Si la empresa deniega la supresión por el art. 17.3.b RGPD, porque la ley le obliga a
@@ -749,8 +751,10 @@ processor under a GDPR art. 28 contract. Two other routes are unclear. First, Wa
 receive bug reports from the box (technical logs and, when a manager chooses, a description of
 what they were doing) and to use them to fix its own software. LOPDGDD art. 33.2 treats as
 controller «quien figurando como encargado utilizase los datos para sus propias finalidades», and
-GDPR art. 28.10 says a processor that determines «los fines y medios del tratamiento» is
-considered controller for that processing. Second, when a venue turns on remote access, the
+GDPR art. 28.10 says that «si un encargado del tratamiento infringe el presente Reglamento al
+determinar los fines y medios del tratamiento, será considerado responsable del tratamiento con
+respecto a dicho tratamiento»: a processor that infringes the Regulation by determining the
+purposes and means of processing is considered a controller for that processing. Second, when a venue turns on remote access, the
 dashboard's encrypted traffic passes through Waitron's relay, which cannot read it; GDPR art. 4.2
 counts «comunicación por transmisión» as processing.
 
