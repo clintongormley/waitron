@@ -1061,7 +1061,9 @@ serves the page AT ONCE under `storage.disk_full`, and writes nothing. The count
 where the page would say "Failed N times." it says "Level: recovery. This start was not counted: the
 disk is full." («Nivel: recovery. Este arranque no se ha contado: el disco está lleno.»). The
 full-disk action begins "The box has deleted what it could make again, and that was not enough."
-(«El equipo ha quitado lo que podía volver a crear, y no ha bastado.»). The Spanish says «quitado»,
+(«El equipo ha quitado lo que podía volver a crear, y no ha bastado.»). That start writes no
+`server.boot_started`, so "Why the last start failed" shows the last counted start's failure, if it
+failed. The Spanish says «quitado»,
 not the design's «borrado», because the page's never-wipe check (`NEVER_WIPE_ES`,
 `apps/server/src/recovery-surface.test.ts`) refuses every word starting «borra». The sentence holds
 however the page was reached, because a start whose failure is classified `storage.disk_full`

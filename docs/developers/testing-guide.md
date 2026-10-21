@@ -1127,12 +1127,12 @@ either boot or show the recovery page under `storage.disk_full` (A798-B slice 2)
 `apps/server/src/start-space.test.ts`, `boot-failure.test.ts`, `node-entry.test.ts`,
 `node-entry.full-disk.test.ts`, `node-entry.full-disk-order.test.ts` and
 `recovery-surface.test.ts` test the product code with stubbed free space and stubbed errors. Every
-product line the slice added must be, and is, covered by them, never by the real-disk file alone, because that file is skipped on a Linux
-machine without a small filesystem. In CI the real-disk file's coverage joins the server's merge
-too. What only a real disk can show
-is which error the engine and the system actually raise when the disk is full, and whether the start
-then does the right thing. That is `apps/server/src/start-full-disk.e2e.test.ts`, and it needs a
-filesystem small enough to fill in a second.
+product line the slice added must be covered by them, never by the real-disk file alone, because
+that file is skipped on a Linux machine without a small filesystem. In CI the real-disk file's
+coverage joins the server's merge too. What only a real disk can show is which error the engine and
+the system actually raise when the disk is full, and whether the start then does the right thing.
+That is `apps/server/src/start-full-disk.e2e.test.ts`, and it needs a filesystem small enough to
+fill in a second.
 
 **Where the filesystem comes from** (`apps/server/src/testing/full-disk.ts`, `openSmallDisk`):
 

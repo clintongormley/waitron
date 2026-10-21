@@ -2370,7 +2370,10 @@ itself and keeps nothing.
 
 **Weaker than the rule.**
 
-- Nothing was measured on Linux's filesystems, which is what the box runs.
+- Slice 1 measured nothing on Linux's filesystems, which is what the box runs. Slice 2's engine-only
+  probes on Linux tmpfs and ext4 in Docker did (F8 in the
+  [slice 2 plan](../superpowers/plans/2026-10-21-a798-2-full-disk-at-start.md#measured-for-this-plan)):
+  the commit failed with 13 and nothing was kept; never through the store, and never on a box.
 - The commit point is tested here on a stand-in: a `Proxy` over a real in-memory connection whose
   `commit` runs the real `rollback` and then throws errcode 13. Through the old queue it printed the
   same lines the real disk image did (E8's last case). No page-limit shape TRIED met the limit at

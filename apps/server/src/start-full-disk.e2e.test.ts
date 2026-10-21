@@ -1,3 +1,7 @@
+// Needs a filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_DIR names, or on macOS a disk
+// image the harness makes with hdiutil (`./testing/full-disk.ts`). Without one each case is reported
+// SKIPPED; with CI=true or WAITRON_REQUIRE_FULL_DISK=1 it FAILS instead (testing-guide.md, "The
+// full-disk start tests run on a small filesystem").
 import {
   mkdirSync,
   mkdtempSync,

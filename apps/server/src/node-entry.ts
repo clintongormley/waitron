@@ -388,8 +388,7 @@ type CountCheck = { written: true } | { written: false; freeBytes: number | null
 
 /**
  * Writes `recovery.json` back unchanged through the count's own path. Only a failure a full disk
- * explains, judged on free space read after it, is answered; any other is thrown, failing the start
- * as an unwritable count always has.
+ * explains, judged on free space read after it, is answered; any other is thrown.
  */
 async function countWritable(deps: EntryDeps): Promise<CountCheck> {
   try {
