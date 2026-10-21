@@ -186,7 +186,9 @@ We offered reciprocity in the message. Send it.
 ## Step 8 — Write the declaración responsable
 
 > **2026-10-21:** drafted in the [A940 design](../superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md)
-> (the text, one per release, every terminal, the public archive); awaiting the owner's answers.
+> (the text, one per release, every terminal, the public archive). The owner answered its four
+> questions the same day — he is the producer for now — and the revised design awaits his
+> approval; item d)'s wording awaits the asesor (Q53).
 
 Needed before anyone else uses the software; already overdue in principle, since the producer
 deadline passed on 29 July 2025.

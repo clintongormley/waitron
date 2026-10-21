@@ -1,9 +1,44 @@
 # A940 — The software's declaración responsable, inside the app and outside it
 
-**Date:** 2026-10-21. **Status:** design, awaiting the owner's answers to four questions (§11).
-Nothing in it is built. **Item:** A940.
+**Date:** 2026-10-21, revised the same day for the owner's answers. **Status:** design; all four
+questions answered (§11); the revision awaits the owner's approval, and item d)'s wording awaits
+the asesor (tax adviser) on Q53. Nothing in it is built. **Items:** A940, and A993 for the automatic
+identity change (§5.6).
 
 **Mock-ups:** [`docs/backlog/mockups/a940-declaracion-responsable/`](../../backlog/mockups/a940-declaracion-responsable/README.md).
+
+> **Revision 2026-10-21 — owner's answers.** All four questions were answered through the campaign
+> watcher between about 14:35 and 15:00. What changed, section by section:
+>
+> - **Q1, the producer: the owner personally, now.** His full name, NIF (Spanish tax number) and a
+>   postal address he is content to publish are still to be supplied; §4 keeps ‹…› placeholders
+>   and the revision's question file asks for them. Slice 1 needs the name and NIF; the first
+>   release needs all three.
+> - **The owner's follow-ups on the two-character code.** New paragraph in §2: who sets the code,
+>   that it does not change with a version, which characters AEAT's validation rules allow (quoted;
+>   stricter than the schema), and why a new producer alone already makes a different system.
+> - **"Automate it."** New **§5.6** and backlog item **A993**: every chain stores the identity it
+>   was opened under; every start compares it with the running release's; on a difference the box
+>   opens a new installation and chain by itself; a guard refuses to add a record to a chain opened
+>   under another identity. §5.6 says how it fits A679's installation-number rules and why it needs
+>   no person's approval where W41s's promotion does — except one choice it cannot make alone, how
+>   the new installation is named without A679's "anyone set up a box in the last hour?" question.
+>   That is the revision's second question. A993 is its own fiscal slice, which the owner lands.
+>   §3 gains fact 5 (what a chain stores today); §8 gains two guards; new picture 5.
+> - **Q2 and Q3, items e) and f).** e) = «S» for this first version, which supports only
+>   Veri\*Factu (this **replaces** the owner's first answer "No", which described the product's
+>   design; the records keep `TipoUsoPosibleSoloVerifactu = S`). f) = «N» (`TipoUsoPosibleMultiOT`
+>   changes from `S` to `N` in slice 1; `IndicadorMultiplesOT` is already `N`). One installation
+>   only ever uses one fiscal policy, so a move between policies is a new installation (§5.6).
+>   §3 fact 3, §4 and slice 1 are updated.
+> - **Q3, the wording.** Item d) is now the draft the watcher sent to the asesor as Q53: the server
+>   on the venue's own computer or in the cloud, an optional spare on site, no hardware of ours, one
+>   installation for one taxpayer under one compliance mode set by the country pack, this version
+>   Veri\*Factu only. It stays a draft until the asesor answers. Pictures 1, 2 and 4 are redrawn
+>   with it (their item labels now read «1.a)» as §4's do); the optional-services slot is gone
+>   from §4 and §5.4.
+> - **Q4: production boxes run releases only**, as designed in §5.1. No change.
+> - **§10 build order** gains A993; **§11** records the answers; **§12** gains three open points.
 
 ---
 
@@ -43,6 +78,9 @@ from the owner, so its version is the first one owed a declaration.
    release publishes it as a PDF and plain text (§7).
 5. What the invoice records tell AEAT about the software agrees with what the declaration says,
    and cannot drift apart (§3, §8).
+6. When the system's identity changes — a new producer, a new two-character code, or a move to
+   another compliance mode — the box opens a new installation and chain by itself, and never adds
+   a record to a chain opened under another identity (§5.6, item A993).
 
 **Non-goals**
 
@@ -51,8 +89,9 @@ from the owner, so its version is the first one owed a declaration.
 - A website for Waitron. The release archive lives on GitHub (§7); a website can link to it later.
 - The licensing question still open with a lawyer (asesor question Q9(a): whether publishing the
   source counts as producing the software for whoever modifies it). It does not change who signs
-  Waitron's own declaration: Waitron does, as decided on 2026-07-27
-  ([asesor-questions.md](../../compliance/asesor-questions.md), Q9).
+  Waitron's own declaration: Waitron's producer does, as decided on 2026-07-27
+  ([asesor-questions.md](../../compliance/asesor-questions.md), Q9) — today the owner personally
+  (§11, Q1).
 
 ## 2. What the law asks
 
@@ -120,6 +159,40 @@ for the other items. Items a), b), c), f), h) and i) describe the same facts as 
 records' `SistemaInformatico` block (Orden, annex block 2.6), so this design keeps each pair
 identical by choice.
 
+**The two-character code (item b).** The Orden, art. 15.1 b): «Se trata de una codificación a
+establecer por la persona o entidad productora … Este código no podrá coincidir con el de otro
+sistema informático distinto que pueda producir dicha persona o entidad». AEAT's FAQ: «Este código
+no se podrá repetir en otro SIF distinto del mismo productor (aunque sí podría darse la coincidencia
+de que dos productores distintos utilizarán el mismo código para referirse a sus respectivos SIF»
+(SIF: *sistema informático de facturación*, the invoicing system). AEAT's developer FAQ (v1.3, §4,
+pp. 9–10): «Un SIF se identifica universalmente por la "concatenación" de tres campos: Id.OEF (NIF)
++ Id.SIF (\*) + NºInstalación(\*\*). Otro dato importante que caracteriza al SIF es su versión,
+pero un cambio en dicha versión (cuando se actualiza, por ejemplo) no significa que el SIF pase a
+ser otro SIF con Id. distinto, cosa que sí ocurre con los otros 3 campos mencionados», and «(\*)
+Código de 2 posiciones dado por cada fabricante a su producto SIF, motivo por el cual, la unicidad
+"global" de dicho Id.SIF del producto SIF se consigue considerando también de forma vinculada a él
+(como si formara parte de él) la identificación de su fabricante: NIF o IdOtro de la
+agrupación/bloque 'SistemaInformatico'».
+
+In plain English: the code is ours to choose; it tells one of our products from our others, so it
+changes with a new product, never with a new version; a system is identified by the taxpayer's NIF
+(Id.OEF, the *obligado a expedir factura*), the code and the installation number; and the code is
+unique only together with its producer's NIF. So, on our reading, a new producer alone makes a
+different system even if the two characters stay the same. Asesor question Q53(d) asks whether the
+same characters may continue under a new producer and confirms what the switch costs; the box's
+side of that switch is §5.6.
+
+Which characters: AEAT's schema allows any string of up to two characters (`IdSistemaInformatico`
+is `TextMax2Type`, a `maxLength` of 2 and no pattern: `schemas/SuministroInformacion.xsd:236` and
+`:665-669` in the `verifactu` repository at `2dc7609`). AEAT's validation rules are stricter:
+«El campo IdSistemaInformatico deberá tener rellenas siempre las dos posiciones, cada una de las
+cuales deberá ser una letra mayúscula, excepto la Ñ, o un dígito numérico» (Validaciones v1.2.2,
+§3.1.5, p. 17) — always exactly two characters, each a capital letter A–Z or a digit 0–9. The
+Orden's annex points there for the restrictions («Se detallarán las posibles restricciones a sus
+valores en la documentación correspondiente en la sede electrónica de la AEAT (documento de
+validaciones...)», annex block 2.6, read by eye from the BOE's image). Waitron's code, `W1`
+(`packages/fiscal-verifactu/src/software.ts:1`), meets the rule.
+
 **Language.** No rule found. The Orden fixes the title and the item wording in Spanish, so the
 declaration is written in Spanish. Nothing found forbids a translation beside it; this design adds
 none (§6.5).
@@ -131,7 +204,7 @@ informático comercializado sin dicha certificación».
 
 There is no declaration, no About screen on any terminal, and no release (`git ls-remote --tags
 origin` lists only `pre-sqlite-migration`; `gh api repos/clintongormley/waitron/releases --jq
-length` answers `0`). Four facts from the code shape the design. Each was found by reading the
+length` answers `0`). Five facts from the code shape the design. Each was found by reading the
 source and following its callers, not by running it; the citations are the receipts.
 
 1. **Every record a box files tells AEAT the version is `0.0.0`.** The `Version` field comes
@@ -154,20 +227,35 @@ source and following its callers, not by running it; the citations are the recei
    that reader in the same pull request, or cancellations would go out under the producer's name.
    I believe nothing has been filed with AEAT's production service: the README says Waitron is
    "Not yet running in production anywhere" (`README.md:9`). If that holds, no wrong record sits
-   at AEAT and the fix changes only what future records carry.
-3. **The two usage flags are marked unverified in the code itself** (`backend.ts:58-61`): records
-   send "only Veri\*Factu" = `S` and "several taxpayers" = `S`. Waitron keeps exactly one taxpayer
-   per installation (the `tenants` table is a single row, CLAUDE.md §3), so "several taxpayers" =
-   `S` looks wrong (§4, item f). "Only Veri\*Factu" = `S` looks right for a Spanish venue: Spain's
-   common territory is mapped to `fiscal-verifactu` (`packages/country-es/src/spain.ts:300-310`),
-   the other Spanish territories are refused, and `selectFiscalModule` forces the slot
-   (`packages/module/src/fiscal-slot.ts:37-47`). The same build also ships `fiscal-none`, which
-   files nothing and is what a UK venue gets (`packages/country-gb/src/united-kingdom.ts:21`).
-   Whether shipping that mode for other countries makes the product one that "can also work as NO
-   VERI\*FACTU" is a legal reading, not a code fact; question 2 asks it.
+   at AEAT and the fix changes only what future records carry. The producer will be the owner
+   personally (§11, Q1).
+3. **The three usage flags are marked unverified in the code itself** (`backend.ts:58-61`).
+   Records send "can only work as Veri\*Factu" (`TipoUsoPosibleSoloVerifactu`) = `S`, "can keep
+   several taxpayers" (`TipoUsoPosibleMultiOT`) = `S`, and "keeps several taxpayers now"
+   (`IndicadorMultiplesOT`) = `N` (`backend.ts:74-76`). The owner's answers settle them for this
+   version (§11, Q2 and Q3). `TipoUsoPosibleSoloVerifactu` stays `S`: the first version supports
+   only Veri\*Factu — Spain's common territory is mapped to `fiscal-verifactu`
+   (`packages/country-es/src/spain.ts:300-310`), the other Spanish territories are refused, and
+   `selectFiscalModule` forces the slot (`packages/module/src/fiscal-slot.ts:37-47`).
+   `TipoUsoPosibleMultiOT` changes to `N`: Waitron keeps exactly one taxpayer per installation (the
+   `tenants` table is a single row, CLAUDE.md §3). `IndicadorMultiplesOT` stays `N`: the annex
+   says the system works it out from the taxpayers it holds, and with one row by construction the
+   answer is always `N`. The same build also ships `fiscal-none`, which files nothing and is what a UK
+   venue gets (`packages/country-gb/src/united-kingdom.ts:21`); §12 says why this design reads it
+   as no bar to «S».
 4. **The name sent is "Waitron POS"** (`backend.ts:72`), while the product is called "Waitron"
    everywhere it is distributed (`README.md:1`). Item a) is «la denominación genérica dada al
    mismo para su distribución o comercialización», and the records' field will say the same.
+
+5. **A chain does not remember which producer or compliance mode it was opened under.** A
+   chain belongs to one SIF row (`registro_sif`), which stores the taxpayer's NIF, the
+   two-character code and the installation number (`packages/fiscal-verifactu/src/schema/sif.ts:20-22`)
+   and nothing else about the software. Activation takes the code from the box's live row, not
+   from the running build (`softwareId: liveSif?.softwareId ?? WAITRON_ID_SISTEMA`,
+   `packages/fiscal-verifactu/src/allocation.ts:77-88`). A start already refuses a node whose
+   recorded filing module differs from the enabled one (`module.fiscal_slot_mismatch`,
+   `packages/module/src/fiscal-slot.ts:26-28`, read at `apps/server/src/boot.ts:1602-1609`). §5.6
+   builds on these.
 
 Facts 1–4 are fiscal changes: they change what every invoice record tells AEAT. None of them
 touches the record's fingerprint, the chain, the series or the numbering: the fingerprint string
@@ -197,12 +285,16 @@ items h)–l), is also applied to the annex headings, by our choice; and the ann
 example's item 2.c) (see the choices below). Items are labelled «1.a)» to «1.l)», as the example
 labels them.
 
-Values marked ‹…› are filled in later: the producer's facts by the owner (question 1, §11), and
-the version, the library version, the functions list and the date by the release step (§5). Where
-the producer is a person rather than a company, AEAT's example says to write «Nombre y apellidos
-de la persona productora» in h) and «persona productora» for «entidad productora» in i)–l). The
-draft below is written for a person, because that is the producer today
-([action-plan.md](../../compliance/action-plan.md), Step 6).
+Values marked ‹…› are filled in later: the producer's facts by the owner (the owner personally,
+§11, Q1; his name, NIF and publishable address are still to be supplied), and the version, the
+library version, the hosting phrases, the functions list and the date by the release step (§5).
+Where the producer is a person rather than a company, AEAT's example says to write «Nombre y
+apellidos de la persona productora» in h) and «persona productora» for «entidad productora» in
+i)–l). The draft below is written for a person, because that is the producer the owner chose.
+
+Item d)'s body is the draft sent to the asesor as Q53
+([asesor-questions.md](../../compliance/asesor-questions.md), Q53), as the owner directed; it stays
+a draft until the asesor answers, and the first release waits for that answer.
 
 > **DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN**
 >
@@ -219,40 +311,31 @@ draft below is written for a person, because that is the producer today
 > esta declaración responsable, junto con una breve descripción de lo que hace dicho sistema
 > informático y de sus principales funcionalidades:**
 >
-> Waitron es un software de punto de venta para restaurantes y bares. Se instala en un equipo
-> servidor del propio usuario, situado en su establecimiento, y los terminales del
-> establecimiento se conectan a él por la red local.
+> Waitron es un software de punto de venta para restaurantes y bares. Se ejecuta en un servidor
+> ‹—un equipo del propio establecimiento o un servidor en la nube—› con Linux y Docker, y los
+> terminales del establecimiento (cajas, comanderos, pantallas de cocina y el panel de gestión) se
+> conectan a él por la red mediante un navegador. ‹Opcionalmente, un segundo servidor de reserva en
+> el establecimiento mantiene una copia continua de los datos y puede sustituir al principal si este
+> falla.›
 >
-> Componentes software de esta versión, todos del mismo productor salvo que se indique:
-> - El servidor de Waitron, que guarda los datos del establecimiento, genera y encadena los
->   registros de facturación, calcula su huella, los conserva y los remite automáticamente a la
->   Agencia Tributaria.
-> - La biblioteca @waitron/verifactu, versión ‹x.y.z›, del mismo productor y con su propia
->   declaración responsable. El servidor la usa en cada registro de facturación para formar el
->   registro, calcular su huella, componer el contenido del código QR de la factura y remitir el
->   registro a la Agencia Tributaria.
-> - Las aplicaciones de caja, terminal de mano, pantalla de cocina y panel de gestión, que el
->   servidor sirve a un navegador web. Los terminales no generan registros de facturación.
-> - El agente de impresión, que envía tickets y facturas a las impresoras.
-> - Componentes de terceros de los que el productor se hace responsable: Node.js ‹versión›, con
->   su motor de base de datos SQLite, en el que se guardan los datos y los registros;
->   Litestream ‹versión›, que mantiene la copia de seguridad cuando el usuario la configura; y el
->   sistema operativo Linux con Docker sobre el que se instala. La lista completa de componentes
->   de terceros de esta versión, con sus licencias, se encuentra en el propio sistema, en la
->   carpeta /app/third-party/.
+> Hardware: Waitron no incluye hardware propio; funciona en cualquier ordenador que cumpla lo
+> anterior.
 >
-> Servicios opcionales del mismo productor que esta versión puede usar: ‹ninguno, o la lista que
-> compruebe el paso de publicación›.
+> Software: el servidor Waitron, que genera, encadena, conserva y remite los registros de
+> facturación; la biblioteca @waitron/verifactu (versión ‹x.y.z›), que construye cada registro, su
+> huella y el contenido del código QR, y lo remite, y que cuenta con su propia declaración
+> responsable; las aplicaciones de los terminales, que no generan registros de facturación; el
+> agente de impresión; y los componentes de terceros de los que nos hacemos responsables: Node.js,
+> SQLite, Litestream, Linux y Docker (la lista completa se muestra en el propio sistema).
 >
-> Componentes hardware: ninguno forma parte del producto. El servidor funciona en cualquier
-> equipo que cumpla los requisitos mínimos de este software.
+> Cada instalación lleva la facturación de un único obligado tributario y aplica una única modalidad
+> de cumplimiento, determinada por el paquete de país instalado; esta versión solo funciona como
+> VERI\*FACTU.
 >
-> Funcionalidades principales: ‹la lista que compruebe el paso de publicación; en la rama
+> Principales funcionalidades: ‹la lista de la versión, comprobada en cada publicación; en la rama
 > principal el 21 de octubre de 2026: toma de pedidos por mesa o en barra, cobro en efectivo y con
 > tarjeta, expedición de facturas simplificadas, facturas rectificativas, consulta de las facturas
 > emitidas e informes de ventas›.
->
-> Cada instalación lleva la facturación de un único obligado tributario.
 >
 > **1.e) Indicación de si el sistema informático a que se refiere esta declaración responsable se
 > ha producido de tal manera que, a los efectos de cumplir con el Reglamento, solo pueda
@@ -307,25 +390,33 @@ draft below is written for a person, because that is the producer today
 >   https://github.com/clintongormley/waitron/releases
 
 **In English, briefly.** a) Waitron. b) W1, the code the records already carry. c) The release's
-version. d) What it is (a restaurant point of sale on the venue's own server, reached by the
-venue's tills over the local network), its own parts, the third-party parts it takes
-responsibility for, any optional services of ours it uses, no hardware of its own, its main
-functions, and one taxpayer per installation; it points to the full third-party list. e) Yes, only Veri\*Factu. f) No, one taxpayer.
+version. d) What it is (a restaurant point of sale on a server that is either the venue's own
+computer or a server in the cloud, with Linux and Docker, reached by the venue's tills, handhelds,
+kitchen screens and dashboard through a browser; optionally a spare server on site that keeps a
+continuous copy and can take over), no hardware of ours, its own parts and the third-party parts
+it takes responsibility for (the full list is on the box), one taxpayer and one compliance mode
+per installation, set by the country pack, Veri\*Factu only in this version, and its main
+functions. e) Yes, only Veri\*Factu, for this version. f) No, one taxpayer.
 g) Signs nothing itself, because a Veri\*Factu-only system's records count as signed when sent
 with a qualified certificate — AEAT's example's words, unchanged. h)–j) Who the producer is and
 where to write to them. k) The fixed compliance statement. l) Date and place of signing. Annex: an
 email address and the archive of every version's declaration.
 
-**Choices made in the draft, each for the owner's approval in question 3:**
+**Choices made in the draft.** The owner's answers (§11) settled e), f) and the producer, and
+directed d); the revision asks him to approve the whole.
 
 - **Item a) says "Waitron", not "Waitron POS".** The records' name field changes to match
   (§3, fact 4).
-- **Item f) says N.** One installation holds one taxpayer by construction, and the records change
-  from `S` to `N` to match (§3, fact 3). AEAT's annex wording for the twin field: «permite llevar
+- **Item f) says N** (the owner, Q2). One installation holds one taxpayer by construction, and the
+  records change from `S` to `N` to match (§3, fact 3). AEAT's annex wording for the twin field: «permite llevar
   independientemente la facturación de varios obligados tributarios (valor "S") o solo de uno
   (valor "N")». A future Waitron that hosts several taxpayers in one installation would be a new
   version with its own declaration saying S.
-- **Item e) says S**, as the records already do, subject to question 2.
+- **Item e) says S for this version** (the owner, Q3, replacing his first answer "No", which
+  described the product's design — a fiscal policy per country pack, Spain one day offering both
+  modes — rather than this version, which supports only Veri\*Factu). The records already say S.
+  Q53(b) asks the asesor to confirm the reading: e) describes the version declared, so «S» now and
+  «N», with its signature types in g), from the first version that ships a non-Veri\*Factu mode.
 - **The functions list is filled in per release and checked route by route.** On main on
   2026-10-21: simplified invoices (F2) are issued; corrective invoices are reached through
   `apps/server/src/cancel-credit.ts`; every full-invoice request is refused
@@ -337,13 +428,19 @@ email address and the archive of every version's declaration.
   no route records one (`recordDailyClose` is called only by a demo script,
   `apps/server/scripts/daily-close-z-demo.ts`); the read-only daily report is part of «informes de
   ventas».
-- **Item d) describes an installation on the venue's own machine.** The README also mentions a
-  hosted service (`README.md:6`); a hosted Waitron would be described in the declaration of the
-  version that offers it.
-- **The third-party parts that do legal work are named:** Node.js and its SQLite engine, where the
-  records live, and Litestream, which copies them to the backup. The guarantee that a filed record
-  is not changed comes from Waitron's own triggers (CLAUDE.md §5), so the draft does not credit the
-  engine with it. The full list stays in `/app/third-party/`, which already ships with every image.
+- **Item d) is Q53's draft, word for word, with three slots besides its own functions placeholder** (the owner, Q3: "you're also
+  limiting the hardware to on prem when it could be running in the cloud. Draft what you think
+  works then add that sentence to the assessor doc"). The library's exact version stands where
+  Q53 says «versión indicada en el sistema», because case (b) of the 2026-07-27 reading asks for
+  it (the library bullet below). The cloud phrase and the spare-server sentence are checked per
+  release, like the functions list: a release that cannot run in the cloud names only «un equipo
+  del propio establecimiento», and one with no spare box yet (A947 is not built) leaves out the
+  spare-server sentence, so d) never promises what the version cannot do. The draft says «nos hacemos responsables» although the producer is one person; that
+  wording is settled with the asesor's answer.
+- **The third-party parts are named, with the full list on the box:** Node.js, SQLite, Litestream,
+  Linux and Docker, as Q53 lists them; `/app/third-party/` already ships with every image. The
+  guarantee that a filed record is not changed comes from Waitron's own triggers (CLAUDE.md §5),
+  so the draft does not credit the engine with it.
 - **No hardware.** AEAT's FAQ: generic hardware is not certified, only hardware sold as part of
   «un "todo"» or hardware that itself meets a requirement. If Waitron later sells a box as part
   of the product, item c) must list the box's version too, software first («Se puede empezar por
@@ -373,15 +470,17 @@ carries the version `0.0.0-dev+<commit>` and no declaration. A box set to
 CLAUDE.md §3) shown on the recovery page with a fixed title and action: "This box is running a
 test build. Install a release." Preproduction and development boxes run any build. The refusal
 happens only at start, never during service, so it cannot stop a sale in progress. This is what
-makes "each version a venue runs has its declaration" a check rather than a habit (question 4).
+makes "each version a venue runs has its declaration" a check rather than a habit (question 4,
+answered "Releases only").
 
 ### 5.2 One source for what the records say and what the declaration says
 
 A new file, `packages/fiscal-verifactu/src/software-identity.ts`, holds the product's own facts:
-the name, the two-character code, the two usage flags and the producer's name and identifier.
+the name, the two-character code, the usage flags and the producer's name and identifier.
 `buildSistemaInformatico` reads it, and so does the declaration renderer. The version comes from
 the build (§5.4). So items a), b), c), e), f), h) and i) and their twin record fields are written
-from the same values.
+from the same values. The producer's identifier and the code are also the running release's
+half of the identity §5.6 compares at every start.
 
 ### 5.3 Where each version's text lives
 
@@ -415,9 +514,9 @@ pnpm release prepare 1.0.0 --place "‹localidad›"
 
 1. Refuses if `v1.0.0` exists, or if `1.0.0` is not greater than the last release.
 2. Writes `packages/fiscal-verifactu/declarations/v1.0.0.md` from the template, the identity
-   file, the version, the bundled `@waitron/verifactu`, Node.js and Litestream versions, the
-   functions and optional-services lists from `declarations/functions.md`, and today's date in
-   Europe/Madrid, in the Orden's order «día, mes y año».
+   file, the version, the bundled `@waitron/verifactu` version, the hosting phrases and the
+   functions list from `declarations/functions.md`, and today's date in Europe/Madrid, in the
+   Orden's order «día, mes y año».
 3. Prints the whole declaration and asks for a typed `yes`. This is the producer signing.
 4. On a branch `release/1.0.0`, commits it (`git commit -s`, "Release 1.0.0") and opens a pull
    request. It lands like any pull request, after its CI.
@@ -437,9 +536,13 @@ GitHub Release named `1.0.0`.
 **What a person checks before `prepare`**, listed in the release runbook
 (`docs/operations/release.md`, written in slice 2): `declarations/functions.md`, which names each
 listed function beside the route that serves it, still matches the code — a function whose route
-is gone or refused comes off, a new one goes on; the optional-services list names every service of
-ours the version can call in production; AEAT's FAQ and worked example are re-read for changes;
-and the repository is still public (§7.1).
+is gone or refused comes off, a new one goes on; item d)'s hosting phrases (the cloud server, the
+spare box on site) are kept only when the release can do them; d) still describes every service of
+ours the version can call in production (none today; a release that adds one changes d) and has
+the wording checked again); AEAT's FAQ and worked example are re-read for changes; and the
+repository is still public (§7.1). A release that changes the producer or the two-character code
+says so in the runbook's first line: every box opens a new installation at its first start on it
+(§5.6), and the boxes of one taxpayer are upgraded one at a time.
 
 ### 5.5 How a box runs a release
 
@@ -447,6 +550,150 @@ Today `waitron.sh install <ref>` pulls images only for `main` and builds any oth
 (`deploy/waitron.sh:324-353`). A release must run the image CI published for its tag, because that
 is the build the declaration describes. So `waitron.sh install v1.0.0` pulls
 `ghcr.io/clintongormley/waitron:1.0.0` (slice 4).
+
+### 5.6 When the system's identity changes: a new installation, by itself (A993)
+
+The owner, 2026-10-21: "Surely we should automate the new chain switch so that we never miss it
+when changing the system identity in the future?" — and, with Q2, "a single installation will only
+ever use one fiscal policy". This section is the design of that step. It is fiscal: it decides
+which chain a record joins. It is built as its own slice, A993, which the owner lands.
+
+**What counts as the identity.** §2: a system is the taxpayer's NIF, the two-character code and
+the installation number, and the code is unique only with its producer's NIF. A new version is
+not a new system (developer FAQ §4, p. 9). So the identity a chain is opened under is four facts:
+
+| Fact | Where it comes from at a start | Changes when |
+| --- | --- | --- |
+| The producer's NIF (or foreign identifier, its type and country) | The running release's `software-identity.ts` (§5.2) | The producer changes, e.g. the owner to a future Waitron company |
+| The two-character code | The same file | Waitron ships a different product |
+| The compliance mode («VERI\*FACTU» today, the only one) | The enabled fiscal module | A venue moves between fiscal policies (the owner, Q2: a new installation) |
+| The taxpayer's NIF | The `tenants` row | Never, through the product (below) |
+
+The version is deliberately not in the list.
+
+**What each chain stores.** A993 adds the producer's identifier and the compliance mode to the
+SIF row a chain belongs to, beside the taxpayer's NIF and the code it already stores (§3, fact 5).
+Every activation writes them from the running release — first setup, restore, re-registration,
+promotion and the change below — and the code comes from the running release too, not from the
+box's previous row (`allocation.ts:77-88` today). That is a migration on a fiscal table; before
+go-live no data is carried forward (CLAUDE.md §3, the no-backwards-compatibility rule), and a row
+opened before A993, with nothing stored, counts as different from any running identity.
+
+**What every start does**, before the box trades, inside the fiscal module:
+
+- **Same producer, code and mode:** nothing. A679's rule that an ordinary update allocates nothing
+  ([A679 design](2026-10-16-a679-hour-coded-series-design.md), "Restore, restart and first Live")
+  still holds for every update that keeps the identity.
+- **A different producer or code, or nothing stored:** the box opens a new installation itself, in
+  one transaction, through the activation every other path uses
+  (`packages/fiscal-verifactu/src/allocation.ts:432-461`): the old SIF row is revoked; the node's
+  chain head is emptied, so the next record is the first of a new chain («PrimerRegistro» = S); the
+  old invoice series are retired and new ones start at 1. The old chain is closed, never
+  rewritten: records already made on it keep the identity they were made under and are sent
+  unchanged (W41s's rule, "Retry the original stored fiscal content",
+  [W41s design](2026-10-04-fiscal-prevention-and-offline-recovery-design.md) §4), so a backlog the
+  old release left reaches AEAT under the old producer. The activation's record names no person;
+  its operator is "identity change at release ‹version›", a new kind beside the recovery-key kind
+  of W41s's 2026-10-12 decision.
+- **A different compliance mode:** today the start refuses a node whose recorded filing module
+  differs from the enabled one (§3, fact 5), and Spain has no second mode. A993 stores and compares
+  the mode within the Veri\*Factu module now, so the comparison exists from the first chain.
+  Turning a move between fiscal modules into a new installation, rather than a refusal, is designed
+  with the first non-Veri\*Factu mode — which also needs the old module's backlog to keep draining —
+  and so is the asesor question about it. **Decision recorded here**, not built now.
+- **A different taxpayer NIF:** no product path changes it — the one writer of `tenants` changes
+  only the legal name (`packages/provisioning/src/taxpayer-name.ts:9-19`;
+  `grep -rn "update(tenants)" apps packages` finds no other) — so a difference means the database
+  was changed outside the product. The box opens nothing and refuses to trade, naming the cause on
+  the recovery page (proposed code `sif.taxpayer_changed`). **Decision, the conservative one:** a
+  person finds out why before anything is filed.
+
+**The guard.** Before a record is added to a chain, the record builder compares the chain's stored
+producer, code and mode with the running release's, and refuses on any difference (proposed code
+`sif.identity_mismatch`, beside the existing `sif.not_registered` at
+`packages/fiscal-verifactu/src/registro-sif.ts:180`). Records already on a closed chain are not
+being added, so sending them is untouched. It is built test-first and proven by deletion: with the
+comparison deleted, a case that changes the running identity without the start-time step must
+fail because a sale chains under the old identity; and the case it must not refuse — the same
+identity, a sale recorded — stays green.
+
+**How the new installation is named: the one choice the box cannot make alone.** A679 names every
+new installation by the current UTC hour, strictly later than every hour the box knows of, and
+before choosing asks a person "Has anyone set up a Waitron box for this business in the last
+hour?" — waiting until the next hour on Yes or "I don't know" (A679 design, "What you see and
+keep"). That question is about the taxpayer's other venues, which a box starting on its own cannot
+know. The installation number must still differ from every earlier installation of the taxpayer,
+of any producer: «Deberá distinguirlo de otros posibles SIF utilizados para realizar la facturación
+del obligado a expedir facturas … incluso aunque en dichas instalaciones se emplee el mismo SIF de
+un productor» (Orden, annex block 2.6, `NumeroInstalacion`, read by eye). Three ways, put to the
+owner as the revision's second question:
+
+1. **Recommended: A947's promotion name** — the hour, a hyphen and the minute (`06XV-40`), with
+   A947's check against every code the box knows
+   ([A947 design](2026-10-21-a947-two-box-failover-design.md) §6.5, its slice 4a). No question and
+   no hour's wait: the box invoices again as soon as it has started. Disclosed limit, as A947
+   discloses for its switches: two of the same taxpayer's boxes changing identity in the same UTC
+   minute, with the same series prefixes, would take the same names. The runbook (§5.4) has an
+   identity-changing release installed one box at a time. It depends on the owner approving A947's
+   revision; today the only venue is the owner's own.
+2. A679's four-symbol hour, taking the "I don't know" path: the box invoices nothing until the next
+   UTC hour — up to an hour without invoices after the upgrade — and two boxes of one taxpayer
+   changing identity in the same hour still collide.
+3. A manager answers A679's question on the dashboard after the upgrade; the box invoices nothing
+   until one does.
+
+**The clock.** A start has no browser to compare with, so the box compares its own clock with the
+authenticated internet reading A679 already uses (an AEAT or configured Waitron address, a
+five-second limit). Installing a release pulls its image from the internet (§5.5), so the box is
+normally online then. If the readings disagree by more than A679's 120 seconds, or none can be
+taken, the change waits and the dashboard asks a manager to confirm the time with A679's own
+dialog; until then the box issues no invoice. Disclosed: an offline first start on an
+identity-changing release stops invoicing until a manager confirms the clock.
+
+**Why no person has to approve it, when W41s asks one for a promotion.** W41s asks for a person
+where another machine may still hold the identity being replaced. A declared restore needs the
+administrator's statements that the old machine is offline and no other recovery is running, then
+re-authentication (W41s §2 and §9.3). A promotion needs the manager's proof and the old main box
+fenced (A947 §6.2). W41s allows an automatic switch only with an outside grant of sole selling
+authority and the previous seller's acknowledged fencing (§9.3). None of that is in question at an
+identity change: the same box, holding its venue folder's lock (one process owns a venue folder,
+CLAUDE.md §3, `openVenueStore` in `packages/store/src/index.ts`), retires the identity only it
+issued on and opens the next in the same transaction; no data is rewound (a start on an image
+older than the database's migrations is refused, `assertNotAhead`, CLAUDE.md §3); and no other
+machine's right to sell changes. The one case none of these paths can see — a cloned disk still
+selling — is A679's own disclosed limit ("Old box returns or disk is cloned"). What W41s and A679
+asked a person for that still applies is the naming question and the clock, handled above.
+
+**How it fits A679.** The new installation is a new activation: the release floor, the
+strictly-later rule, recording the name as spent before activating, and keeping production and
+preproduction apart all apply unchanged. The one row of A679's table it changes is "Ordinary
+reboot, update or exact publication Finish | Keep the existing activation": an update that changes
+the identity is not ordinary.
+
+**After the change.**
+
+- The dashboard shows managers a notice, «Nueva instalación fiscal», with the old and new
+  installation codes and the reason ("new producer in version 1.4.0"), and asks for the box's
+  recovery sheet to be printed again: the sheet prints "only this node's current installation
+  code", which the recovery form asks for (A679 design, "Owner PDF decisions, 2026-10-19").
+  Reprinting allocates nothing (A679's table: "PDF download, print or key reissue | Allocate
+  nothing"). The recovery key is expected to stay the same: A679 describes it as the node's key,
+  named and bound to the taxpayer and node, not to an installation ("Owner PDF review"). Neither
+  that nor whether an old sheet's code still lets a recovery through was traced in the code; the
+  notice asks for a new sheet either way.
+  (Picture 5.)
+- The box keeps the old version's declaration (§7.3).
+- A spare box (A947) follows the new rows. It is upgraded with the main box: a spare promoted while
+  still on the old release would open under the old identity, and its next start on the new
+  release would change it again.
+- Going back to an older release across an identity change would open yet another installation;
+  the runbook says not to.
+
+**Order.** A993 lands after slice 1, which gives the records the producer, and before the first
+production venue goes live, so every production chain stores its identity from its first record.
+Slice 1 itself changes the producer the records name (from the taxpayer to the owner); any
+preproduction chain open then changes producer part-way through, in AEAT's test service only, and
+opens a new chain at its first start on A993 because its row has nothing stored.
 
 ## 6. Inside the app, on every terminal
 
@@ -561,6 +808,13 @@ migration (slice 5).
   still start: a production box on a release.
 - **Cancellations keep the taxpayer's name** (§3, fact 2): a case that records a cancellation
   after slice 1 and checks the submission header names the taxpayer, not the producer.
+- **No record joins a chain opened under another identity** (§5.6, A993): proven by deleting the
+  comparison, with the same-identity sale as the case it must still allow.
+- **A start on a changed identity opens a new installation** (§5.6): a case that starts the box
+  under a release with a different producer and checks that the old SIF row is revoked, the old
+  series retired, the next record is the first of a new chain and the old chain's unsent record is
+  still sent with its old producer; and a case that starts under the same identity and checks that
+  nothing is allocated.
 
 ## 9. What is NOT a release
 
@@ -578,42 +832,51 @@ Each slice is one pull request.
 
 | Slice | What | Path |
 | --- | --- | --- |
-| 1 | `software-identity.ts`; the records carry the producer (not the taxpayer), the name "Waitron", the release's version, and the flags question 2 settles; the cancellation reader and the drain's grouping keep the taxpayer's name | FULL, **fiscal: the owner lands it** |
+| 1 | `software-identity.ts`; the records carry the producer — the owner personally, his name and NIF, which he still has to supply — not the taxpayer; the name "Waitron"; the release's version; `TipoUsoPosibleSoloVerifactu` = S (unchanged), `TipoUsoPosibleMultiOT` = N (was S), `IndicadorMultiplesOT` = N (unchanged); the cancellation reader and the drain's grouping keep the taxpayer's name | FULL, **fiscal: the owner lands it** |
+| 1b | **A993**, the automatic identity change (§5.6): each chain stores its producer and mode; every start compares; a difference opens a new installation; the guard; the dashboard notice | FULL, **fiscal: the owner lands it** |
 | 2 | The template, `functions.md`, the renderer, the "agree" and "headings" guards, `pnpm release prepare` and `tag`, and the release runbook | FULL |
 | 3 | `/legal/declaration` (HTML, PDF, plain text) in every mode and on the landing and recovery listeners; About Waitron on the dashboard, the till's More menu, the ⓘ corners and the setup wizard; guides in English and Spanish | LIGHT |
 | 4 | CI on a `v*` tag: the version and the rendered declaration in the image, the PDF and text on the GitHub Release; `waitron.sh install v<version>` pulls the published image; production refuses an unreleased build; the "never changes" guard | FULL (the box's start path) |
 | 5 | The box keeps every version's declaration it has run, and the About page lists them | FULL (adds a migration) |
 | 6 | `@waitron/verifactu`'s own declaration, one per library release, in `waitron-io/verifactu` | That repository's own flow |
-| — | Cut `v1.0.0` with `pnpm release`, after the owner approves the wording | The owner |
+| — | Cut `v1.0.0` with `pnpm release`, once the owner approves the revision, the asesor has answered Q53 and the producer's three facts are in | The owner |
 
-Slices 1, 2 and 6 can be built side by side. Slice 3 needs 2's renderer; slice 4 needs 2 and 3;
-slice 5 needs 3.
+Slices 1, 2 and 6 can be built side by side. Slice 1b needs slice 1 and the owner's naming choice
+(with the recommended choice, A947's slice 4a first), and lands before the first production venue
+goes live. Slice 3 needs 2's renderer; slice 4 needs 2 and 3; slice 5 needs 3.
 
-## 11. Questions for the owner
+## 11. Questions for the owner — all four answered 2026-10-21
 
-One at a time, each with a worked example; the full text is in the mock-ups folder's
-`question.txt`.
+Asked one at a time through the campaign watcher; the original text is in the mock-ups folder's
+`question.txt`, with the revision's own questions at its end.
 
-1. **Who is the producer on the first declaration, and what tax number and address does it
-   publish?** It goes on every box and on the public GitHub page, and the name and tax number go
-   into every invoice record AEAT receives. AEAT's developer FAQ identifies a system by the
-   taxpayer's NIF, the two-character code and the installation number, says a change in any of
-   them makes it a different system, and ties the producer's NIF to the two-character code «como
-   si formara parte de él»; an installation number may never be reused
-   (`docs/compliance/verifactu-faq-notes.md` §1–3, FAQ §4). Read together, switching to a company
-   later most likely means a new installation number and a new chain at every venue running then.
-   Recommended: you personally, now, because until the company exists the only venue is your own
-   deli, and a new installation there is a path the box already has (re-registering a filing node
-   with a newly issued identity starts a new chain, CLAUDE.md §5); the asesor confirms what
-   the switch costs. The alternative is to form the company before the first release.
-2. **The two yes/no answers:** "only Veri\*Factu" = S and "several taxpayers" = N. Recommended:
-   as drafted, and ask the asesor to confirm both in the next batch, including whether the UK's
-   no-filing mode in the same build changes "only Veri\*Factu" (the setup wizard does not offer
-   the UK yet: `availableForVenueSetup: false`, `packages/country-gb/src/united-kingdom.ts:13`).
-3. **The wording.** Approve §4's text, or change it. Recommended: approve as drafted, with the
-   facts from question 1 filled in.
-4. **Production runs releases only.** Recommended: a production box refuses to start on a build
-   that is not a tagged release, and `waitron.sh install v1.0.0` pulls the published image.
+1. **Who is the producer on the first declaration? Answered: A, the owner personally, now.** His
+   full name, NIF and a postal address to publish are still to be supplied, by him or through the
+   questions file; §4 keeps placeholders. His follow-ups: "when we switch to waitron sl, we bump
+   the 2 character code (we control that, do we?), and does that automatically trigger a new
+   chain? What restrictions are there on the 2 characters? Do we need to bump them every version or
+   when?" — answered in §2 (ours to set; not per version; two characters, each A–Z or 0–9; the
+   producer change alone makes a different system). Then: "Surely we should automate the new chain
+   switch so that we never miss it when changing the system identity in the future?" — §5.6 and
+   A993. The asesor questions these raise are already in Q53(d); none is added.
+2. **The two yes/no answers. Answered: e) No, f) No — then e) revised to «S» at question 3.** On
+   e) the owner first wrote: "The fiscal policy should be embedded in the country pack … But we can
+   say that Waitron is designed so that a single installation will only ever use one fiscal
+   policy." At question 3 he added "We don't support non verifactu yet", and the watcher recorded
+   e) = «S» for this version as replacing the "No". f): "only one tax payer". So the records keep
+   `TipoUsoPosibleSoloVerifactu = S` and change to `TipoUsoPosibleMultiOT = N`, with
+   `IndicadorMultiplesOT = N` as today (slice 1). Consequence designed in §5.6: a move between
+   fiscal policies is a new installation. The asesor confirms both in Q53(b) and (c).
+3. **The wording. Answered: draft d) for hosting in the cloud too, and have the asesor check it.**
+   "We don't support non verifactu yet. But you're also limiting the hardware to on prem when it
+   could be running in the cloud. Draft what you think works then add that sentence to the
+   assessor doc to be checked with them." The watcher's draft is Q53; §4's d) now uses it, and it
+   stays a draft until the asesor answers. The rest of §4 stands. His further question, whether
+   failing over from on site to the cloud needs a different code, is Q53(e).
+4. **Production boxes run releases only. Answered: A**, "Releases only." §5.1 stands.
+
+**The revision's questions** (in `question.txt`): approve the revised design; and how the
+automatic identity change names its new installation (§5.6).
 
 ## 12. What this design does not settle, for the builder
 
@@ -622,6 +885,19 @@ One at a time, each with a worked example; the full text is in the mock-ups fold
 - Whether `pnpm release` also writes release notes. Not required by law; left out.
 - Whether a declaration is owed for a release only the owner runs. The owner's rule (§0) says no;
   the release step makes one anyway, because every tag gets one and the cost is a command.
+- **The UK's no-filing mode and item e).** The same build ships `fiscal-none`, which setup does not
+  offer yet (`availableForVenueSetup: false`, `packages/country-gb/src/united-kingdom.ts:13`). This
+  design reads e) as being about the Reglamento's purposes — «a los efectos de cumplir con el
+  Reglamento» — which a UK venue is outside, so that mode does not make e) «N». That is a reading,
+  not a source; Q53(b) does not mention it. A release whose setup offers the UK re-reads it.
+- **A move between fiscal modules** (Veri\*Factu to a future non-Veri\*Factu mode) as a new
+  installation rather than a refused start: designed with that first mode (§5.6).
+- **«nos hacemos responsables»** in Q53's draft of d), for a producer who is one person: settled
+  with the asesor's answer.
+- **B3's note for A940** ([B3 design](2026-10-21-b3-usb-installer-design.md), "A note for
+  A940") still applies to the new d): once the USB stick ships the operating system, d)'s «Linux y
+  Docker» and its no-hardware sentence change with it. B3 cites this file's line numbers as they
+  were before this revision; the sentences it points at are now in §4's item d) and §7.2.
 
 ## Provenance
 
@@ -629,12 +905,17 @@ One at a time, each with a worked example; the full text is in the mock-ups fold
 | --- | --- | --- |
 | AEAT, worked example V0.5.1 | https://sede.agenciatributaria.gob.es/static_files/Sede/Tema/IVA/Verifactu/EjemplosDeclaracionResponsable(V0.5.1).pdf | §4's headings, item g)'s and k)'s wording, the person-producer substitutions |
 | AEAT, page listing the example (one file listed on 2026-10-21) | https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/informacion-tecnica/ejemplo-declaracion-responsable.html | That V0.5.1 is the current one |
-| AEAT FAQ, «Certificación de los sistemas informáticos: declaración responsable», labelled «Actualizadas a 21 de octubre de 2026» | https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/preguntas-frecuentes/certificacion-sistemas-informaticos-declaracion-responsable.html | Every version; no signature; inside and outside; keep all; item e); hardware; components; the two-character code |
+| AEAT FAQ, «Certificación de los sistemas informáticos: declaración responsable», labelled «Actualizadas a 21 de octubre de 2026» | https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/preguntas-frecuentes/certificacion-sistemas-informaticos-declaracion-responsable.html | Every version; no signature; inside and outside; keep all; item e); hardware; components; the two-character code (its «no se podrá repetir en otro SIF distinto del mismo productor» sentence re-fetched and found word for word on 2026-10-21, revision) |
 | AEAT FAQ, general (sanction) | https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/preguntas-frecuentes.html | €1,000 per system without a declaration |
-| Orden HAC/1177/2024, art. 15 and annex block 2.6 (consolidated text, last updated 28/10/2024; the annex is published as images and was read by eye) | https://www.boe.es/buscar/act.php?id=BOE-A-2024-22138 | Title, items a)–l), annex 2.a)–d), where it must be, the records' twin fields |
-| AEAT developer FAQ §4, as indexed in the repository | `docs/compliance/verifactu-faq-notes.md` §1–3 | The producer's NIF as part of the system's identity (question 1) |
+| Orden HAC/1177/2024, art. 15 and annex block 2.6 (consolidated text, last updated 28/10/2024; the annex is published as images and was read by eye) | https://www.boe.es/buscar/act.php?id=BOE-A-2024-22138 | Title, items a)–l), annex 2.a)–d), where it must be, the records' twin fields; the code's restrictions pointer and `NumeroInstalacion`'s wording (§2, §5.6) |
+| AEAT developer FAQ v1.3 §4, pp. 9–10, pinned copy | `docs/compliance/sources/FAQs-Desarrolladores-v1.3-2025-12-04.pdf`, indexed in `docs/compliance/verifactu-faq-notes.md` §1–3; pages 9–10 re-read with `pdftotext` on 2026-10-21 | What identifies a system; a version is not a new system; the code unique only with the producer's NIF (§2, §5.6) |
+| AEAT, «Validaciones» v1.2.2 (PDF dated 8 April 2026; SHA-256 `426eb926…3513440`) | https://www.agenciatributaria.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/Validaciones_Errores_Veri-Factu.pdf | §3.1.5, p. 17: the characters `IdSistemaInformatico` may hold (§2) |
+| AEAT schema `SuministroInformacion.xsd`, the `verifactu` repository's copy at `2dc7609` | `schemas/SuministroInformacion.xsd:236`, `:665-669` | `IdSistemaInformatico` is `TextMax2Type`, no pattern (§2) |
 | Real Decreto 1007/2023, art. 13 (consolidated text, last updated 03/12/2025) | https://www.boe.es/buscar/act.php?id=BOE-A-2023-24840 | Who, every version, keep them all |
 
 The raw quotes, with every heading of the worked example verbatim, were gathered on 2026-10-21
 by downloading each source with `curl` and searching the text. The FAQ was relabelled the same
-day; re-read it before cutting `v1.0.0`.
+day; re-read it before cutting `v1.0.0`. For the revision, the «Validaciones» PDF was downloaded
+with `curl` and its text extracted with `pdftotext`; the quote in §2 is from that text. The annex
+2.6 wording quoted in §2 and §5.6 comes from the first draft's by-eye reading of the BOE's images,
+not re-read for the revision.

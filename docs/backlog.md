@@ -145,20 +145,38 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
-- **A940. Waitron's declaración responsable — design written, the owner's answers awaited.**
-  The producer's statement that a version meets the Veri\*Factu rules, one per release, readable
-  on every terminal and before installation (compliance plan Step 8). The
+- **A940. Waitron's declaración responsable — design revised for the owner's answers; approval
+  awaited.** The producer's statement that a version meets the Veri\*Factu rules, one per release,
+  readable on every terminal and before installation (compliance plan Step 8). The
   [design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md) drafts the text
   from AEAT's worked example, makes `pnpm release prepare` land each version's copy in a pull
   request and `pnpm release tag` tag it, adds About Waitron to the dashboard, the till's More menu,
   an ⓘ corner and the setup wizard, serves it at `/legal/declaration` before setup, on the
   plain-HTTP page and on the recovery page, attaches it to each GitHub Release, and gives the
-  `@waitron/verifactu` library its own declaration. It found
-  two defects in what every record tells AEAT, fixed first in a fiscal slice the owner lands:
-  `Version` is always `0.0.0`, and the `SistemaInformatico` producer fields carry the taxpayer's
-  name and NIF (`packages/fiscal-verifactu/src/backend.ts:641-653`). Four questions in §11. No
-  build before the owner approves it.
+  `@waitron/verifactu` library its own declaration. The owner answered all four questions on
+  2026-10-21: he is the producer (his name, NIF and a publishable postal address are still to be
+  supplied); e) = «S» for this version and f) = «N»; item d) is the draft sent to the asesor as
+  Q53, pending their answer; production boxes run releases only. The first slice is fiscal and the
+  owner lands it: records carry the producer instead of the taxpayer's name and NIF
+  (`packages/fiscal-verifactu/src/backend.ts:641-653`), the release's version instead of `0.0.0`,
+  and `TipoUsoPosibleMultiOT = N`. The revision's two questions (approve; how A993 names its new
+  installation) are in the mock-ups folder's `question.txt`. No build before the owner approves.
   [Mock-ups](backlog/mockups/a940-declaracion-responsable/README.md)
+
+- **A993. A change of the system's identity opens a new installation by itself — designed in A940
+  §5.6; fiscal, the owner lands it.** AEAT identifies an invoicing system by the taxpayer's NIF,
+  the two-character code and the installation number, and the code counts only together with its
+  producer's NIF, so a new producer (the owner → a future Waitron company), a new code, or a move
+  to another fiscal policy (the owner: one installation, one policy) makes a different system.
+  Each chain stores the producer and compliance mode it was opened under (today `registro_sif`
+  stores neither, `packages/fiscal-verifactu/src/schema/sif.ts:20-22`); every start compares them
+  with the running release's and, on a difference, opens a new installation, series and chain in
+  one transaction; a guard, proven by deletion, refuses to add a record to a chain opened under
+  another identity. Waits for the owner's choice of how the new installation is named without
+  A679's "anyone set up a box in the last hour?" question (recommended: A947's hour-and-minute
+  name, so A947's slice 4a first). After A940's slice 1; before the first production venue goes
+  live. A move between fiscal modules stays a refused start until the first non-Veri\*Factu mode.
+  [Design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md#56-when-the-systems-identity-changes-a-new-installation-by-itself-a993)
 
 - **A696. Invoice issue dates and record offsets follow the process zone.**
   Every new invoice date/offset, ordinary receipt and till must use the saved venue zone,
