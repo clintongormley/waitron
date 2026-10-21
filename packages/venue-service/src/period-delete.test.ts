@@ -29,8 +29,6 @@ import {
   replaceMenuWeek,
   resolveDepartmentService,
   saveMenuPeriod,
-  scheduleEndOffsetClash,
-  updateMenuPeriod,
 } from "./menu-timetable.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -101,7 +99,7 @@ async function venue() {
     const { document } = await buildMenuDocument(tx, menu);
     await publishMenu(tx, menu, menuDocumentHash(document), "person-1");
     const period = async (departmentId: string, name: string) =>
-      (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId: menu, staffMenuIds: [] }, 0)).id;
+      (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId: menu, staffMenuIds: [] })).id;
     const dinner = await period(restaurant, "Dinner");
     const lunch = await period(restaurant, "Lunch");
     const afternoon = await period(restaurant, "Afternoon");
@@ -943,36 +941,6 @@ describe("deleting a period", () => {
 
       expect((await stored(v)).specialDays).toEqual(["2026-09-01 Afternoon 16:00-17:00"]);
     });
-
-    it("is not refused for a sending cutoff clash stored in another department", async () => {
-      const v = await deleteVenue();
-      await scoped((tx) =>
-        replaceMenuWeek(
-          tx,
-          v.cfg,
-          v.deli,
-          [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-            weekday,
-            slots: weekday === 3 ? [slot(v.deliLunch, "12:00", "16:00")] : [],
-          })),
-          WRITE_AT,
-          0,
-        ),
-      );
-      // Written past the writers' check: Deli lunch would stop sending at 11:00, before it starts.
-      await db
-        .update(menuPeriods)
-        .set({ endOffsetMinutes: -300 })
-        .where(eq(menuPeriods.id, v.deliLunch));
-      expect(await scoped((tx) => scheduleEndOffsetClash(tx, v.cfg))).toMatchObject({
-        periodId: v.deliLunch,
-        departmentId: v.deli,
-      });
-
-      await remove(v, v.lunch, null);
-
-      expect((await stored(v)).periods).toEqual(["Afternoon", "Dinner"]);
-    });
   });
 
   describe("refusals", () => {
@@ -1007,81 +975,6 @@ describe("deleting a period", () => {
       const error = await refusal(() => remove(v, v.lunch, v.afternoon, 1));
 
       expect(error.code).toBe("hours.clock_changed");
-      expect(await stored(v)).toEqual(before);
-    });
-
-    it("refuses a replacement whose sending cutoff runs into the next placement where the period's did not, changing nothing", async () => {
-      const v = await deleteVenue();
-      await specialDay(v, "Aniversario", ["2026-10-20"], [slot(v.lunch, "13:00", "15:00")]);
-      // Afternoon, painted nowhere, may take 4 hours; Lunch 12:00-16:00 (no offset) then Dinner
-      // 20:00 on Wednesdays does not clash as it stands.
-      await scoped((tx) =>
-        updateMenuPeriod(tx, v.cfg, v.afternoon, { endOffsetMinutes: 240 }, 0, WRITE_AT),
-      );
-      expect(await scoped((tx) => scheduleEndOffsetClash(tx, v.cfg))).toBeNull();
-      const before = await stored(v);
-
-      const error = await refusal(() => remove(v, v.lunch, v.afternoon));
-
-      expect(error.code).toBe("menu_timetable.invalid");
-      expect(error.params).toEqual({
-        field: "replacementPeriodId",
-        reason: "end_offset",
-        periodId: v.afternoon,
-        departmentId: v.restaurant,
-        seasonId: v.seasons.summer,
-        weekday: 3,
-      });
-      expect(before.seasons).toContain("Summer 3 Lunch 12:00-16:00");
-      expect(before.specialDays).toEqual(["2026-10-20 Lunch 13:00-15:00"]);
-      expect(before.routing).toContain("No category Lunch Barra");
-      expect(before.extensions).toEqual([`${TODAY} Lunch 16:00-17:00`]);
-      expect(await stored(v)).toEqual(before);
-    });
-
-    it("refuses a delete without a replacement whose uncovered season runs into the next day's paint, naming the period", async () => {
-      const v = await deleteVenue();
-      await scoped((tx) =>
-        replaceMenuWeek(
-          tx,
-          v.cfg,
-          v.restaurant,
-          [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-            weekday,
-            slots:
-              weekday === 3
-                ? [slot(v.lunch, "12:00", "16:00"), slot(v.dinner, "20:00", "05:00")]
-                : [],
-          })),
-          WRITE_AT,
-          0,
-          { seasonId: v.seasons.autumn },
-        ),
-      );
-      await scoped((tx) =>
-        updateMenuPeriod(tx, v.cfg, v.dinner, { endOffsetMinutes: 60 }, 0, WRITE_AT),
-      );
-      // Lunch covers Wednesday's Dinner on the 14th, so Dinner's cutoff at 06:00 meets nothing.
-      const verbena = await specialDay(
-        v,
-        "Verbena",
-        ["2026-10-14"],
-        [slot(v.lunch, "12:00", "05:00")],
-      );
-      await specialDay(v, "Feria", ["2026-10-15"], [slot(v.afternoon, "06:00", "08:00")]);
-      const before = await stored(v);
-
-      const error = await refusal(() => remove(v, v.lunch, null));
-
-      expect(error.code).toBe("menu_timetable.invalid");
-      expect(error.params).toEqual({
-        field: "periodId",
-        reason: "end_offset",
-        periodId: v.dinner,
-        departmentId: v.restaurant,
-        date: "2026-10-14",
-        specialDayId: verbena,
-      });
       expect(await stored(v)).toEqual(before);
     });
   });

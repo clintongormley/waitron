@@ -870,7 +870,6 @@ export const en = {
   "business_day.conflict_endpoint": "Moves to another day",
   "business_day.conflict_kept_open": "Kept open until {time} tonight",
   "business_day.conflict_all_day": "All-day range needs new hours",
-  "business_day.conflict_sending": "Last orders clash with the new start or next period",
   "business_day.conflict_strip": "Hours overlap the changed start",
   "business_day.conflict_in_season": "{season}: {line}",
   "business_day.conflict_on_special_day": "{name}: {line}",
@@ -3943,8 +3942,6 @@ export const es: Record<StringKey, string> = {
   "business_day.conflict_endpoint": "Pasa a otro día",
   "business_day.conflict_kept_open": "Abierto hasta las {time} esta noche",
   "business_day.conflict_all_day": "El día completo necesita otro horario",
-  "business_day.conflict_sending":
-    "Los últimos pedidos coinciden con el nuevo inicio o el siguiente período",
   "business_day.conflict_strip": "El horario coincide con el cambio de inicio",
   "business_day.conflict_in_season": "{season}: {line}",
   "business_day.conflict_on_special_day": "{name}: {line}",

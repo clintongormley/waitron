@@ -214,7 +214,7 @@ describe("weekRows", () => {
 });
 
 describe("weekStationRows", () => {
-  /** The Grill's 2 December: the Restaurant sends it Lunch until last orders, the Bar nothing. */
+  /** The Grill's 2 December: the Restaurant sends it Lunch, the Bar nothing. */
   function grillDay() {
     const day = monthModel().days.find((d) => d.date === "2026-12-02")!;
     return {

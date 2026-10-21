@@ -14,7 +14,7 @@ class PeriodLeaveApp extends LitElement {
         .draftParent=${this.draftParent}
         departmentName="Restaurant"
         .menus=${[{ id: "lunch", name: "Lunch", active: true, includes: [] }]}
-        .period=${{ id: "p1", name: "Lunch", colour: "blue", menuId: "lunch", staffMenuIds: [], endOffsetMinutes: -15, weekdays: [1] }}
+        .period=${{ id: "p1", name: "Lunch", colour: "blue", menuId: "lunch", staffMenuIds: [], weekdays: [1] }}
       ></period-dialog
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
   }
@@ -190,60 +190,6 @@ it("busy and disconnected editors refuse a retained close guard", async () => {
   expect(await guard("cancel")).toBe(false);
 });
 
-async function offset(el: PeriodDialog, value: string) {
-  const control =
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=endOffsetMinutes]");
-  expect(control).not.toBeNull();
-  control!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-  return control!;
-}
-
-it("offset-only edits protect navigation, survive Stay and reconnect, and Discard restores the saved value", async () => {
-  const el = await mount();
-  await offset(el, "14");
-  expect(unload()).toBe(true);
-  const stay = app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} });
-  await choose("keep");
-  expect(await stay).toBe("kept");
-  await reconnect(el);
-  const control =
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=endOffsetMinutes]")!;
-  await control.updateComplete;
-  expect(control.shadowRoot!.querySelector("input")!.value).toBe("14");
-  const close = modal(el).requestClose("cancel");
-  await choose("discard");
-  expect(await close).toBe(true);
-  el.open = true;
-  await el.updateComplete;
-  expect((await offset(el, "-0015")).value).toBe("-0015");
-  expect(unload()).toBe(false);
-  expect(save(el).disabled).toBe(true);
-});
-
-it("offset edits made during saving stay dirty against the submitted numeric baseline", async () => {
-  const el = await mount();
-  await offset(el, "14");
-  save(el).click();
-  await offset(el, "16");
-  expect(
-    el.commitSubmitted({
-      name: "Lunch",
-      colour: "blue",
-      menuId: "lunch",
-      staffMenuIds: [],
-      endOffsetMinutes: 14,
-    }),
-  ).toBe(false);
-  expect(unload()).toBe(true);
-  await reconnect(el);
-  await offset(el, "+014");
-  expect(unload()).toBe(false);
-  expect(save(el).disabled).toBe(true);
-});
-
 class PeriodLeaveConfigApp extends LitElement {
   readonly leave = new LeaveController(this);
   override render() {
@@ -274,7 +220,6 @@ it("Delete… on a changed draft asks first: keep emits nothing and keeps the dr
       colour: "blue",
       menuId: "lunch",
       staffMenuIds: [],
-      endOffsetMinutes: 0,
       floorPlanSetId: null,
       weekdays: [1],
       routingUses: [],

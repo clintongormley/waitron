@@ -77,7 +77,6 @@ function request(state: string): DashboardRequest {
               colour: "green",
               menuId: "lunch",
               staffMenuIds: [],
-              endOffsetMinutes: 0,
               weekdays: [1, 3],
               routingUses: [],
             },

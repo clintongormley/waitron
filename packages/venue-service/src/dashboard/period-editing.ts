@@ -57,7 +57,6 @@ export class PeriodEditing implements ReactiveController {
     period?: Period;
     /** Null while the dialog asks for the department. */
     departmentId: string | null;
-    clockRevision: number;
     paintedIn?: PaintedIn;
   };
   private busy = false;
@@ -192,7 +191,6 @@ export class PeriodEditing implements ReactiveController {
     const editor = {
       period,
       departmentId: department?.id ?? null,
-      clockRevision: this.options.model().clockRevision,
     };
     this.editor = editor;
     this.watchFloorPlans();
@@ -233,9 +231,8 @@ export class PeriodEditing implements ReactiveController {
     component.refusal = undefined;
     let created: string | undefined;
     try {
-      if (periodId === null)
-        created = (await api.createPeriod(departmentId!, input, editor.clockRevision)).id;
-      else await api.updatePeriod(periodId, input, editor.clockRevision);
+      if (periodId === null) created = (await api.createPeriod(departmentId!, input)).id;
+      else await api.updatePeriod(periodId, input);
     } catch (error) {
       if (this.editor === editor && this.host.isConnected) component.refusal = refusalOf(error);
       return;

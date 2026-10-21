@@ -1765,17 +1765,11 @@ describe("routing previews", () => {
           .values({ ...f.cfg, name: "Downstairs bar" })
           .returning();
         const lunch = (
-          await saveMenuPeriod(
-            tx,
-            f.cfg,
-            f.department,
-            {
-              name: "Lunch",
-              menuId: f.menu,
-              staffMenuIds: [],
-            },
-            0,
-          )
+          await saveMenuPeriod(tx, f.cfg, f.department, {
+            name: "Lunch",
+            menuId: f.menu,
+            staffMenuIds: [],
+          })
         ).id;
         const [burgerCell] = await tx
           .select({ id: routingCells.id })
@@ -1810,17 +1804,11 @@ describe("routing previews", () => {
           .values({ ...f.cfg, name: "Downstairs bar" })
           .returning();
         const lunch = (
-          await saveMenuPeriod(
-            tx,
-            f.cfg,
-            f.department,
-            {
-              name: "Lunch",
-              menuId: f.menu,
-              staffMenuIds: [],
-            },
-            0,
-          )
+          await saveMenuPeriod(tx, f.cfg, f.department, {
+            name: "Lunch",
+            menuId: f.menu,
+            staffMenuIds: [],
+          })
         ).id;
         const address: CellAddress = { row: productRow(f.cheese), zoneId: null };
         await setRoutingCell(tx, f.cfg, address, station(f.bar));
@@ -3121,7 +3109,7 @@ describe("routing during a service period", () => {
       ])
       .returning();
     const period = async (name: string) =>
-      (await saveMenuPeriod(tx, f.cfg, f.department, { name, menuId: f.menu, staffMenuIds: [] }, 0))
+      (await saveMenuPeriod(tx, f.cfg, f.department, { name, menuId: f.menu, staffMenuIds: [] }))
         .id;
     const lunch = await period("Lunch");
     const afternoon = await period("Afternoon");
@@ -3274,18 +3262,12 @@ describe("saving a cell's period choices", () => {
       staffMenuIds: string[] = [],
     ) =>
       (
-        await saveMenuPeriod(
-          tx,
-          f.cfg,
-          departmentId,
-          {
-            name,
-            menuId,
-            staffMenuIds,
-            colour: "blue",
-          },
-          0,
-        )
+        await saveMenuPeriod(tx, f.cfg, departmentId, {
+          name,
+          menuId,
+          staffMenuIds,
+          colour: "blue",
+        })
       ).id;
     const lunch = await period(f.department, "Lunch", lunchMenu);
     const brunch = await period(f.department, "Brunch", breadMenu);
@@ -3506,7 +3488,7 @@ describe("saving a cell's period choices", () => {
       await setRoutingCell(tx, f.cfg, everyZone(f), station(f.upstairs), [
         line(f.lunch, station(f.downstairs)),
       ]);
-      await updateMenuPeriod(tx, f.cfg, f.lunch, { menuId: f.breadMenu, staffMenuIds: [] }, 0);
+      await updateMenuPeriod(tx, f.cfg, f.lunch, { menuId: f.breadMenu, staffMenuIds: [] });
       await setRoutingCell(tx, f.cfg, everyZone(f), station(f.bar), [
         line(f.lunch, station(f.downstairs)),
       ]);
@@ -3667,18 +3649,12 @@ describe("saving a cell's period choices", () => {
           orderStart: "table",
         });
         const otherLunch = (
-          await saveMenuPeriod(
-            tx,
-            otherCfg,
-            otherDepartment.id,
-            {
-              name: "Lunch",
-              menuId: f.lunchMenu,
-              staffMenuIds: [],
-              colour: "blue",
-            },
-            0,
-          )
+          await saveMenuPeriod(tx, otherCfg, otherDepartment.id, {
+            name: "Lunch",
+            menuId: f.lunchMenu,
+            staffMenuIds: [],
+            colour: "blue",
+          })
         ).id;
         await setRoutingCell(tx, f.cfg, mojitoRow(f), station(f.upstairs));
         const [cell] = await tx
@@ -3753,7 +3729,7 @@ describe("saving a cell's period choices", () => {
         code: "route.period_invalid",
         params: { periodId: f.lunch, reason: "not_offered" },
       });
-      await updateMenuPeriod(tx, f.cfg, f.lunch, { menuId: f.breadMenu, staffMenuIds: [] }, 0);
+      await updateMenuPeriod(tx, f.cfg, f.lunch, { menuId: f.breadMenu, staffMenuIds: [] });
       await expect(
         setRoutingCell(tx, f.cfg, terraceCell(f), station(f.upstairs), [
           line(f.lunch, station(f.downstairs)),
@@ -4044,18 +4020,12 @@ describe("saving a cell's period choices", () => {
         .values({ sectionId: root!.id, position: 9, productId: f.variant });
       const [rootless] = await tx.insert(catalogues).values({ name: "No root" }).returning();
       const aperitivo = (
-        await saveMenuPeriod(
-          tx,
-          f.cfg,
-          f.department,
-          {
-            name: "Aperitivo",
-            menuId: rootless!.id,
-            staffMenuIds: [],
-            colour: "blue",
-          },
-          0,
-        )
+        await saveMenuPeriod(tx, f.cfg, f.department, {
+          name: "Aperitivo",
+          menuId: rootless!.id,
+          staffMenuIds: [],
+          colour: "blue",
+        })
       ).id;
       const { periods } = await routingModel(tx, f.cfg, at);
       const dining = { departmentId: f.department, departmentName: "Dining" };

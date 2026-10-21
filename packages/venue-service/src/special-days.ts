@@ -24,15 +24,8 @@ import {
 import { menuPeriods } from "./schema/menus.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 import { readHolidayDates } from "./holidays.js";
-import { scheduleEndOffsetClash } from "./menu-timetable.js";
 import { joinTouching, type ServingRead } from "./season-weeks.js";
-import {
-  inForceClock,
-  lastOrdersClock,
-  type LastOrdersClock,
-  scheduleCutovers,
-  settledClock,
-} from "./service-day-context.js";
+import { inForceClock, scheduleCutovers, settledClock } from "./service-day-context.js";
 import { clockTimeSkippedInDay, parseRanges, type ClosedRange } from "./service-day.js";
 import "./errors.js";
 
@@ -53,13 +46,13 @@ const yearOf = (date: LocalDate) => Number(date.slice(0, 4));
 const followsHoliday = (rule: SpecialDayDateRule) =>
   rule.repeats && rule.holidayName !== undefined && rule.holidayName !== null;
 
-/** The holiday lists the rules need over `years` (by default their `holidayHorizon`): none, and
- *  nothing read, when no rule is a repeating date that follows a holiday's name. */
-export async function holidayDatesFor(
+/** The holiday lists the rules need over the years given: none, and nothing read, when no rule is
+ *  a repeating date that follows a holiday's name. */
+async function holidayDatesFor(
   tx: Transaction,
   cfg: VenueScope,
   rules: readonly SpecialDayDateRule[],
-  [fromYear, toYear]: readonly [number, number] = holidayHorizon(rules),
+  [fromYear, toYear]: readonly [number, number],
   place?: LocationPlace,
 ): Promise<HolidayDates> {
   const named = rules.filter(followsHoliday);
@@ -86,22 +79,19 @@ function holidayNameOn(holidays: HolidayDates, date: LocalDate): string | null {
   return null;
 }
 
-/** The years a check over every future occurrence walks, from the earliest date: 400 from it, or
- *  from `walkFrom` when that is later. No years without rules. */
-export function holidayHorizon(
-  rules: readonly { date: LocalDate }[],
-  walkFrom = -Infinity,
-): [number, number] {
+/** The years a check over every future occurrence walks: 400 from the earliest date. No years
+ *  without rules. */
+function holidayHorizon(rules: readonly { date: LocalDate }[]): [number, number] {
   if (rules.length === 0) return [1, 0];
   const first = Math.min(...rules.map((rule) => yearOf(rule.date)));
-  return [first, Math.min(Math.max(first, walkFrom) + 400, 9999)];
+  return [first, Math.min(first + 400, 9999)];
 }
 
 /** Where a special-day date falls in `year`: a one-off only in its own year, a repeating one from
  *  its first year on, and a 29 February only in leap years. A repeating date saved on a public
  *  holiday falls, after its first year, where `holidays` puts a holiday of that name that year, and
  *  nowhere when there is none. Null when it does not fall in `year`. */
-export function specialDateIn(
+function specialDateIn(
   rule: SpecialDayDateRule,
   year: number,
   holidays: HolidayDates,
@@ -112,12 +102,12 @@ export function specialDateIn(
 
 /** Whether a date's place in `year` comes from its holiday's name, not its month and day: every
  *  year after its first, for a repeating date saved on a public holiday. */
-export function followsHolidayIn(rule: SpecialDayDateRule, year: number): boolean {
+function followsHolidayIn(rule: SpecialDayDateRule, year: number): boolean {
   return followsHoliday(rule) && year > yearOf(rule.date);
 }
 
 /** Which special-day date stands on each day of `year`, by `standingInYear`. */
-export function specialDatesStandingIn<T extends SpecialDayDateRule>(
+function specialDatesStandingIn<T extends SpecialDayDateRule>(
   rules: readonly T[],
   year: number,
   holidays: HolidayDates,
@@ -472,72 +462,6 @@ export async function missingHolidaysIn(
           year,
         });
   return [...missing.values()];
-}
-
-export interface SpecialDaySchedule {
-  specialDayId: string;
-  name: string;
-  date: LocalDate;
-  repeats: boolean;
-  holidayName: string | null;
-  closedAllDay: boolean;
-  /** By department. */
-  paint: ReadonlyMap<string, PaintRange[]>;
-}
-
-/** Every special-day date of the venue with its department paint (of `departmentIds` only, when
- *  given): one read of the dates and one of the paint. */
-export async function readSpecialDaySchedules(
-  tx: Transaction,
-  cfg: VenueScope,
-  departmentIds?: readonly string[],
-): Promise<SpecialDaySchedule[]> {
-  const dates = await tx
-    .select({
-      dateId: specialDayDates.id,
-      specialDayId: specialDays.id,
-      name: specialDays.name,
-      date: specialDayDates.date,
-      repeats: specialDays.repeatsYearly,
-      holidayName: specialDayDates.holidayName,
-      closedAllDay: specialDayDates.closedAllDay,
-    })
-    .from(specialDayDates)
-    .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
-    .where(eq(specialDayDates.locationId, cfg.locationId))
-    .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
-  if (dates.length === 0) return [];
-  const paint = await tx
-    .select({
-      dateId: departmentDays.specialDayDateId,
-      departmentId: departmentDays.departmentId,
-      periodId: departmentDayRanges.periodId,
-      startsAt: departmentDayRanges.startsAt,
-      endsAt: departmentDayRanges.endsAt,
-    })
-    .from(departmentDays)
-    .innerJoin(departmentDayRanges, eq(departmentDayRanges.dayId, departmentDays.id))
-    .where(
-      and(
-        inArray(
-          departmentDays.specialDayDateId,
-          dates.map((row) => row.dateId),
-        ),
-        departmentIds === undefined
-          ? undefined
-          : inArray(departmentDays.departmentId, departmentIds),
-      ),
-    );
-  const byDate = new Map<string, Map<string, PaintRange[]>>();
-  for (const row of paint) {
-    const owners = byDate.get(row.dateId!) ?? new Map<string, PaintRange[]>();
-    byDate.set(row.dateId!, owners);
-    owners.set(row.departmentId, [
-      ...(owners.get(row.departmentId) ?? []),
-      { periodId: row.periodId, startsAt: wireTime(row.startsAt), endsAt: wireTime(row.endsAt) },
-    ]);
-  }
-  return dates.map(({ dateId, ...row }) => ({ ...row, paint: byDate.get(dateId) ?? new Map() }));
 }
 
 export interface SpecialDayInput {
@@ -897,22 +821,6 @@ async function requireSpecialDay(tx: Transaction, cfg: VenueScope, id: string) {
   return row;
 }
 
-/** Every department, since a Closed-all-day tick touches them all. */
-async function checkScheduleAfterWrite(
-  tx: Transaction,
-  cfg: VenueScope,
-  clock: LastOrdersClock,
-): Promise<void> {
-  const clash = await scheduleEndOffsetClash(tx, cfg, clock);
-  if (clash !== null)
-    invalid("paint", {
-      reason: "end_offset",
-      date: clash.date,
-      periodId: clash.periodId,
-      departmentId: clash.departmentId,
-    });
-}
-
 const storedDate = (row: {
   date: LocalDate;
   closedAllDay: boolean;
@@ -1203,7 +1111,6 @@ export async function saveSpecialDay(
       })),
     );
   }
-  await checkScheduleAfterWrite(tx, cfg, lastOrdersClock(clock, at));
   await afterWrite?.({ clock, departmentOf: zoneDepartments });
   await assertWaitingChangeFits(tx, cfg, at, clock);
   return readSpecialDay(tx, cfg, specialDayId);
@@ -1221,6 +1128,5 @@ export async function deleteSpecialDay(
   await requireSpecialDay(tx, cfg, id);
   await tx.delete(specialDays).where(eq(specialDays.id, id));
   const clock = await readLocationClock(tx, cfg.locationId);
-  await checkScheduleAfterWrite(tx, cfg, lastOrdersClock(clock, at));
   await assertWaitingChangeFits(tx, cfg, at, clock);
 }

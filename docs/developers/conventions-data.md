@@ -521,10 +521,8 @@ actors in `ticket_item_moves`.
 
 The Calendar's Show picker displays planned prep-station times. `stationServiceTimes` uses the shared
 `readPlannedServiceGuides` reader to combine routed products on period menus with department
-hours. The forecast applies each period's signed last-order offset before subtracting zone closed
-times, and joins overlapping shares of the same period. Positive grace can appear at the start
-of the following business day. If a scheduled changeover cuts the period short, carried grace
-starts at that effective cutoff. The public reader takes at most 42 dates
+hours. The forecast ends each share at its period's end before subtracting zone closed times, and
+joins overlapping shares of the same period. The public reader takes at most 42 dates
 and works out each from that date's own plan, season and special day (`readDayPlan`); its route
 refuses a `week` query (`packages/venue-service/src/station-service-times.ts`). The staffing season
 painter instead passes the selected season's weekdays directly to the shared reader. The special-day
@@ -607,22 +605,17 @@ department's season week for that weekday; paint replaces the stretches it cover
 period closing that stretch. A date Closed all day closes every department. See "Special days"
 below.
 
-You set last orders with the period's signed whole-minute end offset, which defaults to 0.
-For Lunch 12:00–14:00, −15 stops selection and sending at 13:45. With +15, selection stops at
-14:00 and unsent dishes may be sent until 14:15. The cutoff minute itself is refused. Increasing
-a line already sent to an order uses the selection cutoff too; unchanged lines, decreases and
-notes retain their stored-line behavior. Saving an unsent table draft does not enforce that cutoff:
-the till gates additions and increases, while the server checks the sending window on submission.
-A fresh request during grace is accepted without checking when you selected its dishes, because
-the server receives no trusted selection timestamp.
-
-An offset is bounded to −1439…1439 minutes. Each placement must keep a nonempty sending window;
-a positive offset must stop strictly before the same department's next placement starts. Each
-season's week, each season boundary and the dated overrides are checked when you edit periods,
-timetables, dates, seasons or the venue clock, and during configuration import. Yesterday's grace can reach a closed business day only
-until its own cutoff. Selection and sending remain separate from the department's actual open state.
-The [A432 plan](../superpowers/plans/2026-10-08-a432-period-end-offset.md) records the decisions.
-`apps/server/src/till-api.service-periods.test.ts` exercises the request boundary.
+A period's menus can be picked and sent from its start until its end, one window for both: for
+Lunch 12:00–14:00, 14:00 itself is refused (`orderableMenuIds` in `resolveDepartmentService`,
+`packages/venue-service/src/menu-timetable.ts`). A dish line whose period has ended is refused
+`menu_period.not_running` (`apps/server/src/working-order.ts`); increasing a line already sent to
+an order is refused the same way, while unchanged lines, decreases and notes keep their stored-line
+behaviour. Saving an unsent table draft does not check the window: the till gates additions and
+increases, and the server checks the window when the order is sent. A period save changes no time
+and takes no clock revision. Picking and sending remain separate from the department's actual open
+state. The [A789 plan](../superpowers/plans/2026-10-21-a789-last-orders.md) records the decisions
+(it retired A432's period end offset); `apps/server/src/till-api.service-periods.test.ts`
+exercises the request boundary.
 Pricing reads static period membership, without resolving ranges, dates or the clock. If the venue
 clock cannot be read, timetable resolution leaves the department's period menus orderable.
 
@@ -647,8 +640,8 @@ closed and the end is open.
 When the venue clock is unreadable, this zone check reports no closed zone; department checks
 remain separate.
 
-A closed zone refuses new service, new dish lines and quantity increases with `service_zone.closed`,
-including during a positive period end offset. `assertZoneTakesNewOrders` is called by
+A closed zone refuses new service, new dish lines and quantity increases with `service_zone.closed`.
+`assertZoneTakesNewOrders` is called by
 `apps/server/src/table-actions.ts`, `working-order.ts` and `move-bill.ts`; the route cases in
 `apps/server/src/till-api.zone-closed.test.ts` check the resulting refusals. A move bringing an open
 bill or guests into that zone is refused. Accepting a department transfer into it is also refused,
@@ -706,8 +699,7 @@ below). `addSeason`, `saveSeason` and `deleteSeason`
 new season starts with a copy of the department and zone weeks of the season it starts inside (a
 venue with no seasons first gets its four); a deleted season's days join the season before it, and
 its weeks go with it. A blank or taken name, a malformed or taken start, and deleting the last
-season are refused `season.invalid` naming the `field`; an add, a move or a delete re-checks every
-department's end offsets and refuses a clash with `season.invalid`, reason `end_offset`. Every write
+season are refused `season.invalid` naming the `field`. Every write
 must send `expectedClockRevision`; a stale one refuses an add, a move or a delete with
 `hours.clock_changed`, but not a rename. An unknown or another venue's `seasonId` is refused
 `season.not_found`, and while a day-cutover change was pending an add, a move or a delete was refused
@@ -723,7 +715,7 @@ malformed body, an unknown key or an id named twice across the two lists is refu
 naming `seasonId`. A refusal names
 its place in the request, as `saveSeasonWeeks`' do: `season.invalid` with `field`
 `save.<i>.name`, `save.<i>.startsOn` or `save.<i>.colour` (reason `taken` for a name or start
-another season holds), `delete` (reason `last`), or `seasons` (reason `end_offset`). Every entry is
+another season holds), or `delete` (reason `last`). Every entry is
 checked before the clock: a call that only renames or recolours skips the clock check, and one with
 an add, a delete or a moved start is refused `hours.clock_changed` on a stale
 `expectedClockRevision` (`assertBusinessDayScheduleWrite`). Since 2026-10-18 (A788) such a call is
@@ -752,8 +744,7 @@ weeks of one season in one transaction; it is what the season painter calls. The
 `management.request_invalid`, and a refusal that names a field names it by the entry's place in the
 request (`departments.<i>.…`, `zones.<i>.…`); an unknown or inactive department is refused
 `department.not_found` and an unknown zone `service_zone.not_found`, each naming its id.
-`expectedClockRevision` is checked once for the whole request, and the end offsets of the
-departments it names are checked together, once, after every week is written.
+`expectedClockRevision` is checked once for the whole request.
 
 A configuration transfer carries the five season tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER` in
 `packages/venue-service/src/configuration-transfer.ts`). `importConfigurationTables`
@@ -771,13 +762,8 @@ quarter-hour or overlapping another on the same day; on a season day, a departme
 period (Closed) and a zone range of any kind but `closed`. It accepts a season with fewer than
 seven day rows, and checks no skipped clock hour on a season day, as a season week has no date.
 A day row naming a special-day date the bundle does not hold is refused; special days themselves
-are under "Special days" below. `validateEndOffsets`, beside it, refuses a period end offset
-reaching the next placement: within a season's week, from each season's last day to the next
-season's first on every weekday, and between each special-day date and the days either side of
-it, a day with no special day read from the season that holds it. The cases are under "season
-weeks in a configuration bundle" in `packages/venue-service/src/configuration-transfer.test.ts`,
-and the special-day grace case ("refuses paint whose period's end offset reaches the next day's
-paint") under "special days in a configuration bundle".
+are under "Special days" below. The cases are under "season weeks in a configuration bundle" in
+`packages/venue-service/src/configuration-transfer.test.ts`.
 
 ### Special days
 
@@ -817,8 +803,7 @@ its painted ranges are deleted, a special-day date left with no paint loses its 
 row so the season shows through, and its extensions go with the period through their cascading
 foreign key. Its routing-cell lines go with the period through their cascading foreign key whether
 or not there is a replacement; none is moved to the replacement (owner, 2026-10-13, A578). It all
-runs in the caller's transaction, and ends with an end-offset check over the period's department
-that refuses `menu_timetable.invalid` (`reason: "end_offset"`).
+runs in the caller's transaction.
 2026-10-14, A506-11: `GET …/menu-periods/painted-in?periodId=` lists that period alone, and a
 malformed id is refused as `shared.invalid_id`.
 2026-10-14, A506-11: the delete-impact answer also carries `clockRevision`, read in the same
@@ -829,8 +814,7 @@ A configuration transfer carries both tables under the importing venue's locatio
 (`VENUE_SERVICE_CONFIGURATION_TRANSFER`). The import refuses, as `setup.request_invalid` naming
 the field, a bundle the writer could not have stored: two special-day dates on one date; a
 special-day day row with a season or a weekday; paint off the quarter-hour or overlapping; paint at a time the clocks skip, a repeating date checked at its
-next occurrence from the venue's date of the bundle's `createdAt`; a period end offset
-reaching the next day; and a zone's Closed paint outside its department's hours on that date
+next occurrence from the venue's date of the bundle's `createdAt`; and a zone's Closed paint outside its department's hours on that date
 (field `zone_day_ranges`), which the special-day routes refuse though `saveSpecialDay` alone would
 store it. The cases are under "special days in a configuration bundle" in
 `packages/venue-service/src/configuration-transfer.test.ts` and "special days in a configuration
@@ -1689,10 +1673,13 @@ argument, `{ createdAt, timeZone, dayCutover }`, which `validateConfigurationBun
 Venue-service's `validateSeasonWeeks` (`packages/venue-service/src/configuration-transfer.ts`)
 checks ranges against the exported day changeover, and uses the bundle's time zone to refuse
 special-day paint at a time the clocks skip, a repeating date at its next occurrence from the
-bundle's `createdAt` (`refuseSkippedPaint`); `validateEndOffsets` uses the changeover too. The
-menu validator takes only the tables. The station-hours validator was removed in A366 slice 4.
+bundle's `createdAt` (`refuseSkippedPaint`). The menu validator takes only the tables. The station-hours validator was removed in A366 slice 4.
 
 ### Service-period configuration
+
+(2026-10-21, A789: the period end offset is gone. The first measurement below tested it; the
+second's `-t` filter names a test since renamed "round-trips service periods with colours, ordered
+staff menus and remapped business-day ranges".)
 
 Measured 2026-10-08 for A432 with `pnpm --filter @waitron/venue-service exec vitest run
 src/schema/schema-conformance.test.ts src/migrations.test.ts src/period-end-offset.test.ts

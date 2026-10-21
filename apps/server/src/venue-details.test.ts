@@ -1571,27 +1571,20 @@ describe("reviewed legacy geography and clock repairs", () => {
   });
 });
 
-it("refuses a changed cutover that empties an offset placement and rolls back other details", async () => {
+it("refuses a changed cutover beside a placed period and rolls back other details", async () => {
   const initial = await read();
   await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, venue.cfg, {
-      name: "Offset clock department",
+      name: "Clock department",
       orderStart: "counter",
     });
     const menu = (await tx.execute<{ id: string }>(sql`select id from catalogues limit 1`)).rows[0]!
       .id;
-    const period = await saveMenuPeriod(
-      tx,
-      venue.cfg,
-      department.id,
-      {
-        name: "Lunch",
-        menuId: menu,
-        staffMenuIds: [],
-        endOffsetMinutes: -119,
-      },
-      0,
-    );
+    const period = await saveMenuPeriod(tx, venue.cfg, department.id, {
+      name: "Lunch",
+      menuId: menu,
+      staffMenuIds: [],
+    });
     await replaceMenuWeek(
       tx,
       venue.cfg,

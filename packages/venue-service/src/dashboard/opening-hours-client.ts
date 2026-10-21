@@ -215,25 +215,11 @@ export class OpeningHoursApi {
     this.specialDays.rereadWatches();
     this.rereadWatches();
   }
-  createPeriod(
-    departmentId: string,
-    input: MenuPeriodInput,
-    expectedClockRevision: number,
-  ): Promise<{ id: string }> {
-    return this.request(`${BASE}/departments/${at(departmentId)}/menu-periods`, "POST", {
-      ...input,
-      expectedClockRevision,
-    });
+  createPeriod(departmentId: string, input: MenuPeriodInput): Promise<{ id: string }> {
+    return this.request(`${BASE}/departments/${at(departmentId)}/menu-periods`, "POST", input);
   }
-  updatePeriod(
-    periodId: string,
-    input: Partial<MenuPeriodInput>,
-    expectedClockRevision: number,
-  ): Promise<void> {
-    return this.request(`${BASE}/menu-periods/${at(periodId)}`, "PATCH", {
-      ...input,
-      expectedClockRevision,
-    });
+  updatePeriod(periodId: string, input: Partial<MenuPeriodInput>): Promise<void> {
+    return this.request(`${BASE}/menu-periods/${at(periodId)}`, "PATCH", input);
   }
   /** `passive` for a read nobody asked for, so it keeps no session alive. */
   readPeriodDeleteImpact(

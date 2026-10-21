@@ -62,7 +62,7 @@ async function seasonVenue() {
       const cena = await dish("Cena", "Solomillo");
       const copas = await dish("Copas", "Gin tonic");
       const period = async (name: string, menuId: string) =>
-        (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId, staffMenuIds: [] }, 0)).id;
+        (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId, staffMenuIds: [] })).id;
       const dinner = await period("Dinner", cena.menuId);
       const lateBar = await period("Late bar", copas.menuId);
       const seasonId = async (name: string) =>

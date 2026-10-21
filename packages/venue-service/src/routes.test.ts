@@ -3339,18 +3339,12 @@ describe("a routing cell's period choices on the routes", () => {
         vatClass: "general",
       });
       await addProductToMenu(tx, { menuId: fx.menuId, productId: product.id });
-      const period = await saveMenuPeriod(
-        tx,
-        cfg,
-        dining.id,
-        {
-          name: "Lunch",
-          menuId: fx.menuId,
-          staffMenuIds: [],
-          colour: "green",
-        },
-        0,
-      );
+      const period = await saveMenuPeriod(tx, cfg, dining.id, {
+        name: "Lunch",
+        menuId: fx.menuId,
+        staffMenuIds: [],
+        colour: "green",
+      });
       const [station] = await tx
         .insert(kitchenStations)
         .values({ locationId: fx.locationId, name: "Downstairs bar" })
@@ -3722,18 +3716,12 @@ it("the station planning route returns the configured period ranges for a non-de
     });
     await addProductToMenu(tx, { menuId: f.menuId, productId: product.id });
     const periodId = (
-      await saveMenuPeriod(
-        tx,
-        cfg,
-        departmentId,
-        {
-          name: "Lunch",
-          menuId: f.menuId,
-          staffMenuIds: [],
-          colour: "blue",
-        },
-        0,
-      )
+      await saveMenuPeriod(tx, cfg, departmentId, {
+        name: "Lunch",
+        menuId: f.menuId,
+        staffMenuIds: [],
+        colour: "blue",
+      })
     ).id;
     const ranges = [{ periodId, startsAt: "12:00", endsAt: "16:00" }];
     await replaceMenuWeek(
@@ -4242,7 +4230,7 @@ describe("department description setup in the live model", () => {
   );
 });
 
-it("A724: the station planning route returns last orders with its period end offset", async () => {
+it("A724: the station planning route returns last orders at its period's own end", async () => {
   const f = await fixture();
   const expected = await withTransaction(db, async (tx) => {
     const cfg = { locationId: f.locationId };
@@ -4259,19 +4247,12 @@ it("A724: the station planning route returns last orders with its period end off
     });
     await addProductToMenu(tx, { menuId: f.menuId, productId: product.id });
     const periodId = (
-      await saveMenuPeriod(
-        tx,
-        cfg,
-        departmentId,
-        {
-          name: "Lunch",
-          menuId: f.menuId,
-          staffMenuIds: [],
-          colour: "blue",
-          endOffsetMinutes: -30,
-        },
-        0,
-      )
+      await saveMenuPeriod(tx, cfg, departmentId, {
+        name: "Lunch",
+        menuId: f.menuId,
+        staffMenuIds: [],
+        colour: "blue",
+      })
     ).id;
     const ranges = [{ periodId, startsAt: "12:00", endsAt: "16:00" }];
     await replaceMenuWeek(
@@ -4295,7 +4276,7 @@ it("A724: the station planning route returns last orders with its period end off
     return {
       stationId: station!.id,
       departmentId,
-      ranges: [{ periodId, startsAt: "12:00", endsAt: "15:30" }],
+      ranges: [{ periodId, startsAt: "12:00", endsAt: "16:00" }],
     };
   });
   const response = await send(

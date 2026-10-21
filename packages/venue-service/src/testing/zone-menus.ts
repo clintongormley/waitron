@@ -36,17 +36,11 @@ export async function offerMenuThroughZone(
     .where(and(eq(menuPeriods.departmentId, policy.departmentId), eq(menuPeriods.name, "Always")));
   const period =
     stored ??
-    (await saveMenuPeriod(
-      tx,
-      cfg,
-      policy.departmentId,
-      {
-        name: "Always",
-        menuId,
-        staffMenuIds: [],
-      },
-      await readBusinessDayScheduleRevision(tx, cfg),
-    ));
+    (await saveMenuPeriod(tx, cfg, policy.departmentId, {
+      name: "Always",
+      menuId,
+      staffMenuIds: [],
+    }));
   if (stored !== undefined) {
     const staff = await tx
       .select({
@@ -63,16 +57,10 @@ export async function offerMenuThroughZone(
       entries.push({ menuId: stored.menuId, displayOrder: 0 });
     if (menuId !== customer) entries.push({ menuId, displayOrder: options.displayOrder ?? 0 });
     entries.sort((a, b) => a.displayOrder - b.displayOrder || a.menuId.localeCompare(b.menuId));
-    await updateMenuPeriod(
-      tx,
-      cfg,
-      period.id,
-      {
-        menuId: customer,
-        staffMenuIds: entries.map((entry) => entry.menuId),
-      },
-      await readBusinessDayScheduleRevision(tx, cfg),
-    );
+    await updateMenuPeriod(tx, cfg, period.id, {
+      menuId: customer,
+      staffMenuIds: entries.map((entry) => entry.menuId),
+    });
     for (const entry of entries)
       await tx
         .update(menuPeriodStaffMenus)

@@ -1,13 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import {
-  CATALOGUE_MIGRATIONS,
-  buildMenuDocument,
-  createCatalogue,
-  menuDocumentHash,
-  publishMenu,
-} from "@waitron/catalogue";
+import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import type { CountryPack } from "@waitron/country";
 import {
   CORE_MIGRATIONS,
@@ -19,17 +13,9 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { businessDayClockConflicts } from "./business-day-schedule.js";
-import { replaceMenuWeek, saveMenuPeriod, updateMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { createDepartment, listVenueReadiness, type VenueScope } from "./operations.js";
-import { menuPeriods } from "./schema/menus.js";
-import {
-  departmentDayRanges,
-  departmentDays,
-  specialDayDates,
-  specialDays,
-} from "./schema/seasons.js";
+import { listVenueReadiness, type VenueScope } from "./operations.js";
+import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { listSpecialDays, readSpecialDay, saveSpecialDay, specialDaysOn } from "./special-days.js";
 
 /** Calls to the invented calendar's `read`, so a test can count the holiday-list reads. */
@@ -132,18 +118,7 @@ async function venue() {
     })
     .returning({ id: locations.id });
   const cfg: VenueScope = { locationId: brandLocationId(location!.id) };
-  return scoped(async (tx) => {
-    const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
-    ).id;
-    const period = async (name: string) => {
-      const menuId = (await createCatalogue(tx, { name })).id;
-      const { document } = await buildMenuDocument(tx, menuId);
-      await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
-      return (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId, staffMenuIds: [] }, 0)).id;
-    };
-    return { cfg, restaurant, lunch: await period("Lunch"), dinner: await period("Dinner") };
-  });
+  return { cfg };
 }
 type Venue = Awaited<ReturnType<typeof venue>>;
 
@@ -454,120 +429,6 @@ it("finds no special day on an empty list of days", async () => {
   expect(await scoped((tx) => specialDaysOn(tx, v.cfg, []))).toEqual(new Map());
 });
 
-describe("the end-offset check uses each year's resolved date", () => {
-  /** Lunch from 06:30 every day; Dinner sends for an hour after it ends, so a Dinner until 05:30
-   *  runs into the next day's Lunch unless that Lunch is Closed. Holy Saturday's Lunch is Closed
-   *  in 2026 and 2027. */
-  async function easter(closeSaturday2027: boolean) {
-    const v = await venue();
-    await db.update(menuPeriods).set({ endOffsetMinutes: 60 }).where(eq(menuPeriods.id, v.dinner));
-    await scoped((tx) =>
-      replaceMenuWeek(
-        tx,
-        v.cfg,
-        v.restaurant,
-        Array.from({ length: 7 }, (_, weekday) => ({
-          weekday,
-          slots: [{ periodId: v.lunch, startsAt: "06:30", endsAt: "09:00" }],
-        })),
-        AT,
-        0,
-      ),
-    );
-    const saturdays = closeSaturday2027 ? ["2026-04-04", "2027-03-27"] : ["2026-04-04"];
-    await save(v, {
-      name: "Sábado Santo",
-      repeatsYearly: false,
-      dates: dates(saturdays),
-      paint: saturdays.map((date) => ({
-        departmentId: v.restaurant,
-        date,
-        ranges: [{ periodId: null, startsAt: "06:30", endsAt: "09:00" }],
-      })),
-    });
-    return v;
-  }
-  const lateFriday = (v: Venue) =>
-    save(v, {
-      name: "Viernes Santo",
-      repeatsYearly: true,
-      dates: dates(["2026-04-03"]),
-      paint: [
-        {
-          departmentId: v.restaurant,
-          date: "2026-04-03",
-          ranges: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "05:30" }],
-        },
-      ],
-    });
-
-  it("accepts paint that is clear on the day after each year's holiday", async () => {
-    const v = await easter(true);
-    await expect(lateFriday(v)).resolves.toMatchObject({ name: "Viernes Santo" });
-  });
-
-  it("refuses paint that runs into the day after a later year's holiday", async () => {
-    const v = await easter(false);
-    expect(await refusal(lateFriday(v))).toEqual({
-      code: "special_day.invalid",
-      params: {
-        field: "paint",
-        reason: "end_offset",
-        date: "2027-03-26",
-        periodId: v.dinner,
-        departmentId: v.restaurant,
-      },
-    });
-  });
-});
-
-describe("the end-offset check gives a day to a date saved there over a holiday that moved onto it", () => {
-  it("accepts an offset whose clash would fall only on the moved holiday's paint, under a one-off Closed all day", async () => {
-    const v = await venue();
-    await scoped((tx) =>
-      replaceMenuWeek(
-        tx,
-        v.cfg,
-        v.restaurant,
-        Array.from({ length: 7 }, (_, weekday) => ({
-          weekday,
-          slots: [{ periodId: v.lunch, startsAt: "06:30", endsAt: "09:00" }],
-        })),
-        AT,
-        0,
-      ),
-    );
-    await save(v, {
-      name: "Sábado Santo",
-      repeatsYearly: false,
-      dates: dates(["2026-04-04"]),
-      paint: [
-        {
-          departmentId: v.restaurant,
-          date: "2026-04-04",
-          ranges: [{ periodId: null, startsAt: "06:30", endsAt: "09:00" }],
-        },
-      ],
-    });
-    await save(v, {
-      name: "Viernes Santo",
-      repeatsYearly: true,
-      dates: dates(["2026-04-03"]),
-      paint: [
-        {
-          departmentId: v.restaurant,
-          date: "2026-04-03",
-          ranges: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "05:30" }],
-        },
-      ],
-    });
-    await rawDay(v, "Cierre", "2027-03-26");
-    await expect(
-      scoped((tx) => updateMenuPeriod(tx, v.cfg, v.dinner, { endOffsetMinutes: 60 }, 0, AT)),
-    ).resolves.toBeUndefined();
-  });
-});
-
 describe("the readiness list warns when a later year has no holiday of the name", () => {
   const warnings = async (v: Venue, at: Date) =>
     (await scoped((tx) => listVenueReadiness(tx, v.cfg, at))).filter(
@@ -722,82 +583,5 @@ describe("saving either special day of a pair that came to share a date", () => 
       "2027-03-26": friday.id,
       "2027-03-27": feria.id,
     });
-  });
-});
-
-describe("the clock-change check follows a repeating holiday date to each year's date", () => {
-  /** Wednesday's Dinner, 22:00 to 04:30, sends until 07:30; a special day's Thursday opens Lunch
-   *  at 07:15. The rows are written raw, as the special-day writer would refuse them under the
-   *  venue's own changeover. */
-  async function thursdayLunch(date: string, holidayName: string) {
-    const v = await venue();
-    await db.update(menuPeriods).set({ endOffsetMinutes: 180 }).where(eq(menuPeriods.id, v.dinner));
-    await scoped((tx) =>
-      replaceMenuWeek(
-        tx,
-        v.cfg,
-        v.restaurant,
-        Array.from({ length: 7 }, (_, weekday) => ({
-          weekday,
-          slots: weekday === 3 ? [{ periodId: v.dinner, startsAt: "22:00", endsAt: "04:30" }] : [],
-        })),
-        AT,
-        0,
-      ),
-    );
-    await scoped(async (tx) => {
-      const [day] = await tx
-        .insert(specialDays)
-        .values({ locationId: v.cfg.locationId, name: holidayName, repeatsYearly: true })
-        .returning({ id: specialDays.id });
-      const [dated] = await tx
-        .insert(specialDayDates)
-        .values({ specialDayId: day!.id, locationId: v.cfg.locationId, date, holidayName })
-        .returning({ id: specialDayDates.id });
-      const [painted] = await tx
-        .insert(departmentDays)
-        .values({ departmentId: v.restaurant, specialDayDateId: dated!.id })
-        .returning({ id: departmentDays.id });
-      await tx.insert(departmentDayRanges).values({
-        dayId: painted!.id,
-        departmentId: v.restaurant,
-        periodId: v.lunch,
-        startsAt: "07:15:00",
-        endsAt: "09:00:00",
-      });
-    });
-    return v;
-  }
-  const reasons = async (v: Venue) =>
-    (
-      await scoped((tx) =>
-        businessDayClockConflicts(
-          tx,
-          v.cfg,
-          { timeZone: "Europe/Madrid", dayCutover: "05:00", cutoverChanges: [] },
-          {
-            timeZone: "Europe/Madrid",
-            dayCutover: "05:00",
-            cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover: "07:00" }],
-          },
-          "2026-11-04",
-        ),
-      )
-    ).conflicts.map((conflict) => conflict.reason);
-
-  it("checks the Thursday the next year's list gives the holiday", async () => {
-    expect(await reasons(await thursdayLunch("2026-04-02", "Jueves Santo"))).toContain(
-      "sending_cutoff",
-    );
-  });
-
-  it("checks no later Thursday when no later list names the holiday", async () => {
-    expect(await reasons(await thursdayLunch("2026-10-01", "Fiesta de 2026"))).toEqual([]);
-  });
-
-  it("checks the Thursday a one-off Closed all day holds, not the holiday that moved onto it", async () => {
-    const v = await thursdayLunch("2026-04-02", "Jueves Santo");
-    await rawDay(v, "Cierre", "2027-03-25");
-    expect(await reasons(v)).toEqual([]);
   });
 });

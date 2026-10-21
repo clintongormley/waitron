@@ -1,7 +1,8 @@
 # A789 — Last orders without an offset: a period is when its menu can be ordered
 
-Status: **design, waiting for the owner's answer to one question (Q39 in lane C's questions file,
-repeated in §11 below). Nothing is built until then.** Backlog entry: `docs/backlog.md` "A789".
+Status: **approved by the owner 2026-10-18 (Q39: "All recommended, configurable whether manager's
+pin required."); building — plan `docs/superpowers/plans/2026-10-21-a789-last-orders.md`.**
+Backlog entry: `docs/backlog.md` "A789".
 Pictures: `docs/backlog/mockups/a789-last-orders/` (drawn in HTML with the apps' colour tokens, not
 screenshots; 02 also in dark, `-dark.png`).
 
@@ -117,6 +118,8 @@ the refusals that were about the offset.
 
   "Remove them" takes those dishes off and goes back to the order; "Kitchen agreed — send" sends
   everything. Anyone who can send can confirm: the check is with the kitchen, not with a manager.
+  A venue can require a manager's PIN for this instead, with a setting in the dashboard's service
+  settings beside "Allow changes to items already sent to the kitchen"; it is off by default.
 - **A dish the running period also sells** — a caña taken from Lunch's menu, which Sobremesa also
   sells — is not marked and needs no check: the kitchen or bar is still making it. It is sent at the
   price it was taken at (Lunch's). This is new: today the caña is held with the tortilla (§2).
@@ -242,9 +245,8 @@ A773's design (`docs/superpowers/specs/2026-10-16-a773-courses-and-groups-design
 says "Neither kind is ever sent". This design changes that for a period that ended: such a line is
 sent after the kitchen agrees. A773 also retires the "Check before sending" window (`:264`); this
 design does not bring it back. Its window opens only when Send (or Fire) includes a dish whose period
-has ended, and in A773's editor the mark is the one A773 already puts in the list. A773-1
-(lane G, in progress) rewrites the till's order editor and its Send. So the till slice here waits
-for A773-1 to land and is built in A773's editor; the watcher is asked to tell lane G (questions file).
+has ended, and in A773's editor the mark is the one A773 already puts in the list. A773-1 (#1897)
+rewrote the till's order editor and its Send, so the till slice here is built in A773's editor.
 
 ## 9. Slices
 
@@ -256,8 +258,8 @@ Each leaves `main` working on its own.
 2. **Delete the period Keep open**, splitting the zone pieces off first.
 3. **The server accepts a confirmed late send** (§5), records it, and the kitchen ticket and screen
    show the mark. The till does not send a confirmation yet, so nothing changes on the floor.
-4. **The till's warning and window** (§3.2) on the counter, table and handheld screens. Waits for lane
-   G's A773-1.
+4. **The till's warning and window** (§3.2) on the counter, table and handheld screens, in A773-1's
+   editor.
 
 Slices 1 and 2 are independent of each other.
 
@@ -277,6 +279,7 @@ answer.
   Recommended: **yes**.
 - **(b) Who can confirm.** Recommended: **anyone who can send**, no manager PIN. Alternative: a
   manager's PIN.
+  Owner, 2026-10-18: anyone who can send, by default; a setting can require a manager's PIN.
 - **(c) A dish the running period also sells** (the caña). Recommended: **sent without the window, at
   the price it was taken at.** Alternative: every dish from the ended period goes in the window.
 - **(d) How long a late send is possible.** Recommended: **until the business day's changeover**; a
@@ -288,3 +291,15 @@ answer.
   Lunch-only dish after 14:00. Recommended: **accept that** — "Lunch is when you can order lunch".
   Alternative: a manager can still pick from an ended menu, with the same kitchen window.
 - **(g) The order of the work.** Recommended: **the four slices in §9, in that order.**
+
+## 12. Decided after approval
+
+- **The manager's-PIN setting lives in `service_settings`**, shown in the dashboard's service
+  settings panel beside "Allow changes to items already sent to the kitchen": that panel already
+  holds the venue's settings about sending to the kitchen, while the department and zone policies
+  are about how an order starts and is paid. Built in slices 3–4.
+- **The per-menu `sendable` flag stays on the wire until slice 4**, set from the one window, so it
+  always equals `orderable`; slice 4 removes it with the till's handling of an ended dish.
+- **No clash check still refuses anything with every offset at 0**, so the checks §7 says are "kept,
+  renamed" are none, and the clash checks go whole. The evidence is in the plan's "The offset-at-0
+  evidence — design §7".

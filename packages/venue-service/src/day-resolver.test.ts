@@ -26,12 +26,7 @@ import {
   resolveDepartmentsDays,
   resolveZoneClosedDays,
 } from "./day-resolver.js";
-import {
-  replaceMenuWeek,
-  resolveDepartmentService,
-  saveMenuPeriod,
-  updateMenuPeriod,
-} from "./menu-timetable.js";
+import { replaceMenuWeek, resolveDepartmentService, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
   configureZone,
@@ -104,8 +99,7 @@ async function venue(options: { oneSeason?: boolean } = {}) {
       menus[name] = menuId;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
-      return (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId, staffMenuIds: [] }, 0))
-        .id;
+      return (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId, staffMenuIds: [] })).id;
     };
     const ids = Object.fromEntries(
       (await ensureDefaultSeasons(tx, cfg)).map((season) => [season.name, season.id]),
@@ -301,22 +295,6 @@ describe("the till's service on a season boundary", () => {
     });
   });
 
-  it("yesterday's grace uses yesterday's season", async () => {
-    const v = await venue();
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.dinner, { endOffsetMinutes: 30 }, 0, AT));
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.lateBar, { endOffsetMinutes: 30 }, 0, AT));
-    await menuSeason(v, v.seasons.Autumn!, {
-      [SATURDAY]: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "05:45" }],
-    });
-    await menuSeason(v, v.seasons.Winter!, {
-      [SATURDAY]: [{ periodId: v.lateBar, startsAt: "20:00", endsAt: "05:45" }],
-    });
-    const at = new Date("2030-12-01T05:05:00Z"); // 06:05 in Madrid, business day Sunday
-    const service = await scoped((tx) => resolveDepartmentService(tx, v.cfg, v.departmentId, at));
-    expect(service.sendableMenuIds).toContain(v.menus.Dinner);
-    expect(service.sendableMenuIds).not.toContain(v.menus["Late bar"]);
-  });
-
   it("an unreadable clock still opens every period's menus", async () => {
     const v = await autumnAndWinter();
     await db
@@ -405,13 +383,11 @@ describe("a day plan shared between resolvers", () => {
     const second = await scoped(async (tx) => {
       const id = (await createDepartment(tx, v.cfg, { name: "Second", orderStart: "table" })).id;
       const period = (
-        await saveMenuPeriod(
-          tx,
-          v.cfg,
-          id,
-          { name: "Second dinner", menuId: v.menus.Dinner!, staffMenuIds: [] },
-          0,
-        )
+        await saveMenuPeriod(tx, v.cfg, id, {
+          name: "Second dinner",
+          menuId: v.menus.Dinner!,
+          staffMenuIds: [],
+        })
       ).id;
       await replaceMenuWeek(
         tx,
@@ -626,13 +602,11 @@ describe("special-day paint over the season", () => {
     const later = await scoped(async (tx) => {
       const id = (await createDepartment(tx, v.cfg, { name: "Later", orderStart: "table" })).id;
       const period = (
-        await saveMenuPeriod(
-          tx,
-          v.cfg,
-          id,
-          { name: "Later dinner", menuId: v.menus.Dinner!, staffMenuIds: [] },
-          0,
-        )
+        await saveMenuPeriod(tx, v.cfg, id, {
+          name: "Later dinner",
+          menuId: v.menus.Dinner!,
+          staffMenuIds: [],
+        })
       ).id;
       await replaceMenuWeek(
         tx,

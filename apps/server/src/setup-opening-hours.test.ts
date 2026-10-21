@@ -87,17 +87,11 @@ describe("setup's saved first opening hours", () => {
       .from(menuPeriods)
       .where(eq(menuPeriods.departmentId, department.id));
     await withTransaction(suite.db, (tx) =>
-      saveMenuPeriod(
-        tx,
-        cfg,
-        department.id,
-        {
-          name: "Evening",
-          menuId: period!.menuId,
-          staffMenuIds: [],
-        },
-        0,
-      ),
+      saveMenuPeriod(tx, cfg, department.id, {
+        name: "Evening",
+        menuId: period!.menuId,
+        staffMenuIds: [],
+      }),
     );
     expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
   });

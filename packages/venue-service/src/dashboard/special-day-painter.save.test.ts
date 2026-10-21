@@ -761,18 +761,12 @@ describe("a refused save", () => {
     expect([...grid(painter).columnErrors.keys()]).toEqual([DEC_15]);
   });
 
-  it("naming a kept entry's end offset names the period, the department and the date", async () => {
+  it("naming a kept department entry names the department and the date", async () => {
     const { painter, writes } = await mount({
       refusals: [
         {
           code: "special_day.invalid",
-          params: {
-            field: "paint",
-            reason: "end_offset",
-            departmentId: "d1",
-            periodId: "p2",
-            date: DEC_14,
-          },
+          params: { field: "paint", departmentId: "d1", date: DEC_14 },
         },
       ],
     });
@@ -781,7 +775,7 @@ describe("a refused save", () => {
     await settle(painter);
     await save(painter, writes);
     expect(frame(painter).refusal).toBe(
-      `Restaurant, ${formatDate(DEC_14)}: Change the end offset of Dinner to fit these times.`,
+      `Restaurant, ${formatDate(DEC_14)}: Check this day's time ranges and periods.`,
     );
     expect(pickerValue(painter)).toBe("d1");
     expect([...grid(painter).columnErrors.keys()]).toEqual([DEC_14]);

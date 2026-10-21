@@ -86,17 +86,11 @@ beforeEach(async () => {
         grossPrice: name === "Lunch" ? "12.00" : "15.00",
       });
       await publishWorkingMenu(tx, menu.id);
-      const period = await saveMenuPeriod(
-        tx,
-        v.cfg,
-        department,
-        {
-          name,
-          menuId: menu.id,
-          staffMenuIds: [],
-        },
-        0,
-      );
+      const period = await saveMenuPeriod(tx, v.cfg, department, {
+        name,
+        menuId: menu.id,
+        staffMenuIds: [],
+      });
       menus.push({ period: period.id, item: item.id });
     }
     await replaceMenuWeek(

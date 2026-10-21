@@ -44,7 +44,6 @@ const lunch = (): Period => ({
   colour: "green",
   menuId: "lunch",
   staffMenuIds: ["staff"],
-  endOffsetMinutes: 0,
   floorPlanSetId: null,
   weekdays: [1, 3],
   routingUses: [],
@@ -202,12 +201,10 @@ it("creates the changed draft and closes it before refreshing the list", async (
       path: "/management-api/venue-service/departments/restaurant/menu-periods",
       method: "POST",
       body: {
-        expectedClockRevision: 0,
         name: "Dinner",
         colour: "red",
         menuId: "lunch",
         staffMenuIds: [],
-        endOffsetMinutes: 0,
       },
     },
   ]);
@@ -229,12 +226,10 @@ it("updates the existing period and preserves every other submitted value", asyn
       path: "/management-api/venue-service/menu-periods/p1",
       method: "PATCH",
       body: {
-        expectedClockRevision: 0,
         name: "Late lunch",
         colour: "green",
         menuId: "lunch",
         staffMenuIds: ["staff"],
-        endOffsetMinutes: 0,
       },
     },
   ]);
@@ -284,12 +279,10 @@ it("places a refused period name under Name with the bottom explanation and retr
   submit(dialog);
   await expect.poll(() => writes.length).toBe(2);
   const body = {
-    expectedClockRevision: 0,
     name: "Dinner",
     colour: "green",
     menuId: "lunch",
     staffMenuIds: ["staff"],
-    endOffsetMinutes: 0,
   };
   expect(writes).toEqual([body, body]);
 });
@@ -520,12 +513,10 @@ it.each([
         path: "/management-api/venue-service/departments/restaurant/menu-periods",
         method: "POST",
         body: {
-          expectedClockRevision: 0,
           name: "Breakfast",
           colour: expected,
           menuId: "lunch",
           staffMenuIds: [],
-          endOffsetMinutes: 0,
         },
       },
     ]);
@@ -575,7 +566,7 @@ it("marks the new period's missing name, menu and department above the buttons w
   expect(writes).toEqual([]);
 });
 
-it("sends an offset-only edit through the real period client and closes before a failed refresh", async () => {
+it("sends a colour-only edit through the real period client and closes before a failed refresh", async () => {
   const writes: unknown[] = [];
   let reads = 0;
   const el = await mount((async (path, method, body) => {
@@ -586,7 +577,7 @@ it("sends an offset-only edit through the real period client and closes before a
     writes.push({ path, method, body });
   }) as DashboardRequest);
   const dialog = await edit(el, "p1");
-  await change(dialog, "endOffsetMinutes", "-15");
+  await change(dialog, "colour", "purple");
   submit(dialog);
   await expect
     .poll(() => writes)
@@ -595,38 +586,15 @@ it("sends an offset-only edit through the real period client and closes before a
         path: "/management-api/venue-service/menu-periods/p1",
         method: "PATCH",
         body: {
-          expectedClockRevision: 0,
           name: "Lunch",
-          colour: "green",
+          colour: "purple",
           menuId: "lunch",
           staffMenuIds: ["staff"],
-          endOffsetMinutes: -15,
         },
       },
     ]);
   await expect.poll(() => dialogOf(el)).toBeNull();
   await expect.poll(() => reads).toBe(2);
-});
-
-it("an opened period keeps its revision through a passive replacement and submits the edited offset", async () => {
-  const data = model();
-  data.clockRevision = 7;
-  const writes: unknown[] = [];
-  const el = await mount((async (_path, method, body) => {
-    if (method === "GET") return structuredClone(data);
-    writes.push(body);
-    throw { code: "hours.clock_changed" };
-  }) as DashboardRequest);
-  const dialog = await edit(el, "p1");
-  await change(dialog, "endOffsetMinutes", "15");
-  data.clockRevision = 8;
-  data.departments[0]!.periods[0]!.name = "Refreshed Lunch";
-  el.api.rereadWatches();
-  await expect.poll(() => periodRow(el, "p1")?.name).toBe("Refreshed Lunch");
-  submit(dialog);
-  await expect.poll(() => writes.length).toBe(1);
-  expect(writes[0]).toMatchObject({ endOffsetMinutes: 15, expectedClockRevision: 7 });
-  await expect.poll(() => dialog.refusal?.code).toBe("hours.clock_changed");
 });
 
 it("+ Add period on a venue with two departments asks for the department and creates the period in the one chosen", async () => {
@@ -652,7 +620,6 @@ it("+ Add period on a venue with two departments asks for the department and cre
       colour: "red",
       menuId: "lunch",
       staffMenuIds: [],
-      endOffsetMinutes: 0,
     },
   });
   await el.updateComplete;
@@ -667,12 +634,10 @@ it("+ Add period on a venue with two departments asks for the department and cre
       path: "/management-api/venue-service/departments/bar/menu-periods",
       method: "POST",
       body: {
-        expectedClockRevision: 0,
         name: "Dinner",
         colour: "orange",
         menuId: "lunch",
         staffMenuIds: [],
-        endOffsetMinutes: 0,
       },
     },
   ]);
@@ -816,7 +781,6 @@ function liveFixture(): OpeningHoursModel {
           colour: "blue" as const,
           menuId: "m1",
           staffMenuIds: [],
-          endOffsetMinutes: 0,
           floorPlanSetId: null,
           weekdays: [1],
           routingUses: [],

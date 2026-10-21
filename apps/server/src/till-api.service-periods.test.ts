@@ -152,17 +152,11 @@ async function setupVenue(options: { timetable: boolean }): Promise<Venue> {
       if (options.timetable) {
         const period = async (name: string, menu: MenuName) =>
           (
-            await saveMenuPeriod(
-              tx,
-              cfg,
-              restaurant,
-              {
-                name,
-                menuId: menus[menu],
-                staffMenuIds: [menus.Bebidas, menus["Café"]],
-              },
-              0,
-            )
+            await saveMenuPeriod(tx, cfg, restaurant, {
+              name,
+              menuId: menus[menu],
+              staffMenuIds: [menus.Bebidas, menus["Café"]],
+            })
           ).id;
         const mananas = await period("Mañanas", "Desayunos");
         const mediodia = await period("Mediodía", "Almuerzo");
@@ -238,15 +232,9 @@ async function replacePeriodMembership(
     .from(menuPeriods)
     .where(eq(menuPeriods.departmentId, departmentId));
   for (const period of periods)
-    await updateMenuPeriod(
-      tx,
-      cfg,
-      period.id,
-      {
-        staffMenuIds: menuIds.filter((id) => id !== period.menuId),
-      },
-      0,
-    );
+    await updateMenuPeriod(tx, cfg, period.id, {
+      staffMenuIds: menuIds.filter((id) => id !== period.menuId),
+    });
 }
 
 describe("ordering uses period membership while browsing follows the timetable", () => {
@@ -383,8 +371,8 @@ async function mealVenue(weekdays: readonly number[] = [1]): Promise<Venue> {
       .where(eq(menuPeriods.departmentId, v.restaurant));
     const lunch = periods.find((period) => period.menuId === v.menus.Almuerzo)!;
     const dinner = periods.find((period) => period.menuId === v.menus.Desayunos)!;
-    await updateMenuPeriod(tx, v.cfg, lunch.id, { name: "Lunch" }, 0);
-    await updateMenuPeriod(tx, v.cfg, dinner.id, { name: "Dinner" }, 0);
+    await updateMenuPeriod(tx, v.cfg, lunch.id, { name: "Lunch" });
+    await updateMenuPeriod(tx, v.cfg, dinner.id, { name: "Dinner" });
     await replaceMenuWeek(
       tx,
       v.cfg,
@@ -432,56 +420,14 @@ async function editMealLine(v: Venue, id: string, patch: { quantity?: string; no
 }
 
 describe("service periods gate only added dishes and added stored quantities", () => {
-  const offsetLunch = async (v: Venue, offset: number) =>
-    withTransaction(suite.db, async (tx) => {
-      const [lunch] = await tx
-        .select({ id: menuPeriods.id })
-        .from(menuPeriods)
-        .where(eq(menuPeriods.menuId, v.menus.Almuerzo));
-      await updateMenuPeriod(tx, v.cfg, lunch!.id, { endOffsetMinutes: offset }, 0);
-    });
-
-  it.each([
-    [-15, "13:44", 200],
-    [-15, "13:45", 400],
-    [15, "14:00", 200],
-    [15, "14:14", 200],
-    [15, "14:15", 400],
-  ] as const)("end-offset %s gates fresh Lunch at %s with %s", async (offset, time, status) => {
-    at(mondayAt("13:00"));
-    const v = await mealVenue();
-    await offsetLunch(v, offset);
-    at(mondayAt(time));
-    const held = await park(v, v.sala, v.tostada.almuerzo, v.versions.Almuerzo);
-    expect(held.status).toBe(status);
-    if (status === 400)
-      expect(held.body).toMatchObject({
-        error: {
-          code: "menu_period.not_running",
-          params: { departmentId: v.restaurant, menuId: v.menus.Almuerzo },
-        },
-      });
-    else
-      expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toMatchObject([
-        { unitPriceGross: 400, menuName: "Almuerzo", menuVersionId: v.versions.Almuerzo },
-      ]);
-  });
-
-  it("end-offset permits fresh Lunch in grace while refusing a stored increase without changes", async () => {
+  it("after Lunch ends, a fresh Lunch line and a stored increase are both refused and nothing changes", async () => {
     at(mondayAt("13:50"));
     const v = await mealVenue();
-    await offsetLunch(v, 15);
     const held = await park(v, v.sala, v.tostada.almuerzo);
     expect(held.status).toBe(200);
     const before = await sendAsTill(v, "GET", `/api/working-orders/${held.id}`);
     at(mondayAt("14:05"));
-    expect((await park(v, v.sala, v.tostada.almuerzo)).status).toBe(200);
-    const otherRoot = await park(v, v.sala, v.tostada.desayunos);
-    expect(otherRoot).toMatchObject({
-      status: 400,
-      body: { error: { code: "menu_period.not_running", params: { menuId: v.menus.Desayunos } } },
-    });
-    expect(await editMealLine(v, held.id, { quantity: "2" })).toEqual({
+    const lunchEnded = {
       status: 400,
       body: {
         error: {
@@ -489,21 +435,25 @@ describe("service periods gate only added dishes and added stored quantities", (
           params: { departmentId: v.restaurant, menuId: v.menus.Almuerzo },
         },
       },
+    };
+    expect(await park(v, v.sala, v.tostada.almuerzo)).toMatchObject(lunchEnded);
+    const otherRoot = await park(v, v.sala, v.tostada.desayunos);
+    expect(otherRoot).toMatchObject({
+      status: 400,
+      body: { error: { code: "menu_period.not_running", params: { menuId: v.menus.Desayunos } } },
     });
+    expect(await editMealLine(v, held.id, { quantity: "2" })).toEqual(lunchEnded);
     expect(await sendAsTill(v, "GET", `/api/working-orders/${held.id}`)).toEqual(before);
     expect((await editMealLine(v, held.id, { note: "No salt" })).status).toBe(200);
   });
 
-  it("end-offset sends a saved unsent table draft in grace and replays the same submission after expiry", async () => {
-    at(mondayAt("13:50"));
-    const v = await mealVenue();
-    await offsetLunch(v, 15);
+  const savedTableDraft = async (v: Venue) => {
     await suite.db
       .update(departmentSalePolicies)
       .set({ orderStart: "table" })
       .where(eq(departmentSalePolicies.departmentId, v.restaurant));
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, v.cfg, { label: "Grace table", zoneId: v.sala }),
+      createTable(tx, v.cfg, { label: "Late table", zoneId: v.sala }),
     );
     const seated = await sendAsTill(v, "POST", `/api/tables/${tableId}/seat`, { guestCount: 2 });
     expect(seated.status).toBe(200);
@@ -530,41 +480,58 @@ describe("service periods gate only added dishes and added stored quantities", (
       .select({ revision: parties.revision })
       .from(parties)
       .where(eq(parties.id, partyId));
-    const body = {
-      submissionId: randomUUID(),
-      draftRevision: draft.revision,
-      expectedPartyRevision: party!.revision,
-      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
-      groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
+    return {
+      tabId,
+      submitUrl: `/api/parties/${partyId}/drafts/${draft.id}/submit`,
+      submit: (submissionId: string) => ({
+        submissionId,
+        draftRevision: draft.revision,
+        expectedPartyRevision: party!.revision,
+        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+        groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
+      }),
     };
+  };
+
+  it("a table draft saved during Lunch is refused at 14:05 and writes no line", async () => {
+    at(mondayAt("13:50"));
+    const v = await mealVenue();
+    const { tabId, submitUrl, submit } = await savedTableDraft(v);
     at(mondayAt("14:05"));
-    const submitted = await sendAsTill(
-      v,
-      "POST",
-      `/api/parties/${partyId}/drafts/${draft.id}/submit`,
-      body,
-    );
+    const submitted = await sendAsTill(v, "POST", submitUrl, submit(randomUUID()));
+    expect(submitted).toMatchObject({
+      status: 400,
+      body: { error: { code: "menu_period.not_running" } },
+    });
+    expect(await withTransaction(suite.db, (tx) => linesOf(tx, tabId))).toEqual([]);
+  });
+
+  it("a table draft sent during Lunch replays the same submission after Lunch ends", async () => {
+    at(mondayAt("13:50"));
+    const v = await mealVenue();
+    const { tabId, submitUrl, submit } = await savedTableDraft(v);
+    const body = submit(randomUUID());
+    at(mondayAt("13:55"));
+    const submitted = await sendAsTill(v, "POST", submitUrl, body);
     expect(submitted.status).toBe(200);
-    expect(await withTransaction(suite.db, (tx) => linesOf(tx, tabId))).toMatchObject([
-      { unitPriceGross: 400, menuVersionId: v.versions.Almuerzo },
-    ]);
-    at(mondayAt("14:15"));
-    expect(
-      await sendAsTill(v, "POST", `/api/parties/${partyId}/drafts/${draft.id}/submit`, body),
-    ).toEqual(submitted);
+    at(mondayAt("14:05"));
+    expect(await sendAsTill(v, "POST", submitUrl, body)).toEqual(submitted);
     expect(await withTransaction(suite.db, (tx) => linesOf(tx, tabId))).toHaveLength(1);
+    expect(await sendAsTill(v, "POST", submitUrl, submit(randomUUID()))).toMatchObject({
+      status: 409,
+      body: { error: { code: "draft.out_of_date" } },
+    });
   });
 
   it.each([
-    [-15, "13:45", true, false, false],
-    [15, "14:05", false, false, true],
-    [15, "14:15", false, false, false],
+    ["13:45", true, true, true],
+    ["14:00", false, false, false],
+    ["14:05", false, false, false],
   ] as const)(
-    "end-offset polling carries eligibility at %s/%s",
-    async (offset, time, open, orderable, sendable) => {
+    "polling reports one window for orderable and sendable at %s",
+    async (time, open, orderable, sendable) => {
       at(mondayAt("13:00"));
       const v = await mealVenue();
-      await offsetLunch(v, offset);
       at(mondayAt(time));
       const state = await sendAsTill(v, "GET", `/api/menu-state?zoneId=${v.barra}`);
       expect(state.status).toBe(200);
@@ -1198,39 +1165,21 @@ describe("menu-state follows department service periods", () => {
   const setupPeriods = async () => {
     const v = await setupVenue({ timetable: true });
     await withTransaction(suite.db, async (tx) => {
-      const lunch = await saveMenuPeriod(
-        tx,
-        v.cfg,
-        v.restaurant,
-        {
-          name: "Lunch",
-          menuId: v.menus.Almuerzo,
-          staffMenuIds: [v.menus.Bebidas],
-        },
-        0,
-      );
-      const afternoon = await saveMenuPeriod(
-        tx,
-        v.cfg,
-        v.restaurant,
-        {
-          name: "Afternoon",
-          menuId: v.menus["Café"],
-          staffMenuIds: [],
-        },
-        0,
-      );
-      const night = await saveMenuPeriod(
-        tx,
-        v.cfg,
-        v.restaurant,
-        {
-          name: "Night",
-          menuId: v.menus.Desayunos,
-          staffMenuIds: [],
-        },
-        0,
-      );
+      const lunch = await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        name: "Lunch",
+        menuId: v.menus.Almuerzo,
+        staffMenuIds: [v.menus.Bebidas],
+      });
+      const afternoon = await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        name: "Afternoon",
+        menuId: v.menus["Café"],
+        staffMenuIds: [],
+      });
+      const night = await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        name: "Night",
+        menuId: v.menus.Desayunos,
+        staffMenuIds: [],
+      });
       await replaceMenuWeek(
         tx,
         v.cfg,
@@ -1348,17 +1297,11 @@ describe("kitchen routing follows the period running when a dish goes on the ord
       const lunch = periods.find((period) => period.name === "Lunch")!;
       const dinner = periods.find((period) => period.name === "Dinner")!;
       const afternoon = (
-        await saveMenuPeriod(
-          tx,
-          v.cfg,
-          v.restaurant,
-          {
-            name: "Afternoon",
-            menuId: v.menus.Bebidas,
-            staffMenuIds: [],
-          },
-          0,
-        )
+        await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+          name: "Afternoon",
+          menuId: v.menus.Bebidas,
+          staffMenuIds: [],
+        })
       ).id;
       await replaceMenuWeek(
         tx,

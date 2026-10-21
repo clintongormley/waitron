@@ -27,7 +27,6 @@ describe("VENUE_SERVICE", () => {
       "assertDeviceKitchenScreens",
       "assertKitchenDisplayHasScreen",
       "assertPassScreenZone",
-      "assertPeriodEndOffsets",
       "assertProfileZone",
       "assertZoneTakesNewOrders",
       "closeStationForToday",

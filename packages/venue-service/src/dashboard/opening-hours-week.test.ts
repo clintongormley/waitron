@@ -1204,7 +1204,7 @@ const SENDERS = DEPARTMENTS.map(({ id, name, periods }) => ({
   zones: [],
   periods: periods.map(({ id, name, colour }) => ({ id, name, colour })),
 }));
-/** The Grill's month: the Restaurant sends it orders until last orders at 15:30 for lunch, the
+/** The Grill's month: the Restaurant sends it orders until 15:30 for lunch, the
  *  Bar all day; neither on 3 December. */
 function grill(): Extract<StationShow, { state: "ready" }> {
   const model = monthModel();

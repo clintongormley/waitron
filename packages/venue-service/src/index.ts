@@ -7,7 +7,6 @@ export * from "./keep-open.js";
 export * from "./table-clearing.js";
 export type { MenuUse } from "./errors.js";
 export {
-  assertPeriodEndOffsets,
   readOpeningHoursModel,
   replaceMenuWeek,
   resolveDepartmentService,

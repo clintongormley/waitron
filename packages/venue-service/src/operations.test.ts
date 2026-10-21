@@ -534,13 +534,12 @@ describe("venue service routing", () => {
         { name: "Bar", orderStart: "counter" },
       );
       const menu = await createCatalogue(tx, { name: "Lunch menu" });
-      const lunch = await saveMenuPeriod(
-        tx,
-        { locationId },
-        restaurant.id,
-        { name: "Lunch", menuId: menu.id, staffMenuIds: [], colour: "blue" },
-        0,
-      );
+      const lunch = await saveMenuPeriod(tx, { locationId }, restaurant.id, {
+        name: "Lunch",
+        menuId: menu.id,
+        staffMenuIds: [],
+        colour: "blue",
+      });
       const summer = (await ensureDefaultSeasons(tx, { locationId })).find(
         (season) => season.name === "Summer",
       )!;

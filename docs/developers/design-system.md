@@ -2626,7 +2626,7 @@ Each column's ⋮ offers Copy to… and Clear; in the special-day painter it als
 season, and a date that follows the season reads "Follows the season". Behind the staffing blocks,
 a department's opening periods are faint bands in their own colours,
 labelled with their names and times. A prep station shows the sending ranges of the periods whose
-menus route it dishes, ending at last orders, in one stable lane per sending department. A long
+menus route it dishes, ending at the period's end, in one stable lane per sending department. A long
 department name is truncated to one line so it leaves room for the period; the day's accessible
 description keeps every full department name, period and time. Empty guides read Closed for a
 department and No orders for a station. The paint row explains the shading for the selected area;
@@ -5441,7 +5441,7 @@ row opens nothing. The bin, named "Delete {name}", opens the delete dialog. Some
 Department field. It holds Name, Colour (a `wt-colour-chooser` whose tiles name the department's
 other periods that use each colour, with no names before a department is chosen; until a colour
 is picked, a new period takes its department's first colour none of them uses), Customer menu with the menus it includes,
-Staff-only menus, End offset with its explanation, Floor plan when the department offers one (as the
+Staff-only menus, Floor plan when the department offers one (as the
 column does), and, for a stored period, Painted in. Floor plan is a `wt-combobox` with no search
 whose first option, drawn `muted`, is the department's default set, "{set} (default)", followed by
 its other sets; choosing another department empties it. The dialog's
@@ -5479,8 +5479,7 @@ files, and the Periods window cases in `opening-hours-screen.painter.test.ts` an
 The Seasons window is the Calendar's `window/seasons` address pair, over any Calendar view or
 painter, as `window/periods` is. It opens from "Seasons…" on the Year's season row, before
 "Periods…" (the button sends `calendar-window-open` with `detail: { window: "seasons" }`), and from
-page search (`venue-service:seasons`). Opening it reads the venue's special days once, so a refusal
-can name one. Its host, `seasons-window` (`seasons-window.ts`, under
+page search (`venue-service:seasons`). Its host, `seasons-window` (`seasons-window.ts`, under
 `packages/venue-service/src/dashboard/`), carries `data-test="calendar-window"
 data-window="seasons"` and draws its own unsized, so wide, `wt-modal` headed "Seasons", unlike the
 Periods window, because its footer holds the draft's Save and the form's bottom message. The inner
@@ -5528,10 +5527,8 @@ of the row the request named, wherever that row now sits, with the bottom messag
 takes both away, and a field refusal naming an entry the request did not hold says "The change could
 not be saved." A refusal that names no field is worded beside Save: the business-day start changed,
 a clash with a waiting business-day start, named in one sentence by its first clashing range
-(`clockChangeConflictText`, `clock-change-conflict.ts`; the "says an end-offset clash, a changed
-business-day start, a clash with a waiting one and the last season at the bottom" cases in
-`seasons-window.test.ts`), the last season, or a period's end offset running into a season on a
-weekday or into a date, with its special day's name when the screen knows it. A Save refused with
+(`clockChangeConflictText`, `clock-change-conflict.ts`; the "says a changed business-day start, a clash with a waiting one and the last season at the bottom" cases in
+`seasons-window.test.ts`), or the last season. A Save refused with
 `season.not_found` for a season the person changed marks that row "This season no longer exists.",
 and Save stays disabled until the row is binned; binning it sends no delete.
 

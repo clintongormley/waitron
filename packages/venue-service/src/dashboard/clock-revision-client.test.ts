@@ -9,17 +9,21 @@ it("sends the editor's retained revision on every time-affecting request", async
     return { id: "new" };
   }) as DashboardRequest;
   const api = new OpeningHoursApi(request);
-  await api.createPeriod(
-    "dept",
-    { name: "Lunch", colour: "blue", menuId: "m", staffMenuIds: [] },
-    7,
-  );
-  await api.updatePeriod("period", { endOffsetMinutes: 15 }, 7);
   await api.saveSeasonWeeks("season", { departments: [], zones: [] }, 7);
-  expect(bodies).toEqual([
-    { name: "Lunch", colour: "blue", menuId: "m", staffMenuIds: [], expectedClockRevision: 7 },
-    { endOffsetMinutes: 15, expectedClockRevision: 7 },
-    { departments: [], zones: [], expectedClockRevision: 7 },
+  expect(bodies).toEqual([{ departments: [], zones: [], expectedClockRevision: 7 }]);
+});
+it("sends no clock revision when a period is created or edited", async () => {
+  const bodies: unknown[] = [];
+  const request = (async (_path, _method, body) => {
+    bodies.push(body);
+    return { id: "new" };
+  }) as DashboardRequest;
+  const api = new OpeningHoursApi(request);
+  await api.createPeriod("dept", { name: "Lunch", colour: "blue", menuId: "m", staffMenuIds: [] });
+  await api.updatePeriod("period", { name: "Dinner" });
+  expect(bodies).toStrictEqual([
+    { name: "Lunch", colour: "blue", menuId: "m", staffMenuIds: [] },
+    { name: "Dinner" },
   ]);
 });
 it("sends the retained calendar revision on save and removal", async () => {

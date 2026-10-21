@@ -68,17 +68,11 @@ async function authorRange(
     });
     const menuId = (await tx.execute<{ id: string }>(sql`select id from catalogues limit 1`))
       .rows[0]!.id;
-    const period = await saveMenuPeriod(
-      tx,
-      venue.cfg,
-      department.id,
-      {
-        name: "Service",
-        menuId,
-        staffMenuIds: [],
-      },
-      0,
-    );
+    const period = await saveMenuPeriod(tx, venue.cfg, department.id, {
+      name: "Service",
+      menuId,
+      staffMenuIds: [],
+    });
     // Only the season holding the cases' November dates, so each weekday's range is one entry in `conflicts`.
     const seasonId = (
       await tx.execute<{ id: string }>(

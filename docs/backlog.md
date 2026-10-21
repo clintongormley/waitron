@@ -1506,8 +1506,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   - A869. While a start change waits, a one-off special day dated after it, with hours that fit
     the start it will have, is refused `special_day.invalid`: one-off dates are read under the
     starts already in force.
-  - A870. A past one-off special day is checked for last orders over an empty day on a venue that
-    holds any start change, but over its season's ranges on a venue that holds none.
   - A871. Branches no test pins in A788's hours writers: an unchanged week resubmitted beside a
     stored clash (`menu-timetable.ts`), a season delete while a change waits (`seasons.ts`), and an
     all-day range or two waiting changes in the menu-week check.
@@ -1623,7 +1621,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   - The clock-skip check runs before touching ranges are joined: two halves of one period meeting
     at a skipped 02:30 are refused, while the joined range is accepted.
   - The special-day-then-season rule is written out in several places, and special-day paint is
-    read by four separately written queries; each could collapse to one place.
+    read by separately written queries; each could collapse to one place.
     [Detail](backlog/service-periods.md#the-special-day-then-season-rule-is-written-out-in-several-places)
   - `business-day-schedule.ts` copies the changeover lookup of
     `packages/shared/src/business-day-clock.ts` (`oldCutoverOn`) to avoid validating the clock on
@@ -1654,14 +1652,16 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **The "Add to" offer reads every special day with every date** (`GET …/special-days`) to show a
   name and a latest date — left open by A506-5, #1603.
 
-- **A789 — last orders without an offset: a period is when its menu can be ordered** — DESIGNED
-  2026-10-18, waiting for the owner's answer to one question (Q39 in lane C's questions file;
+- **A789 — last orders without an offset: a period is when its menu can be ordered** — APPROVED
+  2026-10-18 (Q39: all recommended; whether a late send needs a manager's PIN is a setting, off by
+  default); building — slice 1 (the end offset retired) in review on `feat/a789-1-retire-end-offset`, plan
+  [2026-10-21-a789-last-orders](superpowers/plans/2026-10-21-a789-last-orders.md);
   [design](superpowers/specs/2026-10-18-a789-last-orders-design.md), pictures in
-  [mockups/a789-last-orders/](backlog/mockups/a789-last-orders/)); not built. The period end offset
+  [mockups/a789-last-orders/](backlog/mockups/a789-last-orders/). The period end offset
   and the period "Keep open" go (the zone one stays); a dish taken during a period and sent after it
   ends opens a window asking the waiter to check with the kitchen, and once confirmed it is sent and
-  marked on the kitchen ticket. Four slices; the till slice waits for lane G's A773-1, whose design
-  says a period-ended line is never sent.
+  marked on the kitchen ticket. Four slices; A773-1 has landed (#1897); the till slice is built in its
+  editor.
 
 - **A painter opened from a Painted in chip in the Periods window does not return to the window
   when it closes**, so a manager loses their place — left open by A506-11, #1694.
@@ -1687,11 +1687,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **`range-dialog.ts` (`<range-dialog>`) has no caller**; only its own tests load it — left open by
   A506-9, #1651.
-
-- **The end-offset check accepts a cutoff past the changeover** (a 06:00 cutoff past a 05:00
-  changeover was saved). Decide whether to refuse it — left open by A506-9, #1651. A789's design
-  removes the end offset; if the owner approves it, this entry goes with A789's slice 1.
-  [Detail](backlog/service-periods.md#the-end-offset-check-accepts-a-cutoff-past-the-changeover)
 
 - **A date another manager removed stays in the special-day draft** when this draft changed its
   paint or Closed tick — left open by A506-9, #1651.
@@ -1815,12 +1810,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **Compare computed station weeks with live routing on a painted special-day date without zone paint.**
   The slice 4 review read the planning and zone-week paths but did not compare the real sale
   resolver. Add a real-database comparison before claiming they agree on that case.
-
-- **Sending grace after a period extension is replaced or expires** — decide whether a positive
-  end offset survives a later period's extension or the business-day changeover; two real-store
-  probes observed it ending with the replaced/expired row. The current one-row/today-only rule is
-  approved slice 3 decision 4. A789's design removes both the offset and the period extension; if
-  the owner approves it, this entry goes with A789's slices 1–2. [Detail](backlog/service-periods.md#sending-grace-when-a-period-extension-is-replaced-or-expires)
 
 - **Who authorised today's station or period change** — A366 slice 3 decision 14 leaves
   the authorising person's identity unstored. Decide whether to retain that identity before

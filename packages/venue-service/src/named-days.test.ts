@@ -60,17 +60,11 @@ async function fixture() {
     const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
     const ids = [];
     for (const owner of [department!, other!]) {
-      const period = await saveMenuPeriod(
-        tx,
-        cfg,
-        owner.id,
-        {
-          name: "Lunch",
-          menuId: menu!.id,
-          staffMenuIds: [],
-        },
-        0,
-      );
+      const period = await saveMenuPeriod(tx, cfg, owner.id, {
+        name: "Lunch",
+        menuId: menu!.id,
+        staffMenuIds: [],
+      });
       await replaceMenuWeek(
         tx,
         cfg,

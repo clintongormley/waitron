@@ -658,14 +658,7 @@ export interface BusinessDayClockConflict {
   date?: string;
   periodId?: string;
   rangeIndex: number;
-  reason:
-    | "range"
-    | "overlap"
-    | "endpoint_day"
-    | "all_day"
-    | "sending_cutoff"
-    | "transition_strip"
-    | "kept_open";
+  reason: "range" | "overlap" | "endpoint_day" | "all_day" | "transition_strip" | "kept_open";
 }
 
 export interface FloorPlanSetSummary {
@@ -741,7 +734,6 @@ export interface VenueServiceContribution {
     changeKind: "time" | "metadata",
     expectedClockRevision: number,
   ): Promise<void>;
-  assertPeriodEndOffsets(tx: Transaction, cfg: { locationId: LocationId }): Promise<void>;
   listDepartmentTransferDestinations(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -832,7 +824,6 @@ export interface VenueServiceContribution {
   ): Promise<{
     departmentId: string;
     orderableMenuIds: readonly string[];
-    sendableMenuIds: readonly string[];
     endedMenuIds: readonly string[];
   }>;
   readKeepOpen(

@@ -972,7 +972,7 @@ export async function listZoneOffers(
       (row) => row.menuId === menuId && row.periodId === service?.periodId,
     ) ?? membership.find((row) => row.menuId === menuId))!.audience,
     orderable: service === null || service.orderableMenuIds.includes(menuId),
-    sendable: service === null || service.sendableMenuIds.includes(menuId),
+    sendable: service === null || service.orderableMenuIds.includes(menuId),
     versionId,
     structure: document.root,
     home: document.home,
@@ -1047,7 +1047,7 @@ export async function menuState(
       menuId,
       versionId,
       orderable: service.orderableMenuIds.includes(menuId),
-      sendable: service.sendableMenuIds.includes(menuId),
+      sendable: service.orderableMenuIds.includes(menuId),
     })),
     ...live,
   };

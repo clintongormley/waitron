@@ -130,17 +130,11 @@ async function fixture(): Promise<Fixture> {
       .insert(catalogues)
       .values({ name: `Calendar ${randomUUID()}` })
       .returning();
-    const calendarPeriod = await saveMenuPeriod(
-      tx,
-      cfg,
-      restaurant!.id,
-      {
-        name: "Open",
-        menuId: calendarMenu!.id,
-        staffMenuIds: [],
-      },
-      0,
-    );
+    const calendarPeriod = await saveMenuPeriod(tx, cfg, restaurant!.id, {
+      name: "Open",
+      menuId: calendarMenu!.id,
+      staffMenuIds: [],
+    });
     await replaceMenuWeek(
       tx,
       cfg,
@@ -391,17 +385,11 @@ describe("reading Hours", () => {
         0,
       );
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-      const period = await saveMenuPeriod(
-        tx,
-        fx.cfg,
-        fx.departmentIds.deli,
-        {
-          name: "Deli",
-          menuId: menu!.id,
-          staffMenuIds: [],
-        },
-        0,
-      );
+      const period = await saveMenuPeriod(tx, fx.cfg, fx.departmentIds.deli, {
+        name: "Deli",
+        menuId: menu!.id,
+        staffMenuIds: [],
+      });
       await replaceMenuWeek(
         tx,
         fx.cfg,

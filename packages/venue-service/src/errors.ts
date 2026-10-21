@@ -83,15 +83,7 @@ declare module "@waitron/shared" {
     "menu_period.not_found": { periodId: string };
     "menu_period.not_running": { departmentId: string; menuId: string };
     "menu_period.invalid": {
-      field:
-        "staffMenuIds" | "colour" | "endOffsetMinutes" | "replacementPeriodId" | "floorPlanSetId";
-      reason?: "whole_minutes" | "range" | "placement";
-      periodId?: string;
-      departmentId?: string;
-      seasonId?: string;
-      weekday?: number;
-      date?: string;
-      specialDayId?: string;
+      field: "staffMenuIds" | "colour" | "replacementPeriodId" | "floorPlanSetId";
     };
     /** Another of the department's named periods already has `name`, as trimmed. */
     "menu_period.name_taken": { departmentId: string; name: string };
@@ -105,13 +97,7 @@ declare module "@waitron/shared" {
     "floor_plan_set.is_default": { setId: string };
     "menu_timetable.invalid": {
       field: string;
-      periodId?: string;
-      date?: string;
-      departmentId?: string;
-      seasonId?: string;
-      weekday?: number;
-      specialDayId?: string;
-      reason?: "overlap" | "clock_skips" | "empty" | "order" | "step" | "end_offset";
+      reason?: "overlap" | "clock_skips" | "empty" | "order" | "step";
     };
     "zone.name_taken": { name: string };
     "service_zone.default_missing": Record<string, never>;
@@ -190,27 +176,14 @@ declare module "@waitron/shared" {
     "hours.invalid": { field: string };
     "season.not_found": { seasonId: string };
     /** `field` is the request path of the refused value, such as `save.2.startsOn`, or `delete`
-     *  (`last`) or `seasons` (`end_offset`). `end_offset`: the change leaves a sending cutoff
-     *  running into what follows; a boundary between two seasons names the season and weekday, a
-     *  special day its date. */
-    "season.invalid": {
-      field: string;
-      reason?: "taken" | "last" | "end_offset";
-      date?: string;
-      departmentId?: string;
-      periodId?: string;
-      seasonId?: string;
-      weekday?: number;
-      specialDayId?: string;
-    };
+     *  (`last`). */
+    "season.invalid": { field: string; reason?: "taken" | "last" };
     "special_day.invalid": {
       field: string;
       date?: string;
-      reason?:
-        "empty" | "order" | "step" | "overlap" | "clock_skips" | "end_offset" | "outside_hours";
+      reason?: "empty" | "order" | "step" | "overlap" | "clock_skips" | "outside_hours";
       departmentId?: string;
       zoneId?: string;
-      periodId?: string;
     };
     "special_day.not_found": { specialDayId: string };
     /** Another special day already holds `date` (the first day the two would share). */

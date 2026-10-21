@@ -580,7 +580,7 @@ describe("periods from the painter", () => {
     expect(writes[0]).toMatchObject({
       url: "/management-api/venue-service/departments/d1/menu-periods",
       method: "POST",
-      body: { name: "Christmas", expectedClockRevision: 4 },
+      body: { name: "Christmas" },
     });
     expect(reread).toHaveBeenCalledTimes(1);
     expect(grid(painter).chosen).toBe("p-new");

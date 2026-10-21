@@ -11,6 +11,8 @@ import {
 import {
   CORE_MIGRATIONS,
   floorZones,
+  locationBusinessDaySettings,
+  locationDayCutoverChanges,
   locations,
   withTransaction,
   type Database,
@@ -27,7 +29,6 @@ import { resolveDepartmentDays } from "./day-resolver.js";
 import { saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, type VenueScope } from "./operations.js";
-import { menuPeriods } from "./schema/menus.js";
 import { departmentDays, seasons, zoneDays } from "./schema/seasons.js";
 import { parseSeasonStart, type SeasonChange, type SeasonEntry } from "./season-rules.js";
 import {
@@ -43,7 +44,6 @@ import {
   seasonDeleteImpact,
   temporaryStart,
 } from "./seasons.js";
-import { saveSpecialDay } from "./special-days.js";
 import type { ServiceRange } from "./service-day.js";
 
 const suite = useVenueDb({
@@ -129,7 +129,7 @@ const SATURDAY = 6;
 const SUNDAY = 0;
 
 /** Autumn (09-01), Late autumn (11-01) and Winter (12-01), whose weeks border each other cleanly:
- *  Autumn's Saturday Dinner sends until 06:15 (+30), but Autumn's and Late autumn's Sundays hold
+ *  Autumn's Saturday Dinner runs until 05:45, but Autumn's and Late autumn's Sundays hold
  *  nothing near the 06:00 changeover, and Winter's Saturday has no late Dinner before its own
  *  Sunday Breakfast at 06:00. */
 async function autumnVenue() {
@@ -167,11 +167,10 @@ async function autumnVenue() {
       const menuId = (await createCatalogue(tx, { name })).id;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
-      return (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId, staffMenuIds: [] }, 0)).id;
+      return (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId, staffMenuIds: [] })).id;
     };
     const breakfast = await period("Breakfast");
     const dinner = await period("Dinner");
-    await tx.update(menuPeriods).set({ endOffsetMinutes: 30 }).where(eq(menuPeriods.id, dinner));
     const autumnWeek = EMPTY_WEEK();
     autumnWeek[SATURDAY] = [{ periodId: dinner, startsAt: "20:00", endsAt: "05:45" }];
     autumnWeek[3] = [{ periodId: breakfast, startsAt: "08:00", endsAt: "11:00" }];
@@ -321,44 +320,6 @@ describe("saveSeasons", () => {
     });
     expect(await seasonOnDay(v, "2030-11-20")).toBe(v.winter);
     expect(await restaurantWeek(v, v.winter)).toEqual(v.winterWeek);
-  });
-
-  it("refuses a move whose new boundary clashes with a special day's sending, changing nothing", async () => {
-    const v = await autumnVenue();
-    // Saturday 9 November, in Late autumn, sends Dinner until 06:15; Late autumn's Sunday is empty.
-    const eve = await scoped((tx) =>
-      saveSpecialDay(
-        tx,
-        v.cfg,
-        null,
-        {
-          name: "Gala",
-          repeatsYearly: false,
-          dates: [{ date: "2030-11-09", closedAllDay: false }],
-          paint: [
-            {
-              departmentId: v.restaurant,
-              date: "2030-11-09",
-              ranges: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "05:45" }],
-            },
-          ],
-        },
-        AT,
-        0,
-      ),
-    );
-    expect(await refusal(change(v, { save: [entry(v.winter, "Winter", "11-10")] }))).toEqual({
-      code: "season.invalid",
-      params: {
-        field: "seasons",
-        reason: "end_offset",
-        date: "2030-11-09",
-        periodId: v.dinner,
-        departmentId: v.restaurant,
-        specialDayId: eve.id,
-      },
-    });
-    expect(await seasonsOf(v)).toEqual(THREE);
   });
 
   it("refuses a move under a stale clock revision before anything changes", async () => {
@@ -577,22 +538,6 @@ describe("saveSeasons", () => {
     expect(await scoped((tx) => readSeasons(tx, { locationId }))).toHaveLength(1);
   });
 
-  it("refuses a delete that makes Autumn's Saturday Dinner send into Winter's Sunday Breakfast", async () => {
-    const v = await autumnVenue();
-    expect(await refusal(change(v, { delete: [v.lateAutumn] }))).toEqual({
-      code: "season.invalid",
-      params: {
-        field: "seasons",
-        reason: "end_offset",
-        seasonId: v.autumn,
-        weekday: SATURDAY,
-        periodId: v.dinner,
-        departmentId: v.restaurant,
-      },
-    });
-    expect(await seasonsOf(v)).toEqual(THREE);
-  });
-
   it("swaps Summer's and Autumn's starts and their names in one call, each id keeping its weeks", async () => {
     const cfg: VenueScope = { locationId: await newLocation("Swapped seasons") };
     const [, summer, autumn] = await scoped((tx) => ensureDefaultSeasons(tx, cfg));
@@ -723,15 +668,30 @@ describe("saveSeasons", () => {
         }),
       ),
     ).toEqual({ code: "season.invalid", params: { field: "save.2.startsOn" } });
-    // Refused after its writes: deleting Late autumn makes Autumn's Dinner send into Winter.
+    // A waiting change of the day's start to 03:00, which Autumn's Saturday Dinner (20:00–05:45)
+    // crosses, is refused only after the renames, the new season and the delete are written.
+    await scoped(async (tx) => {
+      await tx
+        .insert(locationBusinessDaySettings)
+        .values({ locationId: v.cfg.locationId, revision: 1 });
+      await tx.insert(locationDayCutoverChanges).values({
+        locationId: v.cfg.locationId,
+        effectiveBusinessDay: "2030-10-20",
+        dayCutover: "03:00:00",
+      });
+    });
     expect(
       await refusal(
-        change(v, {
-          save: [entry(v.autumn, "Fall", "09-05", "red"), entry(undefined, "Feria", "04-10")],
-          delete: [v.lateAutumn],
-        }),
+        change(
+          v,
+          {
+            save: [entry(v.autumn, "Fall", "09-05", "red"), entry(undefined, "Feria", "04-10")],
+            delete: [v.lateAutumn],
+          },
+          1,
+        ),
       ),
-    ).toMatchObject({ code: "season.invalid", params: { field: "seasons", reason: "end_offset" } });
+    ).toMatchObject({ code: "hours.clock_change_conflict" });
     expect(await scoped((tx) => readSeasons(tx, v.cfg))).toEqual(seasonsBefore);
     expect(await everyWeek(v)).toEqual(weeksBefore);
   });

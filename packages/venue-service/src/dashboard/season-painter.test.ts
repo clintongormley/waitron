@@ -450,7 +450,7 @@ it("+ New period saves the period on its own, keeps the painting and chooses the
   expect(writes).toHaveLength(1);
   expect(writes[0]!.url).toBe("/management-api/venue-service/departments/d1/menu-periods");
   expect(writes[0]!.method).toBe("POST");
-  expect(writes[0]!.body).toMatchObject({ name: "Christmas", expectedClockRevision: 4 });
+  expect(writes[0]!.body).toMatchObject({ name: "Christmas" });
   const next = painterModel();
   (next.departments[0]!.periods as unknown[]).push({
     ...next.departments[0]!.periods[0]!,
@@ -1164,7 +1164,7 @@ it("✎ saving a period closes the dialog, rereads, and keeps that period chosen
     url: "/management-api/venue-service/menu-periods/p1",
     method: "PATCH",
   });
-  expect(writes[0]!.body).toMatchObject({ name: "Brunch", expectedClockRevision: 4 });
+  expect(writes[0]!.body).toMatchObject({ name: "Brunch" });
   expect(reread).toHaveBeenCalledTimes(1);
   expect(grid(painter).chosen).toBe("p1");
 });

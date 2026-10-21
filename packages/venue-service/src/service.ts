@@ -59,11 +59,7 @@ import { readServiceDay } from "./day-resolver.js";
 import { dueFloorLayouts } from "./floor-layout-due.js";
 import { readFloorPlanSets } from "./floor-plan-set-store.js";
 import { kitchenNoteKey, readKitchenNotes, writeKitchenNote } from "./order-kitchen-notes.js";
-import {
-  assertPeriodEndOffsets,
-  resolveDefaultMenu,
-  resolveDepartmentService,
-} from "./menu-timetable.js";
+import { resolveDefaultMenu, resolveDepartmentService } from "./menu-timetable.js";
 import {
   copyOrderServiceContext,
   copyWorkingLineContext,
@@ -155,7 +151,6 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   writeKitchenNote,
   assertBusinessDayClockChange,
   assertBusinessDayScheduleWrite,
-  assertPeriodEndOffsets,
   assertZoneTakesNewOrders,
   closedZoneIdsAt,
   withdrawPendingDepartmentTransfers,

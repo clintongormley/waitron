@@ -83,8 +83,7 @@ async function fixture() {
     await configureZone(tx, cfg, { zoneId: counter, departmentId: bar });
     const menu = await createCatalogue(tx, { name: "Menu" });
     const period = async (name: string) =>
-      (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId: menu.id, staffMenuIds: [] }, 0))
-        .id;
+      (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId: menu.id, staffMenuIds: [] })).id;
     const lunch = await period("Lunch");
     const dinner = await period("Dinner");
     await replaceMenuWeek(
@@ -206,7 +205,7 @@ describe("which floor layout is due", () => {
     const bar = await run(async (tx) => {
       const menu = await createCatalogue(tx, { name: "Bar menu" });
       const period = async (name: string) =>
-        (await saveMenuPeriod(tx, f.cfg, f.bar, { name, menuId: menu.id, staffMenuIds: [] }, 0)).id;
+        (await saveMenuPeriod(tx, f.cfg, f.bar, { name, menuId: menu.id, staffMenuIds: [] })).id;
       const morning = await period("Morning");
       const evening = await period("Evening");
       await replaceMenuWeek(

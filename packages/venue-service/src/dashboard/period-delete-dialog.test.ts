@@ -260,13 +260,10 @@ it("a failed re-read beside a shown impact keeps a refusal's sentence at the bot
   expect(body(el)).toContain("Painted in 2 seasons.");
   expect(confirm(el).disabled).toBe(false);
 
-  el.refusal = {
-    code: "menu_timetable.invalid",
-    params: { field: "replacementPeriodId", reason: "end_offset", periodId: "p2" },
-  };
+  el.refusal = { code: "menu_period.invalid", params: { field: "replacementPeriodId" } };
   await el.updateComplete;
   expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
-  expect(picker(el)!.error).toBe("Change the end offset of Dinner to fit these times.");
+  expect(picker(el)!.error).toBe("Choose another period.");
   expect(el.shadowRoot!.querySelector("[data-test=retry-delete]")).not.toBeNull();
 });
 
@@ -291,15 +288,6 @@ it("a replacement refusal marks Replace with and the bottom asks to correct it; 
   expect(picker(el)!.error).toBe("Choose another period.");
   expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
   expect(confirm(el).disabled).toBe(false);
-
-  el.refusal = {
-    code: "menu_timetable.invalid",
-    params: { field: "replacementPeriodId", reason: "end_offset", periodId: "p2" },
-  };
-  await el.updateComplete;
-  expect(picker(el)!.error).toBe("Change the end offset of Dinner to fit these times.");
-  expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
-  expect(confirm(el).disabled).toBe(false);
 });
 
 it("any other refusal shows one sentence at the bottom and keeps Confirm", async () => {
@@ -312,13 +300,6 @@ it("any other refusal shows one sentence at the bottom and keeps Confirm", async
     [clockChangeConflict, clockChangeConflictSentence],
     [{ code: "menu_period.not_found" }, "This period no longer exists."],
     [{ code: "department.not_found" }, "This department no longer exists."],
-    [
-      {
-        code: "menu_timetable.invalid",
-        params: { field: "periodId", reason: "end_offset", periodId: "p3" },
-      },
-      "Change the end offset of Brunch to fit these times.",
-    ],
     [{ code: "network" }, "This could not be saved. Try again."],
   ];
   for (const [refusal, sentence] of cases) {

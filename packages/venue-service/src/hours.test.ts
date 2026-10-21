@@ -106,17 +106,11 @@ async function fixture(): Promise<Fixture> {
       .insert(catalogues)
       .values({ name: `Calendar ${randomUUID()}` })
       .returning();
-    const calendarPeriod = await saveMenuPeriod(
-      tx,
-      cfg,
-      restaurant!.id,
-      {
-        name: "Open",
-        menuId: calendarMenu!.id,
-        staffMenuIds: [],
-      },
-      0,
-    );
+    const calendarPeriod = await saveMenuPeriod(tx, cfg, restaurant!.id, {
+      name: "Open",
+      menuId: calendarMenu!.id,
+      staffMenuIds: [],
+    });
     await replaceMenuWeek(
       tx,
       cfg,
@@ -269,28 +263,16 @@ describe("the calendar's Closed colour", () => {
     const f = await fixture();
     const deliPeriod = await withTransaction(db, async (tx) => {
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-      const restaurantPeriod = await saveMenuPeriod(
-        tx,
-        f.cfg,
-        f.departmentIds.restaurant,
-        {
-          name: "Lunch",
-          menuId: menu!.id,
-          staffMenuIds: [],
-        },
-        0,
-      );
-      const deliPeriod = await saveMenuPeriod(
-        tx,
-        f.cfg,
-        f.departmentIds.deli,
-        {
-          name: "Deli",
-          menuId: menu!.id,
-          staffMenuIds: [],
-        },
-        0,
-      );
+      const restaurantPeriod = await saveMenuPeriod(tx, f.cfg, f.departmentIds.restaurant, {
+        name: "Lunch",
+        menuId: menu!.id,
+        staffMenuIds: [],
+      });
+      const deliPeriod = await saveMenuPeriod(tx, f.cfg, f.departmentIds.deli, {
+        name: "Deli",
+        menuId: menu!.id,
+        staffMenuIds: [],
+      });
       await replaceMenuWeek(
         tx,
         f.cfg,
@@ -330,17 +312,11 @@ describe("the calendar's Closed colour", () => {
     expect(await toneAndClosed(f, "2026-10-21")).toEqual(["special_day", true]);
     await withTransaction(db, async (tx) => {
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-      const period = await saveMenuPeriod(
-        tx,
-        f.cfg,
-        terrace.id,
-        {
-          name: "Terrace",
-          menuId: menu!.id,
-          staffMenuIds: [],
-        },
-        0,
-      );
+      const period = await saveMenuPeriod(tx, f.cfg, terrace.id, {
+        name: "Terrace",
+        menuId: menu!.id,
+        staffMenuIds: [],
+      });
       await replaceMenuWeek(
         tx,
         f.cfg,

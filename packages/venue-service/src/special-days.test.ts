@@ -22,7 +22,6 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, type VenueScope } from "./operations.js";
-import { menuPeriods } from "./schema/menus.js";
 import { departmentDays, specialDayDates, specialDays, zoneDays } from "./schema/seasons.js";
 import {
   deleteSpecialDay,
@@ -68,8 +67,7 @@ async function venue() {
       const menuId = (await createCatalogue(tx, { name })).id;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
-      return (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId, staffMenuIds: [] }, 0))
-        .id;
+      return (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId, staffMenuIds: [] })).id;
     };
     return {
       cfg,
@@ -944,122 +942,5 @@ describe("deleteSpecialDay", () => {
       params: { specialDayId: missing },
     });
     expect(await read(v, before.id)).toEqual(before);
-  });
-});
-
-describe("end offsets around special days", () => {
-  /** Restaurant Lunch from 06:30 every day; Dinner sends for an hour after it ends. */
-  async function earlyLunches() {
-    const v = await venue();
-    await db.update(menuPeriods).set({ endOffsetMinutes: 60 }).where(eq(menuPeriods.id, v.dinner));
-    await scoped((tx) =>
-      replaceMenuWeek(
-        tx,
-        v.cfg,
-        v.restaurant,
-        Array.from({ length: 7 }, (_, weekday) => ({
-          weekday,
-          slots: [{ periodId: v.lunch, startsAt: "06:30", endsAt: "09:00" }],
-        })),
-        AT,
-        0,
-      ),
-    );
-    return v;
-  }
-  const lateDinner = (v: Venue, date: string) => ({
-    departmentId: v.restaurant,
-    date,
-    ranges: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "05:30" }],
-  });
-  const ownRows = (v: Venue) =>
-    db.select().from(specialDays).where(eq(specialDays.locationId, v.cfg.locationId));
-
-  it("refuses paint whose sending runs into the next day's first period, writing nothing", async () => {
-    const v = await earlyLunches();
-    expect(
-      await refusal(
-        save(v, null, {
-          name: "Nochebuena",
-          repeatsYearly: false,
-          dates: dates(["2030-12-24"]),
-          paint: [lateDinner(v, "2030-12-24")],
-        }),
-      ),
-    ).toEqual({
-      code: "special_day.invalid",
-      params: {
-        field: "paint",
-        reason: "end_offset",
-        date: "2030-12-24",
-        periodId: v.dinner,
-        departmentId: v.restaurant,
-      },
-    });
-    expect(await ownRows(v)).toEqual([]);
-  });
-
-  it("refuses deleting a special day whose paint kept a neighbour's sending clear", async () => {
-    const v = await earlyLunches();
-    // Christmas Day's Lunch is Closed, so Christmas Eve's Dinner may send until 06:30.
-    const christmas = await save(v, null, {
-      name: "Navidad",
-      repeatsYearly: false,
-      dates: dates(["2030-12-25"]),
-      paint: [
-        {
-          departmentId: v.restaurant,
-          date: "2030-12-25",
-          ranges: [{ periodId: null, startsAt: "06:30", endsAt: "09:00" }],
-        },
-      ],
-    });
-    await save(v, null, {
-      name: "Nochebuena",
-      repeatsYearly: false,
-      dates: dates(["2030-12-24"]),
-      paint: [lateDinner(v, "2030-12-24")],
-    });
-    expect(await refusal(scoped((tx) => deleteSpecialDay(tx, v.cfg, christmas.id, AT, 0)))).toEqual(
-      {
-        code: "special_day.invalid",
-        params: {
-          field: "paint",
-          reason: "end_offset",
-          date: "2030-12-24",
-          periodId: v.dinner,
-          departmentId: v.restaurant,
-        },
-      },
-    );
-    expect(await read(v, christmas.id)).toEqual(christmas);
-  });
-
-  it("names the special day when a season week's save clashes with its paint", async () => {
-    const v = await venue();
-    await db.update(menuPeriods).set({ endOffsetMinutes: 60 }).where(eq(menuPeriods.id, v.dinner));
-    const eve = await save(v, null, {
-      name: "Nochebuena",
-      repeatsYearly: false,
-      dates: dates(["2030-12-24"]),
-      paint: [lateDinner(v, "2030-12-24")],
-    });
-    const week = Array.from({ length: 7 }, (_, weekday) => ({
-      weekday,
-      slots: [{ periodId: v.lunch, startsAt: "06:30", endsAt: "09:00" }],
-    }));
-    expect(
-      await refusal(scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, week, AT, 0))),
-    ).toEqual({
-      code: "menu_timetable.invalid",
-      params: {
-        field: "days",
-        reason: "end_offset",
-        periodId: v.dinner,
-        date: "2030-12-24",
-        departmentId: v.restaurant,
-        specialDayId: eve.id,
-      },
-    });
   });
 });

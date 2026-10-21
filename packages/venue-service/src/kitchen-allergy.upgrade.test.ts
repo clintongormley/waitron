@@ -239,13 +239,28 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
   const triggersAfter = suite.db.all<{ name: string; sql: string }>(
     sql`select name, sql from sqlite_master where type = 'trigger' order by name`,
   );
+  const laterColumnDrops = new Map([
+    [
+      "waitron_change_menu_periods_update",
+      ' or new."end_offset_minutes" is not old."end_offset_minutes"',
+    ],
+  ]);
   expect(
     triggersAfter.filter(
       ({ name, sql: text }) =>
         !text.includes('"ticket_item_allergies"') &&
         name !== "waitron_change_kitchen_notices_update",
     ),
-  ).toEqual(triggersBefore.filter(({ name }) => name !== "waitron_change_kitchen_notices_update"));
+  ).toEqual(
+    triggersBefore
+      .filter(({ name }) => name !== "waitron_change_kitchen_notices_update")
+      .map(({ name, sql: text }) => {
+        const dropped = laterColumnDrops.get(name);
+        if (dropped === undefined) return { name, sql: text };
+        expect(text).toContain(dropped);
+        return { name, sql: text.replace(dropped, "") };
+      }),
+  );
   expect(
     triggersAfter.find(({ name }) => name === "waitron_change_kitchen_notices_update")?.sql,
   ).toContain('new."allergy_block" is not old."allergy_block"');

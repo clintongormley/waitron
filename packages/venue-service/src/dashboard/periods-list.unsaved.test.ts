@@ -36,7 +36,6 @@ function model(): OpeningHoursModel {
             colour: "blue",
             menuId: "lunch",
             staffMenuIds: [],
-            endOffsetMinutes: 0,
             floorPlanSetId: null,
             weekdays: [1],
             routingUses: [],

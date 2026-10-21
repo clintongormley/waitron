@@ -545,9 +545,7 @@ export class SeasonPainter extends LitElement {
   /** A refusal naming `departments.<i>` or `zones.<i>` shows that week, marking the day it names. */
   private refuse(error: unknown, departments: string[], zones: string[]) {
     const code = codeOf(error);
-    const params = (
-      error as { params?: { field?: unknown; reason?: unknown; periodId?: unknown } } | null
-    )?.params;
+    const params = (error as { params?: { field?: unknown; reason?: unknown } } | null)?.params;
     if (code === "hours.clock_changed") {
       this.refused = { message: t(code) };
       return;
@@ -569,10 +567,7 @@ export class SeasonPainter extends LitElement {
     const owner = zoned ? zoneKey(id) : departmentKey(id);
     const weekday = match[3] === undefined ? undefined : WEEK_DISPLAY_ORDER[Number(match[3])];
     const name = ownerName(this.model, owner);
-    const period = departmentOf(this.model, owner)?.periods.find(
-      ({ id }) => id === params?.periodId,
-    );
-    const reason = refusalReason(code, params?.reason, period);
+    const reason = refusalReason(code, params?.reason);
     this.refused = {
       message:
         weekday === undefined

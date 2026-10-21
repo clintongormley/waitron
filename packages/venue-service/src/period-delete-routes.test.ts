@@ -30,7 +30,7 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { readLocationClock } from "@waitron/reporting";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
-import { replaceMenuWeek, saveMenuPeriod, updateMenuPeriod } from "./menu-timetable.js";
+import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment } from "./operations.js";
@@ -107,7 +107,7 @@ async function routed() {
     const { document } = await buildMenuDocument(tx, menu);
     await publishMenu(tx, menu, menuDocumentHash(document), "person-1");
     const period = async (departmentId: string, name: string) =>
-      (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId: menu, staffMenuIds: [] }, 0)).id;
+      (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId: menu, staffMenuIds: [] })).id;
     const dinner = await period(restaurant, "Dinner");
     const lunch = await period(restaurant, "Lunch");
     const afternoon = await period(restaurant, "Afternoon");
@@ -485,34 +485,6 @@ describe("the period-delete routes", () => {
       await remove(r.lunch, { replacementPeriodId: r.afternoon, expectedClockRevision: 1 }),
       409,
       { code: "hours.clock_changed", params: {} },
-    );
-    expect(await stored(r)).toEqual(before);
-  });
-
-  it("refuses a replacement whose sending cutoff runs into the next placement with menu_timetable.invalid, changing nothing", async () => {
-    const r = await routed();
-    await scoped((tx) =>
-      updateMenuPeriod(tx, r.cfg, r.afternoon, { endOffsetMinutes: 240 }, 0, new Date()),
-    );
-    const before = await stored(r);
-
-    await answers(
-      await r.send("POST", `/${r.lunch}/delete`, r.manager, {
-        replacementPeriodId: r.afternoon,
-        expectedClockRevision: 0,
-      }),
-      400,
-      {
-        code: "menu_timetable.invalid",
-        params: {
-          field: "replacementPeriodId",
-          reason: "end_offset",
-          periodId: r.afternoon,
-          departmentId: r.restaurant,
-          seasonId: r.seasons.summer,
-          weekday: 3,
-        },
-      },
     );
     expect(await stored(r)).toEqual(before);
   });

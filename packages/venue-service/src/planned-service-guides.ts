@@ -4,7 +4,6 @@ import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/ca
 import type { BusinessDayClock } from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
 import type { CalendarColour, LocalDate } from "./hours-types.js";
-import { addDays } from "./hours-rules.js";
 import {
   readDayPlan,
   resolveDepartmentsDays,
@@ -36,7 +35,6 @@ export interface PlannedServiceGuides {
 
 type Context = Pick<ServiceDayContext, "dayCutover" | "endMinute">;
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6];
-const clockMinutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 
 type Span = { start: number; end: number };
 function plannedSpan(
@@ -89,17 +87,10 @@ export async function readPlannedServiceGuides(
   const periods = await readActivePeriods(tx, cfg);
   const departmentIds = departments.map(({ id }) => id);
   const columns = request.kind === "season" ? WEEKDAYS.map(String) : [...new Set(request.dates)];
-  const previous = (column: string) =>
-    request.kind === "season" ? String((Number(column) + 6) % 7) : addDays(column, -1);
   const context = (column: string): Context =>
     request.kind === "season"
       ? { dayCutover: request.cutover, endMinute: 1440 }
       : serviceDayWallContext(request.clock, column);
-  const needed = [
-    ...new Set(
-      columns.flatMap((column) => (stationIds.length ? [column, previous(column)] : [column])),
-    ),
-  ];
   const zones = stationIds.length ? await readServiceZones(tx, cfg) : [];
   const departmentRanges = new Map<string, Map<string, readonly ServiceRange[]>>();
   let closures: ReadonlyMap<string, ReadonlyMap<string, readonly ClosedRange[]>>;
@@ -117,7 +108,7 @@ export async function readPlannedServiceGuides(
       departmentRanges.set(
         id,
         new Map(
-          needed.map((column) => [
+          columns.map((column) => [
             column,
             weeks.get(id)?.get(request.seasonId)?.[Number(column)] ?? [],
           ]),
@@ -135,7 +126,7 @@ export async function readPlannedServiceGuides(
       ]),
     );
   } else {
-    const missing = needed.filter(
+    const missing = columns.filter(
       (day) => !request.plan?.seasonIdOn.has(day) || !request.plan.special.has(day),
     );
     const extra = missing.length
@@ -145,17 +136,17 @@ export async function readPlannedServiceGuides(
       seasonIdOn: new Map([...extra.seasonIdOn, ...(request.plan?.seasonIdOn ?? [])]),
       special: new Map([...extra.special, ...(request.plan?.special ?? [])]),
     };
-    const days = await resolveDepartmentsDays(tx, cfg, departmentIds, needed, request.clock, plan);
+    const days = await resolveDepartmentsDays(tx, cfg, departmentIds, columns, request.clock, plan);
     for (const id of departmentIds)
       departmentRanges.set(
         id,
-        new Map(needed.map((column) => [column, days.get(id)?.get(column)?.ranges ?? []])),
+        new Map(columns.map((column) => [column, days.get(id)?.get(column)?.ranges ?? []])),
       );
     closures = await resolveZoneClosedDays(
       tx,
       cfg,
       zones.map(({ id }) => id),
-      needed,
+      columns,
       request.clock,
       plan,
     );
@@ -201,36 +192,20 @@ export async function readPlannedServiceGuides(
       }
       reaches.set(period.id, targets);
     }
-    const offsets = new Map(periods.map((period) => [period.id, period.endOffsetMinutes]));
     for (const stationId of requested) {
       for (const column of columns) {
         const current = context(column);
-        const priorKey = previous(column);
-        const prior = context(priorKey);
-        const distance = 1440 + clockMinutes(current.dayCutover) - clockMinutes(prior.dayCutover);
         const results: { departmentId: string; ranges: ServiceRange[] }[] = [];
         for (const departmentId of departmentIds) {
           const byPeriod = new Map<string, Span[]>();
-          for (const [key, origin, shift] of [
-            [column, current, 0],
-            [priorKey, prior, distance],
-          ] as const) {
-            for (const slot of serviceRuns(departmentRanges.get(departmentId)?.get(key) ?? [])) {
-              const raw = rangeSpan(slot, origin.dayCutover);
-              const offset = offsets.get(slot.periodId) ?? 0;
-              if (shift && offset <= 0) continue;
-              const sendingEnd = shift ? Math.min(raw.end, origin.endMinute) : raw.end;
-              const end = sendingEnd + offset - shift;
-              const sending = {
-                start: Math.max(0, raw.start - shift),
-                end: Math.min(end, current.endMinute),
-              };
-              if (sending.end <= sending.start) continue;
-              const shares = byPeriod.get(slot.periodId) ?? [];
-              for (const zoneId of reaches.get(slot.periodId)?.get(stationId) ?? [])
-                shares.push(...subtract(sending, closures.get(zoneId)?.get(column) ?? [], current));
-              byPeriod.set(slot.periodId, shares);
-            }
+          for (const slot of serviceRuns(departmentRanges.get(departmentId)?.get(column) ?? [])) {
+            const raw = rangeSpan(slot, current.dayCutover);
+            const sending = { start: raw.start, end: Math.min(raw.end, current.endMinute) };
+            if (sending.end <= sending.start) continue;
+            const shares = byPeriod.get(slot.periodId) ?? [];
+            for (const zoneId of reaches.get(slot.periodId)?.get(stationId) ?? [])
+              shares.push(...subtract(sending, closures.get(zoneId)?.get(column) ?? [], current));
+            byPeriod.set(slot.periodId, shares);
           }
           const ranges = [...byPeriod]
             .flatMap(([periodId, shares]) =>
@@ -253,12 +228,7 @@ export async function readPlannedServiceGuides(
   return {
     departments,
     periods,
-    departmentRanges: new Map(
-      [...departmentRanges].map(([id, days]) => [
-        id,
-        new Map(columns.map((column) => [column, days.get(column) ?? []])),
-      ]),
-    ),
+    departmentRanges,
     stationRanges,
   };
 }
