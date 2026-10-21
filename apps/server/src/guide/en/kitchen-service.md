@@ -77,3 +77,9 @@ only the stations and service zones assigned to it.
 You choose when to request cooking from the till. In **Venue settings**, the **Kitchen** tab
 lets you choose whether to mark preparation ready by line or by whole ticket, and set the default
 late flags. You no longer choose a venue-wide firing mode there.
+
+## Request cooking from the till {#request-cooking}
+
+Request held food from the table's order screen. A station queue shows held courses and groups
+without a Fire button. Held dishes stay dimmed and cannot be advanced by tapping them.
+Once released, a dish can move through preparation to Ready at its station.

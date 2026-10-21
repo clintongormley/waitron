@@ -20,7 +20,6 @@ import type {
   KitchenNotice,
   KitchenNoticeKind,
   QueueGroup,
-  QueueParty,
   StationQueueCourse,
   StationQueueGroup,
   StationQueueItem,
@@ -57,9 +56,6 @@ const COLUMNS: readonly TicketState[] = ["queued", "preparing", "ready"];
  *  order at the station. */
 export type BumpMode = "line" | "ticket";
 
-/** Which surface owns the per-course and per-group fire action (`locations.fire_control`):
- *  `kitchen` is this widget; under `waiter` the table-order screen fires and under `expo` the expo
- *  screen does. */
 export type FireControlMode = "waiter" | "kitchen" | "expo";
 
 interface FlatItem {
@@ -70,7 +66,6 @@ interface FlatItem {
 interface CourseSection {
   course: StationQueueCourse | null;
   items: StationQueueItem[];
-  held: boolean;
 }
 
 interface GroupSection {
@@ -482,8 +477,6 @@ export class TillStationQueue extends LitElement {
         display: inline-block;
       }
 
-      /* A course subsection within a rail card (KDS-2 §5a) — its held/fired lines under a course header,
-         with the held course's fire button at its foot. Just vertical rhythm; the lines carry the visual. */
       .course {
         display: flex;
         flex-direction: column;
@@ -522,12 +515,7 @@ export class TillStationQueue extends LitElement {
         margin: 0 0 var(--wt-space-2);
       }
 
-      /* The per-order Mode-P handover action (.collect) and the per-course or per-group
-         kitchen-fire action (.fire, KDS-2 §5a) — full-width primary buttons at the foot of a rail
-         card / course section. The wt-color-primary on wt-color-on-primary pairing is the SAME
-         a11y-correct one wt-button's primary variant uses, so contrast holds in both themes. */
-      .collect,
-      .fire {
+      .collect {
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-2) var(--wt-space-3);
         border: 1px solid var(--wt-color-primary);
@@ -539,11 +527,6 @@ export class TillStationQueue extends LitElement {
         cursor: pointer;
       }
 
-      /* The per-order REPRINT action (KDS-4 §3d) — a full-width SECONDARY wt-button at the card foot,
-         under the primary collect handover. wt-button hosts as inline-block; display:block lets it span
-         the card width like the collect/fire buttons above. Secondary (not primary) because reprint is a
-         recover-from-a-jam utility, not a workflow step — its own a11y-correct colour pairing lives inside
-         wt-button, so no chrome is hardcoded here. */
       wt-button.reprint {
         display: block;
       }
@@ -649,7 +632,7 @@ export class TillStationQueue extends LitElement {
   /** Set for a merged queue: each dish and notice is labelled with its station's name. */
   @property({ attribute: false }) stationNames?: ReadonlyMap<string, string>;
   @property() fireControl: FireControlMode = "waiter";
-  /** For an enrolled device display: the collect and fire routes need a session, so both buttons are hidden. */
+  /** For an enrolled device display: collection needs a session, so its button is hidden. */
   @property({ type: Boolean }) advanceOnly = false;
   /** Rail-only, like collect: kanban columns cut across orders, so a per-order action has no home there. */
   @property({ type: Boolean }) showReprint = false;
@@ -694,26 +677,6 @@ export class TillStationQueue extends LitElement {
     );
   }
 
-  #fire(group: StationQueueGroup, course: StationQueueCourse): void {
-    this.dispatchEvent(
-      new CustomEvent("fire-course", {
-        detail: { orderId: group.orderId, courseId: course.id },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-
-  #fireGroup(party: QueueParty, group: QueueGroup): void {
-    this.dispatchEvent(
-      new CustomEvent<FireKitchenGroupDetail>("fire-kitchen-group", {
-        detail: { partyId: party.id, groupId: group.id, expectedPartyRevision: party.revision },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-
   #move(group: MergedQueueGroup, item: StationQueueItem): void {
     this.dispatchEvent(
       new CustomEvent("move-station", {
@@ -749,11 +712,10 @@ export class TillStationQueue extends LitElement {
       const key = course?.id ?? null;
       let section = byCourse.get(key);
       if (section === undefined) {
-        section = { course, items: [], held: true };
+        section = { course, items: [] };
         byCourse.set(key, section);
       }
       section.items.push(item);
-      if (item.firedAt !== null) section.held = false;
     }
     return [...byCourse.values()].sort((a, b) => courseOrder(a.course) - courseOrder(b.course));
   }
@@ -930,9 +892,7 @@ export class TillStationQueue extends LitElement {
           ${
             group.party === undefined
               ? this.#courseSections(group).map((section) => this.#courseSection(group, section))
-              : this.#groupSections(group).map((section) =>
-                  this.#groupSection(group, group.party!, section),
-                )
+              : this.#groupSections(group).map((section) => this.#groupSection(group, section))
           }
           ${this.#elsewhere(group)} ${this.#collectAction(group)} ${this.#reprintAction(group)}
         </article>`;
@@ -965,15 +925,10 @@ export class TillStationQueue extends LitElement {
       <ul class="lines">
         ${section.items.map((item) => html`<li>${this.#line(group, item)}</li>`)}
       </ul>
-      ${this.#fireAction(group, section)}
     </div>`;
   }
 
-  #groupSection(
-    group: StationQueueGroup,
-    party: QueueParty,
-    section: GroupSection,
-  ): TemplateResult {
+  #groupSection(group: StationQueueGroup, section: GroupSection): TemplateResult {
     const sent = section.group;
     const name = sent === null ? "" : groupName(sent);
     return html`<div class="course" data-group-section=${sent?.id ?? "none"}>
@@ -992,18 +947,6 @@ export class TillStationQueue extends LitElement {
       <ul class="lines">
         ${section.items.map((item) => html`<li>${this.#line(group, item)}</li>`)}
       </ul>
-      ${
-        sent === null || sent.state !== "held" || this.advanceOnly || this.fireControl !== "kitchen"
-          ? nothing
-          : html`<button
-              class="fire"
-              data-fire-group=${sent.id}
-              aria-label=${`${t("station.fire_group")} ${name}`}
-              @click=${() => this.#fireGroup(party, sent)}
-            >
-              ${t("station.fire_group")}
-            </button>`
-      }
     </div>`;
   }
 
@@ -1017,20 +960,6 @@ export class TillStationQueue extends LitElement {
     return html`<p class="print-problem print-problems" data-print-problems>
       ${t("station.print_problem")}: ${orders}
     </p>`;
-  }
-
-  #fireAction(group: StationQueueGroup, section: CourseSection): TemplateResult | typeof nothing {
-    if (this.advanceOnly) return nothing;
-    if (this.fireControl !== "kitchen" || section.course === null || !section.held) return nothing;
-    const course = section.course;
-    return html`<button
-      class="fire"
-      data-fire=${course.id}
-      aria-label=${`${t("station.fire_course")} ${course.name}`}
-      @click=${() => this.#fire(group, course)}
-    >
-      ${t("station.fire_course")}
-    </button>`;
   }
 
   /** Collect is offered on settled orders only; a sent, unpaid counter order is handed over from the

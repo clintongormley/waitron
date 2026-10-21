@@ -674,7 +674,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
           { signals: [{ kind: "bill_requested", requestedAt: "2026-09-29T19:55:00.000Z" }] },
         ],
         ["Ready", { readyToServe: 2 }],
-        ["Step", { readyToServe: 0, enRoute: 0, signals: [{ kind: "take_order" }] }],
+        ["Step", { readyToServe: 0, signals: [{ kind: "take_order" }] }],
       ];
       const familyZones: FloorZone[] = [
         zones[0]!,

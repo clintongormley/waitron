@@ -44,7 +44,7 @@ function party(over: Partial<TableParty> = {}): TableParty {
   };
 }
 
-function table(over: Partial<TableState> = {}): TableState {
+function table(over: Partial<TableState> & { enRoute?: number } = {}): TableState {
   return {
     id: "t2",
     label: "Table 2",
@@ -57,7 +57,6 @@ function table(over: Partial<TableState> = {}): TableState {
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
-    enRoute: 0,
     timingBand: "fresh",
     nextReservation: null,
     today: null,
@@ -410,7 +409,7 @@ describe("mapLook", () => {
     expect(mapLook(oneBooked, now).cue).toEqual({ icon: null, text: "21:00" });
   });
 
-  it("counts ready dishes from the stations, else the dishes on their way", () => {
+  it("counts ready dishes from stations or the complete ready quantity", () => {
     const ready: TableSignal = {
       kind: "ready",
       byStation: [
@@ -419,8 +418,21 @@ describe("mapLook", () => {
       ],
     };
     expect(mapLook([table({ signals: [ready] })], now).cue!.text).toBe("3");
-    expect(mapLook([table({ enRoute: 4 })], now).cue!.text).toBe("4");
+    expect(mapLook([table({ readyToServe: 4 })], now).cue!.text).toBe("4");
   });
+
+  it.each([1, 4])(
+    "A773 no dispatch state: an old count of %i never becomes ready food",
+    (enRoute) => {
+      const dispatchOnly = table({ enRoute });
+      expect(mapKinds(dispatchOnly, now)).not.toContain("ready");
+      const emptyReady = table({ enRoute, signals: [{ kind: "ready", byStation: [] }] });
+      expect(mapLook([emptyReady], now).cue!.text).toBe("0");
+      expect(kindWords("ready", [emptyReady], now)).toBe(
+        en["table.flash_ready"].replace("{n}", "0"),
+      );
+    },
+  );
 
   it("says the table's state in words, Seated first", () => {
     const seated = en["floor.status_seated"];

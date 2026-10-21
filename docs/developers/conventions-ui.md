@@ -870,7 +870,7 @@ native event is composed: measured 2026-09-28 with a standalone Playwright 1.63 
 outside, delivered `input` with `composed: true`, which a listener on the document saw, and `change`
 with `composed: false`, which a listener inside the shadow root saw and the one on the document did
 not. App screens and app-owned components may name their local action events plainly, as the till
-screens do with events such as `fire-course` and `mark-collected`.
+screens do with events such as `advance-ticket-item` and `mark-collected`.
 
 **Printing and hardware**
 

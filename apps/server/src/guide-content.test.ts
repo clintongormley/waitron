@@ -41,6 +41,7 @@ describe("the user guides", () => {
         "held-work",
         "reprints",
         "service-lifetime",
+        "request-cooking",
       ]);
     },
   );

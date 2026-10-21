@@ -88,3 +88,9 @@ pase sigue mostrando solo las estaciones y zonas de servicio que tiene asignadas
 Tú decides cuándo pedir la preparación desde el terminal. En **Configuración del local**, la
 pestaña **Cocina** permite elegir si se marca como listo cada plato o la comanda completa y fijar
 los avisos de retraso predeterminados. Ya no se elige allí un modo de marcha para todo el local.
+
+## Pide la preparación desde el terminal {#request-cooking}
+
+Pide los platos en espera desde el pedido de la mesa. La cola de una estación muestra los pases
+y grupos en espera sin botón Marchar. Esos platos se muestran atenuados y no avanzan al tocarlos.
+Una vez enviados a preparar, puedes avanzar los platos hasta Listo en su estación.

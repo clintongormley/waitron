@@ -203,7 +203,7 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on the kitchen-fire RAIL (held course greyed, the Empezar curso button shown)", async () => {
+  it("has no violations on the rail with held food and no station Fire button", async () => {
     const { el, host } = await mountWidget<TillStationScreen>(
       "till-station-screen",
       { api: stubApi(), fireControl: "kitchen" },
