@@ -46,6 +46,11 @@ export interface ReasonTally extends AdjustmentTally {
   reasonId: string;
   /** The name the reason's most recent row in the range recorded. */
   reasonName: string;
+  /** Who asked for this reason, and how often; a guest's request is in `guestRequests`. */
+  requesters: (PersonRef & { count: number })[];
+  guestRequests: number;
+  /** Who approved it, and how often, a requester approving their own included. */
+  approvers: (PersonRef & { count: number })[];
 }
 
 export interface AdjustmentTotals extends AdjustmentTally {
@@ -158,6 +163,9 @@ interface Tallied {
   reasonId: string;
   reduction: Decimal;
   nominalValue: Decimal;
+  requestedBy: string;
+  approvedBy: string | null;
+  byGuest: boolean;
 }
 
 function add(tally: AdjustmentTally, row: Tallied): void {
@@ -172,7 +180,17 @@ function add(tally: AdjustmentTally, row: Tallied): void {
 interface Accumulator extends AdjustmentTally {
   byAction: Record<AdjustmentAction, AdjustmentTally>;
   byStage: Record<AdjustmentStageGroup, AdjustmentTally>;
-  byReason: Map<string, AdjustmentTally>;
+  byReason: Map<string, ReasonAccumulator>;
+}
+
+interface ReasonAccumulator extends AdjustmentTally {
+  requesters: Map<string, number>;
+  guestRequests: number;
+  approvers: Map<string, number>;
+}
+
+function countIn(counts: Map<string, number>, personId: string): void {
+  counts.set(personId, (counts.get(personId) ?? 0) + 1);
 }
 
 function accumulator(): Accumulator {
@@ -194,18 +212,40 @@ function tallyRow(into: Accumulator, row: Tallied): void {
   add(into.byStage[stageGroupOf(row.stage)], row);
   let reason = into.byReason.get(row.reasonId);
   if (reason === undefined) {
-    reason = emptyTally();
+    reason = { ...emptyTally(), requesters: new Map(), guestRequests: 0, approvers: new Map() };
     into.byReason.set(row.reasonId, reason);
   }
   add(reason, row);
+  if (row.byGuest) reason.guestRequests += 1;
+  else countIn(reason.requesters, row.requestedBy);
+  if (row.approvedBy !== null) countIn(reason.approvers, row.approvedBy);
 }
 
-function totalsOf(acc: Accumulator, reasonNames: Map<string, string>): AdjustmentTotals {
-  const byReason = [...acc.byReason].map(([reasonId, tally]) => ({
-    reasonId,
-    reasonName: reasonNames.get(reasonId)!,
-    ...tally,
-  }));
+/** Largest count first; a stable sort, so people with the same count stay in name order. */
+function countedPeople(
+  counts: Map<string, number>,
+  ref: (personId: string) => PersonRef,
+): (PersonRef & { count: number })[] {
+  return byName([...counts].map(([personId, count]) => ({ ...ref(personId), count }))).sort(
+    (a, b) => b.count - a.count,
+  );
+}
+
+function totalsOf(
+  acc: Accumulator,
+  reasonNames: Map<string, string>,
+  ref: (personId: string) => PersonRef,
+): AdjustmentTotals {
+  const byReason = [...acc.byReason].map(
+    ([reasonId, { requesters, guestRequests, approvers, ...tally }]) => ({
+      reasonId,
+      reasonName: reasonNames.get(reasonId)!,
+      ...tally,
+      requesters: countedPeople(requesters, ref),
+      guestRequests,
+      approvers: countedPeople(approvers, ref),
+    }),
+  );
   byReason.sort(
     (a, b) =>
       compareDecimal(b.reduction, a.reduction) ||
@@ -386,9 +426,7 @@ export async function computeAdjustmentReport(
     } else {
       const requester = personAcc(row.requestedBy);
       tallyRow(requester, row);
-      if (row.approvedBy !== null) {
-        requester.approvers.set(row.approvedBy, (requester.approvers.get(row.approvedBy) ?? 0) + 1);
-      }
+      if (row.approvedBy !== null) countIn(requester.approvers, row.approvedBy);
     }
     if (row.approvedBy !== null && (row.byGuest || row.approvedBy !== row.requestedBy)) {
       personAcc(row.approvedBy).approvalsGiven += 1;
@@ -399,13 +437,10 @@ export async function computeAdjustmentReport(
   const ref = (personId: string): PersonRef => ({ personId, name: names.get(personId) ?? null });
   const personRows = [...people].map(([personId, acc]) => ({
     ...ref(personId),
-    ...totalsOf(acc, reasonNames),
+    ...totalsOf(acc, reasonNames, ref),
     sales: acc.sales,
     ratePercent: rateOf(acc.reduction, acc.sales),
-    // A stable sort, so approvers with the same count stay in name order.
-    approvers: byName(
-      [...acc.approvers].map(([approverId, count]) => ({ ...ref(approverId), count })),
-    ).sort((a, b) => b.count - a.count),
+    approvers: countedPeople(acc.approvers, ref),
     approvalsGiven: acc.approvalsGiven,
   }));
 
@@ -413,12 +448,12 @@ export async function computeAdjustmentReport(
     fromBusinessDay: input.fromBusinessDay,
     toBusinessDay: input.toBusinessDay,
     overall: {
-      ...totalsOf(overall, reasonNames),
+      ...totalsOf(overall, reasonNames, ref),
       sales: overallSales,
       ratePercent: rateOf(overall.reduction, overallSales),
     },
     people: byName(personRows),
-    guests: totalsOf(guests, reasonNames),
+    guests: totalsOf(guests, reasonNames, ref),
   };
 }
 

@@ -46,6 +46,9 @@ export type AdjustmentStageGroup = "beforeFiring" | "afterFiring" | "afterServin
 export interface ReasonTally extends AdjustmentTally {
   reasonId: string;
   reasonName: string;
+  requesters: (PersonRef & { count: number })[];
+  guestRequests: number;
+  approvers: (PersonRef & { count: number })[];
 }
 
 export interface AdjustmentTotals extends AdjustmentTally {

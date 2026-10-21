@@ -339,8 +339,22 @@ describe("the fixture day (spec §7)", () => {
         billDiscount: NONE,
       },
       byReason: [
-        { reasonId: day.mistake.id, reasonName: "Mistake", ...tally(2, "25.00", "37.00") },
-        { reasonId: day.complaint.id, reasonName: "Cold food", ...tally(1, "12.00", "0.00") },
+        {
+          reasonId: day.mistake.id,
+          reasonName: "Mistake",
+          ...tally(2, "25.00", "37.00"),
+          requesters: [{ personId: day.alex, name: "Alex", count: 2 }],
+          guestRequests: 0,
+          approvers: [],
+        },
+        {
+          reasonId: day.complaint.id,
+          reasonName: "Cold food",
+          ...tally(1, "12.00", "0.00"),
+          requesters: [{ personId: day.alex, name: "Alex", count: 1 }],
+          guestRequests: 0,
+          approvers: [{ personId: day.mia, name: "Mia", count: 1 }],
+        },
       ],
       approvers: [{ personId: day.mia, name: "Mia", count: 1 }],
       approvalsGiven: 0,
@@ -462,9 +476,30 @@ describe("the fixture day (spec §7)", () => {
         billDiscount: tally(1, "3.00", "0.00"),
       },
       byReason: [
-        { reasonId: day.mistake.id, reasonName: "Mistake", ...tally(2, "25.00", "37.00") },
-        { reasonId: day.complaint.id, reasonName: "Cold food", ...tally(1, "12.00", "0.00") },
-        { reasonId: day.regular.id, reasonName: "Regular", ...tally(1, "3.00", "0.00") },
+        {
+          reasonId: day.mistake.id,
+          reasonName: "Mistake",
+          ...tally(2, "25.00", "37.00"),
+          requesters: [{ personId: day.alex, name: "Alex", count: 2 }],
+          guestRequests: 0,
+          approvers: [],
+        },
+        {
+          reasonId: day.complaint.id,
+          reasonName: "Cold food",
+          ...tally(1, "12.00", "0.00"),
+          requesters: [{ personId: day.alex, name: "Alex", count: 1 }],
+          guestRequests: 0,
+          approvers: [{ personId: day.mia, name: "Mia", count: 1 }],
+        },
+        {
+          reasonId: day.regular.id,
+          reasonName: "Regular",
+          ...tally(1, "3.00", "0.00"),
+          requesters: [{ personId: day.sam, name: "Sam", count: 1 }],
+          guestRequests: 0,
+          approvers: [],
+        },
       ],
     });
     expect(read.guests).toEqual(EMPTY_TOTALS);
@@ -809,7 +844,14 @@ describe("stages, reasons and guests", () => {
     const read = await report();
 
     expect(read.overall.byReason).toEqual([
-      { reasonId: reason.id, reasonName: "Complaint (es)", ...tally(2, "3.00", "0.00") },
+      {
+        reasonId: reason.id,
+        reasonName: "Complaint (es)",
+        ...tally(2, "3.00", "0.00"),
+        requesters: [{ personId: alex, name: "Alex", count: 2 }],
+        guestRequests: 0,
+        approvers: [],
+      },
     ]);
     expect((await entries()).map((row) => row.reasonName)).toEqual(["Complaint (es)", "Complaint"]);
   });
@@ -895,6 +937,127 @@ describe("stages, reasons and guests", () => {
       [guestCancel, true],
     ]);
     expect((await entries({ personId: alex })).map((row) => row.action)).toEqual(["comp"]);
+  });
+
+  it("Staff meal shows who gave each one and who approved it", async () => {
+    const alex = await person("Alex");
+    const sam = await person("Sam");
+    const mia = await person("Mia");
+    const staffMeal = await seedReason(db);
+    const coldFood = await seedReason(db);
+    const visit = await bill();
+    let minute = 0;
+    const comp = (
+      reason: AdjustmentReason,
+      reasonName: string,
+      by: string,
+      approvedBy?: string,
+      byGuest?: boolean,
+    ) =>
+      adjust({
+        bill: visit.id,
+        reason,
+        reasonName,
+        action: "comp",
+        line: { name: "Coffee", list: "1.50", creditedTo: by, stage: "served" },
+        before: "1.50",
+        after: "0.00",
+        nominal: "1.50",
+        by,
+        approvedBy,
+        byGuest,
+        at: `2026-09-15T19:${String((minute += 1)).padStart(2, "0")}:00.000Z`,
+      });
+    await comp(staffMeal, "Staff meal", alex);
+    await comp(staffMeal, "Staff meal", alex, mia);
+    await comp(staffMeal, "Staff meal", sam, sam);
+    // A guest's request: Sam is recorded as asking, but it is not his.
+    await comp(staffMeal, "Staff meal", sam, mia, true);
+    await comp(coldFood, "Cold food", alex);
+
+    const read = await report();
+
+    const overall = (reasonId: string) =>
+      read.overall.byReason.find((row) => row.reasonId === reasonId);
+    expect(overall(staffMeal.id)).toMatchObject({
+      requesters: [
+        { personId: alex, name: "Alex", count: 2 },
+        { personId: sam, name: "Sam", count: 1 },
+      ],
+      guestRequests: 1,
+      approvers: [
+        { personId: mia, name: "Mia", count: 2 },
+        { personId: sam, name: "Sam", count: 1 },
+      ],
+    });
+    expect(overall(coldFood.id)).toMatchObject({
+      requesters: [{ personId: alex, name: "Alex", count: 1 }],
+      guestRequests: 0,
+      approvers: [],
+    });
+    expect(read.guests.byReason).toMatchObject([
+      {
+        reasonId: staffMeal.id,
+        requesters: [],
+        guestRequests: 1,
+        approvers: [{ personId: mia, name: "Mia", count: 1 }],
+      },
+    ]);
+    expect(
+      personRow(read, alex).byReason.map((row) => [
+        row.reasonId,
+        row.requesters,
+        row.guestRequests,
+      ]),
+    ).toEqual([
+      [staffMeal.id, [{ personId: alex, name: "Alex", count: 2 }], 0],
+      [coldFood.id, [{ personId: alex, name: "Alex", count: 1 }], 0],
+    ]);
+    expect(personRow(read, sam).byReason).toMatchObject([
+      {
+        reasonId: staffMeal.id,
+        requesters: [{ personId: sam, name: "Sam", count: 1 }],
+        guestRequests: 0,
+      },
+    ]);
+  });
+
+  it("orders a reason's requesters and approvers by count, then by name", async () => {
+    const [ana, bea, carl] = [await person("Ana"), await person("Bea"), await person("Carl")];
+    const reason = await seedReason(db);
+    const visit = await bill();
+    let minute = 0;
+    const comp = (by: string, approvedBy: string) =>
+      adjust({
+        bill: visit.id,
+        reason,
+        reasonName: "House",
+        action: "comp",
+        line: { name: "Coffee", list: "1.50", creditedTo: by, stage: "served" },
+        before: "1.50",
+        after: "0.00",
+        nominal: "1.50",
+        by,
+        approvedBy,
+        at: `2026-09-15T19:${String((minute += 1)).padStart(2, "0")}:00.000Z`,
+      });
+    await comp(carl, bea);
+    await comp(bea, ana);
+    await comp(carl, carl);
+    await comp(ana, bea);
+
+    const [house] = (await report()).overall.byReason;
+
+    expect(house!.requesters).toEqual([
+      { personId: carl, name: "Carl", count: 2 },
+      { personId: ana, name: "Ana", count: 1 },
+      { personId: bea, name: "Bea", count: 1 },
+    ]);
+    expect(house!.approvers).toEqual([
+      { personId: bea, name: "Bea", count: 2 },
+      { personId: ana, name: "Ana", count: 1 },
+      { personId: carl, name: "Carl", count: 1 },
+    ]);
   });
 
   it("names a person the directory no longer holds as nobody", async () => {
