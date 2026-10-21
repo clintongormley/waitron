@@ -23,6 +23,7 @@ import { recoverAutomaticCardPayments } from "./pending-card-recovery.js";
 import { provisionBillVenue, statusOf, tabWith, tendersOfBill } from "./testing/bill-venue.js";
 import type { BillVenue } from "./testing/bill-venue.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
+import { TradingAdmission } from "./trading-admission.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -81,6 +82,61 @@ function recoveryDeps(venue: BillVenue) {
 }
 
 describe("automatic card capture recovery", () => {
+  it("refuses a closed pass before loading providers or touching retained captures", async () => {
+    const venue = await provisionBillVenue(suite.db);
+    const { id, paymentRef } = await retained(venue);
+    const deps = recoveryDeps(venue);
+    const get = vi.spyOn(deps.pool, "get");
+    const before = await getPaymentByRef(suite.db, { provider: "stripe", paymentRef });
+    const admission = new TradingAdmission();
+    admission.repairOnly("invalid");
+    let refusal: unknown;
+    try {
+      await recoverAutomaticCardPayments({ ...deps, admission });
+    } catch (error) {
+      refusal = error;
+    }
+    expect(get).not.toHaveBeenCalled();
+    expect(await getPaymentByRef(suite.db, { provider: "stripe", paymentRef })).toEqual(before);
+    expect(await suite.db.select().from(sales)).toEqual([]);
+    expect(refusal).toMatchObject({
+      code: "venue.time_zone_not_ready",
+      params: { reason: "invalid" },
+    });
+    admission.admit();
+    expect(await recoverAutomaticCardPayments({ ...deps, admission })).toEqual({
+      filed: 1,
+      errors: [],
+    });
+    expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, id))).toHaveLength(1);
+    expect(deps.collect).not.toHaveBeenCalled();
+  });
+  it("retains captured evidence when admission closes after the worker acquires its provider", async () => {
+    const venue = await provisionBillVenue(suite.db);
+    const { id, paymentRef } = await retained(venue);
+    const deps = recoveryDeps(venue),
+      admission = testTradingAdmission();
+    const before = await getPaymentByRef(suite.db, { provider: "stripe", paymentRef });
+    deps.pool.get = async () => {
+      admission.requireRestart();
+      return deps.provider;
+    };
+    expect(await recoverAutomaticCardPayments({ ...deps, admission })).toEqual({
+      filed: 0,
+      errors: [{ paymentId: before!.id, error: "AppError: venue.time_zone_not_ready" }],
+    });
+    expect(await getPaymentByRef(suite.db, { provider: "stripe", paymentRef })).toEqual(before);
+    expect(await suite.db.select().from(sales)).toEqual([]);
+    expect(deps.collect).not.toHaveBeenCalled();
+    deps.pool.get = async () => deps.provider;
+    admission.admit();
+    expect(await recoverAutomaticCardPayments({ ...deps, admission })).toEqual({
+      filed: 1,
+      errors: [],
+    });
+    expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, id))).toHaveLength(1);
+    expect(deps.collect).not.toHaveBeenCalled();
+  });
   it.each([
     { issued: false, placed: false },
     { issued: true, placed: false },

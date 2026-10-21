@@ -822,6 +822,8 @@ describe("the provider refunds another refund of the payment already accounts fo
         {
           db: venue.db,
           backend: venue.backend,
+          admission: testTradingAdmission(),
+          cfg: venue.cfg,
           clock: systemClock(),
           refundProviderFor: () => Promise.resolve(venue.card),
         },
@@ -869,6 +871,8 @@ describe("the provider refunds another refund of the payment already accounts fo
         {
           db: venue.db,
           backend: venue.backend,
+          admission: testTradingAdmission(),
+          cfg: venue.cfg,
           clock: systemClock(),
           refundProviderFor: () => Promise.resolve(venue.card),
         },
@@ -940,6 +944,8 @@ describe("the provider's refunds read before the first send", () => {
         {
           db: venue.db,
           backend: venue.backend,
+          admission: testTradingAdmission(),
+          cfg: venue.cfg,
           clock: systemClock(),
           refundProviderFor: () => Promise.resolve(venue.card),
         },
@@ -953,6 +959,8 @@ describe("the provider's refunds read before the first send", () => {
         {
           db: venue.db,
           backend: venue.backend,
+          admission: testTradingAdmission(),
+          cfg: venue.cfg,
           clock: systemClock(),
           refundProviderFor: () => Promise.resolve(venue.card),
         },
@@ -1717,6 +1725,8 @@ describe("a refund the provider here cannot answer for", () => {
       {
         db: venue.db,
         backend: venue.backend,
+        admission: testTradingAdmission(),
+        cfg: venue.cfg,
         clock: systemClock(),
         ...(refundProviderFor === undefined ? {} : { refundProviderFor }),
       },
@@ -1826,8 +1836,9 @@ describe("a refund the provider here cannot answer for", () => {
 
     const resumed = await resumeCardRefund(
       {
-        db: venue.db,
-        backend: venue.backend,
+        db: venue.db, backend: venue.backend,
+        admission: testTradingAdmission(),
+        cfg: venue.cfg,
         clock: systemClock(),
         refundProviderFor: partial({}),
       },

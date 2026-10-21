@@ -191,7 +191,7 @@ async function refundInFull(billId: string, paymentId: string): Promise<void> {
     loginWithPin(tx, { deviceId, personId: adminId, pin: "1234" }),
   );
   await refundBillPayment(
-    { db: v.db, backend: v.backend, clock: v.clock },
+    { db: v.db, backend: v.backend, admission: testTradingAdmission(), cfg, clock: v.clock },
     cfg,
     billId,
     paymentId,

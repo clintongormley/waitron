@@ -198,6 +198,7 @@ export function mountBillPaymentsApi(
 ): void {
   const fiscal = {
     db: deps.db,
+    cfg: deps.cfg,
     backend: deps.backend,
     admission: deps.admission,
     clock: deps.clock,

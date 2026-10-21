@@ -1,4 +1,5 @@
 import { assertStillSignedIn } from "./till-session.js";
+import { requireEconomicWrite } from "./trading-admission.js";
 import { and, eq, isNotNull, ne } from "drizzle-orm";
 import { billPaymentRefunds, billPayments, withTransaction, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -44,7 +45,7 @@ import { claimLive, perDatabase } from "./live-in-process.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { enqueueBillRefundDrawer } from "./receipt-print.js";
 import type { TenderKind } from "./device-session.js";
-import type { DeviceRequestConfig } from "./trading-context.js";
+import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
 import { fingerprint } from "./parties.js";
 import { refusePaymentInFlight } from "./working-order.js";
 import type { TillSaleDeps } from "./working-order.js";
@@ -71,7 +72,8 @@ export interface BillRefundResult {
  * none is available here. */
 export type RefundProviderFor = (providerName: string) => Promise<PaymentProvider | undefined>;
 
-export type BillRefundDeps = Pick<TillSaleDeps, "db" | "backend" | "clock"> & {
+export type BillRefundDeps = Pick<TillSaleDeps, "db" | "backend" | "clock" | "admission"> & {
+  cfg: TradingContext;
   refundProviderFor?: RefundProviderFor;
   attendance?: AttendanceRecorder;
 };
@@ -261,6 +263,7 @@ async function recordRefundOutcome(
   attestation?: Attestation,
 ): Promise<RefundRow> {
   return withTransaction(deps.db, async (tx) => {
+    await requireEconomicWrite(tx, deps.cfg, deps.admission);
     const target = (await readCardRefund(tx, refundId))!;
     const { refund } = target;
     const outcome = refundOutcome(evidence);
@@ -336,12 +339,16 @@ async function sendCardRefund(
   raisedBy: AlertOrigin,
 ): Promise<RefundRow> {
   // The row is pending: this process claimed it, and every writer of its outcome claims it too.
-  const before = await withTransaction(deps.db, (tx) => readCardRefund(tx, refundId));
+  const before = await withTransaction(deps.db, async (tx) => {
+    await requireEconomicWrite(tx, deps.cfg, deps.admission);
+    return readCardRefund(tx, refundId);
+  });
   const refsBeforeSend =
     before!.refund.sentAt === null && provider.existingRefundRefs !== undefined
       ? await provider.existingRefundRefs(before!.provided!.processorRef).catch(() => null)
       : null;
   const stamped = await withTransaction(deps.db, async (tx) => {
+    await requireEconomicWrite(tx, deps.cfg, deps.admission);
     const target = (await readCardRefund(tx, refundId))!;
     const reading = deps.clock.now();
     if (await clockStopsRefund(tx, deps, null, reading)) return { ...target, stopped: true };
@@ -405,6 +412,7 @@ async function lookUp(
   processorRef: string,
   sentAt: string,
 ): Promise<RefundLookup> {
+  deps.admission.require();
   if (provider.lookupRefund === undefined) return { kind: "unreachable" };
   try {
     return await provider.lookupRefund({
@@ -457,6 +465,7 @@ export async function resumeCardRefund(
 ): Promise<ResumedRefund> {
   const live = liveRefundsOf(deps.db);
   const target = await withTransaction(deps.db, async (tx) => {
+    await requireEconomicWrite(tx, deps.cfg, deps.admission);
     const found = await readCardRefund(tx, refundId);
     if (found === undefined) throw new AppError("bill.refund_not_found", { refundId });
     if (found.refund.state !== "pending" || live.has(refundId)) return { found, release: null };
@@ -515,6 +524,7 @@ export async function attestCardRefund(
 ): Promise<RefundRow> {
   const live = liveRefundsOf(deps.db);
   const release = await withTransaction(deps.db, async (tx) => {
+    await requireEconomicWrite(tx, deps.cfg, deps.admission);
     const target = await readCardRefund(tx, refundId);
     if (target === undefined) throw new AppError("bill.refund_not_found", { refundId });
     if (target.refund.state !== "pending" || live.has(refundId)) {
@@ -612,6 +622,7 @@ export async function refundBillPayment(
     const begun = await withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) => {
       const override = withCheck(req.override, checked);
       return withTransaction(deps.db, async (tx) => {
+        await requireEconomicWrite(tx, cfg, deps.admission);
         await assertStillSignedIn(tx, {
           deviceId: cfg.origin.deviceId,
           personId: operator.personId,

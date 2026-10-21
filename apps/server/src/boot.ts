@@ -3274,6 +3274,7 @@ async function bootServer(
 
   const pendingCardController = new AbortController();
   const pendingCardLoop = runPendingCardLoop({
+    admission: tradingAdmission,
     pass: withPendingBillPayments(
       withStalePaymentRelease(
         withAutomaticCardRecovery(
@@ -3332,6 +3333,8 @@ async function bootServer(
       ? runTenderRefundRecoveryLoop({
           db,
           backend: nodeBackend,
+          admission: tradingAdmission,
+          cfg: tradingContext,
           clock: tillClock,
           refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
           attendance: attendanceRecorder,

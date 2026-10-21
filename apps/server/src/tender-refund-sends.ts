@@ -1,4 +1,5 @@
 import { and, eq, isNotNull, ne } from "drizzle-orm";
+import { requireEconomicWrite } from "./trading-admission.js";
 import {
   billPaymentRefunds,
   tenderRefunds,
@@ -143,6 +144,7 @@ async function recordOutcomeIn(
   attestation?: Attestation,
 ): Promise<RefundRow> {
   signal.throwIfAborted();
+  await requireEconomicWrite(tx, deps.cfg, deps.admission);
   const refund = await read(tx, id);
   const outcome = refundOutcome(evidence);
   const reading = deps.clock.now();
@@ -229,6 +231,7 @@ export async function attestTenderRefundIn(
   outcome: "completed" | "failed",
   attestation: Attestation,
 ) {
+  await requireEconomicWrite(tx, deps.cfg, deps.admission);
   const refund = await readStuckTenderRefund(tx, deps.db, refundId);
   if (outcome === "completed" && refund.sentAt === null)
     throw new AppError("tender.attestation_contradicted", { refundId, evidence: "never_sent" });
@@ -267,6 +270,7 @@ async function lookup(
   const excludeRefs = await withTransaction(deps.db, (tx) => excludedRefs(tx, refund));
   await withTransaction(deps.db, async (tx) => {
     signal.throwIfAborted();
+    await requireEconomicWrite(tx, deps.cfg, deps.admission);
     const current = await read(tx, refund.id);
     if (current.state === "pending")
       await tx
@@ -313,6 +317,7 @@ async function send(
   // The reservation and send intent commit separately so no provider wait holds the venue writer.
   const stamped = await withTransaction(deps.db, async (tx) => {
     signal.throwIfAborted();
+    await requireEconomicWrite(tx, deps.cfg, deps.admission);
     const current = await read(tx, refund.id);
     if (expired()) return null;
     const reading = deps.clock.now();
@@ -358,6 +363,7 @@ async function resolve(
   signal: AbortSignal,
 ): Promise<RefundRow> {
   signal.throwIfAborted();
+  await withTransaction(deps.db, (tx) => requireEconomicWrite(tx, deps.cfg, deps.admission));
   if (refund.sentAt === null && resolver !== "retry")
     return recordOutcome(deps, refund.id, { kind: "never_sent" }, signal);
   const provider = await providerResult(signal, async () =>
@@ -391,6 +397,7 @@ export async function resumeTenderRefund(
 ) {
   const live = liveOf(deps.db);
   const target = await withTransaction(deps.db, async (tx) => {
+    await requireEconomicWrite(tx, deps.cfg, deps.admission);
     const refund = await read(tx, refundId);
     const release =
       refund.state === "pending" &&

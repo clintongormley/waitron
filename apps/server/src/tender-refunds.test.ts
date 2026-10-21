@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
@@ -139,6 +140,8 @@ beforeEach(async () => {
   deps = {
     db,
     backend: new FakeFiscalBackend(db),
+    admission: testTradingAdmission(),
+    cfg,
     clock: createTrustedClock({
       deviceId: device.deviceId,
       monotonic: () => 0,
@@ -536,7 +539,13 @@ describe("settled-tender refund command local transaction", () => {
   });
   it("can record a local return without an attendance recorder", async () => {
     const t = await target();
-    const withoutAttendance = { db: deps.db, backend: deps.backend, clock: deps.clock };
+    const withoutAttendance = {
+      db: deps.db,
+      backend: deps.backend,
+      admission: deps.admission,
+      cfg: deps.cfg,
+      clock: deps.clock,
+    };
     expect((await run(t, request(t), withoutAttendance)).state).toBe("completed");
     expect(await store.db.select().from(attendanceOperationFacts)).toEqual([]);
     expect(await store.db.select().from(printJobs)).toHaveLength(1);
