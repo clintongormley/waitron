@@ -4,6 +4,16 @@ When a guest needs special care, you need to know which dish is theirs and what 
 Record the guest and assign their dishes through the table's
 [allergy window](products.md#table-allergies). The kitchen receives those instructions with its work.
 
+## Retry a counter send after a lost reply {#counter-send-retry}
+
+If the till cannot confirm a counter send, retry with the basket unchanged. When the first send
+already reached the server, the retry returns its original result and moves the till on as placed.
+It adds no second kitchen ticket or collection-number slip.
+
+If you edit the basket after the first send, the till must save those edits before placing it.
+When the order has already been placed, it keeps your edits on screen and shows an error instead
+of pretending the kitchen received them. Check the placed order before continuing.
+
 ## Read the allergy copy with its dish {#allergy-copies}
 
 An assigned dish carries the guest's name, the allergens they avoid and their kitchen note.

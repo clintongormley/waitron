@@ -174,21 +174,6 @@ a drawer shortfall at cash-up. No till screen or server route calls `recordVoid`
 can do this today. **Owner decision 2026-09-25:** keep it here and decide it when the till's void
 screen is designed.
 
-## A re-sent "place" on an already-placed order answers 409 rather than replaying the original result — leave it, or build the replay?
-
-**Product decisions to take before production:**
-
-- **A re-sent "place" on an already-placed order answers 409 rather than replaying the original
-  result — leave it, or build the replay?** Since invoicing at placement was retired (A261-2c,
-  #1285), placing files no invoice: `placeOrder` (`apps/server/src/working-order.ts`) marks the
-  order placed, sends its dishes to the kitchen and, in a `ticket_then_pay` zone, queues its
-  collection ticket. A second place on a placed order is refused `working_order.not_open` (409).
-  Leaving it is a real option — the 409 is a defensible state conflict and the till keeps the
-  basket and shows `place.error`. The gain if built is that a re-tap after a lost response moves
-  the till on as placed instead of showing an error. The place-path comment in
-  `apps/till/src/till-app.ts` calling an idempotent `placeOrder` "a recorded backlog follow-up"
-  refers to this entry.
-
 ## The till's top bar is one row at every width (A395, #1435): left open
 
 - **A395 DONE (#1435): the till's top bar is one row at every width.** On a phone nothing changed. Wider,

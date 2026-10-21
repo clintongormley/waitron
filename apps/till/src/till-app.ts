@@ -6891,13 +6891,6 @@ export class TillApp extends LitElement {
     return true;
   }
 
-  /**
-   * Saves an edited retrieved order before a pay or place. A fresh basket has no server row, and an
-   * unedited one has nothing to save.
-   * `working_order.not_open` (already settled or placed) is swallowed so the pay routes replay the filed
-   * ticket; `placeOrder` is not idempotent and still refuses. An idempotent `placeOrder` is a recorded
-   * backlog follow-up (docs/backlog.md, "A re-sent "place" on an already-placed order answers 409").
-   */
   async #syncIfDirty(id: string, lines: SaleLine[], label: string | undefined): Promise<boolean> {
     if (!(await this.#flushCounterKitchenNote())) return false;
     if (!(this.#store.persisted && this.#store.dirty)) return true;
@@ -6925,11 +6918,16 @@ export class TillApp extends LitElement {
     return true;
   }
 
-  /**
-   * `placeOrder` needs an existing open row, so a fresh basket is parked first and a retrieved one is
-   * saved only if edited (see {@link #syncIfDirty}); re-parking a retrieved order would replay it
-   * server-side and drop the edit. On success the SAME order moves to the `"collect"` stage.
-   */
+  #unconfirmedPlace?: {
+    id: string;
+    session: number;
+    visit: number;
+    api: TillApi;
+    basket: string;
+    invoice: InvoiceRecipientDetail | undefined;
+    language: string | undefined;
+  };
+
   async #onPlaceOrder(
     retried = false,
     refusalRetry = false,
@@ -6947,51 +6945,83 @@ export class TillApp extends LitElement {
       api === this.api &&
       basketVisit === this.#store.loadGeneration;
     if (!refusalRetry) this.errorKey = undefined;
-    // A network failure after the fiscal call started is `sale.unconfirmed`; before it, nothing was filed.
-    let reachedFiscal = false;
+    let reachedPlace = false;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
     let recheck = false;
     let inactiveChoice = false;
     let placed = false;
     try {
-      if (!(await this.#askCounterDeadEnds("place", !refusalRetry, clearInactiveChoices))) return;
-      if (!current()) return;
-      const lines = this.#currentSaleLines();
-      const label = this.#store.label;
-      const payload = this.#basketPayload();
-      if (this.#store.persisted) {
-        if (!(await this.#syncIfDirty(id, lines, label)) || !current()) return;
-      } else {
-        await api.parkOrder({
+      const pending = this.#unconfirmedPlace;
+      const invoice = this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : undefined;
+      const language =
+        this.receiptLanguageChoice?.orderId === id
+          ? this.receiptLanguageChoice.language
+          : undefined;
+      const replay =
+        pending?.id === id &&
+        pending.session === session &&
+        pending.visit === basketVisit &&
+        pending.api === api &&
+        pending.basket === this.#basketPayload() &&
+        pending.invoice === invoice &&
+        pending.language === language;
+      if (!replay) {
+        this.#unconfirmedPlace = undefined;
+        if (!(await this.#askCounterDeadEnds("place", !refusalRetry, clearInactiveChoices))) return;
+        if (!current()) return;
+        const lines = this.#currentSaleLines();
+        const label = this.#store.label;
+        const payload = this.#basketPayload();
+        if (this.#store.persisted) {
+          if (!(await this.#syncIfDirty(id, lines, label)) || !current()) return;
+          // A refused save can precede a replay, but unsaved edits are a different placement.
+          if (this.#basketPayload() !== this.#basketBaseline) {
+            this.errorKey = "place.error";
+            return;
+          }
+        } else {
+          await api.parkOrder({
+            id,
+            lines,
+            label,
+            ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
+          });
+          if (!current()) return;
+          if (!(await this.#adoptCreatedCounterNote(id, basketVisit, session))) return;
+          this.#commitBasket(payload);
+        }
+        if (this.invoiceChoice?.orderId === id) {
+          const saved = await api.setOrderInvoiceChoice(id, {
+            revision: this.#store.revision,
+            ...this.invoiceChoice.invoice,
+            expectedEdit: null,
+          });
+          if (!current()) return;
+          this.#store.markSaved(saved.revision);
+        }
+        await this.#saveUnsavedReceiptLanguage(id);
+        if (!current()) return;
+        this.#unconfirmedPlace = {
           id,
-          lines,
-          label,
-          ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
-        });
-        if (!current()) return;
-        if (!(await this.#adoptCreatedCounterNote(id, basketVisit, session))) return;
-        this.#commitBasket(payload);
+          session,
+          visit: basketVisit,
+          api,
+          basket: this.#basketPayload(),
+          invoice,
+          language,
+        };
       }
-      if (this.invoiceChoice?.orderId === id) {
-        const saved = await api.setOrderInvoiceChoice(id, {
-          revision: this.#store.revision,
-          ...this.invoiceChoice.invoice,
-          expectedEdit: null,
-        });
-        if (!current()) return;
-        this.#store.markSaved(saved.revision);
-      }
-      await this.#saveUnsavedReceiptLanguage(id);
-      if (!current()) return;
-      reachedFiscal = true;
+      reachedPlace = true;
       await api.placeOrder(id, null);
       if (!current()) return;
+      this.#unconfirmedPlace = undefined;
       this.stage = "collect";
       placed = true;
     } catch (error) {
       // `place.refused`, not `sale.refused`: placing takes no tender, so its message says nothing
       // about refunds.
       if (!current()) return;
+      if (!isNetworkFailure(error)) this.#unconfirmedPlace = undefined;
       if (
         !refusalRetry &&
         ["station.no_replacement", "route.station_inactive"].includes(
@@ -7004,7 +7034,7 @@ export class TillApp extends LitElement {
       else
         this.errorKey = isPermanentSaleRefusal(error)
           ? "place.refused"
-          : reachedFiscal && isNetworkFailure(error)
+          : reachedPlace && isNetworkFailure(error)
             ? "sale.unconfirmed"
             : counterError(error, "place.error");
     } finally {

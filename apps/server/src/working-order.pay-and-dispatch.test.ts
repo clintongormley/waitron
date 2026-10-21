@@ -1357,7 +1357,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     expect(await ticketStateOf(id)).toBe("queued");
   });
 
-  it("placeOrder refuses a non-open order — a re-place of a placed one, and an absent id — writing no second log", async () => {
+  it("placeOrder replays an identical place without a second log, and refuses an absent id", async () => {
     const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
@@ -1367,12 +1367,10 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
 
-    // Placing is NOT idempotent: a second place of the now-`placed` order is refused with
-    // `working_order.not_open` (wrong status), before any transition or amendment — so the log still
-    // holds exactly its one genesis entry.
-    await expect(
-      placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR),
-    ).rejects.toMatchObject({ code: "working_order.not_open", params: { workingOrderId: id } });
+    await expect(placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR)).resolves.toEqual({
+      id,
+      status: "placed",
+    });
     expect(await readAmendments(id)).toHaveLength(1);
 
     // An ABSENT id — the status read returns no row — is the same fail-closed code (the undefined
@@ -1831,10 +1829,10 @@ describe("prepare & collect — zone payment timing", () => {
       placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR),
       placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR),
     ]);
-    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
-    const rejected = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
-    expect(rejected).toHaveLength(1);
-    expect(rejected[0]!.reason).toMatchObject({ code: "working_order.not_open" });
+    expect(results).toEqual([
+      { status: "fulfilled", value: { id, status: "placed" } },
+      { status: "fulfilled", value: { id, status: "placed" } },
+    ]);
 
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
     expect(await saleCount(id)).toBe(0);

@@ -103,9 +103,6 @@ export const partyTables = table(
 export const serviceCommandScope = enumType(["party", "bill"]);
 
 /**
- * One row per service command, keyed by its device's submission id; a bill may also hold one
- * server-written made_here row for the made-here items of a pay-first send on replay.
- *
  * `scope_id` names a party or a working order by `scope_kind`, so it carries no key.
  */
 export const serviceCommands = table(

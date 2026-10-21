@@ -1,5 +1,8 @@
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { offer as menuOffer } from "../test/allergy-app-fixture.js";
+import { productUnit } from "./widgets/product-name.js";
 import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import "./till-app.js";
@@ -289,6 +292,29 @@ async function retrieved(overrides: Record<string, unknown> = {}): Promise<TillA
   emit(counter(el), "retrieve-order", { id: "wo-9" });
   await flush(el);
   return el;
+}
+
+async function placeCounter(overrides: Record<string, unknown> = {}): Promise<TillApp> {
+  const available = heldOrder(4).lines.map(({ product: item }) => ({
+    ...menuOffer(item.menuItemId!, item.name),
+    menuId: item.catalogueId!,
+    productId: item.id,
+    unitPrice: item.unitPrice,
+    grossPrice: item.unitPrice,
+    unit: productUnit(item),
+  }));
+  const catalogue: ZoneOfferCatalogue = {
+    ...offers,
+    context: { ...offers.context, serviceMode: "ticket_then_pay" },
+    menus: servedMenus([{ id: "cat-default", name: "Menu", isDefault: true }], available),
+    offers: available,
+  };
+  return retrieved({
+    getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+    listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+    listZoneOffers: vi.fn().mockResolvedValue(catalogue),
+    ...overrides,
+  });
 }
 
 async function chooseReason(el: TillApp, name: string): Promise<void> {
@@ -919,6 +945,212 @@ describe("till-app: giving away a dish on a stored counter order", () => {
     expect(api.placeOrder).toHaveBeenCalledWith("wo-9", null);
     expect(offered(el)).toBe(0);
   });
+
+  it("moves on as placed when an unchanged retry answers the original placement", async () => {
+    const placeOrder = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Network reply lost"))
+      .mockResolvedValue({ id: "wo-9", status: "placed" });
+    const el = await placeCounter({ placeOrder });
+    emit(counter(el), "place-order");
+    await flush(el);
+    expect(el.stage).toBe("order");
+    expect(el.errorKey).toBe("sale.unconfirmed");
+
+    emit(counter(el), "place-order");
+    await flush(el);
+
+    expect(placeOrder.mock.calls).toEqual([
+      ["wo-9", null],
+      ["wo-9", null],
+    ]);
+    expect(el.stage).toBe("collect");
+    expect(el.errorKey).toBeUndefined();
+  });
+
+  it("keeps an edited second attempt when its save says the order was already placed", async () => {
+    const placeOrder = vi.fn().mockResolvedValue({ id: "wo-9", status: "placed" });
+    const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
+    const el = await placeCounter({ placeOrder, updateWorkingOrder });
+    const store = counter(el).store;
+    store.addProduct(store.lines[1]!.product, "1");
+    const quantity = store.lines[1]!.quantity.toString();
+
+    emit(counter(el), "place-order");
+    await flush(el);
+
+    expect(updateWorkingOrder).toHaveBeenCalledOnce();
+    expect(placeOrder).not.toHaveBeenCalled();
+    expect(el.stage).toBe("order");
+    expect(el.errorKey).toBe("place.error");
+    expect(store.lines[1]!.quantity.toString()).toBe(quantity);
+  });
+
+  it("replays a lost placing reply without saving the confirmed recipient again", async () => {
+    const placeOrder = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Network reply lost"))
+      .mockResolvedValue({ id: "wo-9", status: "placed" });
+    const setOrderInvoiceChoice = vi
+      .fn()
+      .mockResolvedValueOnce({ revision: 5 })
+      .mockRejectedValue({ code: "working_order.not_open" });
+    const el = await placeCounter({
+      placeOrder,
+      setOrderInvoiceChoice,
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, orderFlow: "ticket_then_pay", fullInvoices: true }),
+      getInvoiceDeliveryOptions: vi
+        .fn()
+        .mockResolvedValue({ invoicePrinter: null, emailAvailable: false }),
+    });
+    emit(counter(el), "choose-invoice");
+    await flush(el);
+    emit(
+      el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+      "invoice-recipient-confirm",
+      {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "12345678Z",
+          legalName: "Example Guest",
+          address: "1 Main Street",
+          countryCode: "ES",
+        },
+        delivery: { medium: "receipt" },
+      },
+    );
+    await flush(el);
+    emit(counter(el), "place-order");
+    await flush(el);
+    expect(el.errorKey).toBe("sale.unconfirmed");
+    expect(setOrderInvoiceChoice).toHaveBeenCalledOnce();
+
+    emit(counter(el), "place-order");
+    await flush(el);
+
+    expect(setOrderInvoiceChoice).toHaveBeenCalledOnce();
+    expect(placeOrder.mock.calls).toEqual([
+      ["wo-9", null],
+      ["wo-9", null],
+    ]);
+    expect(el.stage).toBe("collect");
+    expect(el.errorKey).toBeUndefined();
+  });
+
+  it("does not replay an uncertain placement after the basket changes", async () => {
+    const placeOrder = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Network reply lost"))
+      .mockResolvedValue({ id: "wo-9", status: "placed" });
+    const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
+    const el = await placeCounter({ placeOrder, updateWorkingOrder });
+    emit(counter(el), "place-order");
+    await flush(el);
+    expect(el.errorKey).toBe("sale.unconfirmed");
+    const store = counter(el).store;
+    store.addProduct(store.lines[1]!.product, "1");
+
+    emit(counter(el), "place-order");
+    await flush(el);
+
+    expect(updateWorkingOrder).toHaveBeenCalledOnce();
+    expect(placeOrder).toHaveBeenCalledOnce();
+    expect(el.stage).toBe("order");
+    expect(el.errorKey).toBe("place.error");
+  });
+
+  it("saves an edited basket to a replacement server before placing there", async () => {
+    const placeOrder = vi.fn().mockRejectedValue(new TypeError("Network reply lost"));
+    const el = await placeCounter({ placeOrder });
+    emit(counter(el), "place-order");
+    await flush(el);
+    expect(el.errorKey).toBe("sale.unconfirmed");
+    const replacement = {
+      ...api,
+      updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 5 }),
+      placeOrder: vi.fn().mockResolvedValue({ id: "wo-9", status: "placed" }),
+    };
+    el.api = replacement;
+    const store = counter(el).store;
+    store.addProduct(store.lines[1]!.product, "1");
+    await flush(el);
+
+    emit(counter(el), "place-order");
+    await flush(el);
+
+    expect(replacement.updateWorkingOrder).toHaveBeenCalledOnce();
+    expect(replacement.placeOrder).toHaveBeenCalledWith("wo-9", null);
+    expect(placeOrder).toHaveBeenCalledOnce();
+    expect(el.stage).toBe("collect");
+  });
+
+  it("places edited lines after their save succeeds", async () => {
+    const placeOrder = vi.fn().mockResolvedValue({ id: "wo-9", status: "placed" });
+    const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 5 });
+    const el = await placeCounter({ placeOrder, updateWorkingOrder });
+    const store = counter(el).store;
+    store.addProduct(store.lines[1]!.product, "1");
+
+    emit(counter(el), "place-order");
+    await flush(el);
+
+    expect(updateWorkingOrder).toHaveBeenCalledOnce();
+    expect(placeOrder).toHaveBeenCalledWith("wo-9", null);
+    expect(el.stage).toBe("collect");
+    expect(el.errorKey).toBeUndefined();
+  });
+
+  for (const language of ["en", "es"] as const)
+    for (const theme of ["light", "dark"] as const)
+      for (const width of [390, 1280])
+        it(`shows the lost-reply retry and placed result in ${language}/${theme}/${width}`, async () => {
+          const previous = currentLocale();
+          await page.viewport(width, 900);
+          const placeOrder = vi
+            .fn()
+            .mockRejectedValueOnce(new TypeError("Network reply lost"))
+            .mockResolvedValue({ id: "wo-9", status: "placed" });
+          const el = await placeCounter({
+            placeOrder,
+            getTill: vi
+              .fn()
+              .mockResolvedValue({ ...till, orderFlow: "ticket_then_pay", locale: language }),
+          });
+          const host = el.parentElement!;
+          host.setAttribute("data-theme", theme);
+          try {
+            setLocale(language);
+            el.requestUpdate();
+            await flush(el);
+            const send = () =>
+              counter(el)
+                .shadowRoot!.querySelector("till-tender-pay")!
+                .shadowRoot!.querySelector("wt-button.place")!
+                .shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+            expect(send().disabled).toBe(false);
+            await userEvent.click(send());
+            await vi.waitFor(() => expect(el.errorKey).toBe("sale.unconfirmed"));
+            await flush(el);
+            expect(el.shadowRoot!.textContent).toContain(t("sale.unconfirmed", language));
+            await page.screenshot({
+              path: `__screenshots__/a983-place-replay/lost-${language}-${theme}-${width}.png`,
+            });
+
+            await userEvent.click(send());
+            await vi.waitFor(() => expect(el.stage).toBe("collect"));
+            await flush(el);
+            expect(el.errorKey).toBeUndefined();
+            expect(el.shadowRoot!.textContent).not.toContain(t("place.error", language));
+            await page.screenshot({
+              path: `__screenshots__/a983-place-replay/placed-${language}-${theme}-${width}.png`,
+            });
+          } finally {
+            setLocale(previous);
+            await page.viewport(1280, 900);
+          }
+        });
 
   it("applies it to the counter order at the basket's revision, then loads the order again", async () => {
     const el = await retrieved();

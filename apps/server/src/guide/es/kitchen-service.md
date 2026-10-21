@@ -5,6 +5,17 @@ evitar. Registra a la persona y asígnale sus platos en la
 [ventana de alergias](products.md#table-allergies) de la mesa. Cocina recibe esas instrucciones
 junto con su trabajo.
 
+## Reintenta un envío de mostrador si se pierde la respuesta {#counter-send-retry}
+
+Si el terminal no puede confirmar un envío de mostrador, reinténtalo sin cambiar la cesta. Si el
+primer envío ya llegó al servidor, el reintento devuelve su resultado original y el terminal
+continúa con el pedido enviado. No añade otra comanda de cocina ni otro resguardo con el número
+de recogida.
+
+Si cambias la cesta después del primer envío, el terminal debe guardar esos cambios antes de
+enviarla. Si el pedido ya está enviado, conserva tus cambios en pantalla y muestra un error en
+vez de dar a entender que la cocina los recibió. Revisa el pedido enviado antes de continuar.
+
 ## Lee la copia de alergias junto al plato {#allergy-copies}
 
 Un plato asignado lleva el nombre de la persona, los alérgenos que evita y su nota para cocina.
