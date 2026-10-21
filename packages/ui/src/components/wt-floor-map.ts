@@ -385,7 +385,6 @@ export class WtFloorMap extends LitElement {
         font-size: var(--wt-font-size-sm);
         text-wrap: nowrap;
         overflow: hidden;
-        text-overflow: ellipsis;
       }
 
       /* A flex container cuts no text itself: its text's own box carries the ellipsis. */
@@ -938,7 +937,7 @@ export class WtFloorMap extends LitElement {
     const merged = members.length > 1;
     const drawn = merged ? box : first.placement;
     const named = group.drawsName && showsName(drawn, view.scale);
-    const cue = named && showsCue(drawn, view.scale) ? (first.cue ?? null) : null;
+    const cue = named && showsCue(drawn, view.scale) ? first.cue : null;
     const drag = this.#drag?.tableId === first.id && !group.fixed ? this.#drag : null;
     const allergy = members.some((member) => member.allergy);
     return html`<button
@@ -1038,7 +1037,7 @@ export class WtFloorMap extends LitElement {
     still: boolean | null,
   ): TemplateResult {
     const p = table.placement;
-    const outline = still === null ? null : (table.outline ?? null);
+    const outline = still === null ? null : table.outline;
     return html`<span
       part="shape"
       data-fill=${table.fill}
@@ -1055,7 +1054,7 @@ export class WtFloorMap extends LitElement {
         outline === "overdue" || outline === "waiting"
           ? renderFloorRing(outline, false, { onFill: true })
           : nothing
-      }${still === null ? nothing : renderFloorPulse(table.pulse ?? null, !still)}</span
+      }${still === null ? nothing : renderFloorPulse(table.pulse, !still)}</span
     >`;
   }
 }

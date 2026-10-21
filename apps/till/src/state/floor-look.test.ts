@@ -14,7 +14,7 @@ import {
   pinLook,
   readyText,
   reminderClock,
-  zoneTabKind,
+  topTabKind,
 } from "./floor-look.js";
 
 const now = Date.parse("2026-09-30T20:00:00.000Z");
@@ -643,7 +643,6 @@ describe("pinLook", () => {
     }
   });
 
-  // Carries floor-map.test.ts "a free table is free, a booked free one reserved".
   it("a free table is free, a booked free one reserved", () => {
     expect(pin([table(free)])).toEqual({ fill: "free", icon: null, text: en["floor.free"] });
     expect(pin([table({ ...free, nextReservation: { time: "20:30" } })])).toEqual({
@@ -661,8 +660,6 @@ describe("pinLook", () => {
     });
   });
 
-  // Carries floor-map.test.ts "a party or a delivery on its way makes it seated, even when booked":
-  // a party with nothing to do is now calm, Nothing needed (§9).
   it("a party is Nothing needed and a delivery seated, even when booked", () => {
     expect(pin([table({ nextReservation: { time: "20:30" } })])).toEqual({
       fill: "calm",
@@ -676,8 +673,6 @@ describe("pinLook", () => {
     });
   });
 
-  // Carries floor-map.test.ts "a bill requested beats seated, and needs clearing beats both": Bill
-  // requested is now above Needs clearing (§4 rows 6 and 11).
   it("a bill beats seated, and beats needs clearing", () => {
     expect(pin([table({ signals: [bill] })]).text).toBe(en["signal.bill_requested"]);
     expect(pin([table({ condition: "needs_clearing", signals: [bill] })])).toEqual({
@@ -687,8 +682,6 @@ describe("pinLook", () => {
     });
   });
 
-  // Carries floor-map.test.ts "a forgotten order's dot beats ready dishes'" and words "gives the
-  // pin its shortest word" (its Forgotten line); an overdue wait is now a state of its own.
   it("a forgotten wait beats ready, and an overdue one is said too", () => {
     expect(pin([table({ readyToServe: 2 })])).toEqual({
       fill: "ready",
@@ -710,7 +703,6 @@ describe("pinLook", () => {
     });
   });
 
-  // Carries floor-map.test.ts "a merge shows its most urgent member".
   it("a merge shows its most urgent member", () => {
     expect(pin([table({ id: "a", readyToServe: 2 }), table({ id: "b", ...free })]).fill).toBe(
       "ready",
@@ -720,7 +712,6 @@ describe("pinLook", () => {
     ).toEqual({ fill: "danger", icon: "floor-timer", text: en["floor.forgotten"] });
   });
 
-  // Carries floor-map.test.ts "says one ready dish in the singular on the pin".
   it("says one ready dish in the singular", () => {
     expect(pin([table({ readyToServe: 1 })]).text).toBe(en["table.flash_ready_one"]);
     setLocale("es");
@@ -730,8 +721,6 @@ describe("pinLook", () => {
     );
   });
 
-  // Carries floor-map.test.ts "gives the pin its shortest word": "N to serve" leaves the pin
-  // (Decision 15).
   it("says Nothing needed, not the dishes to serve, and the bill before them", () => {
     expect(pin([table({ readyToServe: 2, pendingToServe: 3 })]).text).toBe(readyText(2));
     expect(pin([table({ pendingToServe: 3 })]).text).toBe(en["floor.nothing_needed"]);
@@ -741,9 +730,6 @@ describe("pinLook", () => {
     );
   });
 
-  // Carries floor-map.test.ts "takes a merge's pin count from the member that gave the dot, never
-  // summed" and "reads a merge's to-serve count from its seated member with the most, in either
-  // order".
   it("reads a merge's count from one member, never summed, in either order", () => {
     const freeTable = table({ id: "b", ...free });
     const sameParty = [
@@ -760,10 +746,6 @@ describe("pinLook", () => {
     );
   });
 
-  // Carries floor-map.test.ts "takes the clearing fill and reads Needs moving on the pin, even with
-  // a booking to come", "takes the clearing fill while it also needs clearing" and "in a merge
-  // ranks with Needs clearing, above a bill, on the pin": the dashes are the map's alone, and a
-  // bill now ranks above both (§4 rows 6 and 11).
   it("a table that needs moving says Move's words over the next fill, and a bill beats it", () => {
     expect(pin([table({ ...free, today: moving })])).toEqual({
       fill: "free",
@@ -811,7 +793,9 @@ describe("reminderClock", () => {
   });
 });
 
-describe("zoneTabKind", () => {
+describe("topTabKind", () => {
+  const tabKindOf = (tables: TableState[]) =>
+    topTabKind(new Set(tables.flatMap((tbl) => mapKinds(tbl, now))));
   const forgotten = table({ id: "f", timingBand: "forgotten" });
   const overdue = table({ id: "o", signals: [wait("overdue")] });
   const out = table({ id: "u", signals: [unavailable] });
@@ -866,14 +850,14 @@ describe("zoneTabKind", () => {
     "takes %s over every kind below it, across the zone's tables",
     (kind, i) => {
       const rest = [...ranked.slice(i + 1), heldTable, calm, reserved, freeTable];
-      expect(zoneTabKind([...rest, ranked[i]!], now)).toBe(kind);
-      expect(zoneTabKind([ranked[i]!, ...rest], now)).toBe(kind);
+      expect(tabKindOf([...rest, ranked[i]!])).toBe(kind);
+      expect(tabKindOf([ranked[i]!, ...rest])).toBe(kind);
     },
   );
 
   it("is null for a zone whose best is held, calm, reserved or free, and for no tables", () => {
-    expect(zoneTabKind([heldTable, calm, reserved, freeTable], now)).toBeNull();
-    expect(zoneTabKind([freeTable], now)).toBeNull();
-    expect(zoneTabKind([], now)).toBeNull();
+    expect(tabKindOf([heldTable, calm, reserved, freeTable])).toBeNull();
+    expect(tabKindOf([freeTable])).toBeNull();
+    expect(topTabKind(new Set())).toBeNull();
   });
 });

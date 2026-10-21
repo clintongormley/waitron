@@ -542,9 +542,12 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
       { zones, tables: iconned },
       theme,
     );
-    for (const name of ["floor-timer", "floor-out", "floor-bill", "floor-ready", "floor-unsent"]) {
+    for (const name of ["floor-out", "floor-bill", "floor-ready", "floor-unsent"]) {
       expect(list.el.shadowRoot!.querySelector(`wt-icon[name="${name}"]`)).not.toBeNull();
     }
+    expect(
+      list.el.shadowRoot!.querySelector('[data-chip="long-wait"] wt-icon[name="floor-timer"]'),
+    ).not.toBeNull();
     expect(list.el.shadowRoot!.querySelector("[data-forgotten] wt-icon")).not.toBeNull();
     await expectNoA11yViolations(list.host);
   });

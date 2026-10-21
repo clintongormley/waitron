@@ -121,7 +121,8 @@
   --wt-color-table-calm-edge: #8fb7f5;
   --wt-color-danger-pulse-dim: #e8bebc;
   --wt-color-warning-pulse-dim: #dccbb3;
-  /* The map's calm fill, the text on a ready table, and a zone tab's tint for each state's colour. */
+  /* The map's calm fill and its text, the text on a ready table, and a zone tab's tint for each
+     state's colour. */
   --wt-color-table-calm: #e4ecfb;
   --wt-color-on-table-calm: #16181d;
   --wt-color-on-success: #ffffff;
@@ -248,7 +249,8 @@
     --wt-color-table-calm-edge: #4d6aa6;
     --wt-color-danger-pulse-dim: #bd9ba0;
     --wt-color-warning-pulse-dim: #b9aa94;
-    /* The map's calm fill, the text on a ready table, and a zone tab's tint for each state's colour. */
+    /* The map's calm fill and its text, the text on a ready table, and a zone tab's tint for each
+       state's colour. */
     --wt-color-table-calm: #22304a;
     --wt-color-on-table-calm: #eceef2;
     --wt-color-on-success: #06190f;
@@ -375,7 +377,8 @@
   --wt-color-table-calm-edge: #8fb7f5;
   --wt-color-danger-pulse-dim: #e8bebc;
   --wt-color-warning-pulse-dim: #dccbb3;
-  /* The map's calm fill, the text on a ready table, and a zone tab's tint for each state's colour. */
+  /* The map's calm fill and its text, the text on a ready table, and a zone tab's tint for each
+     state's colour. */
   --wt-color-table-calm: #e4ecfb;
   --wt-color-on-table-calm: #16181d;
   --wt-color-on-success: #ffffff;
@@ -501,7 +504,8 @@
   --wt-color-table-calm-edge: #4d6aa6;
   --wt-color-danger-pulse-dim: #bd9ba0;
   --wt-color-warning-pulse-dim: #b9aa94;
-  /* The map's calm fill, the text on a ready table, and a zone tab's tint for each state's colour. */
+  /* The map's calm fill and its text, the text on a ready table, and a zone tab's tint for each
+     state's colour. */
   --wt-color-table-calm: #22304a;
   --wt-color-on-table-calm: #eceef2;
   --wt-color-on-success: #06190f;

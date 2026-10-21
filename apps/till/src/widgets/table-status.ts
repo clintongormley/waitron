@@ -141,7 +141,7 @@ export class TillTableStatus extends LitElement {
         @click=${() => this.#setOpen(party.id)}
       >
         <span class="swatch" data-fill=${fill} aria-hidden="true"></span>
-        ${icon === null ? nothing : html`<wt-icon name=${icon} size="sm"></wt-icon>`} ${text}
+        <wt-icon name=${icon!} size="sm"></wt-icon> ${text}
       </button>
       <wt-toast
         class="flash-notice"

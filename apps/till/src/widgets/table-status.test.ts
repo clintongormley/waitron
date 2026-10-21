@@ -225,7 +225,6 @@ describe("till-table-status", () => {
     });
     const children = [...pin(el)!.children];
     expect(children.map((child) => child.localName)).toEqual(["span", "wt-icon"]);
-    expect(pin(el)!.querySelector("wt-icon")!.getAttribute("name")).toBe("floor-timer");
     expect(pin(el)!.querySelector('wt-icon[name="floor-timer"]')).not.toBeNull();
     expect(pin(el)!.textContent!.trim()).toBe("Overdue");
   });
@@ -401,6 +400,7 @@ describe("till-table-status", () => {
 for (const theme of ["light", "dark"] as const) {
   for (const [over, words, token] of [
     [{ signals: [billRequested] }, "Bill requested", "--wt-color-table-bill"],
+    [{ signals: [], readyToServe: 2 }, "2 ready", "--wt-color-success"],
     [{ signals: [billRequested], readyToServe: 2 }, "Bill requested", "--wt-color-table-bill"],
     [
       { signals: [billRequested], readyToServe: 2, timingBand: "forgotten" },

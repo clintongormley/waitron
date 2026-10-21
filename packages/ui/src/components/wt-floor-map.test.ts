@@ -719,7 +719,6 @@ describe("the whole table shows its state", () => {
     const el = await sized(36, { cue: { icon: "floor-step", text: "x".repeat(40) } });
     const cue = within(el, "cue", "t")!;
     expect(getComputedStyle(cue).overflow).toBe("hidden");
-    expect(getComputedStyle(cue).textOverflow).toBe("ellipsis");
     const text = cue.querySelector<HTMLElement>(".cue-text")!;
     expect(text.textContent).toBe("x".repeat(40));
     expect(text.scrollWidth).toBeGreaterThan(text.clientWidth);

@@ -172,7 +172,7 @@ export function kindWords(kind: MapKind, members: readonly TableState[], now: nu
   }
 }
 
-/** A kind's cue on the map, read like `kindWords`; a zone's tab shows its icon. */
+/** A kind's cue on the map; a zone's tab shows its icon. */
 export function kindCue(
   kind: MapKind,
   members: readonly TableState[],
@@ -272,11 +272,6 @@ export const TAB_KINDS: ReadonlySet<MapKind> = new Set(
 /** The most urgent tab kind among `kinds`, or `null` when none is one. */
 export function topTabKind(kinds: ReadonlySet<MapKind>): MapKind | null {
   return MAP_PRECEDENCE.find((kind) => TAB_KINDS.has(kind) && kinds.has(kind)) ?? null;
-}
-
-/** The most urgent tab kind across the zone's tables, or `null` when none has one. */
-export function zoneTabKind(tables: readonly TableState[], now: number): MapKind | null {
-  return topTabKind(new Set(tables.flatMap((table) => mapKinds(table, now))));
 }
 
 /** Each table's minutes to fire, or "due": it changes whenever a look can change with time. */
