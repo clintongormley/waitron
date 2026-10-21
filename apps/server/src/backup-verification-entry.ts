@@ -1,3 +1,4 @@
+export { ALL_MODULES as BACKUP_VERIFICATION_MODULES } from "@waitron/composition";
 export { verifyBackupArtifact, type BackupVerificationDeps } from "./backup-verification.js";
 export {
   backupVerificationRequestDigest,

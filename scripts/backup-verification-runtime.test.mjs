@@ -82,6 +82,26 @@ describe("backup runtime identity", () => {
 });
 
 describe("embedded backup qualification", () => {
+  it("the production image carries the verification entry and its dependency notices", () => {
+    const dockerfile = readFileSync(join(ROOT, "deploy/Dockerfile"), "utf8");
+    const stage = dockerfile.slice(dockerfile.indexOf("AS runtime")).replaceAll(/\\\n/g, " ");
+    const copies = [...stage.matchAll(/^COPY[^\n]*/gm)].map((m) => m[0].split(/\s+/));
+    expect(
+      copies.some(
+        (parts) =>
+          parts.includes("/src/apps/server/dist/backup-verification.js") &&
+          parts.at(-1) === "/app/",
+      ),
+    ).toBe(true);
+    expect(
+      copies.some(
+        (parts) =>
+          parts.includes("/src/apps/server/dist/backup-verification.js.NOTICES.txt") &&
+          parts.at(-1) === "/app/third-party/npm/server/",
+      ),
+    ).toBe(true);
+  });
+
   it("the real bundle command stamps every target entry from the source tree", () => {
     const directory = mkdtempSync(join(tmpdir(), "waitron-runtime-command-"));
     try {
@@ -182,7 +202,7 @@ const entry = await import(${JSON.stringify(output)});
 const first = entry.currentBackupVerificationTarget();
 process.env.WAITRON_BUILD_ID = 'forged';
 const second = entry.currentBackupVerificationTarget();
-console.log(JSON.stringify({ first, same: JSON.stringify(first) === JSON.stringify(second), keys: Object.keys(entry).sort() }));
+console.log(JSON.stringify({ first, same: JSON.stringify(first) === JSON.stringify(second), keys: Object.keys(entry).sort(), owners: entry.BACKUP_VERIFICATION_MODULES?.map(m => m.name).sort() ?? null, canVerify: typeof entry.verifyBackupArtifact === "function" }));
 `;
       const loaded = spawnSync(process.execPath, ["--input-type=module", "-e", probe], {
         cwd: directory,
@@ -194,6 +214,8 @@ console.log(JSON.stringify({ first, same: JSON.stringify(first) === JSON.stringi
       const result = JSON.parse(loaded.stdout);
       expect(result.first.runtime).toEqual(runtime);
       expect(result.same).toBe(true);
+      expect(result.canVerify).toBe(true);
+      expect(result.owners).toEqual(result.first.modules.map((m) => m.name));
       expect(result.first.modules.map((m) => m.name)).toEqual([
         "adjustments",
         "bookings",
@@ -223,11 +245,13 @@ console.log(JSON.stringify({ first, same: JSON.stringify(first) === JSON.stringi
         ),
       );
       expect(result.keys).toEqual([
+        "BACKUP_VERIFICATION_MODULES",
         "backupVerificationRequestDigest",
         "buildBackupVerificationTarget",
         "currentBackupVerificationTarget",
         "readBackupVerificationRequest",
         "readBackupVerificationResult",
+        "verifyBackupArtifact",
       ]);
       writeFileSync(join(directory, "drizzle/core/0000_initial.sql"), "select 'changed';");
       const changed = spawnSync(

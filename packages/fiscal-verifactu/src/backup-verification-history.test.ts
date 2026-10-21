@@ -148,7 +148,9 @@ async function capture(populate = true) {
     await suite.db.execute(
       sql`insert into acks (registro_id, submitted_at, csv, state) select id, ${time}, 'retained-csv', 'accepted' from registros_facturacion`,
     );
-    await suite.db.execute(sql`insert into envio_flujo values (1,${time},60)`);
+    await suite.db.execute(
+      sql`insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg) values (1,${time},60)`,
+    );
     await suite.db.execute(
       sql`insert into fiscal_certificate_installs (id,node_id,installed_at,source,kind,fingerprint,valid_from,valid_until) values ('10000000-0000-4000-8000-000000000004',${node.nodeId},${time},'setup','sello','retained-fingerprint',${time},'2027-10-16T11:00:00.000Z')`,
     );
