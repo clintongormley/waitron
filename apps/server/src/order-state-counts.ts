@@ -51,7 +51,8 @@ export function dishCounts(
 ): OrderStateCounts {
   const active = Math.max(0, dish.quantity - dish.cancelled);
   if (active === 0) return { ...ZERO };
-  const served = dish.servedAt !== null ? active : Math.min(dish.servedQuantity, active);
+  const served =
+    dish.servedAt !== null ? active : Math.min(Math.max(0, dish.servedQuantity), active);
   const left = collected ? 0 : active - served;
   const places = dish.unitPrecision ?? dish.unit?.precision ?? 0;
   const byTheUnit =

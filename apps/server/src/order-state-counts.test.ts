@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { floorZones, nowIso, workingOrderLines } from "@waitron/db";
-import { assignProductUnit, createUnit, units } from "@waitron/catalogue";
+import { assignProductUnit, createUnit, setProductVariants, units } from "@waitron/catalogue";
 import { markCollected, parkOrder } from "./working-order.js";
 import { inTx, provisionBillVenue } from "./testing/bill-venue.js";
 import type { BillVenue } from "./testing/bill-venue.js";
@@ -18,6 +18,7 @@ import type { CountedLine } from "./order-state-counts.js";
 import "./errors.js";
 
 let venue: BillVenue;
+let pulpoLarge: string;
 const zones = {} as Record<"prepay" | "ticket_then_pay", string>;
 
 /** Each test parks its own orders; the units are given to dishes no other test orders. */
@@ -31,7 +32,7 @@ useVenueDb({
       zones[mode] = await inTx(venue, async (tx) => {
         const [zone] = await tx
           .insert(floorZones)
-          .values({ locationId: venue.cfg.locationId, name: `Barra ${mode}` })
+          .values({ locationId: venue.cfg.locationId, name: `Bar ${mode}` })
           .returning({ id: floorZones.id });
         await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "counter" });
         if (mode === "ticket_then_pay") {
@@ -100,6 +101,24 @@ useVenueDb({
       await assignProductUnit(tx, await productOf(tx, "Chuletón"), ml.id);
       await assignProductUnit(tx, await productOf(tx, "Ensalada"), kilo!.id);
       await assignProductUnit(tx, await productOf(tx, "Croquetas"), tenth.id);
+      const pulpo = await productOf(tx, "Pulpo");
+      await assignProductUnit(tx, pulpo, gram!.id);
+      const [large] = await setProductVariants(
+        tx,
+        pulpo,
+        [
+          {
+            name: "Large",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "30.00",
+            available: true,
+          },
+        ],
+        "en",
+      );
+      pulpoLarge = large!.id;
       await republishMenus(tx);
     });
   },
@@ -267,6 +286,14 @@ describe("dishCounts", () => {
     });
   });
 
+  it("counts a negative served quantity as nothing served", () => {
+    expect(dishCounts(dish({ servedQuantity: -500 }), [], false)).toEqual({
+      ...zero,
+      ordered: 1,
+      waiting: 1,
+    });
+  });
+
   it("counts cancellations out, and no more left than ordered", () => {
     expect(
       dishCounts(dish({ quantity: 3000, cancelled: 1000, servedQuantity: 500 }), [], false),
@@ -339,6 +366,28 @@ describe("readOrderStateCounts", () => {
         .where(eq(workingOrderLines.workingOrderId, id)),
     );
     expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, unsent: 1 }]]));
+  });
+
+  it("counts 150 g of a variant as one, reading its parent's unit", async () => {
+    const id = randomUUID();
+    await parkOrder(deps(), venue.cfg, {
+      id,
+      zoneId: zones.prepay,
+      lines: [{ menuItemId: venue.offerFor("Pulpo"), variantId: pulpoLarge, quantity: "150" }],
+      operatorId: venue.operatorId,
+    });
+    expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, unsent: 1 }]]));
+  });
+
+  it("counts by the line's frozen places, not its unit's current ones", async () => {
+    const id = await parked([["Croquetas", "2"]]);
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ unitPrecision: 0 })
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 2, unsent: 2 }]]));
   });
 
   it("counts whole units only, because 1.5 of a dish with no decimal places is refused", async () => {
