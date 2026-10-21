@@ -4018,8 +4018,9 @@ slice 5), built with `settingsCard` and `settingsRows`:
   panels sit side by side when the preview is at least 640px wide. Narrower, each stacks, the
   preview below the choices and the light panel above the dark. Inside a panel, the sample's side
   menu stays beside the sample while the sample's narrowest content fits there, and goes above it
-  otherwise; this follows the words' real widths, so it needs no width per language. The buttons
-  sit `--wt-space-4` below the preview.
+  otherwise; this follows the words' real widths, so it needs no width per language. The form's
+  buttons sit `--wt-space-4` below whatever comes before them: the preview in one column, the
+  taller of the two columns side by side, or the Fix all line when it shows.
 - **The preview's Light and Dark panels are painted from the draft inside the card and nowhere
   else** (`apps/dashboard/src/widgets/theme-preview.ts`). Each panel is a theme root inside the
   preview's shadow root, painted by a constructed sheet adopted into that shadow root only. The draft

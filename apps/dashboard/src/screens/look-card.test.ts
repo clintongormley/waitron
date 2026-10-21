@@ -924,6 +924,8 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
   for (const [locale, cardWidth] of [
     ["es-ES", 358],
     ["en-GB", 358],
+    ["es-ES", 800],
+    ["en-GB", 800],
     ["es-ES", 1000],
     ["en-GB", 1000],
   ] as const) {
@@ -937,7 +939,8 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
           const label = `${mode} ${JSON.stringify(found)}`;
           expect(found.drawn, label).toBe(found.undoOnColourLine);
           if (found.drawn) expect(found.dotOnColourLine, label).toBe(true);
-          if (locale === "en-GB" && cardWidth === 1000) expect(found.drawn, label).toBe(true);
+          // One column, its choices far wider than the line, even in a wider font.
+          if (locale === "en-GB" && cardWidth === 800) expect(found.drawn, label).toBe(true);
           cleanupWidgets();
         }
       });
