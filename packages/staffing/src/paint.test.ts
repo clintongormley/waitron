@@ -491,7 +491,7 @@ describe("special-day staffing", () => {
     ]);
   });
 
-  it("batches the own special-day read, predecessor calendar and each guide source", async () => {
+  it("batches the own special-day read and each guide source, with no extra day-plan read", async () => {
     const v = await guideVenue();
     const tables = await inTx(async (tx) => {
       const session = (tx as unknown as { session: { prepareQuery: (...a: never[]) => unknown } })
@@ -838,14 +838,14 @@ async function guideVenue() {
     return { ...v, periodId: period!.id, zoneId: zone!.id, menuId };
   });
 }
-const lunchGuide = (v: Awaited<ReturnType<typeof guideVenue>>, endsAt = "16:00") => ({
+const lunchGuide = (v: Awaited<ReturnType<typeof guideVenue>>) => ({
   periodId: v.periodId,
   periodName: "Lunch",
   periodColour: "blue",
   departmentId: v.departmentId,
   departmentName: "Dining room",
   startsAt: "12:00",
-  endsAt,
+  endsAt: "16:00",
 });
 
 it("A724 returns period identity and station sending hours for the chosen season", async () => {

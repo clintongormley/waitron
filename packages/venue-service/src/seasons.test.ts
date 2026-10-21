@@ -11,6 +11,8 @@ import {
 import {
   CORE_MIGRATIONS,
   floorZones,
+  locationBusinessDaySettings,
+  locationDayCutoverChanges,
   locations,
   withTransaction,
   type Database,
@@ -674,14 +676,30 @@ describe("saveSeasons", () => {
         }),
       ),
     ).toEqual({ code: "season.invalid", params: { field: "save.2.startsOn" } });
+    // A waiting change of the day's start to 03:00, which Autumn's Saturday Dinner (20:00–05:45)
+    // crosses, is refused only after the renames, the new season and the delete are written.
+    await scoped(async (tx) => {
+      await tx
+        .insert(locationBusinessDaySettings)
+        .values({ locationId: v.cfg.locationId, revision: 1 });
+      await tx.insert(locationDayCutoverChanges).values({
+        locationId: v.cfg.locationId,
+        effectiveBusinessDay: "2030-10-20",
+        dayCutover: "03:00:00",
+      });
+    });
     expect(
       await refusal(
-        change(v, {
-          save: [entry(v.autumn, "Fall", "09-05", "red"), entry(undefined, "Winter", "04-10")],
-          delete: [v.lateAutumn],
-        }),
+        change(
+          v,
+          {
+            save: [entry(v.autumn, "Fall", "09-05", "red"), entry(undefined, "Feria", "04-10")],
+            delete: [v.lateAutumn],
+          },
+          1,
+        ),
       ),
-    ).toEqual({ code: "season.invalid", params: { field: "save.1.name", reason: "taken" } });
+    ).toMatchObject({ code: "hours.clock_change_conflict" });
     expect(await scoped((tx) => readSeasons(tx, v.cfg))).toEqual(seasonsBefore);
     expect(await everyWeek(v)).toEqual(weeksBefore);
   });
