@@ -184,7 +184,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   design recommends that the upgrade check the clock while the old release still serves, and make
   the change only once that check passes — otherwise the old release never stops. A sale can still
   wait on the internet after a crash between the migration and the change, or when the new release
-  is started by hand. The owner's choice, A940's second-revision question 2. After A940's slice 1;
+  is started by hand; and a power cut during the upgrade's stop leaves no app running until the
+  upgrade runs again, until the restart-at-boot step the design adds is built. The owner's choice, A940's second-revision question 2. After A940's slice 1;
   before the first production venue goes live. A move between fiscal modules stays a refused start
   until the first non-Veri\*Factu mode.
   [Design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md#56-when-the-systems-identity-changes-a-new-installation-by-itself-a993)

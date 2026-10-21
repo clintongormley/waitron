@@ -44,9 +44,14 @@ for the automatic identity change (§5.6).
 >   The first revision's "a manager confirms the clock" path is gone: A947 allows no confirmation.
 >   Two cases still make a sale wait on the internet's clock, disclosed in §5.6: a power cut or
 >   crash between the migration and the change (the two cannot share one transaction on today's
->   code), and a new release started some other way than through the upgrade. (Corrected the same
->   day after a fresh-context review: the first draft of this revision stopped the old release
->   before the clock check and claimed one transaction for the migration and the change.)
+>   code), and a new release started some other way than through the upgrade. And a power cut while
+>   the app is stopped for the upgrade leaves the venue selling nothing until the upgrade runs
+>   again, until the restart-at-boot step slice 1b adds is built (Docker does not restart a
+>   container the upgrade stopped). Carrying step 1's clock reading to the moment the name is taken
+>   extends A947's "every time a box takes a name" clock rule; approving this revision approves
+>   that. (Corrected the same day after a fresh-context review and a third check: the first draft
+>   of this revision stopped the old release before the clock check, claimed one transaction for
+>   the migration and the change, and missed the restart after a power cut.)
 > - **§5.4** (the runbook's first line), **§8** (cases for the upgrade's step), **§10** (slice 1b
 >   needs A947's slice 4a and carries the upgrade's step), **§11** and **§12** follow.
 > - **Picture 5 redrawn**: five-symbol names, the upgrade reading the internet's clock, no print
@@ -778,9 +783,10 @@ a sale, which CLAUDE.md §5 forbids ("Nothing EXTERNAL may block a sale").
   and pulls or builds its images before `docker compose up` starts anything
   (`deploy/waitron.sh:607-630`). The box-file fetch and the image pull stop the script when the
   network fails (the script runs under `set -euo pipefail`, `:13`; the pull's failure at
-  `:329-330`); two earlier steps do not — the script's own refresh carries on with the running copy,
-  and the print agent's AppArmor step falls back to Docker's default
-  (`scripts/waitron-sh.test.mjs:714`, `:857`); a failed pull leaves the running containers as they were, since nothing has been stopped
+  `:329-330`); two steps before the pull do not — the script's own refresh carries on with the
+  running copy (`scripts/waitron-sh.test.mjs:714`), and the print agent's AppArmor step, which runs
+  after the box-file fetch (`:620-621`), falls back to Docker's default profile when its fetch or
+  load fails (`:223-231`); a failed pull leaves the running containers as they were, since nothing has been stopped
   yet, though the box's files may already be the new ones (read, not run). `grep -n 'docker load' deploy/waitron.sh` finds no way to install an image from
   a file. A release will pull its published image by its tag (§5.5). B3's stick fetches the newest
   release over the network — "every install now has the internet, and so network time" (B3 §5.4)
@@ -820,24 +826,56 @@ while the fibre is down until 14:00. With the internet up, all four do the same:
      point is pinned for `waitron.sh`'s own reads at `scripts/waitron-sh.test.mjs:1243-1257`). It
      opens the venue database without taking it from the running server, reading only (the
      `exclusive: false` way CLAUDE.md §3 gives a tool that runs beside the server), and compares the
-     chain's stored identity with the new release's. If they match, the upgrade carries on as an
+     chain's stored identity with the new release's. That database is still the old release's and
+     not yet migrated, so the check reads **the previous release's database shape**: the SIF row and
+     the tables the name history is built from (`invoice_series`, `registro_sif`,
+     `fiscal_allocations`, `fiscal_reservations`, `hour-history-reader.ts:51-102`), and for the
+     first release carrying A993, whose identity columns do not exist yet, a missing column counts
+     as "nothing stored". A release whose migrations change those tables must keep the check able
+     to read the shape before them; slice 1b's test runs the check against the previous release's
+     frozen database, the kind A799 keeps on each GitHub Release (§7.1). The alternative weighed —
+     migrate a copy and read that, as a restore does (`apps/server/src/restore.ts:367-375`) — needs a
+     consistent copy of a database the old release is still writing, and would migrate twice, the
+     second time inside the stop; not taken. If they match, the upgrade carries on as an
      ordinary one. If they differ, it reads the internet's clock (one reading takes at most 5
      seconds, `packages/fiscal-verifactu/src/hour-clock-internet.ts:62-67`), applies A947 §6.5's
      clock check, works out the earliest minute A947's rules 1–4 allow, and waits for it — rule 3's
      wait, at most 150 seconds — all while the old release sells. If it cannot pass (the three
      refusals below), it stops here, and the old release was never stopped.
   2. **The upgrade stops the old release.**
-  3. **A quick check again, on the box alone**, with the venue lock held: the history is read again,
-     and the box's clock must have moved as the host's steady clock (the one that only counts
-     seconds since start-up and cannot be set) has moved since step 1's reading, so a clock set by
-     hand in between is caught. If either fails, nothing has been changed yet: the upgrade starts
+  3. **A quick check again, on the box alone**, with the venue lock held. Three things must hold:
+     the history is exactly as step 1 read it (any change at all fails the check); this box still
+     holds the filing role (`node_roles.singleton_role` is `primary`); and the box's clock has moved
+     by the same amount as the host's steady clock — the machine-wide clock that only counts time
+     since start-up and cannot be set — since step 1's reading, so a clock set by hand in between is
+     caught. How step 1's readings are carried to this separate run is open (§12): the existing
+     internet-clock reader times itself with `performance.now()`
+     (`packages/fiscal-verifactu/src/hour-clock-internet.ts:45`), which starts again in every
+     process, so it cannot be reused; and a reboot in between resets the machine-wide clock, so it
+     fails the check. If any of the three fails, nothing has been changed yet: the upgrade starts
      the old release again and reports it. No outside reading is taken here, so while the app is
-     stopped nothing waits on anything outside the box.
+     stopped nothing waits on anything outside the box. **This is an extension of A947's clock
+     check**, which applies "every time a box takes a name": here the outside reading was taken in
+     step 1 and is carried to step 4 by the steady clock, seconds or, after rule 3's wait, up to
+     about two and a half minutes earlier. A947 itself takes a name up to 150 seconds after its
+     check (rule 3); whether A947 accepts a reading carried this way is put to the owner with this
+     revision (§12, question 1).
   4. **Migrate, then make the change.** These are two commits, not one transaction:
      `applyMigrations` opens its own store, runs each migration set in its own drizzle transaction,
      commits it and closes (`packages/migrations/src/apply.ts:43-93`). The change is one transaction
-     after them, under the step's own lock.
+     after them, under the step's own lock. It takes **the box's current minute** at that moment, as
+     A947's rule 2 does — which must be no earlier than the minute step 1 waited for; a later minute
+     is taken if the clock has moved on into one.
   5. **The upgrade starts the new release.**
+
+  *At a venue with a spare box*, a manager could switch to the spare while the main box is stopped
+  for its upgrade — the tills show the red strip after 20 seconds of silence (A947 §6.1). Step 3's
+  role check catches a switch made before it. One made after it, during steps 4 and 5, is A947's
+  returning main box (A947 §7): the main box learns it was replaced "before its first filing pass
+  and before it serves a till" (A947 §7, item 1), so the installation it has just opened never
+  carries a record. That is my reading of A947's design, whose
+  fence is not built; the spare's own name, taken without knowing the main box's, could even fall
+  in the same minute, harmless only because the main box's is never used.
 
   *What the stop costs.* Steps 2 to 5 are the stop every upgrade already makes (stop, migrate,
   start), plus a check on the box and one transaction — reasoned from the order, not measured. The
@@ -856,24 +894,37 @@ while the fibre is down until 14:00. With the internet up, all four do the same:
     1.4.0 pendiente: ya se usó un minuto posterior a la hora de este equipo. Se podrá a partir de
     las ‹HH:MM›.» — A947's refusal, which names the time from which it will be allowed.
 
-  *The one gap left, disclosed.* A power cut or crash in step 4, after the migration has committed
-  and before the change has. The old release then refuses the migrated database (`assertNotAhead`,
-  `apps/server/src/node-entry.ts:245`), and the new release starts with the change unmade — the
-  start's fallback below, where **a sale does wait on the internet's clock** until one can be read.
-  The window is the migration plus one transaction: seconds, by reasoning, not measured. A950's
+  *A power cut or crash while the app is stopped, disclosed.* Nothing starts any release by itself
+  afterwards: the box's containers are set `restart: unless-stopped` (`deploy/compose.yml:12`,
+  `:82`, `:105`), and Docker's documentation says of it: «Similar to `always`, except that when the
+  container is stopped (manually or otherwise), it isn't restarted even after Docker daemon
+  restarts» (quoted from the documentation's source by the third check, not run). The upgrade
+  stopped the app in step 2, so a cut anywhere in steps 2 to 5 leaves the venue **selling nothing
+  until the upgrade is run again**, and a box installed from B3's stick has no terminal for that.
+  The fix is new work in slice 1b: before step 2 the upgrade writes a marker in the box's folder
+  naming the previous and new images and the step reached, and a start-up service on the host (B3's
+  host service, §8 of B3, or a unit `waitron.sh` installs) reads it at boot and carries on —
+  before the migration it starts the old release; after it, the new one. Until that is built, the
+  disclosure stands as written here. And if the cut comes after the migration has committed and
+  before the change has, the old release refuses the migrated database (`assertNotAhead`,
+  `apps/server/src/node-entry.ts:245`), so whatever brings the app back starts the new release
+  with the change unmade — the start's fallback below, where **a sale does wait on the internet's
+  clock** until one can be read. That window is the migration plus one transaction: seconds, by
+  reasoning, not measured. A950's
   snapshot, put back before the first order, would close it; today's script takes no snapshot
   (`docs/backlog/box.md`, "It takes no backup first"). One transaction for both was weighed and not
   taken: it needs a way to run every migration set inside the change's transaction, but
   `applyMigrations` removes the change feed and installs the append-only triggers around the sets,
   and drizzle's migrator runs each set in a transaction of its own (`apply.ts:59-93`, and the comment
-  at `:80-84`). That is a change
+  at `:81-85`). That is a change
   to how every set migrates, larger than this slice, and not shown to be sound for every set.
 
   *Putting the old release back is new work too.* Today `waitron.sh install` records nothing about
   what it replaces: `refresh_self` may already have replaced the script itself
   (`deploy/waitron.sh:75-139`); the box files are overwritten (`:199-205`); for `main` the same tag
-  is pulled again, so the old image loses its tag (`:326-330`); and for a branch `.env` is rewritten
-  before anything starts (`:352-353`). So slice 1b records the previous image and box files before
+  is pulled again, so the old image loses its tag (`:326-330`); and `.env` is rewritten for every
+  ref before anything starts — the image lines removed for `main` (`:327-328`) or set for a branch
+  (`:352-353`), and the AppArmor line set or removed (`:226`, `:229`). So slice 1b records the previous image and box files before
   it overwrites them, and puts them back when the step changes nothing.
 
   *Example:* at 11:15 the check finds no internet; 1.3.2 was never stopped and the bar sells all
@@ -921,7 +972,8 @@ between (a switch to the spare, say) — more fiscal code, to save a delay that 
 **Under A, what a start does.** Every start still compares the identities (above). After an
 upgrade through its step they match. They differ in two cases: the new release was started some
 other way, for instance `docker compose up` typed by hand; or a power cut or crash came between the
-step's migration and its change (way A, "the one gap left"). Then the start makes the change
+step's migration and its change, and the app has since been brought back (way A, "A power cut or
+crash while the app is stopped"). Then the start makes the change
 itself, under A947's rules, with the internet's clock, and **until then does not trade**; its
 recovery page says «Esta versión abre una nueva instalación fiscal y necesita la hora de internet:
 conecta el equipo a internet». Disclosed: in both cases a sale does wait on something outside the
@@ -1120,7 +1172,15 @@ migration (slice 5).
 - **The quick check after the stop** (§5.6, way A, step 3): a case that sets the box's clock by
   hand between the check and the stop, and one that adds a name to the history in between; each
   must start the old release again with nothing changed.
-- **A crash between the migration and the change** (§5.6, way A, "the one gap left"): a case that
+- **A power cut during the upgrade's stop** (§5.6, way A, "A power cut or crash while the app is
+  stopped"): with the marker written and the app stopped, a case that simulates a boot before the
+  migration and checks the start-up service starts the old release, and one after it that checks
+  it starts the new release.
+- **The check reads the previous release's database** (§5.6, way A, step 1): the check run against
+  the previous release's frozen database, and against one from before A993 whose identity columns
+  are missing, which must read as "nothing stored".
+- **A crash between the migration and the change** (§5.6, way A, "A power cut or crash while the
+  app is stopped"): a case that
   stops the step after the migration commits and before the change, then starts the new release
   with no internet, and checks that it does not trade and the old chain gains nothing; and, with the
   internet back, that the start makes the change and then trades.
@@ -1130,11 +1190,14 @@ migration (slice 5).
 - **A restore of an old-producer backup onto a new release** (§5.6, "What each chain stores"): a
   case that restores a backup whose chain was opened under the old producer onto a box running a
   release with the new one, and checks that the restore's activation writes the new identity and
-  that the first start's identity step then does nothing. By my reading of
-  `apps/server/src/restore.ts:363-386`, the restore migrates its copy of the backup and runs its
-  fiscal activation on that copy, under the running release, before placing it
-  (`checkBeforePlacement`, which runs the restore's module operation,
-  `apps/server/src/recovery-module-operation.ts:132-134`); read, not run.
+  that the first start's identity step then does nothing. The restore places the backup, updates
+  it, then runs its fiscal activation under the running release, before any start: `restoreDatabase`
+  then `applyMigrations` (`apps/server/src/restore.ts:305-316`), then `runRestoreHooks`
+  (`:328-335`), which calls the fiscal module's restore hook (`:782-787`),
+  `ALLOCATED_FISCAL_RESTORE`, which activates (`packages/fiscal-verifactu/src/allocated-lifecycle.ts:49-60`)
+  — or, with no live installation in the backup, activates nothing (`:53-56`). Read by me; the
+  order was also recorded by the third check's probe, which printed `PROBE ORDER ["check
+  placed=false","hook placed=true"]`.
 
 ## 9. What is NOT a release
 
@@ -1234,8 +1297,20 @@ D, A recommended).
   changed by this revision.
 - **The upgrade's step (§5.6, way A), for the builder:** how the one-off command reaches the
   fiscal module without `apps/server` importing it (§5.3's composition rule); how step 1's clock
-  reading and steady-clock reading reach step 3, which is a separate run of the command; and how
-  long after step 1 step 3 may still rely on it before step 1 must be run again.
+  reading and machine-wide steady-clock reading reach step 3, which is a separate run of the
+  command (the internet-clock reader's own `performance.now()` restarts per process and cannot be
+  reused); and how long after step 1 step 3 may still rely on it before step 1 must be run again.
+- **Step 3 extends A947's clock check** (§5.6, way A): the outside reading is taken in step 1 and
+  carried to the name in step 4 by the host's steady clock, rather than read at the moment of
+  taking the name. A947's own rule 3 already takes a name up to 150 seconds after its check;
+  whether A947 accepts a reading carried between two runs is for the owner, with question 1, and
+  for A947's slice 4a to allow.
+- **Bringing the app back after a cut during the upgrade** (§5.6, way A): the marker and the
+  start-up service that reads it are new work in slice 1b; until they exist, a cut in steps 2 to 5
+  leaves the venue selling nothing until the upgrade is run again.
+- **The check reads the previous release's database shape** (§5.6, way A, step 1), guarded by a
+  test against the previous release's frozen database; the copy-and-migrate alternative is not
+  taken.
 - **A950's rollback after the change.** If A950 puts back its snapshot after the step but before
   the first order, the restored database no longer records that the new code was spent. Nothing
   was filed under it (A950 files nothing before its check passes), and the next attempt takes a

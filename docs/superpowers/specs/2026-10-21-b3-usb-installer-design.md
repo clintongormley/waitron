@@ -44,7 +44,7 @@ which makes B3 go-live work. Four other pieces of work are already waiting on wh
 - **A798, keep trading when a part fails** — "The box image keeps its clock synchronised, with no
   terminal … the image makes it standing" (`docs/backlog/box.md:366-373`).
 - **A940, the declaración responsable** — "B3's USB installer, when it is designed, copies the PDF
-  onto the stick beside the installer" (`docs/superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md:1072-1073`).
+  onto the stick beside the installer" (`docs/superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md:1124-1125`).
 
 And the owner's 2026-10-21 answer on A732 — no recovery desk: "But this isn't needed. You just
 reinstall the box and start again" (recorded in lane E's questions file, outside the repository).
@@ -162,7 +162,7 @@ The stick does not change with every release: it fetches the newest one (§5.4).
 The release's declaración responsable (A940 §7.1) is downloaded with the release and kept on the
 box, where Help → About shows it (A940's design), rather than on a stick that may be older than the
 release it installs. **My call**; A940 assumed the PDF goes on the stick
-(`docs/superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md:1072-1073`), and §17
+(`docs/superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md:1124-1125`), and §17
 hands that line back to A940.
 
 ## 5. What happens at the box
@@ -958,7 +958,7 @@ image, so slice 5 adds a check that the disk's package list and its notices matc
 
 **A note for A940.** Its draft names the third-party parts as "Node.js, SQLite, Litestream, Linux
 and Docker, as Q53 lists them", with the full list in `/app/third-party/`
-(`docs/superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md:496-498`). Once the stick
+(`docs/superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md:501-503`). Once the stick
 installs the operating system, Debian 13 is part of what Waitron supplies, and its notices live
 under `/usr/share/doc` on the box rather than in `/app/third-party/`. A940's list and pointer change
 with it.
