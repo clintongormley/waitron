@@ -3281,12 +3281,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   identical. Every screen using `colorField` is affected.
 
 - **A841 slice 5 differences from the pictures and tidy-ups (2026-10-21).** Optional, for the owner
-  to judge from `~/waitron-campaign/a841-5-shots/`: at a 1280 px window with the side menu open the
-  form is about 825 px wide, under the 900 px at which the preview sits beside the choices, so it sits
+  to judge from its [screenshots](backlog/mockups/a841-5-theme-editor/): at a 1280 px window with
+  the side menu open the form is about 825 px wide, under the 900 px at which the preview sits beside the choices, so it sits
   below them (pictures 02, 04, 05 show it beside); the warning and fix lines are plain text and a
   plain button, without the pictures' boxes and colour chips; Waitron's choice sits above the swatches
   rather than beside Custom; the theme's name in the editing line is not bold; on a phone the
-  preview's sample keeps its side menu beside it while it fits (picture 03 draws it above). Test
+  preview's sample keeps its side menu beside it while it fits (picture 03 draws it above); and the
+  pictures still show Café Limón's light fix as `#9f8b18` and Bar Lucía's dark fix as `#417c59`,
+  where the code gives `#9d8a15` and `#437e5b` (a dated note in the design says so). Test
   gaps its reviews left: an unchanged draft off the page following a newer read on re-attach;
   the colour field's refused chip value, disabled code box while saving and same-row placement; the
   warning text's colour; the preview's colour-rebuild check (`theme-preview.test.ts`); Bar Lucía and
@@ -3328,9 +3330,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (`derive.ts`) both evaluate contrast rules and could share one evaluator; the black-or-white text
   choice could be shared with `packages/ui`; `deriveAt` could be tidied and the hues kept in one
   list; `packages/ui-core/src/tokens/colors.test.ts` still keeps its own station lists rather than
-  reading `STATIONS`. Separately, the design's mock-up pictures still show Café Limón's light fix as
-  `#9f8b18` and Bar Lucía's dark fix as `#417c59`; the code now gives `#9d8a15` and `#437e5b` (a dated
-  note in the design says so). Redraw them when the editor's slice is built.
+  reading `STATIONS`.
 
 - **Uploaded font files for themes (owner, 2026-10-20, A841 Q7 B) — after A841.** A theme's
   Typeface may also be a font file the venue uploads, so every screen draws the bar's own face. The

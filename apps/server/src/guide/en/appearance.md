@@ -35,8 +35,8 @@ use. While Waitron's theme is in use, the card has no **Edit**.
 Press **Edit** and the card opens its three choices in place:
 
 - **Brand colour**: pick **Waitron's**, one of the swatches, or **Custom** to choose any colour.
-  You can also type a code such as `#1e5b3a` into **Colour code**. A code must be `#` followed by
-  six digits or letters a to f, or Save tells you so under the field.
+  You can also type a code such as `#1e5b3a` into the box beside **Custom**. A code must be `#`
+  followed by six digits or letters a to f, or Save tells you so under the field.
 - **Background**: **Neutral** or **Tinted**.
 - **Corners**: **Square**, **Standard** or **Round**.
 
@@ -89,8 +89,9 @@ for each colour that is. It offers three choices:
 
 When the theme you saved is the one in use, the dashboard you are using changes to the new look at
 once. Other dashboards open at the same time follow on their own, and a signed-in till follows the
-next time it checks its menu for changes, which a till showing a menu does every 15 seconds. A till
-that is not showing a menu follows when it next opens one, or when it restarts.
+next time it checks its menu for changes. A till set up for counter service checks every 15
+seconds. Any other till checks every 15 seconds while a table's order is open on it, and otherwise
+follows when it next opens one, or when it restarts.
 
 If you saved anyway, the Look card keeps a warning line for each colour that is still hard to read,
 so the next person who opens the page sees it too.

@@ -1,8 +1,8 @@
 # Apariencia
 
 El panel y las cajas pueden llevar los colores de tu local en lugar del azul de Waitron. La página
-**Apariencia**, dentro de **Ajustes**, muestra el aspecto en uso y permite cambiarlo y ver el
-resultado antes de que lo vea nadie más.
+**Apariencia**, dentro de **Ajustes**, muestra el aspecto en uso y permite a un encargado
+cambiarlo y ver el resultado antes de que lo vea nadie más.
 
 ## Consulta el aspecto en uso {#look}
 
@@ -37,9 +37,9 @@ de los temas propios del local. Mientras está en uso el tema de Waitron, la tar
 Pulsa **Editar** y la tarjeta abre sus tres elecciones en el mismo sitio:
 
 - **Color de marca**: elige **De Waitron**, una de las muestras, o **Personalizado** para escoger
-  cualquier color. También puedes escribir un código como `#1e5b3a` en **Código de color**. Un
-  código debe ser `#` seguido de seis dígitos o letras de la a a la f; si no lo es, Guardar te lo
-  indica debajo del campo.
+  cualquier color. También puedes escribir un código como `#1e5b3a` en la casilla junto a
+  **Personalizado**. Un código debe ser `#` seguido de seis dígitos o letras de la a a la f; si no
+  lo es, Guardar te lo indica debajo del campo.
 - **Fondo**: **Neutro** o **Teñido**.
 - **Esquinas**: **Rectas**, **Estándar** o **Redondeadas**.
 
@@ -92,9 +92,10 @@ cada color afectado. Ofrece tres opciones:
 
 Cuando el tema que guardaste es el que está en uso, el panel que estás usando cambia al nuevo
 aspecto al momento. Los demás paneles abiertos a la vez lo siguen por su cuenta, y una caja con la
-sesión iniciada lo sigue la próxima vez que comprueba si su carta ha cambiado, cosa que una caja
-que muestra una carta hace cada 15 segundos. Una caja que no muestra ninguna carta lo sigue cuando
-vuelve a abrir una, o cuando se reinicia.
+sesión iniciada lo sigue la próxima vez que comprueba si su carta ha cambiado. Una caja preparada
+para el servicio en mostrador lo comprueba cada 15 segundos. Cualquier otra caja lo comprueba cada
+15 segundos mientras tiene abierto el pedido de una mesa y, si no, lo sigue cuando vuelve a abrir
+uno, o cuando se reinicia.
 
 Si guardaste de todos modos, la tarjeta Aspecto conserva una línea de aviso por cada color que
 sigue leyéndose mal, para que también lo vea la próxima persona que abra la página.

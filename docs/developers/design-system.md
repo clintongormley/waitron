@@ -470,7 +470,8 @@ A user-chosen data colour is the one deliberate exception to "no hex, no hardcod
 colour a person gave a category, a product or a menu section is painted as it is, never mapped to a
 token. Its users are the colour chooser's palette (`apps/dashboard/src/widgets/color-field.ts`), the
 category swatches in the Products tree, the product and section swatches in a menu's Structure tree,
-and the till's product and section tiles (`apps/till/src/widgets/menu-browser.ts`). A painted till
+the brand colour and fix shade chips on Settings → Appearance's Look card
+(`apps/dashboard/src/screens/look-card.ts`), and the till's product and section tiles (`apps/till/src/widgets/menu-browser.ts`). A painted till
 tile takes black or white for its labels and its icon, whichever `readableTextColor`
 (`packages/ui/src/category-color.ts`) picks for that colour, because the label still carries the
 meaning and the colour is never the only signal. `wt-lozenge` takes a colour the same way, filling
@@ -4021,6 +4022,9 @@ slice 5), built with `settingsCard` and `settingsRows`:
   otherwise; this follows the words' real widths, so it needs no width per language. The form's
   buttons sit `--wt-space-4` below whatever comes before them: the preview in one column, the
   taller of the two columns side by side, or the Fix all line when it shows.
+- **The editor's buttons follow the design's mock-up 02**: Use Waitron's look in the `cancel` slot
+  at the start, then Cancel as `secondary`, then Save. This departs from the rule that Cancel takes
+  the `cancel` slot.
 - **The preview's Light and Dark panels are painted from the draft inside the card and nowhere
   else** (`apps/dashboard/src/widgets/theme-preview.ts`). Each panel is a theme root inside the
   preview's shadow root, painted by a constructed sheet adopted into that shadow root only. The draft
