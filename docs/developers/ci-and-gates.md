@@ -1113,7 +1113,7 @@ A file's time is the seconds on its `[file-progress] end` line in the job log, a
   149 s, which asked for 121, 133 and 94 repeated scrypt derivations at N=2^17 on identical inputs,
   from the test helper and from the product's preview, validate and restore steps each decrypting
   the same archive; `src/first-setup-unused-pdf.test.ts` 151 s, one 84 s test building three
-  fixtures; `src/invoice-pdf.test.ts` 119 s, its time in `width()`
+  fixtures; `src/invoice-pdf.test.ts` 119 s, its slowest test's time, without coverage, 95% under `width()`
   (`apps/server/src/invoice-page.ts:47`), about 4.5 times slower under coverage.
 - **The split put heavy files together.** Vitest 4.1.11 sorts the files by the sha1 of each path and
   cuts the list into equal counts (`BaseSequencer.shard`), so which files share a shard depends only
@@ -1150,10 +1150,10 @@ A file's time is the seconds on its `[file-progress] end` line in the job log, a
    locally on `src/hour-recovery-placement-1.test.ts` with coverage, with the setup line in and out
    alternately at a load average of about 9 to 12: 70.0 and 69.7 s with it, 95.2 and 111.8 s
    without. That file asked for 164 keys, and 43 were derived. One N=2^17 derivation took about 175
-   to 195 ms on the Mac it ran on (two measurements, Node v26.11.1: 175–182 ms and 186–193 ms).
-   A restore from a backup file still derives the archive's key at preview, at staging and at the
-   next start; deriving it once is a behaviour change on the restore path, left in the backlog
-   ([detail](../backlog/box.md#a-restore-from-a-backup-file-derives-the-archives-key-three-times)).
+   to 195 ms on the Mac they ran on (two measurements, Node v26.11.1: 175–182 ms and 186–193 ms).
+   A restore from a backup file still derives the archive's key at least once at each of preview,
+   staging and the next start; deriving it once is a behaviour change on the restore path, left in the backlog
+   ([detail](../backlog/box.md#a-restore-from-a-backup-file-derives-the-archives-key-at-least-three-times)).
 2. **Packing by measured time.** `apps/server/vitest.config.ts` names
    `scripts/vitest-duration-sequencer.mjs` as its sequencer, with the committed table
    `apps/server/test-durations.json` (seconds per test file, keyed by its path under `apps/server`).
@@ -1187,9 +1187,10 @@ no charge.
 `python3 -I stale.py files.txt old.kv` in the model folder judged a table taken from run 39169930434, from before
 A679, which lacks 137 of today's 872 files (2,541 file-seconds, a quarter of the suite). Worst shard
 job per run, simulated: at 16 shards, 279 to 332 s with the absent files started by their estimate,
-230 to 260 s with them started first (at 15: 297 to 353 s against 249 to 267 s). So even a table
-missing a quarter of the suite does better than a sixteen-way hash split would (298 s on today's
-names, 302 s at the random p90, modelled with the memo). A stale table
+230 to 260 s with them started first (at 15: 297 to 353 s against 249 to 267 s). So with the absent
+files started first, as the sequencer does, even a table missing a quarter of the suite (230 to
+260 s) does better than a sixteen-way hash split would (298 s on today's names, 302 s at the random
+p90, modelled with the memo); started by their estimate, it would not (279 to 332 s). A stale table
 makes the shards less even; it does not drop or repeat a file.
 
 **Refreshing the table.** When a server shard drifts past 4 minutes, or the `[duration-sequencer]`

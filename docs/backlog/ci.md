@@ -619,7 +619,7 @@ without coverage, put 95% of the time under `width()` (`apps/server/src/invoice-
 `invoiceFont.layout(text).advanceWidth`). For a word that does not fit on the line, `wrap()`
 measures a growing string once per character, and the 480-layout test measures the same strings
 again each time. The whole file took 10.9 s locally without coverage and 49.6 s with it, about 4.5
-times slower. Caching the advance width per string is the untried fix; it would also speed real
+times slower. Caching the advance width per string is the untried fix; it may also speed real
 invoice rendering. Left open by A801. Receipts:
 [A801](../developers/ci-and-gates.md#runners-come-in-two-speeds-and-the-busiest-shard-is-the-one-that-crosses-4-minutes),
 [A938](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration).

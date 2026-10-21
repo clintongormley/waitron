@@ -571,9 +571,9 @@ below records the gap that prompted the design, not a new runtime measurement.
   opening a connection", and one title ("rather than opening the working directory") rests on the
   false reason in the empty-venue-directory section above.
 
-## A restore from a backup file derives the archive's key three times
+## A restore from a backup file derives the archive's key at least three times
 
-Each step below derives the archive's key with scrypt at N=2^17 (`KDF_BY_VERSION`,
+Each step below derives the archive's key at least once, with scrypt at N=2^17 (`KDF_BY_VERSION`,
 `packages/provisioning/src/artifact-cipher.ts:14`):
 
 - the preview, `previewRecoveryArchive` (`apps/server/src/recovery-backup-preview.ts:99`), through

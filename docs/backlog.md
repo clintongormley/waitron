@@ -5461,10 +5461,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   A178 (#1010 to #1019), seen while building, not changed: the same parsing is on `main` before
   A178b (`#buildSchedule`'s `split(":")`); what the server does with it was not checked.
 
-- **A restore from a backup file derives the archive's key three times**, each an N=2^17 scrypt:
-  at preview, at staging and again at the next start. Deriving it once would save CPU on the box;
+- **A restore from a backup file derives the archive's key at least three times**, each an N=2^17
+  scrypt: at least once at each of preview, staging and the next start. Deriving it once would save CPU on the box;
   it is a behaviour change on the restore path and needs its own tests. Left open by A938.
-  [Detail](backlog/box.md#a-restore-from-a-backup-file-derives-the-archives-key-three-times)
+  [Detail](backlog/box.md#a-restore-from-a-backup-file-derives-the-archives-key-at-least-three-times)
 
 ### Replication, failover and the cloud
 
@@ -5743,7 +5743,7 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   [Reproduction](developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
 
 - **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**, a median of 144 s over six
-  runs in A938. A938's profile put its time under `width()`; caching the advance width per string
+  runs in A938. A938's profile put its slowest test's time under `width()`; caching the advance width per string
   is the untried fix. Left open by A801.
   [Detail](backlog/ci.md#the-invoice-pdf-test-took-162-s-on-one-ci-run)
 
