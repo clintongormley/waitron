@@ -1287,6 +1287,7 @@ const SPARSE_PACK: CountryPack = {
   countryCode: "ZZ",
   defaultLocale: "zz-ZZ",
   defaultTimeZone: "Etc/GMT-3",
+  timeZones: ["Etc/GMT-3"],
   invoiceLocales: ["zz-ZZ"],
   moduleIds: [],
   availableForVenueSetup: true,

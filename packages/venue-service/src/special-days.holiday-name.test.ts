@@ -70,6 +70,7 @@ vi.mock("@waitron/country-packs", async (importOriginal) => {
     countryCode: "ZZ",
     defaultLocale: "es-ES",
     defaultTimeZone: "Europe/Madrid",
+    timeZones: ["Europe/Madrid"],
     invoiceLocales: ["es-ES"],
     moduleIds: [],
     availableForVenueSetup: false,

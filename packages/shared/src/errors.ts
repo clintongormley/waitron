@@ -25,6 +25,8 @@
  * an import written in a comment or string of another file the barrel reaches fakes an edge.
  */
 export interface ErrorParams {
+  "venue.time_zone_invalid": { reason: "missing" | "invalid" | "country" };
+  "venue.time_zone_conversion_failed": { reason: "invalid_instant" | "unreadable_offset" };
   "business_day.clock_invalid": {
     reason:
       | "invalid_date"

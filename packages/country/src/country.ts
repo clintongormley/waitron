@@ -132,6 +132,7 @@ export interface CountryPack {
   readonly countryCode: string;
   readonly defaultLocale: string;
   readonly defaultTimeZone: string;
+  readonly timeZones: readonly string[];
   readonly defaultProductVatClass?: string;
   readonly invoiceLocales: readonly string[];
   /** Resource locales can include display translations beyond the offered invoice locales. */

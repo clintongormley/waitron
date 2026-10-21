@@ -13,7 +13,13 @@ import {
   resolveCountryDemoIdentity,
   validateRecipientIdentifier,
 } from "@waitron/country";
-import { contentLanguageCode, FALLBACK_LOCALE, type ContentLanguageRules } from "@waitron/shared";
+import {
+  AppError,
+  classifyTimeZone,
+  contentLanguageCode,
+  FALLBACK_LOCALE,
+  type ContentLanguageRules,
+} from "@waitron/shared";
 import {
   SPAIN,
   SPAIN_RECEIPT_LABELS,
@@ -219,4 +225,22 @@ export function receiptCountryNameFor(countryCode: string, locale: string): stri
     ? locale
     : FALLBACK_RECEIPT_LOCALE;
   return countryNameFor(countryCode, receiptLocale);
+}
+
+export function requireCountryTimeZone(country: string, value: unknown): string {
+  const saved = classifyTimeZone(value);
+  if (saved.kind !== "valid") {
+    throw new AppError("venue.time_zone_invalid", { reason: saved.kind });
+  }
+  const pack = getCountryPack(country);
+  if (
+    pack === undefined ||
+    !pack.timeZones.some((zone) => {
+      const allowed = classifyTimeZone(zone);
+      return allowed.kind === "valid" && allowed.timeZone === saved.timeZone;
+    })
+  ) {
+    throw new AppError("venue.time_zone_invalid", { reason: "country" });
+  }
+  return saved.timeZone;
 }

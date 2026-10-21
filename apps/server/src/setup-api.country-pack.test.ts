@@ -21,6 +21,7 @@ const UNFILED: CountryPack = {
   countryCode: "ZZ",
   defaultLocale: "en-GB",
   defaultTimeZone: "Etc/UTC",
+  timeZones: ["Etc/UTC"],
   invoiceLocales: ["en-GB"],
   moduleIds: [],
   availableForVenueSetup: true,
