@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { applyTokens, startVenueTheme, VENUE_THEME_STORAGE_KEY } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
-import { FIXTURE_ANSWER, FIXTURE_LIGHT_BG } from "@waitron/ui/test/venue-theme-fixture.js";
+import {
+  FIXTURE_ANSWER,
+  FIXTURE_LIGHT_BG,
+  WAITRON_LIGHT_BG,
+} from "@waitron/ui/test/venue-theme-fixture.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { DashboardApp } from "./dashboard-app.js";
 import type { DashboardApi } from "./api/client.js";
@@ -149,6 +153,40 @@ it("after returning to sign-in, changes read nothing", async () => {
   await flush(el);
   await flush(el);
   expect(api.getVenueTheme).toHaveBeenCalledTimes(calls);
+});
+
+it("a refresh still in flight when the session ends does not repaint the page", async () => {
+  const api = stubApi();
+  const el = await mount(api);
+  await vi.waitFor(() => expect(bg()).toBe(FIXTURE_LIGHT_BG));
+  let answer!: (value: typeof SECOND_ANSWER) => void;
+  api.getVenueTheme.mockImplementation(
+    () => new Promise<typeof SECOND_ANSWER>((resolve) => (answer = resolve)),
+  );
+  const calls = api.getVenueTheme.mock.calls.length;
+  api.liveData.invalidate([{ type: "custom_themes" }]);
+  await vi.waitFor(() => expect(api.getVenueTheme).toHaveBeenCalledTimes(calls + 1));
+  window.dispatchEvent(
+    new CustomEvent("waitron-session-invalid", { detail: { code: "management_session.expired" } }),
+  );
+  await el.updateComplete;
+  answer(SECOND_ANSWER);
+  await flush(el);
+  await flush(el);
+  expect(bg()).toBe(FIXTURE_LIGHT_BG);
+});
+
+it("a failed first read keeps the page and is recorded", async () => {
+  const record = vi.spyOn(diag, "record");
+  const api = stubApi({
+    getVenueTheme: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+  });
+  await mount(api);
+  await vi.waitFor(() =>
+    expect(record).toHaveBeenCalledWith("warn", "theme.load_failed", { code: "connection.failed" }),
+  );
+  expect(api.getVenueTheme).toHaveBeenCalledOnce();
+  expect(bg()).toBe(WAITRON_LIGHT_BG);
 });
 
 it("a failed read keeps the page and is recorded", async () => {

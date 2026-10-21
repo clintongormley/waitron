@@ -203,7 +203,8 @@ reaches 4.5:1 on both themes' `--wt-color-bg`. A venue's custom theme writes it:
 from the theme's own button colour, unless it is set by hand, and Waitron's own value when the theme
 chooses neither (`THEME_COLOURS`, `packages/ui-core/src/theme/tokens.ts`). The dashboard and the
 till apply the theme in use (`packages/ui/src/venue-theme.ts`); until the editor lands (A841
-slice 5), nothing writes one.
+slice 5), no screen writes one; the management API (`/management-api/themes`,
+`/management-api/theme-in-use`) and a configuration transfer already can.
 
 `--wt-color-primary-hover` and `--wt-color-danger-hover` are the fills a primary and a danger
 `wt-button` take under the pointer: `#1a5fd0` and `#9a1f18` light, `#78a9ff` and `#ffa197` dark,

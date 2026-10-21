@@ -810,8 +810,9 @@ changed or 5 s have passed.
 
 - [ ] **Step 5: Docs** — `design-system.md:202-205`: replace "no screen applies a venue's theme yet
   (A841)" with a sentence that the dashboard and the till apply the theme in use
-  (`packages/ui/src/venue-theme.ts`), and that until the editor lands (A841 slice 5) nothing writes
-  one. Grep the whole file for other sentences saying a venue theme is not applied, and fix each.
+  (`packages/ui/src/venue-theme.ts`), and that until the editor lands (A841 slice 5) no screen writes
+  one; the management API (`/management-api/themes`, `/management-api/theme-in-use`) and a
+  configuration transfer already can. Grep the whole file for other sentences saying a venue theme is not applied, and fix each.
   `docs/developers/dashboard-live-updates.md`: a dated line (2026-10-2x, A841 slice 3) that the shell's
   theme read sends EVERY read passively, its first included, through `DashboardApi.background`
   (`getVenueTheme`), unlike `DashboardQueries`' usual active first read, because it starts on its own
