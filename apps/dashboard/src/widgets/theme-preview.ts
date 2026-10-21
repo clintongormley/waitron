@@ -7,8 +7,7 @@ import { t } from "../i18n/t.js";
 /**
  * A picture of a theme draft: one panel per mode, each a theme root of its own, painted from a
  * sheet adopted into this shadow root only, so neither the page's theme reaches the panels nor
- * the draft the page. A media query cannot read a custom property, so this repeats
- * DRAWER_BREAKPOINT's literal.
+ * the draft the page.
  */
 @customElement("dashboard-theme-preview")
 export class ThemePreview extends LitElement {
@@ -18,6 +17,7 @@ export class ThemePreview extends LitElement {
       :host {
         display: block;
         min-width: 0;
+        container-type: inline-size;
       }
       h3,
       h4 {
@@ -30,12 +30,13 @@ export class ThemePreview extends LitElement {
       }
       .panels {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-4);
       }
-      @media (max-width: 48rem) {
+      /* A panel's content needs about 280px; this leaves room for larger fonts. */
+      @container (min-width: 640px) {
         .panels {
-          grid-template-columns: 1fr;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         }
       }
       figure {

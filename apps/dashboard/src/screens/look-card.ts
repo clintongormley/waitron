@@ -122,9 +122,12 @@ export class LookCard extends LitElement {
         margin: 0 0 var(--wt-space-4);
         color: var(--wt-color-text-muted);
       }
+      form {
+        container-type: inline-size;
+      }
       .editor {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+        grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-5);
         align-items: start;
       }
@@ -133,9 +136,9 @@ export class LookCard extends LitElement {
         gap: var(--wt-space-4);
         min-width: 0;
       }
-      @media (max-width: 48rem) {
+      @container (min-width: 900px) {
         .editor {
-          grid-template-columns: minmax(0, 1fr);
+          grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
         }
       }
     `,
@@ -301,13 +304,13 @@ export class LookCard extends LitElement {
                 label: t("appearance.brand_waitron"),
                 chip: WAITRON_DEFAULTS.light[PRIMARY]!,
               },
-              change: (colour) => this.#change((d) => pickBrand(d, colour), true),
+              change: (colour) => this.#change((d) => pickBrand(d, colour, this.#expected), true),
               code: {
                 name: "brandColor",
                 label: t("appearance.brand_code"),
                 value: draft.code,
                 error: codeError,
-                change: (text) => this.#change((d) => typeCode(d, text), true),
+                change: (text) => this.#change((d) => typeCode(d, text, this.#expected), true),
               },
             })}
             <wt-segmented-control

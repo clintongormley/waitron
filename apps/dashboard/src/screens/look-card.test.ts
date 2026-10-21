@@ -256,6 +256,17 @@ describe("editing the Look card in place", () => {
     expect(codeField(el).value).toBe("#1e5b3a");
   });
 
+  it("picking away and back to the saved colour keeps its fix, and Save goes quiet again", async () => {
+    const { el } = await mountEditing(inUse(lucia));
+    await userEvent.click(q(el, 'button.swatch[data-color="#b12525"]')!);
+    await el.updateComplete;
+    expect(button(el, "save").disabled).toBe(false);
+    await typeInCode(el, "#1E5B3A");
+    expect(button(el, "save").variant).toBe("secondary");
+    expect(button(el, "save").disabled).toBe(true);
+    expect(preview(el).theme.dark["--wt-color-primary"]).toBe(lucia.dark!["--wt-color-primary"]);
+  });
+
   it("every change repaints the preview and nothing else", async () => {
     const { el } = await mountEditing(inUse(lucia));
     const before = getComputedStyle(el).getPropertyValue("--wt-color-primary");
@@ -333,6 +344,7 @@ describe("editing the Look card in place", () => {
     await expect.poll(() => codeField(el).error).toBe(t("appearance.bad_code"));
     expect(await bottom(el)).toBe(t("form.fix_fields"));
     expect(button(el, "save").disabled).toBe(false);
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(codeField(el));
     for (const refusal of [
       { code: "theme.not_found" },
       { code: "theme.invalid", params: { field: "brandFix.light", reason: "fix_with_hand_set" } },
@@ -399,6 +411,29 @@ describe("editing the Look card in place", () => {
     expect(row(el, "brand")).toBe("Custom · #1e5b3a · dark screens #437e5b");
     expect(row(el, "background")).toBe("Tinted");
     expect(row(el, "corners")).toBe("Round");
+  });
+
+  it("lays the editor out by the card's own width, so a 700px card squashes no preview panel", async () => {
+    const { innerWidth: width, innerHeight: height } = window;
+    await page.viewport(1024, 800);
+    try {
+      const { el } = await mountEditing(inUse(lucia));
+      el.parentElement!.style.width = "700px";
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const panels = [...preview(el).shadowRoot!.querySelectorAll<HTMLElement>(".panel")];
+      const measured = panels.map((panel) => `${panel.clientWidth}/${panel.scrollWidth}`);
+      expect(
+        measured.every((pair) => Number(pair.split("/")[0]) >= Number(pair.split("/")[1])),
+        measured.join(" "),
+      ).toBe(true);
+      const choices = q(el, ".choices") as HTMLElement;
+      expect(choices.scrollWidth).toBeLessThanOrEqual(choices.clientWidth);
+      expect(preview(el).getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        choices.getBoundingClientRect().bottom,
+      );
+    } finally {
+      await page.viewport(width, height);
+    }
   });
 
   it("an unreadable theme opens on Waitron's choices", async () => {

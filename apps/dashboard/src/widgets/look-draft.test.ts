@@ -58,6 +58,19 @@ describe("the Look card's draft", () => {
     expect(sameDraft(other, draft)).toBe(false);
   });
 
+  it("takes back the opened draft's fix when the brand colour returns to the opened one", () => {
+    const opened = openDraft(LUCIA);
+    const bySwatch = pickBrand(pickBrand(opened, "#b12525", opened), "#1e5b3a", opened);
+    expect(bySwatch.choices.brandFix).toEqual({ dark: true });
+    expect(sameDraft(bySwatch, opened)).toBe(true);
+    const byCode = typeCode(typeCode(opened, "#123456", opened), "#1E5B3A", opened);
+    expect(byCode.choices.brandFix).toEqual({ dark: true });
+    expect(sameDraft(byCode, opened)).toBe(true);
+    const viaWaitrons = pickBrand(pickBrand(opened, null, opened), "#1e5b3a", opened);
+    expect(viaWaitrons.choices.brandFix).toEqual({ dark: true });
+    expect(pickBrand(opened, "#b12525", opened).choices.brandFix).toEqual({});
+  });
+
   it("keeps the colour while a typed code is partial, and calls the code invalid", () => {
     const draft = typeCode(openDraft(LUCIA), "#12");
     expect(draft.choices).toEqual(LUCIA);
@@ -94,6 +107,21 @@ describe("the Look card's draft", () => {
         openDraft({ ...WAITRON_CHOICES, handSet: { light: {}, dark: { text: "#eeeeee" } } }),
       ),
     ).toBe(false);
+  });
+
+  it("compares a hand-set map holding an undefined value as if the key were absent", () => {
+    const plain = openDraft(LUCIA);
+    const holey = openDraft({
+      ...LUCIA,
+      handSet: {
+        light: { bg: "#f8f1e1", text: undefined } as unknown as Record<string, string>,
+        dark: {},
+      },
+    });
+    expect(sameDraft(plain, holey)).toBe(true);
+    expect(sameDraft(holey, plain)).toBe(true);
+    const other = openDraft({ ...LUCIA, handSet: { light: { text: "#f8f1e1" }, dark: {} } });
+    expect(sameDraft(holey, other)).toBe(false);
   });
 
   it("compares by value, never by key order", () => {

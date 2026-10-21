@@ -25,10 +25,13 @@ function sameHand(
   a: Readonly<Partial<Record<string, string>>>,
   b: Readonly<Partial<Record<string, string>>>,
 ): boolean {
-  const keys = Object.keys(a);
+  const set = (hand: typeof a) =>
+    Object.entries(hand).filter((entry): entry is [string, string] => entry[1] !== undefined);
+  const x = set(a);
+  const y = new Map(set(b));
   return (
-    keys.length === Object.keys(b).length &&
-    keys.every((key) => b[key] !== undefined && a[key]!.toLowerCase() === b[key]!.toLowerCase())
+    x.length === y.size &&
+    x.every(([key, value]) => y.get(key)?.toLowerCase() === value.toLowerCase())
   );
 }
 
@@ -48,19 +51,23 @@ export function sameDraft(a: LookDraft, b: LookDraft): boolean {
   );
 }
 
-function withBrand(draft: LookDraft, colour: string | null): ThemeChoices {
-  return colour === draft.choices.brandColor
-    ? draft.choices
-    : { ...draft.choices, brandColor: colour, brandFix: {} };
+/** A fix belongs to its colour: going back to the opened colour takes back the opened fix. */
+function withBrand(draft: LookDraft, colour: string | null, opened?: LookDraft): ThemeChoices {
+  if (colour === draft.choices.brandColor) return draft.choices;
+  const brandFix =
+    opened !== undefined && colour !== null && colour === opened.choices.brandColor
+      ? opened.choices.brandFix
+      : {};
+  return { ...draft.choices, brandColor: colour, brandFix };
 }
 
-export function pickBrand(draft: LookDraft, colour: string | null): LookDraft {
-  return { choices: withBrand(draft, colour), code: colour ?? "" };
+export function pickBrand(draft: LookDraft, colour: string | null, opened?: LookDraft): LookDraft {
+  return { choices: withBrand(draft, colour, opened), code: colour ?? "" };
 }
 
-export function typeCode(draft: LookDraft, text: string): LookDraft {
+export function typeCode(draft: LookDraft, text: string, opened?: LookDraft): LookDraft {
   const key = codeKey(text);
-  return { choices: CODE.test(key) ? withBrand(draft, key) : draft.choices, code: text };
+  return { choices: CODE.test(key) ? withBrand(draft, key, opened) : draft.choices, code: text };
 }
 
 export function codeInvalid(draft: LookDraft): boolean {
