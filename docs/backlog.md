@@ -5215,8 +5215,12 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   Embedded build identity and an importable verification bundle now have local build checks.
   The artifact verifier now measures a sealed input copy, runs real private placement and owner
   checks, and withholds its result until owned handles and scratch have been disposed. Local
-  orchestration cases cover binding, key refusals, cleanup failures and cancellation; genuine
-  complete fiscal-archive authority qualification and target-bound recovery remain open. Cloud integration
+  orchestration cases cover binding, key refusals, cleanup failures and cancellation. A locally
+  generated encrypted fiscal archive now exercises complete owner checks without activation,
+  original-to-placed row equality, encrypted authenticator enrolment and ordinary restore refusals.
+  Installed omission controls cover verification coverage, compatibility, archive paths and entries,
+  required secrets, full fiscal history, stored heads, immutable rows and the read-only barriers.
+  Target-bound recovery and final branch qualification remain open. Cloud integration
   follows the implementing Waitron release. Snapshots stay unavailable until complete module checks,
   target-bound recovery and joint acceptance pass.
 
