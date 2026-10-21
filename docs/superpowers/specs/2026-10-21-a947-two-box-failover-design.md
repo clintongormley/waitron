@@ -576,28 +576,39 @@ sold for this venue, the old main box's and every earlier promotion's — and:
    moment. So a four-symbol code for the current hour does not hold a switch back (a box set up at
    21:05 does not stop a switch at 21:40: the two names differ), and neither does anything older.
 2. **Takes the current minute if it is allowed.** That is the normal case.
-3. **Otherwise waits, when the earliest allowed minute is at most three minutes ahead** — A679's
-   120-second clock threshold plus the one minute a name lasts. The wait ends when the box's own
-   clock reaches that minute, and the box takes it then, as the current minute. Two switches inside
-   one minute wait under a minute. An earlier box whose clock ran up to three minutes fast makes
-   the wait longer by that much: say a box promoted at 20:58 by the right time with a clock three
-   minutes fast and took `06XW-01`; a switch at 20:59:30 waits until 21:02:00 and takes `06XW-02`.
-   The box never takes "the last minute plus one" ahead of its own clock: that is A679's
-   `maximum + 1`, refused for the same reason (line 131) — a name taken ahead of the clock is one
-   another box could take from its clock.
-4. **Refuses when the earliest allowed minute is more than three minutes ahead.** Then a known code
-   was taken by a clock that ran ahead by more than the comparison allows, or this box's clock is
-   behind: A679's future-clock case (its limits table, line 83, "Further fresh activation must wait
-   or undergo separately authorised resolution"). Nothing is recorded, the spare resumes
-   following, and no box sells until the clock is put right.
+3. **Otherwise waits, when the earliest allowed minute is at most three minutes ahead** of this
+   box's clock: the clock-comparison threshold, 120 seconds, plus the one minute a name lasts. That
+   covers an earlier box whose clock ran **up to two minutes ahead** of this box's. The wait ends
+   when this box's own clock reaches that minute, and the box takes it then, as the current minute.
+   Two switches inside one minute wait under a minute. Example, in Madrid time (UTC+2 that day): a
+   box promoted at 21:58 by the right time, with a clock two minutes fast; its reading was 22:00
+   Madrid, 20:00 UTC, so it took `06XW-00`. A switch at 21:59:30 on a correct clock (19:59:30 UTC,
+   hour `06XV`) finds the earliest allowed minute is 22:01 Madrid, 90 seconds ahead; it waits until
+   22:01:00 and takes `06XW-01`. The box never takes "the last minute plus one" ahead of its own
+   clock: that is A679's `maximum + 1`, refused for the same reason (line 131) — a name taken ahead
+   of the clock is one another box could take from its clock.
+4. **Refuses when the earliest allowed minute is more than three minutes ahead.** The 120 seconds
+   do not bound how far an earlier box's clock was off: a disagreement over 120 seconds is flagged
+   and can then be confirmed past by the operator
+   (`packages/fiscal-verifactu/src/hour-clock.ts:111-119` flags it; `:147-157` accepts it once
+   confirmed). So an earlier box can have run further ahead, or this box's clock can be behind. In
+   the example above with the earlier clock five minutes fast, it took `06XW-03`; a switch at
+   21:59:30 finds the earliest allowed minute is 22:04, four and a half minutes ahead, and is
+   refused. Nothing is recorded and the spare resumes following. Confirming this box's clock does
+   not get past it: "Manual confirmation … cannot override release, history or exhaustion floors"
+   (A679 line 120). The way through is time: the refusal names the minute from which the switch
+   will be allowed, and a switch tried from then on proceeds — or, if this box's clock is the one
+   that is wrong, putting it right. The 120 seconds were proposed at A679 line 94 as a designer
+   recommendation and accepted with the design (line 5, "including the epoch, clock threshold and
+   disclosed limits").
 
 **What the manager sees.** While waiting, the dialog's progress shows «Esperando al minuto
 siguiente» with a countdown and the line «Ya se usó este minuto para cambiar de equipo». On a
-refusal it shows «No se puede cambiar: la hora de este equipo va por detrás» with both times — the
-box's reading and the latest moment a known code implies — and says to check the box's clock and
-call for help; this design adds no way round it, as A679 adds none. Today's code refuses every same-
-or-earlier hour as `hour_not_later` (`hour-selection.ts:464-471`); slice 4a replaces that comparison
-for promotions with the one above.
+refusal it shows «Todavía no se puede cambiar: otro cambio usó una hora posterior a la de este
+equipo. Podrás cambiar a partir de las 22:04» with this box's reading beside it, and says to check
+the box's clock and call for help if the time looks wrong; this design adds no way round it, as
+A679 adds none. Today's code refuses every same-or-earlier hour as `hour_not_later`
+(`hour-selection.ts:464-471`); slice 4a replaces that comparison for promotions with the one above.
 
 Then, as A679 requires for every activation, it records the chosen code as spent **before**
 activating (A679 line 134), so an interrupted promotion never reuses it.
@@ -778,8 +789,9 @@ for when nobody can sign in — is **half right**. Checked in the tree on 2026-1
   (`apps/server/src/operation-authentication.ts:57`); of those, only a promotion may use a person's
   sign-in instead — a restore or re-registration without the key refuses
   `reauthentication_required` (`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:44-51`).
-  The recovery pack's download takes a manager holding `system.manage` and the key, checked
-  against the box's verifier (`apps/server/src/recovery-pack.ts:59-61`).
+  The recovery pack's download takes a manager holding `system.manage`
+  (`apps/server/src/recovery-pack-api.ts:41,54`) and the key, checked against the box's verifier
+  (`apps/server/src/recovery-pack.ts:59-61`).
 - **Corrected: the sheet plays no part in getting back in when nobody can sign in.** A679 says so:
   the sheet "does not itself create a management session or reset a password"
   (A679 line 215). A forgotten password is reset by email (`POST /management-api/password-reset`,
@@ -898,14 +910,29 @@ order, each re-run from the start on a retry:
      (`packages/fiscal-verifactu/src/classification.ts:13-15`), and §7.1 has the new main box file
      the old box's last records itself, so its row can read "accepted" where the old box sent
      "waiting". For those rows the check passes when the new main box holds the row and its state
-     is the same as the one sent or further along the filing order §7.1's terminal-state-wins
-     already uses; two different finished states are §7.1's filing case — the row arrived, and the
-     case keeps the archive (below). The builder lists, for every `ledger` table, which kind its
-     rows are.
-   - **The totals.** For every installation (SIF) the returning box ever filed under, the two
-     boxes compare its number of invoice records and the fingerprint of its last record in chain
-     order. A row the batch builder missed would leave the new main box one short, or with a
-     different last fingerprint, even though every row that was sent arrived.
+     is the same as the one sent or further along this order, using the filing states the
+     database allows (`packages/fiscal-verifactu/src/schema/envios.ts:54`): **not yet filed** —
+     `pendiente` and `enviando`, equal here, since §7.1 returns `enviando` to `pendiente` in the
+     batch — then **finished** — `aceptado`, `aceptado_con_errores`, `rechazado`, `detenido`, and
+     `retenido` (a cancellation set aside with a filing case of its own, `drain.ts:861`). One step
+     back is allowed: a finished row the new main box's reconcile has re-submitted reads
+     `pendiente` again with `reconciled_resubmit_at` set (`schema/envios.ts:40-44`), and counts as
+     further along. Two different finished states are §7.1's filing case — the row arrived, and
+     the case keeps the archive (below). The builder lists, for every `ledger` table, which kind
+     its rows are.
+   - **The totals.** For every installation (SIF) the returning box holds **any** invoice record
+     for — filed or not — the two boxes compare its number of invoice records and the fingerprint
+     of its last record in chain order. A record the batch builder missed would leave the new main
+     box one short, or with a different last fingerprint, even though every row that was sent
+     arrived.
+   - **Every record has its filing row.** Filing work is chosen only from `envios` rows marked
+     `pendiente` (`packages/fiscal-verifactu/src/drain.ts:133,418,598`), and one is written beside
+     each record as it is made (`backend.ts:252`). A record that arrived without its `envios` row
+     would never be filed, and the two parts above would not notice. So, per installation, the two
+     boxes also compare the number of `envios` rows, and the new main box confirms that every one
+     of those invoice records has an `envios` row there; for each record not yet filed on the
+     returning box, the new main box's row must be not yet filed or further along (the order
+     above).
 
    This is the tail receipt the original design required; today `retireSelf` and
    `rejoinAsSecondary` lost the proofs that a box's rows reached the carrier before an irreversible
@@ -1158,21 +1185,22 @@ silent; a manager may override only the health check; the archive is kept 90 day
 | A chain's first record carries `PrimerRegistro = "S"` | `packages/fiscal-verifactu/src/chain.ts:148-151` | read 2026-10-21 |
 | `NumeroInstalacion` is free text up to 100 characters; Waitron's series check is 1–60 of `A-Z a-z 0-9 / _ . -` | the separate `verifactu` repository at `2dc7609`: `schemas/SuministroInformacion.xsd:238,581-585` (its copy of AEAT's XSD); `src/validate.ts:586-590`; installed `@waitron/verifactu` 0.2.1 `dist/validate.js:37` | read 2026-10-21 |
 | Consecutive numbering within each series; installation number never repeated; AEAT's series field | RD 1619/2012 art. 6.1(a); AEAT FAQ v1.3 §4 pp.9–10; Validaciones v1.2.2 §3.1.3.1 | quoted from A679's evidence table (its live research, 2026-10-16); not re-fetched for this revision |
-| Friday 23 October 2026, 21:40 and 21:55 Madrid are hour `06XV`; 22:00 is `06XW`; Madrid is UTC+2 that day | Python: A679's encoding (checked against A679's `06RB` example) and `zoneinfo` `Europe/Madrid` | run 2026-10-21 |
+| Friday 23 October 2026, 21:40, 21:55, 21:58 and 21:59:30 Madrid are hour `06XV`; 22:00–22:05 is `06XW`; Madrid is UTC+2 that day | `encodeHourIdentity` from `packages/fiscal-verifactu/src/hour-identity.ts`, run under Node 26.11 (also gives A679's `06RB`); `zoneinfo` `Europe/Madrid` | run 2026-10-21 |
 | The promote route's fields, break-glass first, `node.promote`, session ended; code asked only when enrolled | `apps/server/src/promote-api.ts:105-113,147-150,169,171`; `packages/identity/src/manager-login.ts:105-107` | read 2026-10-21 |
 | Passkeys: one relying party from config, `waitron.local` in the image; user verification required; the till has PIN sign-in only | `apps/server/src/config.ts:484-492`; `deploy/Dockerfile:276-277`; `packages/identity/src/passkey.ts:228-231,278-281`; `apps/till/src/api/client.ts:2621` | read 2026-10-21 |
 | Both boxes carry the same `contactUrl`; the router keeps one entry per address | `apps/server/src/boot.ts:1304`; `adopt.ts:89`; `config.ts:549-551`; `apps/till/src/api/server-router.ts:190-191` | read 2026-10-21 |
 | The mDNS responder answers one name, with a 120-second lifetime | `apps/server/src/mdns.ts:45,63-64` | read 2026-10-21 |
 | The authority may sign only `waitron.local`, `localhost` and private addresses; each box's certificate names its IPs | `apps/server/src/self-signed-cert.ts:33-39,176-178`; `box-secrets.ts:57` | read 2026-10-21 |
 | A name constraint admits any name with labels added on the left | RFC 5280 §4.2.1.10 | `curl` of rfc-editor.org's text, 2026-10-21 |
+| The clock threshold can be confirmed past; confirmation cannot override history floors; 120 s proposed and accepted | `packages/fiscal-verifactu/src/hour-clock.ts:111-119,147-157`; A679 lines 5, 94, 120 | read 2026-10-21 |
 | A passkey for `waitron.local` signs in at `equipo-7f3a.waitron.local`; refused at an IP and at a sibling name (Chromium reporting a failed `.well-known/webauthn` fetch); not found under the subdomain's own name | Playwright Chromium 156, virtual authenticator, certificate errors ignored, names mapped to 127.0.0.1 | run 2026-10-21 with three controls; other browsers and real authenticators not measured |
 | The server library accepts a list of origins | `@simplewebauthn/server` 14.0.3, `verifyAuthenticationResponse.d.ts:25` | read 2026-10-21 |
 | macOS resolves a two-part `.local` name over mDNS | `dns-sd -P` then `dscacheutil -q host`, macOS 26.6.2, with a never-advertised control | run 2026-10-21; other platforms not measured |
 | Related origins: a relying party may list other names at `/.well-known/webauthn` | W3C Web Authentication Level 3, §5.11 | `curl` of w3.org/TR/webauthn-3, 2026-10-21; not tested with a file |
 | Issuing a passkey challenge writes a streamed `state` row | `packages/identity/src/passkey.ts:232-235`; `packages/identity/src/classification.ts:40-44` | read 2026-10-21 |
-| The filing-state tables are `ledger` tables | `packages/fiscal-verifactu/src/classification.ts:13-15` | read 2026-10-21 |
+| The filing-state tables are `ledger` tables; the filing states; work chosen only from `pendiente` rows written beside each record | `packages/fiscal-verifactu/src/classification.ts:13-15`; `schema/envios.ts:40-44,54`; `drain.ts:133,418,598,861`; `backend.ts:252` | read 2026-10-21 |
 | A phone passkey used at a till needs a tunnel service and Bluetooth | FIDO CTAP 2.2 (14 July 2025), §11.5 | `curl` of fidoalliance.org, 2026-10-21; not measured offline |
-| What the recovery sheet is needed for, and that it resets no password | `restore-command.ts:106-109,281-286`; `allocated-lifecycle.ts:15-16,53-56`; `operation-authentication.ts:57`; `hour-recovery-preparation.ts:44-51`; `recovery-pack.ts:59-61`; `management-api.ts:907`; `break-glass-command.ts:32-34`; A679 line 215 | read 2026-10-21 |
+| What the recovery sheet is needed for, and that it resets no password | `restore-command.ts:106-109,281-286`; `allocated-lifecycle.ts:15-16,53-56`; `operation-authentication.ts:57`; `hour-recovery-preparation.ts:44-51`; `recovery-pack-api.ts:41,54`; `recovery-pack.ts:59-61`; `management-api.ts:907`; `break-glass-command.ts:32-34`; A679 line 215 | read 2026-10-21 |
 | A732's "reinstall the box and start again" | `docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md:38-41` | read |
 | S2's three failing shapes, and that nothing in the rig fenced a sender | the prototype results note | read |
 | A 3000 answer is settled by asking AEAT and comparing fingerprint and installation; annulled is refused | `handleDuplicate`, `packages/fiscal-verifactu/src/drain.ts` | read 2026-10-21; the results note's older reading cites a path that has since moved to the `@waitron/verifactu` package |

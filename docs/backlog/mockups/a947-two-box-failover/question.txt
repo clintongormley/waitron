@@ -21,8 +21,9 @@ What changed, in short:
 - The switch's series carry the hour AND the minute, on every switch (not only a second one in
   the hour) — so the switch never asks your setup question "has anyone set up a box in the
   last hour?". The two forms can never be equal. Two switches in the SAME minute wait for the
-  next minute; a box whose clock is more than three minutes behind an earlier switch is
-  refused until its clock is put right. Fiscal: its own pull request, which you land.
+  next minute. If an earlier switch's clock ran more than two minutes fast (or this box's
+  clock is behind), the switch is refused and names the minute from which it will work.
+  Fiscal: its own pull request, which you land.
 - The switch asks for the manager's passkey, or password plus authenticator code if they have
   one — the same on a till as on the dashboard. No installation code, no emergency key.
 - Any device can reach the switch, even after a reload: the spare answers waitron.local with
