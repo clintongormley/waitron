@@ -309,6 +309,7 @@ describe("payment reservations and previously received money", () => {
               revision: draft.revision,
               lines: [],
               expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
+              personId: venue.operatorId,
             })
           : await send(
               venue.app,

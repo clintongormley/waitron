@@ -1031,7 +1031,7 @@ const ROUTES: readonly Row[] = [
     "PUT /api/parties/:id/drafts",
     "PUT",
     (x) => `/api/parties/${x.deliParty}/drafts`,
-    () => ({ draftId: null, revision: 0 }),
+    () => ({ draftId: null, revision: 0, personId }),
     deliTableZone,
   ],
   ...(["take-over", "submit", "split"] as const).map((verb): Row => [

@@ -168,6 +168,7 @@ async function setup() {
                   path,
                   await observedGroupSubmitBody(db, path, body),
                 ),
+                chosenCookie === samCookie ? sam!.id : ana!.id,
               ),
             ),
           }),
