@@ -48,7 +48,7 @@ export class CloudServicesScreen extends LitElement {
         color: var(--wt-color-danger);
       }
       a {
-        color: var(--wt-color-primary);
+        color: var(--wt-color-primary-text);
         display: inline-flex;
         align-items: center;
         min-height: var(--wt-tap-min);

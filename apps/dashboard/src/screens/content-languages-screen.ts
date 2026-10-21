@@ -86,7 +86,7 @@ export class ContentLanguagesScreen extends LitElement {
       }
       .card-action.accent-primary::part(button):hover {
         border-color: var(--wt-color-primary);
-        color: var(--wt-color-primary);
+        color: var(--wt-color-primary-text);
       }
       .card-action.accent-danger::part(button):hover {
         border-color: var(--wt-color-danger);

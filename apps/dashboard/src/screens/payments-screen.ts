@@ -222,7 +222,7 @@ export class PaymentsScreen extends LitElement {
         color: var(--wt-color-text-muted);
       }
       .badge.connected {
-        color: var(--wt-color-primary);
+        color: var(--wt-color-primary-text);
         border-color: var(--wt-color-primary);
       }
       .provider-actions {

@@ -215,7 +215,7 @@ export class PrintersScreen extends LitElement {
       wt-data-table::part(printer-name) {
         text-align: start;
         overflow-wrap: anywhere;
-        --wt-color-text: var(--wt-color-primary);
+        --wt-color-text: var(--wt-color-primary-text);
       }
       /* The table is never narrower than its content (min-width: max-content, wt-data-table.ts),
          so a long reason gets a width cap to make it wrap. */

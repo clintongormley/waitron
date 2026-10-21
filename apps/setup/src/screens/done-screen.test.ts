@@ -701,7 +701,8 @@ describe("setup-done-screen layout", () => {
       startDelayMs: 0,
       onboardingIntent: "live",
     });
-    host.style.setProperty("--wt-color-primary", "rgb(31, 32, 33)");
+    host.style.setProperty("--wt-color-primary-text", "rgb(31, 32, 33)");
+    host.style.setProperty("--wt-color-primary", "rgb(91, 92, 93)");
     const nudge = q(el, "[data-test=backup-nudge]")!;
     expect(nudge.localName).toBe("wt-card");
     expect(getComputedStyle(nudge.querySelector("a")!).color).toBe("rgb(31, 32, 33)");

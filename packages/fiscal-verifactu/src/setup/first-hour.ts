@@ -84,7 +84,7 @@ export class FirstSetupHour extends LitElement {
         margin: 0;
       }
       a {
-        color: var(--wt-color-primary);
+        color: var(--wt-color-primary-text);
         min-height: var(--wt-tap-min);
         display: inline-flex;
         align-items: center;

@@ -46,6 +46,6 @@ export const statusStyles = css`
 
 export const helpLinkStyles = css`
   a {
-    color: var(--wt-color-primary);
+    color: var(--wt-color-primary-text);
   }
 `;

@@ -23,7 +23,7 @@ export class InitialSetupScreen extends LitElement {
         overflow-wrap: anywhere;
       }
       a {
-        color: var(--wt-color-primary);
+        color: var(--wt-color-primary-text);
         display: inline-flex;
         align-items: center;
         min-height: var(--wt-tap-min);

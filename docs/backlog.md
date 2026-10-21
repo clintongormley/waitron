@@ -3264,7 +3264,18 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   at format 6. Slice 3 landed 2026-10-21 (#1940): the theme in use reaches the screens — the dashboard and
   the till apply the browser's stored copy at start and fetch `/api/theme` without waiting on it;
   an open dashboard follows through a passive live read of `custom_themes`, and a signed-in till
-  through its `themeHash` once per poll. Next: slice 4 (primary-coloured text), then slice 5 (the editor).
+  through its `themeHash` once per poll. Slice 4 landed 2026-10-21 (#1945): text painted in the brand colour
+  reads `--wt-color-primary-text`, and a root guard (`scripts/primary-coloured-text.test.ts`) refuses
+  `color: var(--wt-color-primary)` outside a list of icons and spinners. Next: slice 5 (the editor).
+
+- **Two icons painted in the brand colour sit, in one state each, on a fill no contrast rule checks
+  them against (A841 slice 4).** The till's card-waiting spinner on `--wt-color-surface-sunken`
+  (Waitron's light blue is 3.28:1 there by the WCAG formula, `#1f6feb` on `#d6d9e0`,
+  `packages/ui-core/src/tokens/colors.css:10,14`; a venue theme could go under 3:1), and the data
+  table's column-chooser eye icon while its row is dragged, on `--wt-color-surface-lifted`
+  (`packages/ui/src/components/wt-data-table.ts:684-688`; read, not measured). The spinner is marked
+  decorative beside text saying what is happening, so WCAG 1.4.11 may not ask for 3:1 at all. Decide
+  whether the theme's contrast rules should cover either fill.
 
 - **WebKit in CI for A841's start-up checks (lane A ruling, 2026-10-21).** The dashboard's and the
   till's `venue-theme-startup.test.ts` run in Chromium in CI; WebKit was measured once, locally
@@ -4665,14 +4676,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   as well as components, then make the guard and both documents agree. Whoever picks up the next
   screen should settle this first, because every screen after it inherits the answer.
   [Detail](backlog/dashboard.md#open-and-it-bites-this-work-first-two-documents-state-the-component-rules-and-they-have-drifted)
-
-- **Also open, and product-wide: the primary blue fails the accessibility contrast bar as text on
-  the page background, in the light theme.** Light `--wt-color-primary` (`#1f6feb`) on
-  `--wt-color-bg` (`#f7f7f8`) is 4.33 to 1, under the 4.5 to 1 WCAG AA minimum for normal text
-  (`packages/ui-core/src/tokens/colors.css`). **Next action:** an owner colour call — darken the
-  light theme's primary until it clears 4.5 to 1 as text, or rule that the token is never text on
-  the page background and add a check that says so.
-  [Detail](backlog/dashboard.md#also-open-and-product-wide-the-primary-blue-fails-the-accessibility-contrast-bar-as-text-on-the-page-background-in-the-light-theme)
 
 - **Nothing stops the next screen styling `wt-data-table` cell markup with a class.** A check that
   compares the class names a screen's own stylesheet styles against the class names it puts inside
