@@ -327,6 +327,7 @@ describe("service-period writers", () => {
       resolveDepartmentService(tx, v.cfg, v.restaurant, new Date("2026-03-29T01:10:00Z")),
     );
     expect(running).toMatchObject({ open: true, periodId: v.periods!.noches });
+    expect(running.orderableMenuIds).toContain(running.customerMenuId);
     expect(
       (
         await scoped((tx) =>
@@ -2796,6 +2797,28 @@ describe("department service periods", () => {
     const menus = [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café];
     expect(service.orderableMenuIds).toEqual(select ? menus : []);
     expect(service.open).toBe(time >= "12:00" && time < "14:00");
+  });
+
+  it("keeps a period's menus orderable through a repeated wall minute until its end", async () => {
+    const v = await serviceVenue();
+    await scoped((tx) =>
+      replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        weekOf((day) => (day === 6 ? [slot(v.night, "21:00", "03:00")] : [])),
+        AT,
+        0,
+      ),
+    );
+    const repeated = localTimeOccurrences("2026-10-25", "02:20", ZONE);
+    expect(repeated).toHaveLength(2);
+    for (const instant of repeated) {
+      expect(
+        await scoped((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, instant)),
+      ).toMatchObject({ orderableMenuIds: [v.menus.Cena] });
+    }
+    expect(await read(v, "2026-10-25", "03:00")).toMatchObject({ orderableMenuIds: [] });
   });
 
   it("unions a shared staff menu without reviving its ended selling root", async () => {

@@ -497,9 +497,7 @@ describe("service periods gate only added dishes and added stored quantities", (
     expect((await editMealLine(v, held.id, { note: "No salt" })).status).toBe(200);
   });
 
-  it("a table draft saved during Lunch is refused at 14:05 and writes no line", async () => {
-    at(mondayAt("13:50"));
-    const v = await mealVenue();
+  const savedTableDraft = async (v: Venue) => {
     await suite.db
       .update(departmentSalePolicies)
       .set({ orderStart: "table" })
@@ -532,19 +530,25 @@ describe("service periods gate only added dishes and added stored quantities", (
       .select({ revision: parties.revision })
       .from(parties)
       .where(eq(parties.id, partyId));
-    at(mondayAt("14:05"));
-    const submitted = await sendAsTill(
-      v,
-      "POST",
-      `/api/parties/${partyId}/drafts/${draft.id}/submit`,
-      {
-        submissionId: randomUUID(),
+    return {
+      tabId,
+      submitUrl: `/api/parties/${partyId}/drafts/${draft.id}/submit`,
+      submit: (submissionId: string) => ({
+        submissionId,
         draftRevision: draft.revision,
         expectedPartyRevision: party!.revision,
         allergy: { party: { answer: "none", guests: [] }, ticks: [] },
         groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
-      },
-    );
+      }),
+    };
+  };
+
+  it("a table draft saved during Lunch is refused at 14:05 and writes no line", async () => {
+    at(mondayAt("13:50"));
+    const v = await mealVenue();
+    const { tabId, submitUrl, submit } = await savedTableDraft(v);
+    at(mondayAt("14:05"));
+    const submitted = await sendAsTill(v, "POST", submitUrl, submit(randomUUID()));
     expect(submitted).toMatchObject({
       status: 400,
       body: { error: { code: "menu_period.not_running" } },
@@ -552,12 +556,29 @@ describe("service periods gate only added dishes and added stored quantities", (
     expect(await withTransaction(suite.db, (tx) => linesOf(tx, tabId))).toEqual([]);
   });
 
+  it("a table draft sent during Lunch replays the same submission after Lunch ends", async () => {
+    at(mondayAt("13:50"));
+    const v = await mealVenue();
+    const { tabId, submitUrl, submit } = await savedTableDraft(v);
+    const body = submit(randomUUID());
+    at(mondayAt("13:55"));
+    const submitted = await sendAsTill(v, "POST", submitUrl, body);
+    expect(submitted.status).toBe(200);
+    at(mondayAt("14:05"));
+    expect(await sendAsTill(v, "POST", submitUrl, body)).toEqual(submitted);
+    expect(await withTransaction(suite.db, (tx) => linesOf(tx, tabId))).toHaveLength(1);
+    expect(await sendAsTill(v, "POST", submitUrl, submit(randomUUID()))).toMatchObject({
+      status: 409,
+      body: { error: { code: "draft.out_of_date" } },
+    });
+  });
+
   it.each([
     [-15, "13:45", true, true, true],
+    [15, "14:00", false, false, false],
     [15, "14:05", false, false, false],
-    [15, "14:15", false, false, false],
   ] as const)(
-    "end-offset polling carries eligibility at %s/%s",
+    "polling reports one window for orderable and sendable: offset %s at %s",
     async (offset, time, open, orderable, sendable) => {
       at(mondayAt("13:00"));
       const v = await mealVenue();

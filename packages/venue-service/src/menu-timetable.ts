@@ -417,15 +417,15 @@ export async function resolveDepartmentService(
 
   const context = serviceDayContext(clock, moment.businessDay);
   const ranges = withExtension(day.ranges, day.extension, context.dayCutover);
-  const running = rangeInForce(serviceRuns(ranges), moment.minute, context.dayCutover, context);
+  const runs = serviceRuns(ranges);
+  const running = rangeInForce(runs, moment.minute, context.dayCutover, context);
   const period =
     running === null ? undefined : periods.find((entry) => entry.id === running.periodId);
   const orderableMenuIds = [
     ...new Set(
-      serviceRuns(ranges).flatMap((range) => {
+      runs.flatMap((range) => {
         const span = rangeSpan(range, context.dayCutover);
-        const boundaryEnd =
-          range.endsAt === context.dayCutover && context.endMinute === 1440 && span.end >= 1440;
+        const boundaryEnd = range.endsAt === context.dayCutover && context.endMinute === 1440;
         return moment.minute >= span.start &&
           (boundaryEnd || moment.minute < Math.min(span.end, context.endMinute))
           ? menusOf(range.periodId)

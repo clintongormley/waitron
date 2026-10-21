@@ -1908,7 +1908,7 @@ describe("clock compatibility resolves neighboring special-day substitutions", (
   });
 });
 
-describe("dated runtime service and yesterday sending", () => {
+describe("dated runtime service across a moved changeover", () => {
   async function timeline(v: Awaited<ReturnType<typeof fixture>>, time: string) {
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(locationDayCutoverChanges).values({
@@ -1947,7 +1947,7 @@ describe("dated runtime service and yesterday sending", () => {
     },
   );
   it("after the start moves from 05:00 to 03:00, yesterday's menus are not orderable", async () => {
-    const v = await writtenFixture([range("22:00", "02:30")], { weekday: 2 });
+    const v = await writtenFixture([range("22:00", "04:30")], { weekday: 2 });
     await timeline(v, "03:00");
     for (const instant of [
       "2026-11-04T02:00:00Z",

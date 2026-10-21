@@ -245,9 +245,8 @@ A773's design (`docs/superpowers/specs/2026-10-16-a773-courses-and-groups-design
 says "Neither kind is ever sent". This design changes that for a period that ended: such a line is
 sent after the kitchen agrees. A773 also retires the "Check before sending" window (`:264`); this
 design does not bring it back. Its window opens only when Send (or Fire) includes a dish whose period
-has ended, and in A773's editor the mark is the one A773 already puts in the list. A773-1
-(lane G, in progress) rewrites the till's order editor and its Send. So the till slice here waits
-for A773-1 to land and is built in A773's editor; the watcher is asked to tell lane G (questions file).
+has ended, and in A773's editor the mark is the one A773 already puts in the list. A773-1 (#1897)
+rewrote the till's order editor and its Send, so the till slice here is built in A773's editor.
 
 ## 9. Slices
 
@@ -259,8 +258,8 @@ Each leaves `main` working on its own.
 2. **Delete the period Keep open**, splitting the zone pieces off first.
 3. **The server accepts a confirmed late send** (§5), records it, and the kitchen ticket and screen
    show the mark. The till does not send a confirmation yet, so nothing changes on the floor.
-4. **The till's warning and window** (§3.2) on the counter, table and handheld screens. Waits for lane
-   G's A773-1.
+4. **The till's warning and window** (§3.2) on the counter, table and handheld screens, in A773-1's
+   editor.
 
 Slices 1 and 2 are independent of each other.
 
