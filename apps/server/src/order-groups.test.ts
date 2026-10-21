@@ -4,6 +4,7 @@ import { updateHeldOrder } from "./working-order.js";
 import {
   recallLines,
   sendLines,
+  setLineCourse,
   updateHeldOrder as updateHeldOrderForTest,
   updateOrderLine,
 } from "./testing/order-writer-fixture.js";
@@ -62,7 +63,6 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   createOpenOrder,
-  fireCourse,
   listExpoQueue,
   listStationQueue,
   parkOrder,
@@ -2769,17 +2769,12 @@ describe("a device as the firer", () => {
     return { id, label: row!.label };
   }
 
-  it("records the device, not a person, when a course fires its held groups, and shows it as the sender", async () => {
+  it("records the device, not a person, on a historical group release, and shows it as the sender", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const device = await firingDevice(v);
-    const [steak] = await db
-      .select({ courseId: workingOrderLines.courseId })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.productId, v.productId.steak))
-      .limit(1);
-
-    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, steak!.courseId!, { deviceId: device.id }));
+    const command = await args(s.partyId, { operatorId: device.id });
+    await inTx((tx) => fireGroup(tx, v.cfg, s.partyId, s.mains, command, { deviceId: device.id }));
 
     const [group] = await db.select().from(orderGroups).where(eq(orderGroups.id, s.mains));
     expect(group).toMatchObject({ state: "fired", firedBy: null, firedByDeviceId: device.id });
@@ -2823,26 +2818,15 @@ describe("a device as the firer", () => {
   });
 });
 
-describe("the course Fire of the station and the pass, on a party", () => {
-  async function courseIdOf(v: Venue, dish: Dish): Promise<string> {
-    const [row] = await db
-      .select({ courseId: workingOrderLines.courseId })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.productId, v.productId[dish]))
-      .limit(1);
-    return row!.courseId!;
-  }
-
-  it("fires the held group holding the course's lines, as fireGroup does", async () => {
+describe("waiter group and recalled-line release", () => {
+  it("fires the selected held group and records the waiter", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const [steak, fish] = await linesIn(s.partyId, s.mains);
     const revision = await revisionOf(s.partyId);
     const jobsBefore = (await printed(v)).length;
 
-    await inTx(async (tx) =>
-      fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), { personId: MIA }),
-    );
+    await fire(v, s.partyId, s.mains, { operatorId: MIA });
 
     expect(await revisionOf(s.partyId)).toBe(revision + 1);
     const states = Object.fromEntries(
@@ -2869,7 +2853,7 @@ describe("the course Fire of the station and the pass, on a party", () => {
     });
   });
 
-  it("fires every held group holding the course, whole and in position order", async () => {
+  it("fires selected groups whole in waiter order, leaving the other same-course group held", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     const made = await submit(v, s.partyId, [
@@ -2880,9 +2864,11 @@ describe("the course Fire of the station and the pass, on a party", () => {
     const [steakGroup, fishGroup, warmGroup] = made.groups.map((group) => group.id);
     await reorder(s.partyId, [fishGroup!, warmGroup!, steakGroup!]);
 
-    await inTx(async (tx) =>
-      fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), { personId: ALEX }),
-    );
+    await fire(v, s.partyId, fishGroup!, { operatorId: ALEX });
+
+    expect((await groupsOf(s.partyId)).groups.find((g) => g.id === steakGroup)!.state).toBe("held");
+    expect((await linesIn(s.partyId, steakGroup!))[0]!.sentAt).toBeNull();
+    await fire(v, s.partyId, steakGroup!, { operatorId: ALEX });
 
     const fired = (await eventsOf(s.partyId)).filter((event) => event.kind === "fired");
     expect(fired.map((event) => event.groupId)).toEqual([fishGroup, steakGroup]);
@@ -2893,11 +2879,10 @@ describe("the course Fire of the station and the pass, on a party", () => {
     expect((await groupsOf(s.partyId)).groups.find((g) => g.id === warmGroup)!.state).toBe("held");
   });
 
-  it("keeps a Steak added held after the mains fired held until the next course Fire, which fires its group", async () => {
+  it("keeps a Steak added held after the mains fired held until the waiter fires its group", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
-    const mains = await courseIdOf(v, "steak");
-    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, mains, { personId: ALEX }));
+    await fire(v, s.partyId, s.mains, { operatorId: ALEX });
 
     const later = await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak")] }]);
     const laterGroup = later.groups[0]!.id;
@@ -2905,7 +2890,7 @@ describe("the course Fire of the station and the pass, on a party", () => {
     expect(steak!.sentAt).toBeNull();
     expect(await firedTicketLineIds(s.partyId)).not.toContain(steak!.id);
 
-    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, mains, { personId: ALEX }));
+    await fire(v, s.partyId, laterGroup, { operatorId: ALEX });
 
     expect((await linesIn(s.partyId, laterGroup))[0]!.sentAt).not.toBeNull();
     expect(await firedTicketLineIds(s.partyId)).toContain(steak!.id);
@@ -2914,7 +2899,7 @@ describe("the course Fire of the station and the pass, on a party", () => {
     );
   });
 
-  it("fires a held group of the course and sends a recalled line of that course again", async () => {
+  it("fires a selected held group and separately sends a recalled line of the same course", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     const first = await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "steak")] }]);
@@ -2925,9 +2910,8 @@ describe("the course Fire of the station and the pass, on a party", () => {
     expect(await firedTicketLineIds(s.partyId)).not.toContain(steak!.id);
     const jobsBefore = (await printed(v)).length;
 
-    await inTx(async (tx) =>
-      fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), { personId: ALEX }),
-    );
+    await fire(v, s.partyId, held.groups[0]!.id, { operatorId: ALEX });
+    await inTx((tx) => sendLines(tx, v.cfg, s.tabId, [steak!.lineNo]));
 
     expect(await firedTicketLineIds(s.partyId)).toEqual([steak!.id, fish!.id].sort());
     expect((await groupsOf(s.partyId)).groups.map((group) => group.state)).toEqual([
@@ -2939,7 +2923,7 @@ describe("the course Fire of the station and the pass, on a party", () => {
     expect(slips).toContain(DISHES.fish.kitchen);
   });
 
-  it("sends a recalled line of the course again when no held group holds the course", async () => {
+  it("sends a recalled line again without a held group", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     const first = await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "steak")] }]);
@@ -2948,9 +2932,7 @@ describe("the course Fire of the station and the pass, on a party", () => {
     expect(await firedTicketLineIds(s.partyId)).toEqual([]);
     const jobsBefore = (await printed(v)).length;
 
-    await inTx(async (tx) =>
-      fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), { personId: ALEX }),
-    );
+    await inTx((tx) => sendLines(tx, v.cfg, s.tabId, [steak!.lineNo]));
 
     expect(await firedTicketLineIds(s.partyId)).toEqual([steak!.id]);
     expect((await printed(v)).slice(jobsBefore).join("\n")).toContain(DISHES.steak.kitchen);
@@ -2959,31 +2941,31 @@ describe("the course Fire of the station and the pass, on a party", () => {
   it("refuses a held group holding a sold-out Steak (product.unavailable), firing none of it", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
-    const courseId = await courseIdOf(v, "steak");
     await db.run(sql`update products set available = 0 where id = ${v.productId.steak}`);
 
     await expectRefusedWithNothingWritten(
       v,
       s.partyId,
-      () => inTx((tx) => fireCourse(tx, v.cfg, s.tabId, courseId, { personId: ALEX })),
+      () => fire(v, s.partyId, s.mains, { operatorId: ALEX }),
       { code: "product.unavailable", params: { productId: v.productId.steak } },
     );
   });
 
-  it("does nothing for a course no held group holds, and refuses a course the venue lacks", async () => {
+  it("re-sending a sent line changes nothing, and course editing refuses a course the venue lacks", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
-    const drinks = await courseIdOf(v, "beer");
+    const [drink] = await linesIn(s.partyId, s.drinks);
+    const [steak] = await linesIn(s.partyId, s.mains);
     const before = await snapshot(v, s.partyId);
 
-    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, drinks, { personId: ALEX }));
+    await inTx((tx) => sendLines(tx, v.cfg, s.tabId, [drink!.lineNo]));
     expect(await snapshot(v, s.partyId)).toEqual(before);
 
     const missing = randomUUID();
     await expectRefusedWithNothingWritten(
       v,
       s.partyId,
-      () => inTx((tx) => fireCourse(tx, v.cfg, s.tabId, missing, { personId: ALEX })),
+      () => inTx((tx) => setLineCourse(tx, v.cfg, s.tabId, steak!.lineNo, missing)),
       { code: "course.not_found", params: { courseId: missing } },
     );
   });
@@ -4558,13 +4540,12 @@ describe("advance HOLD tickets (Task 6)", () => {
       expect(linkedBefore).toEqual((await jobIds(v)).slice(0, 5));
     });
 
-    it("prints a FIRE slip through the course Fire too", async () => {
+    it("prints a FIRE slip for a waiter-released group", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
       const s = await specExample(v);
-      const steak = await lineOf(s, s.mains, "steak", v);
 
-      await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, steak.courseId!, { personId: MIA }));
+      await fire(v, s.partyId, s.mains, { operatorId: MIA });
 
       expect(await printedSince(v, 5)).toEqual([
         [

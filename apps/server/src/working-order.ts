@@ -225,7 +225,6 @@ import type { UnsentDraft } from "./order-drafts.js";
 import {
   correctHoldTickets,
   correctJoin,
-  fireHeldGroupsOfCourse,
   onShownBill,
   printedHeldGroups,
   printHoldTickets,
@@ -2337,95 +2336,6 @@ export async function isOpenOrder(tx: Transaction, orderId: string): Promise<boo
   return order?.status === "open";
 }
 
-/**
- * Release held items of a course by stamping fired_at and queued_at. Require the course to exist
- * in this venue, including a deleted course whose food still needs release.
- *
- * On a party's order, the held groups holding the course's dishes fire whole first
- * ({@link fireHeldGroupsOfCourse}); `firer` is who fired them. The course's lines still held
- * outside a held group, such as one recalled from a fired group, are then released.
- */
-export async function fireCourse(
-  tx: Transaction,
-  cfg: OriginConfig,
-  orderId: string,
-  courseId: string,
-  firer: Firer,
-  attendance?: OrderAttendance,
-  command?: AllergyCommand,
-): Promise<void> {
-  const routing = routingOnce(tx, cfg, new Date());
-  await requireCourse(tx, cfg, courseId);
-  const partyId = await partyOfOrder(tx, orderId);
-  if (command !== undefined && partyId !== null) {
-    const allergy =
-      command.allergy === undefined ? undefined : normaliseAllergyPatch(command.allergy);
-    await runServiceCommand(
-      tx,
-      { kind: "party", partyId },
-      command.submissionId,
-      "course.fire",
-      {
-        orderId,
-        courseId,
-        firer,
-        ...(allergy === undefined ? {} : { allergy }),
-      },
-      async () => {
-        await checkAndBumpParty(tx, partyId, command.expectedPartyRevision, "open");
-        await prepareAllergyRelease(
-          tx,
-          cfg,
-          partyId,
-          { kind: "course", orderId, courseId },
-          allergy,
-          "personId" in firer ? firer.personId : null,
-        );
-        await release(true);
-        return null;
-      },
-      cfg.madeHereSink,
-    );
-    return;
-  }
-  await release(false);
-  async function release(ownsRevision: boolean) {
-    await fireHeldGroupsOfCourse(
-      tx,
-      cfg,
-      orderId,
-      courseId,
-      firer,
-      routing,
-      attendance,
-      ownsRevision ? { partyRevisionOwner: "caller" } : {},
-    );
-    const released = await releaseHeld(
-      tx,
-      cfg,
-      orderId,
-      eq(ticketItems.courseId, courseId),
-      {
-        courseIds: [courseId],
-        lineIds: [],
-      },
-      undefined,
-      routing,
-    );
-    if (released > 0)
-      await captureKitchenActivity(
-        tx,
-        attendance,
-        "personId" in firer ? firer.personId : undefined,
-        [orderId],
-      );
-  }
-}
-
-/**
- * Release these held dish lines of one order, as {@link fireCourse} releases a course: a line
- * already fired or sent is left as it is. `mark` heads the ticket printed for them.
- */
 export async function fireOrderLines(
   tx: Transaction,
   cfg: OriginConfig,
@@ -2493,13 +2403,7 @@ async function releaseHeld(
   return firedItems.length + noRoute.lines.length;
 }
 
-/**
- * The end of {@link fireCourse} and {@link sendLines}: refuse a sold-out line when
- * `refuseSoldOut`, stamp the released lines sent, print the items that fired now (with the old
- * station's name for a re-routed dish), and count the
- * write if anything was released. `fired` must be exactly the items this release fired (an
- * update's `RETURNING` over `fired_at IS NULL`), so a re-send prints nothing.
- */
+// Only the items released by this write may print, so a retry cannot print them again.
 async function finishRelease(
   tx: Transaction,
   cfg: TillConfig,

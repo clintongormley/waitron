@@ -66,7 +66,7 @@ import {
   bumpCourseReady,
   createOpenOrder,
   splitLinesWithinOrder,
-  fireCourse,
+  fireOrderLines,
   fireLines,
   getHeldOrder,
   listExpoQueue,
@@ -3350,11 +3350,21 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         )[0]!.sentAt;
       expect(await ticketItemsFor(tx, id)).toEqual([]);
       expect(await stamp()).toEqual(expect.any(String));
-      await fireCourse(tx, cfg, id, course.id, { personId: OPERATOR });
+      await fireOrderLines(
+        tx,
+        cfg,
+        id,
+        (await fireableLines(tx, id)).map((row) => row.id),
+      );
       const sentAt = await stamp();
       expect(sentAt).toEqual(expect.any(String));
       expect(await ticketItemsFor(tx, id)).toEqual([]);
-      await fireCourse(tx, cfg, id, course.id, { personId: OPERATOR });
+      await fireOrderLines(
+        tx,
+        cfg,
+        id,
+        (await fireableLines(tx, id)).map((row) => row.id),
+      );
       expect(await stamp()).toBe(sentAt);
     });
   });
@@ -4244,7 +4254,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
 
   it("places and fires every counter course, putting no line in a group", async () => {
     const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
-    const { cafe, postre, desserts } = await withTransaction(db, async (tx) => {
+    const { cafe, postre } = await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const starters = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 1 });
       const desserts = await createCourse(tx, cfg, { name: "Postres", displayOrder: 3 });
@@ -4252,7 +4262,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
       const postre = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, cafe, starters.id);
       await setProductCourse(tx, cfg, postre, desserts.id);
-      return { cafe, postre, desserts };
+      return { cafe, postre };
     });
     const id = randomUUID();
     await parkProducts(cfg, { id, lines: [line(cafe), line(postre)] });
@@ -4268,7 +4278,14 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
 
     await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR);
     expect(await fired()).toEqual([true, true]);
-    await withTransaction(db, (tx) => fireCourse(tx, cfg, id, desserts.id, { personId: OPERATOR }));
+    await withTransaction(db, async (tx) =>
+      fireOrderLines(
+        tx,
+        cfg,
+        id,
+        (await fireableLines(tx, id)).map((row) => row.id),
+      ),
+    );
 
     expect(await fired()).toEqual([true, true]);
     const lines = await db
@@ -4280,9 +4297,9 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     expect(await db.select().from(orderGroupEvents)).toEqual([]);
   });
 
-  it("releases a placed order's held course whose product has since sold out: its lines can no longer be removed", async () => {
+  it("keeps a placed counter's released dishes after a sold-out change and repeated line release", async () => {
     const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
-    const { cafe, postre, desserts } = await withTransaction(db, async (tx) => {
+    const { cafe, postre } = await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const starters = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 1 });
       const desserts = await createCourse(tx, cfg, { name: "Postres", displayOrder: 3 });
@@ -4290,7 +4307,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
       const postre = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, cafe, starters.id);
       await setProductCourse(tx, cfg, postre, desserts.id);
-      return { cafe, postre, desserts };
+      return { cafe, postre };
     });
     const id = randomUUID();
     await parkProducts(cfg, { id, lines: [line(cafe), line(postre)] });
@@ -4305,7 +4322,14 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
       )[0]!.revision;
     const placedAt = await revision();
 
-    await withTransaction(db, (tx) => fireCourse(tx, cfg, id, desserts.id, { personId: OPERATOR }));
+    await withTransaction(db, async (tx) =>
+      fireOrderLines(
+        tx,
+        cfg,
+        id,
+        (await fireableLines(tx, id)).map((row) => row.id),
+      ),
+    );
 
     // Only an open order's revision counts writes: a placed order's lines cannot be edited.
     expect(await revision()).toBe(placedAt);
@@ -4926,8 +4950,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   });
 });
 
-// Course hold/fire decisions, held-item refusal and fireCourse idempotency.
-
 /** The order's ticket items joined to their line, carrying the fields the hold-and-fire tests read:
  *  the item id (the bump target), its product (to key by line), its snapshotted course and
  *  `fired_at` (NULL = held). */
@@ -4961,8 +4983,8 @@ async function courseItemsFor(
 const byLine = <T extends { productId: string | null }>(items: T[], productId: string): T =>
   items.find((i) => i.productId === productId)!;
 
-describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance guard)", () => {
-  it("auto-fires the earliest course, holds later ones, and fireCourse releases a held course", async () => {
+describe("waiter line release / hold-and-fire", () => {
+  it("auto-fires the earliest course, holds later ones, and waiter line release keeps its same-course sibling held", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -4970,10 +4992,16 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
       const soup = await makeProduct(tx, cfg, catalogueId, {});
       const steak = await makeProduct(tx, cfg, catalogueId, {});
+      const sibling = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, soup, ent.id);
       await setProductCourse(tx, cfg, steak, pri.id);
+      await setProductCourse(tx, cfg, sibling, pri.id);
 
-      const orderId = await fireTableKitchenOrder(tx, cfg, [line(soup), line(steak)]);
+      const orderId = await fireTableKitchenOrder(tx, cfg, [
+        line(soup),
+        line(steak),
+        line(sibling),
+      ]);
       const items = await courseItemsFor(tx, orderId);
       expect(byLine(items, soup).firedAt).not.toBeNull(); // earliest course auto-fired
       expect(byLine(items, steak).firedAt).toBeNull(); // later course held
@@ -4983,9 +5011,10 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
         advanceTicketItem(tx, cfg, byLine(items, steak).id, "preparing"),
       ).rejects.toMatchObject({ code: "ticket.item_held" });
 
-      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
+      await fireProductLine(tx, cfg, orderId, steak);
       const afterFire = await courseItemsFor(tx, orderId);
       expect(byLine(afterFire, steak).firedAt).not.toBeNull();
+      expect(byLine(afterFire, sibling).firedAt).toBeNull();
 
       await advanceTicketItem(tx, cfg, byLine(afterFire, steak).id, "preparing");
       const advanced = await courseItemsFor(tx, orderId);
@@ -5019,7 +5048,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
     });
   });
 
-  it("fireCourse is idempotent — re-firing an already-fired course leaves its timestamps untouched", async () => {
+  it("line release is idempotent — re-firing an already-fired dish leaves its timestamps untouched", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -5030,19 +5059,18 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       await setProductCourse(tx, cfg, starter, ent.id);
       await setProductCourse(tx, cfg, main, pri.id);
 
-      const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
+      const orderId = await fireTableKitchenOrder(tx, cfg, [line(starter), line(main)]);
 
       // The earliest course (Entrantes) auto-fired; re-firing it must NOT restamp — its WHERE
       // (`fired_at IS NULL`) matches nothing already-fired.
       const beforeEnt = byLine(await courseItemsFor(tx, orderId), starter).firedAt;
-      await fireCourse(tx, cfg, orderId, ent.id, { personId: OPERATOR });
+      await fireProductLine(tx, cfg, orderId, starter);
       expect(byLine(await courseItemsFor(tx, orderId), starter).firedAt).toBe(beforeEnt);
 
-      // Fire the held course, capture its stamp, then fire it AGAIN — the second call is a no-op.
-      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
+      await fireProductLine(tx, cfg, orderId, main);
       const firstStamp = byLine(await courseItemsFor(tx, orderId), main).firedAt;
       expect(firstStamp).not.toBeNull();
-      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
+      await fireProductLine(tx, cfg, orderId, main);
       expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).toBe(firstStamp);
     });
   });
@@ -5083,7 +5111,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       expect(byLine(items, dessert).firedAt).toBeNull();
 
       // Release Principales explicitly — now fired for the order though it is not the earliest course.
-      await fireCourse(tx, cfg, tabId, pri.id, { personId: OPERATOR });
+      await fireProductLine(tx, cfg, tabId, main);
       expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).not.toBeNull();
 
       // Round 3: another main. Principales is already fired for this order, so this new item joins the
@@ -5142,25 +5170,29 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).toBeNull(); // Principales held
 
       await deleteCourse(tx, cfg, pri.id);
-      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
+      await fireProductLine(tx, cfg, orderId, main);
       expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).not.toBeNull(); // released
     });
   });
 
-  it("fireCourse rejects an unknown course with course.not_found", async () => {
+  it("course editing rejects an unknown course with course.not_found", async () => {
     const { cfg, catalogueId } = await setupVenue();
-    await withTransaction(db, async (tx) => {
-      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const cafe = await makeProduct(tx, cfg, catalogueId, {});
-      const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe)]);
-
-      const missing = randomUUID();
-      await expect(
-        fireCourse(tx, cfg, orderId, missing, { personId: OPERATOR }),
-      ).rejects.toMatchObject({
-        code: "course.not_found",
-        params: { courseId: missing },
-      });
+    const orderId = await withTransaction(db, async (tx) => {
+      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, cfg, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, cfg, { name: "Mains", displayOrder: 1 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      const main = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, starterCourse.id);
+      await setProductCourse(tx, cfg, main, mainCourse.id);
+      return fireTableKitchenOrder(tx, cfg, [line(starter), line(main)]);
+    });
+    const missing = randomUUID();
+    await expect(
+      withTransaction(db, (tx) => setLineCourse(tx, cfg, orderId, 2, missing)),
+    ).rejects.toMatchObject({
+      code: "course.not_found",
+      params: { courseId: missing },
     });
   });
 });
@@ -5816,7 +5848,7 @@ describe("correction slips on recall & void (A6)", () => {
 // Coursing editing — `hold` on send. A round line may carry `hold: true`; `addTabRound` correlates
 // that marker onto the priced PARENT row (parents come out of `priceOrderLines` in input order) and hands
 // it to `fireLines`, which inserts the held line with `fired_at NULL` REGARDLESS of its course — greyed on
-// the KDS, no kitchen print — until a later `sendLines`/`fireCourse` releases it. Transient: read at fire
+// the KDS, no kitchen print — until a later `sendLines`/`fireOrderLines` releases it. Transient: read at fire
 // time, never stored. These cases prove the hold short-circuit and the parent
 // correlation under modifier expansion.
 // ---------------------------------------------------------------------------------------------------
@@ -5989,8 +6021,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       expect(c1!.fired).toBe(true); // Counter Send releases every course.
       expect(c1!.items.every((i) => i.firedAt !== null)).toBe(true);
 
-      // A repeated release preserves the counter work; legacy Away only changes its roll-up.
-      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
+      await fireProductLine(tx, cfg, orderId, main);
       const items = await courseItemsFor(tx, orderId);
       const entItem = items.find((i) => i.courseId === ent.id)!;
       await tx.update(ticketItems).set({ awayAt: nowIso() }).where(eq(ticketItems.id, entItem.id));
@@ -6253,7 +6284,7 @@ describe("bumpCourseReady — course preparation without dispatch", () => {
 
       expect(byLine(items, starter).awayAt).toBeNull();
 
-      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
+      await fireProductLine(tx, cfg, orderId, main);
       items = await courseItemsFor(tx, orderId);
       expect(byLine(items, main).state).toBe("queued");
       expect(byLine(items, main).awayAt).toBeNull();
@@ -8850,6 +8881,22 @@ async function fireableLines(tx: Transaction, orderId: string) {
     .orderBy(workingOrderLines.lineNo);
 }
 
+async function fireProductLine(
+  tx: Transaction,
+  cfg: Parameters<typeof fireOrderLines>[1],
+  orderId: string,
+  productId: string,
+) {
+  const lines = (await fireableLines(tx, orderId)).filter((row) => row.productId === productId);
+  expect(lines.length).toBeGreaterThan(0);
+  await fireOrderLines(
+    tx,
+    cfg,
+    orderId,
+    lines.map((row) => row.id),
+  );
+}
+
 async function insertRoute(
   tx: Transaction,
   cfg: DeviceRequestConfig,
@@ -9907,7 +9954,7 @@ describe("pricing a stored order to pay it refuses a line never sent whose produ
   });
 });
 
-describe("fireCourse on an order with no service context", () => {
+describe("line release on an order with no service context", () => {
   it("releases the held course and stamps its line sent", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { id } = await withTransaction(db, async (tx) => {
@@ -9924,7 +9971,12 @@ describe("fireCourse on an order with no service context", () => {
         set course_id = case line_no when 1 then ${starters.id} else ${desserts.id} end
         where working_order_id = ${id}`);
       await fireLines(tx, cfg, id, await fireableLines(tx, id));
-      await fireCourse(tx, cfg, id, desserts.id, { personId: OPERATOR });
+      await fireOrderLines(
+        tx,
+        cfg,
+        id,
+        (await fireableLines(tx, id)).map((row) => row.id),
+      );
       return { id };
     });
 

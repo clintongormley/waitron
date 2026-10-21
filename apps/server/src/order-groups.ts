@@ -57,7 +57,6 @@ import type { OriginConfig, TillConfig } from "./till-config.js";
 import {
   checkAndBumpParty,
   partyFamily,
-  partyRevisionOfOrder,
   requireBillOfParty,
   runServiceCommand,
 } from "./parties.js";
@@ -71,7 +70,6 @@ import {
   isReleased,
   priceTabRound,
   routingOnce,
-  type RoutingOnce,
   refusePaymentInFlight,
   splitLinesWithinOrder,
   splitUnitsWithinOrder,
@@ -661,75 +659,6 @@ function groupLinesOf(tx: Transaction, groupId: string) {
     .select({ id: workingOrderLines.id })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.groupId, groupId));
-}
-
-/**
- * The course Fire: on an order of a party, release every held group of the party that holds a dish
- * of this course on this order, whole and in position order, as {@link fireGroup} does. It touches
- * nothing when the order is on no party or no held group qualifies. It carries no submission id, so
- * it records no replay: each group's `fired` event names the course and the order.
- */
-export async function fireHeldGroupsOfCourse(
-  tx: Transaction,
-  cfg: OriginConfig,
-  orderId: string,
-  courseId: string,
-  firer: Firer,
-  routing?: RoutingOnce,
-  attendance?: OrderAttendance,
-  options: { partyRevisionOwner?: "caller" } = {},
-): Promise<void> {
-  const party = await partyRevisionOfOrder(tx, orderId);
-  if (party === null) return;
-  const partyId = party.id;
-  const groups = await tx
-    .selectDistinct({
-      id: orderGroups.id,
-      position: orderGroups.position,
-      createdAt: orderGroups.createdAt,
-    })
-    .from(orderGroups)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.groupId, orderGroups.id))
-    .where(
-      and(
-        eq(orderGroups.partyId, partyId),
-        eq(orderGroups.state, "held"),
-        eq(workingOrderLines.workingOrderId, orderId),
-        eq(workingOrderLines.courseId, courseId),
-        isNull(workingOrderLines.parentLineId),
-      ),
-    )
-    .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
-  if (groups.length === 0) return;
-  if (options.partyRevisionOwner !== "caller")
-    await checkAndBumpParty(tx, partyId, party.revision, "open");
-  await prepareAllergyRelease(
-    tx,
-    cfg,
-    partyId,
-    { kind: "course", orderId, courseId },
-    undefined,
-    null,
-  );
-  const snapshot =
-    attendance === undefined || "deviceId" in firer
-      ? undefined
-      : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() };
-  for (const group of groups) {
-    await releaseGroup(
-      tx,
-      cfg,
-      partyId,
-      group.id,
-      firer,
-      {
-        courseId,
-        workingOrderId: orderId,
-      },
-      routing,
-      snapshot,
-    );
-  }
 }
 
 /**

@@ -24,7 +24,7 @@ import { createCourse, createStation } from "./kitchen.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";
 import { mountTillApi } from "./till-api.js";
-import { fireCourse } from "./working-order.js";
+import { fireGroup } from "./order-groups.js";
 import {
   provisionBillVenue,
   seatedWith,
@@ -237,18 +237,29 @@ describe("group events derived from accepted commands", () => {
       expect(await state()).toEqual(before);
     },
   );
-  it("a device course release creates no human fact", async () => {
+  it("historical device-attributed group releases create no human fact", async () => {
     const p = await prepare();
-    await withTransaction(suite.db, (tx) =>
-      fireCourse(
-        tx,
-        v.cfg,
-        p.tabId,
-        courseId,
-        { deviceId: v.deviceId },
-        { recorder: recordAttendanceFact, clock: v.clock },
-      ),
-    );
+    for (const groupId of [p.groupId, p.otherGroupId]) {
+      await withTransaction(suite.db, async (tx) => {
+        const [party] = await tx
+          .select({ revision: parties.revision })
+          .from(parties)
+          .where(eq(parties.id, p.partyId));
+        await fireGroup(
+          tx,
+          v.cfg,
+          p.partyId,
+          groupId,
+          {
+            submissionId: newId(),
+            expectedPartyRevision: party!.revision,
+            operatorId: v.deviceId,
+          },
+          { deviceId: v.deviceId },
+          { recorder: recordAttendanceFact, clock: v.clock },
+        );
+      });
+    }
     const saved = await state();
     expect(saved.groups.map((g) => [g.state, g.firedBy, g.firedByDeviceId])).toEqual([
       ["fired", null, v.deviceId],
