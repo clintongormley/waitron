@@ -169,6 +169,9 @@ import { singletonPass } from "./singleton-pass.js";
 import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { TradingAdmission } from "./trading-admission.js";
+import { readZoneContext, validateRetainedZoneClock } from "./venue-zone-context.js";
+import { zoneRepairGate } from "./zone-repair-serving.js";
+import { mountVenueZoneRepairApi } from "./venue-zone-repair-api.js";
 import { mountTillApi } from "./till-api.js";
 import { createDiskFullState, noteFullAtStart, watchForDiskFull } from "./disk-full-state.js";
 import { mountDiskStopApi } from "./disk-stop-api.js";
@@ -1746,6 +1749,148 @@ async function bootServer(
     dataNodeId = loaded.originNodeId;
   }
 
+  // `makeFiscalBackend` cross-checks `filingModule` against the enabled fiscal module, so a node
+  // whose records were filed under another regime fails the boot rather than chaining under the
+  // wrong one (CLAUDE.md §5).
+  const filingModule = await readFilingModule(db, config.node);
+  // Resolved through the generic slot so `boot.ts` names no regime package
+  // (`scripts/module-seams.test.ts`).
+  const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
+  const nodeBackend = makeFiscalBackend(setsToMigrate, filingModule, db, env);
+  const operationDescriptionDefault = offeredOperationDescriptionDefault(
+    enabledFiscal.venueFields?.defaults?.operationDescription,
+  );
+  const tradingContext: TradingContext = {
+    ...node,
+    ...config.tillApp,
+    simplifiedInvoiceLimit: nodeBackend.simplifiedInvoiceLimit,
+    operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
+    operationDescriptionDefault,
+    practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
+  };
+  // The venue's default DISPLAY locale. The override is the RAW `tradingContext.localeOverride`, not the
+  // defaulted `tradingContext.locale`, which would mask geography.
+  const venueLocale = await readVenueLocale(db, {
+    locationId: tradingContext.locationId,
+    override: tradingContext.localeOverride,
+  });
+  const tradingAdmission = new TradingAdmission();
+  health.readTradingAdmission = () => tradingAdmission.snapshot();
+  const scope = { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId };
+  const context = await withTransaction(db, async (tx) => {
+    const context = await readZoneContext(tx, scope);
+    if (context.savedZone.kind === "valid")
+      await validateRetainedZoneClock(tx, scope, context.savedZone.timeZone, now());
+    return context;
+  });
+  if (context.savedZone.kind !== "valid") {
+    tradingAdmission.repairOnly(context.savedZone.kind);
+    app.use("*", zoneRepairGate(tradingAdmission));
+    mountWebhook(
+      app,
+      {
+        db,
+        ring,
+        nodeId: tradingContext.nodeId,
+        admission: tradingAdmission,
+        environment: config.environment,
+        makeStripe: defaultMakeStripe,
+      },
+      log,
+    );
+    mountNodeApi(
+      app,
+      {
+        nodeId: tradingContext.nodeId,
+        acceptingSales: false,
+        environment: config.environment,
+        readMembership: () => readNodeMembership(db),
+        readTradingAdmission: () => tradingAdmission.snapshot(),
+      },
+      log,
+    );
+    const sendAccountEmail: NonNullable<
+      Parameters<typeof mountManagementApi>[1]["sendAccountEmail"]
+    > = async (message) => {
+      const [delivery, timeZone] = await Promise.all([
+        resolveEmailDelivery(db, ring, config.devMode || tradingContext.practiceMode === true),
+        readVenueTimeZone(db, { locationId: tradingContext.locationId }),
+      ]);
+      if (delivery.mode === "unconfigured") throw new Error("account email is not configured");
+      await createAccountEmailSender({ ...delivery.smtp, timeZone })(message);
+    };
+    const management = mountManagementApi(
+      app,
+      {
+        db,
+        cfg: { nodeId: tradingContext.nodeId },
+        secureCookies,
+        rpId: config.managementRpId,
+        origin: config.managementOrigin,
+        googleOidc: config.googleOidc,
+        venueLocale,
+        privacyNoticeUrl: config.privacyNoticeUrl,
+        credentialKeyRing: totpKeyRing,
+        sendAccountEmail,
+      },
+      log,
+    );
+    const settle = async () => {
+      await management.settle();
+      await withTransaction(db, async () => {});
+    };
+    undoOnFailure.push(settle);
+    mountMeApi(
+      app,
+      {
+        db,
+        cfg: { nodeId: tradingContext.nodeId },
+        venueLocale,
+        onboardingIntent: config.onboardingIntent,
+        modules: setsToMigrate.map((module) => module.name),
+        credentialKeyRing: totpKeyRing,
+        accountActionCodeKey: accountPurposeKey(accountKey, "account-action-code"),
+        accountActionBaseUrl: `${config.managementOrigin}/`,
+        privacyNoticeUrl: config.privacyNoticeUrl,
+        sendAccountEmail,
+        readTradingAdmission: () => tradingAdmission.snapshot(),
+      },
+      log,
+    );
+    mountVenueZoneRepairApi(
+      app,
+      {
+        db,
+        scope,
+        admission: tradingAdmission,
+        managementOrigin: config.managementOrigin,
+        requestRestart: () => process.kill(process.pid, "SIGTERM"),
+        now,
+      },
+      log,
+    );
+    if (config.dashboardAppDir !== undefined)
+      mountSpa(
+        app,
+        { root: config.dashboardAppDir, basePath: "/manage", navigationPath: "/manage" },
+        log,
+      );
+    const server = startTradingListener(config, app, now, log);
+    undoOnFailure.push(() => closeListener(server));
+    return makeStartedServer(
+      server,
+      health,
+      log,
+      {
+        stopWork: () => Promise.resolve(),
+        settleRequests: settle,
+        closePools: () => store.close(),
+      },
+      { stop: () => Promise.resolve() },
+      startLandingListener(config, log),
+    );
+  }
+  tradingAdmission.admit();
   const liveEvents = new LiveEvents();
   const changeSources = setsToMigrate.flatMap((module) => module.changes ?? []);
   await installChangeFeed(db, changeSources);
@@ -1788,7 +1933,6 @@ async function bootServer(
   // A rerouted till fetches menu photos cross-origin.
   app.use("/media/*", corsForVenue(allowOrigin));
 
-  const tradingAdmission = new TradingAdmission();
   mountWebhook(
     app,
     {
@@ -1801,31 +1945,6 @@ async function bootServer(
     },
     log,
   );
-  // `makeFiscalBackend` cross-checks `filingModule` against the enabled fiscal module, so a node
-  // whose records were filed under another regime fails the boot rather than chaining under the
-  // wrong one (CLAUDE.md §5).
-  const filingModule = await readFilingModule(db, config.node);
-  // Resolved through the generic slot so `boot.ts` names no regime package
-  // (`scripts/module-seams.test.ts`).
-  const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
-  const nodeBackend = makeFiscalBackend(setsToMigrate, filingModule, db, env);
-  const operationDescriptionDefault = offeredOperationDescriptionDefault(
-    enabledFiscal.venueFields?.defaults?.operationDescription,
-  );
-  const tradingContext: TradingContext = {
-    ...node,
-    ...config.tillApp,
-    simplifiedInvoiceLimit: nodeBackend.simplifiedInvoiceLimit,
-    operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
-    operationDescriptionDefault,
-    practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
-  };
-  // The venue's default DISPLAY locale. The override is the RAW `tradingContext.localeOverride`, not the
-  // defaulted `tradingContext.locale`, which would mask geography.
-  const venueLocale = await readVenueLocale(db, {
-    locationId: tradingContext.locationId,
-    override: tradingContext.localeOverride,
-  });
   const contentLanguageRules = await readVenueContentLanguageRules(db, {
     locationId: tradingContext.locationId,
   });
@@ -1912,6 +2031,7 @@ async function bootServer(
     {
       nodeId: tradingContext.nodeId,
       acceptingSales: isSingletonPrimary && !fencedOrMirror,
+      readTradingAdmission: () => tradingAdmission.snapshot(),
       environment: config.environment,
       readMembership: () => readNodeMembership(db),
     },
@@ -2331,6 +2451,7 @@ async function bootServer(
     {
       db,
       describeShifts,
+      readTradingAdmission: () => tradingAdmission.snapshot(),
       cfg: { nodeId: tradingContext.nodeId },
       venueLocale,
       onboardingIntent: config.onboardingIntent,

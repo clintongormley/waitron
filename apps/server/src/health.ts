@@ -4,6 +4,7 @@ import type { StreamView } from "@waitron/stream";
 import { DEFAULT_MAX_TICK_MS } from "./config.js";
 import { ALL_DUTIES, DRAIN_DUTY, RECONCILE_DUTY, type Duty, type PassReport } from "./pass.js";
 import type { Logger } from "./logger.js";
+import type { TradingAdmissionView } from "./trading-admission.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 /**
@@ -43,9 +44,9 @@ export interface HealthState {
   /** Reported, never judged: `/health` failing on an external bucket would stall an install or an
    * update on someone else's outage (`deploy/waitron.sh` waits for a healthy container). */
   readStream: () => StreamView;
+  readTradingAdmission?: () => TradingAdmissionView;
 }
 
-/** A host that has booted and not yet passed reports 503: never having submitted is not healthy. */
 export function createHealthState(startedAt: Date): HealthState {
   const duties: Record<string, DutyHealth> = {};
   for (const duty of ALL_DUTIES) {
@@ -143,6 +144,9 @@ export function healthSnapshot(
   state: HealthState,
   now: Date,
 ): { ok: boolean; body: Record<string, unknown> } {
+  const admission = state.readTradingAdmission?.();
+  if (admission !== undefined && admission.state !== "ready")
+    return { ok: true, body: { ok: true, tradingAvailable: false } };
   const duties: Record<string, unknown> = {};
   let ok = state.lastPassAt !== null;
   for (const [name, duty] of Object.entries(state.duties)) {
@@ -215,7 +219,7 @@ export function healthApp(
     const at = now();
     const snapshot = healthSnapshot(state, at);
     const body =
-      options.venueDir === undefined
+      options.venueDir === undefined || "tradingAvailable" in snapshot.body
         ? snapshot.body
         : { ...snapshot.body, venueHolder: await venueHolderHealth(options.venueDir, at) };
     return c.json(body, snapshot.ok ? 200 : 503);
