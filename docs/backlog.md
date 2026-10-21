@@ -1949,7 +1949,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   groups read and drop the second request; the exact-body assertion in
   `apps/server/src/till-api.groups.test.ts` changes with it. Done when a table load no longer
   calls `GET /api/parties/:id/print-problems` and the printing problems arrive in the groups read.
-  Which held groups the kitchen and pass screens offer Fire on is A773's.
 
 - **Loose ends left by service Task 6 (#761, HOLD tickets in advance).**
   [Detail](backlog/kitchen.md#task-6-761-hold-tickets-in-advance)
