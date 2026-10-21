@@ -1,7 +1,12 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { LitElement, html } from "lit";
+import { page, userEvent } from "vitest/browser";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { LeaveController } from "@waitron/ui";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
+import { codeMessage } from "../i18n/codes.js";
 import { es } from "../i18n/strings.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -182,3 +187,250 @@ describe("the read-only Look card", () => {
     );
   });
 });
+
+type Choices = ThemeChoices;
+const saved = (id: string, name: string, choices: Choices) => theme(id, name, choices);
+
+function editRig(list: ThemeList) {
+  const saveTheme = vi.fn(async (id: string, choices: Choices) => {
+    const name = list.themes.find((view) => view.id === id)?.name ?? id;
+    return saved(id, name, choices);
+  });
+  return { api: { saveTheme } as unknown as DashboardApi & { saveTheme: typeof saveTheme } };
+}
+
+async function mountEditing(list: ThemeList) {
+  const rig = editRig(list);
+  const { el } = await mountWidget<Card>("dashboard-look-card", {
+    api: rig.api,
+    list,
+    canEdit: true,
+  });
+  await userEvent.click(q(el, "[data-test=edit]")!);
+  await el.updateComplete;
+  return { el, saveTheme: rig.api.saveTheme };
+}
+
+const button = (el: Card, name: string) =>
+  q(el, `[data-test=${name}]`) as HTMLElementTagNameMap["wt-button"];
+const segmented = (el: Card, name: string) =>
+  q(el, `wt-segmented-control[name=${name}]`) as HTMLElementTagNameMap["wt-segmented-control"];
+const codeField = (el: Card) =>
+  q(el, "wt-input[name=brandColor]") as HTMLElementTagNameMap["wt-input"];
+const preview = (el: Card) =>
+  q(el, "dashboard-theme-preview") as HTMLElementTagNameMap["dashboard-theme-preview"];
+const bottom = async (el: Card) =>
+  (
+    await formMessageOf(q(el, "wt-form-actions") as HTMLElementTagNameMap["wt-form-actions"])
+  )?.textContent?.trim() ?? "";
+
+async function chooseSegment(el: Card, name: string, label: string) {
+  const control = segmented(el, name);
+  const choice = [...control.shadowRoot!.querySelectorAll("button")].find(
+    (b) => text(b) === label,
+  )!;
+  await userEvent.click(choice);
+  await el.updateComplete;
+}
+
+async function typeInCode(el: Card, value: string) {
+  const inner = codeField(el).shadowRoot!.querySelector("input")!;
+  await page.elementLocator(inner).fill(value);
+  await el.updateComplete;
+}
+
+describe("editing the Look card in place", () => {
+  it("Edit opens the card in place with Save quiet and disabled, a saved fix included", async () => {
+    setLocale("en-GB");
+    const { el } = await mountEditing(inUse(lucia));
+    expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(true);
+    expect(q(el, "[data-test=edit]")).toBeNull();
+    expect(text(q(el, "[data-test=editing-line]"))).toBe(
+      "Theme in use: Bar Lucía. Saving changes every screen.",
+    );
+    expect(button(el, "save").variant).toBe("secondary");
+    expect(button(el, "save").disabled).toBe(true);
+    expect(button(el, "use-waitron").disabled).toBe(false);
+    expect(segmented(el, "background").value).toBe("tinted");
+    expect(segmented(el, "corners").value).toBe("round");
+    expect(codeField(el).value).toBe("#1e5b3a");
+  });
+
+  it("every change repaints the preview and nothing else", async () => {
+    const { el } = await mountEditing(inUse(lucia));
+    const before = getComputedStyle(el).getPropertyValue("--wt-color-primary");
+    await userEvent.click(q(el, 'button.swatch[data-color="#b12525"]')!);
+    await el.updateComplete;
+    expect(preview(el).theme.light["--wt-color-primary"]).toBe("#b12525");
+    expect(getComputedStyle(el).getPropertyValue("--wt-color-primary")).toBe(before);
+    expect(button(el, "save").variant).toBe("primary");
+    expect(button(el, "save").disabled).toBe(false);
+  });
+
+  it("Save sends the whole draft and closes the editor", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    const heard = vi.fn();
+    el.addEventListener("look-saved", (event) => heard((event as CustomEvent).detail));
+    await chooseSegment(el, "background", "Neutral");
+    await userEvent.click(button(el, "save"));
+    await expect
+      .poll(() => q(el, "section.settings-card")!.hasAttribute("data-editing"))
+      .toBe(false);
+    expect(saveTheme).toHaveBeenCalledTimes(1);
+    expect(saveTheme).toHaveBeenCalledWith("t-lucia", {
+      brandColor: "#1e5b3a",
+      brandFix: { dark: true },
+      background: "neutral",
+      corners: "round",
+      handSet: { light: {}, dark: {} },
+    });
+    expect(q(el, "[data-test=saved-theme]")).not.toBeNull();
+    expect(heard).toHaveBeenCalledTimes(1);
+    expect(heard.mock.calls[0]![0]).toEqual(await saveTheme.mock.results[0]!.value);
+  });
+
+  it("a hand-set colour stored through the API is sent back unchanged", async () => {
+    setLocale("en-GB");
+    const handSet = { light: { bg: "#f8f1e1" }, dark: {} };
+    const stored = theme("t-lucia", "Bar Lucía", { ...LUCIA, handSet });
+    const { el, saveTheme } = await mountEditing(inUse(stored));
+    await chooseSegment(el, "corners", "Square");
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    expect(saveTheme.mock.calls[0]![1].handSet).toEqual(handSet);
+    expect(saveTheme.mock.calls[0]![1].corners).toBe("square");
+  });
+
+  it("a bad code is explained after the first Save, and blocks only its own field", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    await typeInCode(el, "#12");
+    expect(codeField(el).error).toBe("");
+    expect(button(el, "save").disabled).toBe(false);
+    await userEvent.click(button(el, "save"));
+    await el.updateComplete;
+    expect(saveTheme).not.toHaveBeenCalled();
+    expect(codeField(el).error).toBe(t("appearance.bad_code"));
+    expect(await bottom(el)).toBe(t("form.fix_fields"));
+    expect(button(el, "save").disabled).toBe(true);
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(codeField(el));
+    await typeInCode(el, "#123456");
+    expect(codeField(el).error).toBe("");
+    expect(await bottom(el)).toBe("");
+    expect(button(el, "save").disabled).toBe(false);
+  });
+
+  it("a refusal naming brandColor lands under the field and never disables Save", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    await chooseSegment(el, "corners", "Square");
+    saveTheme.mockRejectedValueOnce({
+      code: "theme.invalid",
+      params: { field: "brandColor", reason: "bad_value" },
+    });
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => codeField(el).error).toBe(t("appearance.bad_code"));
+    expect(await bottom(el)).toBe(t("form.fix_fields"));
+    expect(button(el, "save").disabled).toBe(false);
+    for (const refusal of [
+      { code: "theme.not_found" },
+      { code: "theme.invalid", params: { field: "brandFix.light", reason: "fix_with_hand_set" } },
+    ]) {
+      saveTheme.mockRejectedValueOnce(refusal);
+      await userEvent.click(button(el, "save"));
+      await expect.poll(() => bottom(el)).toBe(codeMessage(refusal.code));
+      expect(codeField(el).error).toBe("");
+      expect(segmented(el, "corners").error).toBe("");
+      expect(button(el, "save").disabled).toBe(false);
+    }
+    expect(saveTheme).toHaveBeenCalledTimes(3);
+  });
+
+  it("losing the right to edit closes the editor without a write", async () => {
+    setLocale("en-GB");
+    const rig = editRig(inUse(lucia));
+    const { el: host } = await mountWidget<LookLeaveHost>("look-card-leave-host", {
+      api: rig.api,
+      list: inUse(lucia),
+    });
+    const el = host.shadowRoot!.querySelector("dashboard-look-card")!;
+    await el.updateComplete;
+    await userEvent.click(q(el, "[data-test=edit]")!);
+    await el.updateComplete;
+    await chooseSegment(el, "corners", "Square");
+    expect(button(el, "save").disabled).toBe(false);
+    host.canEdit = false;
+    await host.updateComplete;
+    await el.updateComplete;
+    expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(false);
+    expect(q(el, "[data-test=edit]")).toBeNull();
+    expect(row(el, "corners")).toBe("Round");
+    expect(rig.api.saveTheme).not.toHaveBeenCalled();
+    await host.updateComplete;
+    expect(host.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    const leaving = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(leaving);
+    expect(leaving.defaultPrevented).toBe(false);
+  });
+
+  it("Use Waitron's look changes the draft only, and Cancel undoes it", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    expect(button(el, "use-waitron").variant).toBe("secondary");
+    await userEvent.click(button(el, "use-waitron"));
+    await el.updateComplete;
+    const waitrons = q(el, 'button.swatch.none[role="radio"]')!;
+    expect(waitrons.getAttribute("aria-checked")).toBe("true");
+    expect(text(waitrons)).toBe("Waitron's");
+    expect(waitrons.querySelector(".chip")!.getAttribute("style")).toBe("background:#1f6feb");
+    expect(segmented(el, "background").value).toBe("neutral");
+    expect(segmented(el, "corners").value).toBe("standard");
+    expect(codeField(el).value).toBe("");
+    expect(button(el, "use-waitron").disabled).toBe(true);
+    expect(button(el, "use-waitron").variant).toBe("secondary");
+    expect(button(el, "save").disabled).toBe(false);
+    expect(saveTheme).not.toHaveBeenCalled();
+    await userEvent.click(button(el, "cancel"));
+    await el.updateComplete;
+    expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(false);
+    expect(saveTheme).not.toHaveBeenCalled();
+    expect(row(el, "theme")).toBe("Bar Lucía");
+    expect(row(el, "brand")).toBe("Custom · #1e5b3a · dark screens #437e5b");
+    expect(row(el, "background")).toBe("Tinted");
+    expect(row(el, "corners")).toBe("Round");
+  });
+
+  it("an unreadable theme opens on Waitron's choices", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(theme("t-broken", "Old", null)));
+    expect(button(el, "save").variant).toBe("secondary");
+    expect(button(el, "save").disabled).toBe(true);
+    expect(button(el, "use-waitron").disabled).toBe(true);
+    await userEvent.click(q(el, 'button.swatch[data-color="#b12525"]')!);
+    await el.updateComplete;
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    expect(saveTheme).toHaveBeenCalledWith("t-broken", {
+      ...WAITRON_CHOICES,
+      brandColor: "#b12525",
+    });
+  });
+});
+
+class LookLeaveHost extends LitElement {
+  readonly leave = new LeaveController(this);
+  api!: DashboardApi;
+  list!: ThemeList;
+  canEdit = true;
+  static override properties = { canEdit: { attribute: false } };
+  override render() {
+    return html`<dashboard-look-card
+        .api=${this.api}
+        .list=${this.list}
+        .canEdit=${this.canEdit}
+      ></dashboard-look-card>
+      ${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
+  }
+}
+customElements.define("look-card-leave-host", LookLeaveHost);
