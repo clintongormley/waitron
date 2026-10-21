@@ -58,8 +58,10 @@ start a page:
 `apps/print-agent` has no page. The equipment label (`apps/dashboard/src/widgets/equipment-label.ts:42-44`)
 marks its print iframe a theme root inside the dashboard's document, so the venue's sheet reaches
 that element on screen; it copies only font tokens (design line 1398), which no theme writes until
-slices 10-11, and the sheet is inside `@media screen` (`packages/ui-core/src/theme/sheet.ts:24-31`),
-so nothing printed changes in this slice ("Left for later slices").
+slices 10-11, so nothing printed changes in this slice ("Left for later slices"). (The sheet's
+`@media screen` wrapper is no protection here: the label copies the frame's computed tokens into its
+own document at `load`, while the page is on screen, `equipment-label.ts:52-59` — design section 7
+says the wrapper does not cover such a copy. Only the font-token reason holds.)
 
 **D2. The shared code lives in `@waitron/ui` (`packages/ui/src/venue-theme.ts`), not `@waitron/ui-core`.**
 Both apps already take `applyTokens` and `startThemeChoice` from `@waitron/ui`
@@ -67,7 +69,9 @@ Both apps already take `applyTokens` and `startThemeChoice` from `@waitron/ui`
 module follows (module-level state, one start function), is there (`packages/ui/src/theme-choice.ts`,
 exported at `packages/ui/src/index.ts:127-138`). `@waitron/ui-core` carries a `publishConfig` export
 map and a package-consumer test (`packages/ui-core/package.json:13,60-138`); a module that fetches
-from the box and writes to `localStorage` is app glue, not a published component. Consequences:
+from the box and writes to `localStorage` is app glue, not a published component (the one pure
+piece, the answer's shape check, does go in `@waitron/ui-core/theme`, D3, so the server can run it;
+it is mutation-tested there under the same nightly floor). Consequences:
 `packages/ui` measures `src/**/*.ts` at 98/98/98/95 (`packages/ui/vitest.config.ts:114-131`) and
 mutates `src/**/*.ts` (`packages/ui/stryker.config.json:9`), so the new file is mutation-tested; that
 floor of 90 bites only in the nightly merged run (`docs/developers/ci-and-gates.md:326`), so Task 2
@@ -76,7 +80,12 @@ browser command and a fixture answer) go in `packages/ui/test/`, outside the cov
 `apps/till/test/native-reload.ts` sits outside the till's.
 
 **D3. The stored copy and the answer are accepted only in `/api/theme`'s shape: an object, not an
-array, with a string `hash`, a string `css` and a `logo` key.** The value of `logo` is stored as
+array, with a string `hash`, a string `css` and a `logo` key.** The check, `isVenueThemeAnswer`, and
+its type live in `@waitron/ui-core/theme` (`packages/ui-core/src/theme/answer.ts`, pure, no DOM), not
+in `@waitron/ui`, so that `apps/server` — which depends on `@waitron/ui-core`
+(`apps/server/package.json:74`) but not on `@waitron/ui` — can run it over its real `/api/theme`
+answer (Task 1). Without that, a later change to the answer's shape would pass every test while every
+page quietly fell back to Waitron's colours. The value of `logo` is stored as
 received and never read in this slice: slice 8, which draws it, checks its shape first ("Left for
 later slices"). Anything else — text that is not JSON, `null`, `[]`, `42`, a missing or non-string
 `hash` or `css`, no `logo` key — is treated as no stored copy (the page shows Waitron's colours) or,
@@ -141,9 +150,13 @@ samples `--wt-color-bg` on every animation frame — the shape of `apps/till/tes
 The test file reads its engine list from Vitest's `provide` (`WAITRON_STARTUP_ENGINES`, default
 `chromium`); with `chromium,webkit` the command launches Playwright's WebKit itself. WebKit is not in
 CI: CI installs Chromium alone, without `--with-deps` (`.github/workflows/ci.yml:1256-1276,1356,1486`),
-and WebKit on Linux needs system libraries, which means a bounded, retried apt step (CLAUDE.md §2) and
-a Playwright cache whose one key (`ci.yml:1345-1349`) every Chromium-only job also saves. That is an
-open point for the owner or lane, not something this slice changes ("Departures from the design").
+and — an assumption, not run here — WebKit on Linux needs system libraries Chromium does not, which
+would mean a bounded, retried apt step (CLAUDE.md §2) and a Playwright cache whose one key
+(`ci.yml:1345-1349`) every Chromium-only job also saves. The controller ruled (2026-10-21): WebKit
+stays out of CI in this slice, and a driver step adds a backlog entry for it ("Departures from the
+design"). The review ran the Task 3 command shape through Vitest's own server
+(`~/waitron-campaign/a841-plan3/review-probes/vt/`): Chromium 156.0.8078.4 and a separately launched
+WebKit 27.2 both rendered the dashboard and the till in about 1 s per case.
 
 Probes, 2026-10-21 (`~/waitron-campaign/a841-plan3/probes/`):
 
@@ -175,7 +188,8 @@ to tell. The dashboard's live read reports its failures as `diag.record("warn", 
 - **WebKit is measured, not gated** (D10). The design asks for the start-up probe in WebKit among
   section 15's tests; this plan commits the tests with WebKit selectable, runs them in WebKit once,
   locally, in both apps, and records the result in the PR and in the design (Task 4), while CI runs
-  them in Chromium only. Adding WebKit to CI is an open point.
+  them in Chromium only. The controller ruled (2026-10-21) that WebKit stays out of CI in this slice;
+  a driver step adds the backlog entry for it (bounded apt, a cache key per engine).
 
 ---
 
@@ -197,7 +211,8 @@ to tell. The dashboard's live read reports its failures as `diag.record("warn", 
   kitchen screen in device mode is fixed until reload (lines 2253-2254).
 - **General code is English only** (CLAUDE.md §3); every colour in a test fixture is a `--wt-*` value
   written as data, not styling.
-- **Coverage 98/98/98/95** in every package touched (`packages/ui`, `apps/dashboard`, `apps/till`);
+- **Coverage 98/98/98/95** in every package touched (`packages/ui-core`, `packages/ui`,
+  `apps/dashboard`, `apps/till`; `apps/server` gains a test only);
   `main.ts` is outside both apps' coverage (`apps/dashboard/vitest.config.ts:105-115` coverage `exclude`,
   `apps/till/vitest.config.ts:69-71`).
 
@@ -222,6 +237,9 @@ to tell. The dashboard's live read reports its failures as `diag.record("warn", 
 
 | File | Change |
 | --- | --- |
+| `packages/ui-core/src/theme/answer.ts`, `answer.test.ts`, `index.ts` | New: `isVenueThemeAnswer` and its type, pure, shared with the server (D3) |
+| `apps/server/src/themes-api.public.test.ts` | One case: the real answer passes `isVenueThemeAnswer` (Task 1) |
+| `packages/ui/tsconfig.json` | `include` gains `test`, if its typecheck stays clean (Task 3 step 5) |
 | `packages/ui/src/venue-theme.ts` | New: the sheet, the stored copy, the fetch, `startVenueTheme`, `applyVenueTheme`, `followVenueTheme` |
 | `packages/ui/src/venue-theme.test.ts` | New: start-up, answers, failures (Task 1); following and order (Task 2) |
 | `packages/ui/src/venue-theme.unstarted.test.ts` | New: before start nothing happens (Task 1) |
@@ -230,7 +248,7 @@ to tell. The dashboard's live read reports its failures as `diag.record("warn", 
 | `packages/ui/test/venue-theme-startup.ts` | New: the Vitest browser command (Task 3) |
 | `packages/ui/test/venue-theme-fixture.ts` | New: the fixture answer both apps' tests use (Task 3) |
 | `apps/dashboard/src/main.ts`, `apps/till/src/main.ts` | Call `startVenueTheme` after `applyTokens` |
-| `apps/dashboard/vitest.config.ts`, `apps/till/vitest.config.ts` | Register the command; `provide` the engine list |
+| `apps/dashboard/vitest.config.ts`, `apps/till/vitest.config.ts` | Register the command; `provide` the engine list; `optimizeDeps.entries: ["src/main.ts"]` |
 | `apps/dashboard/src/venue-theme-startup.test.ts`, `apps/till/src/venue-theme-startup.test.ts` | New: the start-up cases |
 | `apps/dashboard/src/api/client.ts`, `live-queries.ts` | `getVenueTheme`, its dependency |
 | `apps/dashboard/src/api/client.test.ts` | The read is a passive GET of `/api/theme` |
@@ -239,7 +257,7 @@ to tell. The dashboard's live read reports its failures as `diag.record("warn", 
 | `apps/till/src/till-app.ts` | Follow `themeHash` in `#applyVenueSetup` and `#onMenuState` |
 | `apps/till/src/api/client.ts:210` | The `themeHash` comment |
 | `apps/till/src/till-app-setup-refresh.test.ts` | New describe: the till follows the theme in use |
-| `docs/developers/conventions-ui.md`, `design-system.md`, `testing-guide.md` | Tasks 4-6 |
+| `docs/developers/conventions-ui.md`, `design-system.md`, `testing-guide.md`, `dashboard-live-updates.md` | Tasks 4-6 |
 | `docs/superpowers/specs/2026-10-19-a841-theme-editor-design.md` | A dated receipt of the WebKit measurement (Task 4) |
 
 ---
@@ -247,6 +265,9 @@ to tell. The dashboard's live read reports its failures as `diag.record("warn", 
 ### Task 1: The venue theme module — start-up, answers and failures (`@waitron/ui`)
 
 **Files:**
+- Create: `packages/ui-core/src/theme/answer.ts`, `packages/ui-core/src/theme/answer.test.ts`
+- Modify: `packages/ui-core/src/theme/index.ts` (export `answer.js`)
+- Modify: `apps/server/src/themes-api.public.test.ts` (one case: the real answer passes the check)
 - Create: `packages/ui/src/venue-theme.ts`
 - Create: `packages/ui/src/venue-theme.test.ts`, `packages/ui/src/venue-theme.unstarted.test.ts`
 - Modify: `packages/ui/src/index.ts:127-138` (export beside `theme-choice.js`)
@@ -255,19 +276,22 @@ to tell. The dashboard's live read reports its failures as `diag.record("warn", 
 - Produces (later tasks rely on these names exactly):
 
 ```ts
-export const VENUE_THEME_STORAGE_KEY = "waitron-venue-theme";
-export const VENUE_THEME_TIME_LIMIT_MS = 5_000;
+// packages/ui-core/src/theme/answer.ts (exported from @waitron/ui-core/theme)
 export interface VenueThemeAnswer {
   readonly hash: string;
   readonly css: string;
   readonly logo: unknown;
 }
+export function isVenueThemeAnswer(value: unknown): value is VenueThemeAnswer;
+
+// packages/ui/src/venue-theme.ts (exported from @waitron/ui, which re-exports the two above)
+export const VENUE_THEME_STORAGE_KEY = "waitron-venue-theme";
+export const VENUE_THEME_TIME_LIMIT_MS = 5_000;
 export interface VenueThemeOptions {
   /** Defaults to the global `fetch`, read when each request is sent. */
   readonly fetchImpl?: typeof fetch;
   readonly timeLimitMs?: number;
 }
-export function isVenueThemeAnswer(value: unknown): value is VenueThemeAnswer;
 export function startVenueTheme(root: HTMLElement, options?: VenueThemeOptions): void;
 export function applyVenueTheme(answer: unknown): void;
 ```
@@ -280,21 +304,38 @@ Behaviour (D3, D4, D8, D9): `startVenueTheme` adopts ONE module-level `CSSStyleS
 twice; replaces its text synchronously with the stored copy's `css` when the stored copy parses and
 passes `isVenueThemeAnswer`, else with `""`; records that copy's `hash` as applied (or none); drops
 any fetch in flight; then sends `fetchImpl("/api/theme", { cache: "no-store", signal })` without
-awaiting it. The whole read (request and `response.json()`) is raced against `timeLimitMs`; on
-expiry the signal is aborted and the answer dropped. A response that is not `ok`, a rejected fetch,
+awaiting it. The whole read (request and `response.json()`) is bounded by `timeLimitMs`: the limit is a
+`setTimeout` that aborts an `AbortController` (whose `signal` the request carries) and is cleared once
+the body is read — never `AbortSignal.timeout`, which the fake-timer case below cannot move; on
+expiry the answer is dropped. A response that is not `ok`, a rejected fetch,
 a body that is not JSON, or JSON that fails `isVenueThemeAnswer` changes nothing. An accepted answer
 goes through the same path as `applyVenueTheme`: when its `hash` differs from the applied one,
 `replaceSync(answer.css)` and `localStorage.setItem(VENUE_THEME_STORAGE_KEY, JSON.stringify(answer))`
 inside a `try` (a refusal is ignored); when equal, nothing is written. Reading `localStorage` is
 inside a `try` too.
 
-- [ ] **Step 1: Write the failing tests** in `venue-theme.test.ts`. Each case starts on
+- [ ] **Step 1a: Write the failing contract tests.**
+  - `packages/ui-core/src/theme/answer.test.ts`, "accepts only /api/theme's shape": `true` for
+    `{ hash: "h", css: "", logo: null }` and for `{ hash: "h", css: "x", logo: { light: "a", dark: null } }`;
+    `false` for `null`, `[]`, `42`, `"text"`, `{ css: "", logo: null }`, `{ hash: 1, css: "", logo: null }`,
+    `{ hash: "h", logo: null }`, `{ hash: "h", css: 7, logo: null }` and `{ hash: "h", css: "" }`.
+  - `apps/server/src/themes-api.public.test.ts`, "the answer passes the browser's check, with and
+    without a theme in use": the bodies the two existing cases read (`:31-37` no theme, `:38-…` the
+    lemon in use) each satisfy `isVenueThemeAnswer` from `@waitron/ui-core/theme`. The failing run
+    (before `answer.ts` exists) fails to resolve the import; once it exists, the case is the guard a
+    later reshaping of the answer trips.
+
+- [ ] **Step 1b: Write the failing module tests** in `venue-theme.test.ts`. Each case starts on
   `document.documentElement` after `applyTokens(document.documentElement)` and
   `localStorage.removeItem(VENUE_THEME_STORAGE_KEY)`; `afterEach` clears the key, restores mocks and
   calls `startVenueTheme(document.documentElement, { fetchImpl: never })` with no stored copy, which
   empties the sheet (D9). Helpers: `bg = () => getComputedStyle(document.documentElement).getPropertyValue("--wt-color-bg").trim()`;
   `GREEN` and `LEMON` answers built with `themeSheet(deriveTheme(…))` from
-  `@waitron/ui-core/theme` and `@waitron/ui-core/theme/waitron` and a fixed `hash` string each;
+  `@waitron/ui-core/theme` and `@waitron/ui-core/theme/waitron` and a fixed `hash` string each —
+  `GREEN` from `{ ...WAITRON_CHOICES, brandColor: "#1e5b3a", background: "tinted" }` (light page
+  `#f0f9f3`; a NEUTRAL green gives `#f7f7f8`, Waitron's own, which the review measured, so the
+  background must be tinted) and `LEMON` from `{ ...WAITRON_CHOICES, brandColor: "#f2d300", background: "tinted" }`,
+  with `expect(LEMON_LIGHT_BG).not.toBe(GREEN_LIGHT_BG)` as a precondition;
   `never = vi.fn(() => new Promise<Response>(() => {}))`; `answering(body, init?)` returns a
   `vi.fn` resolving `new Response(body, init)`.
   - "the stored copy paints before the fetch answers": store GREEN, start with `never`;
@@ -345,29 +386,36 @@ inside a `try` too.
 
 - [ ] **Step 2: Run them and watch them fail**
 
-  Run: `pnpm --filter @waitron/ui exec vitest run src/venue-theme`
-  Expected: FAIL — the import of `./venue-theme.js` cannot be resolved (`Failed to resolve import "./venue-theme.js"`), every case failing.
+  Run: `pnpm --filter @waitron/ui-core exec vitest run src/theme/answer.test.ts`,
+  `pnpm --filter @waitron/server exec vitest run src/themes-api.public.test.ts` and
+  `pnpm --filter @waitron/ui exec vitest run src/venue-theme`
+  Expected: FAIL — each cannot resolve its import (`./answer.js`, `isVenueThemeAnswer` from
+  `@waitron/ui-core/theme`, `./venue-theme.js`), every case in those files failing.
 
-- [ ] **Step 3: Implement `packages/ui/src/venue-theme.ts`** with the interface and behaviour above,
-  and export `VENUE_THEME_STORAGE_KEY`, `VENUE_THEME_TIME_LIMIT_MS`, `isVenueThemeAnswer`,
-  `startVenueTheme`, `applyVenueTheme` and the two types from `packages/ui/src/index.ts`.
+- [ ] **Step 3: Implement** `packages/ui-core/src/theme/answer.ts` (exported from the theme index)
+  and `packages/ui/src/venue-theme.ts` with the interface and behaviour above, and export
+  `VENUE_THEME_STORAGE_KEY`, `VENUE_THEME_TIME_LIMIT_MS`, `startVenueTheme`, `applyVenueTheme`,
+  `VenueThemeOptions`, and the re-exported `isVenueThemeAnswer` and `VenueThemeAnswer`, from
+  `packages/ui/src/index.ts`.
 
 - [ ] **Step 4: Run them and watch them pass**
 
-  Run: `pnpm --filter @waitron/ui exec vitest run src/venue-theme`
-  Expected: PASS, a `Tests` line counting every case above (read the count, CLAUDE.md §4).
+  Run: the three commands of Step 2.
+  Expected: PASS, each with a `Tests` line counting its cases (read the count, CLAUDE.md §4).
 
 - [ ] **Step 5: Focused checks**
 
   Run: `pnpm --filter @waitron/ui exec vitest run src/venue-theme --coverage --coverage.include=src/venue-theme.ts`
   Expected: the per-file table shows `venue-theme.ts` at 100 % lines and functions and ≥ 95 % branches.
-  Run: `pnpm --filter @waitron/ui typecheck && pnpm --filter @waitron/ui lint && pnpm format:check`
+  Run: `pnpm --filter @waitron/ui-core exec vitest run src/theme/answer.test.ts --coverage --coverage.include=src/theme/answer.ts`
+  Expected: `answer.ts` at 100 % on every column.
+  Run: `pnpm --filter @waitron/ui-core typecheck && pnpm --filter @waitron/ui typecheck && pnpm --filter @waitron/server typecheck && pnpm --filter @waitron/ui-core lint && pnpm --filter @waitron/ui lint && pnpm format:check`
   Expected: each exits 0.
 
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add packages/ui/src/venue-theme.ts packages/ui/src/venue-theme.test.ts packages/ui/src/venue-theme.unstarted.test.ts packages/ui/src/index.ts
+  git add packages/ui-core/src/theme/answer.ts packages/ui-core/src/theme/answer.test.ts packages/ui-core/src/theme/index.ts apps/server/src/themes-api.public.test.ts packages/ui/src/venue-theme.ts packages/ui/src/venue-theme.test.ts packages/ui/src/venue-theme.unstarted.test.ts packages/ui/src/index.ts
   git commit -s -m "ui: apply the venue's stored theme at start and fetch the current one"
   ```
 
@@ -385,7 +433,11 @@ inside a `try` too.
   nothing when `hash` equals the applied hash; otherwise one fetch through the same path as the
   start-up fetch. While a fetch is in flight, a call remembers the latest hash asked for and sends
   nothing; when the fetch settles, if that remembered hash still differs from the applied one, one
-  more fetch is sent. Order (D8): every fetch is numbered when sent, and `applyVenueTheme` counts as
+  more fetch is sent, and **the remembered hash is cleared when that follow-up is SENT**. A
+  follow-up that fails, or answers another hash, sends nothing more until the next call (for the
+  till, the next menu-state answer). Kept instead of cleared, every settle would re-check it and a
+  down server would be asked again at once, forever: the review's `follow-loop.mjs` counted 157
+  fetches in 200 ms that way, and 2 with the hash cleared on send. Order (D8): every fetch is numbered when sent, and `applyVenueTheme` counts as
   an application at the moment it is called; a fetch's answer is applied only if no application
   happened after that fetch was sent.
 
@@ -398,6 +450,11 @@ inside a `try` too.
     deferred fetch (resolve by hand); call `followVenueTheme("x")` twice → still one call; resolve the
     first with GREEN → exactly one more call is sent; resolving that with LEMON paints LEMON. Control:
     same, but the first fetch answers with hash `"x"` → no second call.
+  - "a follow-up that fails asks no more until the next call": deferred first fetch;
+    `followVenueTheme("x")` twice; the first fetch rejects; the follow-up rejects too → after a
+    macrotask and 100 ms more (real timers), the fetch was called exactly 2 times. A failing
+    implementation (the hash kept) prints a call count far above 2. The success case above is its
+    control.
   - "an older fetch never undoes a newer answer": start with a deferred fetch; `applyVenueTheme(LEMON)`;
     resolve the start-up fetch with GREEN → `bg()` stays LEMON's and the stored copy is LEMON. Control:
     without the `applyVenueTheme` call, the same GREEN answer paints GREEN.
@@ -428,10 +485,13 @@ inside a `try` too.
 - [ ] **Step 2: Run them and watch them fail**
 
   Run: `pnpm --filter @waitron/ui exec vitest run src/venue-theme`
-  Expected: FAIL — `followVenueTheme` is not exported (`does not provide an export named 'followVenueTheme'`)
-  and "an older fetch never undoes a newer answer" fails (`expected '#…GREEN…' to be '#…LEMON…'`) under
-  Task 1's code. The Follow device cases may already pass: they test Task 1's sheet with the real
-  three blocks, and their failing case would print the light value where the dark one is expected.
+  Expected: FAIL — `venue-theme.test.ts` and `venue-theme.unstarted.test.ts` fail to load, every case
+  in them failing with `does not provide an export named 'followVenueTheme'` (a missing named import
+  is a link error, so no single case's own message prints). The Follow device cases import nothing new
+  and may already pass: they test Task 1's sheet with the real three blocks, and their failing case
+  would print the light value where the dark one is expected. To see the order rule fail on its own,
+  run that one case against Task 1's code with the `followVenueTheme` import removed from the file:
+  it prints `expected '#f0f9f3' to be '<LEMON's light page>'`.
 
 - [ ] **Step 3: Implement `followVenueTheme` and the numbering** in `venue-theme.ts`; export it
   from `index.ts`.
@@ -477,6 +537,7 @@ export const FIXTURE_ANSWER: { hash: string; css: string; logo: null };
 // css: section 7's three blocks setting only --wt-color-bg, light #edf6f0, dark #0b110d
 export const FIXTURE_LIGHT_BG = "#edf6f0";
 export const WAITRON_LIGHT_BG = "#f7f7f8";
+export const FIXTURE_DARK_BG = "#0b110d";
 
 // packages/ui/test/venue-theme-startup.ts — Node side
 export type StartupAnswer = "never" | "late" | "refused" | "failed" | "not-json";
@@ -484,6 +545,7 @@ export interface StartupScenario {
   readonly stored: string | null;   // the raw localStorage value, or none
   readonly answer: StartupAnswer;
   readonly answerBody: string;      // what "late" answers, JSON text
+  readonly colorScheme: "light" | "dark"; // the new context's emulated system mode
   readonly engine: "chromium" | "webkit";
 }
 export interface StartupProbeResult {
@@ -498,7 +560,7 @@ export function venueThemeStartupProbe(indexHtml: URL): BrowserCommand<[StartupS
 ```
 
 How the command works (the shape of `apps/till/test/native-reload.ts:8-60`): for `"chromium"` it
-opens a NEW context on the runner's browser (`runner.context().browser()!.newContext({ colorScheme: "light" })`),
+opens a NEW context on the runner's browser (`runner.context().browser()!.newContext({ colorScheme: scenario.colorScheme })`),
 so the subject's `localStorage` is not the runner's; for `"webkit"` it launches
 `(await import("playwright")).webkit` with the same option and closes it after. It navigates to
 `new URL("/__a841_startup__", runner.url())`, fulfilling that navigation with the text of
@@ -530,11 +592,28 @@ changed or 5 s have passed.
     `storedAfter` equal to the stored text, `appRendered` true.
   - "a malformed stored copy leaves a working page in Waitron's colours": stored `"{broken"`,
     `"never"` → `firstThemedBg` `WAITRON_LIGHT_BG`, `appRendered` true.
+  - "on a dark device the stored copy paints its dark version on the first frame": `colorScheme:
+    "dark"`, the fixture stored, `"never"` → `firstThemedBg` `FIXTURE_DARK_BG`. This is the case that
+    measures the dark block nested inside `@media screen` in a `replaceSync` sheet, the one construct
+    new to WebKit; the first case (light) is its control. Every other case uses `colorScheme: "light"`.
 
   In `apps/dashboard/vitest.config.ts`, add `probeVenueThemeStartup: venueThemeStartupProbe(new URL("./index.html", import.meta.url))`
   to `browserProject.test.browser.commands` and
   `provide: { startupEngines: (process.env.WAITRON_STARTUP_ENGINES ?? "chromium").split(",") }` to
-  `browserProject.test`.
+  `browserProject.test`. Also add `entries: ["src/main.ts"]` to the config's top-level `optimizeDeps`
+  (beside `include: ["axe-core"]`). Why: Vitest hands Vite's dependency scan only the browser test
+  files (`@vitest/browser/dist/index.js:1048-1056`, `entries = [...browserTestFiles, …]`, returned as a
+  plugin's `optimizeDeps.entries`, which Vite merges with the config's own). A package that only
+  `main.ts` imports would be found only when this test loads `main.ts` mid-run; Vite then
+  re-optimises and reloads every browser test in flight. The review's control run, with the scan
+  missing what `main.ts` needs, printed `optimized dependencies changed. reloading`, `Vite unexpectedly
+  reloaded a test` and two `504 (Outdated Optimize Dep)`, and the page never rendered in 60 s
+  (`review-probes/vt/output-dashboard.txt`). Naming `main.ts` as an entry makes the scan find every
+  package it reaches before the run. Check it once: `rm -rf node_modules/.vite` in the app, then
+  `DEBUG=vite:deps pnpm --filter @waitron/dashboard exec vitest run src/venue-theme-startup.test.ts 2>&1 | /usr/bin/grep -n 'main.ts\|reloaded\|Outdated'`
+  must list `src/main.ts` among the crawled entries and print no `reloaded` or `Outdated` line; if
+  the merged entries turn out not to include it, fall back to listing in `optimizeDeps.include` each
+  package `main.ts` reaches that no test imports, and say which.
 
 - [ ] **Step 2: Run it and watch it fail**
 
@@ -542,7 +621,8 @@ changed or 5 s have passed.
   Expected: FAIL — the stored-copy case prints `expected '#f7f7f8' to be '#edf6f0'` and the late case
   `expected '#f7f7f8' to be '#edf6f0'` for `bgAfter`, and the refused, failed and non-JSON cases the
   same for `bgAfter`; the no-copy case and the malformed case pass (today's `main.ts` shows Waitron's
-  colours, which is what they expect). `themeRequests` is 0.
+  colours, which is what they expect), and the dark case prints `expected '#101216' to be '#0b110d'`.
+  `themeRequests` is 0.
 
 - [ ] **Step 3: Implement** — in `apps/dashboard/src/main.ts`, import `startVenueTheme` from
   `@waitron/ui` and call `startVenueTheme(document.documentElement)` on the line after
@@ -551,19 +631,30 @@ changed or 5 s have passed.
 - [ ] **Step 4: Run it and watch it pass**
 
   Run: `pnpm --filter @waitron/dashboard exec vitest run src/venue-theme-startup.test.ts`
-  Expected: PASS, `Tests 7 passed (7)`. Note the file's duration from the summary; if it is over
+  Expected: PASS, `Tests 8 passed (8)`. Note the file's duration from the summary; if it is over
   60 s, say so in the handover (a CI shard should stay near 4 minutes, CLAUDE.md §2).
 
 - [ ] **Step 5: Focused checks**
 
   Run: `pnpm --filter @waitron/dashboard typecheck && pnpm --filter @waitron/dashboard lint && pnpm --filter @waitron/ui lint && pnpm format:check`
-  Expected: each exits 0. If `packages/ui/test/` is outside `packages/ui`'s `tsconfig.json`, the
-  dashboard's typecheck (which loads `vitest.config.ts`) is what covers the command file; say which.
+  Expected: each exits 0.
+  The typecheck gap: `apps/dashboard/tsconfig.json`, `apps/till/tsconfig.json` and
+  `packages/ui/tsconfig.json` all `include` `src` only (the review ran `tsc --noEmit --listFilesOnly`
+  in `apps/till`: 2040 files, none of `native-reload`, `vitest.config` or `hold-draft`), so no package
+  typechecks a `vitest.config.ts` or a Node-side command file today, `apps/till/test/native-reload.ts`
+  included. The browser-side fixture IS typechecked, through its import from `src/*.test.ts`. Try
+  closing the gap for the new file: add `"test"` to `packages/ui/tsconfig.json`'s `include`, then run
+  `pnpm --filter @waitron/ui exec tsc --noEmit --listFilesOnly | /usr/bin/grep -c 'packages/ui/test/'`
+  (must print 2) and `pnpm --filter @waitron/ui typecheck`. Keep the change only if the typecheck
+  passes with no change outside `packages/ui/test/` (the command file needs Node's and Playwright's
+  types, which `"types": ["vitest/globals"]` may not bring in); otherwise revert it and write in the
+  handover and the PR that the command file is linted and formatted but not typechecked, as
+  `native-reload.ts` is not.
 
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add packages/ui/test apps/dashboard/src/main.ts apps/dashboard/vitest.config.ts apps/dashboard/src/venue-theme-startup.test.ts
+  git add packages/ui/test packages/ui/tsconfig.json apps/dashboard/src/main.ts apps/dashboard/vitest.config.ts apps/dashboard/src/venue-theme-startup.test.ts
   git commit -s -m "dashboard: start the venue theme with the token layer, and probe its first frames"
   ```
 
@@ -579,9 +670,10 @@ changed or 5 s have passed.
 **Interfaces:**
 - Consumes: Task 3's command and fixture; `startVenueTheme`.
 
-- [ ] **Step 1: Write the failing test** `apps/till/src/venue-theme-startup.test.ts`: the same seven
-  cases as Task 3's, against the till's `index.html`; register the command and `provide` in the
-  till's config as Task 3 did. The till's `main.ts` checks trust before booting
+- [ ] **Step 1: Write the failing test** `apps/till/src/venue-theme-startup.test.ts`: the same eight
+  cases as Task 3's, against the till's `index.html`; register the command, `provide` and
+  `optimizeDeps.entries: ["src/main.ts"]` in the till's config as Task 3 did (the till's config
+  already has a top-level `optimizeDeps.include`), with the same `DEBUG=vite:deps` check. The till's `main.ts` checks trust before booting
   (`apps/till/src/main.ts:24-28`), and with every API path answering 401 it shows an error screen;
   `appRendered` still holds, because `#app` receives an element either way.
 
@@ -597,31 +689,33 @@ changed or 5 s have passed.
 - [ ] **Step 4: Run it and watch it pass**
 
   Run: `pnpm --filter @waitron/till exec vitest run src/venue-theme-startup.test.ts`
-  Expected: PASS, `Tests 7 passed (7)`.
+  Expected: PASS, `Tests 8 passed (8)`.
 
 - [ ] **Step 5: The WebKit measurement, both apps**
 
-  Run: `node -e "require('playwright').webkit.executablePath()"` from `apps/till` and check the file
-  exists; if not, `pnpm --filter @waitron/till exec playwright install webkit` (it downloads into the
+  Run (from `apps/till`): `node -e "const p=require('playwright').webkit.executablePath();console.log(p, require('fs').existsSync(p))"`
+  — it prints the path and `true` when WebKit is installed; on `false`, `pnpm --filter @waitron/till exec playwright install webkit` (it downloads into the
   shared Playwright cache, as D10's probe did).
   Run: `WAITRON_STARTUP_ENGINES=chromium,webkit pnpm --filter @waitron/dashboard exec vitest run src/venue-theme-startup.test.ts`
   and the same for `@waitron/till`.
-  Expected: `Tests 14 passed (14)` in each, the WebKit cases named `webkit`. A WebKit case that
+  Expected: `Tests 16 passed (16)` in each, the WebKit cases named `webkit`. A WebKit case that
   fails is a finding about WebKit, not a reason to drop it: record its message. If WebKit cannot
   load modules from the Vitest server at all, run
   `~/waitron-campaign/a841-plan3/probes/startup-harness.mjs` adapted to seed the stored copy (it
   starts its own Vite server on the app, D10) and record that instead, saying so.
-  Record, for the PR description: each engine's name and version, the seven results per app, and the
+  Record, for the PR description: each engine's name and version, the eight results per app, and the
   frame time of `firstThemedBg` in the stored-copy case (add it to `StartupProbeResult` only if it
   costs one line; otherwise read it from a console line the command prints).
 
 - [ ] **Step 6: Write the receipts**
   - `docs/developers/testing-guide.md`: a section "The start-up probe runs WebKit only when asked" —
     the command, `WAITRON_STARTUP_ENGINES=chromium,webkit`, that CI installs Chromium alone so CI's
-    count is seven per app and a WebKit run's is fourteen, how to install WebKit locally, and the
-    path-not-glob routing trap.
+    count is eight per app and a WebKit run's is sixteen, how to install WebKit locally, the
+    path-not-glob routing trap, and that the probe loads the real `main.ts` through Vitest's server,
+    so `optimizeDeps.entries` names `src/main.ts` — without it a package only `main.ts` imports sets
+    off "Vite unexpectedly reloaded a test" (cite the review's control run).
   - The design, section 12 and section 17: a dated line each, "Measured 2026-10-2x in slice 3:" with
-    the engines' versions and what the seven cases printed in WebKit, pointing at the test files. No
+    the engines' versions and what the eight cases printed in WebKit, pointing at the test files. No
     rewrite of the surrounding text (CLAUDE.md §6: historical docs take a dated pointer).
 
 - [ ] **Step 7: Focused checks**
@@ -647,7 +741,8 @@ changed or 5 s have passed.
 - Modify: `apps/dashboard/src/dashboard-app.ts` (`#applyMe` `:1141-1192`, `#returnToLogin` `:1335-1345`, a `DashboardQueries` beside `#alertQueries` `:940-944`)
 - Modify: `apps/dashboard/src/api/client.test.ts`
 - Create: `apps/dashboard/src/dashboard-app.venue-theme.test.ts`
-- Modify: `docs/developers/design-system.md:202-205`
+- Modify: `docs/developers/design-system.md:202-205`, `docs/developers/dashboard-live-updates.md`
+- Modify: the shared `stubApi` builders of every suite that mounts the shell (Step 3)
 
 **Interfaces:**
 - Consumes: `applyVenueTheme`, `startVenueTheme`, `VenueThemeAnswer` (Task 1).
@@ -698,10 +793,15 @@ changed or 5 s have passed.
     called from `#applyMe` beside `this.#watchAlerts()` (`:1191`) for every role;
     `this.#venueThemeQueries.release("getVenueTheme")` in `#returnToLogin` beside the content
     languages' release (`:1339`).
-  - Existing shell suites whose stub api lacks `getVenueTheme` will record a `theme.load_failed`
-    warning and otherwise behave as before (the watch's error goes to `diag`). Add
-    `getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null })` to a shared
-    stub only where a suite fails because of it, and list each such stub in the handover.
+  - Up front, before running anything: add
+    `getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null })` to every
+    shared `stubApi` builder of a suite that mounts the shell — find them with
+    `git grep -l '"dashboard-app"' -- 'apps/**/*.test.ts' 'packages/**/*.test.ts'`, which lists the
+    `apps/dashboard/src/dashboard-app*.test.ts` files and also `screens/menus-screen.test.ts` and
+    `screens/floor-plan-editor.unsaved.test.ts`. Without it, a stub lacking the method records a
+    `theme.load_failed` on the diagnostics trail, and `dashboard-app.test.ts:6700-6709` compares that
+    trail's last entry before and after an action, so its result would depend on when the record
+    lands. This is set-up, not an assertion. List each stub changed in the handover.
 
 - [ ] **Step 4: Run them and watch them pass**
 
@@ -712,11 +812,15 @@ changed or 5 s have passed.
   (A841)" with a sentence that the dashboard and the till apply the theme in use
   (`packages/ui/src/venue-theme.ts`), and that until the editor lands (A841 slice 5) nothing writes
   one. Grep the whole file for other sentences saying a venue theme is not applied, and fix each.
+  `docs/developers/dashboard-live-updates.md`: a dated line (2026-10-2x, A841 slice 3) that the shell's
+  theme read sends EVERY read passively, its first included, through `DashboardApi.background`
+  (`getVenueTheme`), unlike `DashboardQueries`' usual active first read, because it starts on its own
+  at sign-in and must not count as activity — so a later session does not "fix" it back.
 
 - [ ] **Step 6: Focused checks**
 
-  Run: `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app src/api/live-queries.test.ts`
-  (every shell suite: the shell's session start changed, and memory note "seed/gating change → full
+  Run: `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app src/api/live-queries.test.ts src/screens/menus-screen.test.ts src/screens/floor-plan-editor.unsaved.test.ts`
+  (every suite that mounts the shell: the shell's session start changed, and memory note "seed/gating change → full
   package suite" applies to a change at the session's start).
   Run: `pnpm exec vitest run scripts/live-subscriptions.test.ts`
   Expected: PASS; the second prints `Tests 1 passed (1)` — `custom_themes` is a declared resource.
@@ -725,7 +829,7 @@ changed or 5 s have passed.
 - [ ] **Step 7: Commit**
 
   ```bash
-  git add apps/dashboard/src docs/developers/design-system.md
+  git add apps/dashboard/src docs/developers/design-system.md docs/developers/dashboard-live-updates.md
   git commit -s -m "dashboard: an open dashboard follows the theme in use through a passive live read"
   ```
 
@@ -746,26 +850,33 @@ changed or 5 s have passed.
 - [ ] **Step 1: Write the failing tests** — `describe("A841 the till follows the theme in use")`
   in `till-app-setup-refresh.test.ts`, reusing its `mountApp`, `openMesa`, `poll`, `state` and
   `till` helpers (`:296`, `:340-347`, `:405-408`, `:125-139`, `:206-226`). `beforeEach`: as the A768 describe (fake
-  `setInterval` only), plus `startVenueTheme(document.documentElement, { fetchImpl: themeFetch })`
+  `setInterval` only), plus `applyTokens(document.documentElement)` — the till's `mountWidget` makes
+  only its own host `<div>` a theme root (`apps/till/src/widgets/test-helpers.ts:66-73`), and the
+  venue sheet matches `[data-wt-theme-root]` (`sheet.ts:24-30`), so without it `bg()` read from
+  `<html>` is empty — then `startVenueTheme(document.documentElement, { fetchImpl: themeFetch })`
   where `themeFetch` is a `vi.fn` answering by a variable the test sets; `afterEach` empties the
   sheet as Task 1 and clears the stored key. `till()` answers gain `themeHash`.
   - "a moved theme hash repaints an open till without a reload": start read `themeHash: "h1"`
     (and `themeFetch` first answering `{ hash: "h1", css: "", logo: null }`); then `getTill` answers
     `{ ...moved, themeHash: "h2" }`, menu-state names `"s2"`, `themeFetch` answers the fixture with
-    `hash: "h2"` → after `poll`, `themeFetch` called once more and `bg()` is `FIXTURE_LIGHT_BG`.
+    `hash: "h2"` → after `poll`, `await vi.waitFor(() => expect(bg()).toBe(FIXTURE_LIGHT_BG))` (the
+    chain `getTill` → `#applyVenueSetup` → fetch → `json()` → apply can outlast `flush`'s rounds),
+    and `themeFetch` was called once more.
   - "a setup change that keeps the theme fetches nothing": revision moves to `"s2"` with the same
     `themeHash` → `themeFetch` call count unchanged.
   - "the same revision fetches nothing" (the control for the per-poll follow): two polls naming
     `"s1"` → count unchanged.
   - "a failed theme fetch is tried again on the next poll": the fetch after the move rejects;
     `bg()` unchanged; next `poll` (same revision `"s2"`) → one more call, which answers the fixture
-    → `bg()` `FIXTURE_LIGHT_BG`.
+    → `await vi.waitFor` until `bg()` is `FIXTURE_LIGHT_BG`.
   - "a theme read from before a newer one never wins": covered by Task 2's order case; not repeated.
 
 - [ ] **Step 2: Run them and watch them fail**
 
   Run: `pnpm --filter @waitron/till exec vitest run src/till-app-setup-refresh.test.ts -t "A841"`
-  Expected: FAIL — `themeFetch` called 1 time where 2 are expected, and `expected '#f7f7f8' to be '#edf6f0'`.
+  Expected: FAIL — `vi.waitFor` times out with `expected '#f7f7f8' to be '#edf6f0'` (the
+  `applyTokens` above makes `<html>` a theme root, so Waitron's own page colour is what it reads), and
+  `themeFetch` was called 1 time where 2 are expected.
   The two "fetches nothing" cases pass today (nothing fetches); they are the controls.
 
 - [ ] **Step 3: Implement** — in `#applyVenueSetup`, when `typeof till.themeHash === "string"`,
@@ -808,8 +919,12 @@ changed or 5 s have passed.
   - The A841 entry (`:3190-3206`): its last sentence "Next: slice 3 (delivery)." becomes a line that
     slice 3 landed (#PR): the stored copy and fetch at start in the dashboard and the till, the
     dashboard's live read, the till's swap; "Next: slice 4 (primary-coloured text), then slice 5 (the
-    editor)." Add "WebKit in CI for the start-up probe" as its own short entry in the same area if
-    the owner has not decided it (D10).
+    editor)." Add "WebKit in CI for the A841 start-up probe" as its own short entry in the same area
+    (controller ruling, 2026-10-21, D10): install WebKit in the dashboard and till shards with its
+    system libraries under a bounded, retried apt step (CLAUDE.md §2), give the Playwright cache a
+    key per engine so Chromium-only jobs do not save a cache without WebKit, and set
+    `WAITRON_STARTUP_ENGINES=chromium,webkit` for those suites; whether WebKit's Linux libraries are
+    missing from `ubuntu-latest` is an assumption to check first.
   - The entry "A841 slice 2 points its review left — decide before slice 3" (`:3217-3225`): the
     controller decided to KEEP all three — the nullable `in_use` with a CHECK of 1 is the design's
     deliberate choice; a malformed theme id answers `theme.not_found` so the permission check runs
@@ -841,17 +956,23 @@ changed or 5 s have passed.
 
 ## Changed test checks
 
-None. No existing assertion changes. Existing shell suites may gain a `getVenueTheme` stub (Task 5
-step 3) — set-up, not an assertion — and the till's `till()` fixture gains a `themeHash` field in the
-new describe only.
+None. No existing assertion changes. Every shared `stubApi` builder of a suite that mounts the
+dashboard shell gains a `getVenueTheme` stub (Task 5 step 3) — set-up, not an assertion — the till's
+`till()` fixture gains a `themeHash` field in the new describe only, and
+`themes-api.public.test.ts` gains a case (Task 1) without changing its existing two.
 
 ## Left for later slices
 
 - **Slice 7** adds `media_images` to `QUERY_DEPENDENCIES.getVenueTheme` (D5).
 - **Slice 8** draws `logo` from the stored copy and the answer; it must check the value's shape
   (`null` or `{ light, dark }` of strings) before drawing, since this slice stores it unchecked (D3),
-  and may give the logo's place a shorter wait than D4's 5 s.
+  and may give the logo's place a shorter wait than D4's 5 s. The module as planned exposes no way to
+  ask for the current answer or whether the start-up fetch has finished, which the logo's place needs
+  (design section 8a: empty "until the answer arrives or the fetch's time limit passes"): slice 8 adds
+  a subscription to `venue-theme.ts` (the current answer, and finished or not). Slice 7, which
+  reshapes `logo`, extends `isVenueThemeAnswer` and Task 1's server case with it.
 - **Slices 10-11** add type tokens to the sheet; the equipment label's print frame is a theme root in
   the dashboard's document (D1) and copies font tokens, so those slices make it print in Waitron's
   type (design line 1398).
-- **WebKit in CI** for the start-up probe (D10): an owner or lane decision.
+- **WebKit in CI** for the start-up probe (D10): out of this slice by the controller's ruling; the
+  driver step's backlog entry carries it.
