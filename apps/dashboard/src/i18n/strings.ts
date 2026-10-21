@@ -3094,6 +3094,9 @@ export const en = {
   "appearance.colour.field-value": "Field text",
   "appearance.colour.field-fill-disabled": "Switched-off field background",
   "appearance.colour.stepper-button": "+ and − buttons",
+  "appearance.colours_by_hand": "Colours set by hand",
+  "appearance.none": "None",
+  "appearance.hand_item": "{name} ({mode})",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -6235,6 +6238,9 @@ export const es: Record<StringKey, string> = {
   "appearance.colour.field-value": "Texto de los campos",
   "appearance.colour.field-fill-disabled": "Fondo de los campos desactivados",
   "appearance.colour.stepper-button": "Botones + y −",
+  "appearance.colours_by_hand": "Colores fijados a mano",
+  "appearance.none": "Ninguno",
+  "appearance.hand_item": "{name} ({mode})",
 };
 
 export const catalogues: Record<string, Partial<Record<StringKey, string>>> = {

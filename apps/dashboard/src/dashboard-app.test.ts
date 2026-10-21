@@ -3177,6 +3177,88 @@ describe("dashboard-app", () => {
     },
   );
 
+  const themesStub = () => vi.fn().mockResolvedValue({ themes: [], inUse: null });
+
+  it("offers Appearance first in Settings to a session holding venue.view, and opens its page", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["venue.view"] }),
+      listStaff: vi.fn().mockResolvedValue([]),
+      listThemes: themesStub(),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    const item = navItem(el, "appearance");
+    expect(item!.textContent!.trim()).toBe(t("nav.appearance"));
+    const panel = el.shadowRoot!.querySelector("#nav-group-panel-configuration")!;
+    const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
+    expect(order[0]).toBe("nav-appearance");
+
+    item!.click();
+    await flush(el);
+    const face = el.shadowRoot!.querySelector<HTMLElement & { api?: DashboardApi }>(
+      "dashboard-appearance-screen",
+    );
+    expect(face!.api).toBe(api);
+    expect(location.pathname).toBe("/manage/appearance");
+  });
+
+  it.each([
+    [["venue.view", "layout.configure"], true],
+    [["venue.view"], false],
+  ])("lets the Appearance page edit with %j: %s", async (permissions, canEdit) => {
+    history.replaceState(null, "", "/manage/appearance");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions }),
+        listStaff: vi.fn().mockResolvedValue([]),
+        listThemes: themesStub(),
+      }),
+    });
+    await flush(el);
+    const face = el.shadowRoot!.querySelector<HTMLElement & { canEdit?: boolean }>(
+      "dashboard-appearance-screen",
+    );
+    expect(face!.canEdit).toBe(canEdit);
+  });
+
+  it.each([
+    ["supervisor", []],
+    ["manager", ["booking.manage"]],
+    ["manager", ["layout.configure"]],
+  ])("does not offer Appearance to a %s session without venue.view", async (role, permissions) => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+        listStaff: vi.fn().mockResolvedValue([]),
+      }),
+    });
+    await flush(el);
+    expect(navItem(el, "overview")).toBeTruthy();
+    expect(navItem(el, "appearance")).toBeNull();
+  });
+
+  it.each([
+    ["manager", ["venue.view"], "dashboard-appearance-screen", "/manage/appearance"],
+    ["manager", ["layout.configure"], "dashboard-overview-screen", "/manage/overview"],
+    ["supervisor", [], "dashboard-overview-screen", "/manage/overview"],
+    ["staff", ["sale.take_payment"], "dashboard-my-schedule-screen", "/manage/my-schedule"],
+  ])(
+    "opens /manage/appearance for a %s session only when it holds venue.view",
+    async (role, permissions, tag, path) => {
+      history.replaceState(null, "", "/manage/appearance");
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+          listStaff: vi.fn().mockResolvedValue([]),
+          listThemes: themesStub(),
+        }),
+      });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector(tag)).not.toBeNull();
+      expect(location.pathname).toBe(path);
+    },
+  );
+
   it("opens the Devices page from the approval link's URL for a manager", async () => {
     history.replaceState(null, "", "/manage/devices");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
