@@ -5210,7 +5210,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   old name only points at the new one for 14 days. Five slices; no migration.
 
 - **A box whose first setup was retired into a new workspace keeps that workspace's backup staging
-  through the clean-up before the count.** Accepted for A798-B slice 2.
+  through the clean-up before the count.** Since A978 that keeps a cut-off backup run's plaintext
+  copy there through every ordinary start; not yet put to the owner.
   [Detail](backlog/box.md#a-box-whose-first-setup-was-retired-into-a-new-workspace-keeps-that-workspaces-backup-staging-through-the-clean-up-before-the-count)
 
 - **On a full disk, a box whose kept certificates cannot be used shows the connection set-up page,

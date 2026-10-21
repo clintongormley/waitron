@@ -2588,21 +2588,25 @@ nothing checks that a new entry point names itself. `waitron-break-glass` and `w
 open the folder with `exclusive: false`, so they take no lock and write no holder file. A holder that
 dies leaves its file behind; the next holder overwrites it.
 
-**Every start reads it too, and on a full disk that guards less than it seems.** Whatever the free
-space, a start deletes the copies a backup run leaves in
-`<state>/backup-staging` unless the holder file shows a fresh heartbeat (`freeSpaceAtStart`, `apps/server/src/start-space.ts`), so that a
-start refused beside a running server does not delete that server's backup in progress. But the
-heartbeat is written as a new file and a rename (`writeVenueHolder`,
-`packages/store/src/venue-holder.ts`). On a full HFS+ filesystem it failed with `ENOSPC` on
-`venue.holder.json.partial` and the file kept its earlier `heartbeatAt` (F13 in the
+**Every start takes the venue lock before it deletes backup staging; the holder file decides only
+when the lock cannot be taken.** Whatever the free space, a start deletes the copies a backup run
+leaves in `<state>/backup-staging` (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) unless
+`lockVenue` is refused `provisioning.database_in_use`; it deletes under the hold and releases it. The
+backup run writes staging only inside the server (`BackupSupervisor`, started in
+`apps/server/src/boot.ts` after its store has taken the lock), so the refusal is the running
+server's. With no venue folder it deletes without the lock, because taking it creates the folder.
+Measured 2026-10-21, Node v26.11.1, macOS, on the 64 MiB HFS+ image `apps/server/src/testing/full-disk.ts`
+makes, with a second process holding `venue.lock` by `begin immediate`: `lockVenueDatabase` was
+refused `provisioning.database_in_use` with 0, 4 KiB and 16 KiB left. The control, with no other
+holder: 0 and 4 KiB left failed with `ENOSPC` opening `venue.holder.json.partial` (one earlier run
+with 0 left: `unable to open database file`, errcode 14), and 16 KiB left took the lock. So a full
+disk no longer costs a running server its staging, as the heartbeat-only check did (the slice 2
+plan's decision 5). Any failure other than that refusal falls back to the heartbeat: the copies stay
+while the holder file is fresh. There the old limits stand: on a full HFS+ filesystem the heartbeat
+rewrite failed with `ENOSPC` and the file kept its earlier `heartbeatAt` (F13 in the
 [slice 2 plan](../superpowers/plans/2026-10-21-a798-2-full-disk-at-start.md#measured-for-this-plan)),
-so about half a minute after the disk fills (30 s after its last heartbeat, which is rewritten
-every 5 s) a running server's holder reads stale, and a start beside it deletes
-its staging. Accepted (the plan's decision 5): that one backup run may fail, and the database and every
-archive already at a destination are untouched. While the disk has room for the heartbeat, the
-guard holds. Read, not run: when `WAITRON_VENUE_DIR` puts the venue folder on another disk, a full
-venue disk stops the heartbeat while the state disk still has room, so a running server whose
-backup had room loses its staging to a start beside it.
+and a holder that died less than 30 s before keeps them until a later start. Guards: the
+lock cases in `apps/server/src/start-space.test.ts` and `node-entry.full-disk.test.ts`.
 
 **Two limits, on purpose.** A start refused `provisioning.database_in_use`
 (`apps/server/src/node-entry.ts`) reads the file with `readVenueHolder` and `/health` with

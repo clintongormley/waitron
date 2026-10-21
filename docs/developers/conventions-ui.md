@@ -1054,7 +1054,8 @@ that holds a name: "Missing triggers:" and "Changed triggers:". `/recovery-api/s
 `refused`, not the names.
 
 **A full disk at start** (A798-B slice 2). Every start first deletes the copies a cut-off backup
-run left in backup staging unless the venue folder's holder file shows a fresh heartbeat; one that
+run left in backup staging unless another process holds the venue folder's lock (the heartbeat
+fallback is in conventions-data.md, "Every start takes the venue lock"); one that
 finds under 256 MiB free also deletes rotated logs but the newest and crash reports older than a
 week (`apps/server/src/start-space.ts`). If it is still below that floor, or the folders a
 first-setup resolution chose in their place are, and it cannot write its count back unchanged

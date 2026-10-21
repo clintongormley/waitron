@@ -377,6 +377,7 @@ leaves behind a plaintext copy of the whole venue database (readable by the box'
 the free space? A start beside a running server would still keep them while that server's
 heartbeat is fresh (decision 5). **DEFAULT: follow the design — the start deletes them only when
 the disk has under 256 MiB free** (design §4.7 item 1).
+(2026-10-21: answered by A978 — every start deletes them; see `docs/backlog/box.md` → Decisions and deliberate limits.)
 
 ---
 

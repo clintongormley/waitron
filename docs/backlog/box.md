@@ -415,9 +415,12 @@ this item stays open.)
   (`apps/server/src/backup-sweep.ts`), so a run that is cut off leaves them behind. Owner: "Every
   start deletes them, whatever the free space — so a plaintext copy never outlives a restart. (The
   start never deletes them while a running server holds the venue folder.)" Built in
-  `freeSpaceAtStart` (`apps/server/src/start-space.ts`). The limit that remains: a cut-off run's
-  copy stays until the next start, or for as long as a running server's heartbeat on the venue
-  folder is fresh; a box reset also deletes it (`wipe_box`, `deploy/waitron.sh`). A box whose first
+  `freeSpaceAtStart` (`apps/server/src/start-space.ts`), which keeps them only while another
+  process holds the venue folder's lock. The limits that remain: a cut-off run's copy stays until
+  the next start; where the lock cannot be taken for another reason (measured on a full disk with
+  no other holder), the holder file's heartbeat decides, so a holder that died less than 30 s
+  before keeps it until a later start (`docs/developers/conventions-data.md`, "Every start takes
+  the venue lock"); a box reset also deletes it (`wipe_box`, `deploy/waitron.sh`). A box whose first
   setup was retired into a new workspace is outside the rule, by reading `runEntry`
   (`apps/server/src/node-entry.ts`), not by a run: see the entry on that workspace's backup staging
   below.
@@ -626,5 +629,7 @@ When a first-setup resolution chose a new workspace (`binding` not null), the cl
 workspace's, so a `backup-staging`
 inside the workspace's state folder is not deleted by it. The forced clean-up after a start that
 failed on a full disk runs inside `runAdmittedEntry` with the workspace's folders, and the count
-check uses them too. Accepted for A798-B slice 2 (its plan's decision 15).
+check uses them too. Accepted for A798-B slice 2 (its plan's decision 15). Since A978
+(2026-10-21) this also means a cut-off backup run's plaintext copy in that workspace survives every
+ordinary start; only a start that fails on a full disk deletes it. Not yet put to the owner.
 
