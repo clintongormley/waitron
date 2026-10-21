@@ -242,10 +242,58 @@ describe("the adjustment report", () => {
       ["Whole bill", "1", "€3.00", "€0.00"],
     ]);
     expect(lines("by-reason")).toEqual([
-      ["Entry error", "2", "€25.00", "€37.00"],
-      ["Cold food", "1", "€12.00", "€0.00"],
-      ["Staff meal", "1", "€3.00", "€0.00"],
+      ["Entry error", "2", "€25.00", "€37.00", "Alex (2)", "—"],
+      ["Cold food", "1", "€12.00", "€0.00", "Alex (1)", "Mia (1)"],
+      ["Staff meal", "1", "€3.00", "€0.00", "Sam (1)", "—"],
     ]);
+  });
+
+  /** The people a By reason cell lists, one per line. */
+  function peopleIn(el: AdjustmentReportScreen, reasonRow: number, column: number): string[] {
+    const cell = part(el, "by-reason")!
+      .querySelectorAll("tbody tr")
+      [reasonRow]!.querySelectorAll("th, td")[column]!;
+    return [...cell.querySelectorAll("div")].map((line) => text(line));
+  }
+
+  it("lists a reason's guest requests after its people, and a person the directory no longer holds as unknown", async () => {
+    const gone = "3c4d5e6f-7a8b-4c2d-8e3f-4a5b6c7d8e9f";
+    const report = (from?: string, to?: string) => {
+      const read = fixtureReport(from, to);
+      read.overall.byReason = read.overall.byReason.map((reason) =>
+        reason.reasonId === "r-staff"
+          ? {
+              ...reason,
+              requesters: [...reason.requesters, { personId: gone, name: null, count: 1 }],
+              guestRequests: 1,
+              approvers: [{ personId: gone, name: null, count: 2 }],
+            }
+          : reason,
+      );
+      return read;
+    };
+    const el = await mount(
+      fakeApi({ getReport: vi.fn((range?: Range) => Promise.resolve(answer(report, range))) }),
+    );
+    expect(peopleIn(el, 2, 4)).toEqual(["Sam (1)", "Unknown person (1)", "Guests (1)"]);
+    expect(peopleIn(el, 2, 5)).toEqual(["Unknown person (2)"]);
+    expect(peopleIn(el, 1, 5)).toEqual(["Mia (1)"]);
+  });
+
+  it("heads By reason's two people columns in Spanish, and keeps By action and By stage to four columns", async () => {
+    setLocale("es-ES");
+    const el = await mount(fakeApi());
+    const headings = (test: string) =>
+      [...part(el, test)!.querySelectorAll("thead th")].map((th) => text(th));
+    expect(headings("by-reason").slice(4)).toEqual([
+      ADJUSTMENTS_STRINGS.es["adjustment_report.entries.requested_by"],
+      ADJUSTMENTS_STRINGS.es["adjustment_report.column.approved_by"],
+    ]);
+    expect(headings("by-action")).toHaveLength(4);
+    expect(headings("by-stage")).toHaveLength(4);
+    for (const test of ["by-action", "by-stage"]) {
+      for (const line of breakdown(el, test)) expect(line).toHaveLength(4);
+    }
   });
 
   it("breaks down only the open person's adjustments, under headings that name them", async () => {
@@ -265,8 +313,8 @@ describe("the adjustment report", () => {
       ["Whole bill", "0", "€0.00", "€0.00"],
     ]);
     expect(breakdown(el, "by-reason")).toEqual([
-      ["Entry error", "2", "€25.00", "€37.00"],
-      ["Cold food", "1", "€12.00", "€0.00"],
+      ["Entry error", "2", "€25.00", "€37.00", "Alex (2)", "—"],
+      ["Cold food", "1", "€12.00", "€0.00", "Alex (1)", "Mia (1)"],
     ]);
     await open(el, SAM);
     expect(text(part(el, "by-action-heading"))).toBe("Sam's adjustments by action");
@@ -275,7 +323,9 @@ describe("the adjustment report", () => {
       ["Comps", "1", "€3.00", "€0.00"],
     ]);
     expect(breakdown(el, "by-stage")[3]).toEqual(["Whole bill", "1", "€3.00", "€0.00"]);
-    expect(breakdown(el, "by-reason")).toEqual([["Staff meal", "1", "€3.00", "€0.00"]]);
+    expect(breakdown(el, "by-reason")).toEqual([
+      ["Staff meal", "1", "€3.00", "€0.00", "Sam (1)", "—"],
+    ]);
   });
 
   it("breaks down the guests' adjustments apart, and everyone's again once the list shows everyone or closes", async () => {

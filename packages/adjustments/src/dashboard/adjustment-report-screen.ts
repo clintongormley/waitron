@@ -138,6 +138,18 @@ function personName(ref: PersonRef): string {
   return ref.name ?? t("adjustment_report.unknown_person");
 }
 
+/** One line per person with their count, then the guests' count when there is one. */
+function peopleCell(
+  people: (PersonRef & { count: number })[],
+  guests = 0,
+): TemplateResult[] | string {
+  const lines = people.map(
+    (person) => html`<div>${personName(person)} (${count(person.count)})</div>`,
+  );
+  if (guests > 0) lines.push(html`<div>${t("adjustment_report.guests")} (${count(guests)})</div>`);
+  return lines.length === 0 ? NONE : lines;
+}
+
 function sameEntries(a: EntriesOf, b: EntriesOf): boolean {
   return typeof a === "string" || typeof b === "string" ? a === b : a.personId === b.personId;
 }
@@ -596,12 +608,7 @@ export class AdjustmentReportScreen extends LitElement {
         key: "approvedBy",
         label: t("adjustment_report.column.approved_by"),
         choosable: "shown",
-        cell: (row) =>
-          row.approvers.length === 0
-            ? NONE
-            : row.approvers.map(
-                (approver) => html`<div>${personName(approver)} (${count(approver.count)})</div>`,
-              ),
+        cell: (row) => peopleCell(row.approvers),
       },
       {
         key: "approvalsGiven",
@@ -715,7 +722,8 @@ export class AdjustmentReportScreen extends LitElement {
     test: string,
     heading: string,
     first: string,
-    lines: { label: string; tally: AdjustmentTally }[],
+    lines: { label: string; tally: AdjustmentTally; extra?: (TemplateResult[] | string)[] }[],
+    extraHeadings: string[] = [],
   ): TemplateResult {
     const id = `${test}-heading`;
     return html`<section>
@@ -727,16 +735,18 @@ export class AdjustmentReportScreen extends LitElement {
             <th scope="col" class="num">${t("adjustment_report.column.count")}</th>
             <th scope="col" class="num">${t("adjustment_report.column.reduction")}</th>
             <th scope="col" class="num">${t("adjustment_report.column.cancelled")}</th>
+            ${extraHeadings.map((heading) => html`<th scope="col">${heading}</th>`)}
           </tr>
         </thead>
         <tbody>
           ${lines.map(
-            ({ label, tally }) =>
+            ({ label, tally, extra = [] }) =>
               html`<tr>
                 <th scope="row">${label}</th>
                 <td class="num">${count(tally.count)}</td>
                 <td class="num">${money(tally.reduction)}</td>
                 <td class="num">${money(tally.cancelledNominalValue)}</td>
+                ${extra.map((cell) => html`<td>${cell}</td>`)}
               </tr>`,
           )}
         </tbody>
@@ -848,7 +858,18 @@ export class AdjustmentReportScreen extends LitElement {
               "by-reason",
               heading("reason"),
               t("adjustment_report.column.reason"),
-              totals.byReason.map((reason) => ({ label: reason.reasonName, tally: reason })),
+              totals.byReason.map((reason) => ({
+                label: reason.reasonName,
+                tally: reason,
+                extra: [
+                  peopleCell(reason.requesters, reason.guestRequests),
+                  peopleCell(reason.approvers),
+                ],
+              })),
+              [
+                t("adjustment_report.entries.requested_by"),
+                t("adjustment_report.column.approved_by"),
+              ],
             )
       }
     </div>`;
