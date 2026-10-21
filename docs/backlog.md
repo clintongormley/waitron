@@ -3264,9 +3264,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Two icons painted in the brand colour sit, in one state each, on a fill no contrast rule checks
   them against (A841 slice 4).** The till's card-waiting spinner on `--wt-color-surface-sunken`
-  (Waitron's light blue is 3.28:1 there by the WCAG formula, per
-  `docs/superpowers/plans/2026-10-21-a841-4-primary-text.md`; a venue theme could go under 3:1),
-  and the data table's column-chooser eye icon while its row is dragged, on `--wt-color-surface-lifted`
+  (Waitron's light blue is 3.28:1 there by the WCAG formula, `#1f6feb` on `#d6d9e0`,
+  `packages/ui-core/src/tokens/colors.css:10,14`; a venue theme could go under 3:1), and the data
+  table's column-chooser eye icon while its row is dragged, on `--wt-color-surface-lifted`
   (`packages/ui/src/components/wt-data-table.ts:684-688`; read, not measured). The spinner is marked
   decorative beside text saying what is happening, so WCAG 1.4.11 may not ask for 3:1 at all. Decide
   whether the theme's contrast rules should cover either fill.

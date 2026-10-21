@@ -1876,7 +1876,8 @@ redeclared token (`printers-screen.ts:218`, `--wt-color-text: var(--wt-color-pri
 read from script; the plan lists those by hand.
 (2026-10-21, A841 slice 4: at `32416bfa3` there were 17 such lines — `initial-setup-screen.ts:26`
 and `first-hour.ts:87` arrived with `4e318802f`, `card-waiting.ts:66` with `9a52b5efc` (#1921), and
-`content-translations-dialog.ts:144` left with its file in #1913. 12 moved to `--wt-color-primary-text`; the 5 icons and spinners stay, listed in
+`content-translations-dialog.ts:144` left when #1913 rewrote that file onto `--wt-color-primary-text`.
+12 moved to `--wt-color-primary-text`; the 5 icons and spinners stay, listed in
 `scripts/primary-coloured-text.test.ts`. In `apps/setup` the two link rules moved,
 `form-styles.ts:49` and `initial-setup-screen.ts:26`; the provisioning spinner,
 `provisioning-screen.ts:41`, stays.)
