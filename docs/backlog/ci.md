@@ -372,7 +372,9 @@ failure log is `push-final-attempt.log` in Lane G's A668-5 receipts.
   [Receipt](../developers/ci-and-gates.md#the-upgrade-deadline-grows-with-the-walk),
   [processor time](../developers/ci-and-gates.md#the-upgrade-budget-counts-the-walks-own-processor-time).
 
-- **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
+- **Job-sharding levers:** `--shard` splits by FILE COUNT, except in `apps/server`, whose shards are
+  packed by measured duration since A938
+  ([how](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)); bump `shard: [1..N]` and the denominator
   together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard
   dominates.
 - **The package suites' databases stay on the runner's disk, except in `test-venue-service` and
@@ -606,3 +608,18 @@ minutes (`grep -h -E '^    timeout-minutes:' .github/workflows/*.yml`) — and a
 `timeout-minutes` cannot reach it. Whether the job's own limit covers set-up was not measured.
 Receipt for the checkout half:
 [ci-and-gates.md](../developers/ci-and-gates.md#every-checkout-is-bounded).
+
+## The invoice PDF test took 162 s on one CI run
+
+`apps/server/src/invoice-pdf.test.ts` took 162 s on run 39068745456, the slowest server file then
+(the next was 99 s), so it sets a floor under whichever shard holds it. Over A938's six `main` runs
+(39425472781, 39444354037, 39449527877, 39500330558, 39503634628, 39507125783) it took 109 to 172 s,
+a median of 144 s. A938's local profile of its slowest test,
+without coverage, put 95% of the time under `width()` (`apps/server/src/invoice-page.ts:47`,
+`invoiceFont.layout(text).advanceWidth`). For a word that does not fit on the line, `wrap()`
+measures a growing string once per character, and the 480-layout test measures the same strings
+again each time. The whole file took 10.9 s locally without coverage and 49.6 s with it, about 4.5
+times slower. Caching the advance width per string is the untried fix; it may also speed real
+invoice rendering. Left open by A801. Receipts:
+[A801](../developers/ci-and-gates.md#runners-come-in-two-speeds-and-the-busiest-shard-is-the-one-that-crosses-4-minutes),
+[A938](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration).

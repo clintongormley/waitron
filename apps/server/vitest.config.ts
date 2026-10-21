@@ -1,10 +1,12 @@
+import { readFileSync } from "node:fs";
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
+import { durationSequencer } from "../../scripts/vitest-duration-sequencer.mjs";
 
 export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    setupFiles: ["src/testing/byte-equality-setup.ts"],
+    setupFiles: ["src/testing/byte-equality-setup.ts", "src/testing/derived-key-cache-setup.ts"],
     // `useVenueDb` times its own `beforeAll` (`packages/db/src/testing/venue-db.ts`, 60s unless a
     // suite passes `timeoutMs`), so `hookTimeout` bounds the hooks left untimed: that helper's
     // per-test reset and close, and any hook a test file writes for itself.
@@ -26,6 +28,11 @@ export default defineConfig({
     // (dist/chunks/rpc.MzXet3jl.js:117), so that call has no timeout. See
     // docs/developers/ci-and-gates.md → "A shard can exit 1 with every one of its tests passing".
     maxWorkers: 4,
+    sequence: {
+      sequencer: durationSequencer(
+        JSON.parse(readFileSync(new URL("./test-durations.json", import.meta.url), "utf8")),
+      ),
+    },
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

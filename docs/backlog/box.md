@@ -570,3 +570,21 @@ below records the gap that prompted the design, not a new runtime measurement.
   test could reach; and `cli.test.ts` test titles still say "before connecting" and "before
   opening a connection", and one title ("rather than opening the working directory") rests on the
   false reason in the empty-venue-directory section above.
+
+## A restore from a backup file derives the archive's key at least three times
+
+Each step below derives the archive's key at least once, with scrypt at N=2^17 (`KDF_BY_VERSION`,
+`packages/provisioning/src/artifact-cipher.ts:14`):
+
+- the preview, `previewRecoveryArchive` (`apps/server/src/recovery-backup-preview.ts:99`), through
+  `validateArtifact` (line 100), which decrypts the archive (`apps/server/src/restore.ts:168`);
+- the staging, `validateArtifact` again from `apps/server/src/boot.ts:1111`;
+- the next start's `runStagedRestore` (`apps/server/src/node-entry.ts:389`), whose
+  `validateArtifactFile` (`apps/server/src/restore-request.ts:419`) derives it in
+  `apps/server/src/artifact-cipher-file.ts:61`. That step runs in a later process.
+
+Deriving it once per restore would save CPU on the box, but the key would have to be carried between
+the preview and staging handlers (`apps/server/src/boot.ts:1073` and `:1109`) and across a restart. It is a behaviour change on the restore path and needs its
+own tests. A938 cached only the tests' derivations (`apps/server/src/testing/derived-key-cache.ts`).
+Left open by A938.
+[Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration).

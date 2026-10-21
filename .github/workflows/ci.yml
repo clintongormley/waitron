@@ -875,17 +875,12 @@ jobs:
       - name: Merge the db coverage blobs and enforce thresholds
         run: pnpm --filter "@waitron/db" test:merge
 
-  # apps/server, SHARDED ELEVEN WAYS — the same mechanism as test-heavy above (see it for the full
-  # rationale: why one package can only be split by test file, why the shards suppress thresholds and
-  # emit blobs, and why the merge job needs no Docker). apps/server was the workspace's SECOND
-  # critical-path job — 341s on the unfiltered `main` run 33890775789 — and, like packages/db, it is a
-  # single package, so `--shard=i/N` over its many test files is the only way to spread it. It was itself
-  # split out of test-light on a measurement (341.7s of test-light's 358s wall-clock on run
-  # 32417600304); sharding it is the next step down. See SERVER_PACKAGE in scripts/changed-scope.mjs.
-  #
-  # Eleven shards: see docs/developers/ci-and-gates.md, "Every CI test job should finish in about
-  # 4 minutes" (A528) and "Runners come in two speeds, and the busiest shard is the one that crosses
-  # 4 minutes" (A801).
+  # apps/server, SHARDED SIXTEEN WAYS, packed by measured duration
+  # (`scripts/vitest-duration-sequencer.mjs`, table `apps/server/test-durations.json`) — the same
+  # shard-and-merge mechanism as test-heavy above (see it for why one package can only be split by test
+  # file, why the shards suppress thresholds and emit blobs, and why the merge job needs no Docker).
+  # See SERVER_PACKAGE in scripts/changed-scope.mjs, and docs/developers/ci-and-gates.md, "The
+  # server's shards: sixteen, packed by measured duration".
   #
   # The dedicated runners also let apps/server run in SEVERAL workers (apps/server/vitest.config.ts's
   # maxWorkers): the @vitest/coverage-v8 branch under-merge that held it to one worker is a `pnpm -r`
@@ -900,7 +895,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     steps:
       - id: checkout
         name: Check out the code
@@ -956,7 +951,7 @@ jobs:
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/server" test:shard \
-            --shard=${{ matrix.shard }}/11 \
+            --shard=${{ matrix.shard }}/16 \
             --exclude src/stream-loop.e2e.test.ts \
             --exclude src/stream-pause.e2e.test.ts \
             --exclude src/s3-rehearsal-scenarios.e2e.test.ts \
