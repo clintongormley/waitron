@@ -88,6 +88,22 @@ import {
   WORKFORCE_ES_VOCABULARY,
 } from "@waitron/workforce-es";
 
+type TransferValidate = NonNullable<
+  Extract<ModuleConfigurationTransfer, { kind: "tables" }>["validate"]
+>;
+
+// Typed as the contract's validate so the bundle the import supplies reaches a core check that
+// one day reads it.
+const validateCore: TransferValidate = CORE_CONFIGURATION_TRANSFER.validate;
+
+const CORE_TRANSFER: ModuleConfigurationTransfer = {
+  ...CORE_CONFIGURATION_TRANSFER,
+  validate: (tables, bundle) => {
+    validateCore(tables, bundle);
+    validateThemeConfiguration(tables);
+  },
+};
+
 /**
  * Every Waitron module, in composition order. The one place that names every module package: the
  * server, the provisioning CLI and the root guards all read this list. What
@@ -106,22 +122,6 @@ import {
  * `fiscal-verifactu` and the no-regime `fiscal-none` — so exactly one is enabled per deployment
  * (`fiscalSlot`); provisioning selects it from the venue's territory.
  */
-type TransferValidate = NonNullable<
-  Extract<ModuleConfigurationTransfer, { kind: "tables" }>["validate"]
->;
-
-// Typed as the contract's validate so the bundle the import supplies reaches a core check that
-// one day reads it.
-const validateCore: TransferValidate = CORE_CONFIGURATION_TRANSFER.validate;
-
-const CORE_TRANSFER: ModuleConfigurationTransfer = {
-  ...CORE_CONFIGURATION_TRANSFER,
-  validate: (tables, bundle) => {
-    validateCore(tables, bundle);
-    validateThemeConfiguration(tables);
-  },
-};
-
 export const ALL_MODULES: readonly WaitronModule[] = [
   {
     name: "core",
