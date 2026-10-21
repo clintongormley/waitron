@@ -263,8 +263,7 @@ describe("a reader bill payment while the full-disk stop holds", () => {
     expect(disk.since()).toBeNull();
   });
 
-  // A real state cannot answer full() true with noted() false; this double pins that the read
-  // taken before the first transaction is consulted.
+  // This double pins that the read taken before the first transaction is consulted.
   it("refuses before the reader on the free-space read taken before the first transaction", async () => {
     const billId = await paella();
     const disk: DiskFullState = {
