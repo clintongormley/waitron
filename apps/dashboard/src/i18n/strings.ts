@@ -8,6 +8,31 @@ export const en = {
   "permission_sign_in.unresolved":
     "The dashboard account has not been confirmed. Read the session again before continuing.",
   "permission_sign_in.read_again": "Read again",
+  "zone_repair.ready": "Trading is ready. Reload the dashboard.",
+  "zone_repair.conversion_failed":
+    "The selected zone could not be read at the current time. Check the server clock, then try again.",
+  "zone_repair.invalid_zone": "Choose a supported time zone for this country.",
+  "zone_repair.not_needed": "The venue already has a valid time zone. Check its current status.",
+  "zone_repair.heading": "Confirm the venue time zone",
+  "zone_repair.explanation":
+    "The venue’s saved time zone is missing or invalid. Trading is stopped. Ask a manager to confirm it.",
+  "zone_repair.zone": "Time zone",
+  "zone_repair.choose": "Choose a time zone",
+  "zone_repair.confirm": "I confirm that this is the correct time zone for this venue.",
+  "zone_repair.confirm_required": "Confirm that the selected time zone is correct.",
+  "zone_repair.suggestion":
+    "Suggested for {country} {province}: {zone}. Check this against the venue’s location.",
+  "zone_repair.cutover": "Day changeover",
+  "zone_repair.local_time": "Local date and time",
+  "zone_repair.offset": "UTC offset (minutes)",
+  "zone_repair.business_date": "Business date",
+  "zone_repair.reload": "Reload",
+  "zone_repair.load_failed": "Could not load the current status.",
+  "zone_repair.loading": "Checking the time zone…",
+  "zone_repair.check_status": "Check status",
+  "zone_repair.retry_preview": "Retry preview",
+  "zone_repair.guide": "Time zone guide",
+
   "venue.time_zone_wait": "Trading is starting. Wait and try again.",
   "venue.time_zone_confirm": "Trading is stopped. Ask a manager to confirm the venue time zone.",
   "venue.time_zone_restart": "The time zone was saved. Wait for restart, then reload.",
@@ -3729,6 +3754,31 @@ export const es: Record<StringKey, string> = {
   "permission_sign_in.unresolved":
     "No se ha confirmado la cuenta del panel. Vuelve a consultar la sesión antes de continuar.",
   "permission_sign_in.read_again": "Volver a consultar",
+  "zone_repair.ready": "Las ventas están disponibles. Vuelve a cargar el panel.",
+  "zone_repair.conversion_failed":
+    "No se ha podido leer la zona elegida en la hora actual. Comprueba el reloj del servidor y vuelve a intentarlo.",
+  "zone_repair.invalid_zone": "Elige una zona horaria admitida para este país.",
+  "zone_repair.not_needed": "El local ya tiene una zona horaria válida. Consulta su estado actual.",
+  "zone_repair.heading": "Confirmar la zona horaria del local",
+  "zone_repair.explanation":
+    "La zona horaria guardada del local falta o no es válida. Las ventas están detenidas. Pide a un responsable que la confirme.",
+  "zone_repair.zone": "Zona horaria",
+  "zone_repair.choose": "Elige una zona horaria",
+  "zone_repair.confirm": "Confirmo que esta es la zona horaria correcta para este local.",
+  "zone_repair.confirm_required": "Confirma que la zona horaria elegida es correcta.",
+  "zone_repair.suggestion":
+    "Sugerida para {country} {province}: {zone}. Compruébala con la ubicación del local.",
+  "zone_repair.cutover": "Cambio de jornada",
+  "zone_repair.local_time": "Fecha y hora local",
+  "zone_repair.offset": "Desfase UTC (minutos)",
+  "zone_repair.business_date": "Jornada",
+  "zone_repair.reload": "Recargar",
+  "zone_repair.load_failed": "No se ha podido consultar el estado actual.",
+  "zone_repair.loading": "Comprobando la zona horaria…",
+  "zone_repair.check_status": "Consultar estado",
+  "zone_repair.retry_preview": "Reintentar vista previa",
+  "zone_repair.guide": "Guía de la zona horaria",
+
   "venue.time_zone_wait": "El servicio se está iniciando. Espera y vuelve a intentarlo.",
   "venue.time_zone_confirm":
     "El servicio está detenido. Pide a un responsable que confirme la zona horaria del local.",

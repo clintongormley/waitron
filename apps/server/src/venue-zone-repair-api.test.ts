@@ -1,3 +1,5 @@
+import { chromium, type BrowserServer, type Browser } from "playwright";
+import { freePorts } from "./testing/free-ports.js";
 import { IncomingMessage, ServerResponse } from "node:http";
 import { Socket } from "node:net";
 import { Hono } from "hono";
@@ -422,3 +424,131 @@ describe("time-zone repair management boundary", () => {
     expect(JSON.stringify(logs)).not.toContain(token);
   });
 });
+
+it("serves a native same-origin browser GET with the dashboard no-referrer policy, then confirms by POST", async () => {
+  const seen: { method: string; origin?: string; site?: string }[] = [];
+  const realApp = new Hono();
+  realApp.use("*", async (c, next) => {
+    if (c.req.path === PATH)
+      seen.push({
+        method: c.req.method,
+        origin: c.req.header("origin"),
+        site: c.req.header("sec-fetch-site"),
+      });
+    await next();
+  });
+  realApp.get("/manage", (c) =>
+    c.html('<!doctype html><meta name="referrer" content="no-referrer"><title>Manager</title>'),
+  );
+  const [port] = await freePorts(1);
+  const origin = `http://127.0.0.1:${port}`;
+  mountVenueZoneRepairApi(
+    realApp,
+    {
+      db: suite.db,
+      scope,
+      admission,
+      managementOrigin: origin,
+      requestRestart: restart,
+      now: () => AT,
+    },
+    () => {},
+  );
+  const server = serve({ fetch: realApp.fetch, hostname: "127.0.0.1", port });
+  let browserServer: BrowserServer | undefined;
+  let browser: Browser | undefined;
+  try {
+    await once(server, "listening");
+    browserServer = await chromium.launchServer({ headless: true });
+    browser = await chromium.connect(browserServer.wsEndpoint());
+    const context = await browser.newContext();
+    await context.addCookies([
+      {
+        name: "waitron_management_session",
+        value: token,
+        url: origin,
+        httpOnly: true,
+        sameSite: "Lax",
+      },
+    ]);
+    const page = await context.newPage();
+    await page.goto(`${origin}/manage`);
+    const read = await page.evaluate(async (path) => {
+      const response = await fetch(path, {
+        credentials: "include",
+        headers: { "x-waitron-live": "1" },
+      });
+      return { status: response.status, body: await response.json() };
+    }, PATH);
+    expect(seen[0]).toEqual({ method: "GET", origin: undefined, site: "same-origin" });
+    expect(read.status).toBe(200);
+    expect(read.body).toMatchObject({ eligible: true, category: "invalid", clockRevision: 0 });
+    const preview = await page.evaluate(async (path) => {
+      const response = await fetch(path + "?timeZone=Europe%2FMadrid", { credentials: "include" });
+      return { status: response.status, body: await response.json() };
+    }, PATH);
+    expect(preview.status).toBe(200);
+    expect(preview.body).toMatchObject({
+      preview: { civilDate: "2026-10-15", offsetMinutes: 120 },
+    });
+    const saved = await page.evaluate(
+      async ({ path, input }) => {
+        const response = await fetch(path, {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(input),
+        });
+        return { status: response.status, body: await response.json() };
+      },
+      { path: PATH, input: body },
+    );
+    expect(saved.status).toBe(200);
+    expect(saved.body).toEqual({ repaired: true, clockRevision: 1, admission: "restart_required" });
+    expect(seen.at(-1)).toEqual({ method: "POST", origin, site: "same-origin" });
+    expect(restart).toHaveBeenCalledTimes(1);
+    expect(rows().incidents).toHaveLength(1);
+  } finally {
+    await browser?.close();
+    await browserServer?.close();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
+it.each([
+  ["GET", ORIGIN, "same-origin", undefined, 200],
+  ["GET", ORIGIN, "same-site", undefined, 403],
+  ["GET", ORIGIN, "cross-site", undefined, 403],
+  ["GET", ORIGIN, undefined, undefined, 403],
+  ["GET", "https://foreign.example", "same-origin", undefined, 403],
+  ["GET", ORIGIN, "same-origin", "https://foreign.example", 403],
+  ["POST", ORIGIN, "same-origin", undefined, 403],
+] as const)(
+  "origin proof %s %s %s %s returns %s",
+  async (method, urlOrigin, site, origin, expected) => {
+    const before = rows();
+    const response = await app.request(
+      urlOrigin + PATH,
+      {
+        method,
+        headers: {
+          cookie: `waitron_management_session=${token}`,
+          "content-type": "application/json",
+          ...(site === undefined ? {} : { "sec-fetch-site": site }),
+          ...(origin === undefined ? {} : { origin }),
+        },
+        ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
+      },
+      { outgoing },
+    );
+    expect(response.status).toBe(expected);
+    if (expected !== 200)
+      expect(await response.json()).toEqual({
+        error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
+      });
+    expect(rows()).toEqual(before);
+    expect(restart).not.toHaveBeenCalled();
+  },
+);

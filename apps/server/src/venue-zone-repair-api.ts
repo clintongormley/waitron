@@ -38,7 +38,13 @@ export function mountVenueZoneRepairApi(
   const path = "/management-api/venue-details/time-zone-repair";
   app.get(path, (c) =>
     run(c, log, async () => {
-      if (c.req.header("origin") !== deps.managementOrigin)
+      const origin = c.req.header("origin");
+      // A GET without Origin needs browser origin evidence; the dashboard suppresses referrers.
+      const sameOriginRead =
+        origin === undefined &&
+        c.req.header("sec-fetch-site") === "same-origin" &&
+        new URL(c.req.url).origin === deps.managementOrigin;
+      if (origin !== deps.managementOrigin && !sameOriginRead)
         throw new AppError("authorization.not_permitted", { permission: "venue.configure" });
       const session = requireManagementSession(c);
       const query = c.req.query();

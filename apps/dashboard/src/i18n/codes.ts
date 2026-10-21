@@ -20,6 +20,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "No full invoice names that tax number.",
     es: "Ninguna factura completa lleva ese NIF.",
   },
+  "venue.time_zone_invalid": {
+    en: en["zone_repair.invalid_zone"],
+    es: es["zone_repair.invalid_zone"],
+  },
+  "venue.time_zone_conversion_failed": {
+    en: en["zone_repair.conversion_failed"],
+    es: es["zone_repair.conversion_failed"],
+  },
+  "venue.time_zone_repair_not_needed": {
+    en: en["zone_repair.not_needed"],
+    es: es["zone_repair.not_needed"],
+  },
   "attendance.state_changed": {
     en: "The attendance record changed. Read its latest history before responding.",
     es: "El registro de horas ha cambiado. Consulta el historial actual antes de responder.",
