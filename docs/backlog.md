@@ -2440,8 +2440,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   fields; legacy stamps leave their remaining ready work unchanged. The floor server projection
   omits en-route; ready/pending line counts still follow Serve and Undo, regardless of old Away
   stamps. The dashboard Kitchen tab omits the retired firing-mode choice and its API/query
-  contracts, retaining preparation mode and late timing defaults. The kitchen clients and floor
-  client/display consumers still need coordinated retirement before PR A can be published.
+  contracts, retaining preparation mode and late timing defaults. Floor details count every ready
+  dish without an en-route subtraction or separate count, and table-state precedence ignores legacy
+  dispatch. Kitchen clients and the remaining floor client/badge consumers still need coordinated
+  retirement before PR A can be published.
   Add Requested and pass release,
   remove Away/Done, and finish the station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before
   each slice. The plan carries A797's completed Q42 amendments; its revised pictures/design remain

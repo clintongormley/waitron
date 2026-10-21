@@ -69,6 +69,10 @@ que las reúne.
 En la mesa, un plato listo sigue como **Listo** en su ventana de detalle hasta que lo marques
 como servido. La lista Enviado conserva el tiempo que lleva listo para que veas qué falta servir.
 
+En los detalles de una mesa en el plano, cada plato listo pendiente de servir cuenta como listo.
+Cuando las etiquetas de las estaciones muestran esas cantidades, la línea de progreso las omite
+para que cada plato se cuente una sola vez.
+
 Cuando sirves uno de los dos platos de una línea, el pase muestra el que queda por servir.
 Deshacer restaura la cantidad servida sin reiniciar el tiempo de preparación ni el que lleva listo.
 Una cantidad anulada deja de contar como comida pendiente, aunque se conserve su importe en la

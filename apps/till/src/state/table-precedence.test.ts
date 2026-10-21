@@ -114,10 +114,10 @@ describe("tableStates", () => {
     expect(tableStates(table(over), now)).toEqual(kinds);
   });
 
-  it("ready counts a ready signal, a ready count or an en route count", () => {
+  it("ready counts a ready signal or count, ignoring retired dispatch", () => {
     expect(tableStates(table({ signals: [ready] }), now)).toEqual(["ready"]);
     expect(tableStates(table({ readyToServe: 2 }), now)).toEqual(["ready"]);
-    expect(tableStates(table({ enRoute: 1 }), now)).toEqual(["ready"]);
+    expect(tableStates(table({ enRoute: 1 }), now)).toEqual(["nothing-needed"]);
   });
 
   it("held is calm while it counts down and gives way to Time to fire when due", () => {

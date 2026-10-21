@@ -2484,8 +2484,9 @@ retain their ready work with identical projections after legacy Away/Done stamps
 server projection omits en-route; Serve and Undo still update ready/pending line counts, and old
 Away stamps leave those counts unchanged. The dashboard Kitchen tab retains preparation mode
 and timing defaults and omits the retired firing-mode choice and its API/query contracts.
-Kitchen clients and floor client/display consumers still require coordinated retirement before
-PR A publication.
+Floor details count every ready dish without subtracting or separately showing legacy dispatch;
+table-state precedence ignores dispatch too. Kitchen clients and the remaining floor client/badge
+consumers still require coordinated retirement before PR A publication.
 Client/internal-helper retirement, Requested and scoped pass release, station configuration,
 ticket presentation and schema retirement remain. Recheck A756's
 settings and current lane reservations before each working slice. A803's station/pass additions follow it. The plan
