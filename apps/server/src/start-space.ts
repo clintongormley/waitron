@@ -34,7 +34,7 @@ export interface StartSpaceDeps {
   venueDir: string;
   logDir: string;
   floor: number;
-  /** Delete whatever the free space: a start whose failure was a full disk. */
+  /** Delete logs and crash reports whatever the free space: a start whose failure was a full disk. */
   force?: boolean;
   /**
    * This process holds the venue folder's lock for the whole call. No other process can then hold
@@ -48,20 +48,16 @@ export interface StartSpaceDeps {
 }
 
 /**
- * Below `floor` (or when forced), deletes what a start can make again: rotated logs but the newest,
- * crash reports older than {@link CRASH_REPORT_KEEP_MS}, and the dumps and `backup-encrypt-*`
- * folders a backup run leaves in backup staging, unless the venue folder's holder heartbeat is
- * fresh and `venueHeld` is not set. A folder that is a symbolic link is skipped. Never throws.
+ * Every call deletes the dumps and `backup-encrypt-*` folders a backup run leaves in backup staging,
+ * unless the venue folder's holder heartbeat is fresh and `venueHeld` is not set. Below `floor` (or
+ * when forced) it also deletes rotated logs but the newest and crash reports older than
+ * {@link CRASH_REPORT_KEEP_MS}. A folder that is a symbolic link is skipped. Never throws.
  */
 export async function freeSpaceAtStart(
   deps: StartSpaceDeps,
 ): Promise<{ freeBytes: number | null; belowFloor: boolean }> {
   const dirs = [deps.stateDir, deps.venueDir];
   const before = await lowestFreeBytes(dirs, deps.statfs);
-  if (!deps.force && (before === null || before >= deps.floor)) {
-    return { freeBytes: before, belowFloor: false };
-  }
-  const now = deps.now();
   const failed = (error: unknown) =>
     deps.log("warn", "storage.start_cleanup_failed", { errno: errnoOf(error) ?? null });
   let deleted = 0;
@@ -73,6 +69,25 @@ export async function freeSpaceAtStart(
       failed(error);
     }
   };
+  const removeBackupStaging = async () => {
+    const holder = deps.venueHeld === true ? null : deps.readVenueHolder(deps.venueDir);
+    // The time is read again: the deletions before this can outlast VENUE_HOLDER_STALE_MS, and a
+    // live heartbeat judged against the start of them reads as one from the future.
+    if (holder !== null && isVenueHolderFresh(holder, deps.now())) return;
+    const stagingDir = join(deps.stateDir, BACKUP_STAGING_DIR);
+    for (const name of (await entries(stagingDir, BACKUP_STAGING_DIR, deps.log, failed)) ?? []) {
+      if (STAGED_DUMP.test(name)) await remove(join(stagingDir, name), false);
+      else if (name.startsWith(BACKUP_ENCRYPT_DIR_PREFIX))
+        await remove(join(stagingDir, name), true);
+    }
+  };
+
+  if (!deps.force && (before === null || before >= deps.floor)) {
+    await removeBackupStaging();
+    if (deleted > 0) deps.log("info", "storage.backup_leftovers_deleted", { deleted });
+    return { freeBytes: before, belowFloor: false };
+  }
+  const now = deps.now();
 
   const logs = await entries(deps.logDir, "logs", deps.log, failed);
   for (const name of logs ?? []) {
@@ -96,17 +111,7 @@ export async function freeSpaceAtStart(
     await remove(path, false);
   }
 
-  const holder = deps.venueHeld === true ? null : deps.readVenueHolder(deps.venueDir);
-  // The time is read again: the deletions above can outlast VENUE_HOLDER_STALE_MS, and a live
-  // heartbeat judged against the start of them reads as one from the future.
-  if (holder === null || !isVenueHolderFresh(holder, deps.now())) {
-    const stagingDir = join(deps.stateDir, BACKUP_STAGING_DIR);
-    for (const name of (await entries(stagingDir, BACKUP_STAGING_DIR, deps.log, failed)) ?? []) {
-      if (STAGED_DUMP.test(name)) await remove(join(stagingDir, name), false);
-      else if (name.startsWith(BACKUP_ENCRYPT_DIR_PREFIX))
-        await remove(join(stagingDir, name), true);
-    }
-  }
+  await removeBackupStaging();
 
   const after = await lowestFreeBytes(dirs, deps.statfs);
   deps.log("warn", "storage.start_space_low", {

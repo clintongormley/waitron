@@ -234,6 +234,59 @@ describe("freeSpaceAtStart", () => {
     expect(existsSync(join(logDir, "crash-reports", "holder-frozen-a.json"))).toBe(false);
   });
 
+  describe("above the floor", () => {
+    const encryptFolder = () => join(stateDir, "backup-staging", "backup-encrypt-x");
+
+    it("deletes backup staging, and keeps rotated logs and old crash reports", async () => {
+      await touch(staging());
+      await touch(join(encryptFolder(), "artifact"));
+      await touch(rotated(2));
+      await touch(join(logDir, "crash-reports", "holder-frozen-a.json"), 8 * DAY_MS);
+      const { deps: d, log } = deps({ free: 5000 });
+
+      expect(await freeSpaceAtStart(d)).toEqual({ freeBytes: 5000, belowFloor: false });
+
+      expect(existsSync(staging())).toBe(false);
+      expect(existsSync(encryptFolder())).toBe(false);
+      expect(existsSync(rotated(2))).toBe(true);
+      expect(existsSync(join(logDir, "crash-reports", "holder-frozen-a.json"))).toBe(true);
+      expect(log.mock.calls).toEqual([
+        ["info", "storage.backup_leftovers_deleted", { deleted: 2 }],
+      ]);
+    });
+
+    it("keeps backup staging while a live process holds the venue folder", async () => {
+      await touch(staging());
+      const { deps: d, log } = deps({ free: 5000, readVenueHolder: () => holder(5_000) });
+      await freeSpaceAtStart(d);
+      expect(existsSync(staging())).toBe(true);
+      expect(log).not.toHaveBeenCalled();
+    });
+
+    it("deletes backup staging under a fresh holder when this process holds the venue folder", async () => {
+      await touch(staging());
+      const { deps: d } = deps({
+        free: 5000,
+        venueHeld: true,
+        readVenueHolder: () => holder(5_000),
+      });
+      await freeSpaceAtStart(d);
+      expect(existsSync(staging())).toBe(false);
+    });
+
+    it("deletes backup staging when no folder can report free space", async () => {
+      await touch(staging());
+      await touch(rotated(2));
+      const { deps: d, log } = deps({
+        statfs: statfsStub({ [stateDir]: [new Error("x")], [venueDir]: [new Error("y")] }),
+      });
+      expect(await freeSpaceAtStart(d)).toEqual({ freeBytes: null, belowFloor: false });
+      expect(existsSync(staging())).toBe(false);
+      expect(existsSync(rotated(2))).toBe(true);
+      expect(log).toHaveBeenCalledWith("info", "storage.backup_leftovers_deleted", { deleted: 1 });
+    });
+  });
+
   it("deletes when told to, whatever the free space", async () => {
     await touch(rotated(2));
     const { deps: d, log } = deps({ free: 5000, force: true });

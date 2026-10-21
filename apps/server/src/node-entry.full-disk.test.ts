@@ -350,6 +350,45 @@ describe("a start below the free-space floor", () => {
   });
 });
 
+/** A cut-off backup run's copy in the state folder's backup staging. */
+async function stagedLeftover(): Promise<string> {
+  const staged = join(STATE_DIR, "backup-staging", dumpFileName(new Date("2026-10-20T00:00:00Z")));
+  await mkdir(join(STATE_DIR, "backup-staging"), { recursive: true });
+  await writeFile(staged, "copy");
+  dirs.push(join(STATE_DIR, "backup-staging"));
+  return staged;
+}
+
+describe("an ordinary start with room", () => {
+  it("deletes a cut-off backup run's copy in backup staging", async () => {
+    const staged = await stagedLeftover();
+    const d = deps({}, () => 100 * MIB);
+    await runEntry(d);
+    expect(d.startServer).toHaveBeenCalledTimes(1);
+    expect(existsSync(staged)).toBe(false);
+    expect(d.log).toHaveBeenCalledWith("info", "storage.backup_leftovers_deleted", { deleted: 1 });
+  });
+
+  it("keeps it while another process's holder is fresh", async () => {
+    const staged = await stagedLeftover();
+    const heartbeatAt = new Date().toISOString();
+    const d = deps(
+      {
+        readVenueHolder: () => ({
+          kind: "server",
+          pid: process.pid + 1,
+          host: "box",
+          lockedAt: heartbeatAt,
+          heartbeatAt,
+        }),
+      },
+      () => 100 * MIB,
+    );
+    await runEntry(d);
+    expect(existsSync(staged)).toBe(true);
+  });
+});
+
 /** A state volume holding one `recovery.json`, so the test reads what the start persisted. */
 function recoveryVolume() {
   let stored: RecoveryState = FRESH;
@@ -432,17 +471,23 @@ describe("a start that fails on a full disk", () => {
       dumpFileName(new Date("2026-10-20T00:00:00Z")),
     );
     await mkdir(join(STATE_DIR, "backup-staging"), { recursive: true });
-    await writeFile(staged, "copy");
     dirs.push(join(STATE_DIR, "backup-staging"));
     const error = diskFull();
+    let reads = 0;
     const d = deps(
       {
+        // Written after the clean-up every start runs, so only the full-disk one can delete it.
+        readRecoveryState: vi.fn(async () => {
+          if ((reads += 1) === 1) await writeFile(staged, "copy");
+          return FRESH;
+        }),
         lockVenue: lockVenueDatabase,
         startServer: vi.fn<StartServer>(() => Promise.reject(error)),
       },
       () => 100 * MIB,
     );
     await expect(runEntry(d)).rejects.toBe(error);
+    expect(reads).toBeGreaterThan(0);
     expect(existsSync(staged)).toBe(false);
   });
 
