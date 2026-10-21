@@ -58,6 +58,9 @@ function answerTheme(route: Route, scenario: StartupScenario): Promise<void> | u
 export function venueThemeStartupProbe(indexHtml: URL): BrowserCommand<[StartupScenario]> {
   return async (context, scenario): Promise<StartupProbeResult> => {
     const runner = (context as unknown as { page: Page }).page;
+    if (scenario.engine !== "chromium" && scenario.engine !== "webkit") {
+      throw new Error(`not a start-up engine: ${String(scenario.engine)}`);
+    }
     const html = readFileSync(indexHtml, "utf8");
     const ownBrowser: Browser | null =
       scenario.engine === "webkit" ? await (await import("playwright")).webkit.launch() : null;

@@ -53,6 +53,7 @@ describe.each(engines)("the dashboard's start-up in %s", { timeout: 30_000 }, (e
     expect(result.firstThemedBg).toBe(WAITRON_LIGHT_BG);
     expect(result.bgAfter).toBe(FIXTURE_LIGHT_BG);
     expect(JSON.parse(result.storedAfter!)).toEqual(FIXTURE_ANSWER);
+    expect(result.themeRequests).toBe(1);
   });
 
   it.each(["refused", "failed", "not-json"] as const)(
@@ -62,6 +63,7 @@ describe.each(engines)("the dashboard's start-up in %s", { timeout: 30_000 }, (e
       expect(result.bgAfter).toBe(FIXTURE_LIGHT_BG);
       expect(result.storedAfter).toBe(STORED);
       expect(result.appRendered).toBe(true);
+      expect(result.themeRequests).toBe(1);
     },
   );
 
