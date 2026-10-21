@@ -6,8 +6,6 @@ import {
   assertBusinessDayScheduleWrite,
   assertWaitingChangeFits,
 } from "./business-day-schedule.js";
-import { scheduleEndOffsetClash } from "./menu-timetable.js";
-import { lastOrdersClock, type LastOrdersClock } from "./service-day-context.js";
 import type { VenueScope } from "./operations.js";
 import {
   byStart,
@@ -69,16 +67,6 @@ export function temporaryStart(index: number): string {
   const value = TEMPORARY_STARTS[index];
   if (value === undefined) throw new Error(`no temporary season start ${index}`);
   return value;
-}
-
-/** Every department, since a season change moves days under all of them. */
-async function checkScheduleAfterSeasonWrite(
-  tx: Transaction,
-  cfg: VenueScope,
-  clock: LastOrdersClock,
-): Promise<void> {
-  const clash = await scheduleEndOffsetClash(tx, cfg, clock);
-  if (clash !== null) invalid({ field: "seasons", reason: "end_offset", ...clash });
 }
 
 /** Applies a change to the venue's seasons and answers them by start. A changed season keeps its
@@ -188,10 +176,7 @@ export async function saveSeasons(
       if (week !== undefined) await writeZoneSeasonWeeks(tx, zoneId, [row!.id], week);
     }
   }
-  if (timed) {
-    await checkScheduleAfterSeasonWrite(tx, cfg, lastOrdersClock(clock, at));
-    await assertWaitingChangeFits(tx, cfg, at, clock);
-  }
+  if (timed) await assertWaitingChangeFits(tx, cfg, at, clock);
   return readSeasons(tx, cfg);
 }
 

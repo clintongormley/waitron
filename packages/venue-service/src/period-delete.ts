@@ -9,8 +9,7 @@ import {
 } from "./business-day-schedule.js";
 import { resolveDepartmentDays } from "./day-resolver.js";
 import type { LocalDate } from "./hours-types.js";
-import { departmentEndOffsetClash, readRoutingUses, requirePeriod } from "./menu-timetable.js";
-import { invalidTimetable } from "./menu-timetable-rules.js";
+import { readRoutingUses, requirePeriod } from "./menu-timetable.js";
 import type { PeriodRoutingUse } from "./menu-timetable-types.js";
 import { storedTime, wireTime, type VenueScope } from "./operations.js";
 import { menuPeriods } from "./schema/menus.js";
@@ -25,7 +24,7 @@ import {
 import { departments } from "./schema/service.js";
 import { joinTouching } from "./season-weeks.js";
 import { rangeSpan, serviceMomentAt } from "./service-day.js";
-import { inForceClock, lastOrdersClock } from "./service-day-context.js";
+import { inForceClock } from "./service-day-context.js";
 import "./errors.js";
 
 export interface PaintedIn {
@@ -252,17 +251,6 @@ export async function deletePeriod(
       .where(eq(periodExtensions.periodId, periodId));
   }
   await tx.delete(menuPeriods).where(eq(menuPeriods.id, periodId));
-  const clash = await departmentEndOffsetClash(
-    tx,
-    cfg,
-    period.departmentId,
-    lastOrdersClock(clock, at),
-  );
-  if (clash !== null)
-    invalidTimetable(replacementId === null ? "periodId" : "replacementPeriodId", {
-      reason: "end_offset",
-      ...clash,
-    });
   await assertWaitingChangeFits(tx, cfg, at, clock);
 }
 

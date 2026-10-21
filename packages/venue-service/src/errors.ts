@@ -190,27 +190,14 @@ declare module "@waitron/shared" {
     "hours.invalid": { field: string };
     "season.not_found": { seasonId: string };
     /** `field` is the request path of the refused value, such as `save.2.startsOn`, or `delete`
-     *  (`last`) or `seasons` (`end_offset`). `end_offset`: the change leaves a sending cutoff
-     *  running into what follows; a boundary between two seasons names the season and weekday, a
-     *  special day its date. */
-    "season.invalid": {
-      field: string;
-      reason?: "taken" | "last" | "end_offset";
-      date?: string;
-      departmentId?: string;
-      periodId?: string;
-      seasonId?: string;
-      weekday?: number;
-      specialDayId?: string;
-    };
+     *  (`last`). */
+    "season.invalid": { field: string; reason?: "taken" | "last" };
     "special_day.invalid": {
       field: string;
       date?: string;
-      reason?:
-        "empty" | "order" | "step" | "overlap" | "clock_skips" | "end_offset" | "outside_hours";
+      reason?: "empty" | "order" | "step" | "overlap" | "clock_skips" | "outside_hours";
       departmentId?: string;
       zoneId?: string;
-      periodId?: string;
     };
     "special_day.not_found": { specialDayId: string };
     /** Another special day already holds `date` (the first day the two would share). */

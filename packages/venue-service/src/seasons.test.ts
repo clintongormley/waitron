@@ -43,7 +43,6 @@ import {
   seasonDeleteImpact,
   temporaryStart,
 } from "./seasons.js";
-import { saveSpecialDay } from "./special-days.js";
 import type { ServiceRange } from "./service-day.js";
 
 const suite = useVenueDb({
@@ -323,44 +322,6 @@ describe("saveSeasons", () => {
     expect(await restaurantWeek(v, v.winter)).toEqual(v.winterWeek);
   });
 
-  it("refuses a move whose new boundary clashes with a special day's sending, changing nothing", async () => {
-    const v = await autumnVenue();
-    // Saturday 9 November, in Late autumn, sends Dinner until 06:15; Late autumn's Sunday is empty.
-    const eve = await scoped((tx) =>
-      saveSpecialDay(
-        tx,
-        v.cfg,
-        null,
-        {
-          name: "Gala",
-          repeatsYearly: false,
-          dates: [{ date: "2030-11-09", closedAllDay: false }],
-          paint: [
-            {
-              departmentId: v.restaurant,
-              date: "2030-11-09",
-              ranges: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "05:45" }],
-            },
-          ],
-        },
-        AT,
-        0,
-      ),
-    );
-    expect(await refusal(change(v, { save: [entry(v.winter, "Winter", "11-10")] }))).toEqual({
-      code: "season.invalid",
-      params: {
-        field: "seasons",
-        reason: "end_offset",
-        date: "2030-11-09",
-        periodId: v.dinner,
-        departmentId: v.restaurant,
-        specialDayId: eve.id,
-      },
-    });
-    expect(await seasonsOf(v)).toEqual(THREE);
-  });
-
   it("refuses a move under a stale clock revision before anything changes", async () => {
     const v = await autumnVenue();
     expect(await refusal(change(v, { save: [entry(v.winter, "Winter", "11-15")] }, 1))).toEqual({
@@ -577,20 +538,10 @@ describe("saveSeasons", () => {
     expect(await scoped((tx) => readSeasons(tx, { locationId }))).toHaveLength(1);
   });
 
-  it("refuses a delete that makes Autumn's Saturday Dinner send into Winter's Sunday Breakfast", async () => {
+  it("accepts a delete whose only clash was a stored end offset", async () => {
     const v = await autumnVenue();
-    expect(await refusal(change(v, { delete: [v.lateAutumn] }))).toEqual({
-      code: "season.invalid",
-      params: {
-        field: "seasons",
-        reason: "end_offset",
-        seasonId: v.autumn,
-        weekday: SATURDAY,
-        periodId: v.dinner,
-        departmentId: v.restaurant,
-      },
-    });
-    expect(await seasonsOf(v)).toEqual(THREE);
+    await change(v, { delete: [v.lateAutumn] });
+    expect(await seasonsOf(v)).toEqual([THREE[0], THREE[2]]);
   });
 
   it("swaps Summer's and Autumn's starts and their names in one call, each id keeping its weeks", async () => {
@@ -723,15 +674,14 @@ describe("saveSeasons", () => {
         }),
       ),
     ).toEqual({ code: "season.invalid", params: { field: "save.2.startsOn" } });
-    // Refused after its writes: deleting Late autumn makes Autumn's Dinner send into Winter.
     expect(
       await refusal(
         change(v, {
-          save: [entry(v.autumn, "Fall", "09-05", "red"), entry(undefined, "Feria", "04-10")],
+          save: [entry(v.autumn, "Fall", "09-05", "red"), entry(undefined, "Winter", "04-10")],
           delete: [v.lateAutumn],
         }),
       ),
-    ).toMatchObject({ code: "season.invalid", params: { field: "seasons", reason: "end_offset" } });
+    ).toEqual({ code: "season.invalid", params: { field: "save.1.name", reason: "taken" } });
     expect(await scoped((tx) => readSeasons(tx, v.cfg))).toEqual(seasonsBefore);
     expect(await everyWeek(v)).toEqual(weeksBefore);
   });
