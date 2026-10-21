@@ -8,7 +8,7 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
-import type { FloorZone, TableState, TableToday } from "../api/client.js";
+import type { FloorZone, TableParty, TableState, TableToday } from "../api/client.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {
   return {
@@ -79,6 +79,22 @@ function planned(id: string, over: Partial<TableState> = {}): TableState {
 
 const seated = { state: "open-tab" as const, condition: "held" as const, hasOpenTab: true };
 
+const guests: TableParty = {
+  id: "p1",
+  kitchenNote: { scope: { partyId: "p1" }, note: null, revision: 0, ownerRevision: 1 },
+  revision: 1,
+  guestCount: 2,
+  state: "open",
+  name: null,
+  displayName: "1",
+  mainBillId: null,
+  outstanding: "0.00",
+  billCount: 1,
+  tableIds: ["t1"],
+  unsentDrafts: [],
+  reminder: null,
+};
+
 const mount = (over: Partial<TillFloorScreen> = {}) =>
   mountWidget<TillFloorScreen>("till-floor-screen", {
     zones: [zone()],
@@ -121,14 +137,16 @@ describe("till-floor-screen on the new map", () => {
         ["es", es],
       ] as const) {
         setLocale(locale!);
-        const el = await mount({ tables: [planned("t1", { ...seated, hasAllergy: true })] });
+        const el = await mount({
+          tables: [planned("t1", { ...seated, party: guests, hasAllergy: true })],
+        });
         const map = mapOf(el);
         await new Promise(requestAnimationFrame);
         await new Promise(requestAnimationFrame);
         await map.updateComplete;
         const button = map.shadowRoot!.querySelector('[data-table-id="t1"]')!;
         expect(button.getAttribute("aria-label")).toBe(
-          `1, ${words["floor.status_seated"]}, ${words["floor.allergy"]}`,
+          `1, ${words["floor.status_seated"]}, ${words["floor.nothing_needed"]}, ${words["floor.allergy"]}`,
         );
         expect(button.querySelector('[part="allergy"]')?.textContent).toBe("!");
         el.tables = [planned("t1", seated)];
@@ -148,7 +166,7 @@ describe("till-floor-screen on the new map", () => {
     const map = mapOf(el);
     expect(map).not.toBeNull();
     expect(el.shadowRoot!.querySelector("wt-floor-canvas")).toBeNull();
-    expect(map.tables).toEqual(mapTables([t1]));
+    expect(map.tables).toEqual(mapTables([t1], 0));
     expect(map.fitKey).toBe("z1");
     expect(map.copy.label).toBe("Tables");
   });

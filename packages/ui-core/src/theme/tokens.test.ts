@@ -9,7 +9,8 @@ import {
 } from "./tokens.js";
 import { WAITRON_DEFAULTS } from "./waitron.js";
 
-const MEANING = /^(on-)?(station-|palette-|table-|day-|danger|success|warning|google-|highlight)/;
+const MEANING =
+  /^(on-)?(station-|palette-|table-|tab-|day-|danger|success|warning|google-|highlight)/;
 const PREFIX = "--wt-color-";
 
 describe("the token list a theme writes", () => {

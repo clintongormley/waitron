@@ -1,6 +1,6 @@
 # A757 — Table states: the lifecycle, how each state is shown, and retiring the Tables tab
 
-Status: **answered (Q29–Q34 all A, 2026-10-17); slices 1, 2 and 7 built 2026-10-19, slices 3 and 4 built 2026-10-20; slices 5, 6 and 8 left (§11).**
+Status: **answered (Q29–Q34 all A, 2026-10-17); slices 1, 2 and 7 built 2026-10-19, slices 3, 4 and 5 built 2026-10-20; slices 6 and 8 left (§11).**
 Backlog entry: `docs/backlog.md` "A757" and
 [its detail](../../backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab).
 
@@ -292,6 +292,12 @@ on the owner's answer of 2026-10-20: the list card's outline comes from the most
 draws one, so Waiting's outline stays under Unavailable, Bill requested, Ready, a service step (Take order)
 and Not sent (Decision 1). On the map the same rule is slice 5's.
 
+**2026-10-20:** built by slice 5 (plan `docs/superpowers/plans/2026-10-20-a757-5-map-zone-tabs.md`): the map, the tabs of
+zones not on screen and the order screen's status pin now follow the same order
+(`apps/till/src/state/floor-look.ts`), and so do the table details sheet's chips. Two map-only
+states are ranked beside rows 8 and 11: a counter delivery waiting at a table no party holds, and a
+table that needs moving (the plan's Decision 12).
+
 ## 5. How each state is shown on the card
 
 ### 5.1 Held dishes and the countdown (Q17)
@@ -453,6 +459,19 @@ cue goes with it. A small table on a phone then shows its state by colour and it
 only. The build measures the owner's real plan (Santet, 24 tables) at 390 px; if tables fall below
 the limit, that comes back to the owner.
 
+**2026-10-20:** built by slice 5 (plan `docs/superpowers/plans/2026-10-20-a757-5-map-zone-tabs.md`). A map table is drawn
+in four parts: a fill, an outline inside the shape (thick red for Overdue and thin amber for
+Waiting, each with a thin line of the surface colour inside it so it shows on a solid fill; dashed
+amber for Needs clearing and Needs moving), a pulse ring outside the shape, and a cue. The cue is drawn only on a
+table at least 36 px across (`CUE_MIN_PX`), above the 28 px at which the name shows. Waiting's cue
+is the word "Waiting", not its minutes, because the floor read carries only the timing band. Santet
+was measured in Chromium: at a 390 px map, Front Bar and Saloon draw their tables at 43.3 px, Main
+Bar at 65 px and Terrace at 32.5 px (41.5, 62.3 and 31.2 px inside `apps/till/index.html`'s 8 px
+page padding); at 360 px, 40, 60 and 30 px (38.2, 57.3 and 28.7 px). No table is under 28 px;
+Terrace's tables show their names but no cue. Santet's table positions are an invented grid
+(`local/square/import.mjs`), not the owner's floor, so the owner's real plan is still to be
+measured once it is drawn.
+
 ## 7. Zone tabs carry the most urgent hidden state
 
 Picture 08 (light and dark, 390 px, reduced motion).
@@ -473,6 +492,12 @@ view. Reduced motion: nothing moves; a Forgotten tab is filled red so it still s
 The tabs scroll sideways when they do not fit (`overflow-x: auto`, `till-floor-screen.ts:259-268`). A
 tab carrying a state can be scrolled out of sight on a phone, so the toolbar's edge shows the icon
 of the most urgent tab beyond it ("🛎 ›"); tapping it scrolls that tab into view.
+
+**2026-10-20:** built by slice 5 (plan `docs/superpowers/plans/2026-10-20-a757-5-map-zone-tabs.md`). Each tab tint is its
+state's colour at 18% over the surface, written out as its own token
+(`--wt-color-tab-{danger,warning,bill,ready,seated}-tint`). Needs clearing's tab takes the warning
+amber, not the clearing amber, which reads under 3:1 on the light tint. The edge mark is shown at
+both ends of the strip, not only the right one picture 08 draws.
 
 ## 8. Service steps a venue defines
 
@@ -569,6 +594,9 @@ pendiente"), unless its party has paid, which keeps "Paid". The map's pale tint 
 **2026-10-20:** a follow-up to slice 4 (plan `docs/superpowers/plans/2026-10-20-a757-4b-owner-look-changes.md`):
 the calm edge reads its own token, `--wt-color-table-calm-edge`, so it stays visible in dark; and a
 paid party still seated also says "✓ Nothing needed" beside "Paid" (owner, 2026-10-20).
+
+**2026-10-20:** built by slice 5 (plan `docs/superpowers/plans/2026-10-20-a757-5-map-zone-tabs.md`): the map's calm fill is
+its own token, `--wt-color-table-calm` (text `--wt-color-on-table-calm`).
 
 ## 10. The Tables tab goes
 

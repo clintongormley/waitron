@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { FLOOR_MAP_FILLS, type FloorMapFill } from "@waitron/ui";
+import type { FloorMapFill } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./table-status.js";
@@ -48,31 +48,49 @@ function table(over: Partial<TableState> = {}): TableState {
 
 const seated = { state: "open-tab" as const, condition: "held" as const, hasOpenTab: true };
 
-const forFill: Record<FloorMapFill, TableState> = {
-  free: table(),
-  reserved: table({ nextReservation: { time: "20:30" } }),
-  seated: table({ ...seated, pendingToServe: 2 }),
+/**
+ * Every fill `pinLook` gives a table that carries the pin's party; free, reserved and plain need a
+ * table with no party, which the pin never draws.
+ */
+const forFill = {
+  danger: table({ ...seated, timingBand: "forgotten" }),
+  warning: table({
+    ...seated,
+    signals: [{ kind: "held_unavailable", groupId: "g1", lineNames: ["Steak"] }],
+  }),
   bill: table({
     ...seated,
     signals: [{ kind: "bill_requested", requestedAt: "2026-10-10T11:00:00Z" }],
   }),
-  /** The server sends a row with a party as "held"; kept for the fill's contrast. */
-  clearing: table({ condition: "needs_clearing" }),
-};
+  ready: table({ ...seated, readyToServe: 2 }),
+  seated: table({ ...seated, signals: [{ kind: "take_order" }] }),
+  calm: table({ ...seated, pendingToServe: 2 }),
+} satisfies Partial<Record<FloorMapFill, TableState>>;
+
+const PIN_FILLS = Object.keys(forFill) as (keyof typeof forFill)[];
 
 describe.each(["light", "dark"] as const)("till-table-status a11y (%s theme)", (theme) => {
-  it.each(
-    FLOOR_MAP_FILLS.map(
-      (fill) =>
-        [fill === "clearing" ? "clearing (a shape the server does not send)" : fill, fill] as const,
-    ),
-  )("has no violations for the %s pin", async (_name, fill) => {
+  it.each(PIN_FILLS)("has no violations for the %s pin", async (fill) => {
     const { el, host } = await mountWidget<TillTableStatus>(
       "till-table-status",
       { party, tables: [forFill[fill]] },
       theme,
     );
     expect(el.shadowRoot!.querySelector(`[data-status-pin] [data-fill="${fill}"]`)).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with an overdue pin and its icon", async () => {
+    const { el, host } = await mountWidget<TillTableStatus>(
+      "till-table-status",
+      { party, tables: [table({ ...seated, signals: [{ kind: "long_wait", band: "overdue" }] })] },
+      theme,
+    );
+    expect(
+      el.shadowRoot!.querySelector(
+        '[data-status-pin] [data-fill="calm"] ~ wt-icon[name="floor-timer"]',
+      ),
+    ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

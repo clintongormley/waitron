@@ -114,6 +114,35 @@ in 24 groups. Among the numbers the tasks below give: the dark-green brand's dar
 in light and 73 in dark; and the one-colour hand sweep 82 / 94 in light and 76 / 100 in dark
 (`output-h4-*.txt` in the same folder).)
 
+(2026-10-21, after A757 slice 5, the till floor map's redraw, was rebased onto slice 1: the pins
+that moved come from `derive-h5-a757-5.mjs`, sha256
+`ede40ceb39227038deaa3b29fd6298832478cfc4b96ec43c48ea439467e800ed`, which is `derive-h4.mjs` with
+the floor map's rule changes that read a colour a theme writes, written in by hand from the slice's
+rule list, in the port's group order: `table-dots` becomes `table-marks`, danger and warning (no
+longer success and danger) 3:1 or more on surface; then, after `calm-edge`, field-line 3:1 or more
+on the map's calm fill `table-calm` (group `calm-fill`); then text 4.5:1 or more on each of the five
+zone tab tints, `tab-danger-tint`, `tab-warning-tint`, `tab-bill-tint`, `tab-ready-tint` and
+`tab-seated-tint` (group `tab-tints`, after `calm-fill` and `ready-text`). The slice's other rule
+changes read no colour a theme writes: `table-text` checks calm where it checked clearing, and the
+new rules for the calm fill's own text, text on a ready table and each tab's bar on its tint. The
+copies of the h4 scripts are named `*h5-a757-5*`, and `run-h5-a757-5.sh <checkout> h5 <dir>` runs
+them; run with `h4` on the rebased checkout, the h4 scripts printed every saved `output-h4-*.txt`
+and both `t9/output-pins*-h4.json` byte for byte, apart from the two-colour sweep's timing. The
+counts this plan gives as 392 / 398 and 108 / 113, in 24 groups, are now 405 / 411 and 114 / 119, in
+27 groups. The brand sweep (363 warnings, 112 light and 73 dark), the dark one-colour hand sweep
+(76 / 100) and the two-colour sweep are unchanged; the light one-colour hand sweep is 81 / 95, because
+a light field line set to magenta `#ff00ff` now warns against the calm fill (fix `#e81ee8`). In the
+black brand's dark case, the field line's warning adds `table-calm` and its fix is `#747a87`, not
+`#585e6a`; pure blue light cards name danger and warning where they named success and danger; and
+the text `#6a6a6a` beside sunken areas `#bbbbbb` names the five tab tints. 10 of the 40 reference
+cases and 1 of the 16 made-up-palette cases changed (`t9/output-pins2b-h5-a757-5-diff.txt`,
+`t9/output-pins3-h5-a757-5-diff.txt`); in two, colours moved: `derive.ts:238:18 (Task 9 run 3)`'s
+worked-out light field line is `#777d8a`, not `#b9bfcd`, its field fill's warning (fix `#9fffb1`) gone and its page and card warnings now naming the field line, and `derive.ts:239:5 (Task 9 run 3)`'s is
+`#060812`, not `#e2e8f6`, its page warning gaining the fix `#ffc8c6` and losing its two blockers.
+Tried one at a time, only the field line on the calm fill moves a colour or a fix; the others change
+only which colours a warning names (`output-h5-a757-5-one-at-a-time.txt`). Outputs:
+`output-h5-a757-5-*.txt` in the same folder.)
+
 What each change did to the outputs, measured:
 
 - Change 2: with and without it, the worked examples (`ex.mjs`, `ex2.mjs`, `ex3.mjs`) printed the
@@ -469,6 +498,12 @@ button rules (spec lines 1787-1794). `≥` is at-least, `>` above, `≤` at-most
 text, text-muted on bg, surface, surface-raised ≥ 4.5, 6 / 6; `button-fill` is primary vs bg,
 surface, surface-raised ≥ 3, 3 / 3; and a group `stepper-icon` follows it, both modes, primary on
 stepper-button ≥ 3, 1 / 1. Main's #1920 had already added `calm-edge`, 2 / 2, after `table-dots`.)
+
+(2026-10-21, after A757 slice 5: `table-text` checks free, seated, bill, reserved and calm, 5 / 5;
+`table-dots` is now `table-marks`, danger and warning on surface ≥ 3, 2 / 2; and after `calm-edge`
+come `calm-fill` (on-table-calm on table-calm ≥ 4.5, field-line on table-calm ≥ 3; 2 / 2),
+`ready-text` (on-success on success ≥ 4.5; 1 / 1) and `tab-tints` (text on each of the five tab
+tints ≥ 4.5, then each tab's bar colour on its tint ≥ 3; 10 / 10).)
 
 Groups 1-18 total 377 light and 383 dark; Task 4 checks them, by name, comparison and bound,
 against the old file.

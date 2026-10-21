@@ -1293,24 +1293,9 @@ speeds and the calm card, landed (plan
 changes and the Spanish word for held dishes, landed (plan
 `docs/superpowers/plans/2026-10-20-a757-4b-owner-look-changes.md`; pictures drawn for it in
 `docs/backlog/mockups/a757-table-states/4b-owner-changes.png` and `4b-owner-changes-dark.png`;
-pictures as built in `docs/backlog/mockups/a757-table-states/built-4b/`).
-
-What slice 5 (the map and the zone tabs) must also do, left by slice 4 (its plan's Decisions and
-Open points):
-
-- decide the map's own Nothing needed fill; the card's edge keeps `--wt-color-table-calm-edge`, a
-  line colour;
-- on the map, keep the Waiting outline under a state that draws none (the owner's answer to #1918,
-  point 1, 2026-10-20);
-- put the icons picture 07 draws on the wait, unavailable, bill, ready and unsent chips, once the
-  map's cue icons are registered (Open point 7);
-- decide how the map draws a table with a counter delivery waiting and no party, and a table that
-  needs moving today, neither of which has a state in §4 (Open point 9);
-- move the map's dot and the order screen's status pin off `timingBand` alone: the list card reads
-  the worse of `timingBand` and the `long_wait` signal (`lateBand`,
-  `apps/till/src/state/table-precedence.ts`), the map and the pin do not yet (Decisions 4 and 5);
-- decide the table details sheet's chip order: it opens from the map and the status pin, and still
-  lists chips in the server's order, not the card's (Decision 7).
+pictures as built in `docs/backlog/mockups/a757-table-states/built-4b/`); slice 5, the whole-table
+map and the zone tabs, landed (plan `docs/superpowers/plans/2026-10-20-a757-5-map-zone-tabs.md`;
+pictures as built in `docs/backlog/mockups/a757-table-states/built-5/`).
 
 Venue settings' Tables tab (`apps/dashboard/src/screens/service-status-screen.ts`) held two things:
 
@@ -1384,6 +1369,59 @@ owner, on the running till:
   not change it; I believe the stretching predates slice 4.
 - the Open points of slice 4's follow-up, the owner's look changes
   (`docs/superpowers/plans/2026-10-20-a757-4b-owner-look-changes.md`).
+- the choices slice 5 made where the pictures are silent: its plan's Owner points
+  (`docs/superpowers/plans/2026-10-20-a757-5-map-zone-tabs.md`), each built with the default named
+  here, plus two found while building it (the last two):
+  - **The small-table check was measured on an invented floor.** On Santet's tables, which the
+    import script places on a made-up grid (`local/square/import.mjs`), a 390 px map draws Front Bar
+    and Saloon's tables at 43.3 px, Main Bar's at 65 px and Terrace's at 32.5 px (41.5, 62.3 and
+    31.2 px inside the till page's 8 px margin); a 360 px map draws them at 40, 60 and 30 px (38.2,
+    57.3 and 28.7 px). No table is under 28 px, so every name shows, but Terrace's tables are under
+    the 36 px a cue needs, so there a table's state is its colour, its outline and its spoken words.
+    Default: as built; measuring the owner's real floor once it is drawn is A937.
+  - **Waiting's cue on the map says "Waiting", not the minutes** picture 07 draws ("⏱ 6′"), because
+    the floor read sends only how late a table is, not its dishes' ages. Default: the word; sending
+    the oldest fired dish's age is A936.
+  - **An outline on a filled table has a thin line of the background colour inside it**, which the
+    pictures do not draw: without it a Waiting outline on a Bill requested table is all but
+    invisible in light (1.01:1). Default: the line.
+  - **Two tables §4 has no row for:** a counter delivery waiting at a table no party holds is solid
+    seated blue with the service-step icon and "2 to deliver"; a table that needs moving is dashed
+    like Needs clearing and says "Move". Both also colour a hidden zone's tab, which §7 limits to
+    §4's rows 1–11. Default: as built.
+  - **The cue shows only on a table at least 36 px across**, above the 28 px at which the name
+    shows. Default: 36 px.
+  - **Both ends of the zone strip get an edge mark** for a tab scrolled out of sight; picture 08
+    draws only the right one. The mark pulses like the tab it stands for. Default: both ends.
+  - **The order screen's status pin no longer says "N to serve"**; it says the table's most urgent
+    state, so a seated table with dishes in the kitchen and nothing late reads "Nothing needed".
+    Default: as built.
+  - **New short words on the map:** "Out" («Agotado»), "Fire" («Marchar»), "Bill" («Cuenta»),
+    "Clear" («Recoger») and "Move" («Mover»); Not sent reuses the unplaced token's "Unsent" («Sin
+    enviar») where the picture says "Not sent". Default: these words.
+  - **The pulse ring reaches 6 px out, after a 2 px gap**, where the design says 7 px and picture 09
+    draws a halo with no gap; a table listed later on the map covers a neighbour's ring. Default: as
+    built.
+  - **Icons now show on the chips wherever the till lists a table's signals** — the card, the
+    unplaced token, the details sheet, held orders and the order screen — not only on the floor.
+    Default: everywhere.
+  - **The till bar's Waiting tab keeps «En espera»**: the owner's answer on #1920 named the floor's
+    Waiting chip, and the tab counts counter orders, not dishes. Default: «En espera».
+  - **Needs clearing's dashes, and its zone tab's bar, are the darker warning amber**, not the
+    clearing amber the pictures draw, which in light reads 2.03:1 on the map and 1.55:1 on the tab,
+    under the 3:1 a mark needs. Default: the warning amber.
+  - **On the map, Time to fire over a waiting order draws no Waiting outline**, as on the card, so
+    one table never shows two amber marks — though on the map Time to fire is a fill and an outside
+    ring, not an outline, so the owner's "beneath a higher state that draws none" could be read the
+    other way. Default: as the card.
+  - **A zone tab's Ready words use the largest count at one table, while its delivery words add up
+    the zone**: two Terrace tables with 2 and 3 dishes ready read "Terrace, 3 ready". Adding the
+    ready counts up would count a merged party twice, since each of its tables carries the party's
+    whole count; the plan decides neither way. Default: as built.
+  - **When two hidden tabs beyond the same end of the zone strip are equally urgent, the one
+    earlier in the tab order gives the edge mark its icon and is scrolled to**: beyond the right
+    end, that is the one nearest the strip; beyond the left end, the one farthest from it. The
+    alternative is the one nearest the strip at both ends. Default: as built.
 - two spacing points from A757 slice 2's look (2026-10-20, pictures in
   `docs/backlog/mockups/a757-table-states/built-2/`): in the table drawer, "Still to pay at this
   table" sits right against the "Mark bill requested" button; and at 390 px the floor's list cards
@@ -1402,6 +1440,25 @@ Two owner suggestions are open; settle them here:
 Once A893 settles the look, add the “What the colours mean” badge on the floor; A582 slice 4 left
 it, see its plan's decision 8
 ([2026-10-20-a582-4-till-help.md](../superpowers/plans/2026-10-20-a582-4-till-help.md)).
+
+## A936. Waiting's minutes on the map
+
+**A936 (left open by A757 slice 5).** Picture 07 draws a waiting table's cue on the floor map as
+"⏱ 6′", the minutes the order has waited; slice 5 draws the word "Waiting" («Esperando») instead,
+because the floor read sends a table only its timing band (`timingBand`, documented at
+`apps/till/src/api/client.ts`, and the `long_wait` signal's `band`,
+`packages/shared/src/table-signals.ts`), not its dishes' ages. Showing the minutes means the floor
+read also carrying the oldest fired dish's age, and the map's cue counting up from it. The owner
+reviews the word against the minutes in A893 first.
+
+## A937. Measure the owner's real floor plan once it is drawn
+
+**A937 (left open by A757 slice 5).** The floor map hides a table's cue under 36 px (`CUE_MIN_PX`)
+and its name under 28 px (`NAME_MIN_PX`, both in `packages/ui/src/floor-plan-geometry.ts`). Slice 5
+measured Santet's plan, whose positions are an invented grid (`local/square/import.mjs`), not the
+owner's floor: its Terrace zone, eight tables in one row, draws them at 28.7–32.5 px on a phone, so
+they show names but no cue. Once the owner's real floor is drawn, measure each zone's tables at 390
+and 360 px in the till page and bring any zone under either limit back to the owner.
 
 ## A758. Adjustment reasons: review the rules, then a page of their own
 
@@ -1532,8 +1589,8 @@ whether those reads should follow today's map once a group is left.
 
 ### `timingBand` counts only fired dishes (A757 Q17, owner 2026-10-17; built by A757 slice 3)
 
-A held dish does not turn a card's outline, its Forgotten badge, the map's dot or the order screen's
-pin, however long it is held; sending or releasing it restarts its age.
+A held dish does not make a card, a map table or the order screen's pin Waiting, Overdue or
+Forgotten, however long it is held; sending or releasing it restarts its age.
 
 ### Counter cleanup choices (A738, owner amendments 2026-10-16 to 2026-10-19)
 

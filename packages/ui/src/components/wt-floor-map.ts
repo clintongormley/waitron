@@ -5,24 +5,37 @@ import { styleMap } from "lit/directives/style-map.js";
 import { groupStep, partyTablesName } from "@waitron/shared";
 import { baseStyles } from "../base-styles.js";
 import { DOUBLE_TAP_MS, type GesturePoint, Gestures } from "../gestures.js";
-import { type FloorMapDot, type FloorMapFill, floorMapFillStyles } from "../floor-map-fills.js";
+import {
+  type FloorMapCue,
+  type FloorMapFill,
+  type FloorMapOutline,
+  type FloorMapPulse,
+  floorMapFillStyles,
+} from "../floor-map-fills.js";
+import { floorRingStyles, renderFloorPulse, renderFloorRing } from "../floor-ring.js";
+import "../floor-chips.js";
+import "./wt-icon.js";
 import {
   type PlanPlacement,
   type PlanRect,
   bounds,
   cropToTables,
   fitScale,
+  showsCue,
   showsName,
   unionRect,
 } from "../floor-plan-geometry.js";
 
-/** A merge's members carry the same `fill`, `dot`, `linkId` and `description`. */
+/** A merge's members carry the same `fill`, `outline`, `pulse`, `cue`, `linkId` and `description`. */
 export interface FloorMapTable {
   id: string;
   label: string;
   placement: PlanPlacement;
   fill: FloorMapFill;
-  dot: FloorMapDot | null;
+  outline: FloorMapOutline | null;
+  pulse: FloorMapPulse | null;
+  /** Drawn under the name on a table big enough for both (`showsCue`). */
+  cue: FloorMapCue | null;
   joinId: string | null;
   /** Today's name when it differs from `label`. */
   name?: string;
@@ -225,6 +238,7 @@ export class WtFloorMap extends LitElement {
   static override styles = [
     baseStyles,
     floorMapFillStyles,
+    floorRingStyles,
     css`
       :host {
         display: block;
@@ -262,9 +276,22 @@ export class WtFloorMap extends LitElement {
         pointer-events: auto;
       }
 
+      [part="shape"][data-outline="clearing"] {
+        border: var(--wt-space-1) dashed var(--wt-color-warning);
+      }
+
+      /* Out to the dashes' outer edge, so the ring does not paint over them. */
+      [part="shape"][data-outline="clearing"] .pulse {
+        inset: calc(var(--wt-space-1) * -1);
+      }
+
       [part="table"][data-held] [part="shape"] {
         border-color: var(--wt-color-primary);
         box-shadow: inset 0 0 0 1px var(--wt-color-primary);
+      }
+
+      [part="table"][data-held] [part="shape"][data-outline="clearing"] {
+        border-color: var(--wt-color-warning);
       }
 
       /* Outside the edge, so --wt-focus-offset and not --wt-selected-ring-offset: the seated fill
@@ -334,23 +361,48 @@ export class WtFloorMap extends LitElement {
         text-wrap: nowrap;
       }
 
-      /* Painted in the fill, over the seam between a merge's tables. */
-      [part="table"][data-merge] [part="name"] {
-        padding-inline: var(--wt-space-1);
-        border-radius: var(--wt-radius-sm);
+      /* Positioned, or it paints under the table's own shape. */
+      [part="caption"] {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        max-width: 100%;
+        overflow: hidden;
+        line-height: 1.2;
       }
 
-      [part="dot"] {
-        position: absolute;
-        z-index: 2;
-        top: 0;
-        right: 0;
-        width: var(--wt-space-3);
-        height: var(--wt-space-3);
-        border: calc(var(--wt-space-1) / 2) solid var(--wt-color-surface);
-        border-radius: 50%;
-        transform: translate(50%, -50%);
-        animation: dot-flash 1s infinite;
+      /* Clear, left and right, of the thickest outline drawn inside the shape: Overdue's. */
+      [part="table"]:has(> [part="shape"][data-outline]) > [part="name"],
+      [part="table"]:has(> [part="shape"][data-outline]) > [part="caption"] {
+        max-width: calc(100% - 2 * (var(--wt-space-1) + 1px));
+      }
+
+      [part="cue"] {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+        justify-content: center;
+        font-size: var(--wt-font-size-sm);
+        text-wrap: nowrap;
+        overflow: hidden;
+      }
+
+      /* A flex container cuts no text itself: its text's own box carries the ellipsis. */
+      [part="cue"] .cue-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      [part="cue"] wt-icon {
+        flex: none;
+        color: inherit;
+      }
+
+      /* Painted in the fill, over the seam between a merge's tables. */
+      [part="table"][data-merge] > [part="name"],
+      [part="table"][data-merge] [part="caption"] {
+        padding-inline: var(--wt-space-1);
+        border-radius: var(--wt-radius-sm);
       }
 
       [part="allergy"] {
@@ -370,30 +422,6 @@ export class WtFloorMap extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         transform: translate(-50%, -50%);
         pointer-events: none;
-      }
-
-      [part="dot"][data-dot="ready"] {
-        background-color: var(--wt-color-success);
-      }
-
-      [part="dot"][data-dot="forgotten"] {
-        background-color: var(--wt-color-danger);
-      }
-
-      [part="dot"][data-still] {
-        animation: none;
-      }
-
-      @keyframes dot-flash {
-        50% {
-          opacity: 0;
-        }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        [part="dot"] {
-          animation: none;
-        }
       }
     `,
   ];
@@ -907,9 +935,10 @@ export class WtFloorMap extends LitElement {
     const { box, members, label } = group;
     const [first] = members as [FloorMapTable, ...FloorMapTable[]];
     const merged = members.length > 1;
-    const named = group.drawsName && showsName(merged ? box : first.placement, view.scale);
+    const drawn = merged ? box : first.placement;
+    const named = group.drawsName && showsName(drawn, view.scale);
+    const cue = named && showsCue(drawn, view.scale) ? first.cue : null;
     const drag = this.#drag?.tableId === first.id && !group.fixed ? this.#drag : null;
-    const dot = members.find((m) => m.dot !== null)?.dot ?? null;
     const allergy = members.some((member) => member.allergy);
     return html`<button
       type="button"
@@ -920,7 +949,12 @@ export class WtFloorMap extends LitElement {
       ?data-drop-target=${this.#markedTarget(this.#drag) === group}
       ?data-moving=${drag !== null}
       tabindex=${tabStop ? 0 : -1}
-      aria-label=${`${label}, ${first.description}${allergy ? `, ${this.copy.allergy ?? DEFAULT_COPY.allergy}` : ""}`}
+      aria-label=${[
+        label,
+        ...(cue === null || cue.text === "" ? [] : [cue.text]),
+        first.description,
+        ...(allergy ? [this.copy.allergy ?? DEFAULT_COPY.allergy] : []),
+      ].join(", ")}
       style=${styleMap({
         left: px(view.x + (box.x + (drag?.dx ?? 0)) * view.scale),
         top: px(view.y + (box.y + (drag?.dy ?? 0)) * view.scale),
@@ -928,15 +962,22 @@ export class WtFloorMap extends LitElement {
         height: px(box.height * view.scale),
       })}
     >
-      ${members.map((m) => this.#renderShape(m, box, view.scale))}
+      ${members.map((m) => this.#renderShape(m, box, view.scale, still))}
       ${allergy ? html`<span part="allergy" aria-hidden="true">!</span>` : nothing}
       ${
-        named
-          ? html`<span part="name" data-fill=${merged ? first.fill : nothing}>${label}</span>`
-          : nothing
-      }
-      ${
-        dot === null ? nothing : html`<span part="dot" data-dot=${dot} ?data-still=${still}></span>`
+        cue !== null
+          ? html`<span part="caption" data-fill=${merged ? first.fill : nothing}
+              ><span part="name">${label}</span>
+              <!-- The space: axe reads the name and the cue as one word without it. -->
+              <span part="cue"
+                >${cue.icon === null ? nothing : html`<wt-icon name=${cue.icon} size="sm"></wt-icon>`}${
+                  cue.text === "" ? nothing : html`<span class="cue-text">${cue.text}</span>`
+                }</span
+              ></span
+            >`
+          : named
+            ? html`<span part="name" data-fill=${merged ? first.fill : nothing}>${label}</span>`
+            : nothing
       }
     </button>`;
   }
@@ -978,7 +1019,7 @@ export class WtFloorMap extends LitElement {
           width: px(box.width * view.scale),
           height: px(box.height * view.scale),
         })}
-        >${members.map((m) => this.#renderShape(m, box, view.scale))}</span
+        >${members.map((m) => this.#renderShape(m, box, view.scale, null))}</span
       >${
         to === null
           ? nothing
@@ -988,11 +1029,19 @@ export class WtFloorMap extends LitElement {
       }`;
   }
 
-  #renderShape(table: FloorMapTable, box: PlanRect, scale: number): TemplateResult {
+  /** `still` null draws the fill alone, as a fixed drag's copy does. */
+  #renderShape(
+    table: FloorMapTable,
+    box: PlanRect,
+    scale: number,
+    still: boolean | null,
+  ): TemplateResult {
     const p = table.placement;
+    const outline = still === null ? null : table.outline;
     return html`<span
       part="shape"
       data-fill=${table.fill}
+      data-outline=${outline ?? nothing}
       data-shape=${p.shape}
       style=${styleMap({
         left: px((p.x - box.x) * scale),
@@ -1001,7 +1050,12 @@ export class WtFloorMap extends LitElement {
         height: px(p.height * scale),
         transform: `rotate(${p.rotation}deg)`,
       })}
-    ></span>`;
+      >${
+        outline === "overdue" || outline === "waiting"
+          ? renderFloorRing(outline, false, { onFill: true })
+          : nothing
+      }${still === null ? nothing : renderFloorPulse(table.pulse, !still)}</span
+    >`;
   }
 }
 

@@ -121,9 +121,11 @@ This works whether or not `#app` also carries `data-theme` — see "Themes" abov
 Overriding `--wt-color-primary` leaves every token that holds Waitron's blue as its own value at
 that blue — among them `--wt-color-primary-text`, `--wt-color-primary-hover`, `--wt-color-focus`,
 `--wt-color-field-label-focus`, `--wt-color-primary-disabled` and `--wt-color-table-calm-edge` — and
-overriding `--wt-color-danger` leaves `--wt-color-danger-hover`, `--wt-color-danger-disabled` and
-`--wt-color-danger-pulse-dim` at Waitron's red (and overriding `--wt-color-warning` leaves
-`--wt-color-warning-pulse-dim` at Waitron's amber). Set each one too, with a light and a dark value (see Tokens → Colour).
+overriding `--wt-color-danger` leaves `--wt-color-danger-hover`, `--wt-color-danger-disabled`,
+`--wt-color-danger-pulse-dim` and `--wt-color-tab-danger-tint` at Waitron's red (and overriding
+`--wt-color-warning` leaves `--wt-color-warning-pulse-dim` and `--wt-color-tab-warning-tint` at
+Waitron's amber, and overriding `--wt-color-success` leaves `--wt-color-tab-ready-tint` at Waitron's
+green). Set each one too, with a light and a dark value (see Tokens → Colour).
 
 ## Tokens
 
@@ -140,17 +142,18 @@ edge and the pulse dim colours, is in `colors.test.ts` alone, and the derivation
 `--wt-color-on-primary`, `--wt-color-primary-text`, `--wt-color-primary-hover`, `--wt-color-danger`,
 `--wt-color-on-danger`, `--wt-color-danger-hover`, `--wt-color-primary-disabled`,
 `--wt-color-on-primary-disabled`, `--wt-color-danger-disabled`, `--wt-color-on-danger-disabled`,
-`--wt-color-success`, `--wt-color-warning`, `--wt-color-on-warning`,
+`--wt-color-success`, `--wt-color-on-success`, `--wt-color-warning`, `--wt-color-on-warning`,
 `--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`, `--wt-color-field-fill`,
 `--wt-color-field-line`, `--wt-color-field-label-focus`, `--wt-color-field-fill-disabled`,
 `--wt-color-field-value`, `--wt-color-google-button-fill`, `--wt-color-google-button-line`,
 `--wt-color-google-button-text`, `--wt-color-stepper-button`, and the calendar's
 `--wt-color-palette-{red,orange,amber,yellow,lime,green,teal,cyan,sky,blue,indigo,purple,magenta,pink,brown,grey}`, `--wt-color-day-standard` and
-`--wt-color-day-closed`, the table map's `--wt-color-table-{free,seated,bill,clearing,reserved}`,
+`--wt-color-day-closed`, the table map's `--wt-color-table-{free,seated,bill,reserved,calm}`,
 and the search result's `--wt-color-highlight`, each with an `--wt-color-on-…` text colour, and the prep stations'
 `--wt-color-station-<colour>`, each with a `-dot` and no text colour of its own, and, with no text
 colour, the list card's calm left edge `--wt-color-table-calm-edge` and the colours a pulsing floor
-ring dims to, `--wt-color-danger-pulse-dim` and `--wt-color-warning-pulse-dim`
+ring dims to, `--wt-color-danger-pulse-dim` and `--wt-color-warning-pulse-dim`, and the zone tabs'
+`--wt-color-tab-{danger,warning,bill,ready,seated}-tint`
 
 `--wt-color-stepper-button` is the hover tint of `wt-number-stepper`'s − and + buttons: `#e8f0ff`
 in the light theme and `#172946` in the dark.
@@ -322,23 +325,46 @@ the `prefers-color-scheme` blocks give the same values as the explicit themes. A
 that every pair of dark fills is at least as far apart, by CIEDE2000 colour difference, as the
 closest pair of light fills.
 
-The till's table map paints a table's fill from `--wt-color-table-<fill>` and its text from
-`--wt-color-on-table-<fill>`, through `floorMapFillStyles` (`packages/ui/src/floor-map-fills.ts`), a
-Lit stylesheet that styles an element carrying `data-fill="<fill>"` inside a shadow root whose
-styles include it, as `wt-floor-map`'s do:
+The till's table map paints a table's fill, and its text, from the pair of tokens each fill names,
+through `floorMapFillStyles` (`packages/ui/src/floor-map-fills.ts`), a Lit stylesheet that styles an
+element carrying `data-fill="<fill>"` inside a shadow root whose styles include it, as
+`wt-floor-map`'s do. The fills `free`, `seated`, `bill`, `reserved` and `calm` read
+`--wt-color-table-<fill>` and `--wt-color-on-table-<fill>`; `ready` reads `--wt-color-success` and
+`--wt-color-on-success`; `danger` reads `--wt-color-danger` and `--wt-color-on-danger`; `warning`
+reads `--wt-color-warning` and `--wt-color-on-warning`; and `plain` reads `--wt-color-surface` and
+`--wt-color-text`. The table tokens:
 
 | Fill                        | Light     | Text on it | Dark      | Text on it |
 | --------------------------- | --------- | ---------- | --------- | ---------- |
 | `--wt-color-table-free`     | `#dff3e8` | `#16181d`  | `#183626` | `#eceef2`  |
 | `--wt-color-table-seated`   | `#1f6feb` | `#ffffff`  | `#4c8dff` | `#06101f`  |
 | `--wt-color-table-bill`     | `#7e3fb8` | `#ffffff`  | `#c39bf0` | `#1d0b33`  |
-| `--wt-color-table-clearing` | `#f5a623` | `#241500`  | `#f5b34a` | `#241500`  |
 | `--wt-color-table-reserved` | `#fde7c8` | `#16181d`  | `#4a3a1c` | `#eceef2`  |
+| `--wt-color-table-calm`     | `#e4ecfb` | `#16181d`  | `#22304a` | `#eceef2`  |
 
 The "table fill colours" cases in `packages/ui-core/src/tokens/colors.test.ts` hold, in both
 themes, that each text colour is 4.5:1 or more on its fill, that the five fills differ, that
-`--wt-color-success` and `--wt-color-danger` are 3:1 or more on `--wt-color-surface`, and that the
-`prefers-color-scheme` blocks give the same values as the explicit themes.
+`--wt-color-danger` and `--wt-color-warning`, the colours of a map table's outline and its pulse
+ring, are 3:1 or more on `--wt-color-surface`, and that the `prefers-color-scheme` blocks give the
+same values as the explicit themes.
+
+`--wt-color-on-success` is the text on a ready (green) map table: `#ffffff` light, `#06190f` dark.
+Each zone tab tint is the colour of its tab's bar at 18% over `--wt-color-surface`:
+
+| Tint                          | Its bar                   | Light     | Dark      |
+| ----------------------------- | ------------------------- | --------- | --------- |
+| `--wt-color-tab-danger-tint`  | `--wt-color-danger`       | `#f1d8d7` | `#422e31` |
+| `--wt-color-tab-warning-tint` | `--wt-color-warning`      | `#eae0d1` | `#40372a` |
+| `--wt-color-tab-bill-tint`    | `--wt-color-table-bill`   | `#e8dcf2` | `#383347` |
+| `--wt-color-tab-ready-tint`   | `--wt-color-success`      | `#d6e8e1` | `#223a35` |
+| `--wt-color-tab-seated-tint`  | `--wt-color-table-seated` | `#d7e5fb` | `#22304a` |
+
+The "map and zone tab colours" cases in `colors.test.ts` hold, in both themes, that
+`--wt-color-on-table-calm` is 4.5:1 or more and `--wt-color-field-line` 3:1 or more on the calm
+fill; that calm and free are 10 or more apart by CIEDE2000; that `--wt-color-on-success` is 4.5:1 or
+more on `--wt-color-success`; that `--wt-color-text` is 4.5:1 or more and the bar 3:1 or more on
+each tint; that each tint is its bar at 18% over the surface; and that the `prefers-color-scheme`
+blocks give the same values.
 
 `--wt-color-table-calm-edge` is the soft left edge of a calm list card: `#8fb7f5` light, `#4d6aa6`
 dark. `--wt-color-danger-pulse-dim` and `--wt-color-warning-pulse-dim` are the colours a pulsing
@@ -767,7 +793,7 @@ you set spacing without replacing its error and folding behaviour.
 | `wt-floor-plan-canvas`  | `tables` (property; `{ key, label, fixed, placement, refused? }[]`, the placed tables only, `placement` in grid squares), `selected` (the selected table's key, or null; set by the parent), `copy` (property; `{ label, fixed, rotate, keys?, size? }`, English by default); parts: `viewport`, `grid`, `table`, `fixed-marker`, `rotate-handle`, `resize-dot`, `resize-handle`, `resize-corner`, `resize-corner-handle`, `size-badge`, `refused-reason`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `wt-table-select` (`{ key }`, `null` for a click on empty grid), `wt-table-move` (`{ key, x, y }`), `wt-table-resize` (`{ key, x, y, width, height }`), `wt-table-rotate` (`{ key, rotation, x, y }`)                                                                                                                               |
 | `wt-floor-plan-preview` | A zone's floor plan drawn small and read-only, fitted to its width and capped at `--wt-floor-plan-preview-max-height` (four `--wt-tap-min` at the theme root; a page or panel may set its own): `tables` (property; `{ key, fixed, placement }[]`, as the canvas takes them), `label` (the drawing's accessible name, default "Floor plan"); draws nothing for no tables; parts: `plan`, `table`, `fixed-marker` | — |
 | `wt-sheet`              | `heading` (the toggle's text), `expanded` (reflected; the page may set it); default slot (body); parts: `toggle`, `body` | `wt-sheet-toggle` (`{ expanded }`) |
-| `wt-floor-map`          | `tables` (property; `{ id, label, placement, fill, dot, allergy, joinId, name, groupName, fixed, linkId, description }[]`, the placed tables only, `placement` in grid squares, `fill` a `FloorMapFill`, `dot` a `FloorMapDot` or null, `fixed` optional, unset is movable, `linkId` optional, a party's id or null, `name` optional, the table's name for today, `groupName` optional, the merge's name for today, the same on every member), `canDrag` (property; true by default), `fitKey` (a change fits the view again), `copy` (property; `{ label, allergy }`, default "Tables" and "Allergy"), `reducedMotion` (property; unset reads `prefers-reduced-motion`); sets `--floor-map-ratio` on its own host, the width ÷ height of what it fits (1 with no tables), for its parent's CSS to read, so a parent must not overwrite its `style` attribute; parts: `table`, `shape`, `name`, `dot`, `allergy`, `ghost`, `drag-link`, `links` | `wt-table-tap` (`{ tableId }`), `wt-table-details` (`{ tableId }`), `wt-table-drag-end` (`{ tableId, x, y, targetId }`) |
+| `wt-floor-map`          | `tables` (property; `{ id, label, placement, fill, outline, pulse, cue, allergy, joinId, name, groupName, fixed, linkId, description }[]`, the placed tables only, `placement` in grid squares, `fill` a `FloorMapFill`, `outline` a `FloorMapOutline` or null, `pulse` a `FloorMapPulse` or null, `cue` a `FloorMapCue` (`{ icon, text }`, `icon` a `floor-*` icon name or null) or null, `fixed` optional, unset is movable, `linkId` optional, a party's id or null, `name` optional, the table's name for today, `groupName` optional, the merge's name for today, the same on every member), `canDrag` (property; true by default), `fitKey` (a change fits the view again), `copy` (property; `{ label, allergy }`, default "Tables" and "Allergy"), `reducedMotion` (property; unset reads `prefers-reduced-motion`); sets `--floor-map-ratio` on its own host, the width ÷ height of what it fits (1 with no tables), for its parent's CSS to read, so a parent must not overwrite its `style` attribute; parts: `table`, `shape`, `caption`, `name`, `cue`, `allergy`, `ghost`, `drag-link`, `links` | `wt-table-tap` (`{ tableId }`), `wt-table-details` (`{ tableId }`), `wt-table-drag-end` (`{ tableId, x, y, targetId }`) |
 
 `wt-floor-plan-canvas` draws a zone's floor plan on a scrolling grid, initially 12 px per square, that fills its
 box and reaches at least 8 squares past the furthest table, and 8 squares right of and below the
@@ -868,8 +894,9 @@ set. The consuming app registers the `chevron-down` icon.
 On the till's floor screen, the map box follows the cropped zone's aspect ratio, capped in height
 so the surrounding controls and Unplaced tray have room; the cap stays at least six tap heights
 on short windows, where the page can scroll (owner, 2026-10-10, A472). Bill requested
-chips share the map's purple tokens. On the list card and the unplaced table's token, a table holding dishes shows a quiet chip with a pause icon, “Held 2”, which counts down, “Held 2 · fire in 4 min”, once its reminder has a time; when that time comes the filled amber “Time to fire” chip, with a play icon, takes its place. A table placed on the map shows no held chip yet. A table's states are ranked in A757 §4's order (`tableStates`, `apps/till/src/state/table-precedence.ts`). On the list card the most urgent state that draws an outline decides it — Forgotten red, pulsing fast; Overdue red and Time to fire amber, pulsing slowly, all thick; Waiting a thin steady amber, kept under a state that draws none; no other state draws one — and every mark is listed in that order, “N to serve” last. Under reduced motion nothing moves and Forgotten's left edge turns wide and red. A seated table that needs nothing, or only waits on a held course, has a soft left edge, `--wt-color-table-calm-edge`; the first also says “✓ Nothing needed”. Reserved is pale amber on the card and the token. The unplaced token rings by its own timing band and due reminder only. `@waitron/ui`'s `floor-chips.ts` registers the held, fire and check icons. The order pin's swatch follows its displayed signal: ready
-uses success, forgotten uses danger, and other statuses use their table fill. A single-table details
+chips share the map's purple tokens. On the list card and the unplaced table's token, a table holding dishes shows a quiet chip with a pause icon, “Held 2”, which counts down, “Held 2 · fire in 4 min”, once its reminder has a time; when that time comes the filled amber “Time to fire” chip, with a play icon, takes its place. On the map, when that is its most urgent state, the same table is drawn in the calm fill with the pause icon and its minutes left (“4′”), or “Held 2” before the reminder has a time. A table's states are ranked in A757 §4's order (`tableStates`, `apps/till/src/state/table-precedence.ts`); the map, the tab of a zone not on screen, the zone strip's edge marks and the order screen's status pin follow that order too (`apps/till/src/state/floor-look.ts`), and the table details sheet's chips are sorted into it by `byPrecedence` (`apps/till/src/state/table-precedence.ts`, called from `apps/till/src/widgets/table-details-sheet.ts`). On the list card the most urgent state that draws an outline decides it — Forgotten red, pulsing fast; Overdue red and Time to fire amber, pulsing slowly, all thick; Waiting a thin steady amber, kept under a state that draws none; no other state draws one — and every mark is listed in that order, “N to serve” last. Under reduced motion nothing moves and Forgotten's left edge turns wide and red. A seated table that needs nothing, or only waits on a held course, has a soft left edge, `--wt-color-table-calm-edge`; the first also says “✓ Nothing needed”. Reserved is pale amber on the card and the token. The unplaced token rings by its own timing band and due reminder only. `@waitron/ui`'s `floor-chips.ts` registers the `floor-*` icons the chips, the badges, the map's cues and the zone tabs draw. The order screen's status pin shows the party's map fill as its swatch, then
+its most urgent state's icon and words (“Bill requested”, “2 ready”, “Nothing needed”); it says a
+held course without its countdown, and it does not pulse. A single-table details
 heading says "Table 9" / "Mesa 9", or the table's name for today with "Saved as {saved name}" /
 "Guardada como …" beneath it; a named group's heading is its name, with the tapped table's saved name beneath it; a list-view card shows today's name with the saved name small after
 it; Guests has no placeholder. Rename, after Change seats on the details sheet, opens the Rename
@@ -900,8 +927,10 @@ each list says so in one line when it is empty, and Reset asks before it resets.
 When the zones read offers another layout (`layoutDue`), a device that can change today shows a
 `role="status"` line above the map or the list, "{period} layout is ready." or, with no new period
 to name, "A newer layout is ready.", beside an Update layout button (`#layoutBanner`,
-`apps/till/src/screens/till-floor-screen.ts`). A table that needs moving takes the needs-clearing
-fill on the map (`apps/till/src/state/floor-map.ts`); its list card says "Needs moving" and carries
+`apps/till/src/screens/till-floor-screen.ts`). A table that needs moving is drawn on the map with
+Needs clearing's dashed amber outline over the fill it would otherwise have, unless it draws
+Overdue's or Waiting's outline, which outrank the dashes, and with the cue “Move” when that is its
+most urgent state (`apps/till/src/state/floor-look.ts`); its list card says "Needs moving" and carries
 Leave it here then Mark moved, both small and secondary. While one of the two is being sent for a
 table, the card draws the pressed button busy and the other disabled, and any other press of either
 for that table (card, question or offer) is ignored. Tapping the table on the map asks Cancel
@@ -911,6 +940,18 @@ Leave it here nor Mark moved is shown. When Mark moved, or Back to its saved pla
 needs moving, is refused `table.new_place_taken`, a small secondary Leave it here button for the
 table pressed sits under the refusal line, as wide as its words, for as long as that refusal is
 shown and the table still needs moving, and only in the table's own room.
+
+The tab of a zone not on screen takes the most urgent state, above Held, among that zone's tables
+(`topTabKind`, `apps/till/src/state/floor-look.ts`), and the zone on screen takes none. Its button
+takes the state's tint as its background (`--wt-color-tab-*-tint`, Tokens → Colour) with a
+`--wt-space-1` bar of the state's colour along its bottom, and the state's icon after the zone's
+name; its accessible name adds the state's words ("Terrace, Forgotten"). A Forgotten tab pulses
+fast and an Overdue or Time to fire one slowly, with the map's outside ring; under reduced motion
+nothing moves and a Forgotten tab is filled `--wt-color-danger`. The strip is padded by the ring's
+reach, so the ring is not cut off. When a tab carrying a state is cut off beyond either end of the
+strip, that end shows a button at least `--wt-tap-min` square with the icon of the most urgent such
+tab and "‹" or "›", tinted and pulsing as that tab is and named "Show Terrace"; tapping it scrolls
+the tab into view (`#tabsEdge`, `apps/till/src/screens/till-floor-screen.ts`).
 
 `wt-floor-map` draws the till's tables for a zone, fitted to its box: the tables' crop (two squares
 past them) is scaled to fit and centred, with no grid lines. Its size is its parent's choice; the
@@ -944,23 +985,33 @@ it on release (a fixed group's copy moves no end). They are named once: every on
 `mergeLabel` of all their tables' labels ("Bar 1+2"), or, when any of their tables or merges has a name for
 today, each group's name in the order the line joins them ("García birthday+Bar 5"), and only the first draws it, when its own box
 is big enough for a name. A `linkId` on one group alone draws nothing more. Each shape is painted from
-its fill's `--wt-color-table-*` token, outlined in `--wt-color-field-line` with `--wt-radius-sm`
-corners (a round one is a circle), and the name in the fill's
-`--wt-color-on-table-*`. A name is drawn only when the table's own shorter side, before turning (a
-merge's whole box), is at least 28 px, and is always the start of the button's accessible name,
-followed by ", " and `description`. A dot is a `--wt-space-3` circle on the button's top-right corner,
-`--wt-color-success` for ready and `--wt-color-danger` for forgotten, ringed in the surface colour and
-drawn above every table; it flashes once a second unless motion is reduced. The host isolates its
-stacking (`isolation: isolate`), so the dot is drawn above the map's tables but not above what follows
-the map. An optional `allergy` flag draws a steady **!** at the top-left of the table or merge,
-using `--wt-color-danger` and `--wt-color-on-danger`, beside the existing top-right dot.
+its fill's colour token (Tokens → Colour), edged with a 1 px `--wt-color-field-line` line with
+`--wt-radius-sm` corners (a round one is a circle), and the name in the fill's text token. A name
+is drawn only when the table's own shorter side, before turning (a merge's whole box), is at least
+28 px (`NAME_MIN_PX`), and is always the start of the button's accessible name, followed by ", ",
+the cue's text when the cue is drawn and has any, and `description`. An `outline` is drawn inside
+the shape: `overdue` a `--wt-space-1` `--wt-color-danger` line and `waiting` a half-width
+`--wt-color-warning` one, each with a 1 px `--wt-color-surface` line inside it so it shows on a
+solid fill, and `clearing` a `--wt-space-1` dashed `--wt-color-warning` border in place of the
+shape's edge. A `pulse` is a ring outside the shape (`renderFloorPulse`,
+`packages/ui/src/floor-ring.ts`): a `--wt-color-surface` gap half a `--wt-space-1` wide, then the
+pulse's colour out to one and a half `--wt-space-1` — `--wt-color-danger` for `forgotten` and
+`overdue`, `--wt-color-warning` for `fire` — dimming to its `-pulse-dim` colour half-way through
+each beat, fast (`--wt-duration-pulse-fast`) for `forgotten` and slow for the others. It is not
+drawn at all while motion is reduced, and a table listed after it is drawn over it. A `cue` is
+drawn under the name in one `part="caption"` column, as `part="cue"` at `--wt-font-size-sm`, its icon at `wt-icon`'s
+`sm` size and then its text, cut with an ellipsis, and only when the name is drawn and the shorter
+side is at least 36 px (`CUE_MIN_PX`, `showsCue`). The host isolates its stacking
+(`isolation: isolate`), so nothing it draws is drawn above what follows the map. An optional
+`allergy` flag draws a steady **!** at the top-left of the table or merge, using
+`--wt-color-danger` and `--wt-color-on-danger`.
 The button's accessible name appends `copy.allergy`; the mark itself is hidden from screen readers.
 The till sets it when the seated party has at least one recorded allergic guest and refreshes it
 with the floor read. The flag describes the party; it makes no claim about a dish's ingredients. A table's id in an event is its button's `data-table-id`, so a merge sends its first
 member's. A touch or pen tap on a table, and Enter or Space on a focused one, send `wt-table-tap` at
 once; a mouse click waits 300 ms and sends it unless a second click on the same table makes a
 double-click, which sends `wt-table-details`. A second tap on a different table counts as a tap on
-it. A press held 500 ms marks its table (`data-held`: each shape's edge in `--wt-color-primary`,
+it. A press held 500 ms marks its table (`data-held`: each shape's edge in `--wt-color-primary`, except that a `clearing` outline keeps its `--wt-color-warning` dashes with a 1 px `--wt-color-primary` line inside them,
 plus `--wt-selected-ring` outside a single table's edge, or once around a merge's whole box, which
 is then raised above a table touching it) and its release sends `wt-table-details`; a second finger or a cancelled pointer clears the mark and sends
 nothing. A held table that is dragged is drawn moved by whole squares, the step held so every member's
@@ -992,7 +1043,7 @@ moved only to close a gap at one edge; within the pan limit, and counting as a p
 keeps the view) and focuses it with `focus({ preventScroll: true })`, because the map
 cannot scroll and a focus left to scroll moves the page around it instead (the "arrowing to a
 table below the edge…" case in `wt-floor-map.keys.test.ts`). A focused table is drawn above the
-tables beside it, so its ring is not covered, and a dot above that. The host has no
+tables beside it, so its ring is not covered. The host has no
 `delegatesFocus`, unlike "Adding a primitive" item 4, and clips its overflow (`overflow: clip`)
 rather than hiding it. Probed in headless Chromium 153: a click on empty space in a `delegatesFocus`
 host focused its first button, and with `overflow: hidden` the browser scrolled the host when an

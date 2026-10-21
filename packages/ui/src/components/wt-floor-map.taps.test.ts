@@ -16,7 +16,9 @@ const t = (
   label,
   placement: { x: 0, y: 0, width: 8, height: 4, shape: "rect", rotation: 0, ...placement },
   fill: "free",
-  dot: null,
+  outline: null,
+  pulse: null,
+  cue: null,
   joinId: null,
   description: "Free",
   ...over,
@@ -234,6 +236,20 @@ it("outlines a held table in the primary colour", async () => {
   const shape = getComputedStyle(shapeOf(el, "t1"));
   expect(shape.borderTopColor).toBe("rgb(1, 2, 3)");
   expect(shape.boxShadow).toBe("rgb(1, 2, 3) 0px 0px 0px 1px inset");
+});
+
+it("keeps a held table's clearing dashes in the warning colour", async () => {
+  const el = await map([t("t1", "T1", { x: 10, y: 5 }, { fill: "plain", outline: "clearing" })]);
+  applyTokens(el);
+  el.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+  el.style.setProperty("--wt-color-warning", "rgb(7, 6, 5)");
+  down(el, 300, 150);
+  vi.advanceTimersByTime(500);
+  expect(button(el, "t1").hasAttribute("data-held")).toBe(true);
+  const shape = getComputedStyle(shapeOf(el, "t1"));
+  expect(shape.borderTopStyle).toBe("dashed");
+  expect(shape.borderTopColor).toBe("rgb(7, 6, 5)");
+  expect(shape.outlineColor).toBe("rgb(1, 2, 3)");
 });
 
 it("rings a held table outside its edge, so a table filled in the primary colour shows it too", async () => {

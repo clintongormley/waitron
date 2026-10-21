@@ -23,11 +23,20 @@ import {
   MAP_SEPARATOR,
   mergeLabel,
   renderFloorChips,
+  renderFloorPulse,
   renderFloorRing,
   resolveActiveTabKey,
   toFloorTable,
 } from "@waitron/ui";
-import type { FloorMapDrop, FloorMapTable, FloorRing, FloorTable, ZoneTab } from "@waitron/ui";
+import type {
+  FloorCueIcon,
+  FloorMapDrop,
+  FloorMapTable,
+  FloorPulse,
+  FloorRing,
+  FloorTable,
+  ZoneTab,
+} from "@waitron/ui";
 import {
   conjunctionList,
   decimal,
@@ -101,6 +110,15 @@ import type {
 } from "../api/client.js";
 import { TABLE_REQUEST_LIMIT_MS, limited } from "../state/draft-sync.js";
 import { delayUntil, nextCountdownChange, reminderDueAt } from "../state/release-reminder.js";
+import {
+  kindCue,
+  kindWords,
+  MAP_PRECEDENCE,
+  mapKinds,
+  reminderClock,
+  topTabKind,
+  type MapKind,
+} from "../state/floor-look.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
 import { chipState, heldChip, signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import {
@@ -142,6 +160,12 @@ function shownPartyName(table: TableState): string | undefined {
   const name = table.party?.displayName;
   return name === undefined || name === shownUnder(table) ? undefined : name;
 }
+
+const PULSE_OF: Partial<Record<MapKind, FloorPulse>> = {
+  forgotten: "forgotten",
+  overdue: "overdue",
+  fire: "fire",
+};
 
 const RING_OF: Partial<Record<TableStateKind, FloorRing>> = {
   forgotten: "forgotten",
@@ -253,8 +277,33 @@ function placedAt(table: TableState, pending: Map<string, TodayPlacement>): Tabl
     : { ...table, today: { ...table.today, placement } };
 }
 
+type TabsEdge = "start" | "end";
+
+/** The strip's padding box across, to the fraction of a pixel as the browser places tabs and as
+ * its intersection observer measures; `clientWidth` is rounded to a whole pixel. */
+function stripSpan(strip: HTMLElement): { left: number; right: number } {
+  const box = strip.getBoundingClientRect();
+  const style = getComputedStyle(strip);
+  const borderLeft = parseFloat(style.borderLeftWidth);
+  const borderRight = parseFloat(style.borderRightWidth);
+  const scrollbar = Math.max(0, strip.offsetWidth - strip.clientWidth - borderLeft - borderRight);
+  return { left: box.left + borderLeft, right: box.right - borderRight - scrollbar };
+}
+
+const tabKey = (zoneTab: Element): string =>
+  zoneTab.querySelector<HTMLElement>("wt-button.tab")!.dataset.zone!;
+
+/** What a hidden zone's tab shows: its tables' most urgent state. */
+interface ZoneTabMark {
+  kind: MapKind;
+  icon: FloorCueIcon | null;
+  words: string;
+}
+
 interface ZoneOnScreen {
   tabs: ZoneTab[];
+  /** Keyed by zone; the zone on screen and a zone with nothing urgent have none. */
+  marks: Map<string, ZoneTabMark>;
   refusedZone: FloorZone | undefined;
   activeKey: string | undefined;
   planned: boolean;
@@ -351,10 +400,107 @@ export class TillFloorScreen extends LitElement {
         overflow-x: auto;
         flex-wrap: nowrap;
         gap: var(--wt-space-2);
+        padding: calc(var(--wt-space-1) * 1.5);
+        scroll-padding-inline: calc(var(--wt-space-1) * 1.5);
+      }
+      /* While the tabs overflow, the first and last can scroll clear of an edge laid over each end. */
+      .tabs[data-overflows] {
+        padding-inline: calc(var(--wt-tap-min) + var(--wt-space-1) * 1.5);
+        scroll-padding-inline: calc(var(--wt-tap-min) + var(--wt-space-1) * 1.5);
       }
       .tabs > * {
         flex: none;
         white-space: nowrap;
+      }
+
+      .zone-tab {
+        position: relative;
+        display: inline-flex;
+        border-radius: var(--wt-radius-md);
+      }
+
+      /* Each family sets its tint and bar once; a zone's tab reads them. */
+      [data-zone-state="forgotten"],
+      [data-zone-state="overdue"] {
+        --zone-tint: var(--wt-color-tab-danger-tint);
+        --zone-bar: var(--wt-color-danger);
+      }
+
+      [data-zone-state="unavailable"],
+      [data-zone-state="fire"],
+      [data-zone-state="waiting"],
+      [data-zone-state="clearing"],
+      [data-zone-state="moving"] {
+        --zone-tint: var(--wt-color-tab-warning-tint);
+        --zone-bar: var(--wt-color-warning);
+      }
+
+      [data-zone-state="bill"] {
+        --zone-tint: var(--wt-color-tab-bill-tint);
+        --zone-bar: var(--wt-color-table-bill);
+      }
+
+      [data-zone-state="ready"] {
+        --zone-tint: var(--wt-color-tab-ready-tint);
+        --zone-bar: var(--wt-color-success);
+      }
+
+      [data-zone-state="step"],
+      [data-zone-state="delivery"],
+      [data-zone-state="not-sent"] {
+        --zone-tint: var(--wt-color-tab-seated-tint);
+        --zone-bar: var(--wt-color-table-seated);
+      }
+
+      .zone-tab[data-zone-state] wt-button::part(button) {
+        background: var(--zone-tint);
+        box-shadow: inset 0 calc(var(--wt-space-1) * -1) 0 var(--zone-bar);
+      }
+
+      [data-tabs-edge] {
+        position: relative;
+        z-index: 1;
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        gap: var(--wt-space-1);
+        inline-size: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        padding: 0;
+        border: none;
+        border-radius: var(--wt-radius-md);
+        background: var(--zone-tint);
+        box-shadow: inset 0 calc(var(--wt-space-1) * -1) 0 var(--zone-bar);
+        color: var(--wt-color-text);
+        font: inherit;
+        cursor: pointer;
+      }
+
+      /* Laid over the strip's end: pulled back by its own width and the toolbar's gap, so the strip
+         is as wide with an edge as without one. */
+      [data-tabs-edge="start"] {
+        margin-inline-end: calc((var(--wt-tap-min) + var(--wt-space-2)) * -1);
+      }
+
+      [data-tabs-edge="end"] {
+        margin-inline-start: calc((var(--wt-tap-min) + var(--wt-space-2)) * -1);
+      }
+
+      [data-tabs-edge]:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+
+      .zone-tab wt-icon,
+      [data-tabs-edge] wt-icon {
+        color: inherit;
+      }
+
+      .zone-tab.filled-forgotten wt-button::part(button),
+      [data-tabs-edge].filled-forgotten {
+        background: var(--wt-color-danger);
+        color: var(--wt-color-on-danger);
       }
 
       .map {
@@ -520,7 +666,8 @@ export class TillFloorScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      .calm-line wt-icon {
+      .calm-line wt-icon,
+      .badge wt-icon {
         flex: none;
         color: inherit;
       }
@@ -536,7 +683,7 @@ export class TillFloorScreen extends LitElement {
 
       /* "N listos" -- kitchen-done, waiting to be carried out (KDS-1 §3d). Distinguished from to-serve by
          the success-coloured border rather than a coloured fill, so the label stays theme text on a
-         neutral chip (the a11y-safe pattern wt-table-token's status chip uses); there is no on-success token. */
+         neutral chip (the a11y-safe pattern wt-table-token's status chip uses). */
       .badge.ready {
         background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);
@@ -544,11 +691,6 @@ export class TillFloorScreen extends LitElement {
       }
 
       /* Mirrors @waitron/ui's wt-table-token .badge.fire-due. */
-      .badge.fire-due wt-icon {
-        flex: none;
-        color: inherit;
-      }
-
       .badge.fire-due {
         background: var(--wt-color-warning);
         color: var(--wt-color-on-warning);
@@ -696,6 +838,18 @@ export class TillFloorScreen extends LitElement {
   /** The clock the last render judged reminders by. */
   #drawnAt = 0;
   #reminderTimer?: ReturnType<typeof setTimeout>;
+  /** Zone keys of the tabs the strip does not show whole, by the end they are beyond. */
+  #hiddenTabs = new Map<string, TabsEdge>();
+  /** Whether the tabs, without room for the edges, are wider than the strip. */
+  #tabsOverflow = false;
+  /** The sides an edge was last drawn on: an edge drawn or removed covers or uncovers a tab without
+   * moving it, so no observer reports it. */
+  #drawnEdges = "";
+  #tabsObserver?: IntersectionObserver;
+  #stripResize?: ResizeObserver;
+  /** The strip being watched: `null` while there is none, `undefined` while not watching. */
+  #tabsStrip?: HTMLElement | null;
+  #tabsKeys?: string;
   #rereadTimer?: ReturnType<typeof setInterval>;
 
   readonly #phone = new MediaQueryController(this, PHONE_WIDTH);
@@ -707,6 +861,7 @@ export class TillFloorScreen extends LitElement {
     if (this.hasUpdated) {
       this.#watchReminders();
       this.#watchFloor();
+      this.#watchTabs();
     }
   }
 
@@ -717,6 +872,7 @@ export class TillFloorScreen extends LitElement {
     clearTimeout(this.#reminderTimer);
     clearInterval(this.#rereadTimer);
     this.#rereadTimer = undefined;
+    this.#stopWatchingTabs();
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
@@ -771,6 +927,14 @@ export class TillFloorScreen extends LitElement {
   override updated(): void {
     this.#watchReminders();
     this.#watchFloor();
+    this.#watchTabs();
+    const drawn = [...this.shadowRoot!.querySelectorAll<HTMLElement>("[data-tabs-edge]")]
+      .map((edge) => edge.dataset.tabsEdge)
+      .join();
+    if (drawn !== this.#drawnEdges) {
+      this.#drawnEdges = drawn;
+      if (this.#tabsStrip) this.#placeTabs();
+    }
   }
 
   #watchFloor(): void {
@@ -2015,6 +2179,7 @@ export class TillFloorScreen extends LitElement {
       this.viewOverride,
       this.#pending,
       currentLocale(),
+      reminderClock(this.tables, this.#drawnAt),
     ];
     if (this.#zoneInputs?.every((input, i) => input === inputs[i])) return this.#zone;
     this.#zoneInputs = inputs;
@@ -2028,17 +2193,19 @@ export class TillFloorScreen extends LitElement {
       (zone) => zone.id === this.refusedZoneId && (zone.closed || !seatsGuests(zone)),
     );
     const activeKey = resolveActiveTabKey(this.activeZone, tabs);
+    const marks = this.#tabMarks(tabs, activeKey);
     const visible = this.tables.filter((table): table is ZonedTable => table.zoneId === activeKey);
     const planned = visible.some((table) => table.today !== null);
     const listed = listedTables(visible);
     const pending = this.#pending;
     const drawn = pending === null ? visible : visible.map((table) => placedAt(table, pending));
-    const onMap = mapTables(drawn);
+    const onMap = mapTables(drawn, this.#drawnAt);
     const mapIds = new Set(onMap.map((table) => table.id));
     const unplaced = listed.filter((table) => !mapIds.has(table.id));
     const view = this.viewOverride ?? (onMap.length > 0 ? "map" : "list");
     return {
       tabs,
+      marks,
       refusedZone,
       activeKey,
       planned,
@@ -2048,6 +2215,27 @@ export class TillFloorScreen extends LitElement {
       onMap,
       unplaced,
     };
+  }
+
+  #tabMarks(tabs: readonly ZoneTab[], activeKey: string | undefined): Map<string, ZoneTabMark> {
+    const now = this.#drawnAt;
+    const hidden = new Set(tabs.map((tab) => tab.key).filter((key) => key !== activeKey));
+    const byZone = new Map<string, { table: TableState; kinds: MapKind[] }[]>();
+    for (const table of this.tables) {
+      if (table.zoneId === null || !hidden.has(table.zoneId)) continue;
+      const rows = byZone.get(table.zoneId) ?? [];
+      rows.push({ table, kinds: mapKinds(table, now) });
+      byZone.set(table.zoneId, rows);
+    }
+    const marks = new Map<string, ZoneTabMark>();
+    for (const [zoneId, rows] of byZone) {
+      const kind = topTabKind(new Set(rows.flatMap((row) => row.kinds)));
+      if (kind === null) continue;
+      const members = rows.filter((row) => row.kinds.includes(kind)).map((row) => row.table);
+      const icon = kindCue(kind, members, now)?.icon ?? null;
+      marks.set(zoneId, { kind, icon, words: kindWords(kind, members, now) });
+    }
+    return marks;
   }
 
   /** Rebuilt only when the language changes, so a redraw hands the map the same copy. */
@@ -2062,7 +2250,8 @@ export class TillFloorScreen extends LitElement {
   }
 
   override render() {
-    const { tabs, refusedZone, activeKey, planned, view, listed, onMap, unplaced } = this.#zone;
+    const { tabs, marks, refusedZone, activeKey, planned, view, listed, onMap, unplaced } =
+      this.#zone;
     return html`
       <section class="screen" aria-label=${t("floor.title")}>
         ${
@@ -2082,9 +2271,15 @@ export class TillFloorScreen extends LitElement {
         <div class="zone-toolbar">
           ${
             tabs.length > 1
-              ? html`<nav class="tabs" aria-label=${t("floor.zones")}>
-                  ${tabs.map((tab) => this.#tab(tab, activeKey))}
-                </nav>`
+              ? html`${this.#tabsEdge("start", tabs, marks)}
+                  <nav
+                    class="tabs"
+                    aria-label=${t("floor.zones")}
+                    ?data-overflows=${this.#tabsOverflow}
+                  >
+                    ${tabs.map((tab) => this.#tab(tab, activeKey, marks.get(tab.key)))}
+                  </nav>
+                  ${this.#tabsEdge("end", tabs, marks)}`
               : nothing
           }
           <div class="actions help-anchor">
@@ -2206,16 +2401,177 @@ export class TillFloorScreen extends LitElement {
     </button>`;
   }
 
-  #tab(tab: ZoneTab, activeKey: string | undefined): TemplateResult {
-    const active = tab.key === activeKey;
-    return html`<wt-button
-      class="tab"
-      data-zone=${tab.key}
-      variant=${active ? "primary" : "secondary"}
-      @click=${() => this.#selectZone(tab.key)}
+  /** The most urgent tab with a state beyond `side` of the strip, or nothing. */
+  #tabsEdge(
+    side: TabsEdge,
+    tabs: readonly ZoneTab[],
+    marks: Map<string, ZoneTabMark>,
+  ): TemplateResult | typeof nothing {
+    const rank = (mark: ZoneTabMark) => MAP_PRECEDENCE.indexOf(mark.kind);
+    const [top] = tabs
+      .flatMap((tab) => {
+        const mark = marks.get(tab.key);
+        return mark !== undefined && this.#hiddenTabs.get(tab.key) === side ? [{ tab, mark }] : [];
+      })
+      .sort((a, b) => rank(a.mark) - rank(b.mark));
+    if (top === undefined) return nothing;
+    const { tab, mark } = top;
+    const { pulse, moving, filled } = this.#tabLook(mark);
+    return html`<button
+      class="tabs-edge${filled}"
+      data-tabs-edge=${side}
+      data-zone-state=${mark.kind}
+      aria-label=${t("floor.show_zone").replace("{zone}", () => tab.name)}
+      @click=${() => this.#showTab(tab.key, side)}
     >
-      ${tab.name}
-    </wt-button>`;
+      ${renderFloorPulse(pulse, moving)}${side === "start" ? html`<span aria-hidden="true">‹</span>` : nothing}${this.#markIcon(mark)}${side === "end" ? html`<span aria-hidden="true">›</span>` : nothing}
+    </button>`;
+  }
+
+  /** "nearest" leaves a tab wider than the room between the edges where it is once it sticks out
+   * of both ends, so such a tab is brought to the strip's start instead. */
+  #showTab(key: string, side: TabsEdge): void {
+    const strip = this.#tabsStrip!;
+    const tabs = [...strip.querySelectorAll<HTMLElement>(".zone-tab")];
+    const index = tabs.findIndex((zoneTab) => tabKey(zoneTab) === key);
+    const tab = tabs[index]!;
+    const style = getComputedStyle(strip);
+    const { left, right } = stripSpan(strip);
+    const clear = parseFloat(style.scrollPaddingInlineStart);
+    const box = tab.getBoundingClientRect();
+    if (box.width > right - left - clear - parseFloat(style.scrollPaddingInlineEnd)) {
+      const marked = (zoneTab: HTMLElement) => this.#zone.marks.has(tabKey(zoneTab));
+      const edgeBefore = tabs.slice(0, index).some(marked);
+      const edgeAfter = tabs.slice(index + 1).some(marked);
+      const ring = parseFloat(style.paddingBlockStart);
+      const spare = right - left - box.width;
+      const aim = edgeBefore || (side === "start" && spare >= 1 && !edgeAfter) ? clear : ring;
+      // Centred when the spare room is under a ring's at each end: the scroll lands on whole pixels,
+      // so a tab within a pixel of the strip's width lands as one wider than it.
+      const inset = spare < 1 ? aim : Math.min(aim, Math.max(spare / 2, spare - ring));
+      strip.scrollTo({ left: strip.scrollLeft + box.left - (left + inset), behavior: "instant" });
+    } else {
+      tab.scrollIntoView({ inline: "nearest", block: "nearest", behavior: "instant" });
+    }
+    // A tab wider than the strip can go from cut at both ends to cut at one with no callback.
+    this.#placeTabs();
+  }
+
+  /** Re-reads which tabs the strip cuts off whenever the strip or its tabs are redrawn anew. */
+  #watchTabs(): void {
+    const strip = this.shadowRoot!.querySelector<HTMLElement>("nav.tabs");
+    const keys = this.#zone.tabs.map((tab) => tab.key).join("\n");
+    if (strip === this.#tabsStrip && keys === this.#tabsKeys) return;
+    this.#stopWatchingTabs();
+    this.#tabsStrip = strip;
+    this.#tabsKeys = keys;
+    if (strip === null) return;
+    this.#tabsObserver = new IntersectionObserver(() => this.#placeTabs(), {
+      root: strip,
+      threshold: 1,
+    });
+    for (const tab of strip.querySelectorAll(".zone-tab")) this.#tabsObserver.observe(tab);
+    // A strip that widens until its tabs would fit can leave every tab's visibility as it was. Read
+    // a frame later: the padding that reading can change resizes the strip again.
+    this.#stripResize = new ResizeObserver(() =>
+      requestAnimationFrame(() => {
+        if (this.#tabsStrip === strip) this.#placeTabs();
+      }),
+    );
+    this.#stripResize.observe(strip, { box: "border-box" });
+    // The observer sees a tab the strip cuts, not one coming out from under an edge.
+    strip.addEventListener("scroll", this.#onStripScroll, { passive: true });
+  }
+
+  readonly #onStripScroll = () => this.#placeTabs();
+
+  #stopWatchingTabs(): void {
+    this.#tabsObserver?.disconnect();
+    this.#tabsObserver = undefined;
+    this.#stripResize?.disconnect();
+    this.#stripResize = undefined;
+    this.#tabsStrip?.removeEventListener("scroll", this.#onStripScroll);
+    this.#tabsStrip = undefined;
+    this.#hiddenTabs = new Map();
+  }
+
+  /** Reads from layout which tabs the strip cuts off or a shown edge covers, and beyond which end.
+   * The observer only says when to read: a tab one scroll jump carries from beyond one end to beyond
+   * the other gets no callback of its own. */
+  #placeTabs(): void {
+    const strip = this.#tabsStrip!;
+    const span = stripSpan(strip);
+    const tabs = [...strip.querySelectorAll(".zone-tab")];
+    const first = tabs[0]!.getBoundingClientRect();
+    const last = tabs[tabs.length - 1]!.getBoundingClientRect();
+    // The block padding is the ring's room: the strip's inline padding too while the tabs fit.
+    const ring = parseFloat(getComputedStyle(strip).paddingBlockStart);
+    const overflows = last.right - first.left + 2 * ring > span.right - span.left;
+    // Once the tabs fit, the strip hides none of them, whatever edge is still drawn.
+    const edge = (side: TabsEdge) =>
+      overflows
+        ? this.shadowRoot!.querySelector(`[data-tabs-edge="${side}"]`)?.getBoundingClientRect()
+        : undefined;
+    const [start, end] = [edge("start"), edge("end")];
+    const left = Math.max(span.left, start?.right ?? span.left);
+    const right = Math.min(span.right, end?.left ?? span.right);
+    const edgeRoom = (start ?? end)?.width ?? 0;
+    const marked = tabs.map((tab) => this.#zone.marks.has(tabKey(tab)));
+    const [firstMarked, lastMarked] = [marked.indexOf(true), marked.lastIndexOf(true)];
+    const sides = new Map<string, TabsEdge>();
+    // A tab hidden at both ends goes to an end the strip itself cuts it at, if there is one.
+    for (const [i, tab] of tabs.entries()) {
+      const box = tab.getBoundingClientRect();
+      const under = box.left < left ? "start" : box.right > right ? "end" : undefined;
+      if (box.left < span.left) sides.set(tabKey(tab), "start");
+      else if (box.right > span.right) sides.set(tabKey(tab), "end");
+      else if (under !== undefined) {
+        // The edge over it, and one at the other end only if a tab beyond that end has a state:
+        // a whole tab too wide to clear those is shown.
+        const edges =
+          Number(under === "start" || firstMarked < i) + Number(under === "end" || lastMarked > i);
+        if (box.width <= span.right - span.left - 2 * ring - edges * edgeRoom)
+          sides.set(tabKey(tab), under);
+      }
+    }
+    const same =
+      sides.size === this.#hiddenTabs.size &&
+      [...sides].every(([key, side]) => this.#hiddenTabs.get(key) === side);
+    if (same && overflows === this.#tabsOverflow) return;
+    this.#hiddenTabs = sides;
+    this.#tabsOverflow = overflows;
+    this.requestUpdate();
+  }
+
+  #tabLook(mark: ZoneTabMark | undefined): {
+    pulse: FloorPulse | null;
+    moving: boolean;
+    filled: string;
+  } {
+    const moving = !this.#prefersReducedMotion();
+    const pulse = (mark === undefined ? undefined : PULSE_OF[mark.kind]) ?? null;
+    const filled = mark?.kind === "forgotten" && !moving ? " filled-forgotten" : "";
+    return { pulse, moving, filled };
+  }
+
+  #markIcon(mark: ZoneTabMark | undefined): TemplateResult | typeof nothing {
+    return mark?.icon ? html`<wt-icon name=${mark.icon} size="sm"></wt-icon>` : nothing;
+  }
+
+  #tab(tab: ZoneTab, activeKey: string | undefined, mark: ZoneTabMark | undefined): TemplateResult {
+    const active = tab.key === activeKey;
+    const { pulse, moving, filled } = this.#tabLook(mark);
+    return html`<span class="zone-tab${filled}" data-zone-state=${mark?.kind ?? nothing}
+      >${renderFloorPulse(pulse, moving)}<wt-button
+        class="tab"
+        data-zone=${tab.key}
+        variant=${active ? "primary" : "secondary"}
+        aria-label=${mark === undefined ? nothing : `${tab.name}, ${mark.words}`}
+        @click=${() => this.#selectZone(tab.key)}
+      >
+        ${tab.name} ${this.#markIcon(mark)}
+      </wt-button></span
+    >`;
   }
 
   #prefersReducedMotion(): boolean {
@@ -2404,7 +2760,9 @@ export class TillFloorScreen extends LitElement {
     if (lateBand(table) === "forgotten") {
       marks.push({
         kind: "forgotten",
-        mark: html`<span class="badge forgotten" data-forgotten>${t("floor.forgotten")}</span>`,
+        mark: html`<span class="badge forgotten" data-forgotten
+          ><wt-icon name="floor-timer" size="sm"></wt-icon>${t("floor.forgotten")}</span
+        >`,
       });
     }
     if (this.#fireDue(table)) {
@@ -2420,7 +2778,9 @@ export class TillFloorScreen extends LitElement {
     for (const draft of table.party?.unsentDrafts ?? []) {
       marks.push({
         kind: "not-sent",
-        mark: html`<span class="badge unsent" data-unsent>${unsentText(draft)}</span>`,
+        mark: html`<span class="badge unsent" data-unsent
+          ><wt-icon name="floor-unsent" size="sm"></wt-icon>${unsentText(draft)}</span
+        >`,
       });
     }
     if (table.nextReservation !== null) {

@@ -36,11 +36,12 @@ export function signalChips(
             () => stationName,
           ),
           tone: "success",
+          icon: "floor-ready",
         }));
       case "long_wait": {
         if (signal.band === "forgotten" && forgottenShown) return [];
         const { words, tone } = WAIT_WORDS[signal.band];
-        return [{ key: "long-wait", text: t(words), tone }];
+        return [{ key: "long-wait", text: t(words), tone, icon: "floor-timer" }];
       }
       case "held_unavailable":
         return [
@@ -48,11 +49,17 @@ export function signalChips(
             key: "held-unavailable",
             text: t("signal.unavailable").replace("{items}", () => signal.lineNames.join(", ")),
             tone: "danger",
+            icon: "floor-out",
           },
         ];
       case "bill_requested":
         return [
-          { key: "bill-requested", text: t("signal.bill_requested"), tone: "primary-filled" },
+          {
+            key: "bill-requested",
+            text: t("signal.bill_requested"),
+            tone: "primary-filled",
+            icon: "floor-bill",
+          },
         ];
       case "unsent_draft":
       case "held":

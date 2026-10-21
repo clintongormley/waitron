@@ -114,8 +114,6 @@
   --wt-color-on-table-seated: #ffffff;
   --wt-color-table-bill: #7e3fb8;
   --wt-color-on-table-bill: #ffffff;
-  --wt-color-table-clearing: #f5a623;
-  --wt-color-on-table-clearing: #241500;
   --wt-color-table-reserved: #fde7c8;
   --wt-color-on-table-reserved: #16181d;
   /* The list card's calm left edge, and the colours a pulsing floor ring and the till bar's
@@ -123,6 +121,16 @@
   --wt-color-table-calm-edge: #8fb7f5;
   --wt-color-danger-pulse-dim: #e8bebc;
   --wt-color-warning-pulse-dim: #dccbb3;
+  /* The map's calm fill and its text, the text on a ready table, and a zone tab's tint for each
+     state's colour. */
+  --wt-color-table-calm: #e4ecfb;
+  --wt-color-on-table-calm: #16181d;
+  --wt-color-on-success: #ffffff;
+  --wt-color-tab-danger-tint: #f1d8d7;
+  --wt-color-tab-warning-tint: #eae0d1;
+  --wt-color-tab-bill-tint: #e8dcf2;
+  --wt-color-tab-ready-tint: #d6e8e1;
+  --wt-color-tab-seated-tint: #d7e5fb;
   --wt-color-highlight: #fff3b0;
   --wt-color-on-highlight: #241500;
 }
@@ -236,13 +244,21 @@
     --wt-color-on-table-seated: #06101f;
     --wt-color-table-bill: #c39bf0;
     --wt-color-on-table-bill: #1d0b33;
-    --wt-color-table-clearing: #f5b34a;
-    --wt-color-on-table-clearing: #241500;
     --wt-color-table-reserved: #4a3a1c;
     --wt-color-on-table-reserved: #eceef2;
     --wt-color-table-calm-edge: #4d6aa6;
     --wt-color-danger-pulse-dim: #bd9ba0;
     --wt-color-warning-pulse-dim: #b9aa94;
+    /* The map's calm fill and its text, the text on a ready table, and a zone tab's tint for each
+       state's colour. */
+    --wt-color-table-calm: #22304a;
+    --wt-color-on-table-calm: #eceef2;
+    --wt-color-on-success: #06190f;
+    --wt-color-tab-danger-tint: #422e31;
+    --wt-color-tab-warning-tint: #40372a;
+    --wt-color-tab-bill-tint: #383347;
+    --wt-color-tab-ready-tint: #223a35;
+    --wt-color-tab-seated-tint: #22304a;
     --wt-color-highlight: #614a0f;
     --wt-color-on-highlight: #fff3b0;
   }
@@ -356,13 +372,21 @@
   --wt-color-on-table-seated: #ffffff;
   --wt-color-table-bill: #7e3fb8;
   --wt-color-on-table-bill: #ffffff;
-  --wt-color-table-clearing: #f5a623;
-  --wt-color-on-table-clearing: #241500;
   --wt-color-table-reserved: #fde7c8;
   --wt-color-on-table-reserved: #16181d;
   --wt-color-table-calm-edge: #8fb7f5;
   --wt-color-danger-pulse-dim: #e8bebc;
   --wt-color-warning-pulse-dim: #dccbb3;
+  /* The map's calm fill and its text, the text on a ready table, and a zone tab's tint for each
+     state's colour. */
+  --wt-color-table-calm: #e4ecfb;
+  --wt-color-on-table-calm: #16181d;
+  --wt-color-on-success: #ffffff;
+  --wt-color-tab-danger-tint: #f1d8d7;
+  --wt-color-tab-warning-tint: #eae0d1;
+  --wt-color-tab-bill-tint: #e8dcf2;
+  --wt-color-tab-ready-tint: #d6e8e1;
+  --wt-color-tab-seated-tint: #d7e5fb;
   --wt-color-highlight: #fff3b0;
   --wt-color-on-highlight: #241500;
 }
@@ -475,13 +499,21 @@
   --wt-color-on-table-seated: #06101f;
   --wt-color-table-bill: #c39bf0;
   --wt-color-on-table-bill: #1d0b33;
-  --wt-color-table-clearing: #f5b34a;
-  --wt-color-on-table-clearing: #241500;
   --wt-color-table-reserved: #4a3a1c;
   --wt-color-on-table-reserved: #eceef2;
   --wt-color-table-calm-edge: #4d6aa6;
   --wt-color-danger-pulse-dim: #bd9ba0;
   --wt-color-warning-pulse-dim: #b9aa94;
+  /* The map's calm fill and its text, the text on a ready table, and a zone tab's tint for each
+     state's colour. */
+  --wt-color-table-calm: #22304a;
+  --wt-color-on-table-calm: #eceef2;
+  --wt-color-on-success: #06190f;
+  --wt-color-tab-danger-tint: #422e31;
+  --wt-color-tab-warning-tint: #40372a;
+  --wt-color-tab-bill-tint: #383347;
+  --wt-color-tab-ready-tint: #223a35;
+  --wt-color-tab-seated-tint: #22304a;
   --wt-color-highlight: #614a0f;
   --wt-color-on-highlight: #fff3b0;
 }

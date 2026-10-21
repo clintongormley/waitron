@@ -10,7 +10,9 @@ const t = (id: string, label: string, placement: Partial<PlanPlacement> = {}): F
   label,
   placement: { x: 0, y: 0, width: 8, height: 4, shape: "rect", rotation: 0, ...placement },
   fill: "free",
-  dot: null,
+  outline: null,
+  pulse: null,
+  cue: null,
   joinId: null,
   description: "Free",
 });
@@ -202,6 +204,23 @@ it("a fixed table stays put while its copy follows the finger", async () => {
   expect(getComputedStyle(shape).pointerEvents).toBe("none");
   expect(await boxIn(el, shape)).toEqual({ left: 225, top: 75, width: 300, height: 150 });
   expect(part(el, "drag-link")).toBeNull();
+});
+
+it("a fixed table's copy draws its fill alone, without its outline or pulse", async () => {
+  const el = await map([{ ...fixedT1, fill: "bill", outline: "overdue", pulse: "forgotten" }]);
+  el.reducedMotion = false;
+  await el.updateComplete;
+  hold(el, 300, 150);
+  move(el, 375, 190);
+  await el.updateComplete;
+  const own = button(el, "t1").querySelector<HTMLElement>('[part="shape"]')!;
+  expect(own.querySelector("[data-ring]")).not.toBeNull();
+  expect(own.querySelector("[data-pulse]")).not.toBeNull();
+  expect(own.dataset["outline"]).toBe("overdue");
+  const shape = part(el, "ghost")!.querySelector<HTMLElement>('[part="shape"]')!;
+  expect(shape.dataset["fill"]).toBe("bill");
+  expect(shape.querySelector("[data-ring], [data-pulse]")).toBeNull();
+  expect(shape.hasAttribute("data-outline")).toBe(false);
 });
 
 it("a movable table's drag draws no copy and no line", async () => {

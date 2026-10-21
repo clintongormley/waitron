@@ -20,8 +20,11 @@ export type ContrastGroupId =
   | "calendar-text"
   | "calendar-days"
   | "table-text"
-  | "table-dots"
+  | "table-marks"
   | "calm-edge"
+  | "calm-fill"
+  | "ready-text"
+  | "tab-tints"
   | "station-text"
   | "station-dots"
   | "station-focus"
@@ -83,6 +86,15 @@ const PALETTE = [
 ].map((colour) => `palette-${colour}`);
 
 type Pair = readonly [a: string, b: string];
+
+/** Each zone tab tint, with the bar drawn on it. */
+const TAB_TINTS: readonly Pair[] = [
+  ["tab-danger-tint", "danger"],
+  ["tab-warning-tint", "warning"],
+  ["tab-bill-tint", "table-bill"],
+  ["tab-ready-tint", "success"],
+  ["tab-seated-tint", "table-seated"],
+];
 
 const each = (as: readonly string[], bs: readonly string[]): Pair[] =>
   as.flatMap((a) => bs.map((b) => [a, b] as const));
@@ -197,14 +209,34 @@ export const CONTRAST_GROUPS: readonly ContrastGroup[] = [
   group("table-text", MODES, [
     "at-least",
     4.5,
-    onOwn(["free", "seated", "bill", "clearing", "reserved"].map((fill) => `table-${fill}`)),
+    onOwn(["free", "seated", "bill", "reserved", "calm"].map((fill) => `table-${fill}`)),
   ]),
-  group("table-dots", MODES, ["at-least", 3, each(["success", "danger"], ["surface"])]),
+  group("table-marks", MODES, ["at-least", 3, each(["danger", "warning"], ["surface"])]),
   group(
     "calm-edge",
     MODES,
     ["at-least", 2, [["table-calm-edge", "surface"]]],
     ["at-least", 1.4, [["table-calm-edge", "border"]]],
+  ),
+  group(
+    "calm-fill",
+    MODES,
+    ["at-least", 4.5, onOwn(["table-calm"])],
+    ["at-least", 3, [["field-line", "table-calm"]]],
+  ),
+  group("ready-text", MODES, ["at-least", 4.5, onOwn(["success"])]),
+  group(
+    "tab-tints",
+    MODES,
+    [
+      "at-least",
+      4.5,
+      each(
+        ["text"],
+        TAB_TINTS.map(([tint]) => tint),
+      ),
+    ],
+    ["at-least", 3, TAB_TINTS.map(([tint, bar]) => [bar, tint] as const)],
   ),
   group("station-text", MODES, [
     "at-least",

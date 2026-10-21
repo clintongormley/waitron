@@ -134,10 +134,10 @@ for (const locale of ["en-GB", "es-ES"]) {
           false,
         );
         const actions = floor.shadowRoot!.querySelector<HTMLElement>(".actions")!;
-        const pills = floor.shadowRoot!.querySelector<HTMLElement>(".tabs")!;
+        const pill = floor.shadowRoot!.querySelector<HTMLElement>(".tabs wt-button")!;
         expect(actions.getBoundingClientRect().right).toBeLessThanOrEqual(width);
         expect(
-          Math.abs(actions.getBoundingClientRect().top - pills.getBoundingClientRect().top),
+          Math.abs(actions.getBoundingClientRect().top - pill.getBoundingClientRect().top),
         ).toBeLessThan(1);
         await page.screenshot({
           path: `__screenshots__/a740-zones/floor-${locale}-${theme}-${width}.png`,

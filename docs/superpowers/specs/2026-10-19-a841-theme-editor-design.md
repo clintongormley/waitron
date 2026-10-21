@@ -328,6 +328,8 @@ cards, though a card's header paints secondary text on the raised cards
 (`packages/ui-core/src/components/wt-card.ts:22-28`). The shared list now holds text and secondary
 text at 4.5:1 or more on the page, the cards and the raised cards, and section 9's button rules
 gained the raised cards and the number stepper's fill.)
+(2026-10-21, A757 slice 5: the map's dots are gone, danger and warning stand 3:1 on the surface,
+and the map's calm fill and the zone tab tints have rules of their own in the shared list.)
 
 **Pages a person could call "Settings" today** (re-read for the Q1 answer, 2026-10-19, on main
 ade4b3a3c):
@@ -1083,6 +1085,14 @@ All my call; the plan pins the exact numbers.
   on the stepper's fill) and Bar Lucía's dark fix is `#437e5b` (white text on it 4.80:1); each
   warning below also names the raised cards and the stepper's fill. `derive-h4.mjs` in the same
   folder is the reference with these rules, and `output-h4-*.txt` there hold its outputs.)
+  (2026-10-21, A757 slice 5, the till floor map's redraw: the map's success and danger dots gave way
+  to an outline and a pulse ring, so danger and warning, not success and danger, stand 3:1 or more
+  on the cards; the field line stands 3:1 or more on the map's calm fill; and text stands 4.5:1 or
+  more on each of the five zone tab tints. With them it is 114 in light and 119 in dark. Tried one
+  at a time, only the field line's rule moved a worked-out colour or a fix; `h5-a757-5-brand-examples.mjs`
+  and `h5-a757-5-mockup-15.mjs` print the same colours as their h4 versions apart from one black
+  brand case's field line fix, `#585e6a` before and `#747a87` now, which this document does not give. `derive-h5-a757-5.mjs` in the same folder is the reference
+  with these rules; the slice 1 plan's 2026-10-21 note lists what moved.)
   The prototype's `warn` (added for Q2) works out a set as picked and lists the warnings with their
   fixes; `checks.txt` there holds its output for every picture.
   - Bar Lucía, `#1e5b3a`, tinted: light buttons are `#1e5b3a` with white text at 8.04:1, and no

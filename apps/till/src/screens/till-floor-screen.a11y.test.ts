@@ -277,8 +277,16 @@ for (const locale of ["en", "es"]) {
           expect(marker.right).toBeLessThanOrEqual(bounds.right);
           expect(marker.top).toBeGreaterThanOrEqual(bounds.top);
           expect(marker.bottom).toBeLessThanOrEqual(bounds.bottom);
-          const dot = map.shadowRoot!.querySelector('[part="dot"]')!.getBoundingClientRect();
-          expect(marker.right).toBeLessThanOrEqual(dot.left);
+          const caption = mark
+            .closest("button")!
+            .querySelector('[part="caption"], [part="name"]')!
+            .getBoundingClientRect();
+          const covers =
+            marker.left < caption.right &&
+            caption.left < marker.right &&
+            marker.top < caption.bottom &&
+            caption.top < marker.bottom;
+          expect(covers).toBe(false);
           expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
           await expectNoA11yViolations(host);
           await page.screenshot({
@@ -507,6 +515,43 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await expectNoA11yViolations(list.host);
   });
 
+  it("has no violations with every chip's icon, on the list", async () => {
+    const iconned = partyTables.map((table): TableState =>
+      table.party === null
+        ? table
+        : {
+            ...table,
+            timingBand: "forgotten",
+            party: {
+              ...table.party,
+              unsentDrafts: [{ billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 }],
+            },
+            signals: [
+              {
+                kind: "ready",
+                byStation: [{ stationId: "bar", stationName: "Bar", count: 3 }],
+              },
+              { kind: "long_wait", band: "overdue" },
+              { kind: "held_unavailable", groupId: "g2", lineNames: ["Steak"] },
+              { kind: "bill_requested", requestedAt: "2026-09-29T20:00:00.000Z" },
+            ],
+          },
+    );
+    const list = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: iconned },
+      theme,
+    );
+    for (const name of ["floor-out", "floor-bill", "floor-ready", "floor-unsent"]) {
+      expect(list.el.shadowRoot!.querySelector(`wt-icon[name="${name}"]`)).not.toBeNull();
+    }
+    expect(
+      list.el.shadowRoot!.querySelector('[data-chip="long-wait"] wt-icon[name="floor-timer"]'),
+    ).not.toBeNull();
+    expect(list.el.shadowRoot!.querySelector("[data-forgotten] wt-icon")).not.toBeNull();
+    await expectNoA11yViolations(list.host);
+  });
+
   it("has no violations rendering a planned zone's map", async () => {
     const { el, host } = await mountWidget<TillFloorScreen>(
       "till-floor-screen",
@@ -620,6 +665,110 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
       "till-seat-dialog",
     )!.updateComplete;
     await expectNoA11yViolations(host);
+  });
+
+  for (const reducedMotion of [false, true]) {
+    it(`has no violations with tabs in each family, ${reducedMotion ? "still" : "moving"}`, async () => {
+      const [owing] = partyTables as [TableState];
+      const families: [string, Partial<TableState>][] = [
+        ["Forgotten", { timingBand: "forgotten" }],
+        [
+          "Fire",
+          {
+            party: {
+              ...owing.party!,
+              reminder: { groupId: "g", dueAt: "2026-09-29T19:00:00.000Z" },
+            },
+          },
+        ],
+        [
+          "Bill",
+          { signals: [{ kind: "bill_requested", requestedAt: "2026-09-29T19:55:00.000Z" }] },
+        ],
+        ["Ready", { readyToServe: 2 }],
+        ["Step", { readyToServe: 0, enRoute: 0, signals: [{ kind: "take_order" }] }],
+      ];
+      const familyZones: FloorZone[] = [
+        zones[0]!,
+        ...families.map(([name], i): FloorZone => ({
+          ...zones[1]!,
+          id: `f${i}`,
+          name,
+          displayOrder: i + 1,
+        })),
+      ];
+      const familyTables: TableState[] = [
+        { ...owing, zoneId: "z1" },
+        ...families.map(([, over], i): TableState => ({
+          ...owing,
+          id: `tf${i}`,
+          label: `F${i}`,
+          zoneId: `f${i}`,
+          ...over,
+        })),
+      ];
+      const { el, host } = await mountWidget<TillFloorScreen>(
+        "till-floor-screen",
+        {
+          zones: familyZones,
+          tables: familyTables,
+          now: Date.parse("2026-09-29T20:00:00.000Z"),
+          reducedMotion,
+        },
+        theme,
+      );
+      expect(
+        [...el.shadowRoot!.querySelectorAll(".zone-tab[data-zone-state]")].map((tab) =>
+          tab.getAttribute("data-zone-state"),
+        ),
+      ).toEqual(["forgotten", "fire", "bill", "ready", "step"]);
+      expect(
+        [...el.shadowRoot!.querySelectorAll(".zone-tab .pulse")].map((pulse) =>
+          pulse.getAttribute("data-pulse"),
+        ),
+      ).toEqual(reducedMotion ? [] : ["forgotten", "fire"]);
+      expect(el.shadowRoot!.querySelectorAll(".zone-tab.filled-forgotten")).toHaveLength(
+        reducedMotion ? 1 : 0,
+      );
+      await expectNoA11yViolations(host);
+    });
+  }
+
+  it("has no violations with an edge mark at 390 px", async () => {
+    const [owing] = partyTables as [TableState];
+    const names = ["Bar", "Upstairs lounge", "Garden terrace", "Patio", "Private room"];
+    const manyZones: FloorZone[] = [
+      zones[0]!,
+      ...names.map((name, i): FloorZone => ({
+        ...zones[1]!,
+        id: `e${i}`,
+        name,
+        displayOrder: i + 1,
+      })),
+    ];
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    try {
+      const { el, host } = await mountWidget<TillFloorScreen>(
+        "till-floor-screen",
+        {
+          zones: manyZones,
+          tables: [
+            { ...owing, zoneId: "z1" },
+            { ...owing, id: "te3", label: "E3", zoneId: "e3", timingBand: "forgotten" },
+          ],
+          now: Date.parse("2026-09-29T20:00:00.000Z"),
+          reducedMotion: false,
+        },
+        theme,
+      );
+      await expect
+        .poll(() => el.shadowRoot!.querySelector('[data-tabs-edge="end"]'))
+        .not.toBeNull();
+      await expectNoA11yViolations(host);
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
   });
 });
 

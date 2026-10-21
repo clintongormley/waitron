@@ -393,7 +393,7 @@ describe.each(["light", "dark"] as const)("calendar day colours (%s)", (theme) =
 });
 
 // The till map's table fills.
-const TABLE_FILLS = ["free", "seated", "bill", "clearing", "reserved"].map(
+const TABLE_FILLS = ["free", "seated", "bill", "reserved", "calm"].map(
   (fill) => `--wt-color-table-${fill}`,
 );
 
@@ -402,13 +402,13 @@ describe.each(["light", "dark"] as const)("table fill colours (%s)", (theme) => 
     expect(failures("table-text", theme, mount(theme))).toEqual([]);
   });
 
-  test("the five fills are different colours", () => {
+  test("the table fills are different colours", () => {
     const el = mount(theme);
     expect(new Set(TABLE_FILLS.map((fill) => token(el, fill))).size).toBe(TABLE_FILLS.length);
   });
 
-  test("the dots are readable on the surface ring at 3:1 or more", () => {
-    expect(failures("table-dots", theme, mount(theme))).toEqual([]);
+  test("an outline or a pulse ring reads 3:1 or more on the surface", () => {
+    expect(failures("table-marks", theme, mount(theme))).toEqual([]);
   });
 
   test("the OS preference gives them the same values as the explicit theme", async () => {
@@ -455,6 +455,72 @@ describe.each(["light", "dark"] as const)("floor ring and calm edge colours (%s)
 
   test("the OS preference gives them the same values as the explicit theme", async () => {
     const names = [edge, ...PULSE_DIMS.map(([dim]) => dim)];
+    await commands.emulateColorScheme(theme === "light" ? "dark" : "light");
+    const explicit = mount(theme);
+    const fromTheme = names.map((name) => token(explicit, name));
+    expect(fromTheme).not.toContain("");
+    explicit.remove();
+    await commands.emulateColorScheme(theme);
+    const byPreference = mount();
+    expect(names.map((name) => token(byPreference, name))).toEqual(fromTheme);
+  });
+});
+
+const TAB_TINTS = [
+  ["--wt-color-tab-danger-tint", "--wt-color-danger"],
+  ["--wt-color-tab-warning-tint", "--wt-color-warning"],
+  ["--wt-color-tab-bill-tint", "--wt-color-table-bill"],
+  ["--wt-color-tab-ready-tint", "--wt-color-success"],
+  ["--wt-color-tab-seated-tint", "--wt-color-table-seated"],
+] as const;
+
+describe.each(["light", "dark"] as const)("map and zone tab colours (%s)", (theme) => {
+  const calm = "--wt-color-table-calm";
+
+  test("the calm fill keeps its text at 4.5:1 and its edge line at 3:1", () => {
+    expect(failures("calm-fill", theme, mount(theme))).toEqual([]);
+  });
+
+  test("calm and free are different colours", () => {
+    const el = mount(theme);
+    expect(deltaE2000(token(el, calm), token(el, "--wt-color-table-free"))).toBeGreaterThanOrEqual(
+      10,
+    );
+  });
+
+  test("text on a ready table reads at 4.5:1", () => {
+    expect(failures("ready-text", theme, mount(theme))).toEqual([]);
+  });
+
+  test("each tab tint keeps the text at 4.5:1 and its bar at 3:1", () => {
+    expect(failures("tab-tints", theme, mount(theme))).toEqual([]);
+  });
+
+  test("each tab tint is its bar colour at 18% over the surface", () => {
+    const el = mount(theme);
+    const channels = (hex: string) => {
+      expect(hex).toMatch(/^#[0-9a-f]{6}$/);
+      return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    };
+    const surface = channels(token(el, "--wt-color-surface"));
+    for (const [tint, bar] of TAB_TINTS) {
+      const barChannels = channels(token(el, bar));
+      channels(token(el, tint)).forEach((channel, i) =>
+        expect(
+          Math.abs(channel - Math.round(0.18 * barChannels[i]! + 0.82 * surface[i]!)),
+          `${tint} channel ${i}`,
+        ).toBeLessThanOrEqual(1),
+      );
+    }
+  });
+
+  test("the OS preference gives them the same values as the explicit theme", async () => {
+    const names = [
+      calm,
+      "--wt-color-on-table-calm",
+      "--wt-color-on-success",
+      ...TAB_TINTS.map(([tint]) => tint),
+    ];
     await commands.emulateColorScheme(theme === "light" ? "dark" : "light");
     const explicit = mount(theme);
     const fromTheme = names.map((name) => token(explicit, name));

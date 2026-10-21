@@ -408,6 +408,24 @@ describe("till-table-details-sheet", () => {
     expect(find(el, "[data-free]")).toBeNull();
   });
 
+  it("lists the chips in the card's order", async () => {
+    const el = await mount({
+      table: table({
+        ...seated,
+        party: party(),
+        signals: [
+          { kind: "ready", byStation: [{ stationId: "s1", stationName: "Kitchen", count: 1 }] },
+          { kind: "bill_requested", requestedAt: "2026-10-10T12:00:00Z" },
+        ],
+      }),
+    });
+    const chips = [...el.shadowRoot!.querySelectorAll("[data-chip]")];
+    expect(chips.map((chip) => chip.getAttribute("data-chip"))).toEqual([
+      "bill-requested",
+      "ready",
+    ]);
+  });
+
   it("spaces the chips from the last line as the lines are spaced", async () => {
     const el = await mount({
       table: table({

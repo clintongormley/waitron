@@ -3,6 +3,7 @@ import { NEW_TABLE_SIZE } from "@waitron/shared";
 export { NEW_TABLE_SIZE };
 export const GRID_SQUARE_PX = 12;
 export const NAME_MIN_PX = 28;
+export const CUE_MIN_PX = 36;
 
 const GRID_MAX = 999;
 const CROP_MARGIN = 2;
@@ -323,6 +324,10 @@ function scanFree(
 
 export function showsName(p: Pick<PlanPlacement, "width" | "height">, squarePx: number): boolean {
   return Math.min(p.width, p.height) * squarePx >= NAME_MIN_PX;
+}
+
+export function showsCue(p: Pick<PlanPlacement, "width" | "height">, squarePx: number): boolean {
+  return Math.min(p.width, p.height) * squarePx >= CUE_MIN_PX;
 }
 
 /**

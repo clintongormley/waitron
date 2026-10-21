@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { en } from "../i18n/strings.js";
 import "./table-status.js";
 import type { TillTableStatus } from "./table-status.js";
 import type { TillTableDetailsSheet } from "./table-details-sheet.js";
@@ -103,7 +104,7 @@ describe("till-table-status", () => {
     const p = party();
     const { el } = await mount({ party: p, tables: [row(p, { readyToServe: 2 })] });
     expect(pin(el)!.textContent!.trim()).toBe("2 ready");
-    expect(pin(el)!.querySelector("[data-fill]")!.getAttribute("data-fill")).toBe("seated");
+    expect(pin(el)!.querySelector("[data-fill]")!.getAttribute("data-fill")).toBe("ready");
     expect(pin(el)!.getAttribute("aria-label")).toBe("Table details: 2 ready");
   });
 
@@ -141,7 +142,7 @@ describe("till-table-status", () => {
   it("paints the pin's swatch from the fill's token", async () => {
     const p = party();
     const { el, host } = await mount({ party: p, tables: [row(p)] });
-    host.style.setProperty("--wt-color-table-seated", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-color-table-calm", "rgb(1, 2, 3)");
     const swatch = pin(el)!.querySelector<HTMLElement>("[data-fill]")!;
     expect(getComputedStyle(swatch).backgroundColor).toBe("rgb(1, 2, 3)");
   });
@@ -215,6 +216,19 @@ describe("till-table-status", () => {
     expect(pin(el)!.textContent!.trim()).toBe("3 ready");
   });
 
+  it("the pin's icon is the top state's", async () => {
+    const p = party();
+    const overdue = { kind: "long_wait" as const, band: "overdue" as const };
+    const { el } = await mount({
+      party: p,
+      tables: [row(p, { readyToServe: 2, signals: [overdue] })],
+    });
+    const children = [...pin(el)!.children];
+    expect(children.map((child) => child.localName)).toEqual(["span", "wt-icon"]);
+    expect(pin(el)!.querySelector('wt-icon[name="floor-timer"]')).not.toBeNull();
+    expect(pin(el)!.textContent!.trim()).toBe("Overdue");
+  });
+
   it("flashes what the waiter must see when the order opens", async () => {
     const p = party();
     const { el } = await mount({
@@ -260,6 +274,18 @@ describe("till-table-status", () => {
     await settled(el);
     expect(toast(el)!.open).toBe(true);
     expect(toast(el)!.message).toBe("Forgotten order");
+  });
+
+  it("the notice says a forgotten order from the wait signal when the band has not caught up", async () => {
+    const p = party();
+    const forgotten = { kind: "long_wait" as const, band: "forgotten" as const };
+    const { el } = await mount({
+      party: p,
+      tables: [row(p, { timingBand: "fresh", signals: [forgotten] })],
+    });
+    await settled(el);
+    expect(toast(el)!.open).toBe(true);
+    expect(toast(el)!.message).toBe(en["table.flash_forgotten"]);
   });
 
   it("flashes nothing when nothing is urgent", async () => {
@@ -374,7 +400,8 @@ describe("till-table-status", () => {
 for (const theme of ["light", "dark"] as const) {
   for (const [over, words, token] of [
     [{ signals: [billRequested] }, "Bill requested", "--wt-color-table-bill"],
-    [{ signals: [billRequested], readyToServe: 2 }, "2 ready", "--wt-color-success"],
+    [{ signals: [], readyToServe: 2 }, "2 ready", "--wt-color-success"],
+    [{ signals: [billRequested], readyToServe: 2 }, "Bill requested", "--wt-color-table-bill"],
     [
       { signals: [billRequested], readyToServe: 2, timingBand: "forgotten" },
       "Forgotten",

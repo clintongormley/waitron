@@ -437,6 +437,48 @@ describe("till-floor-screen: the card's marks in the order of precedence", () =>
     expect(marks(el, "t3")).toEqual(["[data-unsent]", '[data-chip="long-wait"]']);
   });
 
+  it("the Forgotten badge and each unsent badge carry their icons, in the text colour", async () => {
+    await page.viewport(390, 900);
+    try {
+      const { el, host } = await mountFloor([
+        table({
+          timingBand: "forgotten",
+          party: party({
+            unsentDrafts: [
+              { ...draft, ownerName: "AlexandradelRosariodelasMercedesFernandez" },
+              { billId: "bill-2", billNumber: 2, ownerName: "Alex", lineCount: 1 },
+            ],
+          }),
+        }),
+      ]);
+      host.style.setProperty("--wt-color-on-danger", "rgb(1, 2, 3)");
+      const timer = card(el).querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+        '[data-forgotten] wt-icon[name="floor-timer"]',
+      )!;
+      expect(timer).not.toBeNull();
+      await timer.updateComplete;
+      expect(getComputedStyle(timer.shadowRoot!.querySelector("svg")!).fill).toBe("rgb(1, 2, 3)");
+      const reference = document.createElement("wt-icon") as HTMLElement & {
+        updateComplete: Promise<unknown>;
+      };
+      reference.setAttribute("name", "floor-unsent");
+      reference.setAttribute("size", "sm");
+      host.append(reference);
+      await reference.updateComplete;
+      const full = reference.getBoundingClientRect().width;
+      expect(full).toBeGreaterThan(0);
+      const unsent = [...card(el).querySelectorAll<HTMLElement>("[data-unsent]")];
+      expect(unsent).toHaveLength(2);
+      for (const mark of unsent) {
+        const icon = mark.querySelector<HTMLElement>('wt-icon[name="floor-unsent"]')!;
+        expect(icon).not.toBeNull();
+        expect(icon.getBoundingClientRect().width).toBe(full);
+      }
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
   it("keeps two unsent orders in their own order, inside the card at 390 px", async () => {
     await page.viewport(390, 900);
     try {

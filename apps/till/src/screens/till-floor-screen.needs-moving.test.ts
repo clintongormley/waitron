@@ -154,12 +154,13 @@ beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 describe("till-floor-screen: a table that needs moving", () => {
-  it("is drawn in its old place, in the clearing colour, read as Needs moving", async () => {
+  it("is drawn in its old place, with the dashed outline, read as Needs moving", async () => {
     const el = await mount([moving("t3", 12), planned("t4", 30)]);
 
     const table = drawn(el, "t3");
     expect(table.placement.x).toBe(12);
-    expect(table.fill).toBe("clearing");
+    expect(table.fill).toBe("free");
+    expect(table.outline).toBe("clearing");
     expect(table.description).toBe("Needs moving");
     expect(drawn(el, "t4").description).toBe(t("floor.free"));
   });
@@ -167,7 +168,8 @@ describe("till-floor-screen: a table that needs moving", () => {
   it("shows Needs clearing while it also needs clearing", async () => {
     const el = await mount([{ ...moving("t3", 12), condition: "needs_clearing" }]);
 
-    expect(drawn(el, "t3").fill).toBe("clearing");
+    expect(drawn(el, "t3").fill).toBe("plain");
+    expect(drawn(el, "t3").outline).toBe("clearing");
     expect(drawn(el, "t3").description).toBe(t("floor.needs_clearing"));
     await tap(el, "t3");
     expect(el.shadowRoot!.querySelector("[data-clear-dialog]")).not.toBeNull();

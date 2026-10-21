@@ -11,7 +11,9 @@ const t = (id: string, placement: Partial<PlanPlacement>): FloorMapTable => ({
   label: id.toUpperCase(),
   placement: { x: 0, y: 0, width: 4, height: 4, shape: "rect", rotation: 0, ...placement },
   fill: "free",
-  dot: null,
+  outline: null,
+  pulse: null,
+  cue: null,
   joinId: null,
   description: "Free",
 });
@@ -439,7 +441,7 @@ async function touching(): Promise<WtFloorMap> {
     "light",
   )) as WtFloorMap;
   el.reducedMotion = true;
-  el.tables = [{ ...t("a", { x: 0 }), dot: "ready" }, t("b", { x: 4 }), t("c", { x: 8 })];
+  el.tables = [t("a", { x: 0 }), t("b", { x: 4 }), t("c", { x: 8 })];
   await settled(el);
   return el;
 }
@@ -458,19 +460,4 @@ it("a focused table's ring is drawn over the table beside it", async () => {
   // The ring lies 2 to 4 px right of the button, over c; the screenshot is scaled, so read across it.
   const across = [2, 3, 4].map((d) => read(box.right + d, box.top + box.height / 2));
   expect(across.some((p) => distance(p, ring) < distance(p, fill))).toBe(true);
-});
-
-it("a dot is drawn over a focused table beside it", async () => {
-  const el = await touching();
-  const b = button(el, "b");
-  b.focus();
-  await press("Shift");
-  const dot = el.shadowRoot!.querySelector('[part="dot"]')!;
-  const colour = rgb(getComputedStyle(dot).backgroundColor);
-  const box = dot.getBoundingClientRect();
-  const read = await pixels(el);
-  const fill = read(box.left - 20, box.top + 20);
-  // The dot's centre is a's top-right corner; its lower right quarter lies over b, inside its ring.
-  const overB = read(box.left + box.width * 0.6, box.top + box.height * 0.6);
-  expect(distance(overB, colour)).toBeLessThan(distance(overB, fill));
 });

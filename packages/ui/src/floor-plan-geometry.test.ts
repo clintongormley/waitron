@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   GRID_SQUARE_PX,
+  CUE_MIN_PX,
   NAME_MIN_PX,
   NEW_TABLE_SIZE,
   automaticNames,
@@ -16,6 +17,7 @@ import {
   resizeFromCorner,
   cornerSides,
   rotatedRect,
+  showsCue,
   showsName,
   snapToSquare,
   stepInside,
@@ -32,6 +34,7 @@ describe("floor plan geometry", () => {
     expect(GRID_SQUARE_PX).toBe(12);
     expect(NEW_TABLE_SIZE).toBe(8);
     expect(NAME_MIN_PX).toBe(28);
+    expect(CUE_MIN_PX).toBe(36);
   });
 
   it("snaps pixels to the nearest whole square", () => {
@@ -205,6 +208,14 @@ describe("floor plan geometry", () => {
     expect(showsName({ width: 2, height: 9 }, 12)).toBe(false);
     expect(showsName({ width: 9, height: 2 }, 12)).toBe(false);
     expect(showsName({ width: 3, height: 3 }, 12)).toBe(true);
+  });
+
+  it("shows a cue at 36 px and hides it below, by the shorter side", () => {
+    expect(showsCue({ width: 2, height: 2 }, 18)).toBe(true);
+    expect(showsCue({ width: 2, height: 2 }, 17.95)).toBe(false);
+    expect(showsCue({ width: 3, height: 9 }, 12)).toBe(true);
+    expect(showsCue({ width: 2, height: 9 }, 17.95)).toBe(false);
+    expect(showsCue({ width: 9, height: 2 }, 17.95)).toBe(false);
   });
 
   it("numbers on from the highest name with the prefix", () => {
