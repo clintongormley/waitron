@@ -181,3 +181,27 @@ it.each([false, true])(
     expect(result.rows).toEqual([{ affected: nameBoundary ? 0 : 1000 }]);
   },
 );
+
+it.each([null, "preproduction", "production"] as const)(
+  "uses an interrupted record's own environment with stamp=%s",
+  async (stamp) => {
+    await seedPendingEnvios(suite.db, { count: 2, entorno: "preproduction" });
+    if (stamp !== null) await stampDeployment(suite.db, stamp);
+    await suite.db
+      .execute(sql`update envios set estado = 'enviando', enviado_en = '2026-07-21T00:09:59.000Z'
+    where registro_id = (select id from registros_facturacion where secuencia = 1)`);
+    await resetInFlightClaims(suite.db, now);
+    expect(
+      (
+        await suite.db.execute(
+          sql`select estado, technical_incidence from envios order by registro_id`,
+        )
+      ).rows,
+    ).toEqual(
+      Array.from({ length: 2 }, () => ({
+        estado: "pendiente",
+        technical_incidence: stamp === "production" ? 0 : 1,
+      })),
+    );
+  },
+);

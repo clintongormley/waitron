@@ -355,12 +355,9 @@ async function drainDue(
         batch.map((row) => row.id),
       );
       await countOnCommit(db, result, async (tx, counts) => {
-        await openTechnicalIncident(
-          tx,
-          environment,
-          now,
-          batch.map((row) => row.id),
-        );
+        await openTechnicalIncident(tx, environment, failure.now, [
+          ...new Set([...failure.ids, ...batch.map((row) => row.id)]),
+        ]);
         await backoffBatch(tx, batch, now, counts);
       });
       forgetTechnicalFailure(db, environment, failure);

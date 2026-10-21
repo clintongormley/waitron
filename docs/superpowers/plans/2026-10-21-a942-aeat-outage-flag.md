@@ -69,7 +69,7 @@ The following outage boundaries are **implementer decisions**, not additional cl
   using the same environment/name/chain eligibility and lawful flow gate as claiming; the cap here
   is production `MAX_REGISTROS_POR_ENVIO` (the slot supplies no test override). Mark only when a
   sendable batch was already due at reset, either its wait had elapsed or its claimable cohort
-  filled that cap. No stamp means no inferred environment or pending-only outage. Add stamped
+  filled that cap. No stamp means no pending-only outage inference. Interrupted claims still use their own recorded environment; a saved stamp, when present, bounds that cohort. Add stamped
   production/preproduction, unstamped, recent-pending-under-wait and unexpired-gate controls.
   This is a conservative operational inference: eligibility at restart does not establish why
   a previous process stopped. Keep the reset signature and generic fiscal contract unchanged.
@@ -207,3 +207,9 @@ late concurrent replies, response persistence failures and populated predecessor
 integrity suite creates actual sale and void records, compares full immutable rows and series/chain
 state across retries, recomputes hashes, compares repeated SOAP record fragments and completes a
 sale while transport is held. These are local qualifications, not live AEAT acceptance.
+
+The whole-branch review reproduced overlapping send failures erasing a held probe's unsaved
+metadata. The failure-save transaction now includes both the retained failure's attempted ids and
+the current batch, using the retained failure's time, before clearing that retained evidence.
+An overlap/no-overlap pair checks the retained marker and the later probe's actual SOAP header.
+The unstamped interrupted-claim policy is explicit above and has stamped/mismatched controls.

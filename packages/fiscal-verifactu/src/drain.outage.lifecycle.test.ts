@@ -497,3 +497,62 @@ it("flushes a concurrent failed metadata write before a delayed resolver may cla
   expect(t.xml).toHaveLength(1);
   expect(t.xml[0]).toContain(flag);
 });
+
+it.each([false, true])(
+  "keeps failed-probe evidence when another send fails with overlap=%s",
+  async (overlap) => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+    const t = transport();
+    for (const key of seeded.facturaKeys) t.authority.reject(key, 1100, "Invalid test record");
+    await drain(t.deps, at(1));
+    const held = await appendPendingAlta(suite.db, seeded, 4);
+    await drain(t.deps, at(2));
+    const { seedSecondChain } = await import("../test/drain-fixtures.js");
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const ordinary = transport(async () => {
+      entered();
+      await gate;
+      throw new Error("ordinary transport failed");
+    });
+    let pending: ReturnType<typeof drain> | undefined;
+    if (overlap) {
+      await seedSecondChain(suite.db, seeded, 6);
+      pending = drain({ ...ordinary.deps, maxRegistrosPorEnvio: 1 }, at(62));
+      await waiting;
+    }
+    const probe = transport(async () => {
+      throw new Error("probe transport failed");
+    });
+    await suite.db.execute(sql`create trigger outage_metadata_refusal before insert on envio_flujo
+    begin select raise(abort, 'test metadata unavailable'); end`);
+    try {
+      expect(
+        (await drain({ ...probe.deps, maxRegistrosPorEnvio: 1 }, at(62))).skipped,
+      ).toHaveLength(1);
+    } finally {
+      await suite.db.execute(sql`drop trigger outage_metadata_refusal`);
+      release();
+      if (pending !== undefined) await pending;
+    }
+    if (!overlap) await seedSecondChain(suite.db, seeded, 6);
+    expect((await drain(t.deps, at(64))).recordsAccepted).toBe(1);
+    expect(
+      (
+        await suite.db.execute(
+          sql`select technical_incidence from envios where registro_id = ${held.registroId}`,
+        )
+      ).rows,
+    ).toEqual([{ technical_incidence: 1 }]);
+    t.xml.length = 0;
+    expect((await drain(t.deps, at(122))).recordsAccepted).toBe(1);
+    expect(t.xml).toHaveLength(1);
+    expect(t.xml[0]).toContain(flag);
+  },
+);
