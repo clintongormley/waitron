@@ -5262,9 +5262,16 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   `WBK1` is restorable only by Waitron code. Scheduled local archives stream through protected
   files; reconsider using a standard encryption and archive format.
 
-- **B3. The bootable USB installer** — Runs `waitron.sh install` unattended. Open questions it owns: whether the stick carries the images so
-  install needs no internet; unattended updates for a box we did not sell; AP-mode WiFi onboarding. Box
-  image constraints under [Box image constraints (B3)](backlog/box.md#box-image-constraints-b3). Not started.
+- **B3. The bootable USB installer** — DESIGNED 2026-10-21, waiting for the owner's answers to five
+  questions: [design](superpowers/specs/2026-10-21-b3-usb-installer-design.md) §13,
+  [pictures](backlog/mockups/b3-usb-installer/). The stick boots a small installer that writes a
+  ready-made Waitron disk (Debian 13, Docker, the release's images; btrfs subvolumes for A950) and
+  needs no internet; it erases nothing without a press on the box's screen, and a venue's name typed
+  if the disk holds one. Built and booted in CI for every release. Not built. Box image constraints
+  under [Box image constraints (B3)](backlog/box.md#box-image-constraints-b3). Left open by the
+  design (§12), each to become its own entry once the design is approved: moving a box from Debian 13
+  to 14 before Chromium's fixes stop; disk encryption; a stick file over GitHub's 2 GiB limit;
+  changing the box's Wi-Fi after install without a terminal.
 
 - **The box image carries the WireGuard link.** [Detail](backlog/box.md#box-image-constraints-b3)
 

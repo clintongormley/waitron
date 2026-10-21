@@ -1,0 +1,92 @@
+B3 — THE BOOTABLE USB INSTALLER: FIVE QUESTIONS, ONE AT A TIME
+Design: docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md (§13). Pictures in this folder.
+Ask 1, then 2, 3, 4, 5. Each has a recommendation; the last option is always "Stop here — I'll write".
+
+In short: the stick boots a small installer that copies a ready-made Waitron box (Debian 13, Docker,
+the release's Waitron images) onto the mini PC's disk, then restarts into the setup wizard. CI builds
+the stick for every release and installs it in a virtual machine before publishing it. Both of a
+venue's boxes (A947) come from the same stick; the wizard asks which job each does.
+
+------------------------------------------------------------------------------------------------
+QUESTION 1 of 5 — what the stick does
+Pictures: 7-q1-what-the-stick-does.png (also 1-this-box.png and 2-venue-found.png)
+
+Example: Monday 10:00, the deli's new box arrives; the shop's internet line is not connected until
+Wednesday.
+
+A (recommended) — the stick carries everything and asks once. About 15 minutes (estimate; measured
+  in the first build), no internet needed. The box's screen shows the disk and what it holds
+  ("Windows"), and one press on «Borrar e instalar» starts it. If the box already holds a Waitron
+  restaurant, the screen names it («Bar Santet», Live, last sale 20/10/2026 23:41, 3 records not yet
+  sent to AEAT), says its own backups go with the disk, and the button works only after the
+  restaurant's name is typed. This is weaker than `waitron.sh`, which refuses to wipe a Live box; it
+  follows your A732 answer that a broken box is reinstalled. The deli reaches the setup wizard by about 10:15 and can
+  prepare its menu before the line arrives. Cost: a large download per release for whoever writes
+  the stick; a box with no screen needs one plugged in for the install.
+B — a small stick that downloads the release during the install. Always the newest release, but the
+  deli waits until Wednesday or borrows a phone's connection for a download of several gigabytes.
+C — fully unattended: like A, but it erases and installs with no question, so a box with no screen
+  can be installed. A stick left in a box that restarts after a power cut can then erase a working
+  restaurant.
+Stop here — I'll write.
+
+------------------------------------------------------------------------------------------------
+QUESTION 2 of 5 — a full-screen browser on every box (your lean of 2026-09-29)
+Pictures: 5-box-screen.png
+
+Example: the deli's box sits in the cupboard under the counter, with the counter touchscreen on top.
+
+A (recommended) — every box carries the full-screen browser (Chromium under `cage`, no desktop) and
+  shows it whenever a screen is plugged in: the setup wizard first, then question 3's screen. Cost:
+  about a gigabyte of the box's memory while it runs (reasoning, not measured), and Chromium updates
+  from Debian every few weeks.
+B — a server-only box. The box's screen shows a text line with its address; tills are always
+  separate machines or tablets. Smaller and simpler; the deli needs a second machine for its
+  counter (the hardware notes price one at €300–450).
+Stop here — I'll write.
+
+------------------------------------------------------------------------------------------------
+QUESTION 3 of 5 — is the box's own screen a till? (your lean of 2026-09-29)
+Pictures: 5-box-screen.png
+
+Example: the deli has one counter. Its box drives the counter screen. Later it adds a spare box (A947)
+in the back room, with an old monitor on it.
+
+A (recommended) — the box's screen joins like any other till: a manager accepts it once, and staff
+  sign in with their PIN (no Linux login; the PIN is the lock). On the spare box, the same screen is
+  a till of the main box, so if the main box dies, the back-room screen keeps working once the spare
+  takes over. If the main box dies, the counter screen it drives dies with it (A947 §9 says so).
+B — the box's screen never sells. It shows the box's state: restaurant, selling or waiting, address,
+  spare up to date, last copy. The counter needs its own till machine.
+Stop here — I'll write.
+
+------------------------------------------------------------------------------------------------
+QUESTION 4 of 5 — a maintenance login on the box (the 2026-09-11 discussion record)
+Pictures: 8-q4-maintenance.png
+
+Example: a Friday night, the box will not start Waitron; Waitron's support person is at the venue
+with a keyboard and wants to look at the box before wiping it.
+
+A (recommended) — a `maintenance` account with no standing password. Booting the stick and choosing
+  «Abrir acceso de mantenimiento» shows a fresh six-word password valid until the box next restarts;
+  the person removes the stick, restarts, and signs in at the box's screen. No SSH. Anyone who has
+  the box and a stick can do this — but anyone with the box can already read its disk today.
+B — a password per box, set when it is installed and printed on a sealed card kept with the box.
+  Works without the stick; a lost card means a reinstall, or a procedure not yet designed.
+C — no login at all: every repair is a reinstall from the stick, then a restore from backup.
+Stop here — I'll write.
+
+------------------------------------------------------------------------------------------------
+QUESTION 5 of 5 — Wi-Fi for the box ("AP-mode WiFi onboarding" in the backlog)
+Pictures: 9-q5-wifi.png (also 3-network-clock.png)
+
+Example: a market stall with no cable to its router.
+
+A (recommended) — the box is wired whenever possible (A947 puts both boxes on one switch). With no
+  cable, the installer's own screen lists the Wi-Fi networks and asks for the password. Changing the
+  Wi-Fi later (a new router) needs a reinstall until a later item adds a way.
+B — the box also opens its own Wi-Fi hotspot «Waitron-4F2A», with a password unique to that box,
+  whenever it has no cable and no known network; a phone joins it, a page asks for the venue's
+  Wi-Fi, and the hotspot closes. Useful only for a box with neither screen nor cable. Intel Wi-Fi
+  cards, common in mini PCs, run a hotspot on 2.4 GHz only.
+Stop here — I'll write.
