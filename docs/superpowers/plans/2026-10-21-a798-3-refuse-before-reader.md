@@ -26,7 +26,9 @@
 > Every claim about how the box behaves today cites a probe in "Measured for this plan", run that
 > day on macOS, Node v26.11.1, `node:sqlite`, from scratch files under
 > `~/waitron-campaign-b/a798-3-plan-probe/`, outside the repository. A claim marked **(read)**
-> comes from reading code, not from running it.
+> comes from reading code, not from running it. Task 12's `file:line`s were read at `45693342d`
+> (this branch's base when Task 12 was written), from a `git archive` of that commit; its Hono
+> measurements are M7.
 
 **Words used in this plan.**
 - A **connected card reader** is a card machine the box talks to (`provider.collect`). The other
@@ -36,10 +38,11 @@
   the reader is asked to charge: `payIntegrated` for `POST /api/pay`
   (`apps/server/src/till-sale.ts:1106`) and `beginBillPayment` for a card on a bill
   (`apps/server/src/bill-payments.ts:1037`).
-- The **full-disk stop** is this plan's version of what design §4.6 item 5 calls the red state for
-  the disk: once a write has been refused because the disk is full, the box refuses card-reader
-  payments until it reads enough free space again. Decision 4 says how it departs from the design's
-  text, and that the owner has been asked.
+- The **full-disk stop** is what design §4.6 item 5 calls the red state for the disk: once a write
+  has been refused because the disk is full, the box refuses every write the till app and the
+  kitchen screens send — sales, payments, orders, kitchen sends, clock-ins — until it reads enough
+  free space again (decision 4: the owner chose this, 2026-10-21). A few writes stay open; decision
+  4 lists them.
 - The **minimum date** is 28-10-2024, the first invoice date AEAT accepts. The fiscal library
   `@waitron/verifactu` refuses an earlier one (`validate.js:610-611` in its 0.2.1 build).
 - The **issue reading** is the one clock reading every server path that records a sale takes in
@@ -47,10 +50,12 @@
   row and its record carry that one instant and offset (M6).
 
 **Goal:** no connected card is charged for a sale the box will not record — neither after a write
-has failed because the disk is full, nor under a clock before 28-10-2024 — and the till says which
-of the two stopped it, and whether a card was charged, in words staff can act on.
+has failed because the disk is full, nor under a clock before 28-10-2024; once a write has failed
+because the disk is full, no till or kitchen screen saves anything until someone frees space; and
+the till says which of the two stopped it, and whether a card was charged, in words staff can act
+on.
 
-**Architecture:** five pieces.
+**Architecture:** six pieces.
 1. The Veri\*Factu module learns to judge a clock reading against the minimum date
    (`refuseBeforeFirstIssueDate`, new `packages/fiscal-verifactu/src/first-issue-date.ts`) and
    offers that judgement through the fiscal seat: `FiscalBackend` gains `assertRecordableAt(reading)`
@@ -70,6 +75,11 @@ of the two stopped it, and whether a card was charged, in words staff can act on
 5. The till gives each refusal its sentence: a refused save, a sale refused before any money, a
    card charged but not recorded, and a wrong clock with its date. The dashboard gives
    `storage.disk_full` and `clock.unusable` one each.
+6. While the stop holds, one gate per mount refuses every write route the till app and the
+   kitchen screens use (`apps/server/src/disk-full-gate.ts`, on `mountTillApi`, `mountDeviceApi`
+   and `mountScheduleApi`), registered route by route so no dashboard route is touched; the four
+   sale routes refuse a new sale from inside, after answering a resend of one already recorded
+   (Task 12).
 
 **Tech stack:** TypeScript, Node v26.11.1, `node:sqlite` behind drizzle (`packages/store`), Hono
 (`apps/server`), Lit (`apps/till`, `apps/dashboard`), Vitest 4.1.11 (browser mode for the till and
@@ -94,7 +104,11 @@ requests (read: `gh pr list --state open`), #1944 touches three source files thi
 it also edits `apps/server/src/department-transfer-api.test.ts`, whose `priceForIssuance` calls
 Task 2 gains an argument (read: `gh pr view 1944 --json files`).
 If #1944 lands first, find each site by name. #1939 touches `packages/fiscal-none/src/index.ts` and
-`packages/fiscal-verifactu/src/index.ts`, which this slice does not edit.
+`packages/fiscal-verifactu/src/index.ts`, which this slice does not edit. #1944 has since landed
+on `main` as `509e8d42a`: besides the above, it removes `POST /api/device/pass-screen/done` and the
+kitchen display's Fire and Away levers (only Ready remains in `device-levers.ts`), which Task 12b's
+gate would have covered; the gate is built from the routes a mount registers, so it covers what
+remains.
 
 ---
 
@@ -216,6 +230,53 @@ two TypeScript probes the check gives were re-run (`tsc` 7.0.2), each with a com
 
 ---
 
+## Review round 3 (owner answer (a), Task 12)
+
+The owner answered decision 4 on 2026-10-21 with (a), the design's own words: once one save has
+failed on a full disk, every sale (cash, connected card and other card machine), order, kitchen
+send and clock-in is refused "until someone frees space — even saves that would still fit"; the
+slice still parks for the owner (decision 4 quotes the answer whole). Tasks 12a-12c, decisions
+21-29 and the edits to the rest of the plan were drafted in `~/waitron-campaign-b/a798-3-task12/`
+(`task-12.md`, `plan-edits.md`), from code read at `45693342d` and the Hono probes of M7. A
+fresh-context check (`check.md` there: 0 Critical, 2 Important, 12 Minor) re-ran the probes, ran
+the gate's design against the real till, device and schedule routes after #1944, and built the
+clock-in case. Rounds 1 and 2 above are kept as written; where they call the narrow stop the
+default or the owner question open, this round replaces them. Each finding, and how it was folded:
+
+- **I1** (the sale's sentence departs from the owner's words without saying so): decision 24 says
+  so, quotes both sentences and says what changes if the owner meant one sentence everywhere. The
+  default stays the sale's own sentence on money surfaces (design §3, §4.6 item 2), by the lane
+  runner's ruling.
+- **I2** ("once space is freed, the same resend is answered as recorded" is false): removed from
+  decisions 20 and 26. Decision 26 says a coded answer ends the till's resends and a later press is
+  a new submission (`draft-sync.ts`'s `resendUnanswered`, `till-app.ts`'s `#submitDraft`; read),
+  and names as a known, unchecked limit whether that press is refused as done or saves the round
+  twice.
+- **M1** (the seven POSTs may record a sighting): "save nothing of their own" in Task 12's open
+  list, decisions 4 and 22, Review focus 2 and Task 12a.
+- **M2** (a draft round's refusal path): added to Task 12's "What the till shows" and decision 12.
+- **M3** (Architecture item 6 before item 5): item 6 now follows item 5.
+- **M4** (clashing decision numbers): Task 12's decisions are numbered 21-29, after the plan's 1-20,
+  so the plan keeps one list; its "recovery and replays stay open" was decision 20 in other words
+  and is merged into it.
+- **M5** (no proof by deletion in 12b; no schedule sweep): 12b Step 4b, and the schedule case is a
+  sweep with an empty open list.
+- **M6** (a whole-package coverage run for one row): 12b Step 4 runs the three files with coverage
+  of `disk-full-gate.ts` alone; CI runs the package's coverage.
+- **M7** (two cases' expected failures): 12a's freed-space case runs under 16 MiB first; 12a's and
+  12c's Step 2 say where each freed-space case fails.
+- **M8** (a write already past the gate): decision 29.
+- **M9** (effects of the gate not listed): "Behaviour this slice removes" names them; Task 12's
+  sign-in entry says sign-in still records working-time evidence.
+- **M10** (Task 11's reader-only title): its section title and commit message.
+- **M11** (12c stopped over a fixture): the settle case moves to `counter-handover.test.ts` instead.
+- **M12** (`TillApiDeps.disk`'s doc named two readers): 12a's doc names every reader.
+
+Task 4 was built with one change from its plan text, after its review: `full()` clears only if no
+refusal was noted while its reading was in flight. Task 4's Interfaces and decision 3 say so.
+
+---
+
 ## Measured for this plan
 
 The Vitest probes ran as
@@ -322,6 +383,23 @@ beside each result.
   - `placeOrder` (`working-order.ts:6628-6673`) and `markOrderPlaced` (`:6786-6808`) call neither
     `recordSale`, `selectOrderInvoice` nor `issueMoment` (read, and an `awk` over those lines that
     printed nothing): placing an order files no sale, so it never meets the clock refusal.
+- **M7 — how Hono 4.13.13 orders a gate** (for Task 12; `node` v26.11.1 running
+  `~/waitron-campaign-b/a798-3-task12/probe/hono-order.mjs` and `hono-prefix.mjs` against
+  `node_modules/.pnpm/hono@4.13.13/node_modules/hono/dist/index.js`, the version `apps/server`
+  resolves). Each probe's gate answers 507 when a header says the disk is full; the failing case
+  for "the gate reaches only the routes it is meant to" is a 507 on a route registered elsewhere.
+  - P1, `app.use("/api/*", gate)` registered between two routes: the later route →
+    `507 ran=[gate]`; the earlier → `200 ran=[before-handler]`; control (not full) → `200
+    ran=[gate,after-handler]`. A `use` reaches every matching route registered after it.
+  - P2, a sub-app's `use("*", gate)` mounted with `app.route("/", sub)`: routes the parent
+    registers afterwards, `POST /api/backup/apply` and `POST /management-api/staff`, both →
+    `507 ran=[sub-gate]`; the parent's route list showed `ALL /*` first.
+  - P3, the gate registered on the parent with `app.on(method, path, gate)` for each write route
+    of the sub-app, then `app.route("/", sub)`: `POST /api/w/1/place → 507 ran=[root-mw,gate]`,
+    control `200 ran=[root-mw,gate,madehere,till-place]`; `GET /api/w/1 → 200` without the gate;
+    the open `POST /api/session → 200`; the parent's later `POST /api/backup/apply` and
+    `POST /api/device/battery → 200` without the gate. `hono-prefix.mjs`: a gated
+    `PUT /api/w/:id` did not catch `PUT /api/w/1/label` (`200 ran=[put-label]`).
 
 **Not measured:**
 - No probe ran on Linux or on a box. The stop's clearing reads `statfs`; slice 2's F1 measured
@@ -331,6 +409,8 @@ beside each result.
   through an injected `statfs` (reasoned, not run).
 - The two windows of decision 17 and the start reading of decision 2 were not probed; they are built
   test-first in Tasks 4, 5, 7 and 8.
+- Task 12's gate was probed on a bare Hono (M7), not on a box; Tasks 12a-12c test it on the real
+  till, device and schedule routes.
 
 ---
 
@@ -344,8 +424,9 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
    engine refuses with result code 13, which slice 1 turns into `storage.disk_full`
    (`packages/store/src/disk-full.ts:4-12`) — from a till request, a dashboard request or a
    background duty alike, including one the code catches and survives (slice 1's E13 shapes). The
-   store reports it (Task 3); the server's own refusal before the reader (an `AppError` it throws,
-   not an engine refusal) does not report it again. Alternative not built: setting it in the till
+   store reports it (Task 3); the server's own refusals — before the reader, at the gate and in the
+   sale routes (`AppError`s it throws or answers, not engine refusals) — do not report it again.
+   Alternative not built: setting it in the till
    routes' error boundary, which would miss the other 76 `createErrorBoundary` call sites and every
    background duty (`grep -rn "createErrorBoundary(" apps packages | grep -v test | wc -l`: 77).
 2. **Where it lives: in the server's memory, one per venue folder, made at start — and a start on a
@@ -353,12 +434,12 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
    listening to `store.venue` and `store.node`. Right after, boot reads `freeBytes(venueDir)` once
    (`apps/server/src/free-bytes.ts:6-15`, the reading decision 3 clears on) and, below
    `FULL_DISK_BYTES`, notes a refusal (`noteFullAtStart`, Task 4), so a box restarted on a disk that
-   is still full refuses its first card-reader payment instead of charging it (M2's pattern). A
+   is still full refuses its first till write, and charges no card (M2's pattern). A
    reading of exactly `FULL_DISK_BYTES` starts clear, as it clears a noted stop. An **unreadable**
    reading (`null`) at start leaves the stop clear and logs `storage.start_space_unread`: decision 3
    keeps a noted stop on `null` because an engine refusal has already proved the disk full, but at
    start nothing has, and on a filesystem that never reports free space a stop set at start could
-   never clear, refusing every card-reader payment for good. The free-space watch and its alerts
+   never clear, refusing every till write for good. The free-space watch and its alerts
    stay slice 5's (design §4.6 item 4). Slice 2's start already reads free space
    (`freeSpaceAtStart`, `apps/server/src/start-space.ts:56-119`, called at
    `apps/server/src/node-entry.ts:300`), but over the state and venue folders together, before
@@ -369,58 +450,51 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
 3. **What clears it: a free-space reading of the venue folder of at least `FULL_DISK_BYTES`
    (16 MiB).** The design says "Trading comes back only when someone frees space" without saying
    how the box knows. A later successful write cannot be the sign: M2 shows small writes succeed
-   after a big one failed. DEFAULT: while a refusal is noted, each card-reader payment reads
-   `freeBytes(venueDir)` before its first transaction; at 16 MiB or more the stop is forgotten and
-   the payment goes on. 16 MiB is slice 2's line between "full" and "not full"
+   after a big one failed. DEFAULT: while a refusal is noted, every till or kitchen-screen write
+   the gate sees (Task 12a, 12b), each sale route (Task 12c) and each card-reader payment (Tasks 5,
+   7) reads `freeBytes(venueDir)` before its first transaction; at 16 MiB or more the stop is
+   forgotten and the write goes on. 16 MiB is slice 2's line between "full" and "not full"
    (`boot-failure.ts:47`): every full-disk failure it measured had at most 48 KiB free on HFS+,
    tmpfs and ext4, and about 1.2 MB reported free on APFS. A reading of `null` (the filesystem
-   cannot say) keeps the stop. When nothing is noted, nothing is read. Two reads that both find
-   space log the clearing once. Deferred: the strip (slice 6), the Box status row and Liberar
+   cannot say) keeps the stop. When nothing is noted, nothing is read. A reading clears the stop
+   only if no refusal was noted while it was in flight; one noted then keeps the stop, and that
+   request is refused too. Two reads that both find space log the clearing once. Deferred: the
+   strip (slice 6), the Box status row and Liberar
    (slice 7), the minute-by-minute watch and its alerts (slice 5); until one of them reads free
-   space, a noted stop clears only when a card-reader payment is tried (backlog, Task 11).
-4. **What the stop refuses — this departs from the approved design, and an owner question is
-   open; the narrow stop is the default built meanwhile.** Design §4.6 item 5, labelled the owner's
-   answer to question 1, says "the first save that fails turns every device red, every sale, order,
-   kitchen send and clock-in is refused with the honest message of item 2 … Trading comes back only
-   when someone frees space", and §9's record of that answer repeats "A disk that fills anyway stops
-   every save at once". The design's default 1 (§6) says "Keep selling whenever the record can be
-   written". This plan builds less than §4.6 item 5, and the lane runner has put the choice to the
-   owner in `~/waitron-campaign-b/questions.md` (A798-B slice 3). Worked example: at 21:40 a
-   20-line card sale on the counter fails because the disk is full; nothing is charged (M2: its
-   first transaction failed, `collect 0`). At 21:41 Marta rings up one caña for cash, which would
-   fit (M2: a 1-line cash sale after the 20-line failure answered `200`). At 21:42 Ana clocks in;
-   at 21:43 Luis sends table 4's mains to the kitchen; at 21:44 Marta takes a card on the
-   connected reader.
-   - **(a) Every write refused while the stop holds** (the design's text): the caña, Ana's
-     clock-in, the mains and the card are all refused with "No se ha guardado…" until someone frees
-     space.
-   - **(b) The narrow stop** (the default built): only the 21:44 card is refused, before the reader
-     is asked. The caña is recorded, Ana is clocked in and the kitchen gets the mains; each of
-     those is refused by itself, with its sentence, only if its own save does not fit.
-   - **(c) Every sale refused**: the caña and the card are refused ("Venta no registrada…") —
-     every route that would record a sale or take money, cash and "Otro datáfono" included — while
-     Ana's clock-in and the kitchen send go on, each refused by itself if it does not fit.
-
-   **Recommendation: (b).** The house rule is that losing a little data is accepted and being
-   unable to trade is not ("Data loss is the accepted price … being stuck offline is not", memory
-   `cold-recovery-no-hot-failover-posture`, owner 2026-08-29, quoted in design §6 default 1). M2
-   shows saves that fit still succeed after a big one failed, so (a) and (c) would refuse sales
-   the box can record. The harm the stop exists to prevent is a card charged with no sale recorded
-   (M2's loop: two cards charged, neither recorded), and (b) is the smallest rule that prevents it:
-   a cash sale or an order that does not fit is refused before any card is charged, by its own
-   failure. **Knock-on for slice 6:** under (b), the red strip's "No se puede guardar nada: el
-   equipo no tiene espacio" (design §3, §4.6 item 2) would be false while cash sales, orders and
-   clock-ins are being saved; slice 6 would need words that say card payments are stopped and saves
-   may fail. Under (a) the strip's words stand; under (c) it would say sales are stopped.
-
-   What (b) refuses, exactly: `POST /api/pay` when it is about to ask the reader (a new or open
-   order — "collect" — and a placed order whose invoice is already filed — "settle") and a reader
-   payment on a bill. Every other write tries and either succeeds or fails on its own with
-   `storage.disk_full`, which the till now names (Tasks 9a-9c). Not refused by the stop: cash,
-   "Otro datáfono", a sale that owes nothing, a replay of a payment already taken, and the recovery
-   of a card already charged (`kind: "recover"`/`"recover-settle"`, which never asks the reader,
-   M3). If the owner answers (a) or (c), optional Task 12 adds its check; the main tasks stay, since
-   both include (b)'s refusal before the reader.
+   space, a noted stop clears only when a till or kitchen screen tries a write, so a box nobody
+   writes to keeps it (backlog, Task 11).
+4. **What the stop refuses: every write the till app and the kitchen screens send, until someone
+   frees space — the owner's answer, (a).** Design §4.6 item 5: "the first save that fails turns
+   every device red, every sale, order, kitchen send and clock-in is refused with the honest
+   message of item 2 … Trading comes back only when someone frees space"; §3's table: a full disk
+   "stops every other write too". The owner, 2026-10-21: "The owner chose (a), the design's own
+   words (§4.6 item 5): once one save has failed on a full disk, every sale (cash, connected card
+   and other card machine), order, kitchen send and clock-in is refused with "No se ha guardado: el
+   equipo no tiene espacio en disco. Avisa al encargado." until someone frees space — even saves
+   that would still fit. Add the task you described to feat/a798-3-refuse-before-reader before it
+   is ready; the red strip keeps its planned words ("No se puede guardar nada"). The slice still
+   parks for the owner to land."
+   Worked example: at 21:40 a 20-line card sale fails on a full disk, nothing charged (M2). At
+   21:41 Marta's one-caña cash sale, which would fit (M2), is refused "Venta no registrada: …"; at
+   21:42 Ana's clock-in and at 21:43 table 4's mains are refused "No se ha guardado: …"; at 21:44 a
+   card is refused before the reader. Once someone frees space, the next till write reads 16 MiB
+   free and goes through. Which sentence each refusal shows, and where that departs from the
+   owner's words, is decision 24.
+   How it is built: Tasks 5 and 7 refuse a reader payment (decision 17). Task 12a puts a gate in
+   front of every write route `mountTillApi` registers, 12b in front of `mountDeviceApi`'s and
+   `mountScheduleApi`'s, each registered route by route so no dashboard route, nor any route
+   mounted later, is touched (M7). 12c refuses a new sale inside the four sale routes, after their
+   replay checks. **Open while the stop holds**, each still refused by itself if its own save does
+   not fit: sign-in, sign-out and the session's language; the four sale routes at the gate (refused
+   inside); seven POSTs that save nothing of their own (three dead-end questions, four previews),
+   because a refused send-preview makes the till show its generic `table.error` and never send the
+   round (read: `apps/till/src/state/party-allergy-flow.ts:19-34`, `apps/till/src/till-app.ts:3684`);
+   and the device's own housekeeping (joining, zones, equipment, profile, battery). A resend of a
+   sale or payment already recorded, and Pay again on a card already charged, are answered
+   (decision 20). **Untouched:** every dashboard route, the provider webhook, node enrolment, and
+   the background duties (filing, the pending-payment pass, printing, the release pass), whose
+   writes fail by themselves and note the stop (decision 1). Decisions 21-29 settle what the
+   owner's words leave open.
 5. **The clock refusal is a new code, `clock.unusable { clockAt, offsetMinutes }`, declared by the Veri\*Factu
    module and offered through the fiscal seat.** Design §8 calls it "`fiscal.record_invalid` caused
    by the minimum date". Keeping that code would make the till recognise the library's own
@@ -465,12 +539,14 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
      and the backend's `sif.not_registered` or foreign-recipient refusal; at the check before the reader
      (`till-sale.ts:1237-1238`) and in `beginBillPayment` (`bill-payments.ts:1078`), whatever those
      functions check after it. Under any other clock nothing changes. (read)
-7. **The clock check applies to every bill payment; the stop only to a reader payment on a bill.**
+7. **The clock check applies to every bill payment; the stop, in Task 7, to a reader payment on a
+   bill, and from Task 12c to every new bill payment (decision 4).**
    `beginBillPayment` is shared by cash, "Otro datáfono" and reader payments
    (`bill-payments.ts:1164`, `:1342`). Under a clock before the minimum date no bill can be
    completed (M1), and a part payment taken now is dated by the wrong clock. DEFAULT: every bill
-   payment is refused `clock.unusable` before anything is written; the stop's refusal applies only
-   when `state === "pending"` (the reader).
+   payment is refused `clock.unusable` before anything is written; Task 7 applies the stop's
+   refusal when `state === "pending"` (the reader), and Task 12c drops that condition, so cash and
+   "Otro datáfono" are refused too, still after the replay lookup.
 8. **The settle kind gets the stop but not the clock check.** A placed order whose invoice is
    already filed writes no new record when paid (`finalizeSettle`, `till-sale.ts:1867-1925`, calls
    `settleSale` and never `recordSale`; read), so the minimum date does not refuse it; slice 8
@@ -487,9 +563,13 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
     - **A sale refused before any money moved** (design §3's table, picture 1): "Venta no
       registrada: el equipo no tiene espacio en disco. No cobres hasta que se resuelva; avisa al
       encargado." / English in decision 19 — on every money surface, for `storage.disk_full`: the
-      stop's refusal before the reader, a sale whose first transaction failed (M2: `collect 0`),
-      and a cash or "Otro datáfono" sale that did not fit. **On an "Otro datáfono" tender** (a
-      card staff have already charged on a terminal the box does not talk to: the counter's
+      stop's refusal before the reader, the stop's refusal of a cash or "Otro datáfono" sale (Task
+      12c), a sale whose first transaction failed (M2: `collect 0`), and a cash or "Otro
+      datáfono" sale that did not fit. This is the sale's own sentence that design §4.6 item 2
+      gives beside the general one; every other refused write shows the owner's sentence (the
+      first bullet). Decision 24 says where this departs from the owner's words. **On an "Otro
+      datáfono" tender** (a card staff have already charged on a terminal the box does not talk to:
+      the counter's
       `tender.method === "card"`, `apps/till/src/widgets/tender-pay.ts:53-56`, a collect or
       found-bill card tender, a bill's manual-card contribution) the sentence is followed by
       today's card advice, word for word from `sale.refused` (`apps/till/src/i18n/strings.ts:1347-1350`,
@@ -541,6 +621,15 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
     - Left, with a named backlog entry owned by slice 6 (Task 11): the draft save's refusals
       (`apps/till/src/state/draft-sync.ts:129-132` and the handlers that read them) and the unpaid
       departure's handler.
+    - Under the stop (decision 4) every gated write answers `507 storage.disk_full`, so the
+      surfaces above show their sentence whenever the stop holds, not only when a save does not
+      fit; Task 12 adds no till code. A kitchen send from a table reaches `lineWriteError` through
+      `#onReleaseRefusal` (at `45693342d`: `till-app.ts:11399-11406`, from `#onGroupCommand`,
+      `:11435`, and the lines send, `:11933`; read), or, for a round sent from a draft, through
+      `#submitDraft`'s `draftRefusalError` → `tableWriteError` and `lineWriteError` (`till-app.ts`
+      `#submitDraft`; read). Left, in backlog (a): the kitchen display's station screen shows
+      nothing for any refused bump (`apps/till/src/screens/till-station-screen.ts:578-586`; read),
+      and any till write surface not named here that shows its own fallback.
 13. **The dashboard's two readers of `server.internal` keep their code.** Slice 1 moved a full disk
     off `server.internal` (its E10 and E18; M2 here printed `507 storage.disk_full`), so both now
     reach their "any other code" branch: the stuck-payments check shows `codeMessage(code)`
@@ -558,24 +647,26 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
     `fiscal.record_invalid` (`apps/server/src/till-api.ts:446`), and `sale.charged_not_recorded`
     with `507`; a route whose table does not name a code answers the boundary's default `400`
     (`packages/server-kit/src/error-boundary.ts:42`). `storage.disk_full` keeps the boundary's
-    `507` (`error-boundary.ts:34-39`), the server's own refusal before the reader included.
+    `507` (`error-boundary.ts:34-39`), the server's own refusal before the reader included; the
+    gate answers the same body and status itself, as the read-only gate does
+    (`apps/server/src/read-only-gate.ts:34-37`), because a middleware is outside a route's
+    boundary.
 15. **No guide changes.** No guide page covers taking a payment (M5). A screen's behaviour changes
     only in which sentence a refusal shows.
-16. **Parked for the owner (the build plan's decision 17).** The owner's rule parks a pull request
-    that changes invoices, the Veri\*Factu record chain or its hashes, invoice series or numbering,
-    or AEAT filing.
-    - *For landing it itself:* it changes no invoice's content, no record, hash or chain link, no
-      series or number, and nothing about filing; `chain.ts`, every record builder, the golden
-      fingerprint test and the immutability test are untouched. Under a clock before the minimum
-      date every sale it refuses was already refused, after the card was charged (M1). The only
-      sales it refuses that would otherwise be issued are card-reader sales while the full-disk
-      stop holds.
-    - *For parking it:* that last refusal is real (M2: a 1-line card sale succeeded after a 20-line
-      one failed, and under the stop it would be refused); it puts a refusal on every server path
-      that records a sale (`issueMoment`) and touches the settle handlers; it moves part payments
-      on a bill under a wrong clock from accepted to refused (M1); and decision 4's question is
-      open.
-    DEFAULT: park, finished to green. The owner can say "land it".
+16. **Parked for the owner (the build plan's decision 17, and the owner's words of 2026-10-21:
+    "The slice still parks for the owner to land").** The owner's rule parks a pull request that
+    changes invoices, the Veri\*Factu record chain or its hashes, invoice series or numbering, or
+    AEAT filing.
+    - It changes no invoice's content, no record, hash or chain link, no series or number, and
+      nothing about filing; `chain.ts`, every record builder, the golden fingerprint test and the
+      immutability test are untouched.
+    - It refuses sales that would otherwise be issued: under a clock before the minimum date (every
+      one of them was already refused, after the card was charged, M1), and every new sale while
+      the full-disk stop holds, cash included (decision 4; M2 shows such sales fit and were
+      recorded before this slice). It puts a refusal on every server path that records a sale
+      (`issueMoment`), touches the settle handlers, and moves part payments on a bill under a
+      wrong clock from accepted to refused (M1).
+    DEFAULT: park, finished to green, as the owner said.
 17. **A reader payment checks the stop three times** (review I1). Writes are serialised by the
     write queue (`packages/store/src/write-queue.ts:42-48`), so a payment that read "not full" can
     wait behind another till's write that fails for a full disk, then run its own small first
@@ -625,9 +716,86 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
 19. **The sale-only disk sentence's English.** Design §3 and picture 1 give only the Spanish.
     DEFAULT: "Sale not recorded: the box is out of disk space. Don't take payment until it is
     fixed; tell a manager." The Spanish is the design's, word for word.
+20. **While the stop holds, a sale already recorded is answered and a card already charged is
+    filed.** The owner's words refuse "every sale"; neither of these is a new one. DEFAULT: Pay
+    again on a card already charged (`kind: "recover"`/`"recover-settle"`,
+    `till-sale.ts:1164-1174`) files the sale without asking the reader (M3: `collect 0`), and a
+    resend of a sale or payment already recorded (`till-sale.ts:663-665`, `:1129-1134`,
+    `:2076-2078`; `bill-payments.ts:1054-1064`) is answered with what was recorded. Refusing the
+    first would leave a charged card unrecorded until someone frees space; refusing the second
+    would tell staff "Venta no registrada" about money already in the drawer or on a card. A
+    recovery that does not fit answers `sale.charged_not_recorded` (Task 7b). A bill's captured
+    card is completed by the pending-payment pass, which no gate touches. A resend of any other
+    write (a round, a bump) during the stop is refused like a new one (decision 26 says what the
+    till does next). The pull request names this decision.
 
-**Questions for the owner (the default is built if unanswered):** decision 4 (asked by the lane
-runner), and decision 16's parking.
+Decisions 21-29 are Task 12's: what the owner's answer (a) does not settle.
+
+21. **Where the stop is enforced: one gate per mount, registered per write route.** DEFAULT: Task
+    12a's gate, on the three mounts the till app and the kitchen screens write through
+    (`mountTillApi`, `mountDeviceApi`, `mountScheduleApi`). Why: an `app.use` would refuse the
+    dashboard's `/api/backup/*` and `/api/box/*` (M7, P1), and a sub-app middleware leaks to every
+    later route (M7, P2). A hand list of paths was rejected because a new till route would be open
+    until someone added it; with this gate a new till write is refused by construction, and only
+    an open route needs naming (the sweep test pins the open list).
+22. **Seven POSTs that save nothing of their own stay open.** DEFAULT: the three dead-end questions
+    and four previews. Why: a refused send-preview turns into the till's generic `table.error` and
+    the round is never sent (read: `party-allergy-flow.ts:19-34`, `till-app.ts:3684`), hiding the
+    owner's sentence. That they save nothing of their own was read, not run; if one does, its
+    write goes through as a GET's does (the read-only gate's documented limit,
+    `read-only-gate.ts:8-10`).
+23. **The device's own housekeeping and the staff schedule.** DEFAULT: joining, zones, equipment,
+    profile and battery stay open (not a sale, order, kitchen send or clock-in; refusing them would
+    unsettle the device itself); the schedule's swap and absence requests are refused, so the
+    strip's "No se puede guardar nada" holds for everything a till sends except the open list.
+24. **The money surfaces keep the sale's own sentence — this departs from the owner's words.** The
+    owner's answer quotes one sentence for every refusal, sales included: "No se ha guardado: el
+    equipo no tiene espacio en disco. Avisa al encargado." DEFAULT: on a sale or payment surface
+    the till shows the design's sale sentence instead, "Venta no registrada: el equipo no tiene
+    espacio en disco. No cobres hasta que se resuelva; avisa al encargado." (followed by the card
+    advice after an "Otro datáfono" tender), and the owner's sentence everywhere else. Why: §4.6
+    item 5 refuses "with the honest message of item 2", item 2 is "One message for any write, and
+    the sale's own (§3)", and design picture 1 shows the sale's own on the pay card; "No cobres"
+    tells staff not to take the money, which the general sentence does not. If the owner meant the
+    one sentence everywhere, Tasks 9a and 9b show the code table's entry for `storage.disk_full`
+    instead of `sale.disk_full`, and nothing on the server changes. The pull request names this
+    decision.
+25. **The kitchen display's silence.** DEFAULT: not fixed here. The station screen shows nothing for
+    any refused bump today (read: `till-station-screen.ts:578-586`); under the stop its tickets
+    simply do not move. Added to backlog (a) for slice 6, beside the surfaces that show their own
+    fallback.
+26. **A resend of any other write is refused like a new one.** The till resends a write that got no
+    answer up to twice under the same submission id (`apps/till/src/state/draft-sync.ts:208-237`;
+    read); if the stop is noted between the first send and a resend, the resend of a round or bump
+    the box already saved is answered `storage.disk_full`, and the till says it was not saved. A
+    coded answer ends the resends (`resendUnanswered` rethrows anything but a network failure,
+    `apps/till/src/state/draft-sync.ts`; read), so the till does not send that submission again by
+    itself; a later press sends a new submission (`#submitDraft` and the group sends draw a new
+    `submissionId` each time; read). **Known limit, not checked:** whether the route then refuses
+    that press as already done or saves the round a second time, sending the kitchen a duplicate.
+    DEFAULT: accepted — only the four sale routes answer resends during the stop, because there a
+    false "not recorded" is about money; the window is one unanswered request long.
+27. **The reader routes are not behind the gate; decision 17's checks stay theirs.** `POST /api/pay`
+    and the bill payment route are open at the gate, because the gate cannot tell Pay again or a
+    resend from a new payment (that is decided inside the first transaction). So the gate is not the
+    first check there: decision 17's read before the first transaction, its check inside it and its
+    check just before the reader remain the only three, 12c moves the two inside-P1 points of
+    `/api/pay` earlier so a sale owing nothing is refused too, and widens the bill's inside check to
+    every new payment. The read before the first transaction is what clears the stop on those
+    routes, as the gate's read does everywhere else.
+28. **The gate answers before authentication.** DEFAULT: accepted, as the read-only gate does
+    (`read-only-gate.ts:33-37`): an unauthenticated write to a gated route gets 507 rather than 401
+    while the stop holds, and each such request reads free space once.
+29. **A write already past the gate when the stop is noted still saves if it fits.** The gate reads
+    the stop once, before the handler; only the sale routes and the reader payments check again
+    inside their transaction. So a round, bump or clock-in that passed the gate just before another
+    till's save failed, and waits in the write queue behind it, still saves if it fits (reasoned
+    from Task 12a's interface; not run). DEFAULT: accepted — the window is one queued write long
+    and no money moves in it.
+
+**Questions for the owner:** none open. Decision 4 was answered (a) on 2026-10-21, and the same
+answer keeps decision 16's parking. Decision 24 departs from the owner's words, and the pull request
+names it so the owner can overrule it.
 
 ---
 
@@ -652,6 +820,15 @@ assertion should change. If one does, it belongs to this list.
   on a folder still under 16 MiB free, the first such sale charged and refused.
 - A card charged and its sale then refused for a full disk answering `storage.disk_full`; it now
   answers `sale.charged_not_recorded`.
+- After a write failed because the disk was full, every other till and kitchen-screen write still
+  tried and was saved when it fitted (M2: a 1-line cash sale answered `200` after a 20-line one
+  failed). It is now refused `507 storage.disk_full` until a write reads 16 MiB free — sales by
+  cash, "Otro datáfono" or reader, bill payments, orders, rounds and kitchen sends, clock-ins,
+  ticket bumps, table and layout changes, kitchen notes and allergy answers, refunds, reprints and
+  receipt emails, opening the cash drawer by hand, department transfers and staff schedule
+  requests — except the open writes of decision 4.
+- A sale owing nothing taken on the reader, or an issued order owing nothing settled there, while
+  the stop holds (Task 12c).
 - The till showing "This sale cannot be filed with the tax agency … the venue's invoice settings need
   fixing" for a wrong clock (design §2.5), and its generic retry sentence, or the code table's
   generic one, for a full disk on the surfaces of decision 12 (build plan decision 10).
@@ -714,9 +891,11 @@ assertion should change. If one does, it belongs to this list.
    attempt mark, no attendance row, no `bill_payments` row (Tasks 5, 6, 7) — including a refusal
    noted while the payment waited in the write queue, and one noted after its first transaction
    (decision 17).
-2. **Nothing that should go on is refused.** A recovery of a card already charged, a replay, cash,
-   "Otro datáfono" and a sale that owes nothing are not refused by the stop; a sale at 00:00 local
-   on 28-10-2024 is not refused by the clock (Tasks 5, 6, 7; Task 1's boundary).
+2. **Nothing that should go on is refused.** A recovery of a card already charged and a resend of
+   a sale or payment already recorded are not refused by the stop (decision 20; Tasks 5, 12c);
+   sign-in, sign-out, the seven POSTs that save nothing of their own and the device's housekeeping
+   are not refused by the gate (Tasks 12a, 12b); a sale at 00:00 local on 28-10-2024 is not refused
+   by the clock (Tasks 6, 7; Task 1's boundary).
 3. **The date is judged as the record would be.** The issue-reading check judges the very reading
    the record carries, in its own offset (Task 2, decision 6); the check agrees with the library on
    both sides of the boundary (Task 1). The pre-reader check reads the clock at P1 and the record
@@ -739,6 +918,14 @@ assertion should change. If one does, it belongs to this list.
    a second charge (Tasks 7b, 9a, 9b).
 8. **The fiscal guard.** `git diff main -- packages/fiscal-verifactu/src/backend.ts packages/core/src/record-sale.ts packages/fiscal-verifactu/src/chain.ts`
    shows only the added delegating method (Task 1).
+9. **The choke point** (Tasks 12a-12c). Under the stop, every `/api/` write route that
+   `mountTillApi`, `mountDeviceApi` and `mountScheduleApi` register answers `507 storage.disk_full`
+   before its handler runs, except the open list, and nothing is written (row counts on parking,
+   placing, a round, a ticket bump, a clock-in, a cash sale, a collect and a bill payment); the
+   sweep tests list every route a mount registers and pin the open list as a literal; no dashboard
+   route and no route mounted afterwards is refused (M7 shows why a `use` would have been); the
+   four sale routes refuse after their replay checks; freed space clears the stop on the next till
+   write; deleting the gate's call fails the sweep and every refusal case.
 
 ---
 
@@ -992,8 +1179,8 @@ assertion should change. If one does, it belongs to this list.
     /** Whether a refusal is noted now. Reads no disk. */
     noted(): boolean;
     /**
-     * Whether a payment on a connected card reader must be refused now. Reads the folder's free
-     * space only while a refusal is noted, and forgets the refusal at FULL_DISK_BYTES or more.
+     * Whether a till write must be refused now. Reads the folder's free space only while a refusal
+     * is noted, and forgets the refusal at FULL_DISK_BYTES or more.
      */
     full(): Promise<boolean>;
     /** When the refusal now noted was first noted; null when none is. */
@@ -1016,12 +1203,14 @@ assertion should change. If one does, it belongs to this list.
     state: DiskFullState,
     stores: readonly { onDiskFull(listener: () => void): () => void }[],
   ): () => void;
-  /** The refusal a card-reader payment gets while the stop holds. */
+  /** The refusal a till write gets while the stop holds. */
   export function diskFullRefusal(): AppError<"storage.disk_full">;
   ```
   `noteRefused` logs `("warn", "storage.disk_full_noted", {})` only when nothing was noted.
-  `full()` clears only if a refusal is still noted when its reading returns, so two reads that race
-  log `("info", "storage.disk_space_back", { freeBytes })` once. `noteFullAtStart` logs
+  `full()` counts `noteRefused` calls and clears only if none was made while its reading was in
+  flight: a refusal noted during the read keeps the stop, and that `full()` answers `true`, so its
+  request is refused too. Two reads that both find space log
+  `("info", "storage.disk_space_back", { freeBytes })` once. `noteFullAtStart` logs
   `("warn", "storage.start_space_unread", {})` on a `null` reading. `diskFullRefusal()` is
   `new AppError("storage.disk_full", {})`, with no `reason`: the boundary never logs one for a
   full disk (`packages/server-kit/src/error-boundary.ts:34-39`); the refusal sites log their own
@@ -1124,8 +1313,9 @@ assertion should change. If one does, it belongs to this list.
     captured payment with no sale on an open order (`insertCapturedPayment`, as
     `till-sale-integrated.db.test.ts:304-314` does), noted, page room available → Pay again
     (`lines: []`) answers `200 captured`, collect unchanged, the sale filed (M3's shape).
-  - `"does not refuse a sale that owes nothing"`: a walk-up of the `0.00` product, noted → `200`,
-    collect unchanged.
+  - (The sale that owes nothing is refused while the stop holds — decision 4 — and is Task 12c's
+    case; this task's checks sit after its return, and Task 12c moves them. The `0.00` product is
+    still created here: Task 12c's case reuses its setup.)
   - Window 1 (decision 17), `"refuses before the reader when a refusal is noted while the payment
     waits for the write queue"`: the route gets a `DiskFullState` that wraps the real one and whose
     `full()` awaits the real `full()` (false: nothing noted), then starts — without awaiting — a
@@ -1154,8 +1344,7 @@ assertion should change. If one does, it belongs to this list.
   Run: `pnpm --filter @waitron/server exec vitest run src/till-pay.disk-full.test.ts`
   Expected: the refusal cases and both windows FAIL with `200` where `507` was expected and collect
   +1 (the stop does not exist yet; `appWith` passes a `disk` nothing reads); the end-to-end case
-  FAILS the same way, M2's answer. The controls, the recovery and the owes-nothing cases pass
-  before and after.
+  FAILS the same way, M2's answer. The controls and the recovery case pass before and after.
 
 - [ ] **Step 3: Implement** the read before P1, the two refusals inside it and the check
   before the reader.
@@ -1253,8 +1442,8 @@ assertion should change. If one does, it belongs to this list.
   - `"refuses a reader payment while a refused write is noted, before the reader"`: noted, statfs 0
     → `507 storage.disk_full`, collect unchanged, no `bill_payments` row.
   - Control `"asks the reader when nothing is noted"` → `200 received`, collect +1.
-  - `"takes cash and Otro datáfono while the stop holds"`: noted → a cash contribution `200
-    received`; a manual card `200 received` (the stop guards the reader only, decision 4).
+  - (Cash and "Otro datáfono" while the stop holds are refused from Task 12c on — decision 4 —
+    and are its cases.)
   - `"answers a retry of a payment already taken while the stop holds"`: take a reader payment,
     then note, then resend the same `submissionId` → `200`, the same payment id, collect unchanged.
   - `"takes a reader payment again once the folder has 16 MiB free"` → collect +1.
@@ -1278,7 +1467,7 @@ assertion should change. If one does, it belongs to this list.
 
   Run: `pnpm --filter @waitron/server exec vitest run src/bill-payments.refuse-before-reader.test.ts`
   Expected: the stop's refusal and both windows FAIL with `200` and collect +1; the clock cases
-  FAIL with `200 received` (part payments, M1); the controls, cash-while-stopped and the retry pass
+  FAIL with `200 received` (part payments, M1); the controls and the retry pass
   before and after.
 
 - [ ] **Step 3: Implement.**
@@ -1670,6 +1859,424 @@ assertion should change. If one does, it belongs to this list.
   git commit -s -m "The dashboard names a full disk and a wrong clock"
   ```
 
+### Task 12: Once a save has failed on a full disk, every till and kitchen-screen write is refused until someone frees space (decision 4: the owner chose (a))
+
+Split into three tasks, each for one implementer, run in order after Tasks 1-10 and before Task 11:
+**12a** puts one gate in front of every write route the till's mount registers; **12b** does the
+same for the kitchen screens' and the staff schedule's routes and wires boot; **12c** refuses the
+four sale routes from inside, after their replay checks. Each is sized well under 100 tool calls.
+**Size:** 12a about 60-80 tool calls, 12b about 35-50, 12c about 60-80. Split because one
+implementer doing all three would pass 150.
+
+Every `file:line` below was read at `45693342d` (the branch's base when this task was written),
+from a `git archive` of that commit, so a line moved by this branch's own Tasks 1-10 is found by
+name. **#1944 landed on `main` as `509e8d42a` after this task was written:** it removes
+`POST /api/device/pass-screen/done` and the kitchen levers' Fire and Away (the levers in
+`device-levers.ts` now register Ready only) and moves lines in `till-api.ts`. This branch is
+rebased onto it, so find each site by name; the gate covers whatever routes are left, because it
+is built from the routes the mount registers.
+
+**Why the gate is registered per route, not as one `app.use`** (M7, measured for this task with
+`node` against `hono` 4.13.13, the version `apps/server` resolves; probes under
+`~/waitron-campaign-b/a798-3-task12/probe/`):
+- `app.use("/api/*", gate)` placed where `mountTillApi` places `madeHereAnswer` (`till-api.ts:1248`)
+  runs before every `/api/*` route registered after it: P1 printed `POST /api/after -> 507
+  ran=[gate]` and, for a route registered before it, `POST /api/before -> 200
+  ran=[before-handler]`. Boot registers the dashboard's `/api/backup/*` (`boot.ts:2279`) and
+  `/api/box/*` routes, the device API (`boot.ts:1805`) and the schedule API (`boot.ts:2015`) after
+  `mountTillApi` (`boot.ts:1653`), so such a gate would refuse them.
+- A sub-app's `use("*", gate)` mounted with `app.route("/", sub)` is copied into the parent as
+  `ALL /*` and catches every route the parent registers afterwards: P2 printed
+  `POST /api/backup/apply -> 507 ran=[sub-gate]` and `POST /management-api/staff -> 507
+  ran=[sub-gate]` (`route()` copies `app.routes` entry by entry; read: `hono-base.js`'s `route`).
+- Registering the gate on the parent with `app.on(method, path, gate)` for each write route of the
+  sub-app, then `app.route("/", sub)`, gates exactly those routes: P3 printed
+  `POST /api/w/1/place -> 507 ran=[root-mw,gate]`, control (not full) `200
+  ran=[root-mw,gate,madehere,till-place]`, `GET /api/w/1 -> 200` (no gate), the open
+  `POST /api/session -> 200`, and the later-registered `POST /api/backup/apply -> 200` and
+  `POST /api/device/battery -> 200`, both without the gate. A gated `PUT /api/w/:id` did not catch
+  `PUT /api/w/1/label` (`hono-prefix.mjs`: `-> 200 ran=[put-label]`). Root middleware registered
+  earlier still runs first (`root-mw`), so the request id and CORS (`boot.ts:972`, `:1587`) wrap the
+  refusal.
+  Commands: `node hono-order.mjs <repo>/node_modules/.pnpm/hono@4.13.13/node_modules/hono/dist/index.js`
+  and `node hono-prefix.mjs <same path>`.
+
+**What stays open while the stop holds** (decision 4; each still fails by itself with
+`storage.disk_full` if its own save does not fit):
+- Sign-in, sign-out and the session's language — `POST /api/session` (`till-api.ts:1345`),
+  `DELETE /api/session` (`:1427`), `PUT /api/session/locale` (`:1442`). A refused sign-out would keep
+  a person signed in on a shared till; a refused sign-in would keep the next shift from reading the
+  floor and its bills. Sign-in also records the person's sign-in as working-time evidence
+  (`till-api.ts`, the `attendance` call in `POST /api/session`), so that evidence keeps arriving
+  while clock-ins are refused.
+- The four sale routes — `POST /api/sales` (`:1736`), `POST /api/pay` (`:1778`),
+  `POST /api/working-orders/:id/collect` (`:2642`), `POST /api/working-orders/:id/payments`
+  (`bill-payments-api.ts:227`) — open at the gate and refused inside by 12c, after their replay
+  checks, because only there can a resend of a sale already recorded be told from a new one
+  (`till-sale.ts:663-665`, `:1129-1134`, `:2076-2078`; `bill-payments.ts:1054-1064`), and because
+  `/api/pay` decides "Pay again on a card already charged" inside its first transaction
+  (`till-sale.ts:1164-1174`). See decision 20.
+- Seven POSTs that save nothing of their own (each, like every GET, may record the device's
+  sighting through `requireSession`): `POST /api/dead-ends/sale`, `/draft`, `/order` (`till-api.ts:1618`,
+  `:3606`, `:3697`), `POST /api/working-orders/:id/payments/preview` (`bill-payments-api.ts:216`),
+  `POST /api/working-orders/:id/adjustments/preview` (`adjustments-api.ts:234`),
+  `POST /api/parties/:id/allergy/send-preview` (`party-allergy-api.ts:93`, answered by
+  `readAllergySendView` at `:130`), `POST /api/bills/:id/move/allergy-preview`
+  (`till-api.ts:4119`). That each saves nothing of its own was read, not run (their handlers and the till
+  client's doc comments, `apps/till/src/api/client.ts:4350`, `:4385`). Why it matters: a refused
+  send-preview makes the till show its generic `table.error` and never send the round
+  (`apps/till/src/state/party-allergy-flow.ts:19-34` turns any failure into `unread`;
+  `apps/till/src/till-app.ts:3684`; read), so the kitchen send itself must be the request that is
+  refused, with Task 9c's sentence.
+- On the device API (12b): the device's own housekeeping — `POST /api/device/join`
+  (`device-api.ts:208`), `PUT /api/device/zones` (`:347`), `PUT /api/device/equipment` (`:379`),
+  `POST /api/device/active-profile` (`:400`), `PUT /api/device/battery` (`:413`). None is a sale,
+  an order, a kitchen send or a clock-in.
+- Never gated, because they are not on these mounts: every dashboard route (`/management-api/*`,
+  and the dashboard's `/api/backup/*` and `/api/box/*`; the dashboard client calls no other `/api/`
+  write, read: `grep` of `apps/dashboard/src` for `"/api/`), the provider webhook, the node
+  enrolment, and every background duty — the filing outbox, the pending-payment pass that completes
+  a bill's captured card (`bill-payments-loop.ts`), the print queue and the payment release pass.
+  Their writes that do not fit fail by themselves with `storage.disk_full` and note the stop
+  (decision 1); this task adds no refusal there.
+
+**What the till shows.** The gate and 12c answer `507 { error: { code: "storage.disk_full",
+params: {} } }`, the shape the error boundary gives (`packages/server-kit/src/error-boundary.ts:34-39`)
+and the read-only gate copies (`apps/server/src/read-only-gate.ts:34-37`). So Tasks 9a-9c's mapping
+applies unchanged and this task adds no till code: placing, parking, table and line writes —
+which a kitchen send from a table reaches through `#onReleaseRefusal` → `lineWriteError`
+(`till-app.ts:11399-11406`, called from `#onGroupCommand` at `:11435` and the lines send at
+`:11933`; read), or, for a round sent from a draft, through `#submitDraft`'s `draftRefusalError` →
+`tableWriteError` and `lineWriteError` (`till-app.ts` `#submitDraft`; read) — discarding, the
+till's ticket advance and clock-in show the owner's
+sentence, "No se ha guardado: el equipo no tiene espacio en disco. Avisa al encargado." (decision 10,
+the code table's entry). The money surfaces keep the sale's own sentence, "Venta no registrada: el
+equipo no tiene espacio en disco. No cobres hasta que se resuelva; avisa al encargado." (design §3's
+table for a sale; decisions 10 and 24), with the card advice after an "Otro datáfono" tender. Not
+covered,
+and left to slice 6 (Task 11, backlog (a)): the kitchen display's station screen shows nothing for
+any refused bump today — it reloads its queue (`apps/till/src/screens/till-station-screen.ts:578-586`;
+read) — and any till surface outside decision 12 that shows its own fallback.
+
+### Task 12a: The gate, in front of every write route `mountTillApi` registers
+
+**Files:**
+- Create: `apps/server/src/disk-full-gate.ts`
+- Modify: `apps/server/src/till-api.ts` (`mountTillApi`, `:1244-4189`: its parameter, its first
+  line and its last line only; `TillApiDeps.disk`'s doc, added by Task 5)
+- Modify: `apps/server/src/testing/bill-venue.ts` (`appWith`, added by Task 5: one more option)
+- Create: `apps/server/src/till-api.disk-full-gate.test.ts`
+- Create: `apps/server/src/till-clock.disk-full.test.ts`
+
+**Interfaces:**
+- `disk-full-gate.ts`:
+  ```ts
+  /**
+   * Adds `routes`' routes to `root`, first putting in front of each write route under `/api/` a
+   * check that answers 507 `storage.disk_full`, before the route runs, while `disk.full()` is true.
+   * A route `open` names ("POST /api/session") is not checked. With no `disk`, nothing is checked.
+   */
+  export function mountGatedWhileDiskFull(
+    root: Hono,
+    routes: Hono,
+    deps: { disk?: DiskFullState; log: Logger; open: ReadonlySet<string> },
+  ): void;
+  ```
+  For each entry of `routes.routes` whose `method` is `POST`, `PUT`, `PATCH` or `DELETE`, whose
+  `path` starts with `/api/`, and whose `` `${method} ${path}` `` is not in `open` and not already
+  checked: `root.on(method, path, check)`. Then `root.route("/", routes)`. The check:
+  `if (!(await disk.full())) return next();` else log
+  `("warn", "storage.disk_full_stop_refused", { route: key, requestId: c.get("requestId") })` and
+  `const err = diskFullRefusal(); return c.json({ error: { code: err.code, params: err.params } }, 507);`
+  — returned directly, as `read-only-gate.ts:34-37` does, because a middleware is outside a route's
+  error boundary. `/management-api/*` routes a mount registers (the demo reader's, `till-api.ts:1285`,
+  `:1291`) are not under `/api/` and are never checked.
+- `till-api.ts`: `mountTillApi(root: Hono, deps, log)`; its first line `const app = new Hono();`
+  (every existing registration below it is unchanged and now lands on `app`, `madeHereAnswer`'s
+  `app.use` at `:1248` included); its last line
+  `mountGatedWhileDiskFull(root, app, { disk: deps.disk, log, open: TILL_OPEN_WHILE_DISK_FULL });`.
+  `TILL_OPEN_WHILE_DISK_FULL` is a module constant beside it holding the 14 entries of "What stays
+  open" (3 session, 4 sale routes, 7 POSTs that save nothing of their own), with one comment line
+  per group saying why.
+  `TillApiDeps.disk`'s doc says it is read by the gate, the reader payments and, through the deps
+  they pass, the cash, collect and bill-payment routes; a live boot always supplies it.
+- `BillVenue.appWith` gains `workforceEnabled?: boolean`, passed to `mountTillApi` (setup only).
+
+- [ ] **Step 1: Write the failing tests.** In `till-api.disk-full-gate.test.ts`, on
+  `provisionBillVenue` under `useVenueDb` with `migrationOptionsFor(manifestSets(), null)` (the
+  shape of `adjustments-bill-payments.test.ts:40-45`), each case with its own
+  `createDiskFullState` over a settable `statfs` stub as `till-pay.disk-full.test.ts` (Task 5) builds
+  one, noted by `noteRefused()` with the stub at 0 unless the case says otherwise. Set up through
+  `venue.app` (no stop); send the request under test through `venue.appWith({ disk })`. Every refused
+  request asserts `status` 507 and body `{ error: { code: "storage.disk_full", params: {} } }`.
+  - `"refuses every till write while a refused write is noted, except the open ones"`: mount
+    `venue.appWith({ disk, workforceEnabled: true })`; list its routes from `app.routes` whose method
+    is a write and whose path starts with `/api/`, deduplicated by `` `${method} ${path}` ``; send
+    each with no cookie and body `{}`, every `:name` segment replaced by one fixed UUID. Expect 507
+    `storage.disk_full` exactly for the routes NOT in a literal `EXPECTED_OPEN` set written in the
+    test (the 14 entries above — never imported from `till-api.ts`), and a status other than 507 for
+    each one in it. Report failures as the list of mismatched routes. Also expect every entry of
+    `EXPECTED_OPEN` to be among the listed routes, so a renamed route fails here.
+    Control `"refuses none of them while nothing is noted"`: the same sweep with a fresh state;
+    no route answers 507.
+  - `"parks and places no order while the stop holds"`: `POST /api/working-orders` with a new id and
+    one Caña (the body `till-api.ts:1842-1890` reads) → 507, no `working_orders` row with that id.
+    Control, fresh state → the route's success status and the row exists. Then, that order parked
+    and the stop noted, `POST /api/working-orders/:id/place` → 507 and the order's `status`
+    unchanged; control → placed.
+  - `"sends no round to the kitchen while the stop holds"`: a seated party
+    (`seatedWith(venue)`, `testing/bill-venue.ts:430`), then `POST /api/parties/:id/groups` with one
+    Paella and `release: "fire"` (the body `seatedWith` sends, `testing/bill-venue.ts:445-454`) →
+    507; that bill's `working_order_lines` and `ticket_items` counts and the `print_jobs` count
+    unchanged. Control → 200 and one more ticket item.
+  - `"advances no ticket item while the stop holds"`: a dish sent to the kitchen
+    (`seatedWith(venue, "Ensalada")`; find its `ticket_items` row as
+    `attendance-kitchen-service.test.ts:100-126` does), then
+    `POST /api/ticket-items/:id/advance` with `{ stationId: <the row's station>, to: "preparing" }`
+    (`till-api.ts:2174`) → 507, the row's `state` unchanged. Control → 200 and `state` `preparing`.
+  - `"still answers a read"`: noted → `GET /api/working-orders/:id` of a parked order → 200.
+  - `"still signs a person in and out"`: noted → `POST /api/session` with the device cookie and
+    `{ personId: venue.operatorId, pin: "5555" }` (read the body at `till-api.ts:1345`) → its
+    success status; `DELETE /api/session` → its success status.
+  - `"refuses no route mounted after the till's"`: on the app `appWith({ disk })` returned, register
+    `mountThemesApi(app, { db: venue.db }, quiet)` and a bare `app.post("/api/backup/apply", (c) => c.json({}))`,
+    as boot mounts those after `mountTillApi` (`boot.ts:1856`, `:2279`); noted →
+    `POST /management-api/themes` with no cookie answers its own refusal (`management_session.required`),
+    not 507, and `POST /api/backup/apply` → 200.
+  - `"lets a write through once the folder has 16 MiB free, and forgets the refusal"`: noted, stub
+    `FULL_DISK_BYTES - 1` → park → 507; then stub `FULL_DISK_BYTES` → park → success, and
+    `disk.noted()` is `false` after.
+  In `till-clock.disk-full.test.ts`, on `createClockVenue` (`testing/clock-venue.ts:28`) under
+  `useVenueDb` as `till-clock-api.test.ts:22-28` sets it up, a Hono with `mountTillApi` over the
+  clock venue's `db` and `cfg`, `workforceEnabled: true`, `secureCookies: false`,
+  `venueLocale: "es-ES"`, `clock: systemClock()` (`till-backend.ts`, as `testing/bill-venue.ts:48`
+  imports it), `backend: {} as FiscalBackend` (setup: the clock routes never read it) and `disk`:
+  - `"clocks no one in while the stop holds"`: `POST /api/clock/in` with `{ expectedEntryId: null }`
+    and the venue's cookie (`till-clock-api.test.ts:29-40`) → 507 `storage.disk_full`, the
+    `timeEntries` count unchanged. Control → 200, one more entry.
+
+- [ ] **Step 2: Run them and watch them fail**
+
+  Run: `pnpm --filter @waitron/server exec vitest run src/till-api.disk-full-gate.test.ts src/till-clock.disk-full.test.ts`
+  Expected: the sweep FAILS listing every write route except the open ones (each answered 401, 400
+  or 404, not 507); the park, place, round, advance and clock-in cases FAIL with their success status
+  where 507 was expected, and the rows changed; the freed-space case FAILS on its
+  first half (no gate: success where 507 was expected). The two controls, the read, the sign-in and
+  the later-mounted routes
+  pass before and after.
+
+- [ ] **Step 3: Implement** `disk-full-gate.ts`, the three-line change to `mountTillApi`, the open
+  set and `appWith`'s option. If anything in `mountTillApi` registers a route after it returns, STOP
+  and report: the copy at its end would miss it.
+
+- [ ] **Step 4: Run them and the till suites, and watch them pass**
+
+  Run the command of Step 2, then
+  `pnpm --filter @waitron/server exec vitest run src/till-api.test.ts src/made-here.routes.test.ts src/till-pay.disk-full.test.ts src/bill-payments.refuse-before-reader.test.ts src/till-api.profile-actions.test.ts src/till-api.profile-zones.test.ts src/till-clock-api.test.ts`
+  — PASS, `Tests` counts shown (`made-here.routes.test.ts` checks `madeHereAnswer` still wraps the
+  till's routes after the move onto the inner app). `pnpm --filter @waitron/server typecheck` exits 0.
+
+- [ ] **Step 5: Prove the gate by deletion.** Replace the `mountGatedWhileDiskFull(...)` call with
+  `root.route("/", app);`. Run Step 2's command: the sweep, park, place, round, advance and clock-in
+  cases must FAIL as in Step 2 (if one passes, it is not testing the gate: STOP). Restore the call;
+  re-run: PASS.
+
+- [ ] **Step 6: Commit**
+
+  ```bash
+  git add apps/server/src/disk-full-gate.ts apps/server/src/till-api.ts apps/server/src/testing/bill-venue.ts apps/server/src/till-api.disk-full-gate.test.ts apps/server/src/till-clock.disk-full.test.ts
+  git commit -s -m "Once a save has failed for a full disk, every till write is refused until the venue folder has 16 MiB free again"
+  ```
+
+### Task 12b: The same gate for the kitchen screens and the staff schedule, wired at boot
+
+**Files:**
+- Modify: `apps/server/src/device-api.ts` (`DeviceApiDeps`, `:97`; `mountDeviceApi`, `:192`: its
+  parameter, first and last line)
+- Modify: `apps/server/src/device-levers.ts` (`mountDeviceLevers`'s `deps` type, `:118-123`, only if
+  the typecheck asks; it receives the inner app from `device-api.ts:447`)
+- Modify: `apps/server/src/schedule-api.ts` (its deps type; `mountScheduleApi`, `:51`)
+- Modify: `apps/server/src/boot.ts` (`mountDeviceApi`'s deps, `:1805-1816`; `mountScheduleApi`'s,
+  `:2015`)
+- Test: `apps/server/src/device-api.test.ts`, `apps/server/src/schedule-api.test.ts`,
+  `apps/server/src/boot.disk-full-wiring.test.ts` (Task 8)
+
+**Interfaces:**
+- `DeviceApiDeps` and `ScheduleApiDeps` gain `disk?: DiskFullState`. Each mount takes `root`, builds
+  `const app = new Hono();` first and ends with `mountGatedWhileDiskFull(root, app, { disk: deps.disk, log, open })`:
+  `DEVICE_OPEN_WHILE_DISK_FULL` (the five housekeeping routes of "What stays open") for the device
+  API, an empty set for the schedule (its writes, `schedule-api.ts:87`, `:106`, `:123`, are staff
+  requests, which the strip's "No se puede guardar nada" covers).
+- The kitchen display's writes are therefore gated by construction: at `45693342d`,
+  `POST /api/device/pass-screen/done` (`device-api.ts:468`), `.../kitchen-notices/:id/acknowledge`
+  (`:556`), `.../ticket-items/:id/advance` (`:578`), `.../working-orders/:id/lines/move-station`
+  (`:610`) and the levers (`device-levers.ts:125`, `:161`); after #1944, whatever remains.
+  `/management-api/devices/*` (`device-api.ts:652-753`) is not under `/api/` and is never gated.
+- Boot passes `disk: diskFull` (Task 8's state) to both mounts; `mountDeviceApi` is called only when
+  `!fencedOrMirror` (`boot.ts:1777`), inside `bootServer` (`:812`), where `diskFull` is in scope.
+
+- [ ] **Step 1: Write the failing tests.**
+  - `device-api.test.ts`, a new `describe("while a save refused for a full disk stands")`, mounting
+    `mountDeviceApi` as `mountApp` does (`device-api.test.ts:235-251`) plus `disk`:
+    - the same sweep as 12a's over this app's `/api/` write routes, with a literal
+      `EXPECTED_OPEN` of the five housekeeping routes; control with nothing noted.
+    - `"a station screen bumps nothing while the stop holds"`: `fireOrder` and
+      `enrolStationScreen` as the case at `device-api.test.ts:956` sets them up; noted →
+      `POST /api/device/ticket-items/:id/advance` `{ to: "preparing" }` → 507 `storage.disk_full`,
+      the item's `state` unchanged. Control → 204 and `preparing`.
+  - `schedule-api.test.ts`, a new `describe("while a save refused for a full disk stands")`,
+    mounting `mountScheduleApi` as the file's existing cases do, plus `disk`: the same sweep as
+    12a's over this app's `/api/` write routes, with an empty literal `EXPECTED_OPEN`, so every one
+    answers 507 `storage.disk_full`; control with nothing noted: none answers 507 (each gives its
+    own refusal, no session).
+  - `boot.disk-full-wiring.test.ts`: mock `./device-api.js` and `./schedule-api.js` as the file
+    mocks `./till-api.js`, recording deps; `"hands the stop to the kitchen screens' and the
+    schedule's routes"`: both recorded deps carry `disk` `toBe` the state `createDiskFullState`
+    returned.
+
+- [ ] **Step 2: Run them and watch them fail**
+
+  Run: `pnpm --filter @waitron/server exec vitest run src/device-api.test.ts src/schedule-api.test.ts src/boot.disk-full-wiring.test.ts`
+  Expected: the device sweep FAILS listing the kitchen writes, and the schedule sweep listing every
+  schedule write; the bump case FAILS with its success status where 507 was expected; the boot case
+  FAILS with `disk`
+  `undefined`. Controls and the files' existing cases pass.
+
+- [ ] **Step 3: Implement.**
+
+- [ ] **Step 4: Run them and the suites near them, and watch them pass**
+
+  Run the command of Step 2, then
+  `pnpm --filter @waitron/server exec vitest run src/device-levers.test.ts src/boot.test.ts src/boot.failed-start.test.ts src/till-api.disk-full-gate.test.ts`
+  — PASS, `Tests` counts shown. `pnpm --filter @waitron/server typecheck` exits 0.
+  Then `pnpm --filter @waitron/server exec vitest run --coverage --coverage.include=src/disk-full-gate.ts src/till-api.disk-full-gate.test.ts src/device-api.test.ts src/schedule-api.test.ts`
+  and read `disk-full-gate.ts`'s row (98/98/98/95); CI runs the package's coverage.
+
+- [ ] **Step 4b: Prove the device and schedule gates by deletion.** In `mountDeviceApi` replace
+  the `mountGatedWhileDiskFull(...)` call with `root.route("/", app);` and run
+  `pnpm --filter @waitron/server exec vitest run src/device-api.test.ts`: the device sweep and
+  the bump case must FAIL with their success or session status (if one passes, it is not testing
+  the gate: STOP). Restore; PASS. Do the same in `mountScheduleApi` with
+  `src/schedule-api.test.ts`.
+
+- [ ] **Step 5: Commit**
+
+  ```bash
+  git add apps/server/src/device-api.ts apps/server/src/device-levers.ts apps/server/src/schedule-api.ts apps/server/src/boot.ts apps/server/src/device-api.test.ts apps/server/src/schedule-api.test.ts apps/server/src/boot.disk-full-wiring.test.ts
+  git commit -s -m "The kitchen screens' and the staff schedule's writes are refused too while a full-disk refusal stands"
+  ```
+
+### Task 12c: The four sale routes refuse a new sale while the stop holds, and still answer one already recorded
+
+**Files:**
+- Modify: `apps/server/src/till-sale.ts` (`TillSaleDeps`, `:75`; `runPayWorkingOrder`, `:642-752`;
+  `runCollectOrder`, `:2058-2164`; `payIntegrated`'s two checks inside P1, placed by Task 5 near
+  `:1194` and `:1265`)
+- Modify: `apps/server/src/bill-payments.ts` (`BillPaymentDeps`, `:105`; `beginBillPayment`'s stop
+  check, placed by Task 7 at `:1078`; `takeBillPayment`, `:1155-1205`)
+- Modify: `apps/server/src/till-api.ts` (the deps `/api/sales` and
+  `/api/working-orders/:id/collect` pass, `:1766-1767`, `:2660-2661`)
+- Modify: `apps/server/src/bill-payments-api.ts` (the cash and manual-card branch, `:236-240`)
+- Create: `apps/server/src/till-sales.disk-full.test.ts`
+- Modify, only if the settle case moves there (Step 1): `apps/server/src/counter-handover.test.ts`
+- Modify, only if Tasks 5 and 7 were built before the plan edit that moved these cases here:
+  `apps/server/src/till-pay.disk-full.test.ts` (`"does not refuse a sale that owes nothing"`) and
+  `apps/server/src/bill-payments.refuse-before-reader.test.ts` (`"takes cash and Otro datáfono
+  while the stop holds"`)
+
+**Interfaces:**
+- `disk?: DiskFullState` moves to till-sale.ts's `TillSaleDeps` (`:75`), so `IntegratedPayDeps`
+  (`:595`) inherits it, and to `BillPaymentDeps` (`bill-payments.ts:105`), so
+  `ReaderBillPaymentDeps` (`:1217`) inherits it; remove the copies Tasks 5 and 7 added.
+- `runPayWorkingOrder` (serving `/api/sales` through `runTillSale`, `:2214`) and `runCollectOrder`:
+  before `withTransaction`, `const preRead = (await deps.disk?.full()) ?? false;`; inside, on the
+  line after the replay return (`:663-665`; `:2076-2078`),
+  `if (preRead || (deps.disk?.noted() ?? false)) refuse…(req.id)` — the same log and
+  `diskFullRefusal()` as Tasks 5 and 7 (if each defined its own closure, add one exported
+  `refuseForDiskStop(log: Logger | undefined, workingOrderId: string): never` to
+  `disk-full-state.ts` and use it here). The unique-violation replay (`:731-751`) is untouched.
+- `payIntegrated`: move Task 5's settle-branch check from before `onLive` (`:1194`) to the first
+  line inside `if (outstanding !== undefined) {` (`:1181`), before the owes-nothing test (`:1182`);
+  move its collect-branch check from after the zero-total return to immediately before
+  `if (compareDecimal(order.gross.total, ZERO) === 0)` (`:1241`). Both stay after the replay
+  (`:1129-1134`) and the recovery (`:1164-1174`). The check just before the reader is unchanged.
+- `beginBillPayment`: Task 7's `if (state === "pending" && refusals.diskFull())` becomes
+  `if (refusals.diskFull())`, still after the replay lookup (`:1054-1064`). `takeBillPayment` reads
+  `preRead` before its transaction and passes
+  `{ diskFull: () => preRead || (deps.disk?.noted() ?? false) }` instead of `() => false`.
+- The routes pass `disk: deps.disk`: `/api/sales` and the collect route in the deps they build
+  (`till-api.ts:1767`, `:2661`); the bill route as `takeBillPayment({ ...fiscal, disk: deps.disk }, …)`.
+
+- [ ] **Step 1: Write the failing tests** in `till-sales.disk-full.test.ts`, set up as Task 12a's
+  gate test (bill venue; a `DiskFullState` per case; setup through `venue.app`, the request under
+  test through `venue.appWith({ disk })`). Every refusal asserts 507
+  `{ error: { code: "storage.disk_full", params: {} } }`.
+  - `"refuses a cash sale while the stop holds, and keeps nothing"`: walk-up `POST /api/sales`, one
+    Caña, cash 3.00 → 507; no `working_orders` row with the id, the `sales` count and the series'
+    `next_number` unchanged. Control → 200, one more sale.
+  - `"refuses an Otro datáfono sale"`: the same with `tender: { method: "card" }` → 507, no
+    `payments` row for the id.
+  - `"answers a resend of a cash sale already recorded"`: record one (nothing noted), then note and
+    resend the same `workingOrderId` → 200 with the first answer's sale, the `sales` count unchanged.
+  - `"refuses to collect a placed order, and answers a collect already made"`: a placed order as
+    `attendance-kitchen-service.test.ts:123-134` makes one (`placeOrder`, then the collect body it
+    sends); noted → `POST /api/working-orders/:id/collect` cash → 507, the order still `placed`.
+    Nothing noted → 200; then noted, resend → 200, the same sale.
+  - `"refuses a bill's cash and Otro datáfono payments, and answers one already taken"`: a bill
+    (`tabWith(venue, "Paella")`); noted → a cash contribution (`bill-payments.card.test.ts:98-110`'s
+    body) → 507, no `bill_payments` row; a manual card → 507. A cash contribution taken with nothing
+    noted, then noted and resent with the same `submissionId` → 200, the same payment id.
+  - `"refuses a card sale that owes nothing"`: a walk-up of a product priced 0.00 (created as Task
+    5's case creates one) on `POST /api/pay` → 507, `collectCalls` unchanged, no `working_orders`
+    row.
+  - `"refuses settling an issued order that owes nothing"`: a placed order whose issued invoice is
+    credited whole (copy `counter-handover.test.ts`'s local `placed("issued", …)` and
+    `creditWholeInvoice`, used at `:395-398`) on `POST /api/pay` → 507, the order still `placed`.
+    Control → 200. If copying the setup takes more than about 15 calls, add this case to
+    `counter-handover.test.ts` beside its owes-nothing case (`:395` area), as a new `it` that
+    builds its own `DiskFullState` and mounts `venue.appWith({ disk })`; name the file in the
+    commit.
+  - `"still files a card already charged"`: re-run Task 5's case of that name; no new case.
+  - `"refuses a cash sale noted while it waits for the write queue"`: Task 5's window-1 wrapper (a
+    `full()` that answers `false` and queues a body calling `noteRefused()`) → 507; control → 200.
+  - `"sells again once the folder has 16 MiB free"`: noted, stub `FULL_DISK_BYTES` → a cash sale
+    → 200 and `disk.noted()` `false`.
+  If `till-pay.disk-full.test.ts` holds `"does not refuse a sale that owes nothing"` or
+  `bill-payments.refuse-before-reader.test.ts` holds `"takes cash and Otro datáfono while the stop
+  holds"` (Tasks 5 and 7 built before the plan edit), change each to expect 507 and nothing written,
+  renamed `"refuses a sale that owes nothing while the stop holds"` and `"refuses cash and Otro
+  datáfono while the stop holds"`, in a commit of its own whose message begins
+  `Changed test checks (A798 slice 3):` and lists each `file:line` with its before and after; they
+  pinned decision 4's old default, which the owner's answer removes.
+
+- [ ] **Step 2: Run them and watch them fail**
+
+  Run: `pnpm --filter @waitron/server exec vitest run src/till-sales.disk-full.test.ts`
+  Expected: every refusal case FAILS with 200 and a row written (the gate leaves these routes open
+  and nothing inside refuses them yet; the 0.00 card sale passes Task 5's checks because they sit
+  after its owes-nothing return); the 16 MiB case FAILS on `disk.noted()` (nothing on `/api/sales`
+  reads free space yet); the
+  resends, the charged-card case and the controls pass before and after.
+
+- [ ] **Step 3: Implement.**
+
+- [ ] **Step 4: Run them and the sale suites, and watch them pass**
+
+  Run: `pnpm --filter @waitron/server exec vitest run src/till-sales.disk-full.test.ts src/till-pay.disk-full.test.ts src/bill-payments.refuse-before-reader.test.ts src/card-charged-not-recorded.test.ts src/till-sale-integrated.db.test.ts src/till-sale.test.ts src/pay-owing-nothing.test.ts src/counter-handover.test.ts src/bill-payments.test.ts src/bill-payments.card.test.ts src/bill-payments-api.test.ts`
+  — PASS, `Tests` counts shown. `pnpm --filter @waitron/server typecheck` exits 0.
+
+- [ ] **Step 5: Prove the sale check by deletion.** Delete the check in `runPayWorkingOrder`; run
+  Step 2's command: the cash, Otro datáfono and window cases must FAIL with 200 (if one passes, it
+  is not testing this check: STOP). Restore; re-run: PASS.
+
+- [ ] **Step 6: Commit**
+
+  ```bash
+  git add apps/server/src/till-sale.ts apps/server/src/bill-payments.ts apps/server/src/till-api.ts apps/server/src/bill-payments-api.ts apps/server/src/disk-full-state.ts apps/server/src/till-sales.disk-full.test.ts
+  # and apps/server/src/counter-handover.test.ts if the settle case went there
+  git commit -s -m "Every new sale is refused while a full-disk refusal stands; a sale already recorded and a card already charged are still answered"
+  ```
+
 ### Task 11: Docs and backlog
 
 **Files:**
@@ -1677,32 +2284,41 @@ assertion should change. If one does, it belongs to this list.
 - Modify: `docs/backlog.md` (`:3896-3900`; the A798-B entry, `:5409-5428`), and the matching area
   files under `docs/backlog/` for any new entry's detail
 
-- [ ] **Step 1: conventions-data.md.** A short section, "Card-reader payments after a full disk":
+- [ ] **Step 1: conventions-data.md.** A short section, "A full disk stops the till's writes":
   the store's `onDiskFull` and what it reports (Task 3); the full-disk stop — set by a report or by
-  a start under 16 MiB free, cleared by a reading of 16 MiB or more of the venue folder, checked
-  before, inside and after a reader payment's first transaction; that it refuses only where a
-  connected reader would be asked next (Tasks 5, 7), and that the owner's choice between that and a
-  wider stop is open (decision 4); `sale.charged_not_recorded` after a charge (Task 7b); that the
+  a start under 16 MiB free, cleared by a reading of 16 MiB or more of the venue folder that any
+  gated write, sale route or reader payment takes; that while it holds every write the till app
+  and the kitchen screens send is refused at one gate per mount, registered route by route because
+  a Hono `use` or a sub-app's middleware reaches every route registered after it (M7), with the
+  open list and why (decision 4), the sale routes refusing after their replay checks (decision 20),
+  and a reader payment checked before, inside and after its first transaction (decision 17);
+  `sale.charged_not_recorded` after a charge (Task 7b); that the
   clock refusal is `clock.unusable`, thrown through `FiscalBackend.assertRecordableAt` at the issue
   reading (`issueMoment`) and before the reader. Name the guards and say where each is weaker than
   its name: the boot wiring test checks arguments, not a real full disk on a box; the windows'
-  tests drive the stop by hand, not by two tills; a full-disk refusal with bytes still free (inodes
-  exhausted) is noted and then cleared by the next card payment's reading, no worse than before
-  this slice.
+  tests drive the stop by hand, not by two tills; the sweep tests list the routes of a mount built
+  with test deps, so a route registered only in a configuration they do not build (the demo
+  reader's cancel) is gated by construction but never sent; the gate refuses by verb, so a write
+  inside a GET still runs, as with the read-only gate; a full-disk refusal with bytes still free
+  (inodes exhausted) is noted and then cleared by the next till write's reading, no worse than
+  before this slice.
 - [ ] **Step 2: backlog.md.**
   - DELETE the entry "With the box's clock before 28-10-2024, a connected card is charged before the
     sale is refused" (`:3896-3900`): this slice finishes it.
-  - In A798-B, say slice 3 is finished and parked for the owner in #<this pull request>, that
-    decision 4's question (narrow stop or the design's wider one) is open, and that slice 4 is next.
+  - In A798-B, say slice 3 is finished and parked for the owner in #<this pull request>, that the
+    owner chose the design's wider stop on 2026-10-21 (decision 4) and slice 3 builds it, and that
+    slice 4 is next.
   - Add one short entry each, in the area of A798-B, for what this slice leaves open, each naming
     its owner slice:
     (a) **slice 6**: till surfaces that still show their own fallback for a full disk — the draft
-    save's refusals (`apps/till/src/state/draft-sync.ts`) and the unpaid departure's handler — so
-    "any refused save" is not yet one sentence everywhere; and, under decision 4's default, the red
-    strip's wording ("No se puede guardar nada" would be false);
-    (b) **slices 5 and 6**: a noted stop clears only when a card-reader payment reads free space,
-    so the strip must read `full()`, or the free-space watch must clear it, or the red outlives the
-    freed space;
+    save's refusals (`apps/till/src/state/draft-sync.ts`), the unpaid departure's handler, and any
+    other write surface decision 12 does not name — which now meet it whenever the stop holds, not
+    only when a save does not fit; and the kitchen display's station screen, which shows nothing
+    for a refused bump (`apps/till/src/screens/till-station-screen.ts`'s `#advance`), so under the
+    stop its tickets do not move and nothing says why;
+    (b) **slices 5 and 6**: a noted stop clears only when a till or kitchen screen tries a write and
+    reads free space, so on a box nobody writes to the red outlives the freed space unless the
+    strip reads `full()` or the free-space watch clears it;
     (c) **slice 8**: corrections, substitutions and voids under a clock before 28-10-2024 still
     answer `fiscal.record_invalid`, as does the setup readiness check;
     (d) **slice 9**: `CORE_ALERTS` (`packages/db/src/alerts.ts:7`) gives the `clock.` prefix to the
@@ -1713,38 +2329,8 @@ assertion should change. If one does, it belongs to this list.
 
   ```bash
   git add docs/developers/conventions-data.md docs/backlog.md docs/backlog
-  git commit -s -m "Docs: card-reader payments after a full disk, and what A798-B slice 3 leaves open"
+  git commit -s -m "Docs: a full disk stops the till's writes, and what A798-B slice 3 leaves open"
   ```
-
-### Task 12 (OPTIONAL — only if the owner chooses (a) or (c) in decision 4)
-
-Not built otherwise. A sketch, so an answer needs no replanning; turn it into a full task, with its
-own failing tests and controls, when the answer comes. Both options keep Tasks 1-11.
-
-- **(c) Every sale refused while the stop holds — but never one whose card was already charged.**
-  `issueMoment` is NOT the place: besides the routes that take money, it runs after a charge, in
-  `finalizeCapture` (P3 after a capture, `till-sale.ts:1554`), `finalizeRecovery` (`:1694`) and
-  `issueWhenFullyPaid` (`bill-payments.ts:685`) when a captured reader payment completes a bill,
-  on the route (`completeBillPayment`, `:1390`) or in the pending-payment pass
-  (`bill-payments-loop.ts:143`). Refusing there would leave a charged card unrecorded. Instead,
-  each route that records a sale reads `await disk.full()` before its first transaction, so freed
-  space clears the stop first, and refuses in that transaction before any money moves:
-  `/api/sales` and pay-working-order (`runPayWorkingOrder`, `till-sale.ts:642`), collecting a
-  placed order (`runCollectOrder`, `:2058`), `/api/pay` (already, at its two points inside P1),
-  bill payments (`takeBillPayment`, `bill-payments.ts:1155`; `beginBillPayment`'s stop check
-  without `state === "pending"`), and an unpaid departure (`unpaid-departure.ts:118`). Every path
-  after a charge goes on while the stop holds — `finalizeCapture`, `finalizeSettle`,
-  `finalizeRecovery`, `finalizeSettleRecovery`, the bill route's captured P3 and the
-  pending-payment pass's completions; on a route, a save after a charge that does not fit
-  answers `sale.charged_not_recorded` (Task 7b).
-- **(a) Every write refused while the stop holds.** One choke point: a middleware in
-  `mountTillApi` beside the existing `app.use("/api/*", madeHereAnswer(…))` (`till-api.ts:1248`),
-  refusing every non-GET request while `await disk.full()`. `mountTillApi` mounts the clock-in API
-  (`:1250`), attendance (`:1256`) and bill payments (`:1327`) on the same app, so they are covered.
-  To settle with it: boot mounts other APIs on the same Hono app after `mountTillApi`
-  (`boot.ts:1817` onwards, the dashboard's among them), which an `/api/*` middleware would also
-  catch, so it must be limited to the till's routes; and which writes stay open — sign-in and
-  sign-out (a session row is a write), and Pay again on a card already charged.
 
 ---
 
@@ -1753,15 +2339,17 @@ own failing tests and controls, when the answer comes. Both options keep Tasks 1
 - §4.6 item 3 (both checks before the reader refuse while red and under a clock before
   28-10-2024): Tasks 5, 6, 7, with the settle kind added (decision 8), the in-queue windows closed
   (decision 17), and the scope of "red" stated (decision 4).
-- §4.6 item 2 (one message for any write, and the sale's own): Tasks 9a-9c, 10; the sale's own
-  sentence and the after-the-charge one built (decisions 10, 18, 19; Task 7b); the surfaces left
-  are backlog (a), owned by slice 6.
+- §4.6 item 2 (one message for any write, and the sale's own): Tasks 9a-9c, 10, reached by every
+  write the stop refuses (Task 12); the sale's own sentence and the after-the-charge one built
+  (decisions 10, 18, 19, 24; Task 7b); the surfaces left, the kitchen display's among them, are
+  backlog (a), owned by slice 6.
 - §4.5 item 1 (the named refusal with today's card advice kept): Tasks 1, 2, 6, 7, 9a, 9b, with the
   date in the sentence (decision 11); the strip, `clock.unusable` as an alert and the email are not
   this slice's (slices 6, 9 and 10).
-- §4.6 item 5 (set by the first save that fails; trading back when someone frees space): Tasks 3,
-  4, 8, with the clearing rule of decision 3 and the start reading of decision 2. What it refuses
-  departs from the design's text and is an open owner question (decision 4; optional Task 12).
+- §4.6 item 5 (set by the first save that fails; every sale, order, kitchen send and clock-in
+  refused; trading back when someone frees space): Tasks 3, 4, 8 set it, with the clearing rule of
+  decision 3 and the start reading of decision 2; Tasks 5, 7 and 12a-12c refuse, as the owner chose
+  (decision 4), with the open writes of decisions 4 and 20 and Task 12's decisions 21-29.
 - §5 (the checks reach the clock rule through the fiscal seat): Task 1's `assertRecordableAt`,
   called from the server (Tasks 2, 6, 7).
 - Build plan decision 10 (the dashboard's two `server.internal` readers): Task 10.
