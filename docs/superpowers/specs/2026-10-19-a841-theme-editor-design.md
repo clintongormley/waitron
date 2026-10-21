@@ -2507,7 +2507,9 @@ Each slice is one pull request that leaves main working: nothing on main reads o
 `tenant_themes` or `/management-api/theme` but the code slice 2 retires with them (`git grep -n
 "management-api/theme\|getTenantTheme\|putTenantTheme"` over non-test files found only
 `apps/server/src/management-api.ts`, `packages/layouts/src/index.ts` and `theme-store.ts`); until
-slice 5, no screen writes a theme, so `/api/theme` answers empty and every screen stays Waitron's;
+slice 5, no screen writes a theme, so `/api/theme` answers empty and every screen stays Waitron's
+(2026-10-21, slice 3: slice 2's management API and a configuration transfer can already write one,
+and since slice 3 the screens show it; `docs/developers/design-system.md`);
 and each later slice adds to a screen that already works without it. The order: 1, 2, 3, then 5;
 4 at any point; 6 and 12 after 5; 7 after 2; 8 after 5 and 7; 14 after 8; 9 after 8 (its "How it
 prints" lines sit under the Logo field, which slice 8 adds); 10, 11 and 13 after 5.
@@ -2538,7 +2540,8 @@ prints" lines sit under the Logo field, which slice 8 adds); 10, 11 and 13 after
    grows past one implementer, the migration and the import check are their own slice (2a).
 3. **Delivery.** The stored copy and the fetch in the dashboard's and till's `main.ts`, the
    dashboard's live read, the till's `#applyVenueSetup` swap, the start-up probes in Chromium and
-   WebKit, the fixed-until-reload entry.
+   WebKit, the fixed-until-reload entry. (2026-10-21: slice 3 runs the start-up probes in WebKit
+   locally only; WebKit in CI is its own entry in `docs/backlog.md`.)
 4. **Primary-coloured text.** Move the text uses of `--wt-color-primary` to `--wt-color-primary-text`
    and add the guard.
 5. **The editor.** The Appearance page in the side menu's Settings section, the Look card,

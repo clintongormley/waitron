@@ -41,7 +41,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     liveData: new LiveData(),
     getGoogleConfig: async () => ({ configured: false }),
     getLocales: async () => ({
-      locales: [{ code: "es-ES", label: "Español" }],
+      locales: [{ code: "es-ES", label: "Spanish" }],
       venueDefault: "es-ES",
       loginDefault: "es-ES",
       venueName: "Deli Test SL",

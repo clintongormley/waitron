@@ -1233,8 +1233,8 @@ still asks, and a full page's own Cancel leaves without asking too.
   Waitron's default hover, text and disabled colours** — left open by A218 (#1082), A306 and A535.
   Since A841 slice 2 (#1932) a custom theme works out `--wt-color-primary-text`,
   `--wt-color-primary-hover`, `--wt-color-primary-disabled` and `--wt-color-on-primary-disabled`
-  from its own button colour (`THEME_COLOURS`, `packages/ui-core/src/theme/tokens.ts`); no screen
-  applies a stored theme until slice 3 (delivery). Two gaps stay: a deployment that sets
+  from its own button colour (`THEME_COLOURS`, `packages/ui-core/src/theme/tokens.ts`). Two gaps
+  stay: a deployment that sets
   `--wt-color-primary` or `--wt-color-danger` by hand (design-system.md, "Retheming a deployment")
   still gets Waitron's default blue or red on a hovered or disabled primary or danger `wt-button`;
   and no theme writes `--wt-color-danger-hover`, `--wt-color-danger-disabled` or

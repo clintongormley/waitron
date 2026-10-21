@@ -66,8 +66,6 @@ async function fetchAnswer(): Promise<void> {
   }
 }
 
-// The wanted hash is cleared when its follow-up is sent, so a failing server is asked again only
-// on the next followVenueTheme call, never from this settle.
 function settle(): void {
   inFlight = null;
   const wanted = wantedHash;

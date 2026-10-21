@@ -2206,7 +2206,6 @@ export class TillApp extends LitElement {
   #bootGeneration = 0;
   /** The setup revision of the last setup applied. */
   #setupRevision?: string;
-  /** `/api/theme`'s hash for the theme in use, from the last setup applied. */
   #themeHash?: string;
   /** A read of the setup a poll asked for, while it is out. */
   #setupRead?: Promise<void>;

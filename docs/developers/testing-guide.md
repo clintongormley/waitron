@@ -2378,8 +2378,8 @@ the `entries` list, in the version installed on 2026-10-21). The plan review's c
 a config with only `axe-core` pre-bundled and the test outside the app
 (`~/waitron-campaign/a841-plan3/review-probes/vt/`) — printed `optimized dependencies changed.
 reloading`, `Vite unexpectedly reloaded a test` and two `504 (Outdated Optimize Dep)`, and the page
-never rendered in 60 s (`output-dashboard.txt` there). Under the dashboard's own config no reload was
-seen without the entry: its start-up file passed alone without it (2026-10-21); the till was not
+never rendered in 60 s (`output-dashboard.txt` there). Under the dashboard's own config its start-up
+file passed alone without the entry (2026-10-21); the till was not
 run without it. So the entry is kept as a precaution, not because a reload was seen under an app's
 own config. It
 does merge with Vitest's own: on a cold cache (`rm -rf node_modules/.vite`, then

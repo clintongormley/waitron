@@ -5603,6 +5603,11 @@ _Formerly _Afterwards_ and _Cloud connection integration_._ Detail: [backlog/rep
 
 Not in any track until the standalone primary is done.
 
+- **The till's theme fetch does not follow a server move (A841 slice 3).** The till fetches
+  `/api/theme` from the page's own address, not through `ServerRouter`; moved to another server, it
+  would keep the theme it has, or take the old server's while that one still answers, so failover
+  work must route it ([conventions-ui.md](developers/conventions-ui.md)).
+
 - **A mirror keeps a renamed server's old chart (A917).** A mirror node is given the venue's chart
   when it is paired; A917's round-3 review found no path that delivers a later one, so after a
   rename its copy would name the old address until it is paired again. No reader routing by a

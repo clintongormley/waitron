@@ -29,8 +29,8 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 };
 
 export default defineConfig({
-  // Pre-bundled up front rather than discovered by the optimizer partway through a run.
   optimizeDeps: {
+    // Pre-bundled up front rather than discovered by the optimizer partway through a run.
     include: [
       "axe-core",
       "qrcode-generator",

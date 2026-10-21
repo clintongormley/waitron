@@ -1,7 +1,11 @@
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { WAITRON_CHOICES, themeSheet } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import { VENUE_THEME_STORAGE_KEY, applyVenueTheme, followVenueTheme } from "./venue-theme.js";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const GREEN = {
   hash: "green-hash",
@@ -22,5 +26,4 @@ it("following before start sends nothing", () => {
   vi.stubGlobal("fetch", spy);
   followVenueTheme("x");
   expect(spy).not.toHaveBeenCalled();
-  vi.unstubAllGlobals();
 });

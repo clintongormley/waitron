@@ -94,7 +94,6 @@ export const QUERY_DEPENDENCIES = {
   getDepartmentDeleteImpact: HIERARCHY_DELETE_READS,
   getCatalogueSettings: ["catalogue_settings"],
   getContentLanguages: ["content_languages"],
-  // Slice 7 adds media_images, once a theme carries an uploaded logo.
   getVenueTheme: ["custom_themes"],
   // The server works the rules out once at boot, so no table change moves them.
   getContentLanguageRules: [],
