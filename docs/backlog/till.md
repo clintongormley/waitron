@@ -981,16 +981,45 @@ the bill-specific draft handles that race.
 
 ## Refuse a request from a device that is not enrolled
 
-- **Refuse a request from a device that is not enrolled** (owner design of 2026-08-30, deferred
-  until after the demo: [design](../superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md)).
-  Tills enrol, selling needs an enrolled device, and a device profile's capabilities gate some
-  actions (`assertDeviceCapability`). But a request that carries NO device still passes
-  `assertDeviceCapability` (`apps/server/src/device-session.ts`). Left: refuse a request with no device, one table of which
-  device kinds may do what with a guard that walks the routes, and printer identity (the design's
-  sub-project C). It sits on the sale and cash path, so it takes the full review. Since B29 (#1011)
-  a handheld places, collects and cancels like a till, and since A238 no refusal is for being a
-  handheld: taking cash, the drawer, integrated card payment and printing each follow the device
-  profile's capability. The design's table is out of date on those rows.
+A941's HTTP probe on `dc1772c4dd147e65ff2c46251b0dfe6d5f60a644` (2026-10-21) signed in
+through the real PIN route, then sent only the returned till-session cookie. A valid
+`POST /api/working-orders` created an order (`200`); the matching-device-cookie control also
+answered `200`. The session resolved to its enrolled device, not null. Across the probe's
+86 restricted-profile cases, the missing action still answered `403 device.forbidden_action`
+or `403 device.cash_not_allowed`. Anonymous and dashboard-password-only credentials were
+refused on the 123 mounted till/device action routes tested.
+
+`requireSession` reads the device through `sessions.device_id` and checks that it is active
+(`apps/server/src/till-session.ts:99`). PIN sign-in requires device proof
+(`apps/server/src/till-api.ts:1328`). The nullable helper's permissive branch is therefore a
+misleading explanation of the observed missing-cookie acceptance. The remaining A941 change
+is to require the device cookie on sensitive requests as the
+[2026-08-30 design](../superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md)
+requires, while retaining the session device's profile checks. Preserve the dashboard's own
+`/management-api/orders/:id/reprint` and `/management-api/orders/:id/invoice-deliveries` routes,
+which accept a management session without a device cookie.
+
+The route probes used real mounted handlers over loopback HTTP and a migrated test venue;
+they did not boot an appliance or test physical payment and printing equipment. Most permitted
+requests deliberately used missing bodies or unknown ids to locate the next check, so those
+responses do not establish successful sales, refunds or printing. The specific order-creation
+control used a real offered item. The proposed `401 device.unauthorized` check failed with
+`200`. The probe and route table are retained with the local A941 campaign receipts.
+
+Still separate: a maintained route-to-profile-action table with a guard that walks the routes,
+and printer identity (the design's sub-project C). Handheld actions follow the profile, not the
+old design's device-kind table: placing, collecting, cancelling, cash, the drawer, integrated
+card payment and printing need their respective current profile actions.
+
+## Malformed sale and cancellation bodies
+
+A941's 2026-10-21 loopback HTTP probe on `dc1772c4dd147e65ff2c46251b0dfe6d5f60a644`
+observed `500 server.internal` for `POST /api/sales` with `{}` or `{"lines": []}`, and for
+`POST /api/working-orders/:id/cancel` with `{}` and a syntactically valid unknown order id.
+The requests carried a real PIN session whose enrolled profile permitted the actions. These
+were malformed-body probes, not successful payment or cancellation attempts. Next: reproduce
+with a focused route test, validate the missing fields, and assert the domain error code.
+A941 does not change these handlers' request validation.
 
 ## Screen faults seen during menus Task 9's look on 2026-09-27
 

@@ -3158,12 +3158,18 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Location-consistency guard** — nothing enforces that a sale-capable device's own location
   (`devices.location_id`) is the box's configured location. Guard at enrol or first sale.
 
-- **Refuse a request from a device that is not enrolled** (owner design of 2026-08-30, deferred
-  until after the demo:
-  [design](superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md)). But a request
-  that carries NO device still passes `assertDeviceCapability`
-  (`apps/server/src/device-session.ts`). It sits on the sale and cash path, so it takes the full
-  review. [Detail](backlog/till.md#refuse-a-request-from-a-device-that-is-not-enrolled)
+- **Refuse a request from a device that is not enrolled (A941).** A valid PIN session can create
+  an order without a `waitron_device` cookie. Its enrolled device still supplies the profile
+  checks; the missing-cookie case does not pass a null device to those checks. The 2026-08-30
+  design requires the device cookie on sensitive requests. Enforce that requirement without
+  changing the dashboard's own routes. Full review required.
+  [Detail](backlog/till.md#refuse-a-request-from-a-device-that-is-not-enrolled)
+
+- **Malformed sale and cancellation bodies answer 500.** With an authenticated, permitted till,
+  `POST /api/sales` with `{}` or `{"lines": []}`, and
+  `POST /api/working-orders/:id/cancel` with `{}`, answered `500 server.internal` in A941's
+  HTTP probe. Validate the missing fields and assert the domain refusal.
+  [Detail](backlog/till.md#malformed-sale-and-cancellation-bodies)
 
 - **Screen faults seen during menus Task 9's look on 2026-09-27.** **Next action:** check each
   against `main`, then fix or file it on its own.
