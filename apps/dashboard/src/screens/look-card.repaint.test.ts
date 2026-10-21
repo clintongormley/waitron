@@ -76,11 +76,19 @@ async function editAndSave(list: ThemeList) {
   return { el, saveTheme, getVenueTheme };
 }
 
+// #b12525 is hard to read on dark screens, so Save asks first.
+async function saveAnyway(el: Card) {
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!);
+  const dialog = el.shadowRoot!.querySelector("dashboard-hard-to-read-dialog")!;
+  await expect.poll(() => dialog.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+  await userEvent.click(dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=save-anyway]")!);
+}
+
 it("a save of the theme in use repaints this dashboard at once", async () => {
   const savedPrimary = deriveTheme(SAVED).light["--wt-color-primary"]!;
   expect(primary()).not.toBe(savedPrimary);
   const { el, saveTheme, getVenueTheme } = await editAndSave({ themes: [lucia], inUse: "t-lucia" });
-  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!);
+  await saveAnyway(el);
   await expect.poll(primary).toBe(savedPrimary);
   expect(saveTheme).toHaveBeenCalledTimes(1);
   expect(getVenueTheme).toHaveBeenCalledTimes(1);
@@ -90,7 +98,7 @@ it("a save of a theme another dashboard has stopped using reads no venue theme",
   const { el, saveTheme, getVenueTheme } = await editAndSave({ themes: [lucia], inUse: "t-lucia" });
   el.list = { themes: [lucia, other], inUse: "t-other" };
   await el.updateComplete;
-  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!);
+  await saveAnyway(el);
   await expect
     .poll(() => el.shadowRoot!.querySelector("section.settings-card")!.hasAttribute("data-editing"))
     .toBe(false);

@@ -3,13 +3,18 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LeaveController } from "@waitron/ui";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
-import { WAITRON_CHOICES, fixAll, type ThemeChoices } from "@waitron/ui-core/theme";
+import {
+  WAITRON_CHOICES,
+  fixAll,
+  normaliseChoices,
+  type ThemeChoices,
+} from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { es } from "../i18n/strings.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
 import "./look-card.js";
 
 type Card = HTMLElementTagNameMap["dashboard-look-card"];
@@ -445,6 +450,8 @@ describe("editing the Look card in place", () => {
     await userEvent.click(q(el, 'button.swatch[data-color="#b12525"]')!);
     await el.updateComplete;
     await userEvent.click(button(el, "save"));
+    await expect.poll(() => dialogOf(el).open).toBe(true);
+    await userEvent.click(dialogButton(el, "save-anyway")!);
     await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
     expect(saveTheme).toHaveBeenCalledWith("t-broken", {
       ...WAITRON_CHOICES,
@@ -639,6 +646,206 @@ describe("readability warnings in the editor", () => {
     expect(text(q(el, "[data-test=brand-fix-light]"))).toBe(
       es["appearance.brand_fix_light"].replace("{colour}", "#9d8a15"),
     );
+  });
+
+  it("the fixed line reads its colour, a dot, then Undo drawn as a link", async () => {
+    setLocale("en-GB");
+    const { el } = await lemonEditing();
+    await userEvent.click(button(el, "brand-fix-light"));
+    await el.updateComplete;
+    const line = button(el, "brand-undo-light").closest("p")!;
+    expect(text(line)).toBe("Buttons on light screens: #9d8a15 · Undo");
+    const dot = line.querySelector("[data-test=brand-fixed-light] + *")!;
+    expect(text(dot)).toBe("·");
+    expect(dot.nextElementSibling).toBe(button(el, "brand-undo-light"));
+  });
+
+  it("Undo is a button drawn as a link", async () => {
+    const { el } = await mountEditing(inUse(lucia));
+    const undo = button(el, "brand-undo-dark");
+    expect(undo.classList.contains("link")).toBe(true);
+    const inner = undo.shadowRoot!.querySelector("button")!;
+    expect(getComputedStyle(inner).textDecorationLine).toBe("underline");
+  });
+});
+
+type HardToRead = HTMLElementTagNameMap["dashboard-hard-to-read-dialog"];
+const hardToRead = (el: Card) => q(el, "dashboard-hard-to-read-dialog") as HardToRead;
+const dialogOf = (el: Card) => hardToRead(el).shadowRoot!.querySelector("wt-dialog")!;
+const dialogButton = (el: Card, name: string) =>
+  hardToRead(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    `[data-test=${name}]`,
+  );
+const dialogLines = (el: Card) =>
+  [...hardToRead(el).shadowRoot!.querySelectorAll("li")].map((li) => text(li));
+const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+const editing = (el: Card) => q(el, "section.settings-card")!.hasAttribute("data-editing");
+
+describe("saving a draft that is hard to read", () => {
+  async function lemonSave() {
+    const opened = await mountEditing(inUse(lucia));
+    await typeInCode(opened.el, "#f2d300");
+    await userEvent.click(button(opened.el, "save"));
+    await opened.el.updateComplete;
+    await expect.poll(() => dialogOf(opened.el).open).toBe(true);
+    return opened;
+  }
+
+  it("Save with a warning asks once, before any request", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await lemonSave();
+    expect(dialogLines(el)).toEqual(["Brand colour: buttons are hard to see on light screens."]);
+    expect(dialogButton(el, "fix-and-save")).not.toBeNull();
+    expect(saveTheme).not.toHaveBeenCalled();
+  });
+
+  it("Back sends nothing and keeps the lemon", async () => {
+    const { el, saveTheme } = await lemonSave();
+    const closed = dialogClosed(dialogOf(el));
+    await userEvent.click(dialogButton(el, "back")!);
+    await closed;
+    await el.updateComplete;
+    expect(dialogOf(el).open).toBe(false);
+    expect(hardToRead(el).open).toBe(false);
+    expect(saveTheme).not.toHaveBeenCalled();
+    expect(codeField(el).value).toBe("#f2d300");
+    expect(editing(el)).toBe(true);
+  });
+
+  it("Escape is Back", async () => {
+    const { el, saveTheme } = await lemonSave();
+    const closed = dialogClosed(dialogOf(el));
+    await userEvent.keyboard("{Escape}");
+    await closed;
+    await el.updateComplete;
+    expect(dialogOf(el).open).toBe(false);
+    expect(saveTheme).not.toHaveBeenCalled();
+    expect(codeField(el).value).toBe("#f2d300");
+    expect(editing(el)).toBe(true);
+  });
+
+  it("Save anyway saves the lemon as it is", async () => {
+    const { el, saveTheme } = await lemonSave();
+    await userEvent.click(dialogButton(el, "save-anyway")!);
+    await expect.poll(() => editing(el)).toBe(false);
+    expect(saveTheme).toHaveBeenCalledTimes(1);
+    expect(saveTheme.mock.calls[0]![1]).toEqual({
+      ...LUCIA,
+      brandColor: "#f2d300",
+      brandFix: {},
+    });
+  });
+
+  it("Fix and save saves the lemon with its light fix", async () => {
+    const { el, saveTheme } = await lemonSave();
+    await userEvent.click(dialogButton(el, "fix-and-save")!);
+    await expect.poll(() => editing(el)).toBe(false);
+    expect(saveTheme).toHaveBeenCalledTimes(1);
+    expect(saveTheme.mock.calls[0]![1]).toEqual({
+      ...LUCIA,
+      brandColor: "#f2d300",
+      brandFix: { light: true },
+    });
+  });
+
+  it("a refused Fix and save keeps the fix in the draft", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await lemonSave();
+    saveTheme.mockRejectedValueOnce({ code: "theme.not_found" });
+    await userEvent.click(dialogButton(el, "fix-and-save")!);
+    await expect.poll(() => bottom(el)).toBe(codeMessage("theme.not_found"));
+    expect(editing(el)).toBe(true);
+    expect(text(q(el, "[data-test=brand-fixed-light]"))).toBe("Buttons on light screens: #9d8a15");
+    expect(button(el, "save").disabled).toBe(false);
+  });
+
+  it("no dialog with no warning", async () => {
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    await chooseSegment(el, "corners", "Square");
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    expect(hardToRead(el)?.open ?? false).toBe(false);
+  });
+
+  it("Fix and save is offered exactly when Fix all leaves no warning", async () => {
+    setLocale("en-GB");
+    const blocked = theme("t-hand", "By hand", {
+      ...WAITRON_CHOICES,
+      handSet: { light: { text: "#555555", "surface-sunken": "#555555" }, dark: {} },
+    });
+    const opened = await mountEditing(inUse(blocked));
+    await chooseSegment(opened.el, "corners", "Square");
+    await userEvent.click(button(opened.el, "save"));
+    await expect.poll(() => dialogOf(opened.el).open).toBe(true);
+    expect(dialogLines(opened.el)).toEqual([
+      "Sunken areas (light) is hard to read.",
+      "Text (light): no shade can be read while Sunken areas is set by hand to #555555.",
+    ]);
+    expect(dialogButton(opened.el, "fix-and-save")!.variant).toBe("primary");
+    await userEvent.click(dialogButton(opened.el, "fix-and-save")!);
+    await expect.poll(() => opened.saveTheme.mock.calls.length).toBe(1);
+    const sent = opened.saveTheme.mock.calls[0]![1];
+    expect(sent.handSet.light).toEqual({ text: "#555555", "surface-sunken": "#cacaca" });
+    expect(sent).toEqual(
+      normaliseChoices(fixAll(WAITRON_DEFAULTS, { ...blocked.choices!, corners: "square" })),
+    );
+    cleanupWidgets();
+
+    const outlasts = theme("t-hand", "By hand", {
+      ...WAITRON_CHOICES,
+      handSet: { light: { text: "#aaaaaa", "surface-sunken": "#555555" }, dark: {} },
+    });
+    const { el } = await mountEditing(inUse(outlasts));
+    await chooseSegment(el, "corners", "Square");
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => dialogOf(el).open).toBe(true);
+    expect(dialogButton(el, "fix-and-save")).toBeNull();
+    expect(dialogButton(el, "save-anyway")!.variant).toBe("primary");
+  });
+
+  for (const choice of ["save-anyway", "fix-and-save"]) {
+    it(`a double press of ${choice} saves once`, async () => {
+      const { el, saveTheme } = await lemonSave();
+      saveTheme.mockImplementation(() => new Promise(() => {}));
+      const press = () =>
+        hardToRead(el).dispatchEvent(
+          new CustomEvent(`hard-to-read-${choice}`, { bubbles: true, composed: true }),
+        );
+      press();
+      press();
+      await el.updateComplete;
+      expect(saveTheme).toHaveBeenCalledTimes(1);
+    });
+  }
+
+  it("a double press of Save with no warning saves once", async () => {
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    saveTheme.mockImplementation(() => new Promise(() => {}));
+    await chooseSegment(el, "corners", "Square");
+    button(el, "save").click();
+    button(el, "save").click();
+    await el.updateComplete;
+    expect(saveTheme).toHaveBeenCalledTimes(1);
+  });
+
+  it("a quick second Save after a refused one opens a dialog that stays open", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await lemonSave();
+    saveTheme.mockRejectedValueOnce({ code: "theme.not_found" });
+    const firstClose = dialogClosed(dialogOf(el));
+    dialogButton(el, "save-anyway")!.click();
+    await expect.poll(() => saveTheme.mock.calls.length, { interval: 0 }).toBe(1);
+    await el.updateComplete;
+    await Promise.resolve();
+    await el.updateComplete;
+    button(el, "save").click();
+    await el.updateComplete;
+    await Promise.race([firstClose, frame().then(frame).then(frame)]);
+    await frame();
+    await el.updateComplete;
+    expect(hardToRead(el).open).toBe(true);
+    expect(dialogOf(el).open).toBe(true);
+    expect(saveTheme).toHaveBeenCalledTimes(1);
   });
 });
 

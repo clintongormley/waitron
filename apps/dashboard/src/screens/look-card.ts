@@ -22,6 +22,7 @@ import {
   MODES,
   THEME_COLOURS,
   WAITRON_CHOICES,
+  canFixAll,
   fixAll,
   normaliseChoices,
   type Background,
@@ -48,6 +49,7 @@ import {
   type LookDraft,
 } from "../widgets/look-draft.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
+import "../widgets/hard-to-read-dialog.js";
 import "../widgets/theme-preview.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import {
@@ -55,6 +57,7 @@ import {
   brandFixedText,
   brandWarningText,
   fixAllText,
+  saveDialogLine,
   savedWarningLine,
   themeColourName,
 } from "../widgets/theme-words.js";
@@ -131,6 +134,10 @@ export class LookCard extends LitElement {
         gap: var(--wt-space-2);
         margin: 0;
       }
+      wt-button.link::part(button) {
+        font-weight: var(--wt-font-weight-normal);
+        text-decoration: underline;
+      }
       .note {
         margin: var(--wt-space-4) 0 0;
         color: var(--wt-color-text-muted);
@@ -169,6 +176,7 @@ export class LookCard extends LitElement {
   @state() private refusedCode = "";
   @state() private actionError = "";
   @state() private submitting = false;
+  @state() private asking = false;
   #editing?: { id: string; name: string };
   #expected?: LookDraft;
   #derived?: DerivedTheme;
@@ -254,6 +262,7 @@ export class LookCard extends LitElement {
     this.submitted = false;
     this.refusedCode = "";
     this.actionError = "";
+    this.asking = false;
   }
   #requestCancel(): void {
     if (this.submitting) return;
@@ -294,8 +303,10 @@ export class LookCard extends LitElement {
             <span data-test="brand-fixed-${mode}"
               >${brandFixedText(mode, derived[mode][PRIMARY]!)}</span
             >
+            <span aria-hidden="true">·</span>
             <wt-button
               data-test="brand-undo-${mode}"
+              class="link"
               variant="ghost"
               size="sm"
               ?disabled=${busy}
@@ -345,8 +356,7 @@ export class LookCard extends LitElement {
   }
   async #save(): Promise<void> {
     const draft = this.draft;
-    const editing = this.#editing;
-    if (this.submitting || !draft || !editing) return;
+    if (this.submitting || !draft || !this.#editing) return;
     if (saveActionState(this.#scope).unchanged) return;
     this.submitted = true;
     this.refusedCode = "";
@@ -355,6 +365,19 @@ export class LookCard extends LitElement {
       await this.#focusInvalid();
       return;
     }
+    if (this.#derived!.warnings.length > 0) this.asking = true;
+    else await this.#send();
+  }
+  #fixAndSave(): void {
+    if (this.submitting) return;
+    this.#change((d) => ({ ...d, choices: fixAll(WAITRON_DEFAULTS, d.choices) }));
+    void this.#send();
+  }
+  async #send(): Promise<void> {
+    const draft = this.draft;
+    const editing = this.#editing;
+    this.asking = false;
+    if (this.submitting || !draft || !editing) return;
     const generation = this.#generation;
     const scope = this.#scope;
     this.submitting = true;
@@ -383,6 +406,20 @@ export class LookCard extends LitElement {
     await this.updateComplete;
     const form = this.shadowRoot!.querySelector("form");
     if (form) await focusFirstInvalid(form);
+  }
+  #dialog(draft: LookDraft): TemplateResult {
+    const warnings = this.asking ? this.#derived!.warnings : [];
+    return html`<dashboard-hard-to-read-dialog
+      .open=${this.asking}
+      .lines=${warnings.map((warning) => saveDialogLine(warning, draft.choices))}
+      .canFix=${this.asking && canFixAll(WAITRON_DEFAULTS, draft.choices)}
+      .opener=${this.shadowRoot?.querySelector<HTMLElement>("[data-test=save]") ?? null}
+      @hard-to-read-back=${() => {
+        this.asking = false;
+      }}
+      @hard-to-read-save-anyway=${() => void this.#send()}
+      @hard-to-read-fix-and-save=${() => this.#fixAndSave()}
+    ></dashboard-hard-to-read-dialog>`;
   }
   #form(draft: LookDraft): TemplateResult {
     const editing = this.#editing!;
@@ -482,7 +519,8 @@ export class LookCard extends LitElement {
             >${t("action.save")}</wt-button
           >
         </wt-form-actions>
-      </form>`;
+      </form>
+      ${this.#dialog(draft)}`;
   }
 
   override render() {
