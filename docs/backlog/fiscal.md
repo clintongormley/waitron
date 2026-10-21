@@ -210,6 +210,25 @@ accepting a saved F1 choice (`setOrderInvoiceChoice`, `apps/server/src/working-o
 lifts its check on an order growing past the limit. A741 left that last one unchanged. Follow the
 campaign's current queue order; this landing does not start another fiscal item.
 
+## A555. Counter full-invoice delivery through payment — DESIGN PROPOSED (2026-10-21)
+
+The [proposed design](../superpowers/specs/2026-10-21-a555-counter-invoice-delivery-design.md)
+and [static pictures](mockups/a555-counter-invoice-delivery/README.md) cover retaining Email PDF,
+A4 or receipt-printer delivery through Counter payment. The source audit records the current
+request/staging gap against `77ab2ced8`; it is not an executed public-F1 result.
+
+The recommendation requires a full invoice's original-delivery choice before payment, in A739's
+shared payment window. Delivery failure keeps payment complete; retained payment requests and
+invoice delivery retries have separate identities. Earlier partial-payment preferences cannot
+replace the final invoice's selected original. None remains an ordinary F2 receipt choice; the
+alternative of choosing F1 delivery later is the owner's one design decision.
+
+**Next action:** approve or revise the complete design, then plan/build against the released
+A739 seams. A444 and B2B delivery remain separate steps before public F1 is enabled. The physical
+58/80 mm paper/QR checks and the adviser's manual-remedy confirmation still gate that switch.
+This design does not close A554's saved-email-address question, change the consent decision or
+add invoice PDF storage.
+
 ## When the business e-invoicing regime starts
 
 Found by A231d's research. [Orden HAC/1028/2026](https://www.boe.es/buscar/doc.php?id=BOE-A-2026-20587) (BOE núm. 247, 5 October 2026) «entrará en vigor el día siguiente al de su publicación en el «Boletín Oficial del Estado», dándose inicio al cómputo de los plazos» of [RD 238/2026](https://www.boe.es/buscar/act.php?id=BOE-A-2026-7295)'s fourth final provision: «Doce meses después» for businesses whose turnover is over €8 million, and «Veinticuatro meses después, para el resto de los empresarios y profesionales». So from about October 2027, or October 2028 for smaller businesses, an invoice to a Spanish business must be a structured message, and a PDF alone is not enough (the design's register, RD 238/2026 art. 7.1). The exact end day of each period, and whether a restaurant's F1s to businesses fall inside the regime, are asked as [Q45](../compliance/asesor-questions.md#q45-when-does-structured-business-invoicing-reach-a-restaurants-full-invoices-added-2026-10-07). Researched 2026-10-07 in the watcher session; the fetched texts were not kept in the repository.

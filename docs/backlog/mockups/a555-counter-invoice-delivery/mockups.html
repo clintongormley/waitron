@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  /><title>A555 · Counter invoice delivery proposal</title>
+  <style>
+    :root {
+      --wt-color-bg: #f7f7f8;
+      --wt-color-surface: #fff;
+      --wt-color-field-fill: #f0f1f4;
+      --wt-color-text: #16181d;
+      --wt-color-text-muted: #5c626e;
+      --wt-color-border: #d6d9e0;
+      --wt-color-primary: #1f6feb;
+      --wt-color-on-primary: #fff;
+      --wt-color-danger: #b3261e;
+      --wt-color-success: #1a7f5a;
+      --wt-space-2: 8px;
+      --wt-space-3: 12px;
+      --wt-space-4: 16px;
+      --wt-space-6: 24px;
+      --wt-space-8: 32px;
+      --wt-radius: 12px;
+      --wt-font-body: 16px;
+      --wt-font-small: 13px;
+      --wt-font-heading: 24px;
+      --wt-tap-min: 44px;
+    }
+    :root[data-theme="dark"] {
+      --wt-color-bg: #17191e;
+      --wt-color-surface: #23262e;
+      --wt-color-field-fill: #303440;
+      --wt-color-text: #f2f3f5;
+      --wt-color-text-muted: #b3b9c7;
+      --wt-color-border: #464d5c;
+      --wt-color-primary: #8dbbff;
+      --wt-color-on-primary: #10233e;
+      --wt-color-danger: #ffb4ab;
+      --wt-color-success: #77d7ad;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background: var(--wt-color-bg);
+      color: var(--wt-color-text);
+      font:
+        var(--wt-font-body)/1.4 -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+    }
+    header {
+      background: var(--wt-color-surface);
+      border-bottom: 1px solid var(--wt-color-border);
+      padding: var(--wt-space-4) var(--wt-space-6);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--wt-space-4);
+    }
+    header b {
+      font-size: var(--wt-font-heading);
+    }
+    small,
+    .muted {
+      color: var(--wt-color-text-muted);
+      font-size: var(--wt-font-small);
+    }
+    main {
+      padding: var(--wt-space-6);
+      max-width: 1160px;
+      margin: auto;
+    }
+    h1,
+    h2,
+    p {
+      margin: 0;
+    }
+    h1 {
+      font-size: var(--wt-font-heading);
+    }
+    h2 {
+      font-size: 20px;
+    }
+    p {
+      margin-top: var(--wt-space-2);
+    }
+    .context {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: var(--wt-space-6);
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 480px;
+      gap: var(--wt-space-6);
+      align-items: start;
+    }
+    .panel {
+      background: var(--wt-color-surface);
+      border: 1px solid var(--wt-color-border);
+      border-radius: var(--wt-radius);
+      padding: var(--wt-space-6);
+    }
+    .panel > h2 {
+      margin-bottom: var(--wt-space-4);
+    }
+    .fields {
+      display: grid;
+      gap: var(--wt-space-3);
+    }
+    .field {
+      background: var(--wt-color-field-fill);
+      border-bottom: 1px solid var(--wt-color-border);
+      padding: var(--wt-space-2) var(--wt-space-3);
+      min-height: 58px;
+    }
+    .field label {
+      display: block;
+      color: var(--wt-color-text-muted);
+      font-size: var(--wt-font-small);
+      margin-bottom: 2px;
+    }
+    .field .value {
+      overflow-wrap: anywhere;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--wt-space-4);
+      padding: var(--wt-space-3) 0;
+      border-bottom: 1px solid var(--wt-color-border);
+    }
+    .row span:last-child {
+      flex-shrink: 0;
+    }
+    .total {
+      font-size: 20px;
+      font-weight: 650;
+    }
+    .buttons {
+      display: flex;
+      gap: var(--wt-space-3);
+      justify-content: space-between;
+      margin-top: var(--wt-space-6);
+    }
+    button {
+      font: inherit;
+      min-height: var(--wt-tap-min);
+      padding: var(--wt-space-2) var(--wt-space-4);
+      border-radius: var(--wt-radius);
+      border: 1px solid var(--wt-color-border);
+      color: var(--wt-color-text);
+      background: var(--wt-color-surface);
+      cursor: pointer;
+    }
+    .primary {
+      background: var(--wt-color-primary);
+      color: var(--wt-color-on-primary);
+      border-color: var(--wt-color-primary);
+    }
+    .delivery {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: var(--wt-space-2);
+    }
+    .delivery button {
+      padding: var(--wt-space-2);
+      font-size: var(--wt-font-small);
+    }
+    .delivery .selected {
+      border: 2px solid var(--wt-color-primary);
+      color: var(--wt-color-primary);
+      font-weight: 700;
+    }
+    .section-title {
+      margin-top: var(--wt-space-4);
+      margin-bottom: var(--wt-space-2);
+      font-weight: 650;
+    }
+    .paid {
+      color: var(--wt-color-success);
+      font-size: var(--wt-font-heading);
+      font-weight: 700;
+    }
+    .error {
+      color: var(--wt-color-danger);
+      font-weight: 600;
+    }
+    .note {
+      margin-top: var(--wt-space-4);
+      padding-top: var(--wt-space-4);
+      border-top: 1px solid var(--wt-color-border);
+    }
+    .new-order {
+      margin-top: var(--wt-space-6);
+      min-height: 165px;
+      border: 1px dashed var(--wt-color-border);
+      border-radius: var(--wt-radius);
+      padding: var(--wt-space-4);
+    }
+    footer {
+      margin-top: var(--wt-space-6);
+      color: var(--wt-color-text-muted);
+      font-size: var(--wt-font-small);
+    }
+    .product {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--wt-space-3);
+      margin-top: var(--wt-space-6);
+    }
+    .product div {
+      padding: var(--wt-space-6) var(--wt-space-4);
+      background: var(--wt-color-field-fill);
+      border-radius: var(--wt-radius);
+    }
+    @media (max-width: 700px) {
+      header {
+        padding: var(--wt-space-4);
+      }
+      header b {
+        font-size: 20px;
+      }
+      main {
+        padding: var(--wt-space-4);
+      }
+      .layout {
+        display: block;
+      }
+      .aside {
+        display: none;
+      }
+      .panel {
+        padding: var(--wt-space-4);
+      }
+      .context {
+        margin-bottom: var(--wt-space-4);
+      }
+      .buttons button {
+        padding: var(--wt-space-2) var(--wt-space-3);
+      }
+    }
+  </style>
+  <header><b>Waitron</b><span id="header"></span></header>
+  <main>
+    <div class="context">
+      <h1 id="title"></h1>
+      <small id="amount"></small>
+    </div>
+    <div class="layout">
+      <section class="panel aside" id="aside"></section>
+      <section class="panel" id="scene"></section>
+    </div>
+    <footer id="footer"></footer>
+  </main>
+  <script>
+    const q = new URLSearchParams(location.search),
+      es = q.get("lang") === "es",
+      scene = q.get("scene") || "email";
+    document.documentElement.lang = es ? "es" : "en";
+    document.documentElement.dataset.theme = q.get("theme") || "light";
+    const t = (a, b) => (es ? b : a);
+    const price = t("€84.00", "84,00 €");
+    header.textContent = t("Counter · Test venue", "Mostrador · Local de prueba");
+    title.textContent = t("Counter", "Mostrador");
+    amount.textContent = t("Order 41", "Pedido 41");
+    footer.textContent = t(
+      "PROPOSAL · Synthetic data · Full invoices remain disabled. This is a drawing, not the running app.",
+      "PROPUESTA · Datos ficticios · Las facturas completas siguen desactivadas. Es un dibujo, no la aplicación.",
+    );
+    const field = (label, value) =>
+      `<div class="field"><label>${label}</label><div class="value">${value}</div></div>`;
+    aside.innerHTML = `<h2>${t("Order 41", "Pedido 41")}</h2><div class="row"><span>2 × ${t("Lunch menu", "Menú de mediodía")}</span><span>${t("€72.00", "72,00 €")}</span></div><div class="row"><span>2 × ${t("Sparkling water", "Agua con gas")}</span><span>${t("€12.00", "12,00 €")}</span></div><div class="row total"><span>${t("Total", "Total")}</span><span>${price}</span></div><div class="product"><div>${t("Menu", "Carta")}</div><div>${t("Drinks", "Bebidas")}</div><div>${t("Desserts", "Postres")}</div><div>${t("Coffee", "Café")}</div></div>`;
+    const full = t("Full invoice", "Factura completa"),
+      email = t("Email PDF", "PDF por email"),
+      a4 = t("A4 paper", "Papel A4"),
+      receipt = t("Receipt paper", "Papel de recibo");
+    if (scene === "email" || scene === "a4") {
+      const isEmail = scene === "email";
+      document.getElementById("scene").innerHTML =
+        `<h2>${full}</h2><div class="fields">${field(t("Tax ID *", "NIF *"), "B12345674")}${field(t("Name *", "Nombre *"), "North Coast Studio SL")}${field(t("Address *", "Dirección *"), "12 Example Street · 08001 · Example City")}</div><div class="section-title">${t("Invoice original · Choose one", "Original de la factura · Elige uno")}</div><div class="delivery"><button>${receipt}</button><button class="${!isEmail ? "selected" : ""}">${a4}</button><button class="${isEmail ? "selected" : ""}">${email}</button></div><p class="muted">${t("A full invoice needs a delivery choice.", "La factura completa necesita una entrega.")}</p><div class="fields" style="margin-top:var(--wt-space-3)">${isEmail ? field(t("Email *", "Email *"), "billing@example.invalid") : field(t("Invoice printer", "Impresora de facturas"), t("Office A4", "Oficina A4"))}</div><div class="buttons"><button>${t("Cancel", "Cancelar")}</button><button class="primary">${t("Save", "Guardar")}</button></div>`;
+    } else if (scene === "confirm") {
+      document.getElementById("scene").innerHTML =
+        `<h2>${t("Pay", "Pagar")}</h2><div class="row"><span>${t("Whole bill", "Cuenta completa")}</span><b>${price}</b></div><div class="row"><span>${t("Card reader", "Datáfono")}</span><span>${t("Counter reader", "Datáfono mostrador")}</span></div><div class="section-title">${full}</div><div class="fields">${field(t("Customer", "Cliente"), "North Coast Studio SL · B12345674")}${field(t("Deliver invoice", "Entregar factura"), email)}${field(t("Invoice language", "Idioma de la factura"), t("English", "Inglés"))}</div><p class="muted">${t("The invoice is sent after the final payment.", "La factura se envía tras el último pago.")}</p><div class="buttons"><button>${t("Back", "Volver")}</button><button class="primary">${t("Pay", "Pagar")} ${price}</button></div>`;
+    } else if (scene === "failed") {
+      document.getElementById("scene").innerHTML =
+        `<div class="paid">${t("Paid", "Pagado")} ${price}</div><p>${full} F/128</p><div class="note"><p class="error">${t("Invoice email not sent", "Email de la factura no enviado")}</p><div class="buttons"><button>${t("Delivery status", "Estado de entrega")}</button><button class="primary">${t("Retry email", "Reintentar email")}</button></div></div><div class="new-order"><h2>${t("New order", "Nuevo pedido")}</h2><p class="muted">${t("Add dishes to begin.", "Añade platos para empezar.")}</p></div>`;
+    } else {
+      const held = scene === "held";
+      document.getElementById("scene").innerHTML =
+        `<div class="paid">${t("Paid", "Pagado")} ${price}</div><p>${full} F/128 · ${t("Office A4", "Oficina A4")}</p><div class="note"><h2>${held ? t("A4 waiting for paper", "A4 esperando papel") : t("A4 outcome unknown", "Resultado A4 desconocido")}</h2><p>${held ? t("Load paper. The same job can continue.", "Añade papel. El mismo trabajo puede continuar.") : t("Check the printer before trying again.", "Comprueba la impresora antes de reintentar.")}</p><div class="buttons"><button>${t("Refresh status", "Actualizar estado")}</button><button class="primary">${t("Delivery details", "Detalles de entrega")}</button></div></div><div class="new-order"><h2>${t("New order", "Nuevo pedido")}</h2><p class="muted">${t("Add dishes to begin.", "Añade platos para empezar.")}</p></div>`;
+    }
+  </script>
+</html>

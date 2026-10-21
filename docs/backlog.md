@@ -302,11 +302,13 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   it is answered none does: the delivery status the till and the dashboard read carries no address,
   and both email forms open empty. Left open by A231q.
 
-- **A555. Paying at the counter drops a full invoice's email or A4 choice.** The till sends the
-  invoice choice with `POST /api/sales` and `/api/pay`, which read no delivery choice and today
-  refuse a full invoice (`sale.full_invoice_unavailable`); a counter choice is staged only when the
-  order is placed. Decide what paying does with the choice before public full invoices are switched
-  on. Left open by A231q.
+- **A555. Keep a counter full invoice's email or A4 choice through payment** — DESIGN PROPOSED,
+  awaiting the owner's one delivery-choice decision and full-design approval. The
+  [design](superpowers/specs/2026-10-21-a555-counter-invoice-delivery-design.md) and
+  [pictures](backlog/mockups/a555-counter-invoice-delivery/README.md) recommend choosing the
+  original before payment, composing with A739's shared window and preserving paid status when
+  delivery fails. No implementation or public F1 enablement is included.
+  [Detail](backlog/fiscal.md#a555-counter-full-invoice-delivery-through-payment--design-proposed-2026-10-21)
 
 - **A556. A full invoice that later replaces a bill's simplified one would not be delivered through
   the bill.** The dashboard's order detail reaches a bill's invoice as the sale carrying that bill's
