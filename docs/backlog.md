@@ -171,8 +171,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Each chain stores the producer and compliance mode it was opened under (today `registro_sif`
   stores neither, `packages/fiscal-verifactu/src/schema/sif.ts:20-22`); every start compares them
   with the running release's and, on a difference, opens a new installation, series and chain in
-  one transaction; a guard, proven by deletion, refuses to add a record to a chain opened under
-  another identity. Waits for the owner's choice of how the new installation is named without
+  one transaction, on the filing node only, through a new `identity-change` activation that only
+  that start step can authorise (CLAUDE.md §5's "does not mint an installation number" sentence is
+  amended in the same change); a guard, proven by deletion, refuses to add a record to a chain
+  opened under another identity. Corrections of invoices issued before the change join the new
+  chain; the design asks for asesor Q53(d)(2) to be widened to cover that. Waits for the owner's choice of how the new installation is named without
   A679's "anyone set up a box in the last hour?" question (recommended: A947's hour-and-minute
   name, so A947's slice 4a first). After A940's slice 1; before the first production venue goes
   live. A move between fiscal modules stays a refused start until the first non-Veri\*Factu mode.

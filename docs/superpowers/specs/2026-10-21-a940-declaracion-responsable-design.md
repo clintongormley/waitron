@@ -39,6 +39,11 @@ identity change (§5.6).
 >   from §4 and §5.4.
 > - **Q4: production boxes run releases only**, as designed in §5.1. No change.
 > - **§10 build order** gains A993; **§11** records the answers; **§12** gains three open points.
+> - **Review fixes, same day:** §5.6 now names the new `identity-change` activation and its
+>   person-less authority, the CLAUDE.md §5 sentence it amends, what happens to corrections of
+>   invoices issued before the change (and the widening it asks of Q53(d)(2)), that only the filing
+>   node runs the step, and A947's possible wait or refusal; the recovery key's sameness is traced;
+>   six drifted code citations in §3, §4, §5.3 and §6 are re-found.
 
 ---
 
@@ -270,7 +275,8 @@ mounted ahead of every mode's gates (`apps/server/src/boot.ts:984-1003`), so it 
 mode and in trading mode. The till has a sheet that shows a box page over the screen
 (`apps/till/src/widgets/guide-sheet.ts`). `packages/fiscal-verifactu` already draws PDFs
 (`pdfkit`, `pdf-lib`, its own font). CI already publishes an image tagged with the version when a
-`v*` tag is pushed (`.github/workflows/ci.yml:2758-2760`).
+`v*` tag is pushed (`.github/workflows/ci.yml:37` triggers on `v*` tags; `:2772` adds the
+version tag).
 
 ## 4. The declaration's text
 
@@ -420,7 +426,7 @@ directed d); the revision asks him to approve the whole.
 - **The functions list is filled in per release and checked route by route.** On main on
   2026-10-21: simplified invoices (F2) are issued; corrective invoices are reached through
   `apps/server/src/cancel-credit.ts`; every full-invoice request is refused
-  (`apps/server/src/till-sale.ts:516`, `apps/server/src/working-order.ts:4180-4191`); and no
+  (`apps/server/src/till-sale.ts:517`, `apps/server/src/working-order.ts:4050-4061`); and no
   route records a cancellation or a substitute invoice (`docs/backlog.md`, fiscal area: "No till screen or
   server route calls `recordVoid` yet", and "no route calls `recordSubstitution`"). So full and
   substitute invoices and cancellations are not listed. A release that turns one on lists it. A
@@ -499,7 +505,7 @@ English.
 - **The rendered copies** — HTML, PDF and plain text — are made once, in the image build, by a
   renderer in `fiscal-verifactu`, and land at a fixed path in the image, `/app/declaration/`,
   beside `/app/third-party/`. The box serves them as opaque files, so `apps/server` never imports
-  `@waitron/fiscal-verifactu` (the composition rule at `packages/composition/src/modules.ts:107-112`).
+  `@waitron/fiscal-verifactu` (the composition rule at `packages/composition/src/modules.ts:121-127`).
   The release job copies the same files out of the published image onto the GitHub Release, so
   the box's PDF and the archive's PDF are the same bytes.
 
@@ -541,8 +547,9 @@ spare box on site) are kept only when the release can do them; d) still describe
 ours the version can call in production (none today; a release that adds one changes d) and has
 the wording checked again); AEAT's FAQ and worked example are re-read for changes; and the
 repository is still public (§7.1). A release that changes the producer or the two-character code
-says so in the runbook's first line: every box opens a new installation at its first start on it
-(§5.6), and the boxes of one taxpayer are upgraded one at a time.
+says so in the runbook's first line: every filing box opens a new installation at its first start
+on it (§5.6), the main boxes of one taxpayer's venues are upgraded one at a time, and each venue's
+spare in the same visit as its main box.
 
 ### 5.5 How a box runs a release
 
@@ -566,7 +573,7 @@ not a new system (developer FAQ §4, p. 9). So the identity a chain is opened un
 | --- | --- | --- |
 | The producer's NIF (or foreign identifier, its type and country) | The running release's `software-identity.ts` (§5.2) | The producer changes, e.g. the owner to a future Waitron company |
 | The two-character code | The same file | Waitron ships a different product |
-| The compliance mode («VERI\*FACTU» today, the only one) | The enabled fiscal module | A venue moves between fiscal policies (the owner, Q2: a new installation) |
+| The compliance mode («VERI\*FACTU» today, the only one) | The enabled fiscal module | A venue moves between fiscal policies (the owner, Q2: a new installation; developer FAQ §3, p. 9: «cuando se produce un cambio de la implementación de la forma de facturar del SIF, realmente se ha cambiado de SIF») |
 | The taxpayer's NIF | The `tenants` row | Never, through the product (below) |
 
 The version is deliberately not in the list.
@@ -579,16 +586,25 @@ box's previous row (`allocation.ts:77-88` today). That is a migration on a fisca
 go-live no data is carried forward (CLAUDE.md §3, the no-backwards-compatibility rule), and a row
 opened before A993, with nothing stored, counts as different from any running identity.
 
-**What every start does**, before the box trades, inside the fiscal module:
+**What every start does**, before the box trades, inside the fiscal module — **only on the node
+that files.** Today filing runs only while a node's role is primary: the drain runs behind
+`singletonPass` (`apps/server/src/boot.ts:2518-2519`), which runs the pass only when
+`node_roles.singleton_role` is `primary` and gives any other node an empty pass
+(`apps/server/src/singleton-pass.ts:4-15`). The start-time step takes the same gate. A
+following spare (A947) that starts on a new release opens nothing and changes nothing: the gate
+keeps it out, it is held dormant with no series of its own until promotion (A947 §2,
+`packages/fiscal-verifactu/src/hour-dormant-standby.ts`), and the main box's rows it follows are
+not its to change. When it is promoted, its activation writes the running release's identity.
 
 - **Same producer, code and mode:** nothing. A679's rule that an ordinary update allocates nothing
   ([A679 design](2026-10-16-a679-hour-coded-series-design.md), "Restore, restart and first Live")
   still holds for every update that keeps the identity.
 - **A different producer or code, or nothing stored:** the box opens a new installation itself, in
-  one transaction, through the activation every other path uses
+  one transaction. The final writes are the ones every activation makes
   (`packages/fiscal-verifactu/src/allocation.ts:432-461`): the old SIF row is revoked; the node's
   chain head is emptied, so the next record is the first of a new chain («PrimerRegistro» = S); the
-  old invoice series are retired and new ones start at 1. The old chain is closed, never
+  old invoice series are retired and new ones start at 1. Getting there is new work (next
+  paragraph). The old chain is closed, never
   rewritten: records already made on it keep the identity they were made under and are sent
   unchanged (W41s's rule, "Retry the original stored fiscal content",
   [W41s design](2026-10-04-fiscal-prevention-and-offline-recovery-design.md) §4), so a backlog the
@@ -607,6 +623,53 @@ opened before A993, with nothing stored, counts as different from any running id
   was changed outside the product. The box opens nothing and refuses to trade, naming the cause on
   the recovery page (proposed code `sif.taxpayer_changed`). **Decision, the conservative one:** a
   person finds out why before anything is filed.
+
+**A new activation action, and why it is the only door without a person.** Today an hour-named
+activation is accepted only through an operation a signed-in person makes: the fiscal module's
+admission refuses `reauthentication_required` unless the operation carries an operator and its
+action is one of `setup`, `restore`, `re-register` or `promote`
+(`packages/fiscal-verifactu/src/allocation-envelope.ts:299-304`), refuses again when the held
+operation has no operator (`:432`), and requires the four-symbol hour form, the code being exactly
+`encodeHourIdentity` of the issue time (`:448`). A993 therefore needs three things, all in its
+slice:
+
+1. **A new action, `identity-change`**, beside the four.
+2. **An authority with no person in it**, which only the start-time step can create, and only when
+   the live SIF row's stored identity differs from the running release's (or has nothing stored).
+   It is made inside the step's own transaction, bound to the node, the old SIF row's id and the
+   running release's version, and used once. No route, operation host, recovery path or tool can
+   ask for one: every other caller that offers `identity-change` is refused, and so is the step
+   itself when the identities match. Each refusing case is proven by deletion (delete the check that
+   the identities differ, or the check that the caller is the start-time step, and its case must
+   fail), beside the case that must still pass: a start under a changed identity activates.
+3. **The new name form** (the naming choice below; with the recommended one, A947's slice 4a teaches
+   the admission the hour-and-minute form).
+
+CLAUDE.md §5 says, in its re-registration rule, "the box does not mint an installation number from
+its clock or a counter". That sentence stops being true, so the same A993 change amends it, to read:
+"…the box does not mint an installation number from its clock or a counter, except at a start that
+finds the running release's identity differs from its chain's (A993), which no person and no other
+caller can trigger." That edit is part of the fiscal pull request the owner reviews.
+
+**What happens to an invoice issued under the old identity.** Its records already made go out
+unchanged, under the old installation and producer: each record stores its own software block
+(`sistemaInformatico: record.SistemaInformatico`, `packages/fiscal-verifactu/src/registro-row.ts:115`)
+and the drain groups and sends rows per SIF row (`partition by r.sif_id`,
+`packages/fiscal-verifactu/src/drain.ts:590`). But anything **new** about such an invoice after the
+change — a cancellation, a corrective invoice, or a record appended after AEAT rejected the
+original — is a new record, and it joins the box's current chain, under the new installation and
+the new producer. AEAT's developer FAQ (p. 20): «la responsabilidad del fabricante de un SIF
+alcanza a los RFs de las facturas emitidas por el SIF que haya certificado, pero no alcanza en modo
+alguno a los RFs correspondientes a facturas emitidas con otro SIF». So after a producer change, the
+new producer would be issuing records about invoices another system issued. Whether that is
+acceptable belongs in the asesor's existing question on the switch; this design asks for Q53(d)(2)
+to be widened, not for a new question, to read: "(2) we read the change of producer as making a new
+system, so every installation then running starts a new installation number and a new chain —
+confirm, and what else it costs (each venue needs its new declaration; anything to notify?), **and
+whether the new system may then record cancellations, corrective invoices and corrections of
+rejected records for invoices the old system issued, or how those should be made**." The watcher
+carries that wording into `asesor-questions.md`; until the asesor answers, A993 builds the
+behaviour above and the release notes of an identity-changing release say so.
 
 **The guard.** Before a record is added to a chain, the record builder compares the chain's stored
 producer, code and mode with the running release's, and refuses on any difference (proposed code
@@ -631,11 +694,15 @@ owner as the revision's second question:
 1. **Recommended: A947's promotion name** — the hour, a hyphen and the minute (`06XV-40`), with
    A947's check against every code the box knows
    ([A947 design](2026-10-21-a947-two-box-failover-design.md) §6.5, its slice 4a). No question and
-   no hour's wait: the box invoices again as soon as it has started. Disclosed limit, as A947
-   discloses for its switches: two of the same taxpayer's boxes changing identity in the same UTC
-   minute, with the same series prefixes, would take the same names. The runbook (§5.4) has an
-   identity-changing release installed one box at a time. It depends on the owner approving A947's
-   revision; today the only venue is the owner's own.
+   no wait for the next hour: normally the box takes the current minute and invoices again as soon
+   as it has started. Not always at once: A947's rules 3 and 4 make it wait, up to about three
+   minutes, when a name it knows is a little later than its clock, and refuse — naming the minute
+   from which it will be allowed — when a known name is more than three minutes ahead; until then
+   the box issues no invoice. Disclosed limit, as A947 discloses for its switches: two of the same
+   taxpayer's venues changing identity in the same UTC minute, with the same series prefixes,
+   would take the same names. The runbook (§5.4) has the main boxes of one taxpayer's venues
+   upgraded one at a time. It depends on the owner approving A947's revision; today the only venue
+   is the owner's own.
 2. A679's four-symbol hour, taking the "I don't know" path: the box invoices nothing until the next
    UTC hour — up to an hour without invoices after the upgrade — and two boxes of one taxpayer
    changing identity in the same hour still collide.
@@ -677,15 +744,20 @@ the identity is not ordinary.
   recovery sheet to be printed again: the sheet prints "only this node's current installation
   code", which the recovery form asks for (A679 design, "Owner PDF decisions, 2026-10-19").
   Reprinting allocates nothing (A679's table: "PDF download, print or key reissue | Allocate
-  nothing"). The recovery key is expected to stay the same: A679 describes it as the node's key,
-  named and bound to the taxpayer and node, not to an installation ("Owner PDF review"). Neither
-  that nor whether an old sheet's code still lets a recovery through was traced in the code; the
-  notice asks for a new sheet either way.
+  nothing"). The recovery key stays the same: its verifier is kept per node
+  (`readBreakGlassVerifier(db, nodeId)`, `packages/db/src/deployment.ts:196`), and
+  `grep -rn setBreakGlassVerifier apps/server/src packages/*/src` finds, outside `packages/db`
+  which defines it, only `apps/server/src/break-glass.ts`, `apps/server/src/recovery-document-api.ts`
+  and `packages/provisioning/src/first-setup-node-key.ts` — none in the activation code
+  (`grep -ci verifier packages/fiscal-verifactu/src/allocation*.ts` answers 0 for every file).
+  Whether an old sheet's printed code still lets a recovery through was not traced; the notice asks
+  for a new sheet either way.
   (Picture 5.)
 - The box keeps the old version's declaration (§7.3).
-- A spare box (A947) follows the new rows. It is upgraded with the main box: a spare promoted while
-  still on the old release would open under the old identity, and its next start on the new
-  release would change it again.
+- A spare box (A947) follows the new rows and, not filing, opens nothing (above). Upgrade it in the
+  same visit as its own venue's main box, before or after: a spare promoted while still on the old
+  release would open under the old identity, and its next start on the new release would change it
+  again. The "one at a time" rule is about the main boxes of different venues, which each file.
 - Going back to an older release across an identity change would open yet another installation;
   the runbook says not to.
 
@@ -722,7 +794,7 @@ instead of its fixed guide title (`apps/till/src/widgets/guide-sheet.ts:89`). (P
 ### 6.3 Handheld and tablet
 
 The More menu (≡) is always drawn on these, because Find bill always lives in it
-(`apps/till/src/till-app.ts:17232-17240`, `apps/till/src/widgets/till-shell.ts:501`). On a tablet
+(`apps/till/src/till-app.ts:17244-17253` always adds `find-bill`, `apps/till/src/widgets/till-shell.ts:501`). On a tablet
 or wide handheld Log out sits in the operator menu, opened from the signed-in person's name; at
 phone width the operator's items, Log out included, are laid out inside More
 (`till-shell.ts:495`, `:868`). So **About Waitron** goes in More, as its very last entry (after the
@@ -733,7 +805,8 @@ width. It opens the same sheet. (Picture 3.)
 
 A kitchen screen shows no menu, only a corner holding the theme and language choosers
 (`till-shell.ts:990-993`). The corner gains a small **ⓘ** button. The lock (PIN) and pairing screens are drawn outside the
-till shell (`apps/till/src/till-app.ts:18226`, `:18371`), so they get their own copy of the sheet
+till shell (`apps/till/src/till-app.ts:18226-18232` for the chooser and pairing (enrol) screens,
+`:18377` for the lock screen), so they get their own copy of the sheet
 for their ⓘ. A kitchen screen cannot invoice, but the queue item asks for every terminal, and a PIN
 screen is where a till sits most of the day. (Picture 3.)
 
@@ -810,6 +883,9 @@ migration (slice 5).
   after slice 1 and checks the submission header names the taxpayer, not the producer.
 - **No record joins a chain opened under another identity** (§5.6, A993): proven by deleting the
   comparison, with the same-identity sale as the case it must still allow.
+- **Only the start-time step activates without a person** (§5.6): every other caller offering
+  `identity-change` is refused, and so is the step when the identities match, each proven by
+  deletion; a following spare's start opens nothing.
 - **A start on a changed identity opens a new installation** (§5.6): a case that starts the box
   under a release with a different producer and checks that the old SIF row is revoked, the old
   series retired, the next record is the first of a new chain and the old chain's unsent record is
