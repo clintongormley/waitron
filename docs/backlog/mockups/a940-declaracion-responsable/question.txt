@@ -139,13 +139,13 @@ box starts on 1.4.0 at 11:15 and finds its chain was opened under you. By itself
 closes installation 06RB (its last receipt A-06RB/1234), opens a new installation and series, and
 its next receipt is the first of a new chain. Two records 1.3.2 left unsent still go to AEAT
 unchanged under your name. A manager sees «Nueva instalación fiscal» and prints a new recovery
-sheet (the key itself stays the same). If anything ever tried to add a 1.4.0 record to the old
+sheet (the design requires the step not to change the recovery key). If anything ever tried to add a 1.4.0 record to the old
 chain, a guard refuses it. Only the box that files does this; the venue's spare opens nothing.
 Until then nothing changes: an ordinary upgrade keeps the same installation, as today.
 
 Two things the revision makes explicit. First, this is the one way a box may open an installation
-with no person present: a new kind of activation that only that start step can create, and only
-when the identity really differs; CLAUDE.md's rule that "the box does not mint an installation
+with no person present: a new kind of activation that only that start step, on the box that files,
+can create, and only when the stored identity is missing or really differs; CLAUDE.md's rule that "the box does not mint an installation
 number from its clock or a counter" is amended in the same change. Second, if the bar later
 cancels or corrects a receipt issued before the change (A-06RB/...), that new record goes on the
 new chain under Waitron S.L. AEAT's FAQ says a producer answers only for records of invoices its
@@ -178,7 +178,7 @@ Example: the bar's box starts on 1.4.0 at 11:15 on 1 March 2027.
 - A (recommended) — the hour-and-minute name, with A947's check against every name the box knows.
   It normally sells again at once; if a name it knows is a little later than its clock it waits up
   to about three minutes, and if one is more than three minutes ahead it refuses until a minute it
-  names (no invoices meanwhile). Limit: two of the same business's venues changing in the same
+  names, then tries again by itself at that minute (no invoices meanwhile). Limit: two of the same business's venues changing in the same
   minute would take the same name, so the release runbook says to upgrade one venue's main box at
   a time, a minute apart (each venue's spare in the same visit). Needs you to approve A947's
   revision (its slice 4a builds the name).

@@ -38,7 +38,7 @@ identity change (§5.6).
 >   with it (their item labels now read «1.a)» as §4's do); the optional-services slot is gone
 >   from §4 and §5.4.
 > - **Q4: production boxes run releases only**, as designed in §5.1. No change.
-> - **§10 build order** gains A993; **§11** records the answers; **§12** gains three open points.
+> - **§10 build order** gains A993; **§11** records the answers; **§12** gains new open points.
 > - **Review fixes, same day:** §5.6 now names the new `identity-change` activation and its
 >   person-less authority, the CLAUDE.md §5 sentence it amends, what happens to corrections of
 >   invoices issued before the change (and the widening it asks of Q53(d)(2)), that only the filing
@@ -573,7 +573,7 @@ not a new system (developer FAQ §4, p. 9). So the identity a chain is opened un
 | --- | --- | --- |
 | The producer's NIF (or foreign identifier, its type and country) | The running release's `software-identity.ts` (§5.2) | The producer changes, e.g. the owner to a future Waitron company |
 | The two-character code | The same file | Waitron ships a different product |
-| The compliance mode («VERI\*FACTU» today, the only one) | The enabled fiscal module | A venue moves between fiscal policies (the owner, Q2: a new installation; developer FAQ §3, p. 9: «cuando se produce un cambio de la implementación de la forma de facturar del SIF, realmente se ha cambiado de SIF») |
+| The compliance mode («VERI\*FACTU» today, the only one) | The enabled fiscal module | A venue moves between fiscal policies — a new installation by **Waitron's own conservative choice** (the owner, Q2), not by a source: the developer FAQ's «cuando se produce un cambio de la implementación de la forma de facturar del SIF, realmente se ha cambiado de SIF» (§3, p. 9) is about a change of regulation (its example: RD 1007/2023 to the SII), and §3 also calls an adapted system one system «tanto actuando en la modalidad VERI\*FACTU como en la NO VERI\*FACTU» (p. 7; `docs/compliance/verifactu-faq-notes.md` §6). §12 keeps it for the asesor |
 | The taxpayer's NIF | The `tenants` row | Never, through the product (below) |
 
 The version is deliberately not in the list.
@@ -647,9 +647,10 @@ slice:
 
 CLAUDE.md §5 says, in its re-registration rule, "the box does not mint an installation number from
 its clock or a counter". That sentence stops being true, so the same A993 change amends it, to read:
-"…the box does not mint an installation number from its clock or a counter, except at a start that
-finds the running release's identity differs from its chain's (A993), which no person and no other
-caller can trigger." That edit is part of the fiscal pull request the owner reviews.
+"…the box does not mint an installation number from its clock or a counter, except at a start on
+the filing node that finds the chain's stored identity missing or different from the running
+release's (A993); no route, tool or person can request it." Installing such a release is what
+triggers it. That edit is part of the fiscal pull request the owner reviews.
 
 **What happens to an invoice issued under the old identity.** Its records already made go out
 unchanged, under the old installation and producer: each record stores its own software block
@@ -658,7 +659,9 @@ and the drain groups and sends rows per SIF row (`partition by r.sif_id`,
 `packages/fiscal-verifactu/src/drain.ts:590`). But anything **new** about such an invoice after the
 change — a cancellation, a corrective invoice, or a record appended after AEAT rejected the
 original — is a new record, and it joins the box's current chain, under the new installation and
-the new producer. AEAT's developer FAQ (p. 20): «la responsabilidad del fabricante de un SIF
+the new producer. AEAT's developer FAQ (§10, «Importación de facturas desde otro sistema», p. 20 —
+a passage about importing invoices from another system, not about a change of producer): «la
+responsabilidad del fabricante de un SIF
 alcanza a los RFs de las facturas emitidas por el SIF que haya certificado, pero no alcanza en modo
 alguno a los RFs correspondientes a facturas emitidas con otro SIF». So after a producer change, the
 new producer would be issuing records about invoices another system issued. Whether that is
@@ -697,8 +700,10 @@ owner as the revision's second question:
    no wait for the next hour: normally the box takes the current minute and invoices again as soon
    as it has started. Not always at once: A947's rules 3 and 4 make it wait, up to about three
    minutes, when a name it knows is a little later than its clock, and refuse — naming the minute
-   from which it will be allowed — when a known name is more than three minutes ahead; until then
-   the box issues no invoice. Disclosed limit, as A947 discloses for its switches: two of the same
+   from which it will be allowed — when a known name is more than three minutes ahead. **Decision:**
+   after such a refusal the box keeps running without issuing invoices and tries the change again
+   by itself at the minute it named (and on its next start, if it restarts first); the dashboard
+   shows that minute. No person is needed unless the clock check fails (below). Disclosed limit, as A947 discloses for its switches: two of the same
    taxpayer's venues changing identity in the same UTC minute, with the same series prefixes,
    would take the same names. The runbook (§5.4) has the main boxes of one taxpayer's venues
    upgraded one at a time. It depends on the owner approving A947's revision; today the only venue
@@ -744,12 +749,15 @@ the identity is not ordinary.
   recovery sheet to be printed again: the sheet prints "only this node's current installation
   code", which the recovery form asks for (A679 design, "Owner PDF decisions, 2026-10-19").
   Reprinting allocates nothing (A679's table: "PDF download, print or key reissue | Allocate
-  nothing"). The recovery key stays the same: its verifier is kept per node
-  (`readBreakGlassVerifier(db, nodeId)`, `packages/db/src/deployment.ts:196`), and
-  `grep -rn setBreakGlassVerifier apps/server/src packages/*/src` finds, outside `packages/db`
-  which defines it, only `apps/server/src/break-glass.ts`, `apps/server/src/recovery-document-api.ts`
-  and `packages/provisioning/src/first-setup-node-key.ts` — none in the activation code
-  (`grep -ci verifier packages/fiscal-verifactu/src/allocation*.ts` answers 0 for every file).
+  nothing"). **Requirement on A993: the step must not make a new recovery key.** Activation today
+  writes none: the key's verifier is kept per node (`readBreakGlassVerifier(db, nodeId)`,
+  `packages/db/src/deployment.ts:196`), `grep -rln setBreakGlassVerifier apps/server/src
+  packages/*/src | grep -v '\.test\.'` lists only `packages/db` (which defines it),
+  `apps/server/src/break-glass.ts`, `apps/server/src/recovery-document-api.ts` and
+  `packages/provisioning/src/first-setup-node-key.ts`, and `grep -ci verifier
+  packages/fiscal-verifactu/src/allocation*.ts` answers 0 for every file. But other paths do make
+  one — adoption mints a key (`mintBreakGlassKey`, `apps/server/src/adopt.ts:152`) — so A993 must
+  not reach any of them, and a case checks that the verifier is unchanged after the step.
   Whether an old sheet's printed code still lets a recovery through was not traced; the notice asks
   for a new sheet either way.
   (Picture 5.)
@@ -968,6 +976,10 @@ automatic identity change names its new installation (§5.6).
   not a source; Q53(b) does not mention it. A release whose setup offers the UK re-reads it.
 - **A move between fiscal modules** (Veri\*Factu to a future non-Veri\*Factu mode) as a new
   installation rather than a refused start: designed with that first mode (§5.6).
+- **A move between compliance modes as a new installation** is Waitron's own conservative choice
+  (the owner, Q2), not something a source requires: the developer FAQ calls an adapted system one
+  system in either mode (§3, p. 7). For the asesor with the first non-Veri\*Factu mode, together
+  with the design of that move (§5.6); not added to `asesor-questions.md` now.
 - **«nos hacemos responsables»** in Q53's draft of d), for a producer who is one person: settled
   with the asesor's answer.
 - **B3's note for A940** ([B3 design](2026-10-21-b3-usb-installer-design.md), "A note for
