@@ -15,4 +15,17 @@ describe("@waitron/layouts barrel", () => {
     expect(api.MAX_RECEIPT_PHONE_LENGTH).toBe(30);
     expect(api.MAX_RECEIPT_EMAIL_LENGTH).toBe(254);
   });
+  it("exports the custom themes store and its two parsers", () => {
+    for (const name of [
+      "parseThemeChoices",
+      "parseThemeName",
+      "createCustomTheme",
+      "saveCustomTheme",
+      "setThemeInUse",
+      "listCustomThemes",
+      "readThemeInUse",
+    ]) {
+      expect(typeof (api as Record<string, unknown>)[name]).toBe("function");
+    }
+  });
 });
