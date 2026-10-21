@@ -1,7 +1,7 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { WAITRON_CHOICES, themeSheet } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
-import { VENUE_THEME_STORAGE_KEY, applyVenueTheme } from "./venue-theme.js";
+import { VENUE_THEME_STORAGE_KEY, applyVenueTheme, followVenueTheme } from "./venue-theme.js";
 
 const GREEN = {
   hash: "green-hash",
@@ -15,4 +15,12 @@ it("before start nothing is adopted or applied", () => {
   applyVenueTheme(GREEN);
   expect([...document.adoptedStyleSheets]).toEqual(before);
   expect(localStorage.getItem(VENUE_THEME_STORAGE_KEY)).toBeNull();
+});
+
+it("following before start sends nothing", () => {
+  const spy = vi.fn(() => new Promise<Response>(() => {}));
+  vi.stubGlobal("fetch", spy);
+  followVenueTheme("x");
+  expect(spy).not.toHaveBeenCalled();
+  vi.unstubAllGlobals();
 });

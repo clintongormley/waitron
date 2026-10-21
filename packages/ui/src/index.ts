@@ -140,6 +140,7 @@ export {
   VENUE_THEME_STORAGE_KEY,
   VENUE_THEME_TIME_LIMIT_MS,
   applyVenueTheme,
+  followVenueTheme,
   isVenueThemeAnswer,
   startVenueTheme,
 } from "./venue-theme.js";

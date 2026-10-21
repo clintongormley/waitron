@@ -6,6 +6,7 @@ import {
   VENUE_THEME_STORAGE_KEY,
   VENUE_THEME_TIME_LIMIT_MS,
   applyVenueTheme,
+  followVenueTheme,
   startVenueTheme,
 } from "./venue-theme.js";
 
@@ -44,6 +45,21 @@ function storeGreen(): string {
 async function settled(json: ReturnType<typeof vi.spyOn>): Promise<void> {
   await vi.waitFor(() => expect(json).toHaveBeenCalled());
   await macrotask();
+}
+
+/** A fetch whose every call waits until the test answers or refuses it by hand. */
+function byHand() {
+  const calls: { answer: (body: unknown) => void; refuse: () => void }[] = [];
+  const fetchImpl = vi.fn(
+    () =>
+      new Promise<Response>((resolve, reject) => {
+        calls.push({
+          answer: (body) => resolve(new Response(JSON.stringify(body))),
+          refuse: () => reject(new TypeError("Failed to fetch")),
+        });
+      }),
+  );
+  return { fetchImpl, calls };
 }
 
 beforeEach(() => {
@@ -244,6 +260,24 @@ describe("startVenueTheme", () => {
     expect(bg()).toBe(LEMON_LIGHT_BG);
   });
 
+  it("keeps its copy under the key waitron-venue-theme", () => {
+    expect(VENUE_THEME_STORAGE_KEY).toBe("waitron-venue-theme");
+  });
+
+  it("a root inside a shadow root adopts the sheet onto that shadow root", () => {
+    storeGreen();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const shadow = host.attachShadow({ mode: "open" });
+    const inner = document.createElement("div");
+    shadow.append(inner);
+    const onPage = document.adoptedStyleSheets.length;
+    startVenueTheme(inner, { fetchImpl: never });
+    expect(shadow.adoptedStyleSheets.length).toBe(1);
+    expect(document.adoptedStyleSheets.length).toBe(onPage);
+    host.remove();
+  });
+
   it("the sheet is adopted once, after the token sheet", () => {
     storeGreen();
     document.adoptedStyleSheets = [];
@@ -270,5 +304,174 @@ describe("applyVenueTheme", () => {
     applyVenueTheme("nonsense");
     expect(bg()).toBe(GREEN_LIGHT_BG);
     expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual(GREEN);
+  });
+});
+
+describe("followVenueTheme", () => {
+  it("following the applied hash sends nothing", async () => {
+    storeGreen();
+    const json = vi.spyOn(Response.prototype, "json");
+    const fetchImpl = answering(JSON.stringify(GREEN));
+    startVenueTheme(document.documentElement, { fetchImpl });
+    await settled(json);
+    followVenueTheme(GREEN.hash);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("following a new hash fetches and paints", async () => {
+    storeGreen();
+    const json = vi.spyOn(Response.prototype, "json");
+    const fetchImpl = answering(JSON.stringify(GREEN));
+    startVenueTheme(document.documentElement, { fetchImpl });
+    await settled(json);
+    fetchImpl.mockImplementation(() => Promise.resolve(new Response(JSON.stringify(LEMON))));
+    followVenueTheme("other");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenLastCalledWith(
+      "/api/theme",
+      expect.objectContaining({ cache: "no-store", signal: expect.any(AbortSignal) }),
+    );
+    await vi.waitFor(() => expect(bg()).toBe(LEMON_LIGHT_BG));
+    expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual(LEMON);
+  });
+
+  it("following while a fetch is out waits for it, then asks once more if still behind", async () => {
+    const { fetchImpl, calls } = byHand();
+    startVenueTheme(document.documentElement, { fetchImpl });
+    followVenueTheme("x");
+    followVenueTheme("x");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    calls[0]!.answer(GREEN);
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    expect(bg()).toBe(GREEN_LIGHT_BG);
+    const json = vi.spyOn(Response.prototype, "json");
+    calls[1]!.answer(LEMON);
+    await vi.waitFor(() => expect(bg()).toBe(LEMON_LIGHT_BG));
+    await settled(json);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("a fetch that brings the hash asked for while it was out asks no more", async () => {
+    const { fetchImpl, calls } = byHand();
+    startVenueTheme(document.documentElement, { fetchImpl });
+    followVenueTheme("x");
+    followVenueTheme("x");
+    const json = vi.spyOn(Response.prototype, "json");
+    calls[0]!.answer({ ...GREEN, hash: "x" });
+    await settled(json);
+    expect(bg()).toBe(GREEN_LIGHT_BG);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("the latest hash asked for while a fetch is out is the one checked", async () => {
+    storeGreen();
+    const { fetchImpl, calls } = byHand();
+    startVenueTheme(document.documentElement, { fetchImpl });
+    followVenueTheme("x");
+    followVenueTheme(GREEN.hash);
+    calls[0]!.refuse();
+    await fetchImpl.mock.results[0]!.value.catch(() => undefined);
+    await macrotask();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("a follow-up that fails asks no more until the next call", async () => {
+    const { fetchImpl, calls } = byHand();
+    startVenueTheme(document.documentElement, { fetchImpl });
+    followVenueTheme("x");
+    followVenueTheme("x");
+    calls[0]!.refuse();
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    calls[1]!.refuse();
+    await macrotask();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    followVenueTheme("x");
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it("an older fetch never undoes a newer answer", async () => {
+    const { fetchImpl, calls } = byHand();
+    startVenueTheme(document.documentElement, { fetchImpl });
+    applyVenueTheme(LEMON);
+    const json = vi.spyOn(Response.prototype, "json");
+    calls[0]!.answer(GREEN);
+    await settled(json);
+    expect(bg()).toBe(LEMON_LIGHT_BG);
+    expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual(LEMON);
+  });
+
+  it("an older fetch's answer paints when nothing was applied after it was sent", async () => {
+    const { fetchImpl, calls } = byHand();
+    startVenueTheme(document.documentElement, { fetchImpl });
+    calls[0]!.answer(GREEN);
+    await vi.waitFor(() => expect(bg()).toBe(GREEN_LIGHT_BG));
+  });
+
+  it("a live update while the start-up fetch is out keeps the newer theme", async () => {
+    storeGreen();
+    const { fetchImpl, calls } = byHand();
+    startVenueTheme(document.documentElement, { fetchImpl });
+    followVenueTheme(LEMON.hash);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    applyVenueTheme(LEMON);
+    const json = vi.spyOn(Response.prototype, "json");
+    calls[0]!.answer(GREEN);
+    await settled(json);
+    expect(bg()).toBe(LEMON_LIGHT_BG);
+    expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual(LEMON);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("an answer that repeats the applied hash still counts as applied", async () => {
+    storeGreen();
+    const { fetchImpl, calls } = byHand();
+    startVenueTheme(document.documentElement, { fetchImpl });
+    applyVenueTheme(GREEN);
+    const json = vi.spyOn(Response.prototype, "json");
+    calls[0]!.answer(LEMON);
+    await settled(json);
+    expect(bg()).toBe(GREEN_LIGHT_BG);
+  });
+
+  it("a fetch dropped by a restart does not end the restart's own fetch", async () => {
+    const first = byHand();
+    startVenueTheme(document.documentElement, { fetchImpl: first.fetchImpl });
+    const second = byHand();
+    startVenueTheme(document.documentElement, { fetchImpl: second.fetchImpl });
+    first.calls[0]!.refuse();
+    await first.fetchImpl.mock.results[0]!.value.catch(() => undefined);
+    await macrotask();
+    followVenueTheme("x");
+    expect(second.fetchImpl).toHaveBeenCalledTimes(1);
+    second.calls[0]!.answer(GREEN);
+    await vi.waitFor(() => expect(second.fetchImpl).toHaveBeenCalledTimes(2));
+  });
+
+  it("an answer from before a restart applies nothing", async () => {
+    const { fetchImpl, calls } = byHand();
+    startVenueTheme(document.documentElement, { fetchImpl });
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+    calls[0]!.answer(GREEN);
+    await macrotask();
+    await macrotask();
+    expect(bg()).toBe(WAITRON_LIGHT_BG);
+  });
+
+  it("a restart forgets a hash asked for before it", async () => {
+    const { fetchImpl, calls } = byHand();
+    startVenueTheme(document.documentElement, { fetchImpl });
+    followVenueTheme("x");
+    const second = byHand();
+    startVenueTheme(document.documentElement, { fetchImpl: second.fetchImpl });
+    const json = vi.spyOn(Response.prototype, "json");
+    second.calls[0]!.answer(GREEN);
+    await settled(json);
+    calls[0]!.answer(LEMON);
+    await macrotask();
+    await macrotask();
+    expect(second.fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(bg()).toBe(GREEN_LIGHT_BG);
   });
 });
