@@ -161,10 +161,8 @@ export class OpeningHoursScreen extends LitElement {
   @state() private requestedYear = 0;
   @state() private yearModel?: OpeningHoursYear;
   @state() private yearReadError = "";
-  @state() private knownSpecialDays: readonly { id: string; name: string }[] = [];
   private yearDetach?: () => void;
   private watchedYear = 0;
-  private knownSpecialDaysRead = {};
   /** The address's month, or "" for the venue's current one. */
   @state() private requestedMonth = "";
   /** The address's `week` date, or "" for the venue's today. */
@@ -272,7 +270,6 @@ export class OpeningHoursScreen extends LitElement {
       this.replaceAddress(this.calendarUrl(calendarWindowPath(current.pathname, null)));
       return;
     }
-    if (windowId === "seasons" && this.windowId !== "seasons") this.readKnownSpecialDays();
     this.windowId = windowId ?? "";
     const contentPath = calendarWindowPath(current.pathname, null);
     const contentKey = contentPath + current.search + current.hash;
@@ -454,7 +451,6 @@ export class OpeningHoursScreen extends LitElement {
       data-window="seasons"
       .seasons=${this.model.seasons}
       .clockRevision=${this.model.clockRevision}
-      .specialDays=${this.knownSpecialDays}
       .readOnly=${this.readOnly}
       .draftParent=${this.windowDraftRoot}
       .api=${this.api}
@@ -878,17 +874,6 @@ export class OpeningHoursScreen extends LitElement {
         () => {},
       );
     });
-  }
-  /** Feeds only the naming of a season refusal, so a failed read keeps the last list. */
-  private readKnownSpecialDays() {
-    const read = (this.knownSpecialDaysRead = {});
-    void this.api.specialDays.listSpecialDays({ passive: true }).then(
-      (days) => {
-        if (this.isConnected && this.knownSpecialDaysRead === read)
-          this.knownSpecialDays = days.map(({ id, name }) => ({ id, name }));
-      },
-      () => {},
-    );
   }
   private readonly areaWrites = {
     saveHolidayArea: (areaKey: string) => this.api.specialDays.saveHolidayArea(areaKey),

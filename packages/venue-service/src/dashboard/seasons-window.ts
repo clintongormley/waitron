@@ -185,7 +185,6 @@ export class SeasonsWindow extends LitElement {
   ];
   @property({ attribute: false }) seasons: OpeningHoursModel["seasons"] = [];
   @property({ type: Number }) clockRevision = 0;
-  @property({ attribute: false }) specialDays: readonly { id: string; name: string }[] = [];
   @property({ type: Boolean }) readOnly = false;
   @property({ attribute: false }) draftParent?: object;
   @property({ attribute: false }) api?: Pick<

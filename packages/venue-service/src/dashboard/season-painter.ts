@@ -545,9 +545,7 @@ export class SeasonPainter extends LitElement {
   /** A refusal naming `departments.<i>` or `zones.<i>` shows that week, marking the day it names. */
   private refuse(error: unknown, departments: string[], zones: string[]) {
     const code = codeOf(error);
-    const params = (
-      error as { params?: { field?: unknown; reason?: unknown; periodId?: unknown } } | null
-    )?.params;
+    const params = (error as { params?: { field?: unknown; reason?: unknown } } | null)?.params;
     if (code === "hours.clock_changed") {
       this.refused = { message: t(code) };
       return;

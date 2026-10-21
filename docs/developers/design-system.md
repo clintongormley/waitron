@@ -5479,8 +5479,7 @@ files, and the Periods window cases in `opening-hours-screen.painter.test.ts` an
 The Seasons window is the Calendar's `window/seasons` address pair, over any Calendar view or
 painter, as `window/periods` is. It opens from "Seasons…" on the Year's season row, before
 "Periods…" (the button sends `calendar-window-open` with `detail: { window: "seasons" }`), and from
-page search (`venue-service:seasons`). Opening it reads the venue's special days once, so a refusal
-can name one. Its host, `seasons-window` (`seasons-window.ts`, under
+page search (`venue-service:seasons`). Its host, `seasons-window` (`seasons-window.ts`, under
 `packages/venue-service/src/dashboard/`), carries `data-test="calendar-window"
 data-window="seasons"` and draws its own unsized, so wide, `wt-modal` headed "Seasons", unlike the
 Periods window, because its footer holds the draft's Save and the form's bottom message. The inner

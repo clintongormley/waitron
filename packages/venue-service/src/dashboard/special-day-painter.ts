@@ -946,7 +946,6 @@ export class SpecialDayPainter extends LitElement {
             name?: unknown;
             departmentId?: unknown;
             zoneId?: unknown;
-            periodId?: unknown;
           };
         }
       ).params ?? {};
@@ -1013,7 +1012,6 @@ export class SpecialDayPainter extends LitElement {
       date?: unknown;
       departmentId?: unknown;
       zoneId?: unknown;
-      periodId?: unknown;
     },
     input: SpecialDayInput,
   ): boolean {

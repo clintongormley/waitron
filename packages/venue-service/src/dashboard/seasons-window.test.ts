@@ -24,15 +24,10 @@ afterEach(() => {
 });
 
 type WindowApi = Pick<OpeningHoursApi, "saveSeasons" | "readSeasonDeleteImpact">;
-async function mount(
-  readOnly = false,
-  api: Partial<WindowApi> = {},
-  specialDays: { id: string; name: string }[] = [],
-) {
+async function mount(readOnly = false, api: Partial<WindowApi> = {}) {
   const el = document.createElement("seasons-window");
   el.seasons = seasons;
   el.clockRevision = 3;
-  el.specialDays = specialDays;
   el.readOnly = readOnly;
   el.api = {
     saveSeasons: vi.fn(),
@@ -693,7 +688,7 @@ it.each([
     const saveSeasons = vi.fn(async () => {
       throw refusal;
     });
-    const el = await mount(false, { saveSeasons }, [{ id: "sd1", name: "Christmas dinners" }]);
+    const el = await mount(false, { saveSeasons });
     const events = savedEvents();
     await change(el, "season-3-day", "15");
     await press(el, save(el));

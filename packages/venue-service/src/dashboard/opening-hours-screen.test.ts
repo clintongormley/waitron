@@ -1337,39 +1337,6 @@ describe("Year view", () => {
     expect(view().shadowRoot!.querySelector("[data-test=year]")?.textContent?.trim()).toBe("2028");
   });
 
-  it("applies only the newest special-day list when an older read answers last", async () => {
-    const { el, view, held } = await heldMount(
-      "/manage/opening-hours/view/year/year/2027",
-      (path) => path.endsWith("/special-days"),
-    );
-    await expect.poll(() => view().model?.year).toBe(2027);
-    await view().updateComplete;
-    const win = () =>
-      el.shadowRoot!.querySelector<HTMLElementTagNameMap["seasons-window"]>(
-        "[data-test=calendar-window][data-window=seasons]",
-      );
-    const open = async () => {
-      view()
-        .shadowRoot!.querySelector<HTMLElement>("season-chips [data-test=open-seasons]")!
-        .click();
-      await expect.poll(() => win()).not.toBeNull();
-    };
-    await open();
-    await expect.poll(() => held.length).toBe(1);
-    await win()!.updateComplete;
-    win()!.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-seasons]")!.click();
-    await expect.poll(() => win()).toBeNull();
-    await open();
-    await expect.poll(() => held.length).toBe(2);
-    const list = (id: string, name: string) => [{ id, name, repeatsYearly: true, dates: [] }];
-    held[1]!.release(list("new", "New fair"));
-    await expect.poll(() => win()!.specialDays).toEqual([{ id: "new", name: "New fair" }]);
-    held[0]!.release(list("old", "Old fair"));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await el.updateComplete;
-    expect(win()!.specialDays).toEqual([{ id: "new", name: "New fair" }]);
-  });
-
   it("opens the Year from an old Calendar address", async () => {
     const { el, view } = await yearMount("/manage/opening-hours/view/calendar");
     expect(drawnView(el)).toBe("year");
