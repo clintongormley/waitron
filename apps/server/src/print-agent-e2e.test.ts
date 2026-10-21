@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations, printJobs, printers, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -879,9 +879,30 @@ function listen(app: Hono, port: number): Promise<ServerType> {
   });
 }
 
+/** This file's tests share one database, and the system can hand an earlier test's printer port out
+ * again; discovery matches by address, so a printer still registered there would read as this one. */
+async function portsNoPrinterNames(): Promise<number[]> {
+  const attempts = 20;
+  let lastPort = 0;
+  let lastIds: string[] = [];
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const ports = await freePorts(2);
+    const named = await suite.db
+      .select({ id: printers.id })
+      .from(printers)
+      .where(and(eq(printers.host, "127.0.0.1"), eq(printers.port, ports[1]!)));
+    if (named.length === 0) return ports;
+    lastPort = ports[1]!;
+    lastIds = named.map((row) => row.id);
+  }
+  throw new Error(
+    `no free printer port after ${attempts} draws: port ${lastPort} is still named by printer rows ${lastIds.join(", ")}`,
+  );
+}
+
 describe("a printer deleted over real HTTP", () => {
   it("serves create, impact, delete, the late result, history, discovery and a replacement to a real agent and client", async () => {
-    const [httpPort, printerPort] = await freePorts(2);
+    const [httpPort, printerPort] = await portsNoPrinterNames();
     const base = `http://127.0.0.1:${httpPort}`;
     const app = new Hono();
     const pairingMode = createPairingMode();
@@ -1090,6 +1111,12 @@ describe("a printer deleted over real HTTP", () => {
         }>;
         return rows.find((row) => row.host === "127.0.0.1" && row.port === printerPort);
       };
+      expect(
+        await suite.db
+          .select({ id: printers.id })
+          .from(printers)
+          .where(and(eq(printers.host, "127.0.0.1"), eq(printers.port, printerPort!))),
+      ).toEqual([{ id: oldId }]);
       expect(await discovered()).toMatchObject({ alreadyRegistered: false, printerId: null });
 
       const replaced = await call("POST", "/management-api/printers", {
