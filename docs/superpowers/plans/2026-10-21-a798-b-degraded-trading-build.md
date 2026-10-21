@@ -20,8 +20,9 @@
 > the engine or the store behaves cites a probe in "Measured for this plan", run that day on macOS,
 > Node v26.11.1, `node:sqlite`, from scratch files outside the repository: the planner's under
 > `~/waitron-campaign-b/a798-plan-probe/`, the round-1 review's under
-> `~/waitron-campaign-b/a798-plan-review/`, and this revision's under
-> `~/waitron-campaign-b/a798-plan-review/round1-fix/`. Nothing was measured on Linux.
+> `~/waitron-campaign-b/a798-plan-review/`, this revision's under
+> `~/waitron-campaign-b/a798-plan-review/round1-fix/`, and the round-2 check's under
+> `~/waitron-campaign-b/a798-plan-review/round2-check/`. Nothing was measured on Linux.
 
 **Goal (whole build):** the box keeps trading when a part fails wherever a sale's record can still
 be written, tells staff and managers what is wrong, and refuses honestly when it cannot — as the
@@ -91,8 +92,9 @@ Why each lands itself or is parked, against the owner's four categories:
 2. **Lands itself.** The start and the recovery page; nothing fiscal.
 3. **Parked, by default** (decision 17). It refuses, before a card is charged, sales while the
    disk is red and sales under a clock before 28-10-2024, and words them. That can refuse a sale
-   that would be issued today: E12 measured a one-line sale written on a database where a 20-line
-   sale had just been refused, and design §4.6 item 5 refuses every sale once a save has failed. It
+   that would be issued today: on a database filled until a 20-line sale was refused, the next one-line
+   sale was written (`~/waitron-campaign-b/a798-plan-review/round2-check/srv/seq.test.ts`,
+   2026-10-21), and design §4.6 item 5 refuses every sale once a save has failed. It
    changes no invoice's content, no record, chain, series or number; whether refusing a sale that
    would otherwise be issued counts as changing invoices is the owner's call, so slice 3's plan
    may ask for it to land itself. The red state its checks read (§4.6 item 5: set by the first save
@@ -270,6 +272,10 @@ from the worktree, importing the worktree's own `packages/store/src` and `apps/s
   `AppError("storage.disk_full", {})` thrown under `createErrorBoundary({}, …)` answered
   `400 {"error":{"code":"storage.disk_full","params":{}}}`; a Hono route answering `c.json(…, 507)`
   sent status `507`.
+- **E19, three review probes cited below.** Review V1 (E8 N2 re-run), V3 (a top-level
+  `db.transaction` outside the queue today: `cannot rollback - no transaction is active`,
+  `sales: []`) and V4 (`RAISE(ROLLBACK)` through the queue today: `cannot rollback - no transaction
+  is active`, `sales: ["after"]`), in `vt/review.test.ts`.
 
 ### Decisions this plan makes that the spec does not
 
@@ -279,7 +285,7 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
    database at its page limit … at both failure points (inside the body and at commit)" (§8 slice
    1). No way to do that was found: in every shape tried, a page limit was met at a statement,
    never at commit (E3, E3b). DEFAULT: the inside-the-body and nested cases run on a real database
-   at its page limit; the at-commit cases (the queue's, Task 2; the adapter's own, Task 3a) run on
+   at its page limit; the at-commit cases (the queue's, Task 2; the adapter's own, Task 3b) run on
    the E11 stand-in, whose behaviour E7 and K measured on a real full disk. The real-disk
    harness is slice 2's (design §4.7 asks for one); slice 2's plan adds an at-commit case to it.
 2. **The store also refuses a new top-level `begin` inside a body whose transaction was ended**
@@ -389,12 +395,14 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
     to the body would need a chain of body tokens through every nested savepoint.
 17. **Slice 3 parks by default** (review round 1, finding 9; Part 1, reason 3).
 18. **Task 3 is split into 3a, 3b and 3c** (review round 1, finding 7, proposed 3a and 3b). 3a is
-    the adapter and its cases; 3b the migrator's `ROLLBACK`, the refusal controls and the audit;
+    the adapter and its cases; 3b the migrator's `ROLLBACK`, the controls on 3a's code (the
+    refusal controls, Open and Top-at-commit) and the audit;
     3c the two `apps/server` consequences this round found (decisions 13 and 15), so 3a and 3b
     stay inside `packages/store`.
 19. **Task 5's failing run is a deletion, not a run on `main`** (review round 1, finding 5). Its
-    fixture now checks `diskFullIn(error)` (Task 1), which `main` lacks, so the test file cannot
-    load there; E12 is the run on `main`. DEFAULT: Step 2 deletes the boundary's full-disk branch
+    fixture now checks `diskFullIn(error)` (Task 1), which `main` lacks. On `main` the file loads,
+    but `diskFullIn` is undefined there, so every case fails inside `fillDatabase` with
+    `diskFullIn is not a function` — for the wrong reason. E12 is the run on `main`. DEFAULT: Step 2 deletes the boundary's full-disk branch
     (Task 4), watches the refusal cases fail, then restores it.
 
 ### Behaviour slice 1 removes
@@ -422,9 +430,9 @@ list's.
   `storage.disk_full` (Task 3b's audit, group B).
 - A full disk passed through, where it reaches them, by the wrappers that pass an `AppError` on and
   re-code anything else, and printed by the operator commands that print an `AppError`'s code:
-  `storage.disk_full` instead of `cloud.unavailable`, `cloud.failed`, `reader.unpair_failed`,
+  `storage.disk_full` instead of `cloud.unavailable`, `reader.unpair_failed`,
   `provisioning.state_unreadable`, `unexpected failure (Error)` or a bare `restore failed`
-  (Task 3b's audit, groups C and E).
+  (Task 3b's audit, groups C and E), and `cloud.failed` in the Cloud status reply (group B).
 
 ### Global constraints
 
@@ -460,14 +468,14 @@ task named.
 2. **A full disk that left the transaction OPEN** (E13: a multi-row update, an index build, an
    insert into a table with an insert trigger). Expected: `storage.disk_full`; a body that lets it
    escape is rolled back, nothing kept, and the next transaction served; a body that catches it
-   carries on as after any refused statement (Task 2, the open-transaction case; Task 3a, case
+   carries on as after any refused statement (Task 2, the open-transaction case; Task 3b, case
    Open). An implementation keyed on result code 13 rather than on the engine's state fails these
    (decision 14).
 3. **A refusal is not a full disk.** A unique key, NOT NULL, CHECK, an immediate foreign key,
    `RAISE(ABORT)`, `RAISE(FAIL)` and a missing table, each caught inside a nested transaction,
    must still leave the transaction usable and commit the rows around it (Task 3b, the controls).
 4. **The disk fills at commit.** Expected: `storage.disk_full`, no rollback issued, and the next
-   transaction served (Task 2 for the queue's commit and Task 3a, case Top-at-commit, for the
+   transaction served (Task 2 for the queue's commit and Task 3b, case Top-at-commit, for the
    adapter's own, both on the stand-in). The control: a commit the engine refuses and leaves open
    (a deferred foreign key) is still rolled back (Task 2).
 5. **Other callers around the failure.** A caller queued behind the failed body is served; a read
@@ -624,7 +632,7 @@ task named.
   transaction is active` (today's queue commits, gets "cannot commit", then rolls back and gets
   "cannot rollback"); the queued-caller case FAILS on the first rejection's message; the
   open-transaction case FAILS on its first assertion, the run rejecting with the raw
-  `database or disk is full` and no `code` (E14, P1), while its `[]` and `next` assertions pass
+  `database or disk is full`, `code: "ERR_SQLITE_ERROR"` rather than `storage.disk_full` (E14, P1), while its `[]` and `next` assertions pass
   today; the connections cases FAIL because `noteEnded`, `endedBy`, `clearEnded` and `insideBody`
   do not exist. The deferred-key control PASSES before and after — it is the control.
 
@@ -712,27 +720,9 @@ task named.
     failure, then inserts `after nested` (record its error), then opens another nested transaction
     inserting `second nested` (record its error). Both recorded errors are
     `{ code: "storage.disk_full" }`; the run rejects the same; `bodies()` is `[]`.
-  - Open `"rolls back a full disk that left the transaction open, and serves the next one"`
-    (decision 14): add `create table log (v blob)` and
-    `create trigger sale_big after insert on sale when new.body = 'big' begin insert into log values (zeroblob(65536)); end`
-    (E13's "left open" shape; E14's P2 ran it). The body inserts `outer`, then a nested
-    `db.transaction` inserts `inner` and `big`; the outer body records the nested caller's error
-    and rethrows it. The nested caller's error and the run's rejection are both
-    `{ code: "storage.disk_full" }`; `bodies()` is `[]`; a following `withWriteLock` body inserting
-    `next` resolves, and `bodies()` is `["next"]`. A second case, the control: the same, but the
-    outer body catches the nested failure and inserts `after`; the run resolves and `bodies()` is
-    `["outer", "after"]` — a full disk the engine backed out alone is a refused statement like any
-    other.
   - Top `"hands back storage.disk_full from a top-level transaction opened without the queue"`:
     `await expect(db.transaction(async () => { insert x; fill })).rejects.toMatchObject({ code: "storage.disk_full" })`;
     `bodies()` is `[]`; a following `db.transaction` inserting `y` resolves and keeps it.
-  - Top-at-commit `"hands back storage.disk_full when a top-level transaction's commit fills the disk, and issues no rollback"`
-    (review round 1, 8a): copy Task 2's `fullAtCommit` stand-in into this file (a dozen lines;
-    test files do not import each other here), wrap a raw in-memory `DatabaseSync` holding
-    `create table t (who text)`, and build `drizzleNodeSqlite(connectionPair(w, w), { schema: {} })`
-    over it, as E16 did. `db.transaction(async () => { db.execute("insert into t values ('x')") })`
-    rejects `{ code: "storage.disk_full" }`; the stand-in recorded no `"rollback"` after
-    `"commit"`; the real table is empty; the real connection's `isTransaction` is false.
   - Next `"serves the next transaction after a full disk"`: after Q2's shape fails, a
     `withWriteLock` body inserting `next` resolves; `bodies()` is `["next"]`.
   - Reader `"answers a read and a write from outside a body that filled the disk, while that body still runs"`:
@@ -757,15 +747,13 @@ task named.
   Expected, on top of Task 2. Measured on today's code, and expected to hold after Task 2: N with
   the nested caller's error `no such savepoint: wt_sp_<n>` (E8 N; the counter is module-level, so
   the number varies); N-rollback the same way; N2 with `bodies()` `["after nested", "second nested"]`
-  (E8 N2, V1); Top with `cannot rollback - no transaction is active` (V3); Top-at-commit with the
-  raw `database or disk is full` and a `rollback` after `commit` (E16); Raise-rollback with
-  `bodies()` `["after"]` (V4); Open's first case with the raw `database or disk is full` and no
-  `code` (E14, P2). Reasoned, not run, because Task 2 is not yet built: Q2 with `bodies()`
+  (E8 N2, V1); Top with `cannot rollback - no transaction is active` (V3); Raise-rollback with
+  `bodies()` `["after"]` (V4). Reasoned, not run, because Task 2 is not yet built: Q2 with `bodies()`
   `["part 2"]` (E8 Q2) and the run rejecting with Task 2's "ended this transaction" error, because
   the body caught the only error that named the disk; Q2b with that same error; Next with
   `bodies()` `["part 2", "next"]`, because nothing yet stops `part 2` committing by itself; Reader
   on the run's rejection, Task 2's error rather than `storage.disk_full`. Passing before and after:
-  Open's control case, Open's `[]` and `next` assertions, and Reader's read and write.
+  Reader's read and write. (Open and Top-at-commit are Task 3b's.)
 
 - [ ] **Step 3: Implement** the adapter behaviour in the Interfaces block, and rewrite the doc
   comment at `:103-125` so it says that the engine sometimes ends a transaction itself and
@@ -811,6 +799,24 @@ task named.
     inside a nested `db.transaction(...)` and catches it, then inserts `after`. The run resolves
     and `bodies()` is `["before", "after"]`. Create the extra tables and triggers the rows need in
     the case's own setup.
+  - Open `"rolls back a full disk that left the transaction open, and serves the next one"`
+    (decision 14): add `create table log (v blob)` and
+    `create trigger sale_big after insert on sale when new.body = 'big' begin insert into log values (zeroblob(65536)); end`
+    (E13's "left open" shape; E14's P2 ran it). The body inserts `outer`, then a nested
+    `db.transaction` inserts `inner` and `big`; the outer body records the nested caller's error
+    and rethrows it. The nested caller's error and the run's rejection are both
+    `{ code: "storage.disk_full" }`; `bodies()` is `[]`; a following `withWriteLock` body inserting
+    `next` resolves, and `bodies()` is `["next"]`. A second case, the control: the same, but the
+    outer body catches the nested failure and inserts `after`; the run resolves and `bodies()` is
+    `["outer", "after"]` — a full disk the engine backed out alone is a refused statement like any
+    other.
+  - Top-at-commit `"hands back storage.disk_full when a top-level transaction's commit fills the disk, and issues no rollback"`
+    (review round 1, 8a): copy Task 2's `fullAtCommit` stand-in into this file (a dozen lines;
+    test files do not import each other here), wrap a raw in-memory `DatabaseSync` holding
+    `create table t (who text)`, and build `drizzleNodeSqlite(connectionPair(w, w), { schema: {} })`
+    over it, as E16 did. `db.transaction(async () => { db.execute("insert into t values ('x')") })`
+    rejects `{ code: "storage.disk_full" }`; the stand-in recorded no `"rollback"` after
+    `"commit"`; the real table is empty; the real connection's `isTransaction` is false.
   - M `"reports a full disk while migrating as storage.disk_full"`: a migrations folder written
     into the temp folder by the test, as the probe `a798-plan-probe/vt/mig/` holds it:
     `meta/_journal.json` with one entry (`"breakpoints": true`) and one `.sql` file whose two
@@ -826,8 +832,13 @@ task named.
   Run: `pnpm --filter @waitron/store exec vitest run src/disk-full.test.ts`
   Expected: M FAILS with `diskFullIn` false and the message `Failed to run the query 'ROLLBACK'`
   (E9, measured on today's code; expected unchanged by Tasks 2 and 3a, which leave the bare
-  `rollback` alone). The refusal controls PASS: they are controls on Task 3a's code, and one that
-  fails is a defect in Task 3a — stop and fix it there, test first.
+  `rollback` alone). The refusal controls, Open's two cases and Top-at-commit PASS: they are
+  controls on Task 3a's code, and one that fails is a defect in Task 3a — stop and fix it there,
+  test first. Measured on today's code, Top-at-commit rejects with the raw
+  `database or disk is full` and a `rollback` after `commit` (E16). For Open, after Task 2 the
+  run's own rejection is already mapped, so without Task 3a Open fails on the nested caller's
+  error, the raw `database or disk is full`, `code: "ERR_SQLITE_ERROR"` rather than
+  `storage.disk_full` (E14, P2).
 
 - [ ] **Step 3: Implement** the bare-`rollback` rule.
 
@@ -851,7 +862,7 @@ task named.
 
   | Group | What a full disk does there after slice 1 | Sites |
   | --- | --- | --- |
-  | A | Names its codes (or a prefix, or a named set); a full disk takes the path every unnamed failure takes, as the raw engine error does today. No change. | `packages/payments-stripe/src/provider.ts:259`; `packages/fiscal-verifactu/src/allocated-lifecycle.ts:38`; `packages/stream/src/supervisor.ts:370`; `packages/venue-service/src/party-allergy.ts:146` (prefix `allergen.`); `packages/venue-service/src/season-weeks.ts:305` (rethrows an `AppError` with no string `field` param, and `storage.disk_full` has none); `packages/venue-service/src/configuration-transfer.ts:51`; `apps/server/src/restore-command.ts:181`, `:185`, `:376`, `:498`, `:573` (the refusal tables name their codes; `storage.*` matches none, so the operator still reads `restore failed`, `:376-393`); `apps/server/src/recovery-unpack-command.ts:82`; `apps/server/src/location-settings-api.ts:263`; `apps/server/src/restore-stream.ts:192`, `:261`, `:310`; `apps/server/src/invoice-print.ts:47`; `apps/server/src/business-day-start.ts:171`; `apps/server/src/till-api.ts:1407`; `apps/server/src/setup-api.ts:693`, `:855`; `apps/server/src/webhook.ts:130` (a named set; the rest is logged by code and answered 500 — the webhook is not under the error boundary, so it stays 500); `apps/server/src/rejoin-command.ts:98`, `:154` (prefix `rejoin.`); `apps/server/src/department-receipt-draft.ts:101`; `apps/server/src/till-sale.ts:1917`; `apps/server/src/cloud-client.ts:529`; `apps/server/src/content-suggestion-runner.ts:52` (`null` for an unnamed code) |
+  | A | Names its codes (or a prefix, or a named set); a full disk takes the path every unnamed failure takes, as the raw engine error does today. No change of path (`webhook.ts:130` and `supervisor.ts:370` also log the code, as group B does). | `packages/payments-stripe/src/provider.ts:259`; `packages/fiscal-verifactu/src/allocated-lifecycle.ts:38`; `packages/stream/src/supervisor.ts:370`; `packages/venue-service/src/party-allergy.ts:146` (prefix `allergen.`); `packages/venue-service/src/season-weeks.ts:305` (rethrows an `AppError` with no string `field` param, and `storage.disk_full` has none); `packages/venue-service/src/configuration-transfer.ts:51`; `apps/server/src/restore-command.ts:181`, `:185`, `:376`, `:498`, `:573` (the refusal tables name their codes; `storage.*` matches none, so the operator still reads `restore failed`, `:376-393`); `apps/server/src/recovery-unpack-command.ts:82`; `apps/server/src/location-settings-api.ts:263`; `apps/server/src/restore-stream.ts:192`, `:261`, `:310`; `apps/server/src/invoice-print.ts:47`; `apps/server/src/business-day-start.ts:171`; `apps/server/src/till-api.ts:1407`; `apps/server/src/setup-api.ts:693`, `:855`; `apps/server/src/webhook.ts:130` (a named set; the rest is logged by code and answered 500 — the webhook is not under the error boundary, so it stays 500); `apps/server/src/rejoin-command.ts:98`, `:154` (prefix `rejoin.`); `apps/server/src/department-receipt-draft.ts:101`; `apps/server/src/till-sale.ts:1917`; `apps/server/src/cloud-client.ts:529`; `apps/server/src/content-suggestion-runner.ts:52` (`null` for an unnamed code) |
   | B | Reads the code for a log line, a reply field or a printed detail: it now says `storage.disk_full` where it said `unknown` (or `cloud.failed`). Accepted. | `packages/payments/src/reconcile.ts:539`; `packages/fiscal-verifactu/src/drain.ts:1579`; `packages/fiscal-verifactu/src/aeat-transport.ts:185`; `packages/stream/src/supervisor.ts:206`; `packages/scheduler/src/run.ts:236`; `packages/server-kit/src/error-code.ts:8` (`codeOf`); `apps/server/src/node-entry.ts:178`; `apps/server/src/cloud-api.ts:82` (`replacementError`); `apps/server/src/optional-document.ts:40`, `:41` (the warning's code; the comparison at `:35` is Task 3c's) |
   | C | Passes an `AppError` on and re-codes anything else: where a full disk reaches it, it now passes on as `storage.disk_full`. Accepted (listed under "Behaviour slice 1 removes"). | `packages/provisioning/src/cli.ts:557` (instead of `provisioning.state_unreadable`); `apps/server/src/cloud-installation.ts:346`, `apps/server/src/cloud-translation.ts:176` (instead of `cloud.unavailable`); `apps/server/src/cloud-client.ts:375` (instead of `cloud.unavailable`, only when the signal was aborted); `apps/server/src/payments-api.ts:478` (instead of `reader.unpair_failed`); `apps/server/src/recovery-preparation.ts:110` (instead of its own refusal); `apps/server/src/restore.ts:701` (wrapped as `restore.hook_failed` naming `storage.disk_full`, where the raw error passed on and printed `restore failed`) |
   | D | Not reached: the code inside its `try` runs no statement on the store. | `packages/provisioning/src/first-setup-owner.ts:137` (a JSON file and two `lstat`s, `:116-133`; `setup-operation.ts:87`); `packages/catalogue/src/content-translations.ts:160` (`validateOptionalTranslations`, in memory); `apps/server/src/cloud-client.ts:309`, `apps/server/src/cloud-backup.ts:112` (an HTTP exchange); `apps/server/src/rebuild-first-start.ts:232` (a bucket read) |
@@ -1047,7 +1058,7 @@ task named.
 
 - [ ] **Step 1: Write the tests.** `useVenueDb({ resetPerTest: false, … })`; setup provisions
   the venue, one catalogue, one category and one product at `10.00`, all with English names
-  (CLAUDE.md §3: general code is English only; `simplified-limit.test.ts:52-57` uses Spanish ones,
+  (CLAUDE.md §3: general code is English only; `simplified-limit.test.ts:50-57` uses Spanish ones,
   "Banquetes", "Eventos", "Lote" — do not copy those), and a counter zone offering the product.
   Helpers:
   - `fillDatabase()`: creates `ballast (id integer primary key, pad blob)` if absent, sets
@@ -1074,15 +1085,17 @@ task named.
     `POST /api/working-orders` with 20 lines (the body shape of `simplified-limit.test.ts:196-205`)
     answers `507 storage.disk_full`, and `working_orders` is unchanged.
 
-- [ ] **Step 2: Watch them fail by deletion** (decision 19). The file cannot load on `main`, which
-  has no `diskFullIn`; E12 is the run on `main`, which answered
+- [ ] **Step 2: Watch them fail by deletion** (decision 19). On `main` the file loads, but
+  `diskFullIn` is undefined there, so every case fails inside `fillDatabase` with
+  `diskFullIn is not a function` — for the wrong reason. E12 is the run on `main`, which answered
   `{ status: 500, json: { code: "server.internal" } }`.
 
   Run: `env TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server exec vitest run src/till-sale.disk-full.test.ts`
   first with Tasks 1 to 4 in, 3a to 3c included (expected: PASS, `Tests 3 passed`), then with the `diskFullIn` branch
   Task 4 added to `packages/server-kit/src/error-boundary.ts` deleted. Expected then: the two
-  refusal cases FAIL with a status other than `507` (which one depends on the route's own status
-  table, `400` if it omits the code, as E18 measured for an empty one), and their unchanged-counts
+  refusal cases FAIL with a status other than `507` (`400` if the domain error reaches the boundary
+  unwrapped and the route's table omits it, as E18 measured; `500` if a drizzle wrapper carries
+  it), and their unchanged-counts
   assertions hold; the "sells again" case passes. Restore the file with
   `git checkout -- packages/server-kit/src/error-boundary.ts` (Task 4 is committed) and record both
   runs in the commit message.
@@ -1121,8 +1134,8 @@ task named.
   >   `tx` is safe. Either way the caller gets `storage.disk_full`, and after one that ended the
   >   transaction the store refuses every later statement in that body. **A TEST still catches such
   >   a refusal OUTSIDE the transaction**, around the whole `withTransaction`, and no guard enforces
-  >   that. Guard: `packages/store/src/disk-full.test.ts`, weaker than its name — a page limit, not
-  >   a real disk, and both at-commit cases are a stand-in. Receipt:
+  >   that. Guard: `packages/store/src/disk-full.test.ts` and `write-queue.test.ts`, weaker than
+  >   their names — a page limit, not a real disk, and both at-commit cases are a stand-in. Receipt:
   >   [conventions-data.md](docs/developers/conventions-data.md#a-full-disk-sometimes-ends-the-whole-transaction).
 
 - [ ] **Step 2: Add the receipt** as a `### A full disk sometimes ends the whole transaction`
