@@ -313,7 +313,13 @@ it.each(
     expect(full).toContain(`1 Plato ${figure("9.92")} ${figure("9.92")} 21%`);
     expect(full).toContain(`1 Extra ${figure("1.00")} ${figure("1.00")} 10%`);
     expect(full).toContain(`${discount} -${figure("1.41")} 21%`);
-    expect(full).toContain(`${discount} 100% -${figure("1.00")} 10%`);
+    // At 80 mm in Basque the indented item column is 14 wide, so the table wraps «100%» under
+    // the figures, as it does for any 100% percentage there.
+    expect(full).toContain(
+      locale === "eu-ES" && printer.paperWidth === "80mm"
+        ? "Deskontua -1,00 10% 100%"
+        : `${discount} 100% -${figure("1.00")} 10%`,
+    );
     expect(full).toMatch(/10[,.]?0?%/);
     expect(render("F2")).not.toContain(`(${included})`);
   },
