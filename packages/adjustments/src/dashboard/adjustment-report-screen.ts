@@ -235,6 +235,10 @@ export class AdjustmentReportScreen extends LitElement {
       .scroll {
         overflow-x: auto;
       }
+      wt-combobox[name="reason"] {
+        width: calc(var(--wt-cell-name-max-width) + var(--wt-space-4));
+        max-width: 100%;
+      }
       table {
         width: 100%;
         border-collapse: collapse;

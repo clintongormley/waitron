@@ -438,6 +438,24 @@ describe("the adjustment report", () => {
     });
   });
 
+  it.each([1280, 390])(
+    "draws the Reason field at the width the orders screen's filters take, within %i pixels",
+    async (width) => {
+      await atWidth(width, async () => {
+        const el = await mount(fakeApi());
+        part(el, "show-all")!.click();
+        await settle(el);
+        const probe = document.createElement("div");
+        probe.style.width = "calc(var(--wt-cell-name-max-width) + var(--wt-space-4))";
+        el.shadowRoot!.appendChild(probe);
+        const expected = Math.min(probe.getBoundingClientRect().width, width);
+        const field = el.shadowRoot!.querySelector('wt-combobox[name="reason"]')!;
+        expect(expected).toBeGreaterThan(0);
+        expect(field.getBoundingClientRect().width).toBeCloseTo(expected, 0);
+      });
+    },
+  );
+
   it("keeps By reason on a phone's screen, its last column reached by scrolling the table", async () => {
     await atWidth(390, async () => {
       const el = await mount(fakeApi());
