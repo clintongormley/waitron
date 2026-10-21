@@ -2334,9 +2334,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (owner, 2026-10-19), but nothing translates it yet: A758-1's nine void and comp reasons are English
   on every venue. The owner is asked how (lane C's questions, 2026-10-20): (A) each module ships a
   translation file of its starter names and setup writes every content language the venue has; (B)
-  Cloud's Translate all runs at the end of setup; (C) English until someone translates. The same
-  answer covers the kitchen station, device profiles, service steps and units
-  ([audit](backlog/english-only-audit.md)).
+  Cloud's Translate all runs at the end of setup; (C) English until someone translates. **Owner
+  answered A (2026-10-20 ~03:00):** each module ships a translation file of its starter names, setup
+  writes every language the venue uses from it, and the English-only check allows those files. It
+  covers reasons, the kitchen station «Cocina», device profiles, service steps, seasons and units, and
+  is A913's point 1 ([audit](backlog/english-only-audit.md), Bucket D; [A913's
+  items](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)).
 
 - **A912. A new venue's set-up report still says "default cancel reason ready" (left open by
   A758-1).** It now seeds nine starter reasons (`packages/adjustments/src/provisioning.ts`; pinned
@@ -6394,13 +6397,55 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   dev-stack slots and Santet venue through the plan; leave the owner's physical `waitron.local`
   off/quarantined, image pinned, for the owner to reset on return after 2 November.
 
-- **A913. Find the non-English text in general code, then propose fixes (owner, 2026-10-19).**
-  General code is English only (CLAUDE.md §3; the owner's decisions are in
-  [conventions-data.md](developers/conventions-data.md#general-code-is-english-only)). A docs-only
-  audit lists every non-English text in `packages/*` and `apps/*` outside the allowed homes and asks
-  the owner which to fix. **Audit done 2026-10-20** ([the audit](backlog/english-only-audit.md));
-  waiting on the owner's choice of what to fix and the policy for the packages written for Spain.
-  [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+- **A913's fix items: general code English only (owner's answers, 2026-10-20).** The audit
+  ([english-only-audit.md](backlog/english-only-audit.md)) and the owner's eight answers became the
+  items below and A918. A963–A965 come first: they change what a venue sees. [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+
+- **A963. A full invoice's address: Spain's rule moves to Spain's pack, the till stores a country
+  code.** `apps/server/src/invoice-selection.ts` refuses an address not ending «España» with a
+  five-digit postcode; the till appends «España». Changes printed invoice text. [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+
+- **A964. Kitchen tickets and the order-number slip follow the venue's language, from a new
+  `apps/server/src/i18n/`.** Today they follow `WAITRON_TILL_LOCALE`, which setup never writes, so
+  an installed box prints them in Spanish. [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+
+- **A965. Spain's receipt words gain English; the card slip, the sample receipt and the refund
+  receipt's heading print in the receipt language.** [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+
+- **A966. The server's emails move into `apps/server/src/i18n/`** (account and missed-clocking
+  emails). No visible change. After A964. [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+
+- **A967. The server's printed reports and test pages move into `apps/server/src/i18n/`**
+  (working-time PDF frame, category sales, printer test and ruler pages). After A964. [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+
+- **A968. The guide's frame and the recovery page move into `apps/server/src/i18n/`.** The recovery
+  page must still load without the database. After A964. [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+
+- **A969. `dashboard-kit`'s fallback error and alert text moves into a strings file.** [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+
+- **A970. `workforce-es`'s export labels move to a translation file, and three access-holder values
+  get English.** [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+
+- **A971. Spain's pack provides English for every word it shows** (holiday names, area labels,
+  notices) — check first; a holiday with two names may need a schema change. [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+
+- **A972. Demo data per country pack and region — DESIGN FIRST, then ask the owner.** "Casa
+  Delgado" moves into `country-es`; a Catalan demo for Catalunya and similar. After A918. [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+
+- **A973. `settle-invoice-first.ts` writes English.** An operator script that can write «Comida»,
+  «Descuento» and «Supervisora» into a production venue's filed records. [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+
+- **A974. Comments, identifiers and file names in general code to English** (Bucket E and F of the
+  audit). Low priority. [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+
+- **A975. Developer tools and demo scripts to English** (`dev-setup.ts`, the `*-demo.ts` scripts,
+  README examples). Low priority; needed before A977 can scan them. [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+
+- **A976. The server's test venues default to English** — the first test cleanup; later ones go
+  package by package from A977's list. Low priority. [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+
+- **A977. Widen the English-only guard to every text file, after A918 and A963–A973.** Accented
+  letters too; a shrinking-only list of test folders still to clean. [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
 
 - **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; revised design awaits agreement).**
   [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md) and [mockups](backlog/mockups/a646-modules-page/README.md).
