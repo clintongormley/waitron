@@ -42,8 +42,8 @@ There is no connection string. The whole database is a **directory** — see
 Build with `pnpm --filter @waitron/server build` — this bundles `src/bin.ts` with esbuild AND copies
 every migration package's `drizzle/` folder beside the bundle, and ui-core's two token files under
 `dist/node_modules/@waitron/ui-core/` (`scripts/copy-migrations.mjs`); `WAITRON_MIGRATIONS_DIR`
-defaults to finding the folders there. Running `dist/server.js` without that copy step fails loudly
-at boot, not silently.
+defaults to finding the folders there. Running `dist/server.js` without that copy step stops with an
+error as it starts, not silently.
 
 If your first setup is interrupted, direct and supervised startup can serve a restricted recovery
 API before ordinary database opens or staged restore/reset work. It currently offers inspection,

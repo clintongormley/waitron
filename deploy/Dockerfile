@@ -35,7 +35,8 @@ RUN set -eux; \
   bounded pnpm install --frozen-lockfile
 
 # `@waitron/server`'s build emits dist/server.js, dist/node-entry.js (this image's ENTRYPOINT), the
-# four operator CLIs and dist/drizzle/ (copy-migrations.mjs); the three web apps emit dist/ via vite.
+# four operator CLIs, dist/drizzle/ and dist/node_modules/@waitron/ui-core/ (copy-migrations.mjs);
+# the three web apps emit dist/ via vite.
 RUN pnpm --filter @waitron/server build \
   && pnpm --filter @waitron/till build \
   && pnpm --filter @waitron/dashboard build \

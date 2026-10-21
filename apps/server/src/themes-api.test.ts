@@ -220,6 +220,17 @@ describe("the custom theme routes", () => {
     expect(JSON.parse((await storedRows())[0]!.theme).brandColor).toBe("#f2d300");
   });
 
+  it("answers a created theme's name and choices, and lists the same", async () => {
+    const res = await create(managerCookie, { name: "Red", theme: DARK_GREEN });
+    expect(res.status).toBe(201);
+    const answer = await res.json();
+    expect(answer).toMatchObject({ name: "Red", choices: DARK_GREEN });
+    const listed = await (await list(managerCookie)).json();
+    expect(listed.themes).toEqual([
+      expect.objectContaining({ id: answer.id, name: "Red", choices: DARK_GREEN }),
+    ]);
+  });
+
   it("a supervisor reads the list and is refused every write here", async () => {
     const id = await created("Lemon", LEMON);
     const before = await storedRows();
@@ -227,6 +238,7 @@ describe("the custom theme routes", () => {
     for (const res of [
       await create(supervisorCookie, { name: "Green", theme: DARK_GREEN }),
       await save(supervisorCookie, id, { theme: DARK_GREEN }),
+      await save(staffCookie, id, { theme: DARK_GREEN }),
     ]) {
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual(

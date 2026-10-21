@@ -212,7 +212,9 @@ slice has `GET` and `POST /management-api/themes`, `PUT /management-api/themes/{
 - **Names** (design lines 1761-1766): "1 to 60 characters after trimming, unique ignoring case, and
   never "Waitron" in any case"; the key is "the name normalised to NFC, trimmed, then
   `toLowerCase()`"; "SQLite's own `lower()` is never used for it". This plan counts the 60 in code
-  points of the NFC form (so an emoji counts once) and stores the trimmed name as typed.
+  points of the NFC form (so an emoji counts once) and stores the trimmed name as typed. (Changed at
+  the finish-branch review, 2026-10-21: the key composes once more after `toLowerCase()`, so `T\u0308`
+  and `\u1e97` share a key.)
 - **`custom_themes`** (lines 2043-2049): `id`, `name`, `name_key` with `custom_themes_name_key_uq`,
   `in_use` "declared with the vocabulary's `count` builder, nullable — not `flag`", CHECK
   `custom_themes_in_use_ck` allowing only `1`, unique index `custom_themes_in_use_uq`; "`1` on the
@@ -327,7 +329,7 @@ export function readThemeDocument(input: unknown): ThemeDocumentResult;
 // names.ts
 export const THEME_NAME_MAX_LENGTH = 60;
 export const BUILT_IN_THEME_NAME = "Waitron";
-export function themeNameKey(name: string): string; // name.normalize("NFC").trim().toLowerCase()
+export function themeNameKey(name: string): string; // name.normalize("NFC").trim().toLowerCase().normalize("NFC") (final NFC added at the finish-branch review, 2026-10-21)
 export type ThemeNameRefusal = "empty" | "too_long" | "reserved";
 export type ThemeNameResult =
   | { readonly ok: true; readonly name: string; readonly key: string } // name: trimmed, as typed
@@ -348,6 +350,10 @@ order and answers the first refusal:
 7. `handSet`: absent → `missing`; not a plain object → `bad_value`; a key other than `light`/`dark` → `handSet.<key>` `unknown_key`; `light` or `dark` absent → `handSet.<mode>` `missing`; not a plain object → `handSet.<mode>` `bad_value`; a colour key outside `THEME_COLOURS` → `handSet.<mode>.<key>` `unknown_colour`; a value not `#rrggbb` → `handSet.<mode>.<key>` `bad_value`;
 8. for `light` then `dark`: `brandFix[mode]` with `brandColor` `null` → `{ field: "brandFix.<mode>", reason: "fix_without_brand" }`; `brandFix[mode]` with `handSet[mode].primary` set → `fix_with_hand_set`;
 9. otherwise `{ ok: true, choices: normaliseChoices(…) }` (hex lower-cased).
+
+(Changed at the finish-branch review, 2026-10-21: an unknown key's or unknown colour's `field` is the
+known field holding it — `theme`, `brandFix`, `handSet`, or `handSet.<mode>` — never the key itself;
+the list above and the test table below predate that.)
 
 Name no local variable `document` (call it `input` or `sent`): `sources.test.ts:14` refuses
 `\bdocument\s*\.` in any theme source, so `document.brandColor` would fail that guard.
@@ -846,6 +852,9 @@ clash (409). Error table: `management_session.required` 401, `management_session
   4. "PUT with a body omitting theme → 400 management.request_invalid naming the field" → `{}` and `null` bodies to `redId` → `params: { field: "theme" }`.
   5. "refuses the theme routes for a STAFF-role session with 403" → the GET and a PUT of `RED` to `redId` each `authorization.not_permitted`.
   6. "refuses the theme routes unauthenticated with 401" → GET `/management-api/themes` → `management_session.required`.
+
+  (Moved at the finish-branch review, 2026-10-21, into `themes-api.test.ts`; the canvas file keeps
+  only its canvas-retirement cases.)
 
   `themes-api.test.ts` (manager, supervisor and staff sessions as `venue-defaults-permission.test.ts:40-62`
   makes them; `CORE_MIGRATIONS`, `IDENTITY_MIGRATIONS`):
