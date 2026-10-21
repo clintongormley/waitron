@@ -172,6 +172,7 @@ export {
 } from "./schema/device-profile-printers.js";
 export { printerHolders } from "./schema/printer-holders.js";
 export { tenantThemes } from "./schema/tenant-themes.js";
+export { customThemes } from "./schema/custom-themes.js";
 export { tenantReceipts } from "./schema/tenant-receipts.js";
 export { workingOrderCounters } from "./schema/working-order-counters.js";
 export {
