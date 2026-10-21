@@ -6,7 +6,7 @@ import type { DatabaseSync, StatementSync } from "node:sqlite";
  * An `async` body returns at its FIRST `await`, with its remaining work and its throw still ahead
  * of it, so a wrapper that believes the return finishes it commits early and never sees the throw.
  */
-const isPending = (value: unknown): value is PromiseLike<unknown> =>
+export const isPending = (value: unknown): value is PromiseLike<unknown> =>
   typeof (value as PromiseLike<unknown> | undefined)?.then === "function";
 
 /**
