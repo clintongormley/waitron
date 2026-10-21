@@ -677,6 +677,7 @@ describe("readBillAdjustments", () => {
         action: "comp",
         percentBp: null,
         reduction: "12.00",
+        full: true,
       },
       {
         lineId: part.from,
@@ -685,6 +686,7 @@ describe("readBillAdjustments", () => {
         action: "comp",
         percentBp: null,
         reduction: "12.00",
+        full: true,
       },
       {
         lineId: percentLine,
@@ -693,6 +695,7 @@ describe("readBillAdjustments", () => {
         action: "discount_percent",
         percentBp: 2500,
         reduction: "2.50",
+        full: false,
       },
       {
         lineId: null,
@@ -701,8 +704,33 @@ describe("readBillAdjustments", () => {
         action: "discount_amount",
         percentBp: null,
         reduction: "5.00",
+        full: false,
       },
     ]);
+  });
+
+  it("marks a Free comp and an amount that took the whole list value as full", async () => {
+    const order = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const amount = (beforeAmount: string, nominalValue: string) =>
+      comp(order, reason, {
+        action: "discount_amount",
+        beforeAmount: decimal(beforeAmount),
+        afterAmount: decimal("0.00"),
+        reduction: decimal(beforeAmount),
+        nominalValue: decimal(nominalValue),
+      });
+    await recordAt("2026-09-30T12:00:00.000Z", comp(order, reason));
+    await recordAt("2026-09-30T12:00:01.000Z", amount("12.00", "12.00"));
+    await recordAt("2026-09-30T12:00:02.000Z", amount("6.00", "12.00"));
+    await recordAt("2026-09-30T12:00:03.000Z", {
+      ...amount("20.00", "20.00"),
+      line: null,
+      quantity: null,
+    });
+
+    const read = await withTransaction(db, (tx) => readBillAdjustments(tx, order));
+    expect(read.map((row) => row.full)).toEqual([true, true, false, true]);
   });
 
   it("reads the bill's adjustments through the index that leads with the working order", async () => {
