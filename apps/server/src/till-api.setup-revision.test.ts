@@ -193,6 +193,21 @@ describe("the till's setup revision", () => {
     expect(await startRevision(till)).toBe(lemon.body.setupRevision);
   });
 
+  it("saving the theme in use with new choices moves the revision", async () => {
+    const till = await setupTill();
+    const lemonId = await storeTheme("Lemon", LEMON, true);
+    const before = await sendAsTill(till, "GET", "/api/till");
+    await suite.db
+      .update(customThemes)
+      .set({ theme: { ...LEMON, brandColor: "#1e5b3a" } })
+      .where(eq(customThemes.id, lemonId));
+    const after = await sendAsTill(till, "GET", "/api/till");
+    expect(after.body.themeHash).toBe(await hashInUse());
+    expect(after.body.themeHash).not.toBe(before.body.themeHash);
+    expect(after.body.setupRevision).not.toBe(before.body.setupRevision);
+    expect(await menuStateRevision(till)).toBe(after.body.setupRevision);
+  });
+
   it("saving a theme that is not in use leaves the revision", async () => {
     const till = await setupTill();
     await storeTheme("Lemon", LEMON, true);

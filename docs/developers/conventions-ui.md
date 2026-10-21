@@ -1492,7 +1492,9 @@ receipt languages and invoice language, venue name and tax id, onboarding intent
 control, courses, card provider, card readers and the default reader, tips, the simplified-invoice
 limit and full invoices. Every read of the setup is numbered when sent, and an answer is skipped
 once a read sent after it has been applied. A draft line keeps the course it was given, name
-included, after a refresh deletes that course.
+included, after a refresh deletes that course. `themeHash`, the hash `/api/theme` answers for
+the theme in use, is in the answer and moves `setupRevision` when the theme in use changes or is
+saved; the till reads neither it nor `/api/theme`.
 
 Some of those values change only when the server restarts, and the revision covers them, so an open
 till takes the new value after a restart without reloading: tips come from `WAITRON_TILL_TIPS`

@@ -20201,6 +20201,7 @@ describe("switching the device's profile from the header", () => {
           receiptLanguages: [],
           activeReaders: [],
           fullInvoices: false,
+          themeHash: "theme",
           setupRevision: "switched",
           startingScreen: "show-schedule",
         });
