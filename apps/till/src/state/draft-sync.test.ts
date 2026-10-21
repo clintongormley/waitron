@@ -374,7 +374,7 @@ describe("DraftSync: saving", () => {
     expect(draft.revision).toBe(2);
   });
 
-  it("names the sync's person in every save, whoever signs in later", async () => {
+  it("names the sync's person in every save", async () => {
     server.personId = "p7";
     const draft = sync("p7");
     await draft.load();
