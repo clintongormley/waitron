@@ -321,7 +321,7 @@ export function validateBackupVerificationTarget(value: unknown): BackupVerifica
 }
 
 // JSON.parse loses duplicate keys and integer spellings before shape validation can see them.
-function parse(raw: string, limit: number): unknown {
+export function parseBackupVerificationJson(raw: string, limit: number): unknown {
   if (typeof raw !== "string" || Buffer.byteLength(raw, "utf8") > limit) refuse();
   let at = 0;
   function space() {
@@ -409,7 +409,7 @@ function parse(raw: string, limit: number): unknown {
   return result;
 }
 export function readBackupVerificationRequest(raw: string): BackupVerificationRequest {
-  const request = object(parse(raw, 65536), [
+  const request = object(parseBackupVerificationJson(raw, 65536), [
     "protocol",
     "captureId",
     "pointId",
@@ -515,7 +515,7 @@ export function readBackupVerificationResult(
   raw: string,
   request: BackupVerificationRequest,
 ): BackupVerificationResult {
-  const result = object(parse(raw, 32768), [
+  const result = object(parseBackupVerificationJson(raw, 32768), [
     "protocol",
     "requestDigest",
     "attemptToken",

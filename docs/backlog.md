@@ -5220,7 +5220,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   original-to-placed row equality, encrypted authenticator enrolment and ordinary restore refusals.
   Installed omission controls cover verification coverage, compatibility, archive paths and entries,
   required secrets, full fiscal history, stored heads, immutable rows and the read-only barriers.
-  Target-bound recovery and final branch qualification remain open. Cloud integration
+  The opt-in v2 recovery client now binds its saved request and signed proofs to the complete target,
+  checks every selected verification descriptor and refuses downgrades or changed targets. The
+  running setup caller stays on v1 pending the coordinated Cloud release. Local staging/restart/
+  placement comparisons and final branch qualification remain open. Cloud integration
   follows the implementing Waitron release. Snapshots stay unavailable until complete module checks,
   target-bound recovery and joint acceptance pass.
 

@@ -607,11 +607,11 @@ Each task's checklist means: write the named red assertions; run its exact comma
 
 `SnapshotRecoveryVerification = {protocol:"backup-data-restore/v1";target:BackupVerificationTarget;policyDigest:string;requestDigest:string;archiveSha256:string;archiveBytes:number;pointId:string}` lives in `cloud-recovery-v2.ts`. Export `assertSnapshotRecoveryTarget(verification:SnapshotRecoveryVerification,current:BackupVerificationTarget):void` (fixed existing Cloud-unavailable error on mismatch) and `readSavedSnapshotRecoveryTarget(stateDir:string):Promise<{requestId:string;pointId:string|undefined;target:BackupVerificationTarget}|null>` (strict version-2 saved-state reader, null for v1/absent state). Extend `CloudRecoveryOptions` with `snapshotProtocol?:2`, `target?:()=>BackupVerificationTarget`; the qualified caller supplies both. Existing default v1 callers remain their explicit old contract.
 
-- [ ] RED `v2 binds fresh request key request ID and target`, `qualified snapshots refuse absent or v1 descriptor`, `info read and post-download rechecks reject changed target`, `negotiation failure never downgrades`, `v1 and continuous behavior remains intact`. Saved state is a strict discriminated version 1/2 union; version 2 freezes its target/protocol, and old state cannot qualify.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/cloud-recovery-v2.test.ts src/cloud-recovery.test.ts src/setup-api.cloud-recovery.test.ts`; expect missing v2 export then absent-descriptor acceptance denial red.
-- [ ] Implement start/status proof bytes exactly `['waitron-cloud-recovery-request-v2',origin,requestId,action,publicKey,code,target.digest,nowMs]`; info/read/restored exactly `['waitron-cloud-recovery-v2',origin,requestId,action,archiveDigest,target.digest,nowMs]`. Start/status body is `{version:2,target,payload,signature}`; later body `{version:2,id:requestId,target,payload,signature}`. Signature commits to the complete target by recomputed digest. Require `version:2` response negotiation and strict `verification` on selected info/read; compare point/hash/size, complete target and policy on every recheck. Response target never replaces saved/local target. Keep old v1 arrays unedited.
-- [ ] GREEN same command. Exchange exact proof/result vectors and bounds with lane D **before enabling the qualified caller**. If Cloud lacks v2, new snapshot policy stays unavailable; this is a coordinated release dependency, not a fallback layer. No deployment enforcement or fiscal authority change.
-- [ ] Commit `git commit -s -m "feat(recovery): negotiate target-bound snapshot recovery v2"`.
+- [x] RED `v2 binds fresh request key request ID and target`, `qualified snapshots refuse absent or v1 descriptor`, `info read and post-download rechecks reject changed target`, `negotiation failure never downgrades`, `v1 and continuous behavior remains intact`. Saved state is a strict discriminated version 1/2 union; version 2 freezes its target/protocol, and old state cannot qualify.
+- [x] Run `pnpm --filter @waitron/server exec vitest run src/cloud-recovery-v2.test.ts src/cloud-recovery.test.ts src/setup-api.cloud-recovery.test.ts`; expect missing v2 export then absent-descriptor acceptance denial red.
+- [x] Implement start/status proof bytes exactly `['waitron-cloud-recovery-request-v2',origin,requestId,action,publicKey,code,target.digest,nowMs]`; info/read/restored exactly `['waitron-cloud-recovery-v2',origin,requestId,action,archiveDigest,target.digest,nowMs]`. Start/status body is `{version:2,target,payload,signature}`; later body `{version:2,id:requestId,target,payload,signature}`. Signature commits to the complete target by recomputed digest. Require `version:2` response negotiation and strict `verification` on selected info/read; compare point/hash/size, complete target and policy on every recheck. Response target never replaces saved/local target. Keep old v1 arrays unedited.
+- [x] GREEN same command. Exchange exact proof/result vectors and bounds with lane D **before enabling the qualified caller**. If Cloud lacks v2, new snapshot policy stays unavailable; this is a coordinated release dependency, not a fallback layer. No deployment enforcement or fiscal authority change.
+- [x] Commit `git commit -s -m "feat(recovery): negotiate target-bound snapshot recovery v2"`.
 
 ### Task 26: Recheck target at staging, restart and actual placement
 
@@ -1028,3 +1028,29 @@ The restored copy passed the same 57 build and 179 protocol/target cases. The ex
 fixture gained the newly imported build helper; no existing assertion changed. These receipts
 cover local builds and target binding, not full artifact verification or the joint Cloud release.
 Tasks 23–27 remain before whole-branch finishing and release handoff.
+
+### Task 25 implementation checkpoint — 21 October 2026
+
+The opt-in client constructs and persists version-2 target-bound requests, signs the specified
+v2 proof arrays and checks negotiated responses before exposing a selected point. The descriptor
+is retained across status, read, post-download and restored-report checks. The saved-state reader
+checks the request key pair, target digest, protocol, selected descriptor and phase. It returns no
+qualification for an ordinary v1 request. Identity-only replacement access can still read a saved
+v2 identity; it does not perform v1 network operations for that request.
+
+The existing strict JSON parser is shared through `parseBackupVerificationJson`; its earlier
+request/result readers retain their limits. Recovery v2 uses at most 30,000 UTF-8 bytes for the
+target descriptor and 65,536 bytes for private state or a response, with the existing 30-second
+response deadline and 512 MiB archive limit. The target bound reserves space for both copies in a
+saved approval. V1 retains its 8,192-byte state and 16,384-byte response limits and original proof
+arrays. New local tests check larger compositions, overflow, duplicate keys, target changes and
+downgrade attempts. Installed disposable copies catch eleven independent omissions, and their
+restored accepting control passes.
+
+The setup caller in `boot.ts` is intentionally unchanged: Cloud's inspected recovery implementation
+still uses v1. Exact synthetic public wire arrays, payloads, signatures, descriptor and bounds are
+provided to lane D through the campaign exchange. Those examples are not admitted verification
+results. Enabling the qualified caller waits for the coordinated v2 interface; local pre-placement
+comparisons remain Task 26. There is no Cloud deployment, snapshot-availability or fiscal-authority
+change. The scoped two-file coverage diagnostic is below the package thresholds; final package
+coverage remains due.
