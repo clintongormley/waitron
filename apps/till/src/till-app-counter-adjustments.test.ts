@@ -295,18 +295,24 @@ async function retrieved(overrides: Record<string, unknown> = {}): Promise<TillA
 }
 
 async function placeCounter(overrides: Record<string, unknown> = {}): Promise<TillApp> {
-  const available = heldOrder(4).lines.map(({ product: item }) => ({
-    ...menuOffer(item.menuItemId!, item.name),
-    menuId: item.catalogueId!,
-    productId: item.id,
-    unitPrice: item.unitPrice,
-    grossPrice: item.unitPrice,
-    unit: productUnit(item),
-  }));
+  const available = heldOrder(4).lines.map((line) => {
+    const item = line.product!;
+    return {
+      ...menuOffer(item.menuItemId!, item.name),
+      menuId: item.catalogueId!,
+      productId: item.id,
+      unitPrice: item.unitPrice,
+      grossPrice: item.unitPrice,
+      unit: productUnit(item),
+    };
+  });
   const catalogue: ZoneOfferCatalogue = {
     ...offers,
     context: { ...offers.context, serviceMode: "ticket_then_pay" },
-    menus: servedMenus([{ id: "cat-default", name: "Menu", isDefault: true }], available),
+    menus: servedMenus(
+      [{ id: "cat-default", name: "Menu", isDefault: true, versionId: "v1" }],
+      available,
+    ),
     offers: available,
   };
   return retrieved({
@@ -954,8 +960,8 @@ describe("till-app: giving away a dish on a stored counter order", () => {
     const el = await placeCounter({ placeOrder });
     emit(counter(el), "place-order");
     await flush(el);
-    expect(el.stage).toBe("order");
-    expect(el.errorKey).toBe("sale.unconfirmed");
+    expect(counter(el).stage).toBe("order");
+    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
 
     emit(counter(el), "place-order");
     await flush(el);
@@ -964,8 +970,8 @@ describe("till-app: giving away a dish on a stored counter order", () => {
       ["wo-9", null],
       ["wo-9", null],
     ]);
-    expect(el.stage).toBe("collect");
-    expect(el.errorKey).toBeUndefined();
+    expect(counter(el).stage).toBe("collect");
+    expect(banner(el)).toBeNull();
   });
 
   it("keeps an edited second attempt when its save says the order was already placed", async () => {
@@ -981,8 +987,8 @@ describe("till-app: giving away a dish on a stored counter order", () => {
 
     expect(updateWorkingOrder).toHaveBeenCalledOnce();
     expect(placeOrder).not.toHaveBeenCalled();
-    expect(el.stage).toBe("order");
-    expect(el.errorKey).toBe("place.error");
+    expect(counter(el).stage).toBe("order");
+    expect(banner(el)?.textContent).toContain(t("place.error"));
     expect(store.lines[1]!.quantity.toString()).toBe(quantity);
   });
 
@@ -1024,7 +1030,7 @@ describe("till-app: giving away a dish on a stored counter order", () => {
     await flush(el);
     emit(counter(el), "place-order");
     await flush(el);
-    expect(el.errorKey).toBe("sale.unconfirmed");
+    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
     expect(setOrderInvoiceChoice).toHaveBeenCalledOnce();
 
     emit(counter(el), "place-order");
@@ -1035,8 +1041,8 @@ describe("till-app: giving away a dish on a stored counter order", () => {
       ["wo-9", null],
       ["wo-9", null],
     ]);
-    expect(el.stage).toBe("collect");
-    expect(el.errorKey).toBeUndefined();
+    expect(counter(el).stage).toBe("collect");
+    expect(banner(el)).toBeNull();
   });
 
   it("does not replay an uncertain placement after the basket changes", async () => {
@@ -1048,7 +1054,7 @@ describe("till-app: giving away a dish on a stored counter order", () => {
     const el = await placeCounter({ placeOrder, updateWorkingOrder });
     emit(counter(el), "place-order");
     await flush(el);
-    expect(el.errorKey).toBe("sale.unconfirmed");
+    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
     const store = counter(el).store;
     store.addProduct(store.lines[1]!.product, "1");
 
@@ -1057,8 +1063,8 @@ describe("till-app: giving away a dish on a stored counter order", () => {
 
     expect(updateWorkingOrder).toHaveBeenCalledOnce();
     expect(placeOrder).toHaveBeenCalledOnce();
-    expect(el.stage).toBe("order");
-    expect(el.errorKey).toBe("place.error");
+    expect(counter(el).stage).toBe("order");
+    expect(banner(el)?.textContent).toContain(t("place.error"));
   });
 
   it.each(["same values", "new recipient", "new delivery"] as const)(
@@ -1107,7 +1113,7 @@ describe("till-app: giving away a dish on a stored counter order", () => {
       await confirm();
       emit(counter(el), "place-order");
       await flush(el);
-      expect(el.errorKey).toBe("sale.unconfirmed");
+      expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
       await confirm(true);
 
       emit(counter(el), "place-order");
@@ -1116,13 +1122,13 @@ describe("till-app: giving away a dish on a stored counter order", () => {
       if (change === "same values") {
         expect(setOrderInvoiceChoice).toHaveBeenCalledOnce();
         expect(placeOrder).toHaveBeenCalledTimes(2);
-        expect(el.stage).toBe("collect");
-        expect(el.errorKey).toBeUndefined();
+        expect(counter(el).stage).toBe("collect");
+        expect(banner(el)).toBeNull();
       } else {
         expect(setOrderInvoiceChoice).toHaveBeenCalledTimes(2);
         expect(placeOrder).toHaveBeenCalledOnce();
-        expect(el.stage).toBe("order");
-        expect(el.errorKey).toBe("place.error");
+        expect(counter(el).stage).toBe("order");
+        expect(banner(el)?.textContent).toContain(t("place.error"));
       }
     },
   );
@@ -1142,11 +1148,11 @@ describe("till-app: giving away a dish on a stored counter order", () => {
     store.addProduct(store.lines[1]!.product, "1");
     emit(counter(el), "place-order");
     await flush(el);
-    expect(el.errorKey).toBe("sale.unconfirmed");
+    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
     expect(updateWorkingOrder).toHaveBeenCalledOnce();
     emit(counter(el), "place-order");
     await flush(el);
-    expect(el.errorKey).toBe("place.error");
+    expect(banner(el)?.textContent).toContain(t("place.error"));
     expect(updateWorkingOrder).toHaveBeenCalledOnce();
 
     emit(counter(el), "place-order");
@@ -1154,7 +1160,7 @@ describe("till-app: giving away a dish on a stored counter order", () => {
 
     expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
     expect(placeOrder).toHaveBeenCalledTimes(3);
-    expect(el.stage).toBe("collect");
+    expect(counter(el).stage).toBe("collect");
   });
 
   it("saves a new receipt language before retrying an uncertain placement", async () => {
@@ -1174,7 +1180,7 @@ describe("till-app: giving away a dish on a stored counter order", () => {
     });
     emit(counter(el), "place-order");
     await flush(el);
-    expect(el.errorKey).toBe("sale.unconfirmed");
+    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
     emit(counter(el), "choose-receipt-language");
     await flush(el);
     emit(
@@ -1196,7 +1202,7 @@ describe("till-app: giving away a dish on a stored counter order", () => {
 
     expect(setOrderReceiptLanguage).toHaveBeenCalledOnce();
     expect(placeOrder).toHaveBeenCalledTimes(2);
-    expect(el.stage).toBe("collect");
+    expect(counter(el).stage).toBe("collect");
   });
 
   it("saves an edited basket to a replacement server before placing there", async () => {
@@ -1204,13 +1210,13 @@ describe("till-app: giving away a dish on a stored counter order", () => {
     const el = await placeCounter({ placeOrder });
     emit(counter(el), "place-order");
     await flush(el);
-    expect(el.errorKey).toBe("sale.unconfirmed");
+    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
     const replacement = {
       ...api,
       updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 5 }),
       placeOrder: vi.fn().mockResolvedValue({ id: "wo-9", status: "placed" }),
     };
-    el.api = replacement;
+    el.api = replacement as unknown as TillApi;
     const store = counter(el).store;
     store.addProduct(store.lines[1]!.product, "1");
     await flush(el);
@@ -1221,7 +1227,7 @@ describe("till-app: giving away a dish on a stored counter order", () => {
     expect(replacement.updateWorkingOrder).toHaveBeenCalledOnce();
     expect(replacement.placeOrder).toHaveBeenCalledWith("wo-9", null);
     expect(placeOrder).toHaveBeenCalledOnce();
-    expect(el.stage).toBe("collect");
+    expect(counter(el).stage).toBe("collect");
   });
 
   it("places edited lines after their save succeeds", async () => {
@@ -1236,8 +1242,8 @@ describe("till-app: giving away a dish on a stored counter order", () => {
 
     expect(updateWorkingOrder).toHaveBeenCalledOnce();
     expect(placeOrder).toHaveBeenCalledWith("wo-9", null);
-    expect(el.stage).toBe("collect");
-    expect(el.errorKey).toBeUndefined();
+    expect(counter(el).stage).toBe("collect");
+    expect(banner(el)).toBeNull();
   });
 
   for (const language of ["en", "es"] as const)
@@ -1269,7 +1275,9 @@ describe("till-app: giving away a dish on a stored counter order", () => {
                 .shadowRoot!.querySelector<HTMLButtonElement>("button")!;
             expect(send().disabled).toBe(false);
             await userEvent.click(send());
-            await vi.waitFor(() => expect(el.errorKey).toBe("sale.unconfirmed"));
+            await vi.waitFor(() =>
+              expect(banner(el)?.textContent).toContain(t("sale.unconfirmed")),
+            );
             await flush(el);
             expect(el.shadowRoot!.textContent).toContain(t("sale.unconfirmed", language));
             await page.screenshot({
@@ -1277,9 +1285,9 @@ describe("till-app: giving away a dish on a stored counter order", () => {
             });
 
             await userEvent.click(send());
-            await vi.waitFor(() => expect(el.stage).toBe("collect"));
+            await vi.waitFor(() => expect(counter(el).stage).toBe("collect"));
             await flush(el);
-            expect(el.errorKey).toBeUndefined();
+            expect(banner(el)).toBeNull();
             expect(el.shadowRoot!.textContent).not.toContain(t("place.error", language));
             await page.screenshot({
               path: `__screenshots__/a983-place-replay/placed-${language}-${theme}-${width}.png`,
