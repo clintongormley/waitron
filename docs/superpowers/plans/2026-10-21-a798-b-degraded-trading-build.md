@@ -766,7 +766,9 @@ task named.
   Run: `pnpm --filter @waitron/store exec vitest run`
   Expected: PASS, every file, `Tests` count shown; the existing adapter cases at
   `node-sqlite-adapter.test.ts:328-367` (a refused commit, a deferred key) still pass unchanged.
-  Then `pnpm --filter @waitron/store test:coverage` holds 98/98/98/95.
+  Then run `pnpm --filter @waitron/store test:coverage` and note any line or branch below the bar: the
+  adapter's commit-failure branch is reached only by Task 3b's Top-at-commit case, so the bar
+  (98/98/98/95) is required at the end of Task 3b, not here.
 
 - [ ] **Step 5: Commit**
 
