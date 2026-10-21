@@ -1,3 +1,5 @@
+import { request as httpsRequest } from "node:https";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { build } from "esbuild";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -15,7 +17,19 @@ it.each(["bin.ts", "node-entry.ts"])(
     try {
       const stateDir = join(root, "state"),
         venueDir = join(root, "venue");
-      await mkdir(stateDir);
+      await mkdir(join(stateDir, "tls"), { recursive: true });
+      const tls = mintSelfSignedServerCert({
+        hostnames: ["waitron.local", "localhost"],
+        ipAddresses: ["127.0.0.1"],
+        now: new Date(),
+      });
+      for (const [name, value] of Object.entries({
+        "ca.crt": tls.caCertPem,
+        "ca.key": tls.caKeyPem,
+        "server.crt": tls.serverCertPem,
+        "server.key": tls.serverKeyPem,
+      }))
+        await writeFile(join(stateDir, "tls", name), value);
       await mkdir(venueDir);
       await writeFile(join(venueDir, "first-setup-claim.json"), "{}");
       await cp(resolve("src/assets"), join(root, "assets"), { recursive: true });
@@ -78,7 +92,29 @@ it.each(["bin.ts", "node-entry.ts"])(
           reject(new Error("bundle exited before ready: " + output));
         });
       });
-      const response = await fetch(`http://127.0.0.1:${port}/setup-api/first-setup/status`);
+      const response = await new Promise<Response>((resolve, reject) => {
+        const req = httpsRequest(
+          {
+            hostname: "127.0.0.1",
+            port,
+            path: "/setup-api/first-setup/status",
+            ca: tls.caCertPem,
+            servername: "waitron.local",
+            timeout: 5000,
+          },
+          (res) => {
+            let body = "";
+            res.on("data", (chunk: Buffer) => {
+              body += chunk.toString();
+            });
+            res.on("end", () => resolve(new Response(body, { status: res.statusCode! })));
+          },
+        );
+        req.on("error", reject);
+        req.on("timeout", () => req.destroy(new Error("HTTPS bundled entry deadline")));
+        req.end();
+      });
+      expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ claimed: true, resolution: true });
       expect(output.match(/"event":"recovery.listening"/g)).toHaveLength(1);
       await expect(stat(join(venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });

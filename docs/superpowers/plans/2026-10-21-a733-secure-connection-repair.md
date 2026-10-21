@@ -120,3 +120,8 @@ Resuming an interrupted repair validates its reserved authority and signed leaf 
 refreshes only the leaf if addresses or its validity interval changed, durably saving that leaf
 before installation. The reserved CA and original archive remain unchanged. Linked TLS layouts
 retain the plan's explicit refusal; the public-repair limitation is recorded in the backlog.
+
+
+CI identified two further protected-transport fixture consumers: `boot.till-clock.test.ts`'s recovery
+listener case and both bundled entry cases in `first-setup-bundle.test.ts`. Their unchanged protected
+status and route-absence assertions now run over CA-verified HTTPS with real box TLS fixtures.
