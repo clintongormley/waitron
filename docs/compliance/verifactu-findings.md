@@ -343,6 +343,11 @@ back accepted with errors. The validation document (v1.2.2, §4.3.1) exempts the
 correction: «Se excepciona este error de la necesidad de ser subsanado», though it words that case
 as a time later than AEAT's. Production was not tested.
 
+> **Test-service update, 2026-10-21:** with `Cabecera.RemisionVoluntaria.Incidencia="S"`,
+> a record sent 361.055 seconds after generation returned `Correcto`, without code `2004`.
+> The earlier delay observations above used a different probe. See [§18](#18-outage-header-test-service-observations-added-2026-10-21-a946)
+> for the fresh controls, full replies and limits. Production was not tested.
+
 ### Unplanned outage: tolerated indefinitely, with obligations
 
 AEAT, on power cuts, connection failures, and AEAT's own service being down:
@@ -1304,10 +1309,50 @@ and [research/2026-10-09-operations.md](research/2026-10-09-operations.md). The 
 
 ---
 
+## 18. Outage-header test-service observations (added 2026-10-21, A946)
+
+You can inspect the [full redacted request projections, parsed replies and raw SOAP replies](../superpowers/specs/2026-10-21-aeat-outage-flag-evidence.json).
+The owner-approved [library PR #145](https://github.com/waitron-io/verifactu/pull/145)
+was merged as `2dc7609574c7fd3bd34521ed6f913d3a93263673`. The watcher dispatched
+[run 39560851006](https://github.com/waitron-io/verifactu/actions/runs/39560851006)
+on `main`, in the `aeat-preproduction` environment, using mode `outage-flag`.
+The job ran on 21 October from 07:16:42 to 07:25:01 UTC. No second run was sent
+when collecting these results.
+
+Before sending, the script printed its expectation: the fresh flagged alta, fresh unflagged
+control and fresh flagged cancellation would return `Correcto`; the six-minute-held flagged
+alta would return `AceptadoConErrores`, code `2004`.
+
+| Submission | Record generation time, UTC | Send time, UTC | Header incidence | AEAT batch / record status | Error code and text |
+| --- | --- | --- | --- | --- | --- |
+| Fresh alta | 07:16:55 | 07:16:55.635 | `S` | `Correcto` / `Correcto` | Neither field present |
+| Held alta, age 361.055 seconds | 07:16:55 | 07:22:56.055 | `S` | `Correcto` / `Correcto` | Neither field present |
+| Fresh control alta | 07:23:56 | 07:23:56.635 | Absent | `Correcto` / `Correcto` | Neither field present |
+| Fresh cancellation of the first alta | 07:24:57 | 07:24:57.722 | `S` | `Correcto` / `Correcto` | Neither field present |
+
+The flagged raw replies echo `RemisionVoluntaria/Incidencia=S`; the control's reply has no
+`RemisionVoluntaria`. Every reply has `TiempoEsperaEnvio=60`. The three altas use separate
+synthetic installation names and first-record chains; the cancellation links to the first alta.
+It is an annulment record, not a corrective invoice.
+
+The workflow conclusion is **failure**: `delayedFlagged.matchesExpectation` is false because
+AEAT returned `Correcto` instead of the predicted warning. All four replies were retained.
+No assertion was changed and no retry was sent to obtain another result.
+
+A942 (#1931) can flag records that were not themselves delayed after a restart. This run sent
+one freshly generated flagged record, and AEAT's test service returned `Correcto` without an
+error code. It also accepted the held flagged record without code `2004`. The run did not
+restart Waitron or exercise its outbox, and contained no delayed unflagged control. You cannot
+attribute the missing warning to the flag alone, infer acceptance for every batch or extend
+these observations to production. The results do not call for an inline A942 change.
+
+---
+
 ## Sources
 
 | Source | Type |
 | --- | --- |
+| [A946 full outage-header evidence](../superpowers/specs/2026-10-21-aeat-outage-flag-evidence.json), [run 39560851006](https://github.com/waitron-io/verifactu/actions/runs/39560851006), 2026-10-21 | primary test-service replies: all four `Correcto`; workflow failed its expected delayed-record warning; limits in §18 |
 | [W41s-1 saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json), 2026-10-05 | synthetic AEAT preproduction observations — request projections and parsed replies, not raw SOAP bytes; limits in §16 |
 | BOE-A-2023-24840 — RD 1007/2023 (RRSIF), arts. 8, 12, 14, 15, 16 | primary |
 | BOE-A-2024-22138 — Orden HAC/1177/2024, arts. 2, 7, 13, 16, 20, 21 | primary |

@@ -1,0 +1,382 @@
+{
+  "item": "A946",
+  "service": "AEAT preproduction; workflow aeat-preproduction, personal certificate route",
+  "repository": "waitron-io/verifactu",
+  "sourceCommit": "2dc7609574c7fd3bd34521ed6f913d3a93263673",
+  "libraryPullRequest": "https://github.com/waitron-io/verifactu/pull/145",
+  "workflowRun": 39560851006,
+  "workflowUrl": "https://github.com/waitron-io/verifactu/actions/runs/39560851006",
+  "jobId": 119091467169,
+  "workflowConclusion": "failure",
+  "expectationPrintedBeforeSending": "fresh flagged alta, fresh unflagged control and fresh flagged cancellation Correcto; six-minute-held flagged alta AceptadoConErrores with code 2004. Test service only; results do not establish production behaviour.",
+  "summary": [
+    {
+      "batch": "freshFlagged",
+      "generated": "2026-10-21T09:16:55+02:00",
+      "sentAt": "2026-10-21T07:16:55.635Z",
+      "ageSeconds": 0.635,
+      "incidence": "S",
+      "EstadoEnvio": "Correcto",
+      "EstadoRegistro": [
+        "Correcto"
+      ],
+      "errorFields": [
+        {}
+      ],
+      "matchesExpectation": true
+    },
+    {
+      "batch": "delayedFlagged",
+      "generated": "2026-10-21T09:16:55+02:00",
+      "sentAt": "2026-10-21T07:22:56.055Z",
+      "ageSeconds": 361.055,
+      "incidence": "S",
+      "EstadoEnvio": "Correcto",
+      "EstadoRegistro": [
+        "Correcto"
+      ],
+      "errorFields": [
+        {}
+      ],
+      "matchesExpectation": false
+    },
+    {
+      "batch": "control",
+      "generated": "2026-10-21T09:23:56+02:00",
+      "sentAt": "2026-10-21T07:23:56.635Z",
+      "ageSeconds": 0.635,
+      "incidence": null,
+      "EstadoEnvio": "Correcto",
+      "EstadoRegistro": [
+        "Correcto"
+      ],
+      "errorFields": [
+        {}
+      ],
+      "matchesExpectation": true
+    },
+    {
+      "batch": "cancellationFlagged",
+      "generated": "2026-10-21T09:24:57+02:00",
+      "sentAt": "2026-10-21T07:24:57.722Z",
+      "ageSeconds": 0.722,
+      "incidence": "S",
+      "EstadoEnvio": "Correcto",
+      "EstadoRegistro": [
+        "Correcto"
+      ],
+      "errorFields": [
+        {}
+      ],
+      "matchesExpectation": true
+    }
+  ],
+  "batches": {
+    "freshFlagged": {
+      "sentAt": "2026-10-21T07:16:55.635Z",
+      "records": [
+        {
+          "IDVersion": "1.0",
+          "IDFactura": {
+            "IDEmisorFactura": "[identity]",
+            "NumSerieFactura": "CI/20261021/39560851006-OUTAGE-freshFlagged",
+            "FechaExpedicionFactura": "21-10-2026"
+          },
+          "RefExterna": "CI-39560851006-OUTAGE-freshFlagged",
+          "NombreRazonEmisor": "[identity]",
+          "TipoFactura": "F1",
+          "DescripcionOperacion": "Prueba de integración en preproducción",
+          "Destinatarios": {
+            "IDDestinatario": [
+              {
+                "NombreRazon": "[identity]",
+                "NIF": "[identity]"
+              }
+            ]
+          },
+          "Desglose": [
+            {
+              "ClaveRegimen": "01",
+              "TipoImpositivo": "21.00",
+              "BaseImponibleOimporteNoSujeto": "1.00",
+              "CuotaRepercutida": "0.21",
+              "CalificacionOperacion": "S1"
+            }
+          ],
+          "CuotaTotal": "0.21",
+          "ImporteTotal": "1.21",
+          "Encadenamiento": {
+            "PrimerRegistro": "S"
+          },
+          "SistemaInformatico": {
+            "NombreRazon": "[identity]",
+            "NIF": "[identity]",
+            "NombreSistemaInformatico": "Waitron VeriFactu test",
+            "IdSistemaInformatico": "WT",
+            "Version": "0.1.0",
+            "NumeroInstalacion": "CI-39560851006-OUTAGE-freshFlagged",
+            "TipoUsoPosibleSoloVerifactu": "S",
+            "TipoUsoPosibleMultiOT": "N",
+            "IndicadorMultiplesOT": "N"
+          },
+          "FechaHoraHusoGenRegistro": "2026-10-21T09:16:55+02:00",
+          "TipoHuella": "01",
+          "Huella": "7EFACDD50E03A1EE86D1F216213DE5E9B5443A5FBCE671B7E8BF9E38A2AD7C5A"
+        }
+      ],
+      "incidence": "S",
+      "response": {
+        "CSV": "A-PNS4BZRJ4E3DGN",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-21T09:16:56+02:00"
+        },
+        "EstadoEnvio": "Correcto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI/20261021/39560851006-OUTAGE-freshFlagged",
+              "FechaExpedicionFactura": "21-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Alta"
+            },
+            "RefExterna": "CI-39560851006-OUTAGE-freshFlagged",
+            "EstadoRegistro": "Correcto"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-PNS4BZRJ4E3DGN</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-21T09:16:56+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision><tik:RemisionVoluntaria><tik:Incidencia>S</tik:Incidencia></tik:RemisionVoluntaria></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Correcto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI/20261021/39560851006-OUTAGE-freshFlagged</tik:NumSerieFactura><tik:FechaExpedicionFactura>21-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion><tikR:RefExterna>CI-39560851006-OUTAGE-freshFlagged</tikR:RefExterna><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": true
+    },
+    "delayedFlagged": {
+      "sentAt": "2026-10-21T07:22:56.055Z",
+      "records": [
+        {
+          "IDVersion": "1.0",
+          "IDFactura": {
+            "IDEmisorFactura": "[identity]",
+            "NumSerieFactura": "CI/20261021/39560851006-OUTAGE-delayed",
+            "FechaExpedicionFactura": "21-10-2026"
+          },
+          "RefExterna": "CI-39560851006-OUTAGE-delayed",
+          "NombreRazonEmisor": "[identity]",
+          "TipoFactura": "F1",
+          "DescripcionOperacion": "Prueba de integración en preproducción",
+          "Destinatarios": {
+            "IDDestinatario": [
+              {
+                "NombreRazon": "[identity]",
+                "NIF": "[identity]"
+              }
+            ]
+          },
+          "Desglose": [
+            {
+              "ClaveRegimen": "01",
+              "TipoImpositivo": "21.00",
+              "BaseImponibleOimporteNoSujeto": "1.00",
+              "CuotaRepercutida": "0.21",
+              "CalificacionOperacion": "S1"
+            }
+          ],
+          "CuotaTotal": "0.21",
+          "ImporteTotal": "1.21",
+          "Encadenamiento": {
+            "PrimerRegistro": "S"
+          },
+          "SistemaInformatico": {
+            "NombreRazon": "[identity]",
+            "NIF": "[identity]",
+            "NombreSistemaInformatico": "Waitron VeriFactu test",
+            "IdSistemaInformatico": "WT",
+            "Version": "0.1.0",
+            "NumeroInstalacion": "CI-39560851006-OUTAGE-delayed",
+            "TipoUsoPosibleSoloVerifactu": "S",
+            "TipoUsoPosibleMultiOT": "N",
+            "IndicadorMultiplesOT": "N"
+          },
+          "FechaHoraHusoGenRegistro": "2026-10-21T09:16:55+02:00",
+          "TipoHuella": "01",
+          "Huella": "F209496D53BB0E3A87D3C78E609F44E50279DBF0CE264C960031336DE5E9FE3B"
+        }
+      ],
+      "incidence": "S",
+      "response": {
+        "CSV": "A-FDKHQRF5KVUDR3",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-21T09:22:56+02:00"
+        },
+        "EstadoEnvio": "Correcto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI/20261021/39560851006-OUTAGE-delayed",
+              "FechaExpedicionFactura": "21-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Alta"
+            },
+            "RefExterna": "CI-39560851006-OUTAGE-delayed",
+            "EstadoRegistro": "Correcto"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-FDKHQRF5KVUDR3</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-21T09:22:56+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision><tik:RemisionVoluntaria><tik:Incidencia>S</tik:Incidencia></tik:RemisionVoluntaria></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Correcto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI/20261021/39560851006-OUTAGE-delayed</tik:NumSerieFactura><tik:FechaExpedicionFactura>21-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion><tikR:RefExterna>CI-39560851006-OUTAGE-delayed</tikR:RefExterna><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": false
+    },
+    "control": {
+      "sentAt": "2026-10-21T07:23:56.635Z",
+      "records": [
+        {
+          "IDVersion": "1.0",
+          "IDFactura": {
+            "IDEmisorFactura": "[identity]",
+            "NumSerieFactura": "CI/20261021/39560851006-OUTAGE-control",
+            "FechaExpedicionFactura": "21-10-2026"
+          },
+          "RefExterna": "CI-39560851006-OUTAGE-control",
+          "NombreRazonEmisor": "[identity]",
+          "TipoFactura": "F1",
+          "DescripcionOperacion": "Prueba de integración en preproducción",
+          "Destinatarios": {
+            "IDDestinatario": [
+              {
+                "NombreRazon": "[identity]",
+                "NIF": "[identity]"
+              }
+            ]
+          },
+          "Desglose": [
+            {
+              "ClaveRegimen": "01",
+              "TipoImpositivo": "21.00",
+              "BaseImponibleOimporteNoSujeto": "1.00",
+              "CuotaRepercutida": "0.21",
+              "CalificacionOperacion": "S1"
+            }
+          ],
+          "CuotaTotal": "0.21",
+          "ImporteTotal": "1.21",
+          "Encadenamiento": {
+            "PrimerRegistro": "S"
+          },
+          "SistemaInformatico": {
+            "NombreRazon": "[identity]",
+            "NIF": "[identity]",
+            "NombreSistemaInformatico": "Waitron VeriFactu test",
+            "IdSistemaInformatico": "WT",
+            "Version": "0.1.0",
+            "NumeroInstalacion": "CI-39560851006-OUTAGE-control",
+            "TipoUsoPosibleSoloVerifactu": "S",
+            "TipoUsoPosibleMultiOT": "N",
+            "IndicadorMultiplesOT": "N"
+          },
+          "FechaHoraHusoGenRegistro": "2026-10-21T09:23:56+02:00",
+          "TipoHuella": "01",
+          "Huella": "94286A224463B18BFDC418726E8DB8C847D49A5F90C0D71976E25DB8BA2D6E5A"
+        }
+      ],
+      "incidence": null,
+      "response": {
+        "CSV": "A-PX66XFN6DFQ5ZX",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-21T09:23:57+02:00"
+        },
+        "EstadoEnvio": "Correcto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI/20261021/39560851006-OUTAGE-control",
+              "FechaExpedicionFactura": "21-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Alta"
+            },
+            "RefExterna": "CI-39560851006-OUTAGE-control",
+            "EstadoRegistro": "Correcto"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-PX66XFN6DFQ5ZX</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-21T09:23:57+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Correcto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI/20261021/39560851006-OUTAGE-control</tik:NumSerieFactura><tik:FechaExpedicionFactura>21-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion><tikR:RefExterna>CI-39560851006-OUTAGE-control</tikR:RefExterna><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": true
+    },
+    "cancellationFlagged": {
+      "sentAt": "2026-10-21T07:24:57.722Z",
+      "records": [
+        {
+          "IDVersion": "1.0",
+          "IDFactura": {
+            "IDEmisorFacturaAnulada": "[identity]",
+            "NumSerieFacturaAnulada": "CI/20261021/39560851006-OUTAGE-freshFlagged",
+            "FechaExpedicionFacturaAnulada": "21-10-2026"
+          },
+          "Encadenamiento": {
+            "RegistroAnterior": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI/20261021/39560851006-OUTAGE-freshFlagged",
+              "FechaExpedicionFactura": "21-10-2026",
+              "Huella": "7EFACDD50E03A1EE86D1F216213DE5E9B5443A5FBCE671B7E8BF9E38A2AD7C5A"
+            }
+          },
+          "SistemaInformatico": {
+            "NombreRazon": "[identity]",
+            "NIF": "[identity]",
+            "NombreSistemaInformatico": "Waitron VeriFactu test",
+            "IdSistemaInformatico": "WT",
+            "Version": "0.1.0",
+            "NumeroInstalacion": "CI-39560851006-OUTAGE-freshFlagged",
+            "TipoUsoPosibleSoloVerifactu": "S",
+            "TipoUsoPosibleMultiOT": "N",
+            "IndicadorMultiplesOT": "N"
+          },
+          "FechaHoraHusoGenRegistro": "2026-10-21T09:24:57+02:00",
+          "TipoHuella": "01",
+          "Huella": "4883C2E3B3817CDD6150454830D799FFA71F35CA8F7818BE462E4687F9E3BBD4"
+        }
+      ],
+      "incidence": "S",
+      "response": {
+        "CSV": "A-8L222RLRAPAE2Q",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-21T09:24:58+02:00"
+        },
+        "EstadoEnvio": "Correcto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI/20261021/39560851006-OUTAGE-freshFlagged",
+              "FechaExpedicionFactura": "21-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Anulacion"
+            },
+            "EstadoRegistro": "Correcto"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-8L222RLRAPAE2Q</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-21T09:24:58+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision><tik:RemisionVoluntaria><tik:Incidencia>S</tik:Incidencia></tik:RemisionVoluntaria></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Correcto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI/20261021/39560851006-OUTAGE-freshFlagged</tik:NumSerieFactura><tik:FechaExpedicionFactura>21-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Anulacion</tik:TipoOperacion></tikR:Operacion><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": true
+    }
+  },
+  "limits": [
+    "Identity fields retain the script redaction [identity]; full redacted raw SOAP and parsed replies are preserved.",
+    "The delayed flagged record was sent once in this run; there was no delayed unflagged control in the same run.",
+    "Test-service observations do not establish production behavior or the cause of the absent 2004 warning."
+  ]
+}
