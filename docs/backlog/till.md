@@ -1604,6 +1604,15 @@ whether those reads should follow today's map once a group is left.
 
 ## Decisions and deliberate limits
 
+### A841 slice 2's review points kept as built (lane A, 2026-10-21, before slice 3)
+
+`custom_themes.in_use` stays a nullable number with a CHECK of 1 and a plain unique index
+(`packages/db/drizzle/0182_create_custom_themes.sql`), the design's deliberate choice, where other
+"at most one chosen row" columns are a not-null flag with a partial unique index. A malformed theme
+id answers `theme.not_found` (404), not `shared.invalid_id`, so the permission check still runs
+first. ui-core's token files stay shipped beside the server bundle rather than built into it. The
+optional tidy-ups the same review listed were not recorded individually and are dropped.
+
 ### `timingBand` counts only fired dishes (A757 Q17, owner 2026-10-17; built by A757 slice 3)
 
 A held dish does not make a card, a map table or the order screen's pin Waiting, Overdue or

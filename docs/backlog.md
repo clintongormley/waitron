@@ -3248,7 +3248,18 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   sweeps and the token-list guard, in `@waitron/ui-core/theme`. Slice 2 landed
   2026-10-21 (#1932): custom themes stored in `custom_themes` (`tenant_themes` retired), their
   routes, the theme in use served at `/api/theme`, the till's `themeHash`, and configuration copies
-  at format 6. Next: slice 3 (delivery).
+  at format 6. Slice 3 landed 2026-10-21: the theme in use reaches the screens — the dashboard and the till
+  apply the browser's stored copy at start and fetch `/api/theme` without waiting on it; an open
+  dashboard follows through a passive live read of `custom_themes`, and a signed-in till through its
+  `themeHash` once per poll. Next: slice 4 (primary-coloured text), then slice 5 (the editor).
+
+- **WebKit in CI for A841's start-up checks (lane A ruling, 2026-10-21).** The dashboard's and the
+  till's `venue-theme-startup.test.ts` run in Chromium in CI; WebKit was measured once, locally
+  (`WAITRON_STARTUP_ENGINES=chromium,webkit`; receipt in `docs/developers/testing-guide.md`). To gate
+  it: install WebKit in those shards under a bounded, retried apt step (CLAUDE.md §2), give the
+  Playwright cache a key per engine so Chromium-only jobs do not save a cache without WebKit, and set
+  the variable for those suites. Whether WebKit's Linux libraries are missing from `ubuntu-latest`
+  is an assumption to check first.
 
 - **A841 slice 1 tidy-ups its review left (#1927's finish-branch, 2026-10-21).** Optional, no
   behaviour change: `checkRules` (`packages/ui-core/src/theme/contrast-rules.ts`) and `failing`
@@ -3258,16 +3269,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   reading `STATIONS`. Separately, the design's mock-up pictures still show Café Limón's light fix as
   `#9f8b18` and Bar Lucía's dark fix as `#417c59`; the code now gives `#9d8a15` and `#437e5b` (a dated
   note in the design says so). Redraw them when the editor's slice is built.
-
-- **A841 slice 2 points its review left (#1932's finish-branch, 2026-10-21) — decide before
-  slice 3.** `custom_themes.in_use` is a nullable number with a CHECK of 1 and a plain unique index
-  (`packages/db/drizzle/0182_create_custom_themes.sql`), where other "at most one chosen row" columns
-  are a not-null flag with a unique index limited to rows set to 1; the design chose this on
-  purpose. A malformed theme id answers `theme.not_found` (404), not `shared.invalid_id` (400), as
-  the plan pins, so the permission check still runs first. Also left: building ui-core's token files
-  into the server bundle instead of shipping them beside it (the simplify reviewer rated it medium
-  risk for that branch), and a few optional tidy-ups the same reviewer listed, not recorded
-  individually.
 
 - **Uploaded font files for themes (owner, 2026-10-20, A841 Q7 B) — after A841.** A theme's
   Typeface may also be a font file the venue uploads, so every screen draws the bar's own face. The
