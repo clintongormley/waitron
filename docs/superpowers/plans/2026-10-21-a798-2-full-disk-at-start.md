@@ -576,14 +576,15 @@ action with `toContain`, and the new action contains it whole, so it keeps passi
   `stoppedStatus`.
 - Produces, `OPERATOR_TEXT["storage.disk_full"]` actions exactly:
   - `en-GB`: `The box has deleted what it could make again, and that was not enough. Ask whoever installed this box to free some space (old backups, earlier versions of Waitron) or fit a bigger disk. Your sales are not touched.`
-  - `es-ES`: `El equipo ha borrado lo que podía volver a crear, y no ha bastado. Pide a quien instaló este equipo que libere espacio (copias antiguas, versiones anteriores de Waitron) o ponga un disco mayor. Tus ventas no se tocan.`
+  - `es-ES`: `El equipo ha quitado lo que podía volver a crear, y no ha bastado. Pide a quien instaló este equipo que libere espacio (copias antiguas, versiones anteriores de Waitron) o ponga un disco mayor. Tus ventas no se tocan.`
+    Changed from the design's «ha borrado» to «ha quitado»: the page's never-wipe check (NEVER_WIPE_ES, recovery-surface.test.ts:182) refuses any word starting «borra», and the check stays as it is.
   Titles unchanged. The retry button stays `Reintentar un arranque normal` / `Retry a normal boot`.
 
 - [ ] **Step 1: Write the failing tests**, written as literals passed through `escapeHtml`, as the
   file's fixed-string cases do (`:450-469`):
   - `"says the box has already deleted what it could, in both languages"`: `pageFor("storage.disk_full")`
     contains the English sentence `The box has deleted what it could make again, and that was not enough.`;
-    with `SPANISH`, `El equipo ha borrado lo que podía volver a crear, y no ha bastado.`; and
+    with `SPANISH`, `El equipo ha quitado lo que podía volver a crear, y no ha bastado.`; and
     neither page contains `borra`/`wipe`/`reset` advice beyond that sentence — check instead that
     the action still names whoever installed the box (`Pide a quien instaló este equipo`).
   - `"shows the free space on the box's disk in each language"`: build `recoveryApp` directly

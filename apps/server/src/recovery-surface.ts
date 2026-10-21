@@ -16,6 +16,10 @@ export interface RecoveryDeps {
   logDir: string;
   /** Called only after the response has been written — see `outgoingOf`. */
   onRetry: (level: RecoveryLevel) => Promise<void>;
+  /** Bytes free on the box's disk, read on every request; null when it cannot be read. */
+  freeSpace?: () => Promise<number | null>;
+  /** This start could not record its failure, so `failures` does not count it. */
+  uncounted?: true;
 }
 
 /** The page is served before any authentication exists; see `OPERATOR_TEXT` for what reaches it. */
@@ -138,6 +142,9 @@ const PAGE_TEXT: Readonly<
       lastFailure: (at: string) => string;
       status: (level: string, failures: number) => string;
       stoppedStatus: (level: string) => string;
+      uncountedStatus: (level: string) => string;
+      freeSpace: (amount: string) => string;
+      unknownSpace: string;
       missingTriggers: (names: string) => string;
       changedTriggers: (names: string) => string;
       lastError: (code: string, at: string) => string;
@@ -156,6 +163,9 @@ const PAGE_TEXT: Readonly<
     lastFailure: (at) => `Why the last start failed (${at})`,
     status: (level, failures) => `Level: ${level}. Failed ${failures} times.`,
     stoppedStatus: (level) => `Level: ${level}. Stopped while running.`,
+    uncountedStatus: (level) => `Level: ${level}. This start was not counted: the disk is full.`,
+    freeSpace: (amount) => `Free space on the box's disk: ${amount}.`,
+    unknownSpace: "unknown",
     missingTriggers: (names) => `Missing triggers: ${names}`,
     changedTriggers: (names) => `Changed triggers: ${names}`,
     lastError: (code, at) => `Last error: ${code} at ${at}`,
@@ -172,6 +182,10 @@ const PAGE_TEXT: Readonly<
     lastFailure: (at) => `Por qué falló el último arranque (${at})`,
     status: (level, failures) => `Nivel: ${level}. Intentos fallidos: ${failures}.`,
     stoppedStatus: (level) => `Nivel: ${level}. Se detuvo mientras funcionaba.`,
+    uncountedStatus: (level) =>
+      `Nivel: ${level}. Este arranque no se ha contado: el disco está lleno.`,
+    freeSpace: (amount) => `Espacio libre en el disco del equipo: ${amount}.`,
+    unknownSpace: "desconocido",
     missingTriggers: (names) => `Disparadores que faltan: ${names}`,
     changedTriggers: (names) => `Disparadores cambiados: ${names}`,
     lastError: (code, at) => `Último error: ${code}, fecha: ${at}`,
@@ -275,12 +289,12 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": {
       title: "The box's disk is full, so Waitron cannot save anything.",
       action:
-        "Ask whoever installed this box to free some space (old backups, earlier versions of Waitron) or fit a bigger disk. Your sales are not touched.",
+        "The box has deleted what it could make again, and that was not enough. Ask whoever installed this box to free some space (old backups, earlier versions of Waitron) or fit a bigger disk. Your sales are not touched.",
     },
     "es-ES": {
       title: "El disco del equipo está lleno, así que Waitron no puede guardar nada.",
       action:
-        "Pide a quien instaló este equipo que libere espacio (copias antiguas, versiones anteriores de Waitron) o ponga un disco mayor. Tus ventas no se tocan.",
+        "El equipo ha quitado lo que podía volver a crear, y no ha bastado. Pide a quien instaló este equipo que libere espacio (copias antiguas, versiones anteriores de Waitron) o ponga un disco mayor. Tus ventas no se tocan.",
     },
   },
   "migrations.incomplete": {
@@ -461,14 +475,44 @@ function triggerLines(state: RecoveryState, page: (typeof PAGE_TEXT)[SupportedLo
   return lines.map((line) => `<p>${escapeHtml(line)}</p>\n`).join("");
 }
 
-function renderPage(state: RecoveryState, log: LogView, locale: SupportedLocale): string {
+/** `undefined` means no reader was given, so the page carries no free-space line at all. */
+type FreeSpaceReading = number | null | undefined;
+
+async function readFreeSpace(deps: RecoveryDeps): Promise<FreeSpaceReading> {
+  if (deps.freeSpace === undefined) return undefined;
+  try {
+    return await deps.freeSpace();
+  } catch {
+    return null;
+  }
+}
+
+function freeSpaceLine(bytes: FreeSpaceReading, locale: SupportedLocale): string {
+  if (bytes === undefined) return "";
+  const page = PAGE_TEXT[locale];
+  const amount =
+    bytes === null
+      ? page.unknownSpace
+      : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(bytes / 1_000_000)} MB`;
+  return `<p>${escapeHtml(page.freeSpace(amount))}</p>\n`;
+}
+
+function renderPage(
+  deps: RecoveryDeps,
+  log: LogView,
+  locale: SupportedLocale,
+  freeBytes: FreeSpaceReading,
+): string {
+  const { state } = deps;
   const page = PAGE_TEXT[locale];
   const text = operatorText(state)[locale];
   const refused = state.refused === true;
   const heading = refused ? page.stoppedHeading : page.heading;
   const status = refused
     ? page.stoppedStatus(state.level)
-    : page.status(state.level, state.failures);
+    : deps.uncounted === true
+      ? page.uncountedStatus(state.level)
+      : page.status(state.level, state.failures);
   const lastError = page.lastError(
     state.lastErrorCode ?? page.noCode,
     state.lastFailureAt ?? page.noTime,
@@ -501,7 +545,7 @@ function renderPage(state: RecoveryState, log: LogView, locale: SupportedLocale)
 </form>
 <h2>${escapeHtml(page.forInstaller)}</h2>
 <p>${escapeHtml(status)}</p>
-${triggerLines(state, page)}<p>${escapeHtml(lastError)}</p>
+${freeSpaceLine(freeBytes, locale)}${triggerLines(state, page)}<p>${escapeHtml(lastError)}</p>
 ${lastFailure}<h2>${escapeHtml(page.logTail)}</h2>
 <pre>${tail}</pre>
 </body>
@@ -519,11 +563,12 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
 
   app.get("/", async (c) => {
     const log = await readLog(deps.logDir);
+    const freeBytes = await readFreeSpace(deps);
     // No venue locale: that is read from the venue database, which the recovery path never opens.
     const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
     c.header("Cache-Control", "no-store");
     c.header("Vary", "Accept-Language");
-    return c.html(renderPage(deps.state, log, locale));
+    return c.html(renderPage(deps, log, locale, freeBytes));
   });
 
   // Named one by one, to leave out the clear count and the trigger names.
