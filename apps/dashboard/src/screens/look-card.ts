@@ -127,12 +127,37 @@ export class LookCard extends LitElement {
         margin: var(--wt-space-3) 0 0;
         color: var(--wt-color-warning);
       }
+      .warning > wt-icon {
+        flex-shrink: 0;
+      }
       .fixed {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-2);
         margin: 0;
+      }
+      /* The "·" and Undo never part, and a "·" carried to the start of a line is pulled out past
+         the clip edge, so Undo on a line of its own has no "·" (design: a wrapped link drops it).
+         The clip margin is the focus ring's room. */
+      .undo-line {
+        margin: 0;
+        overflow: clip;
+        overflow-clip-margin: var(--wt-space-1);
+        white-space: nowrap;
+      }
+      .undo-line > .fixed-text {
+        padding-inline-end: var(--wt-space-4);
+        white-space: normal;
+      }
+      .undo-line > .dot {
+        display: inline-block;
+        width: var(--wt-space-4);
+        margin-inline-start: calc(-1 * var(--wt-space-4));
+        text-align: center;
+      }
+      .undo-line > wt-button {
+        vertical-align: middle;
       }
       wt-button.link::part(button) {
         font-weight: var(--wt-font-weight-normal);
@@ -160,6 +185,9 @@ export class LookCard extends LitElement {
         display: grid;
         gap: var(--wt-space-4);
         min-width: 0;
+      }
+      wt-form-actions {
+        margin-top: var(--wt-space-4);
       }
       @container (min-width: 900px) {
         .editor {
@@ -299,12 +327,11 @@ export class LookCard extends LitElement {
     return MODES.flatMap((mode: Mode) => {
       if (draft.choices.brandFix[mode]) {
         return [
-          html`<p class="fixed">
-            <span data-test="brand-fixed-${mode}"
-              >${brandFixedText(mode, derived[mode][PRIMARY]!)}</span
-            >
-            <span aria-hidden="true">·</span>
-            <wt-button
+          html`<p class="undo-line">
+            <span class="fixed-text" data-test="brand-fixed-${mode}"
+              >${brandFixedText(mode, derived[mode][PRIMARY]!)} </span
+            ><span class="dot" aria-hidden="true">· </span
+            ><wt-button
               data-test="brand-undo-${mode}"
               class="link"
               variant="ghost"

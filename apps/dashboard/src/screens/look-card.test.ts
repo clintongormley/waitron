@@ -866,3 +866,107 @@ class LookLeaveHost extends LitElement {
   }
 }
 customElements.define("look-card-leave-host", LookLeaveHost);
+
+describe("the editor's spacing and wrapping at phone and desk widths", () => {
+  async function onDesk(run: () => Promise<void>): Promise<void> {
+    const { innerWidth: width, innerHeight: height } = window;
+    await page.viewport(1280, 900);
+    try {
+      await run();
+    } finally {
+      await page.viewport(width, height);
+    }
+  }
+  async function resize(el: Card, cardWidth: number) {
+    el.parentElement!.style.width = `${cardWidth}px`;
+    await frame();
+    await frame();
+  }
+  const rect = (node: Element) => node.getBoundingClientRect();
+
+  for (const cardWidth of [358, 700, 1000]) {
+    it(`leaves a space between the preview and the buttons in a ${cardWidth}px card`, async () => {
+      await onDesk(async () => {
+        setLocale("es-ES");
+        const { el } = await mountEditing(inUse(lucia));
+        await resize(el, cardWidth);
+        const gap = rect(q(el, "wt-form-actions")!).top - rect(preview(el)).bottom;
+        expect(gap).toBeGreaterThanOrEqual(16);
+      });
+    });
+  }
+
+  /** Where the fixed line's "·" is: drawn or not, and whether Undo shares the colour's line. */
+  function dotOf(el: Card, mode: "light" | "dark") {
+    const span = q(el, `[data-test=brand-fixed-${mode}]`)!;
+    const dot = span.nextElementSibling!;
+    const undo = button(el, `brand-undo-${mode}`);
+    const words = document.createRange();
+    words.selectNodeContents(span);
+    const rects = words.getClientRects();
+    const last = rects[rects.length - 1]!;
+    const sameLine = (box: DOMRect) => {
+      const middle = (box.top + box.bottom) / 2;
+      return middle > last.top && middle < last.bottom;
+    };
+    const box = rect(dot);
+    const hit = el.shadowRoot!.elementFromPoint(
+      (box.left + box.right) / 2,
+      (box.top + box.bottom) / 2,
+    );
+    return {
+      drawn: hit === dot,
+      dotOnColourLine: sameLine(box) && box.left >= last.right - 1,
+      undoOnColourLine: sameLine(rect(undo)),
+    };
+  }
+
+  for (const [locale, cardWidth] of [
+    ["es-ES", 358],
+    ["en-GB", 358],
+    ["es-ES", 1000],
+    ["en-GB", 1000],
+  ] as const) {
+    it(`draws the fixed line's "·" only beside Undo on the colour's line (${locale}, ${cardWidth}px)`, async () => {
+      await onDesk(async () => {
+        setLocale(locale);
+        for (const mode of ["light", "dark"] as const) {
+          const { el } = await fixedLine(mode);
+          await resize(el, cardWidth);
+          const found = dotOf(el, mode);
+          const label = `${mode} ${JSON.stringify(found)}`;
+          expect(found.drawn, label).toBe(found.undoOnColourLine);
+          if (found.drawn) expect(found.dotOnColourLine, label).toBe(true);
+          if (locale === "en-GB" && cardWidth === 1000) expect(found.drawn, label).toBe(true);
+          cleanupWidgets();
+        }
+      });
+    });
+  }
+
+  /** Bar Lucía opens with its dark fix taken; the lemon's light fix is taken here. */
+  async function fixedLine(mode: "light" | "dark") {
+    const opened = await mountEditing(inUse(lucia));
+    if (mode === "light") {
+      await typeInCode(opened.el, "#f2d300");
+      await userEvent.click(button(opened.el, "brand-fix-light"));
+      await opened.el.updateComplete;
+    }
+    return opened;
+  }
+
+  it("keeps the saved warning's icon its full size when the line wraps", async () => {
+    await onDesk(async () => {
+      setLocale("es-ES");
+      const lemon = theme("t-lemon", "Lemon Café", { ...WAITRON_CHOICES, brandColor: "#f2d300" });
+      const el = await mount(inUse(lemon));
+      const line = q(el, "[data-test=saved-warning]")!;
+      const icon = line.querySelector("wt-icon")!;
+      await resize(el, 1000);
+      const wide = rect(icon).width;
+      await resize(el, 300);
+      expect(rect(line).height).toBeGreaterThan(rect(icon).height * 1.5);
+      expect(rect(icon).width).toBe(wide);
+    });
+  });
+});

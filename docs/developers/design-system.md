@@ -4016,7 +4016,10 @@ slice 5), built with `settingsCard` and `settingsRows`:
 - **The editor lays out by the card's width, never the window's** (container queries): the choices
   and the preview sit side by side when the form is at least 900px wide, and the preview's two
   panels sit side by side when the preview is at least 640px wide. Narrower, each stacks, the
-  preview below the choices and the light panel above the dark.
+  preview below the choices and the light panel above the dark. Inside a panel, the sample's side
+  menu stays beside the sample while the sample's narrowest content fits there, and goes above it
+  otherwise; this follows the words' real widths, so it needs no width per language. The buttons
+  sit `--wt-space-4` below the preview.
 - **The preview's Light and Dark panels are painted from the draft inside the card and nowhere
   else** (`apps/dashboard/src/widgets/theme-preview.ts`). Each panel is a theme root inside the
   preview's shadow root, painted by a constructed sheet adopted into that shadow root only. The draft
@@ -4025,7 +4028,8 @@ slice 5), built with `settingsCard` and `settingsRows`:
 - **A readability warning is drawn with the warning icon in `--wt-color-warning`, never as a field
   error**, and never disables Save. A brand-colour warning with a fix carries the fix as a button
   below it, and a fix taken shows its shade with Undo; two or more warnings with fixes add a Fix all
-  line.
+  line. The "·" before Undo travels with Undo: when Undo wraps onto a line of its own the "·" is
+  clipped away, so no line starts with it.
 - **Save with a warning opens the Hard to read dialog**
   (`apps/dashboard/src/widgets/hard-to-read-dialog.ts`): one line per warning, then Back, Save
   anyway and, only when fixing all would leave no warning, Fix and save. With Fix and save offered
