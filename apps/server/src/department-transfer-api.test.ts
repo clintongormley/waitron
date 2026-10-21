@@ -50,7 +50,7 @@ import { closeParty, openParty } from "./testing/party-close-fixture.js";
 import { mergeCheckedBills } from "./testing/bill-action-fixture.js";
 import { takeIntoParty } from "./testing/move-bill-fixture.js";
 import { LiveEvents, changeSubscriber } from "./live-api.js";
-import { decimal } from "@waitron/shared";
+import { AppError, decimal } from "@waitron/shared";
 import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
 import { requestCfg } from "./request-config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -1284,6 +1284,28 @@ describe("department transfer live invalidation", () => {
           await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, personId));
       }
     });
+
+  it("closes the stream without session-invalid when checking the session meets a full disk", async () => {
+    const f = await ready();
+    const response = await app.request(path, { headers: { cookie: f.desk.cookie } });
+    expect(response.status).toBe(200);
+    const reader = response.body!.getReader();
+    const before = logged.length;
+    const writeLock = vi
+      .spyOn(suite.db, "withWriteLock")
+      .mockRejectedValueOnce(new AppError("storage.disk_full", {}));
+    try {
+      await reader.read();
+      liveEvents.publish({ resources: [{ type: "department_transfer_requests" }] });
+      const next = await reader.read();
+      expect(next.value === undefined ? "" : text(next.value)).not.toContain("session-invalid");
+      expect(next.done).toBe(true);
+      expect(logged.slice(before)).toContain("live.stream_failed");
+    } finally {
+      writeLock.mockRestore();
+      await reader.cancel();
+    }
+  });
 
   it("checks an idle stream on heartbeat without refreshing the device sighting", async () => {
     const f = await ready();

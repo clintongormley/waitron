@@ -12,7 +12,7 @@ export function reportOptionalDocumentFailure(event: OptionalDocumentDiagnostic)
   console.warn("receipt.optional_document_failed", event);
 }
 
-/** Only a body failure whose savepoint was rolled back may be omitted; engine settlement failures escape. */
+/** Only a body failure whose savepoint was rolled back may be omitted; when the engine ended the transaction the store throws a different error, and that one escapes. */
 export async function optionalDocument<T>(
   tx: Transaction,
   operation: OptionalDocumentDiagnostic["operation"],

@@ -12,7 +12,13 @@ import {
 } from "@waitron/db";
 import { authorize, canUseDeviceProfile, persons } from "@waitron/identity";
 import { readRawJsonBody } from "@waitron/server-kit";
-import { AppError, isUuid, centsToDecimal, thousandthsToDecimal } from "@waitron/shared";
+import {
+  AppError,
+  diskFullIn,
+  isUuid,
+  centsToDecimal,
+  thousandthsToDecimal,
+} from "@waitron/shared";
 import { asObject } from "./bill-payments-api.js";
 import { assertDeviceStillProven, assertProfileAction } from "./device-session.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -118,7 +124,7 @@ export function mountDepartmentTransferApi(
               try {
                 await authenticate();
               } catch (error) {
-                if (error instanceof AppError)
+                if (error instanceof AppError && !diskFullIn(error))
                   await stream.writeSSE({
                     event: "session-invalid",
                     data: JSON.stringify({ code: error.code }),
