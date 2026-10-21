@@ -120,7 +120,7 @@ come after the list above:
   upgrades and recovery_): upgrade testing with rows the product itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
   installer (B3); what the box does when a part fails but it can still sell (A798-B, the build:
   [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md) revision 6; every owner
-  question answered; slice 1 of 10 built).
+  question answered; slices 1 and 2 of 10 built).
 - **The displays and the printers walked at the real box** (_The till, devices and table service_;
   _Printers, the print agent and receipts_) — till, handheld and KDS through
   [ui-review.md](ui-review.md), and the first physical print since #327.
@@ -5175,10 +5175,31 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   a planned "re-trust every device" event — devices pair again in place of their old entries, and the
   old name only points at the new one for 14 days. Five slices; no migration.
 
-- **A backup run that is cut off leaves a plaintext copy of the whole venue database** (owner-only file)
-  and its encrypted copy in `<state>/backup-staging`: only the run's own `finally` deletes them
-  (`apps/server/src/backup-sweep.ts`), and nothing sweeps the folder at start. Read, not run. Found by
-  A798, whose "Liberar espacio" deletes them. [Design §11](superpowers/specs/2026-10-19-a798-degraded-trading-design.md#11-found-while-reading-outside-this-design)
+- **A backup run that is cut off leaves a plaintext copy of the whole venue database**, and its
+  encrypted copy, in `<state>/backup-staging` until a start deletes them under 256 MiB free or after
+  a start that failed on a full disk; nothing else in the server deletes them, and a box reset
+  does. **Owner question:** should every start delete them, whatever the free space? Found by A798.
+  [Detail](backlog/box.md#a-backup-run-that-is-cut-off-leaves-a-plaintext-copy-of-the-whole-venue-database)
+
+- **A box whose first setup was retired into a new workspace keeps that workspace's backup staging
+  through the clean-up before the count.** Accepted for A798-B slice 2.
+  [Detail](backlog/box.md#a-box-whose-first-setup-was-retired-into-a-new-workspace-keeps-that-workspaces-backup-staging-through-the-clean-up-before-the-count)
+
+- **On a full disk, a box whose kept certificates cannot be used shows the connection set-up page,
+  with no word of the full disk.** The connection-bootstrap branch (`needsConnectionBootstrap`,
+  `apps/server/src/node-entry.ts`) returns before the count check, as A798-B slice 2's plan
+  decided. Its pre-merge review ran `runEntry` on a filled 32 MiB HFS+ image with an empty TLS
+  folder, and `/` answered "Set up secure connection" and did not contain "disk is full". Open:
+  should that page also say the disk is full and show the free space?
+
+- **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
+  (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; A798-B slice 2 names `ENOSPC`
+  a full disk at start only (`fullDiskFailure`, `apps/server/src/boot-failure.ts`), because adding
+  it to `diskFullIn` changes every route's answer. A798-B slice 5's watch is the natural home.
+
+- **The recovery page served at once on a full disk does not notice freed space by itself.** It
+  shows the free space as it is on every load, but only Retry, which restarts the app, tries the
+  start again (A798-B slice 2).
 
 - **Migrating a box drops the change-feed triggers one statement at a time, outside a
   transaction.** `removeChangeFeed` (`packages/db/src/change-feed.ts`, called first by
@@ -5369,7 +5390,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   2026-10-20). It adds a module seat for staff notices and one
   migration in the Veri*Factu module's set. Slice 1 of 10 (a full disk reported as
   `storage.disk_full`; nothing a body writes through the write queue after one that ended its
-  transaction can commit, except as the entry below says) landed in #1936; slice 2 is next. Open asesor questions:
+  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 is next. Open asesor questions:
   [Q51](compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21)
   and
   [Q52](compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21).

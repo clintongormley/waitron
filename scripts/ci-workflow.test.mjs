@@ -67,6 +67,7 @@ const STREAM_TEST_FILES = [
   "src/aws-send-gate.e2e.test.ts",
   "src/aws-rehearsal-interrupt.e2e.test.ts",
   "src/testing/s3-test-server.test.ts",
+  "src/start-full-disk.e2e.test.ts",
 ];
 const STREAM_BINARY_INSTALLERS = [
   "node scripts/setup-litestream.mjs",
@@ -1603,7 +1604,7 @@ describe("the test shards", () => {
         id: STREAM_JOB,
         step: streamStep.slice(
           streamStep.findIndex((l) =>
-            /- name: Run the tests that need Litestream or versitygw$/.test(l),
+            /- name: Run the tests that need Litestream, versitygw or a small filesystem$/.test(l),
           ),
         ),
       },
@@ -2010,12 +2011,13 @@ describe("the venue-service shards' browser start-up record", () => {
 });
 
 /**
- * The tests that need Litestream or versitygw (`STREAM_TEST_FILES`) run in a job of their own,
- * beside the apps/server shards: between them they need two downloaded binaries. Their blob joins
+ * The tests that need Litestream, versitygw or a small filesystem (`STREAM_TEST_FILES`) run in a
+ * job of their own, beside the apps/server shards: between them they need two downloaded binaries
+ * and a tmpfs the job mounts. Their blob joins
  * the server's coverage merge. Read from ci.yml as TEXT, so a step an `if:` switches off still
  * passes.
  */
-describe("the job of the tests that need Litestream or versitygw", () => {
+describe("the job of the tests that need Litestream, versitygw or a small filesystem", () => {
   const stream = () => job(STREAM_JOB);
   const streamText = () => stream().body.join("\n");
 
@@ -2059,6 +2061,24 @@ describe("the job of the tests that need Litestream or versitygw", () => {
     );
     expect(mtu, "no step runs `sudo ip link set dev lo mtu 1500`").toBeGreaterThan(-1);
     expect(mtu, "loopback's packet size must be set before the tests run").toBeLessThan(run);
+  });
+
+  it("mounts a small filesystem before it runs them, and names it to the tests", () => {
+    const body = stream().body;
+    const code = (line) => !line.trim().startsWith("#");
+    const run = body.findIndex((line) => code(line) && line.includes("test:shard"));
+    const mount = body.findIndex(
+      (line) =>
+        code(line) &&
+        /^\s*sudo mount -t tmpfs -o size=32m tmpfs "\$RUNNER_TEMP\/full-disk"\s*$/.test(line),
+    );
+    expect(mount, "no step mounts a 32m tmpfs at $RUNNER_TEMP/full-disk").toBeGreaterThan(-1);
+    expect(mount, "the small filesystem must be mounted before the tests run").toBeLessThan(run);
+    const stepStart = body.findLastIndex((line, at) => at < run && /^ {6}- /.test(line));
+    const runKey = body.findIndex((line, at) => at > stepStart && /^ {8}run:/.test(line));
+    expect(body.slice(stepStart, runKey)).toContain(
+      "          WAITRON_FULL_DISK_DIR: ${{ runner.temp }}/full-disk",
+    );
   });
 
   it("is the only job that installs the binaries", () => {

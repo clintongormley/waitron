@@ -12,6 +12,9 @@ function basicIsoStamp(now: Date): string {
     .replace(/\.\d+Z$/, "Z");
 }
 
+/** The folder each backup run makes in the staging folder for its encrypted copy. */
+export const BACKUP_ENCRYPT_DIR_PREFIX = "backup-encrypt-";
+
 /** The plaintext staging copy of the venue database, before encryption. */
 export function dumpFileName(now: Date): string {
   return `${BACKUP_KEY_PREFIX}${basicIsoStamp(now)}.dump`;

@@ -469,6 +469,18 @@ describe("curated operator text", () => {
     );
   });
 
+  it("says the box has already deleted what it could, in both languages", async () => {
+    const english = await pageFor("storage.disk_full");
+    expect(english).toContain(
+      escapeHtml("The box has deleted what it could make again, and that was not enough."),
+    );
+    const spanish = await pageFor("storage.disk_full", undefined, SPANISH);
+    expect(spanish).toContain(
+      escapeHtml("El equipo ha quitado lo que podía volver a crear, y no ha bastado."),
+    );
+    expect(spanish).toContain(escapeHtml("Pide a quien instaló este equipo"));
+  });
+
   it("names a removed or changed safeguard on the permanent records, in both languages", async () => {
     const english = await pageFor("append_only.triggers_changed");
     expect(english).toContain(
@@ -939,5 +951,133 @@ describe("a box the running server stopped", () => {
       lastFailureAt: "2026-10-11T10:00:00.000Z",
       refused: true,
     });
+  });
+});
+
+describe("the full-disk page's free space and uncounted start", () => {
+  const diskFull: RecoveryState = {
+    ...FRESH,
+    level: "recovery",
+    lastErrorCode: "storage.disk_full",
+  };
+
+  function appWith(extra: Partial<Parameters<typeof recoveryApp>[0]>, base = diskFull) {
+    return recoveryApp({ state: base, logDir: "/nonexistent", onRetry: vi.fn(), ...extra });
+  }
+
+  async function bodyOf(app: Hono, acceptLanguage = "en-GB"): Promise<string> {
+    return await (
+      await app.request("/", { headers: { "Accept-Language": acceptLanguage } })
+    ).text();
+  }
+
+  it("shows the free space on the box's disk in each language", async () => {
+    const some = appWith({ freeSpace: async () => 1_228_800 });
+    expect(await bodyOf(some)).toContain(
+      `<p>${escapeHtml("Free space on the box's disk: 1.2 MB.")}</p>`,
+    );
+    expect(await bodyOf(some)).toContain(
+      `<p>${escapeHtml("Level: recovery. Failed 0 times.")}</p>\n<p>${escapeHtml("Free space on the box's disk: 1.2 MB.")}</p>`,
+    );
+    expect(await bodyOf(some, SPANISH)).toContain(
+      `<p>${escapeHtml("Espacio libre en el disco del equipo: 1,2 MB.")}</p>`,
+    );
+    expect(await bodyOf(appWith({ freeSpace: async () => 0 }))).toContain(
+      `<p>${escapeHtml("Free space on the box's disk: 0 MB.")}</p>`,
+    );
+    expect(await bodyOf(appWith({ freeSpace: async () => 300_000_000 }))).toContain(
+      `<p>${escapeHtml("Free space on the box's disk: 300 MB.")}</p>`,
+    );
+    const unknown = appWith({ freeSpace: async () => null });
+    expect(await bodyOf(unknown)).toContain(
+      `<p>${escapeHtml("Free space on the box's disk: unknown.")}</p>`,
+    );
+    expect(await bodyOf(unknown, SPANISH)).toContain(
+      `<p>${escapeHtml("Espacio libre en el disco del equipo: desconocido.")}</p>`,
+    );
+  });
+
+  it("reads free space again on every request", async () => {
+    const freeSpace = vi
+      .fn<() => Promise<number | null>>()
+      .mockResolvedValueOnce(5_000_000)
+      .mockResolvedValueOnce(9_000_000);
+    const app = appWith({ freeSpace });
+    expect(await bodyOf(app)).toContain(escapeHtml("Free space on the box's disk: 5 MB."));
+    expect(await bodyOf(app)).toContain(escapeHtml("Free space on the box's disk: 9 MB."));
+    expect(freeSpace).toHaveBeenCalledTimes(2);
+  });
+
+  it("still serves the page when reading free space fails", async () => {
+    const app = appWith({ freeSpace: () => Promise.reject(new Error("statfs failed")) });
+    const res = await app.request("/");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain(escapeHtml("Free space on the box's disk: unknown."));
+  });
+
+  it("logs a free-space read that fails or finds nothing, and serves the same page", async () => {
+    const quiet = await bodyOf(appWith({ freeSpace: async () => null }));
+    const log = vi.fn();
+    const failing = appWith({
+      freeSpace: () => Promise.reject(Object.assign(new Error("statfs failed"), { code: "EIO" })),
+      log,
+    });
+    const res = await failing.request("/");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(quiet);
+    expect(log).toHaveBeenCalledWith("warn", "recovery.free_space_unreadable", { errno: "EIO" });
+
+    const nothing = vi.fn();
+    expect(await bodyOf(appWith({ freeSpace: async () => null, log: nothing }))).toBe(quiet);
+    expect(nothing).toHaveBeenCalledWith("warn", "recovery.free_space_unreadable", {
+      errno: null,
+    });
+
+    const read = vi.fn();
+    await bodyOf(appWith({ freeSpace: async () => 0, log: read }));
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("shows no free-space line when none is given", async () => {
+    const english = await pageFor("storage.disk_full");
+    const spanish = await pageFor("storage.disk_full", undefined, SPANISH);
+    for (const body of [english, spanish]) {
+      expect(body).not.toContain("Free space");
+      expect(body).not.toContain("Espacio libre");
+    }
+  });
+
+  it("keeps /recovery-api/status to its named fields", async () => {
+    const app = appWith(
+      { freeSpace: async () => 1_228_800 },
+      { ...diskFull, holderKind: "server" },
+    );
+    const json = (await (await app.request("/recovery-api/status")).json()) as object;
+    expect(Object.keys(json).sort()).toEqual([
+      "failures",
+      "holderKind",
+      "lastErrorCode",
+      "lastFailureAt",
+      "level",
+      "refused",
+    ]);
+  });
+
+  it("says a start that could not be counted was not counted, in both languages", async () => {
+    const app = appWith({ uncounted: true });
+    const english = await bodyOf(app);
+    expect(english).toContain(
+      `<p>${escapeHtml("Level: recovery. This start was not counted: the disk is full.")}</p>`,
+    );
+    expect(english).not.toContain("Failed 0 times");
+    const spanish = await bodyOf(app, SPANISH);
+    expect(spanish).toContain(
+      `<p>${escapeHtml("Nivel: recovery. Este arranque no se ha contado: el disco está lleno.")}</p>`,
+    );
+    expect(spanish).not.toContain("Intentos fallidos: 0");
+    const refused = appWith({ uncounted: true }, { ...diskFull, refused: true });
+    const stopped = await bodyOf(refused);
+    expect(stopped).toContain("Stopped while running.");
+    expect(stopped).not.toContain("This start was not counted");
   });
 });

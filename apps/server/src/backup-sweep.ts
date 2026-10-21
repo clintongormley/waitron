@@ -17,6 +17,7 @@ import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import {
+  BACKUP_ENCRYPT_DIR_PREFIX,
   BACKUP_KEY_PREFIX,
   backupArchiveKey,
   dumpFileName,
@@ -163,7 +164,7 @@ export async function runOnce(
       { kind: "file", name: "db.dump", path: staged },
       ...metadata.slice(1).map((entry) => ({ kind: "bytes" as const, entry })),
     ];
-    encryptedDir = await mkdtemp(join(deps.stagingDir, "backup-encrypt-"));
+    encryptedDir = await mkdtemp(join(deps.stagingDir, BACKUP_ENCRYPT_DIR_PREFIX));
     const ciphertext = join(encryptedDir, "artifact");
     await encryptArtifactFile(
       packArchiveStream(entries),

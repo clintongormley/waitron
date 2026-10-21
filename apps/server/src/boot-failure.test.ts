@@ -3,8 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { AppError, sqliteFailureOf } from "@waitron/shared";
-import { UNREACHABLE_RESULT_CODES, classifyBootFailure } from "./boot-failure.js";
+import { AppError, MAX_CAUSE_DEPTH, sqliteFailureOf } from "@waitron/shared";
+import {
+  UNREACHABLE_RESULT_CODES,
+  classifyBootFailure,
+  classifyStartFailure,
+  fullDiskFailure,
+  startFailureCode,
+} from "./boot-failure.js";
 
 function wrapped(errcode: number): Error {
   return new Error("Failed query", { cause: Object.assign(new Error("driver"), { errcode }) });
@@ -163,5 +169,124 @@ describe("classifyBootFailure", () => {
   it("classifies a non-error value as unknown rather than throwing", () => {
     expect(classifyBootFailure("boom")).toBe("unknown");
     expect(classifyBootFailure(undefined)).toBe("unknown");
+  });
+});
+
+const MIB = 1024 * 1024;
+
+function missingFolderError(): unknown {
+  return realSqliteError((dir) => {
+    new DatabaseSync(join(dir, "missing", "venue.db"), { readOnly: true });
+  });
+}
+
+function engineError(errcode: number, message: string): Error {
+  return Object.assign(new Error(message), { errcode, code: "ERR_SQLITE_ERROR" });
+}
+
+/** The engine error a nearly full disk raised at start, measured on HFS+, APFS and Linux on 2026-10-21. */
+function diskIoError(): Error {
+  return engineError(4874, "disk I/O error");
+}
+
+describe("fullDiskFailure", () => {
+  it("takes the engine's own full-disk code whatever the free space", () => {
+    expect(fullDiskFailure(engineError(13, "database or disk is full"), 1_000_000_000)).toBe(true);
+    expect(fullDiskFailure(new AppError("storage.disk_full", {}), null)).toBe(true);
+  });
+
+  it("takes 14, the I/O family and ENOSPC only under 16 MiB", () => {
+    const missing = missingFolderError();
+    expect(sqliteFailureOf(missing)?.errcode).toBe(14);
+    expect(fullDiskFailure(missing, 16_777_215)).toBe(true);
+    expect(fullDiskFailure(missing, 16_777_216)).toBe(false);
+
+    const io = new Error("Failed query", { cause: diskIoError() });
+    expect(fullDiskFailure(io, 0)).toBe(true);
+    expect(fullDiskFailure(io, 100 * MIB)).toBe(false);
+
+    const enospc = new Error("start", {
+      cause: new Error("open", {
+        cause: Object.assign(new Error("ENOSPC: no space left on device, open"), {
+          code: "ENOSPC",
+        }),
+      }),
+    });
+    expect(fullDiskFailure(enospc, 0)).toBe(true);
+    expect(fullDiskFailure(enospc, null)).toBe(false);
+  });
+
+  it("does not take a permission refusal or a busy lock for a full disk", () => {
+    expect(fullDiskFailure(engineError(1544, "attempt to write a readonly database"), 0)).toBe(
+      false,
+    );
+    expect(fullDiskFailure(Object.assign(new Error("open"), { code: "EACCES" }), 0)).toBe(false);
+    expect(fullDiskFailure(engineError(5, "database is locked"), 0)).toBe(false);
+    expect(fullDiskFailure(engineError(26, "file is not a database"), 0)).toBe(false);
+  });
+
+  it("does not look for ENOSPC past the cause-chain depth limit", () => {
+    const chainWithEnospcAt = (depth: number): Error => {
+      let error: Error = Object.assign(new Error("ENOSPC: no space left on device"), {
+        code: "ENOSPC",
+      });
+      for (let i = 0; i < depth; i += 1) error = new Error(`layer ${i}`, { cause: error });
+      return error;
+    };
+    expect(fullDiskFailure(chainWithEnospcAt(MAX_CAUSE_DEPTH - 1), 0)).toBe(true);
+    expect(fullDiskFailure(chainWithEnospcAt(MAX_CAUSE_DEPTH), 0)).toBe(false);
+  });
+
+  it("returns false on a self-referencing cause", () => {
+    const looped = new Error("loop");
+    (looped as { cause?: unknown }).cause = looped;
+    expect(fullDiskFailure(looped, 0)).toBe(false);
+  });
+});
+
+describe("classifyStartFailure", () => {
+  it("names a missing folder by its own code when there is room", () => {
+    const missing = missingFolderError();
+    expect(classifyStartFailure(missing, 100 * MIB)).toBe("provisioning.database_unreachable");
+    expect(classifyStartFailure(missing, null)).toBe("provisioning.database_unreachable");
+  });
+
+  it("names a database refused on a nearly full disk a full disk", () => {
+    expect(classifyStartFailure(missingFolderError(), 4096)).toBe("storage.disk_full");
+    expect(classifyStartFailure(diskIoError(), 8192)).toBe("storage.disk_full");
+    expect(classifyStartFailure(diskIoError(), 100 * MIB)).toBe("unknown");
+  });
+
+  it("leaves every other failure as it was", () => {
+    const noTable = realSqliteError((dir) => {
+      const db = new DatabaseSync(join(dir, "venue.db"));
+      db.exec("select * from tenants");
+    });
+    expect(classifyStartFailure(noTable, 0)).toBe("provisioning.schema_mismatch");
+    const migration = Object.assign(
+      new AppError("migrations.apply_failed", { set: "__drizzle_migrations" }),
+      { cause: diskIoError() },
+    );
+    expect(classifyStartFailure(migration, 0)).toBe("migrations.apply_failed");
+    expect(classifyStartFailure(new Error("boom"), 0)).toBe("unknown");
+  });
+
+  it("keeps a full disk the engine already named", () => {
+    expect(classifyStartFailure(engineError(13, "database or disk is full"), 1_000_000_000)).toBe(
+      "storage.disk_full",
+    );
+  });
+});
+
+describe("startFailureCode", () => {
+  it("reads the free space of the lowest folder", async () => {
+    const roomy = "/roomy";
+    const full = "/full";
+    const statfs = (lowFor: string | null) => (path: string) =>
+      Promise.resolve({ bavail: path === lowFor ? 4096 : 100 * MIB, frsize: 1 });
+    expect(await startFailureCode(diskIoError(), [roomy, full], statfs(full))).toBe(
+      "storage.disk_full",
+    );
+    expect(await startFailureCode(diskIoError(), [roomy, full], statfs(null))).toBe("unknown");
   });
 });

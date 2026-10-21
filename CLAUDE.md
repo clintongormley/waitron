@@ -511,6 +511,13 @@ called weaker than its name, the topic file lists what it does not see.
 - **A refusal under result code 1811 is identified by its words, never by `isRefusal` alone.** An
   `ON DELETE RESTRICT` key and every trigger's `RAISE(ABORT)` share the code; `restrictRefused` and `triggerRaised` (`packages/db/src/constraint-target.ts`) read the message
   too. Nothing guards it.
+- **A full disk is not one error code**: measured 13, 14, 4874 and the system's `ENOSPC`, by
+  filesystem and by step, and 14 also comes from a missing folder; the start names one with
+  `fullDiskFailure` (`apps/server/src/boot-failure.ts`) — 13 always, the others only under 16 MiB
+  free. Cost: a database refused on a nearly full disk was recorded `unknown`. Guard: its cases in
+  `apps/server/src/boot-failure.test.ts`, weaker than the rule — stubbed errors, and no real-disk
+  case reaches `ENOSPC`. Receipt:
+  [conventions-data.md](docs/developers/conventions-data.md#a-full-disk-is-not-one-error-code).
 - **One process owns a venue folder at a time.** `openVenueStore` holds `venue.lock` and refuses a
   second PROCESS (`provisioning.database_in_use`); opens inside one process share the hold. A tool
   documented to run beside the server passes `exclusive: false`; a command that changes the
@@ -684,6 +691,12 @@ browser test** — most of these rules exist because a test passed while proving
   `ci.yml` as TEXT, so install
   commands left only in a YAML comment, or in a step an `if:` switches off, pass it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#the-stream-loop-test-skips-locally-without-its-two-binaries-and-a-skip-reads-as-a-pass).
+- **The full-disk start tests need a small real filesystem**: on macOS they make one with
+  `hdiutil`; on Linux they read `WAITRON_FULL_DISK_DIR`, are SKIPPED locally without it, and FAIL
+  in CI. Cost avoided: a local Linux skip reads as a pass. An interrupted macOS run can leave its
+  image attached, and `pnpm reap` does not detach it.
+  Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem).
 - **On Vitest 4.1.11 a browser's `connectTimeout` is read only from the OUTER config's
   `test.browser` block**; the command-line flag and a project's own `browser` block are ignored
   without a word. Nothing guards it. Cost: A527's first forced-failure control passed. Receipt:

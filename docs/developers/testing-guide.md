@@ -1120,6 +1120,135 @@ reaches its bucket over a real network, not over loopback; the box's own path wa
 and its restore keeps its two-minute no-progress bound (`RESTORE_STALL_MS`,
 `packages/stream/src/restore.ts`).
 
+## The full-disk start tests run on a small filesystem
+
+A box whose disk fills has to start well enough to say so: delete what it can make again, then
+either boot or show the recovery page under `storage.disk_full` (A798-B slice 2). The unit tests in
+`apps/server/src/start-space.test.ts`, `boot-failure.test.ts`, `node-entry.test.ts`,
+`node-entry.full-disk.test.ts`, `node-entry.full-disk-order.test.ts` and
+`recovery-surface.test.ts` test the product code with stubbed free space and stubbed errors. Every
+product line the slice added must be covered by them, never by the real-disk file alone, because
+that file is skipped on a Linux machine without a small filesystem. In CI the real-disk file's
+coverage joins the server's merge too. What only a real disk can show is which error the engine and
+the system actually raise when the disk is full, and whether the start then does the right thing.
+That is `apps/server/src/start-full-disk.e2e.test.ts`, and it needs a filesystem small enough to
+fill in a second.
+
+**Where the filesystem comes from** (`apps/server/src/testing/full-disk.ts`, `openSmallDisk`):
+
+- With `WAITRON_FULL_DISK_DIR` set, the tests use that folder. They refuse it when its filesystem
+  holds more than 64 MiB (`blocks × frsize` from `statfs`), so a typo naming a large disk is
+  refused, and they work inside a fresh `wt-full-disk-*` folder there that they remove at the end.
+  The limit refuses a large filesystem; it does not check that the folder is the one you meant.
+- Without it, on macOS, they make their own: a 32 MiB HFS+ image, `disk.dmg`, in a fresh
+  `wt-full-disk-*` folder under the system's temporary folder, created with `hdiutil create -size
+  32m -fs HFS+ -volname wt-full-disk -layout NONE` and attached at `mnt` beside it with
+  `hdiutil attach -nobrowse -noautoopen`. No `sudo` is needed (F1 below). At the end they detach it
+  with `-force` and remove the folder. HFS+ rather than APFS because APFS refused writes while
+  reporting about 1.2 MB free, and let a new `recovery.json` through on a full disk (F1, F2), where
+  HFS+ reported 0 free like both Linux filesystems tried.
+- Otherwise, which means Linux without the variable, there is no small filesystem. The cases are
+  SKIPPED, with `start-full-disk tests SKIPPED: <reason>` printed (hidden under an AI agent unless
+  `AI_AGENT` and `CLAUDECODE` are unset), and **a skip reads as a pass**: the run prints
+  `Tests  7 skipped (7)` and exits 0. With `CI=true` or `WAITRON_REQUIRE_FULL_DISK=1` the same run
+  FAILS instead, each case with `full-disk tests cannot run: <reason>`. This is the stream loop
+  test's trap again. Measured 2026-10-21 on macOS by pointing the variable at `/tmp`, whose
+  filesystem is far over the limit: `Tests  7 skipped (7)`; with `WAITRON_REQUIRE_FULL_DISK=1` added,
+  every case failed with that message (the second at Task 5a, when the file had three cases).
+
+The tests fill the filesystem with one file, `filler`, written in 64 KiB, then 512-byte, then
+1-byte writes until the system refuses with `ENOSPC` (any other refusal throws), and `fill(leave)`
+then gives back `leave` bytes by shortening it. The free-space floor in these tests is 8 MiB, set
+through `freeSpaceFloor`, because a 32 MiB filesystem can never have the product's 256 MiB free.
+
+**In CI** the file runs in `test-server-stream`, which already uses `sudo` for loopback's packet
+size. A step before the tests mounts a 32 MiB tmpfs at `$RUNNER_TEMP/full-disk` and gives it to the
+runner's user, the run step names it in `WAITRON_FULL_DISK_DIR`, and every `test-server` shard
+excludes the file. Guard: the stream job's cases in `scripts/ci-workflow.test.mjs`, weaker than
+their name: they read `ci.yml` as text, so a step an `if:` switches off still passes them. Before the
+branch's first CI run, the mount had been run only in a privileged Linux container on Docker
+Desktop during the slice's review (2026-10-21), where the 32 MiB tmpfs mounted and the fill reached
+`ENOSPC`. On a GitHub runner the first run (PR #1941, run 39600285845, job `test-server-stream`,
+2026-10-21) printed `✓ src/start-full-disk.e2e.test.ts (7 tests) 1487ms` on the 32 MiB tmpfs, with
+`WAITRON_FULL_DISK_DIR: /home/runner/work/_temp/full-disk`; the job's whole run printed
+`Tests  36 passed (36)`.
+
+**A run you interrupt can leave its image attached.** A run stopped with Ctrl-C during the
+slice's review (2026-10-21) left its image still attached afterwards. `pnpm reap` does not look for
+it. Find it, detach it by its mount path, then remove its folder:
+
+```bash
+hdiutil info | grep wt-full-disk      # image-path …/wt-full-disk-XXXXXX/disk.dmg, and /dev/diskN …/wt-full-disk-XXXXXX/mnt
+hdiutil detach <mount>                # the …/mnt path from the /dev/diskN line; add -force if it reports busy
+rm -rf <the wt-full-disk-XXXXXX folder above it>
+```
+
+With `WAITRON_FULL_DISK_DIR` set, an interrupted run leaves a `wt-full-disk-*` folder, filler
+included, inside that filesystem instead; delete it.
+
+**What the cases show, on HFS+.** Run 2026-10-21 on macOS 26.6.2, Node v26.11.1, Vitest 4.1.11,
+`pnpm --filter @waitron/server exec vitest run src/start-full-disk.e2e.test.ts`: `Tests  7 passed
+(7)`.
+
+- A start whose leftovers free enough deletes rotated logs `waitron.log.2` to `.5`, a crash report
+  eight days old and a 2 MiB file in `backup-staging`, keeps `waitron.log.1`, counts itself and
+  boots. `recovery.lock` and `venue.lock` keep their inodes.
+- A start with nothing to delete serves the recovery page at once: over HTTPS, trusting the box's
+  own CA, `GET /` answered 200 with the full-disk title, the sentence "The box has deleted what it
+  could make again, and that was not enough." and "Free space on the box's disk: 0 MB.";
+  `recovery.json` was byte for byte what it was before, and both locks kept their inodes. After the
+  filler is removed, the same folder boots.
+- A box whose first setup finished gets the full-disk page, not first-setup resolution
+  (`/setup-api/status` answered 404), and boots once there is room.
+- A venue folder on the full filesystem, its state folder elsewhere, with 8 KiB and with 16 KiB
+  left: the start rejects and records `storage.disk_full`. Read through a temporary log at Task 5b:
+  the 8 KiB row failed with errcode 14 (`unable to open database file`) and the 16 KiB row with
+  4874 (`disk I/O error`). F14 below recorded `ENOSPC` on the lock's holder file at 8 KiB; that did
+  not happen here, so **no real-disk case drives the `ENOSPC` branch today**. It rests on the
+  `fullDiskFailure` unit cases in `boot-failure.test.ts`.
+- A commit on a full disk, through `openVenueStore`, 16 KiB left: a 64 KiB insert ran (held in
+  memory), the commit was refused `storage.disk_full`, the table still held only the row committed
+  before, and once there was room the next transaction committed. This is the at-commit case slice
+  1 could not reach with a page limit.
+
+**The receipts behind the design** are the plan's
+([plan, "Measured for this plan"](../superpowers/plans/2026-10-21-a798-2-full-disk-at-start.md#measured-for-this-plan)),
+run 2026-10-21 on macOS 26.6.2 with Node v26.11.1, and on Linux in Docker 29.3.0 (Docker Desktop's
+kernel `6.12.76-linuxkit`, image `node:26.11.1-slim`, as its unprivileged `node` user in a
+`--privileged` container that mounted the filesystem). The probe scripts were kept outside the
+repository; the plan names each and how it ran.
+
+- F1. `hdiutil create -size 16m -fs HFS+ -volname <n> -layout NONE <file>.dmg -quiet` and
+  `hdiutil attach <file>.dmg -mountpoint <dir> -nobrowse -noautoopen -quiet` both exited 0 as an
+  ordinary user, and the same with `-fs APFS`. Filled until `ENOSPC`, free space read 0 on HFS+,
+  Linux tmpfs (`mount -t tmpfs -o size=16m`) and Linux ext4 (a loop-mounted 16 MiB image), and
+  1,228,800 bytes on APFS.
+- F2. The failure count on a full disk, through the real `updateRecoveryState`: HFS+ errcode 14 at
+  `begin immediate` on the existing `recovery.lock`; tmpfs and ext4 (engine only) errcode 13; APFS
+  took the lock and the new file and failed at the rename with `ENOSPC`.
+- F5. The venue lock and the database on a full disk: HFS+ errcode 14 for the lock, the open and a
+  plain read; APFS 4874 at the open; tmpfs and ext4 (engine only) 13 for the lock and 4874 for a
+  read.
+- F6. The engine alone, with nothing opening the database first: with 8 KiB free on HFS+, tmpfs
+  and ext4 the lock was `ok` and the open failed with 4874. This is not the order a start meets;
+  F11 and F14 are.
+- F8. A 64 KiB insert under `withWriteLock` through slice 1's store, HFS+ with 16 KiB left and with
+  0, and APFS: the statement `ok`, the transaction rejected `storage.disk_full`, only the earlier row
+  kept. tmpfs and ext4, engine only: the statement `ok`, the commit errcode 13, nothing kept.
+- F11. The order a finished-setup box meets, from a nearly full disk: on HFS+ the inspection's
+  read-only open failed with 4874 at 4 to 16 KiB free and was `ok` at 32 KiB, while the count and
+  the venue lock failed with 14 up to 32 KiB; all `ok` from 64 KiB. tmpfs the same with 13 where
+  HFS+ printed 14; ext4 failed up to 8 KiB and was `ok` from 16 KiB.
+- F14. Today's start, unclaimed, venue folder nearly full, state folder elsewhere, on HFS+: `ENOSPC`
+  on the holder file at 8 KiB, 4874 at 16 to 48 KiB, every one recorded `unknown` before this slice.
+  The 8 KiB result did not repeat in the real-disk file (above).
+
+**Weaker than its name.** The file runs on HFS+ on a Mac and on tmpfs in CI, never on the box's
+ext4 under Docker, and never as the image's own user. ext4 with 1 KiB blocks opened the database
+with 16 KiB free where tmpfs refused it at 24 KiB (F6, F11), so the rows that leave a few KiB are
+written for HFS+ and tmpfs. Every fill is one filler file; a real box fills with Docker images, the
+Litestream folder and backups, and none of that was reproduced.
+
 ## A sale can wait behind Litestream's own checkpoint
 
 CLAUDE.md §5 states the rule; these are its figures. SQLite writes each change first to a side

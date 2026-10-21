@@ -33,6 +33,7 @@ import type { BackupDestination, StorageBackend } from "./storage-backend.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { realSleep } from "./loop.js";
 import type { Logger } from "./logger.js";
+import { BACKUP_STAGING_DIR } from "./start-space.js";
 import "./errors.js";
 
 /** Where a destination is and which access key id it uses, never the secret that opens it. */
@@ -245,7 +246,7 @@ export class BackupSupervisor {
         resolvers: {},
         stateDir: this.#deps.stateDir,
         venueDir: this.#deps.venueDir,
-        stagingDir: join(this.#deps.stateDir, "backup-staging"),
+        stagingDir: join(this.#deps.stateDir, BACKUP_STAGING_DIR),
         archive: (outFile) => venue.venue.archiveTo(outFile),
         stagingEstimateBytes: () => venueStagingEstimate(this.#deps.venueDir),
         recoveryKey: cfg.recoveryKey,

@@ -36,6 +36,7 @@ import { withRecoveryLock } from "./recovery-lock.js";
 import {
   afterFailure,
   cleared,
+  fullDiskAtStart,
   readRecoveryState,
   stayedUpClear,
   updateRecoveryState,
@@ -51,7 +52,10 @@ import { runStagedReset, type StagedResetDeps } from "./reset-request.js";
 import { clearReplacedDatabases } from "./restore.js";
 import { loadCloudOrigin } from "./cloud-client.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
-import { classifyBootFailure } from "./boot-failure.js";
+import { fullDiskFailure, startFailureCode } from "./boot-failure.js";
+import { errnoOf } from "./errno.js";
+import type { Statfs } from "./free-bytes.js";
+import { START_FREE_SPACE_FLOOR, freeSpaceAtStart, lowestFreeBytes } from "./start-space.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { redactSecrets } from "./redact-secrets.js";
 import "./errors.js";
@@ -110,6 +114,11 @@ export interface EntryDeps {
    */
   migrationsRoot?: string;
   exit?: (code: number) => void;
+  /** Below this many free bytes the start deletes what it can make again; defaults to
+   *  `START_FREE_SPACE_FLOOR`. */
+  freeSpaceFloor?: number;
+  /** Reads a folder's filesystem; defaults to the real `statfs`. */
+  statfs?: Statfs;
 }
 
 /* v8 ignore start -- the real process binding; every test supplies its own `exit` instead */
@@ -138,8 +147,10 @@ function changeState(
 /**
  * Persist the escalation state, logging a write failure rather than letting it become the outcome:
  * on the failure path the boot's own error is what matters, and in the stayed-up callback a
- * floating rejection would kill a healthy server. The pre-boot counter is the one write not routed
- * through here, and is allowed to throw: a box whose count cannot be written can never escalate.
+ * floating rejection would kill a healthy server. The pre-boot counter, and the write-back before
+ * it, are the writes not routed through here, and are allowed to throw: a box whose count cannot be
+ * written can never escalate. A full disk found below the free-space floor serves the page instead
+ * (`countWritable`).
  */
 async function persistState(
   deps: EntryDeps,
@@ -148,7 +159,10 @@ async function persistState(
   try {
     await changeState(deps, change);
   } catch (error) {
-    deps.log("warn", "recovery.state_write_failed", { errorCode: codeOf(error) });
+    deps.log("warn", "recovery.state_write_failed", {
+      errorCode: codeOf(error),
+      errno: errnoOf(error) ?? null,
+    });
   }
 }
 
@@ -260,6 +274,12 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
  *    this start's opens would create an empty one, and the next start would delete the folder
  *    holding the only copy. The clearing runs before the ahead check because that check's open
  *    creates a missing `venue.db`.
+ * 6. Below the floor, the start deletes what it can make again before first-setup resolution, whose
+ *    inspection opens the database.
+ * 7. Still below it, or below it in the folders first-setup resolution chose instead, the start
+ *    writes the count back unchanged before resolution's app or the page is served: a finished
+ *    setup's inspection fails on a full disk and would serve resolution (plan F4), and its
+ *    admission takes the venue lock before the count.
  *
  * `startServer` resolving is the signal rather than a healthy `/health`, because `/health` is 503
  * on a setup box by design, so a health-gated reset would drive every unprovisioned box into
@@ -274,6 +294,19 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     (deps.reportFailure ?? (() => {}))(argumentsRefused(deps.args));
     throw new AppError("server.entry_arguments_refused", {});
   }
+
+  const now = deps.now ?? (() => new Date());
+  const floor = deps.freeSpaceFloor ?? START_FREE_SPACE_FLOOR;
+  const space = await freeSpaceAtStart({
+    stateDir: deps.stateDir,
+    venueDir: deps.venueDir,
+    logDir: deps.logDir ?? join(deps.stateDir, "logs"),
+    floor,
+    now,
+    statfs: deps.statfs,
+    readVenueHolder: deps.readVenueHolder ?? readVenueHolder,
+    log: deps.log,
+  });
 
   const admission = await resolveFirstSetupEntry(
     deps,
@@ -301,6 +334,42 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     await deps.serveRecovery(new Hono(), { ...transport, bootstrapOnly: true });
     return;
   }
+
+  const rooted: EntryDeps = {
+    ...deps,
+    stateDir: admission.roots.stateDir,
+    venueDir: admission.roots.venueDir,
+    baseEnv: {
+      ...deps.baseEnv,
+      WAITRON_STATE_DIR: admission.roots.stateDir,
+      WAITRON_VENUE_DIR: admission.roots.venueDir,
+    },
+  };
+  const dirs = [rooted.stateDir, rooted.venueDir];
+  const moved = rooted.stateDir !== deps.stateDir || rooted.venueDir !== deps.venueDir;
+  const belowFloor =
+    space.belowFloor || (moved && ((await lowestFreeBytes(dirs, deps.statfs)) ?? floor) < floor);
+  let check: CountCheck;
+  if (belowFloor && !(check = await countWritable(rooted)).written) {
+    const exit = deps.exit ?? DEFAULT_EXIT;
+    await deps.serveRecovery(
+      recoveryApp({
+        state: fullDiskAtStart(await deps.readRecoveryState(rooted.stateDir), now()),
+        uncounted: true,
+        logDir: deps.logDir ?? join(rooted.stateDir, "logs"),
+        onRetry: async () => {
+          await persistState(rooted, cleared);
+          exit(0);
+        },
+        freeSpace: () => lowestFreeBytes(dirs, deps.statfs),
+        log: deps.log,
+      }),
+      transport,
+    );
+    deps.log("warn", "recovery.serving_disk_full", { freeBytes: check.freeBytes });
+    return;
+  }
+
   if (admission.kind === "resolution") {
     const port = httpPortFrom(deps.baseEnv);
     await deps.serveRecovery(admission.app, {
@@ -317,23 +386,48 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     return;
   }
 
-  const selected =
-    admission.roots.binding === null
-      ? deps
-      : {
-          ...deps,
-          stateDir: admission.roots.stateDir,
-          venueDir: admission.roots.venueDir,
-          baseEnv: {
-            ...deps.baseEnv,
-            WAITRON_STATE_DIR: admission.roots.stateDir,
-            WAITRON_VENUE_DIR: admission.roots.venueDir,
-          },
-        };
-  return admission.run(() => runAdmittedEntry(selected, transport));
+  const selected = admission.roots.binding === null ? deps : rooted;
+  return admission.run((venueHeld) => runAdmittedEntry(selected, transport, venueHeld));
 }
 
-async function runAdmittedEntry(deps: EntryDeps, transport: RecoveryServeOptions): Promise<void> {
+type CountCheck = { written: true } | { written: false; freeBytes: number | null };
+
+/**
+ * Writes `recovery.json` back unchanged through the count's own path. Only a failure a full disk
+ * explains, judged on free space read after it, is answered; any other is thrown.
+ */
+async function countWritable(deps: EntryDeps): Promise<CountCheck> {
+  try {
+    await changeState(deps, (current) => current);
+    return { written: true };
+  } catch (error) {
+    deps.log("warn", "recovery.state_write_failed", {
+      errorCode: codeOf(error),
+      errno: errnoOf(error) ?? null,
+    });
+    const freeBytes = await lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs);
+    if (fullDiskFailure(error, freeBytes)) return { written: false, freeBytes };
+    throw error;
+  }
+}
+
+const recordedCodes = new WeakMap<object, string>();
+
+/**
+ * The code a failed attempt classified its failure as, or undefined for a failure outside one.
+ * Reading free space again is no substitute: the deletion after a full disk can leave room, which
+ * would name the same failure something other than a full disk.
+ */
+export function recordedStartFailureCode(error: unknown): string | undefined {
+  return typeof error === "object" && error !== null ? recordedCodes.get(error) : undefined;
+}
+
+/** `venueHeld`: the caller holds `deps.venueDir`'s lock for the whole call. */
+async function runAdmittedEntry(
+  deps: EntryDeps,
+  transport: RecoveryServeOptions,
+  venueHeld: boolean,
+): Promise<void> {
   // Outside the recovery lock: it decides only whether this start boots or serves the page. Every change
   // below re-reads under the lock, so a write made since is kept rather than overwritten.
   const state = await deps.readRecoveryState(deps.stateDir);
@@ -356,6 +450,8 @@ async function runAdmittedEntry(deps: EntryDeps, transport: RecoveryServeOptions
           await persistState(deps, cleared);
           exit(0);
         },
+        freeSpace: () => lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs),
+        log: deps.log,
       }),
       {
         stateDir: deps.stateDir,
@@ -438,8 +534,23 @@ async function runAdmittedEntry(deps: EntryDeps, transport: RecoveryServeOptions
     // Both channels first, so the real reason survives even if the state write fails.
     const detail = failureDetail(error);
     (deps.reportFailure ?? (() => {}))(detail);
-    const code = classifyBootFailure(error);
+    const code = await startFailureCode(error, [deps.stateDir, deps.venueDir], deps.statfs);
     page("error", "server.boot_failed", { errorCode: code, detail });
+    if (code === "storage.disk_full") {
+      await freeSpaceAtStart({
+        stateDir: deps.stateDir,
+        venueDir: deps.venueDir,
+        logDir,
+        floor: deps.freeSpaceFloor ?? START_FREE_SPACE_FLOOR,
+        force: true,
+        venueHeld,
+        now,
+        statfs: deps.statfs,
+        readVenueHolder: deps.readVenueHolder ?? readVenueHolder,
+        log: deps.log,
+      });
+    }
+    if (typeof error === "object" && error !== null) recordedCodes.set(error, code);
     const at = now();
     if (code === "provisioning.database_in_use") {
       await recordRefusal(deps, attempt, at);
@@ -522,9 +633,12 @@ function bootThisProcess(): Promise<void> {
     scheduleStayedUp: (ms, onStayedUp) => void setTimeout(onStayedUp, ms).unref(),
     log,
     exit: DEFAULT_EXIT,
-  }).catch((error: unknown) => {
+  }).catch(async (error: unknown) => {
     // The code alone: for a failed attempt, `runEntry`'s catch has already reported the detail.
-    log("error", "server.boot_failed", { errorCode: classifyBootFailure(error) });
+    log("error", "server.boot_failed", {
+      errorCode:
+        recordedStartFailureCode(error) ?? (await startFailureCode(error, [stateDir, venueDir])),
+    });
     process.exit(1);
   });
 }

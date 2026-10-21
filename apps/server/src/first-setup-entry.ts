@@ -57,7 +57,7 @@ export async function resolveFirstSetupEntry(
     return {
       kind: "normal" as const,
       roots: { ...roots, binding: null },
-      run: <T>(body: () => Promise<T>) => body(),
+      run: <T>(body: (venueHeld: boolean) => Promise<T>) => body(false),
     };
   }
   let target: FirstSetupBootTarget;
@@ -91,8 +91,9 @@ export async function resolveFirstSetupEntry(
   return {
     kind: "normal" as const,
     roots: target,
-    async run<T>(body: () => Promise<T>): Promise<T> {
-      if (!claimed && target.binding === null) return body();
+    /** `body` learns whether this process holds the target's venue folder for the whole call. */
+    async run<T>(body: (venueHeld: boolean) => Promise<T>): Promise<T> {
+      if (!claimed && target.binding === null) return body(false);
       const anchor = await firstSetupAnchorFor(target);
       const hold = await lockVenueDatabase(anchor.venueDir);
       let selected: Awaited<ReturnType<typeof lockVenueDatabase>> | undefined;
@@ -104,7 +105,7 @@ export async function resolveFirstSetupEntry(
         await assertFirstSetupBootTarget(target);
         if ((await needsResolution(host)).unresolved)
           throw new AppError("setup.attempt_uncertain", {});
-        return await body();
+        return await body(true);
       } finally {
         selected?.release();
         hold.release();

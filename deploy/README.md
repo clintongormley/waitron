@@ -239,6 +239,34 @@ The app comes back on this page, because the refusal is still recorded. Press Re
 the dropped triggers back, checks them, carries on trading, and shows the same dashboard warning.
 Never edit rows in the database to repair it.
 
+#### When the page names `storage.disk_full`
+
+The box's disk is full, so Waitron cannot save anything. Before it opens its database, every start
+checks the free space in the state folder and in the database's folder. Below 256 MiB, it deletes
+what it can make again:
+
+- rotated log files except the newest (`waitron.log.2` and later; `waitron.log` and `waitron.log.1`
+  stay);
+- crash reports in the `logs` volume's `crash-reports` folder that are more than a week old;
+- the database copy and encrypted copy a backup run that was cut off left in `backup-staging` in
+  the state folder, found by the names a backup run gives them, unless a running server's heartbeat
+  shows it may still be using them. On a full disk that heartbeat cannot
+  be written, so from about half a minute after the disk fills, a start beside a running server
+  deletes that server's backup in progress too, and that backup run may fail.
+
+It deletes nothing else: never the database, the lock files, `recovery.json` or a finished backup,
+even one whose local backup folder was set inside `backup-staging`. If `logs`, its `crash-reports`
+folder or `backup-staging` is a symbolic link, the start leaves it and what it points at alone.
+
+If that frees enough, the box starts as usual. If the start still cannot write, the page appears at
+once, without counting the start, and says "The box has deleted what it could make again, and that
+was not enough." Below the status line it shows the free space on the box's disk, read again each
+time you load the page. A start that fails later because the disk filled is named `storage.disk_full`
+as well, and deletes the same files before it records the failure.
+
+Free space on the disk, then press Retry. The page does not notice the freed space by itself: Retry
+restarts the app, and the next start tries again.
+
 ### Trying a branch before it merges
 
 CI does not publish an image for a pull request (only pushes to `main` and `v*` tags publish to
