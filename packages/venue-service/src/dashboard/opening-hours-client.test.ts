@@ -385,7 +385,6 @@ describe("OpeningHoursApi", () => {
                 colour: "green",
                 menuId: "lunch",
                 staffMenuIds: [],
-                endOffsetMinutes: 0,
                 floorPlanSetId: null,
                 weekdays: [],
                 routingUses: [{ rowKind: "category", rowLabel: "Cocktails", zoneName: null }],

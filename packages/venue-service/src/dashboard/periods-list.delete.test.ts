@@ -29,7 +29,6 @@ const lunch = (): Period => ({
   colour: "green",
   menuId: "lunch",
   staffMenuIds: [],
-  endOffsetMinutes: 0,
   floorPlanSetId: null,
   weekdays: [],
   routingUses: [],

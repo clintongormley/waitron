@@ -9,7 +9,6 @@ export interface MenuPeriodInput {
   colour?: CalendarColour;
   menuId: string;
   staffMenuIds: readonly string[];
-  endOffsetMinutes?: number;
   /** Absent keeps the stored set; null empties the field, so the department's default is used. */
   floorPlanSetId?: string | null;
 }
@@ -82,7 +81,6 @@ export interface OpeningHoursModel extends BusinessDayScheduleStatus {
       colour: CalendarColour;
       menuId: string;
       staffMenuIds: readonly string[];
-      endOffsetMinutes: number;
       /** Null when the field is empty and the department's default set is used. */
       floorPlanSetId: string | null;
       /** The weekdays the period is painted on in any season. */

@@ -40,7 +40,6 @@ const model = {
           colour: "blue",
           menuId: "menu",
           staffMenuIds: [],
-          endOffsetMinutes: 0,
           weekdays: [1],
           routingUses: [],
         },

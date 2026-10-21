@@ -22,7 +22,6 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, type VenueScope } from "./operations.js";
-import { menuPeriods } from "./schema/menus.js";
 import { departmentDays, specialDayDates, specialDays, zoneDays } from "./schema/seasons.js";
 import {
   deleteSpecialDay,
@@ -943,45 +942,5 @@ describe("deleteSpecialDay", () => {
       params: { specialDayId: missing },
     });
     expect(await read(v, before.id)).toEqual(before);
-  });
-});
-
-describe("end offsets around special days", () => {
-  /** Restaurant Lunch from 06:30 every day; Dinner stores an end offset of 60. */
-  async function earlyLunches() {
-    const v = await venue();
-    await db.update(menuPeriods).set({ endOffsetMinutes: 60 }).where(eq(menuPeriods.id, v.dinner));
-    await scoped((tx) =>
-      replaceMenuWeek(
-        tx,
-        v.cfg,
-        v.restaurant,
-        Array.from({ length: 7 }, (_, weekday) => ({
-          weekday,
-          slots: [{ periodId: v.lunch, startsAt: "06:30", endsAt: "09:00" }],
-        })),
-        AT,
-        0,
-      ),
-    );
-    return v;
-  }
-  const lateDinner = (v: Venue, date: string) => ({
-    departmentId: v.restaurant,
-    date,
-    ranges: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "05:30" }],
-  });
-  const ownRows = (v: Venue) =>
-    db.select().from(specialDays).where(eq(specialDays.locationId, v.cfg.locationId));
-
-  it("accepts paint whose only clash was a stored end offset", async () => {
-    const v = await earlyLunches();
-    const eve = await save(v, null, {
-      name: "Nochebuena",
-      repeatsYearly: false,
-      dates: dates(["2030-12-24"]),
-      paint: [lateDinner(v, "2030-12-24")],
-    });
-    expect((await ownRows(v)).map((row) => row.id)).toEqual([eve.id]);
   });
 });

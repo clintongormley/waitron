@@ -815,7 +815,6 @@ async function guideVenue() {
         menuId,
         name: "Lunch",
         colour: "blue",
-        endOffsetMinutes: -30,
       })
       .returning();
     const [day] = await tx

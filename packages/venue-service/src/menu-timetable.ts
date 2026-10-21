@@ -25,7 +25,6 @@ import {
 } from "./service-day.js";
 import { CALENDAR_COLOURS } from "./hours-types.js";
 import { invalidTimetable, menuPeriodName, parseMenuWeek } from "./menu-timetable-rules.js";
-import { parseEndOffsetMinutes } from "./period-end-offset.js";
 import type {
   DepartmentService,
   OpeningHoursModel,
@@ -99,7 +98,6 @@ export async function requirePeriod(tx: Transaction, cfg: VenueScope, periodId: 
       departmentId: menuPeriods.departmentId,
       name: menuPeriods.name,
       menuId: menuPeriods.menuId,
-      endOffsetMinutes: menuPeriods.endOffsetMinutes,
       floorPlanSetId: menuPeriods.floorPlanSetId,
     })
     .from(menuPeriods)
@@ -386,9 +384,6 @@ async function writeMenuPeriod(
   period: MenuPeriodInput,
 ): Promise<{ id: string }> {
   const name = menuPeriodName(period.name);
-  const endOffsetMinutes = parseEndOffsetMinutes(
-    period.endOffsetMinutes === undefined ? 0 : period.endOffsetMinutes,
-  );
   await assertDepartment(tx, cfg, departmentId);
   if (
     period.colour !== undefined &&
@@ -446,7 +441,7 @@ async function writeMenuPeriod(
       );
     if (own === undefined) throw new AppError("menu_period.invalid", { field: "floorPlanSetId" });
   }
-  const values = { name, menuId: period.menuId, colour, endOffsetMinutes, floorPlanSetId };
+  const values = { name, menuId: period.menuId, colour, floorPlanSetId };
   let id = periodId;
   if (periodId === null) {
     const [row] = await tx
@@ -492,8 +487,6 @@ export async function updateMenuPeriod(
     colour: period.colour === undefined ? appearance!.colour : period.colour,
     staffMenuIds:
       period.staffMenuIds === undefined ? staff.map((row) => row.menuId) : period.staffMenuIds,
-    endOffsetMinutes:
-      period.endOffsetMinutes === undefined ? stored.endOffsetMinutes : period.endOffsetMinutes,
     floorPlanSetId:
       period.floorPlanSetId === undefined ? stored.floorPlanSetId : period.floorPlanSetId,
   });
@@ -722,7 +715,6 @@ export async function readActivePeriods(tx: Transaction, cfg: VenueScope) {
       name: menuPeriods.name,
       colour: menuPeriods.colour,
       menuId: menuPeriods.menuId,
-      endOffsetMinutes: menuPeriods.endOffsetMinutes,
       floorPlanSetId: menuPeriods.floorPlanSetId,
     })
     .from(menuPeriods)
@@ -788,12 +780,11 @@ export async function readOpeningHoursModel(
           .map(({ id, name, seasonWeeks }) => ({ id, name, seasonWeeks })),
         periods: periods
           .filter((period) => period.departmentId === department.id)
-          .map(({ id, name, colour, menuId, endOffsetMinutes, floorPlanSetId }) => ({
+          .map(({ id, name, colour, menuId, floorPlanSetId }) => ({
             id,
             name,
             colour,
             menuId,
-            endOffsetMinutes,
             floorPlanSetId,
             staffMenuIds: staff
               .filter((entry) => entry.periodId === id)

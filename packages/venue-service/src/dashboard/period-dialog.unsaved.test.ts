@@ -220,7 +220,6 @@ it("Delete… on a changed draft asks first: keep emits nothing and keeps the dr
       colour: "blue",
       menuId: "lunch",
       staffMenuIds: [],
-      endOffsetMinutes: 0,
       floorPlanSetId: null,
       weekdays: [1],
       routingUses: [],

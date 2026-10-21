@@ -23,7 +23,6 @@ const period = {
   colour: "blue" as const,
   menuId: "lunch",
   staffMenuIds: ["deli"],
-  endOffsetMinutes: 0,
   floorPlanSetId: null,
   weekdays: [1, 2],
   routingUses: [],

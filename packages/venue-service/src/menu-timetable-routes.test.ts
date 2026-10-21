@@ -195,42 +195,23 @@ async function answers(response: Response, status: number, error?: Record<string
 }
 
 describe("the opening-hours routes", () => {
-  it("accepts a signed end offset on create and PATCH, and retains it on a name-only edit", async () => {
+  it("refuse an end offset on a period create or update, changing nothing", async () => {
     const r = await routed();
-    const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
-      name: "Lunch",
-      menuId: r.almuerzo,
-      staffMenuIds: [],
-      endOffsetMinutes: -15,
-    });
-    expect(created.status).toBe(201);
-    const { id } = (await created.json()) as { id: string };
-    const saved = async () => restaurantOf(await r.model(), r).periods.find((p) => p.id === id)!;
-    expect(await saved()).toMatchObject({ endOffsetMinutes: -15 });
-    await answers(
-      await r.send("PATCH", `/menu-periods/${id}`, r.manager, { name: "Afternoon" }),
-      204,
-    );
-    expect(await saved()).toMatchObject({ name: "Afternoon", endOffsetMinutes: -15 });
-    await answers(
-      await r.send("PATCH", `/menu-periods/${id}`, r.manager, { endOffsetMinutes: 14 }),
-      204,
-    );
-    expect(await saved()).toMatchObject({ endOffsetMinutes: 14 });
-    await answers(
-      await r.send("PATCH", `/menu-periods/${id}`, r.manager, { endOffsetMinutes: 0 }),
-      204,
-    );
-    expect(await saved()).toMatchObject({ endOffsetMinutes: 0 });
-    await answers(
-      await r.send("PATCH", `/menu-periods/${id}`, r.manager, { endOffsetMinutes: null }),
-      400,
-      {
-        code: "menu_period.invalid",
-        params: { field: "endOffsetMinutes", reason: "whole_minutes" },
-      },
-    );
-    expect(await saved()).toMatchObject({ endOffsetMinutes: 0 });
+    const before = await r.model();
+    for (const [method, path, body] of [
+      [
+        "POST",
+        `/departments/${r.restaurant}/menu-periods`,
+        { name: "Tardes", menuId: r.cafe, staffMenuIds: [], endOffsetMinutes: 0 },
+      ],
+      ["PATCH", `/menu-periods/${r.mananas}`, { name: "Tardes", endOffsetMinutes: 0 }],
+      ["PATCH", `/menu-periods/${r.mananas}`, { endOffsetMinutes: 0 }],
+    ] as const)
+      await answers(await r.send(method, path, r.manager, body), 400, {
+        code: "management.request_invalid",
+        params: { field: "endOffsetMinutes" },
+      });
+    expect(await r.model()).toEqual(before);
   });
 
   it("show the model to anyone who may view the venue's settings", async () => {
@@ -541,7 +522,6 @@ describe("the opening-hours period API", () => {
           menuId: r.desayunos,
           colour: "red",
           staffMenuIds: [],
-          endOffsetMinutes: 0,
           floorPlanSetId: null,
           weekdays: [],
           routingUses: [],
@@ -571,7 +551,6 @@ describe("the opening-hours period API", () => {
       colour: "blue",
       menuId: r.almuerzo,
       staffMenuIds: [r.cafe, r.deliParaLlevar],
-      endOffsetMinutes: 0,
       floorPlanSetId: null,
       weekdays: [],
       routingUses: [],
@@ -586,7 +565,6 @@ describe("the opening-hours period API", () => {
       colour: "green",
       menuId: r.almuerzo,
       staffMenuIds: [r.cafe, r.deliParaLlevar],
-      endOffsetMinutes: 0,
       floorPlanSetId: null,
       weekdays: [],
       routingUses: [],
@@ -603,7 +581,6 @@ describe("the opening-hours period API", () => {
       colour: "green",
       menuId: r.almuerzo,
       staffMenuIds: [r.deliParaLlevar, r.cafe],
-      endOffsetMinutes: 0,
       floorPlanSetId: null,
       weekdays: [],
       routingUses: [],

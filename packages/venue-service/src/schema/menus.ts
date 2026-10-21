@@ -25,7 +25,6 @@ export const menuPeriods = table(
     name: label("name").notNull(),
     colour: calendarColour("colour").notNull().default("grey"),
     menuId: id("menu_id").notNull(),
-    endOffsetMinutes: count("end_offset_minutes").notNull().default(0),
     /**
      * A set of this period's own department. The key names core's floor_plan_sets, so the
      * database takes any department's set; the period routes refuse another department's with

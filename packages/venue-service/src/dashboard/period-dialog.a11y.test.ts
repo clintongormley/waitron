@@ -39,7 +39,6 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
         colour: state === "colour-invalid" ? ("beige" as never) : "green",
         menuId: "lunch",
         staffMenuIds: ["deli"],
-        endOffsetMinutes: 0,
         floorPlanSetId: null,
         weekdays: [1],
         routingUses: [],

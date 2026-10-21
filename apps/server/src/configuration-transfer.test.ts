@@ -5613,95 +5613,88 @@ it("round-trips departmental transfer directions and desks with remapped ids, le
     expect(original).not.toContain(id);
 });
 
-it.each([-15, 14])(
-  "round-trips service periods with end offset %s, colours, ordered staff menus and remapped business-day ranges",
-  async (endOffsetMinutes) => {
-    const source = await applyVenue(planVenue(venue("B24681367"), ALL_MODULES), {
-      db: suite.db,
-      modules: ALL_MODULES,
+it("round-trips service periods with colours, ordered staff menus and remapped business-day ranges", async () => {
+  const source = await applyVenue(planVenue(venue("B24681367"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const scope = { locationId: brandLocationId(source.locationId) };
+  const original = await withTransaction(suite.db, async (tx) => {
+    await tx
+      .update(locations)
+      .set({ dayCutover: "04:30:00" })
+      .where(eq(locations.id, scope.locationId));
+    const department = await createDepartment(tx, scope, {
+      name: "Period transfer",
+      orderStart: "table",
     });
-    const scope = { locationId: brandLocationId(source.locationId) };
-    const original = await withTransaction(suite.db, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ dayCutover: "04:30:00" })
-        .where(eq(locations.id, scope.locationId));
-      const department = await createDepartment(tx, scope, {
-        name: "Period transfer",
-        orderStart: "table",
-      });
-      const customer = await createCatalogue(tx, { name: "Period customer" });
-      const staffFirst = await createCatalogue(tx, { name: "Period staff first" });
-      const staffSecond = await createCatalogue(tx, { name: "Period staff second" });
-      const period = await saveMenuPeriod(tx, scope, department.id, {
-        name: "Night transfer",
-        endOffsetMinutes,
-        colour: "blue",
-        menuId: customer.id,
-        staffMenuIds: [staffSecond.id, staffFirst.id],
-      });
-      await replaceMenuWeek(
-        tx,
-        scope,
-        department.id,
-        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-          weekday,
-          slots: weekday === 5 ? [{ periodId: period.id, startsAt: "21:00", endsAt: "03:00" }] : [],
-        })),
-        new Date("2026-10-07T10:00:00Z"),
-        0,
-      );
-      return [department.id, customer.id, staffFirst.id, staffSecond.id, period.id];
-    });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
-    const bundle = await buildConfigurationBundle(
-      suite.db,
-      source,
-      ALL_MODULES,
-      new Date("2026-10-07T10:00:00Z"),
-      versions,
-    );
-    const period = bundle.tables.menu_periods!.find((row) => row.name === "Night transfer")!;
-    expect(period).toMatchObject({
+    const customer = await createCatalogue(tx, { name: "Period customer" });
+    const staffFirst = await createCatalogue(tx, { name: "Period staff first" });
+    const staffSecond = await createCatalogue(tx, { name: "Period staff second" });
+    const period = await saveMenuPeriod(tx, scope, department.id, {
+      name: "Night transfer",
       colour: "blue",
-      menu_id: original[1],
-      end_offset_minutes: endOffsetMinutes,
+      menuId: customer.id,
+      staffMenuIds: [staffSecond.id, staffFirst.id],
     });
-    expect(bundle.tables.menu_period_staff_menus).toEqual(
-      expect.arrayContaining([
-        {
-          period_id: original[4],
-          department_id: original[0],
-          menu_id: original[3],
-          display_order: 0,
-        },
-        {
-          period_id: original[4],
-          department_id: original[0],
-          menu_id: original[2],
-          display_order: 1,
-        },
-      ]),
+    await replaceMenuWeek(
+      tx,
+      scope,
+      department.id,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        slots: weekday === 5 ? [{ periodId: period.id, startsAt: "21:00", endsAt: "03:00" }] : [],
+      })),
+      new Date("2026-10-07T10:00:00Z"),
+      0,
     );
-    const decoded = decodeConfigurationBundle(
-      encodeConfigurationBundle(bundle, "a strong passphrase"),
-      "a strong passphrase",
-    );
-    const target = await applyVenue(planVenue(venue("B24681368"), ALL_MODULES), {
-      db: targetSuite.db,
-      modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, decoded, result, ALL_MODULES, versions),
-    });
-    const offset = await targetSuite.db.execute(sql`
-    select end_offset_minutes from menu_periods where name='Night transfer'`);
-    expect(offset.rows).toEqual([{ end_offset_minutes: endOffsetMinutes }]);
-    const seasonsHolding = await targetSuite.db.execute(sql`
+    return [department.id, customer.id, staffFirst.id, staffSecond.id, period.id];
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const bundle = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-07T10:00:00Z"),
+    versions,
+  );
+  const period = bundle.tables.menu_periods!.find((row) => row.name === "Night transfer")!;
+  expect(period).toMatchObject({
+    colour: "blue",
+    menu_id: original[1],
+  });
+  expect(bundle.tables.menu_period_staff_menus).toEqual(
+    expect.arrayContaining([
+      {
+        period_id: original[4],
+        department_id: original[0],
+        menu_id: original[3],
+        display_order: 0,
+      },
+      {
+        period_id: original[4],
+        department_id: original[0],
+        menu_id: original[2],
+        display_order: 1,
+      },
+    ]),
+  );
+  const decoded = decodeConfigurationBundle(
+    encodeConfigurationBundle(bundle, "a strong passphrase"),
+    "a strong passphrase",
+  );
+  const target = await applyVenue(planVenue(venue("B24681368"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, decoded, result, ALL_MODULES, versions),
+  });
+  const seasonsHolding = await targetSuite.db.execute(sql`
     select count(distinct t.season_id) as seasons
     from department_day_ranges x join department_days t on t.id=x.day_id
     join menu_periods p on p.id=x.period_id where p.name='Night transfer'`);
-    expect(seasonsHolding.rows).toEqual([{ seasons: 4 }]);
-    const rows = await targetSuite.db.execute(sql`
+  expect(seasonsHolding.rows).toEqual([{ seasons: 4 }]);
+  const rows = await targetSuite.db.execute(sql`
     select distinct p.id as period_id, d.id as department_id, c.id as customer_id, s.menu_id as staff_id,
       d.location_id, p.name, p.colour, c.name as customer, sc.name as staff, s.display_order,
       t.weekday, x.starts_at, x.ends_at
@@ -5710,52 +5703,51 @@ it.each([-15, 14])(
     join catalogues sc on sc.id=s.menu_id join department_days t on t.department_id=d.id
     join department_day_ranges x on x.day_id=t.id and x.period_id=p.id
     where p.name='Night transfer' order by s.display_order`);
-    expect(rows.rows).toEqual([
-      {
-        period_id: expect.any(String),
-        department_id: expect.any(String),
-        customer_id: expect.any(String),
-        staff_id: expect.any(String),
-        location_id: target.locationId,
-        name: "Night transfer",
-        colour: "blue",
-        customer: "Period customer",
-        staff: "Period staff second",
-        display_order: 0,
-        weekday: 5,
-        starts_at: "21:00:00",
-        ends_at: "03:00:00",
-      },
-      {
-        period_id: expect.any(String),
-        department_id: expect.any(String),
-        customer_id: expect.any(String),
-        staff_id: expect.any(String),
-        location_id: target.locationId,
-        name: "Night transfer",
-        colour: "blue",
-        customer: "Period customer",
-        staff: "Period staff first",
-        display_order: 1,
-        weekday: 5,
-        starts_at: "21:00:00",
-        ends_at: "03:00:00",
-      },
-    ]);
-    for (const row of rows.rows)
-      for (const key of ["period_id", "department_id", "customer_id", "staff_id"])
-        expect(original).not.toContain(row[key]);
-    const bad = structuredClone(bundle);
-    const range = bad.tables.department_day_ranges!.find((row) => row.period_id === original[4])!;
-    range.ends_at = "05:00:00";
-    expect(() => validateConfigurationBundle(bad, ALL_MODULES, versions)).toThrowError(
-      expect.objectContaining({
-        code: "setup.request_invalid",
-        params: { field: "department_day_ranges" },
-      }),
-    );
-  },
-);
+  expect(rows.rows).toEqual([
+    {
+      period_id: expect.any(String),
+      department_id: expect.any(String),
+      customer_id: expect.any(String),
+      staff_id: expect.any(String),
+      location_id: target.locationId,
+      name: "Night transfer",
+      colour: "blue",
+      customer: "Period customer",
+      staff: "Period staff second",
+      display_order: 0,
+      weekday: 5,
+      starts_at: "21:00:00",
+      ends_at: "03:00:00",
+    },
+    {
+      period_id: expect.any(String),
+      department_id: expect.any(String),
+      customer_id: expect.any(String),
+      staff_id: expect.any(String),
+      location_id: target.locationId,
+      name: "Night transfer",
+      colour: "blue",
+      customer: "Period customer",
+      staff: "Period staff first",
+      display_order: 1,
+      weekday: 5,
+      starts_at: "21:00:00",
+      ends_at: "03:00:00",
+    },
+  ]);
+  for (const row of rows.rows)
+    for (const key of ["period_id", "department_id", "customer_id", "staff_id"])
+      expect(original).not.toContain(row[key]);
+  const bad = structuredClone(bundle);
+  const range = bad.tables.department_day_ranges!.find((row) => row.period_id === original[4])!;
+  range.ends_at = "05:00:00";
+  expect(() => validateConfigurationBundle(bad, ALL_MODULES, versions)).toThrowError(
+    expect.objectContaining({
+      code: "setup.request_invalid",
+      params: { field: "department_day_ranges" },
+    }),
+  );
+});
 
 it("transfers order start policies under new department and zone ids", async () => {
   const source = await applyVenue(planVenue(venue("B13572478"), ALL_MODULES), {
@@ -6662,7 +6654,6 @@ describe("dated business-day configuration transfer", () => {
         name: "Clock period",
         menuId: menu.id,
         staffMenuIds: [],
-        endOffsetMinutes: 14,
       });
       await replaceMenuWeek(
         tx,
@@ -6715,9 +6706,8 @@ describe("dated business-day configuration transfer", () => {
       weekday: number;
       startsAt: string;
       endsAt: string;
-      offset: number;
     }>(sql`
-      select distinct d.weekday, s.starts_at as "startsAt", s.ends_at as "endsAt", p.end_offset_minutes as "offset"
+      select distinct d.weekday, s.starts_at as "startsAt", s.ends_at as "endsAt"
       from department_day_ranges s join department_days d on d.id=s.day_id join menu_periods p on p.id=s.period_id
       where p.name='Clock period' order by d.weekday`);
     const seasonsHolding = await targetSuite.db.execute(sql`
@@ -6730,7 +6720,6 @@ describe("dated business-day configuration transfer", () => {
         weekday,
         startsAt: "09:00:00",
         endsAt: "17:00:00",
-        offset: 14,
       })),
     );
     expect(await targetSuite.db.select().from(locationDayCutoverChanges)).toEqual([]);
@@ -7134,6 +7123,27 @@ describe("special days in a configuration transfer", () => {
     );
     await expect(
       applyVenue(planVenue(venue("B35792477"), ALL_MODULES), {
+        db: targetSuite.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx, result) =>
+          importConfigurationTables(tx, bundle, result, ALL_MODULES, versions),
+      }),
+    ).rejects.toMatchObject(error);
+    expect(
+      (await targetSuite.db.execute<{ n: number }>(sql`select count(*) as n from tenants`)).rows,
+    ).toEqual([{ n: 0 }]);
+  });
+
+  it("refuses a bundle whose service periods still carry an end offset, and writes nothing", async () => {
+    const { versions, bundle } = await fiestaVenue("B35792478");
+    expect(bundle.tables.menu_periods!.length).toBeGreaterThan(0);
+    bundle.tables.menu_periods = bundle.tables.menu_periods!.map((row) => ({
+      ...row,
+      end_offset_minutes: 0,
+    }));
+    const error = { code: "setup.request_invalid", params: { field: "table:menu_periods" } };
+    await expect(
+      applyVenue(planVenue(venue("B35792479"), ALL_MODULES), {
         db: targetSuite.db,
         modules: ALL_MODULES,
         beforeCommit: (tx, result) =>

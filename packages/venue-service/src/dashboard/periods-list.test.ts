@@ -27,7 +27,6 @@ const period = (id: string, name: string, overrides: Partial<Period> = {}): Peri
   colour: "green",
   menuId: "lunch",
   staffMenuIds: [],
-  endOffsetMinutes: 0,
   floorPlanSetId: null,
   weekdays: [],
   routingUses: [],

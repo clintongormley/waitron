@@ -420,47 +420,9 @@ async function editMealLine(v: Venue, id: string, patch: { quantity?: string; no
 }
 
 describe("service periods gate only added dishes and added stored quantities", () => {
-  const offsetLunch = async (v: Venue, offset: number) =>
-    withTransaction(suite.db, async (tx) => {
-      const [lunch] = await tx
-        .select({ id: menuPeriods.id })
-        .from(menuPeriods)
-        .where(eq(menuPeriods.menuId, v.menus.Almuerzo));
-      await updateMenuPeriod(tx, v.cfg, lunch!.id, { endOffsetMinutes: offset });
-    });
-
-  it.each([
-    [-15, "13:59", 200],
-    [-15, "14:00", 400],
-    [15, "14:00", 400],
-    [15, "14:14", 400],
-  ] as const)(
-    "a stored end offset %s no longer moves last orders: fresh Lunch at %s answers %s",
-    async (offset, time, status) => {
-      at(mondayAt("13:00"));
-      const v = await mealVenue();
-      await offsetLunch(v, offset);
-      at(mondayAt(time));
-      const held = await park(v, v.sala, v.tostada.almuerzo, v.versions.Almuerzo);
-      expect(held.status).toBe(status);
-      if (status === 400)
-        expect(held.body).toMatchObject({
-          error: {
-            code: "menu_period.not_running",
-            params: { departmentId: v.restaurant, menuId: v.menus.Almuerzo },
-          },
-        });
-      else
-        expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toMatchObject([
-          { unitPriceGross: 400, menuName: "Almuerzo", menuVersionId: v.versions.Almuerzo },
-        ]);
-    },
-  );
-
   it("after Lunch ends, a fresh Lunch line and a stored increase are both refused and nothing changes", async () => {
     at(mondayAt("13:50"));
     const v = await mealVenue();
-    await offsetLunch(v, 15);
     const held = await park(v, v.sala, v.tostada.almuerzo);
     expect(held.status).toBe(200);
     const before = await sendAsTill(v, "GET", `/api/working-orders/${held.id}`);
@@ -562,15 +524,14 @@ describe("service periods gate only added dishes and added stored quantities", (
   });
 
   it.each([
-    [-15, "13:45", true, true, true],
-    [15, "14:00", false, false, false],
-    [15, "14:05", false, false, false],
+    ["13:45", true, true, true],
+    ["14:00", false, false, false],
+    ["14:05", false, false, false],
   ] as const)(
-    "polling reports one window for orderable and sendable: offset %s at %s",
-    async (offset, time, open, orderable, sendable) => {
+    "polling reports one window for orderable and sendable at %s",
+    async (time, open, orderable, sendable) => {
       at(mondayAt("13:00"));
       const v = await mealVenue();
-      await offsetLunch(v, offset);
       at(mondayAt(time));
       const state = await sendAsTill(v, "GET", `/api/menu-state?zoneId=${v.barra}`);
       expect(state.status).toBe(200);

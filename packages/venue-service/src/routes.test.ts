@@ -4252,7 +4252,6 @@ it("A724: the station planning route returns last orders at its period's own end
         menuId: f.menuId,
         staffMenuIds: [],
         colour: "blue",
-        endOffsetMinutes: -30,
       })
     ).id;
     const ranges = [{ periodId, startsAt: "12:00", endsAt: "16:00" }];

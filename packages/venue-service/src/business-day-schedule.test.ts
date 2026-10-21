@@ -110,7 +110,6 @@ const paintDate = (
 async function fixture(
   ranges: { startsAt: string; endsAt: string }[],
   options: {
-    offset?: number;
     date?: string;
     annual?: boolean;
     disabled?: boolean;
@@ -144,7 +143,6 @@ async function fixture(
       departmentId,
       menuId,
       name: "Service",
-      endOffsetMinutes: options.offset ?? 0,
     });
     // One season covers the whole year, so every weekday range is in it.
     const seasonId = randomUUID();
@@ -553,7 +551,7 @@ describe("every time writer stays open while a change waits", () => {
       withTransaction(suite.db, (tx) => replaceMenuWeek(tx, v.cfg, v.departmentId, week, at, 1)),
     ).resolves.toBeUndefined();
   });
-  it("accepts offsets, names, colours and equivalent offsets", async () => {
+  it("accepts a name and colour change", async () => {
     const v = await fixture([range("09:00", "17:00")]);
     await pending(v);
     await expect(
@@ -561,13 +559,7 @@ describe("every time writer stays open while a change waits", () => {
         updateMenuPeriod(tx, v.cfg, v.periodId, {
           name: "Lunch",
           colour: "blue",
-          endOffsetMinutes: 0,
         }),
-      ),
-    ).resolves.toBeUndefined();
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        updateMenuPeriod(tx, v.cfg, v.periodId, { endOffsetMinutes: 1 }),
       ),
     ).resolves.toBeUndefined();
   });
@@ -671,15 +663,12 @@ describe("a waiting change checks the hours written while it waits", () => {
     });
     expect(await stored(v)).toEqual(before);
   });
-  it.each([0, 30])(
-    "stores a week ending before the waiting start whatever its period's stored end offset (%s)",
-    async (offset) => {
-      const v = await fixture([], { offset });
-      await waiting(v);
-      await expect(writeWeek(v, 6, [range("21:00", "02:45")])).resolves.toBeUndefined();
-      expect(await stored(v)).toEqual(["6 21:00:00-02:45:00"]);
-    },
-  );
+  it("stores a week ending before the waiting start", async () => {
+    const v = await fixture([]);
+    await waiting(v);
+    await expect(writeWeek(v, 6, [range("21:00", "02:45")])).resolves.toBeUndefined();
+    expect(await stored(v)).toEqual(["6 21:00:00-02:45:00"]);
+  });
   it("accepts a period rename beside a stored range that clashes with the waiting start", async () => {
     const v = await fixture([]);
     await withTransaction(suite.db, (tx) =>
@@ -690,7 +679,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       withTransaction(suite.db, (tx) => updateMenuPeriod(tx, v.cfg, v.periodId, { name: "Late" })),
     ).resolves.toBeUndefined();
   });
-  it("creates a period with an offset and no ranges while a change waits", async () => {
+  it("creates a period with no ranges while a change waits", async () => {
     const v = await fixture([]);
     await waiting(v);
     const menuId = randomUUID();
@@ -703,7 +692,6 @@ describe("a waiting change checks the hours written while it waits", () => {
           name: "Late",
           menuId,
           staffMenuIds: [],
-          endOffsetMinutes: 15,
         }),
       ),
     ).resolves.toMatchObject({ id: expect.any(String) });
@@ -1420,11 +1408,6 @@ describe("undated hours are checked against the start in force", () => {
     await hoursBack(v);
     await expect(writeWeek(v, [range("22:00", "02:30")])).resolves.toBeUndefined();
   });
-  it("accepts last orders that fit the start in force though they ran into an earlier start", async () => {
-    const v = await fixture([], { offset: 30 });
-    await hoursBack(v);
-    await expect(writeWeek(v, [range("22:00", "04:30")])).resolves.toBeUndefined();
-  });
   it("refuses a menu week crossing the start in force while the earlier start is in force", async () => {
     const v = await fixture([]);
     await hoursBack(v);
@@ -1456,26 +1439,6 @@ describe("undated hours are checked against the start in force", () => {
       saveSeasonWeek(v, {
         zones: [{ zoneId: v.zoneId!, days: zoneWeek([range("22:00", "04:30")]) }],
       }),
-    ).resolves.toBeUndefined();
-  });
-  it("accepts a season week whose last orders fit the start in force", async () => {
-    const v = await fixture([], { offset: 30 });
-    await hoursBack(v);
-    await expect(
-      saveSeasonWeek(v, {
-        departments: [
-          { departmentId: v.departmentId, days: menuWeek(v, [range("22:00", "04:30")]) },
-        ],
-      }),
-    ).resolves.toBeUndefined();
-  });
-  it("accepts an offset whose last orders fit the start in force", async () => {
-    const v = await fixture([range("22:00", "04:30")]);
-    await hoursBack(v);
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        updateMenuPeriod(tx, v.cfg, v.periodId, { endOffsetMinutes: 30 }),
-      ),
     ).resolves.toBeUndefined();
   });
   it("accepts a special-day save and delete beside a night that crossed an earlier start", async () => {
@@ -1523,7 +1486,6 @@ describe("undated hours are checked against the start in force", () => {
         departmentId: v.departmentId,
         menuId: period!.menuId,
         name: "Other",
-        endOffsetMinutes: 0,
       });
     });
     await expect(
@@ -1531,7 +1493,7 @@ describe("undated hours are checked against the start in force", () => {
     ).resolves.toBeUndefined();
   });
   it("leaves a past one-off date to its own start when another week is saved", async () => {
-    const v = await fixture([], { offset: 30 });
+    const v = await fixture([]);
     await hoursBack(v);
     await paintDate(v, "menu", "2026-10-23", [range("03:00", "04:30")], whileThreeInForce, 1);
     await paintDate(v, "menu", "2026-10-24", [range("05:00", "06:00")], whileThreeInForce, 1);
@@ -1544,7 +1506,7 @@ describe("undated hours are checked against the start in force", () => {
     ).resolves.toBeUndefined();
   });
   it("leaves the weekly ranges out beside a past one-off date when the week is saved", async () => {
-    const v = await fixture([], { offset: 30 });
+    const v = await fixture([]);
     await hoursBack(v);
     await paintDate(v, "menu", "2026-10-22", [range("03:00", "04:00")], whileThreeInForce, 1);
     await expect(writeWeek(v, [range("22:00", "04:30")])).resolves.toBeUndefined();
@@ -1562,7 +1524,6 @@ describe("undated hours are checked against the start in force", () => {
         departmentId: v.departmentId,
         menuId: period!.menuId,
         name: "Other",
-        endOffsetMinutes: 0,
       });
       const dayId = randomUUID();
       await tx
@@ -1716,8 +1677,8 @@ describe("dated calendar authoring after activation", () => {
         .values({ locationId: v.cfg.locationId, effectiveBusinessDay: E, dayCutover: "07:00:00" });
     });
   }
-  it("allows a one-off all-day range with a negative offset under its own start", async () => {
-    const v = await fixture([], { offset: -1 });
+  it("allows a one-off all-day range under its own start", async () => {
+    const v = await fixture([]);
     await activated(v);
     await expect(
       paintDate(v, "menu", "2026-12-25", [range("07:00", "07:00")], after, 1),
@@ -2255,8 +2216,8 @@ async function busyCalendar(count: number, run = 0) {
       const lunch = fixed(3, d * 2),
         dinner = fixed(3, d * 2 + 1);
       await tx.insert(menuPeriods).values([
-        { id: lunch, departmentId: id, menuId, name: `Lunch ${d}`, endOffsetMinutes: 30 },
-        { id: dinner, departmentId: id, menuId, name: `Dinner ${d}`, endOffsetMinutes: 120 },
+        { id: lunch, departmentId: id, menuId, name: `Lunch ${d}` },
+        { id: dinner, departmentId: id, menuId, name: `Dinner ${d}` },
       ]);
       departmentsMade.push({ id, lunch, dinner });
       for (const season of seasonIds)

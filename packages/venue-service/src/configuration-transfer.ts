@@ -6,7 +6,6 @@ import { isLocalDate, weekdayOf } from "./hours-rules.js";
 import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
 import { isReadableClock } from "./hours-clock.js";
 import { menuPeriodName } from "./menu-timetable-rules.js";
-import { parseEndOffsetMinutes } from "./period-end-offset.js";
 import { layerPaint, type PaintRange } from "./day-paint.js";
 import { civilDateOf } from "@waitron/reporting";
 import { ZONE_PAINT_KINDS } from "./schema/seasons.js";
@@ -40,9 +39,7 @@ function parsedAs<T>(table: string, parse: () => T): T {
   } catch (error) {
     if (
       error instanceof AppError &&
-      (error.code === "menu_timetable.invalid" ||
-        error.code === "menu_period.invalid" ||
-        error.code === "zone_closed_time.invalid")
+      (error.code === "menu_timetable.invalid" || error.code === "zone_closed_time.invalid")
     )
       refuse(table);
     throw error;
@@ -134,9 +131,6 @@ export function validateMenuTimetables(tables: Tables): void {
     names.add(name);
     if (!CALENDAR_COLOURS.includes(row.colour as CalendarColour)) refuse("menu_periods.colour");
     if (!menus.has(row.menu_id)) refuse("menu_periods.menu_id");
-    parsedAs("menu_periods.end_offset_minutes", () =>
-      parseEndOffsetMinutes(row.end_offset_minutes === undefined ? 0 : row.end_offset_minutes),
-    );
     periodDepartment.set(row.id, row.department_id);
     customerMenus.set(row.id, row.menu_id);
   }

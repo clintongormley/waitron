@@ -80,7 +80,6 @@ import {
 import "./errors.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { assertDatedClosuresInHours, assertSeasonClosuresInHours } from "./zone-closure-hours.js";
-import { parseEndOffsetMinutes } from "./period-end-offset.js";
 import {
   deleteSpecialDay,
   listSpecialDays,
@@ -1214,14 +1213,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, [
-          "name",
-          "colour",
-          "menuId",
-          "staffMenuIds",
-          "endOffsetMinutes",
-          "floorPlanSetId",
-        ]);
+        onlyKeys(body, ["name", "colour", "menuId", "staffMenuIds", "floorPlanSetId"]);
         const name = requireString(body.name, "name");
         const menuId = requireBodyUuid(body.menuId, "menuId");
         const input = {
@@ -1229,9 +1221,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           menuId,
           ...(body.colour === undefined ? {} : { colour: requirePeriodColour(body.colour) }),
           staffMenuIds: requireStaffMenuIds(body.staffMenuIds),
-          ...(body.endOffsetMinutes === undefined
-            ? {}
-            : { endOffsetMinutes: parseEndOffsetMinutes(body.endOffsetMinutes) }),
           ...floorPlanSetField(body),
         };
         const period = await gated(sessionId, (tx) =>
@@ -1292,14 +1281,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const periodId = requireUuidParam(c.req.param("periodId"), "MenuPeriodId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, [
-          "name",
-          "colour",
-          "menuId",
-          "staffMenuIds",
-          "endOffsetMinutes",
-          "floorPlanSetId",
-        ]);
+        onlyKeys(body, ["name", "colour", "menuId", "staffMenuIds", "floorPlanSetId"]);
         if (Object.keys(body).length === 0)
           throw new AppError("management.request_invalid", { field: "body" });
         const period = {
@@ -1309,9 +1291,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           ...(body.staffMenuIds === undefined
             ? {}
             : { staffMenuIds: requireStaffMenuIds(body.staffMenuIds) }),
-          ...(body.endOffsetMinutes === undefined
-            ? {}
-            : { endOffsetMinutes: parseEndOffsetMinutes(body.endOffsetMinutes) }),
           ...floorPlanSetField(body),
         };
         await gated(sessionId, (tx) => updateMenuPeriod(tx, ctx.cfg, periodId, period));

@@ -29,7 +29,6 @@ import { resolveDepartmentDays } from "./day-resolver.js";
 import { saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, type VenueScope } from "./operations.js";
-import { menuPeriods } from "./schema/menus.js";
 import { departmentDays, seasons, zoneDays } from "./schema/seasons.js";
 import { parseSeasonStart, type SeasonChange, type SeasonEntry } from "./season-rules.js";
 import {
@@ -130,7 +129,7 @@ const SATURDAY = 6;
 const SUNDAY = 0;
 
 /** Autumn (09-01), Late autumn (11-01) and Winter (12-01), whose weeks border each other cleanly:
- *  Autumn's Saturday Dinner sends until 06:15 (+30), but Autumn's and Late autumn's Sundays hold
+ *  Autumn's Saturday Dinner runs until 05:45, but Autumn's and Late autumn's Sundays hold
  *  nothing near the 06:00 changeover, and Winter's Saturday has no late Dinner before its own
  *  Sunday Breakfast at 06:00. */
 async function autumnVenue() {
@@ -172,7 +171,6 @@ async function autumnVenue() {
     };
     const breakfast = await period("Breakfast");
     const dinner = await period("Dinner");
-    await tx.update(menuPeriods).set({ endOffsetMinutes: 30 }).where(eq(menuPeriods.id, dinner));
     const autumnWeek = EMPTY_WEEK();
     autumnWeek[SATURDAY] = [{ periodId: dinner, startsAt: "20:00", endsAt: "05:45" }];
     autumnWeek[3] = [{ periodId: breakfast, startsAt: "08:00", endsAt: "11:00" }];
@@ -538,12 +536,6 @@ describe("saveSeasons", () => {
       params: { field: "delete", reason: "last" },
     });
     expect(await scoped((tx) => readSeasons(tx, { locationId }))).toHaveLength(1);
-  });
-
-  it("accepts a delete whose only clash was a stored end offset", async () => {
-    const v = await autumnVenue();
-    await change(v, { delete: [v.lateAutumn] });
-    expect(await seasonsOf(v)).toEqual([THREE[0], THREE[2]]);
   });
 
   it("swaps Summer's and Autumn's starts and their names in one call, each id keeping its weeks", async () => {

@@ -33,7 +33,7 @@ import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
 import { clockChangeConflictText } from "./clock-change-conflict.js";
 
-type Draft = Omit<MenuPeriodInput, "endOffsetMinutes" | "floorPlanSetId"> & {
+type Draft = Omit<MenuPeriodInput, "floorPlanSetId"> & {
   colour: CalendarColour;
   /** Empty for the department's default set. */
   floorPlanSetId: string;
