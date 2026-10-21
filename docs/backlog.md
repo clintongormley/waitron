@@ -149,9 +149,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   The producer's statement that a version meets the Veri\*Factu rules, one per release, readable
   on every terminal and before installation (compliance plan Step 8). The
   [design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md) drafts the text
-  from AEAT's worked example, makes `pnpm release` write and freeze each version's copy, adds
-  About Waitron to the dashboard, the till's More menu and an ⓘ corner, serves it at
-  `/legal/declaration` before setup, and attaches it to each GitHub Release. It found
+  from AEAT's worked example, makes `pnpm release prepare` land each version's copy in a pull
+  request and `pnpm release tag` tag it, adds About Waitron to the dashboard, the till's More menu,
+  an ⓘ corner and the setup wizard, serves it at `/legal/declaration` before setup, on the
+  plain-HTTP page and on the recovery page, attaches it to each GitHub Release, and gives the
+  `@waitron/verifactu` library its own declaration. It found
   two defects in what every record tells AEAT, fixed first in a fiscal slice the owner lands:
   `Version` is always `0.0.0`, and the `SistemaInformatico` producer fields carry the taxpayer's
   name and NIF (`packages/fiscal-verifactu/src/backend.ts:641-653`). Four questions in §11. No

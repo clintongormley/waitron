@@ -97,7 +97,8 @@ detailed explanation of how the system meets the Orden, anything else.
 
 **Components.** AEAT's FAQ on software built from other code: the producer that writes or
 integrates it «debe realizar la declaración responsable, incorporar los datos obligatorios e
-indicar qué componentes utiliza» and «se hará responsable del funcionamiento del mismo». A
+indicar qué componentes utiliza» and «En el caso de que utilice código abierto, se hará responsable del funcionamiento del
+mismo». A
 component from the same producer with its own release cycle, usable by other systems, needs its
 own declaration; the repository recorded that reading on 2026-07-27
 ([verifactu-findings.md](../../compliance/verifactu-findings.md), the table of cases (a)–(c)).
@@ -186,11 +187,14 @@ mode and in trading mode. The till has a sheet that shows a box page over the sc
 ## 4. The declaration's text
 
 Drafted from AEAT's worked example (V0.5.1, the only one AEAT publishes; its one example is
-software sold for Veri\*Factu-only use by a Spanish company). **The headings are the example's,
-word for word**: the example is AEAT's own rendering of art. 15.1's items as headings («esta
-declaración responsable», «el apartado a)»), and the Orden's text describes each item rather than
-giving a heading to copy. The explanatory sentences the Orden adds to items a), b) and l) are
-not headings and are left out, as the example leaves them out.
+software sold for Veri\*Factu-only use by a Spanish company). **The item headings are the
+example's, word for word**: the example is AEAT's own rendering of art. 15.1's items as headings
+(«esta declaración responsable», «el apartado a)»), while the Orden's text describes each item
+rather than giving a heading to copy, and adds explanatory sentences to several items that are
+not headings. Three departures, each deliberate: the title is the Orden's exact wording (art. 15.1
+fixes it); the person-producer wording of the example's footnote i, which the footnote applies to
+items h)–l), is also applied to the annex headings, by our choice; and the annex has no item 2.d)
+(the example has none either).
 
 Values marked ‹…› are filled in later: the producer's facts by the owner (question 1, §11), and
 the version, the library version, the functions list and the date by the release step (§5). Where
@@ -224,14 +228,17 @@ draft below is written for a person, because that is the producer today
 >   Agencia Tributaria.
 > - La biblioteca @waitron/verifactu, versión ‹x.y.z›, del mismo productor y con su propia
 >   declaración responsable. El servidor la usa en cada registro de facturación para formar el
->   registro, calcular su huella y preparar su envío.
+>   registro, calcular su huella, generar el código QR de la factura y remitirlo a la Agencia
+>   Tributaria.
 > - Las aplicaciones de caja, terminal de mano, pantalla de cocina y panel de gestión, que el
 >   servidor sirve a un navegador web. Los terminales no generan registros de facturación.
 > - El agente de impresión, que envía tickets y facturas a las impresoras.
 > - Componentes de terceros de los que el productor se hace responsable: Node.js ‹versión›, con
->   su motor de base de datos SQLite, que guarda los registros y bloquea su modificación;
+>   su motor de base de datos SQLite, en el que se guardan los datos y los registros;
 >   Litestream ‹versión›, que mantiene la copia de seguridad cuando el usuario la configura; y el
->   sistema operativo Linux con Docker sobre el que se instala.
+>   sistema operativo Linux con Docker sobre el que se instala. La lista completa de componentes
+>   de terceros de esta versión, con sus licencias, se encuentra en el propio sistema, en la
+>   carpeta /app/third-party/.
 >
 > Servicios opcionales del mismo productor que esta versión puede usar: ‹ninguno, o la lista que
 > compruebe el paso de publicación›.
@@ -242,7 +249,7 @@ draft below is written for a person, because that is the producer today
 > Funcionalidades principales: ‹la lista que compruebe el paso de publicación; en la rama
 > principal el 21 de octubre de 2026: toma de pedidos por mesa o en barra, cobro en efectivo y con
 > tarjeta, expedición de facturas simplificadas, facturas rectificativas, consulta de las facturas
-> emitidas, cierre de caja e informes de ventas›.
+> emitidas e informes de ventas›.
 >
 > Cada instalación lleva la facturación de un único obligado tributario.
 >
@@ -297,20 +304,16 @@ draft below is written for a person, because that is the producer today
 > refiere esta declaración responsable:**
 > - Histórico de declaraciones responsables de las versiones de este producto:
 >   https://github.com/clintongormley/waitron/releases
->
-> **2.d) Otra información:** La lista completa de componentes de terceros que incluye esta
-> versión, con sus licencias, se encuentra en el propio sistema, en la carpeta /app/third-party/.
 
 **In English, briefly.** a) Waitron. b) W1, the code the records already carry. c) The release's
 version. d) What it is (a restaurant point of sale on the venue's own server, reached by the
 venue's tills over the local network), its own parts, the third-party parts it takes
 responsibility for, any optional services of ours it uses, no hardware of its own, its main
-functions, and one taxpayer per installation. e) Yes, only Veri\*Factu. f) No, one taxpayer.
+functions, and one taxpayer per installation; it points to the full third-party list. e) Yes, only Veri\*Factu. f) No, one taxpayer.
 g) Signs nothing itself, because a Veri\*Factu-only system's records count as signed when sent
 with a qualified certificate — AEAT's example's words, unchanged. h)–j) Who the producer is and
 where to write to them. k) The fixed compliance statement. l) Date and place of signing. Annex: an
-email address, the archive of every version's declaration, and where the full third-party list
-lives.
+email address and the archive of every version's declaration.
 
 **Choices made in the draft, each for the owner's approval in question 3:**
 
@@ -326,12 +329,20 @@ lives.
   2026-10-21: simplified invoices (F2) are issued; corrective invoices are reached through
   `apps/server/src/cancel-credit.ts`; every full-invoice request is refused
   (`apps/server/src/till-sale.ts:516`, `apps/server/src/working-order.ts:4180-4191`); and no
-  route records a cancellation or a substitute invoice (`docs/backlog.md`, fiscal area: \"No till screen or
+  route records a cancellation or a substitute invoice (`docs/backlog.md`, fiscal area: "No till screen or
   server route calls `recordVoid` yet", and "no route calls `recordSubstitution`"). So full and
-  substitute invoices and cancellations are not listed. A release that turns one on lists it.
-- **The third-party parts that do legal work are named:** Node.js and its SQLite engine (the
-  triggers that refuse a change to a filed record, CLAUDE.md §5) and Litestream (the backup
-  stream). The full list stays in `/app/third-party/`, which already ships with every image.
+  substitute invoices and cancellations are not listed. A release that turns one on lists it. A
+  function is listed only when a screen can do it: the end-of-day till close is left out because
+  no route records one (`recordDailyClose` is called only by a demo script,
+  `apps/server/scripts/daily-close-z-demo.ts`); the read-only daily report is part of «informes de
+  ventas».
+- **Item d) describes an installation on the venue's own machine.** The README also mentions a
+  hosted service (`README.md:6`); a hosted Waitron would be described in the declaration of the
+  version that offers it.
+- **The third-party parts that do legal work are named:** Node.js and its SQLite engine, where the
+  records live, and Litestream, which copies them to the backup. The guarantee that a filed record
+  is not changed comes from Waitron's own triggers (CLAUDE.md §5), so the draft does not credit the
+  engine with it. The full list stays in `/app/third-party/`, which already ships with every image.
 - **No hardware.** AEAT's FAQ: generic hardware is not certified, only hardware sold as part of
   «un "todo"» or hardware that itself meets a requirement. If Waitron later sells a box as part
   of the product, item c) must list the box's version too, software first («Se puede empezar por
@@ -462,16 +473,17 @@ instead of its fixed guide title (`apps/till/src/widgets/guide-sheet.ts:89`). (P
 
 ### 6.3 Handheld and tablet
 
-On these the More menu appears only when bar items overflow
-(`apps/till/src/widgets/till-shell.ts:493-503`, `:1008`), and Log out lives in the operator menu,
-opened from the signed-in person's name (`till-shell.ts:735-842`). So **About Waitron** goes in the
-operator menu, last before Log out, and opens the same sheet. (Picture 3.)
+The More menu (≡) is always drawn on these, because Find bill always lives in it
+(`apps/till/src/till-app.ts:17232-17240`, `apps/till/src/widgets/till-shell.ts:501`). On a tablet
+or wide handheld Log out sits in the operator menu, opened from the signed-in person's name; at
+phone width the operator's items, Log out included, are laid out inside More
+(`till-shell.ts:495`, `:869`). So **About Waitron** goes in More, as its last entry, and is found in
+the same place at every width. It opens the same sheet. (Picture 3.)
 
 ### 6.4 Kitchen screen, and a till before sign-in
 
-A kitchen screen shows no menu, only a corner holding the theme and language choosers, and draws
-that corner only when a language list is wired in (`till-shell.ts:990-993`). The corner gains a
-small **ⓘ** button and is drawn always. The lock (PIN) and pairing screens are drawn outside the
+A kitchen screen shows no menu, only a corner holding the theme and language choosers
+(`till-shell.ts:990-993`). The corner gains a small **ⓘ** button. The lock (PIN) and pairing screens are drawn outside the
 till shell (`apps/till/src/till-app.ts:18226`, `:18371`), so they get their own copy of the sheet
 for their ⓘ. A kitchen screen cannot invoice, but the queue item asks for every terminal, and a PIN
 screen is where a till sits most of the day. (Picture 3.)
@@ -541,8 +553,8 @@ migration (slice 5).
   tags for it (a shallow checkout has none; the guard fails, not passes, when a released version's
   tag is missing).
 - **The headings.** A test reads the title and every item heading from a rendered declaration and
-  compares them with AEAT's worked example V0.5.1, typed once into the test from the provenance
-  source. Weaker than its name: it checks headings, not the values beside them.
+  compares them with a fixed list typed once into the test: AEAT's worked example V0.5.1's
+  headings with §4's three departures. Weaker than its name: it checks headings, not the values beside them.
 - **Production refuses an unreleased build** (§5.1), with a refusing case and the case that must
   still start: a production box on a release.
 - **Cancellations keep the taxpayer's name** (§3, fact 2): a case that records a cancellation
@@ -582,13 +594,18 @@ One at a time, each with a worked example; the full text is in the mock-ups fold
 
 1. **Who is the producer on the first declaration, and what tax number and address does it
    publish?** It goes on every box and on the public GitHub page, and the name and tax number go
-   into every invoice record AEAT receives. Recommended: you personally, now; a company's
-   declaration comes with the first release after the company exists — and at that release every
-   new record names the company instead, part-way through a running chain, which the asesor
-   should confirm is fine.
+   into every invoice record AEAT receives. AEAT's developer FAQ counts the producer's NIF as part
+   of the system's identity, and says a change in that identity makes it a different system
+   (`docs/compliance/verifactu-faq-notes.md` §1–2, FAQ §4 pp. 9–10). So switching to a company
+   later most likely means a new installation number and a new chain at every venue running then.
+   Recommended: you personally, now, because until the company exists the only venue is your own
+   deli, and a new installation there is a path the box already has (re-registering a filing node
+   starts a new chain, CLAUDE.md §5); the asesor confirms what
+   the switch costs. The alternative is to form the company before the first release.
 2. **The two yes/no answers:** "only Veri\*Factu" = S and "several taxpayers" = N. Recommended:
    as drafted, and ask the asesor to confirm both in the next batch, including whether the UK's
-   no-filing mode in the same build changes "only Veri\*Factu".
+   no-filing mode in the same build changes "only Veri\*Factu" (the setup wizard does not offer
+   the UK yet: `availableForVenueSetup: false`, `packages/country-gb/src/united-kingdom.ts:13`).
 3. **The wording.** Approve §4's text, or change it. Recommended: approve as drafted, with the
    facts from question 1 filled in.
 4. **Production runs releases only.** Recommended: a production box refuses to start on a build
@@ -611,6 +628,7 @@ One at a time, each with a worked example; the full text is in the mock-ups fold
 | AEAT FAQ, «Certificación de los sistemas informáticos: declaración responsable», labelled «Actualizadas a 21 de octubre de 2026» | https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/preguntas-frecuentes/certificacion-sistemas-informaticos-declaracion-responsable.html | Every version; no signature; inside and outside; keep all; item e); hardware; components; the two-character code |
 | AEAT FAQ, general (sanction) | https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/preguntas-frecuentes.html | €1,000 per system without a declaration |
 | Orden HAC/1177/2024, art. 15 and annex block 2.6 (consolidated text, last updated 28/10/2024; the annex is published as images and was read by eye) | https://www.boe.es/buscar/act.php?id=BOE-A-2024-22138 | Title, items a)–l), annex 2.a)–d), where it must be, the records' twin fields |
+| AEAT developer FAQ §4, as indexed in the repository | `docs/compliance/verifactu-faq-notes.md` §1–2 | The producer's NIF as part of the system's identity (question 1) |
 | Real Decreto 1007/2023, art. 13 (consolidated text, last updated 03/12/2025) | https://www.boe.es/buscar/act.php?id=BOE-A-2023-24840 | Who, every version, keep them all |
 
 The raw quotes, with every heading of the worked example verbatim, were gathered on 2026-10-21
