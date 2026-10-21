@@ -60,7 +60,7 @@ async function call(method: string, path: string, body?: unknown) {
     venue.cookie,
     method,
     path,
-    await observedDraftCommandBody(venue.db, method, path, body),
+    await observedDraftCommandBody(venue.db, method, path, body, venue.operatorId),
   );
 }
 async function command(partyId: string) {

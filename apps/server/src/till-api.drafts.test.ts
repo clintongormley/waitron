@@ -81,14 +81,26 @@ async function seated(): Promise<Seated> {
 
 /** Ana, the venue's staff session. */
 async function ana(method: string, path: string, body?: unknown) {
-  return send(venue.app, venue.cookie, method, path, await draftBody(method, path, body));
+  return send(
+    venue.app,
+    venue.cookie,
+    method,
+    path,
+    await draftBody(method, path, body, venue.operatorId),
+  );
 }
 
 async function admin(method: string, path: string, body?: unknown) {
-  return send(venue.app, adminCookie, method, path, await draftBody(method, path, body));
+  return send(
+    venue.app,
+    adminCookie,
+    method,
+    path,
+    await draftBody(method, path, body, venue.adminId),
+  );
 }
 
-async function draftBody(method: string, path: string, body: unknown) {
+async function draftBody(method: string, path: string, body: unknown, personId: string) {
   if (
     path.endsWith("/take-over") &&
     body !== null &&
@@ -96,7 +108,7 @@ async function draftBody(method: string, path: string, body: unknown) {
     !Array.isArray(body)
   )
     body = { submissionId: randomUUID(), ...body };
-  return observedDraftCommandBody(venue.db, method, path, body);
+  return observedDraftCommandBody(venue.db, method, path, body, personId);
 }
 async function anotherBill(partyId: string): Promise<string> {
   const billId = randomUUID();

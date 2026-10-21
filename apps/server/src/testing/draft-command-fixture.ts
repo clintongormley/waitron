@@ -110,12 +110,17 @@ export async function observedDraftCommandBody(
   db: Database,
   method: string,
   path: string,
-  body: unknown,
+  given: unknown,
+  personId?: string,
 ): Promise<unknown> {
-  if (body === null || typeof body !== "object" || Array.isArray(body)) return body;
-  const ask = body as Record<string, unknown>;
-  if (Object.hasOwn(ask, "expectedEdit")) return body;
+  if (given === null || typeof given !== "object" || Array.isArray(given)) return given;
   const save = method === "PUT" && /^\/api\/parties\/[^/]+\/drafts$/.test(path);
+  const ask: Record<string, unknown> =
+    save && personId !== undefined && !Object.hasOwn(given, "personId")
+      ? { ...given, personId }
+      : (given as Record<string, unknown>);
+  const body: unknown = ask;
+  if (Object.hasOwn(ask, "expectedEdit")) return body;
   const recall = /^\/api\/parties\/[^/]+\/lines\/([^/]+)\/recall$/.exec(path);
   const draft = /^\/api\/parties\/[^/]+\/drafts\/([^/]+)\/(take-over|submit)$/.exec(path);
   if (!save && recall === null && draft === null) return body;
