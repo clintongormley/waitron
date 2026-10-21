@@ -1437,6 +1437,10 @@ that:
 _2026-09-30, C90: the receipt now prints the dish at its full price with the comp or discount on a
 line of its own beneath it._
 
+_2026-10-21, A758-4 (owner D11): a full comp now prints «Descuento 100% -12,00 €» where (c)'s
+example says «Invitación -12,00 €»; the figures and the filed record are unchanged. S10 already
+treats a free item as a discount (V0555-17)._
+
 **What the software does, 2026-09-30.** This is now built (service plan Task 11, #916). Staff can
 comp or discount only a bill whose invoice has not been issued yet (an open bill of a table). The
 filed record carries only the reduced price. The printed ticket, and the ticket the till shows

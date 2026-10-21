@@ -2218,8 +2218,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Voids and comps under Service, with search, drag to reorder and a real Delete; A923–A926 are what
   it left open. **A758-3 built the report** ([plan](superpowers/plans/2026-10-21-a758-3-voids-and-comps-report.md)): Voids
   and Comps in the totals, each entry's words, who asked for and approved each reason, and a Reason
-  filter on the list; A952–A959 are what it left open. Left:
-  A758-4 ("Descuento 100%" on receipts), A758-5 (the till's Comp words), and the §3.8 and
+  filter on the list; A952–A959 are what it left open. **A758-4 built the receipt words**
+  ([plan](superpowers/plans/2026-10-21-a758-4-full-comp-receipt.md)): a full comp — Free, or an
+  amount that took the whole list price — prints «Descuento 100%» in each language's own discount
+  word, and the «Invitación» receipt label is gone; a test shows the filed record is unchanged;
+  A911 and A960 are what it left open. Left: A758-5 (the till's Comp words), and the §3.8 and
   "collect it at the counter" slices. The §3.8 slice also makes the report's entries read
   "Void, charged" («Cancelado, cobrado», design §3.6) for a cancel that kept the charge, deferred from
   A758-3; most such rows are already told apart without a migration, because A773-1 writes a
@@ -2262,10 +2265,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   another person's list opens or the days change, and goes back to All reasons when the list
   closes. A deleted reason re-added under the same name shows twice in the field, because the
   report groups by the reason's id. Owner to confirm.
-
-- **A955. An amount comp reads "Comp 100%" only when it took the item's whole list value (left
-  open by A758-3).** An amount that takes what an earlier comp left reads "Comp €6.00". Owner to
-  confirm.
 
 - **A956. The report's new words, for the owner to read (left open by A758-3).** Voids / Comps («Cancelaciones» /
   «Descuentos»), Void («Cancelado»), "Comp {amount}" («Descuento {amount}»), All reasons («Todos
@@ -2315,9 +2314,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   with no approval under a 50% item limit; on the original bill the same 50% asked. Decide whether
   an item's count should follow it to another bill.
 
-- **A911. When an amount comp prints "Descuento 100%" (left open by A758-1, for A758-4).** "Full"
-  means the comp took the item's whole list price. An amount comp that takes what another comp left
-  prints "Descuento" with its amount. Confirm with the owner when A758-4 is built.
+- **A911. What counts as a full comp (left open by A758-1, A758-3 and A758-4).** Free always
+  counts, even after an earlier comp took part of the price, so it prints «Descuento 100%» beside
+  what was left, as a 100% percentage already does. An amount counts only when it took the item's
+  whole list price; one that takes what an earlier comp left prints «Descuento» and its amount, and
+  the report reads "Comp €6.00". One rule decides both (`packages/adjustments/src/full-comp.ts`).
+  Owner to confirm both halves.
 
 - **A919. Three reason-form limits show "No limit" as a placeholder and also carry a hint (left
   open by A758-1).** The voids-and-comps form's limit fields use `adjustments.no_limit` as the
@@ -3857,6 +3859,14 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   #1242, left as it was): `discovered-row-`, `register-`, `pair-`, `forget-device-` and the rest,
   so a lookup by name finds the first row drawn for that device. Left open by W74 (deleting a
   category warns about exactly what will go, #1196).
+
+- **A960. On an 80 mm roll in Basque, a full invoice with more than one VAT rate prints a full
+  comp's «Deskontua 100%» with «100%» on its own line under the figures (left open by A758-4).**
+  The receipt table (`apps/server/src/receipt-table.ts`) wraps item text longer than the item
+  column — 14 characters on that bill, narrowed by the VAT-rate column, less a 2-character indent
+  for a row under a dish — just as a 100% percentage discount or a long dish name already wraps
+  there. Decide whether a short label should be kept whole. The wrapped text is pinned in
+  `apps/server/src/receipt-ticket.test.ts` (the 80 mm Basque case of the comped-extra check).
 
 - **Loose ends left by A331 batch 3b (#1415).**
   - A freshly added printer's wizard opens with a blue Save — the campaign runner's ruling of
