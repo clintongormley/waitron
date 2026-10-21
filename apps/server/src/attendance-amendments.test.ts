@@ -191,7 +191,7 @@ describe("amendment attendance in the command transaction", () => {
     },
   );
   it.each(["place", "cancel"] as const)(
-    "a repeated %s is refused before reading a new activity clock",
+    "a repeated %s reads no new activity clock and creates no evidence",
     async (action) => {
       const id = await parked();
       if (action === "cancel")
@@ -201,9 +201,12 @@ describe("amendment attendance in the command transaction", () => {
       vi.spyOn(v.clock, "now").mockImplementation(() => {
         throw new Error("repeat amendment clock");
       });
-      await expect(act(action, id)).rejects.toMatchObject({
-        code: action === "place" ? "working_order.not_open" : "working_order.not_placed",
-      });
+      if (action === "place")
+        await expect(act(action, id)).resolves.toEqual({ id, status: "placed" });
+      else
+        await expect(act(action, id)).rejects.toMatchObject({
+          code: "working_order.not_placed",
+        });
       expect(await state()).toEqual(before);
     },
   );
