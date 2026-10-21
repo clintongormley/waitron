@@ -12,6 +12,7 @@ import { readCredential } from "./credentials.js";
 import { stripeSecretKeyFrom } from "./stripe-account.js";
 import { codeOf } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import "./errors.js";
 
 const PURPOSE = "payments.stripe";
@@ -30,8 +31,8 @@ export interface WebhookDeps {
   db: Database;
   ring: KeyRing;
   nodeId: string;
+  admission: TradingAdmission;
   environment: DeploymentEnvironment;
-  /** Injected so a test never constructs a real SDK and the key it was given is observable. */
   makeStripe: (secretKey: string) => Stripe;
 }
 
@@ -53,10 +54,6 @@ export function hostedWebhookSecretFrom(
   return webhookSecret;
 }
 
-/**
- * The signature is the whole of the authorisation. No sale is recorded here, so a payment settled
- * by this route has no associated sale (the `recordSale` hand-off is open in `docs/backlog.md`).
- */
 export async function settleWebhook(
   deps: WebhookDeps,
   rawBody: string,
@@ -99,6 +96,7 @@ export async function settleWebhook(
   }
 
   return withTransaction(deps.db, async (tx) => {
+    await requireEconomicWrite(tx, { nodeId: deps.nodeId }, deps.admission);
     if (event.outcome === "expired") {
       await expireInitiated(tx, { provider: event.provider, externalRef: event.externalRef });
       return "expired";

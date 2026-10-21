@@ -107,10 +107,10 @@ For safety-critical omission controls, create a disposable detached checkout con
 
 **Files/ownership:** Modify server `webhook.ts`/`.test.ts`; create `zone-webhook-admission.test.ts` for the independent boundary cases. Consumes Task 4 admission; produces the signature-verifying webhook handler mounted by Task 8. No dependency on later issuance changes.
 
-- [ ] **Red:** A valid signed new settlement under closed admission returns retryable **500**, stores **0** new economic rows and retains preexisting evidence byte-for-byte. Direct `settleWebhook` must refuse too. Invalid signatures keep their existing refusal. Admitted control stores the settlement once; closing, reopening and redelivering the same verified event creates no duplicate.
-- [ ] **Minimal:** Make admission a required handler/orchestration dependency and check it at the actual settlement-write transaction after raw signature verification. Retain verified unrelated-event treatment. Use the real installed provider client with synthetic signed events; provider-side money movement remains outside this claim.
-- [ ] **Focused red/green/control:** `pnpm --filter @waitron/server exec vitest run src/webhook.test.ts src/zone-webhook-admission.test.ts`. In an installed copy omit only the write-boundary check; observe 200/new settlement and the intended failed assertion, then restore/pass.
-- [ ] **Commit:** `git commit -s` with `fix: refuse webhook settlement before zone admission`. Actual repair-mode mounting and post-restart redelivery are Task 8/18 acceptance.
+- [x] **Red:** A valid signed new settlement under closed admission returns retryable **500**, stores **0** new economic rows and retains preexisting evidence byte-for-byte. Direct `settleWebhook` must refuse too. Invalid signatures keep their existing refusal. Admitted control stores the settlement once; closing, reopening and redelivering the same verified event creates no duplicate.
+- [x] **Minimal:** Make admission a required handler/orchestration dependency and check it at the actual settlement-write transaction after raw signature verification. Retain verified unrelated-event treatment. Use the real installed provider client with synthetic signed events; provider-side money movement remains outside this claim.
+- [x] **Focused red/green/control:** `pnpm --filter @waitron/server exec vitest run src/webhook.test.ts src/zone-webhook-admission.test.ts`. In an installed copy omit only the write-boundary check; observe 200/new settlement and the intended failed assertion, then restore/pass.
+- [x] **Commit:** `git commit -s` with `fix: refuse webhook settlement before zone admission`. Actual repair-mode mounting and post-restart redelivery are Task 8/18 acceptance.
 
 ### Task 6: Qualify the invalid-zone restore entry dependency
 

@@ -167,6 +167,7 @@ import { runPass, DRAIN_DUTY, type PassReport } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
 import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
+import { TradingAdmission } from "./trading-admission.js";
 import { mountTillApi } from "./till-api.js";
 import { createDiskFullState, noteFullAtStart, watchForDiskFull } from "./disk-full-state.js";
 import { mountDiskStopApi } from "./disk-stop-api.js";
@@ -1786,12 +1787,14 @@ async function bootServer(
   // A rerouted till fetches menu photos cross-origin.
   app.use("/media/*", corsForVenue(allowOrigin));
 
+  const tradingAdmission = new TradingAdmission();
   mountWebhook(
     app,
     {
       db,
       ring,
       nodeId: config.node.nodeId,
+      admission: tradingAdmission,
       environment: config.environment,
       makeStripe: defaultMakeStripe,
     },
