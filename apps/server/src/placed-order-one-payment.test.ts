@@ -584,7 +584,7 @@ describe("a placed order's card when a transaction ahead in the write queue note
     );
 
   it.each(KINDS)(
-    "$label: refuses with storage.disk_full inside the first transaction, asking no reader",
+    "$label: refuses with storage.disk_full before the reader is asked",
     async ({ kind }) => {
       const id = await placed(kind);
       const disk = roomyState();
