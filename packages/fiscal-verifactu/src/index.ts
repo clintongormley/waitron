@@ -6,6 +6,7 @@ export { FISCAL_VOCABULARY } from "./vocabulary.js";
 export { FISCAL_PROVISIONING, WAITRON_ID_SISTEMA } from "./provisioning.js";
 export { FISCAL_OPERATIONS } from "./hour-configuration.js";
 export { FISCAL_HOUR_BACKUP_STATE } from "./hour-backup-state.js";
+export { FISCAL_BACKUP_VERIFICATION } from "./backup-verification.js";
 export { FISCAL_RECOVERY_PACK } from "./recovery-pack.js";
 export { FISCAL_RECOVERY_DOCUMENT } from "./completed-recovery-document.js";
 export { readCloudAllocationReceipt, verifyCloudAllocationEvidence } from "./cloud-evidence.js";

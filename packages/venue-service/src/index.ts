@@ -128,3 +128,4 @@ export {
   type FloorPlanSetsModel,
 } from "./floor-plan-set-store.js";
 export type { DueFloorLayout, FloorPlanSetSummary } from "@waitron/module";
+export { VENUE_SERVICE_BACKUP_VERIFICATION } from "./backup-verification.js";

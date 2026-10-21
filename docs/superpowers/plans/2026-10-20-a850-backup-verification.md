@@ -57,7 +57,7 @@ These anchors refer to the plan base. No test, restore, migration, isolation pro
 
 ## Interfaces and file responsibilities
 
-Everything in this section is a **planned interface**, not an existing export. `Environment` is the structural literal union `"preproduction" | "production"`, matching existing `DeploymentEnvironment` without a package-to-app import; `BackupValue`, `BackupRow`, and `BackupQuery` come from the new store file below. All digests are lowercase full SHA-256; revisions are full 40-hex. Copy/freeze admitted inputs so later mutation cannot change a bound request.
+This section specifies the final interfaces. The task checklists and execution checkpoint below distinguish implemented exports from planned ones. `Environment` is the structural literal union `"preproduction" | "production"`, matching existing `DeploymentEnvironment` without a package-to-app import; `BackupValue`, `BackupRow`, and `BackupQuery` come from the new store file below. All digests are lowercase full SHA-256; revisions are full 40-hex. Copy/freeze admitted inputs so later mutation cannot change a bound request.
 
 ### Query and owner semantics
 
@@ -307,7 +307,7 @@ No fake migrator/placement/openDb/verifier or activation/boot/worker seats. Narr
 
 Create `apps/server/src/backup-data-placement.ts` exporting `placeBackupDatabase(databasePath:string,input:{venueDir:string;modules:readonly WaitronModule[];migrationsRoot:string|null;log:Logger}):Promise<void>` and `placeBackupData(validated:ValidatedArtifact,input:{venueDir:string;stateDir:string;modules:readonly WaitronModule[];migrationsRoot:string|null;log:Logger}):Promise<void>`. Use existing `restoreDatabase`, real `applyMigrations(migrationOptionsFor(orderedMigrationSets(...)))` and `restoreSecrets`; no identity set-aside, hooks, operations, series settlement or markers. Keep ordinary `placeValidated` unchanged: the new host shares its existing exported placement primitives and the real migration engine. This avoids adding a circular import just to share two orchestration calls.
 
-Create `apps/server/src/backup-verification-compatibility.ts` exporting `checkBackupVerificationCompatibility(input:{manifest:BackupManifest;target:BackupVerificationTarget;modules:readonly WaitronModule[];before:BackupQuery;entries:readonly ArchiveEntry[]}):Promise<"passed"|"unsupported"|"invalid">`. Reconcile all manifest names/counts, actual applied journal histories/hashes, source tables, modules.json, dependencies, identity and environment before migration. Existing `checkRestoreCompatibility` stays permissive for ordinary callers. Refuse unclaimed tables/entries; only exact named journal tables and known SQLite/Litestream internals (`_litestream_seq`, `_litestream_lock`) get explicit schema-checked exceptions.
+Create `apps/server/src/backup-verification-compatibility.ts` exporting `checkBackupVerificationCompatibility(input:{manifest:BackupManifest;target:BackupVerificationTarget;modules:readonly WaitronModule[];before:BackupQuery;entries:readonly ArchiveEntry[];migrationsRoot?:string|null}):Promise<"passed"|"unsupported"|"invalid">`. Resolve shipped history with the same explicit migration root used to construct the target (`null` by default for source execution). Reconcile all manifest names/counts, actual applied journal histories/hashes, source tables, modules.json, dependencies, identity and environment before migration. Existing `checkRestoreCompatibility` stays permissive for ordinary callers. Refuse unclaimed tables/entries; only exact named journal tables and known SQLite/Litestream internals (`_litestream_seq`, `_litestream_lock`) get explicit schema-checked exceptions.
 
 Create `apps/server/src/backup-verification-secrets.ts` exporting `verifyBackupStateSecrets(entries:readonly ArchiveEntry[],source:{nodeId:string;locationId:string},now:Date,sealedState?:{sealed:Uint8Array;recoveryKey:string}):Promise<{status:"passed"|"invalid"|"unsupported"|"unavailable";reason:BackupVerificationReason}>`. Also export `verifyBackupKeyPlacement(captured:readonly ArchiveEntry[],placedStateDir:string):Promise<"passed"|"unsupported"|"unavailable">` from the secrets file for the captured/actual-layout comparison above; it returns no key material. Create boot-free `apps/server/src/backup-verification-entry.ts` exporting verifier, target builders and strict readers; build to `apps/server/dist/backup-verification.js`. Cloud owns private transport, real child identity, termination and child cleanup in addition to Waitron's scratch cleanup.
 
@@ -341,40 +341,40 @@ Each task's checklist means: write the named red assertions; run its exact comma
 **Files:** create `packages/module/src/backup-verification.ts`, `packages/module/src/backup-verification.test.ts`; modify `packages/module/src/module.ts`, `packages/module/src/index.ts`, `packages/module/package.json`; create the **type declarations only** from the query contract in `packages/store/src/backup-query.ts` and export them from `packages/store/src/index.ts` (Task 2 adds implementation).
 **Consumes:** existing module/backup interfaces. **Produces:** exact owner interfaces, `BackupVerificationUnsupported`, `BackupCheckUnavailable` and declaration/result validators above; store value/query types. Module gets a direct store type dependency, never db-to-module.
 
-- [ ] RED `requires explicit verification declarations`, `data effects name independent checks`, `activation effects cannot claim executed checks`, `rejects duplicate effects unknown versions and free-form results`. Assert missing semantics refuses; fiscal-none's explicit empty contract is accepted.
-- [ ] Run `pnpm --filter @waitron/module exec vitest run src/backup-verification.test.ts`; expect missing validator, then incorrect acceptance assertions red.
-- [ ] Implement strict declarations/results (aggregate status must agree with check statuses) and optional seat; preserve ordinary descriptors/restore hook semantics. GREEN the same command, then `pnpm --filter @waitron/module typecheck`.
-- [ ] Commit `git commit -s -m "feat(module): declare backup verification semantics"`.
+- [x] RED `requires explicit verification declarations`, `data effects name independent checks`, `activation effects cannot claim executed checks`, `rejects duplicate effects unknown versions and free-form results`. Assert missing semantics refuses; fiscal-none's explicit empty contract is accepted.
+- [x] Run `pnpm --filter @waitron/module exec vitest run src/backup-verification.test.ts`; expect missing validator, then incorrect acceptance assertions red.
+- [x] Implement strict declarations/results (aggregate status must agree with check statuses) and optional seat; preserve ordinary descriptors/restore hook semantics. GREEN the same command, then `pnpm --filter @waitron/module typecheck`.
+- [x] Commit `git commit -s -m "feat(module): declare backup verification semantics"`.
 
 ### Task 2: Enforce read-only access beneath types
 
 **Files:** modify `packages/store/src/backup-query.ts`, `packages/store/src/index.ts`; create `packages/store/src/backup-query.test.ts`.
 **Consumes:** Task 1 query types and a closed SQLite path. **Produces:** `openBackupQuery(databasePath)` above.
 
-- [ ] RED `serves bound SELECT and recursive reads`, `refuses UPDATE DELETE INSERT from a cast callback`, `refuses PRAGMA query_only OFF attachments DDL RETURNING writes and extensions`, `closes on iteration failure`. Assert engine refusal, unchanged whole rows and no new attached file, while legitimate reads pass.
-- [ ] Run `pnpm --filter @waitron/store exec vitest run src/backup-query.test.ts`; expect missing implementation then writable-fixture assertions red.
-- [ ] Implement readOnly/query-only/default-deny authorizer and private close; no ordinary store change. Unsupported authorizer is unavailable, not fallback. GREEN same command.
-- [ ] Commit `git commit -s -m "feat(store): enforce query-only backup reads"`.
+- [x] RED `serves bound SELECT and recursive reads`, `refuses UPDATE DELETE INSERT from a cast callback`, `refuses PRAGMA query_only OFF attachments DDL RETURNING writes and extensions`, `closes on iteration failure`. Assert engine refusal, unchanged whole rows and no new attached file, while legitimate reads pass.
+- [x] Run `pnpm --filter @waitron/store exec vitest run src/backup-query.test.ts`; expect missing implementation then writable-fixture assertions red.
+- [x] Implement readOnly/query-only/default-deny authorizer and private close; no ordinary store change. Unsupported authorizer is unavailable, not fallback. GREEN same command.
+- [x] Commit `git commit -s -m "feat(store): enforce query-only backup reads"`.
 
 ### Task 3: Generate inventory without enabled-module filtering
 
 **Files:** create `packages/composition/src/backup-verification.ts`, `packages/composition/src/backup-verification.test.ts`; modify `packages/composition/src/index.ts`.
 **Consumes:** Task 1 declarations and `ALL_MODULES`. **Produces:** `backupVerificationInventory(modules:readonly WaitronModule[]):readonly {module:WaitronModule;verification:BackupVerificationContribution}[]`.
 
-- [ ] RED `refuses each missing owner independently`, `includes inactive and schema-zero descriptors`, `refuses duplicate names dependency gaps and unknown semantics`, `never substitutes fiscal-none`. Remove each contribution from a complete synthetic descriptor set and require unsupported; inactive fiscal remains required.
-- [ ] Run `pnpm --filter @waitron/composition exec vitest run src/backup-verification.test.ts`; expect missing export then omitted-owner assertion red.
-- [ ] Implement complete dependency/semantics validation. Do not pretend real composition has contributions yet; Task 21 adds its passing real-inventory assertion. GREEN same command.
-- [ ] Commit `git commit -s -m "feat(composition): require complete verification inventory"`.
+- [x] RED `refuses each missing owner independently`, `includes inactive and schema-zero descriptors`, `refuses duplicate names dependency gaps and unknown semantics`, `never substitutes fiscal-none`. Remove each contribution from a complete synthetic descriptor set and require unsupported; inactive fiscal remains required.
+- [x] Run `pnpm --filter @waitron/composition exec vitest run src/backup-verification.test.ts`; expect missing export then omitted-owner assertion red.
+- [x] Implement complete dependency/semantics validation. Do not pretend real composition has contributions yet; Task 21 adds its passing real-inventory assertion. GREEN same command.
+- [x] Commit `git commit -s -m "feat(composition): require complete verification inventory"`.
 
 ### Task 4: Bind strict wire input, result and target descriptors
 
 **Files:** create `apps/server/src/backup-verification-protocol.ts`, `apps/server/src/backup-verification-protocol.test.ts`, `apps/server/src/backup-verification-target.ts`, `apps/server/src/backup-verification-target.test.ts`.
 **Consumes:** Tasks 1–3 and actual migration assets. **Produces:** all private protocol types/readers/digest functions and `buildBackupVerificationTarget` above. Task 5 connects current build provenance.
 
-- [ ] RED `binds every request field independently`, `module ordering leaves digest stable`, `rejects duplicate JSON keys unknown nested keys noncanonical integers and oversized input`, `rejects incomplete or forged passed output`, `target changes with SQL package version or policy bytes`. Assert null measurement and missing module cannot pass; no secret/free-form/path result fields accepted.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/backup-verification-protocol.test.ts src/backup-verification-target.test.ts`; expect missing exports then binding/shape assertions red.
-- [ ] Implement bounded readers and fixed canonical arrays. Publish deterministic literal vectors for lane D; no request-provided source revision. GREEN same command, mutating each field separately.
-- [ ] Commit `git commit -s -m "feat(server): bind private backup verification protocol"`.
+- [x] RED `binds every request field independently`, `module ordering leaves digest stable`, `rejects duplicate JSON keys unknown nested keys noncanonical integers and oversized input`, `rejects incomplete or forged passed output`, `target changes with SQL package version or policy bytes`. Assert null measurement and missing module cannot pass; no secret/free-form/path result fields accepted.
+- [x] Run `pnpm --filter @waitron/server exec vitest run src/backup-verification-protocol.test.ts src/backup-verification-target.test.ts`; expect missing exports then binding/shape assertions red.
+- [x] Implement bounded readers and fixed canonical arrays. Publish deterministic literal vectors for lane D; no request-provided source revision. GREEN same command, mutating each field separately.
+- [x] Commit `git commit -s -m "feat(server): bind private backup verification protocol"`.
 
 ### Task 5: Embed build identity and expose a boot-free distribution
 
@@ -391,80 +391,82 @@ Each task's checklist means: write the named red assertions; run its exact comma
 **Files:** create `packages/db/src/backup-evidence.ts`, `packages/db/src/backup-evidence.test.ts`, `packages/composition/src/core-backup-verification.ts`; modify `packages/db/src/index.ts`, `packages/composition/src/modules.ts`.
 **Consumes:** Task 2 queries, complete core classification and existing pure amendment verifier. **Produces:** table policy/comparison/core functions above; `CORE_BACKUP_VERIFICATION:BackupVerificationContribution` in composition, using a structural db API to avoid cycles.
 
-- [ ] RED `detects same-count immutable replacement and non-hash field changes`, `preserves every historical and live series counter`, `source identity location or environment disagreement refuses`, `walks every order amendment chain`, `never creates a missing head`. Assert every generated core append-only row/field, sales relationships and stored heads are retained, not merely row counts/newest hashes.
-- [ ] Run `pnpm --filter @waitron/db exec vitest run src/backup-evidence.test.ts`; expect missing export then count-only comparison denial red.
-- [ ] Implement complete typed row comparisons, identity/series/reference checks and query-only amendment walks. Preserve membership documents, public-key relationships and removal/clearance evidence without adoption/signing; use existing `verifyMembershipDocument` (`packages/membership/src/verify.ts:100`) with the captured trust set as an internal consistency check, without claiming independent external membership attestation. Compare closes/head now; Task 7 adds semantic walk. Declare host series replacement/first-start as activation-only. GREEN same command plus `pnpm exec vitest run scripts/workspace-cycles.test.ts scripts/module-seams.test.ts`.
-- [ ] Commit `git commit -s -m "feat(db): verify preserved core backup evidence"`.
+- [x] RED `detects same-count immutable replacement and non-hash field changes`, `preserves every historical and live series counter`, `source identity location or environment disagreement refuses`, `walks every order amendment chain`, `never creates a missing head`. Assert every generated core append-only row/field, sales relationships and stored heads are retained, not merely row counts/newest hashes.
+- [x] Run `pnpm --filter @waitron/db exec vitest run src/backup-evidence.test.ts`; expect missing export then count-only comparison denial red.
+- [x] Implement complete typed row comparisons, identity/series/reference checks and query-only amendment walks. Preserve membership documents, public-key relationships and removal/clearance evidence without adoption/signing; use existing `verifyMembershipDocument` (`packages/membership/src/verify.ts:100`) with the captured trust set as an internal consistency check, without claiming independent external membership attestation. Compare closes/head now; Task 7 adds semantic walk. Declare host series replacement/first-start as activation-only. GREEN same command plus `pnpm exec vitest run scripts/workspace-cycles.test.ts scripts/module-seams.test.ts`.
+- [x] Commit `git commit -s -m "feat(db): verify preserved core backup evidence"`.
 
 ### Task 7: Verify daily-close history through the core contribution
 
 **Files:** create `packages/reporting/src/backup-verification.ts`, `packages/reporting/src/backup-verification.test.ts`; modify `packages/reporting/src/index.ts`, `packages/reporting/package.json` (store dependency), `packages/composition/package.json` (reporting dependency), `packages/composition/src/core-backup-verification.ts`.
 **Consumes:** Task 2 queries, Task 6 comparison and existing `computeCloseEntryHash`. **Produces:** `verifyBackupCloseHistory(before:BackupQuery,after:BackupQuery):Promise<boolean>`; called by composition's core adapter, not db.
 
-- [ ] RED `checks all nodes`, `rejects middle damage deleted tail and missing head`, `accepts honestly empty history`. Assert contiguous sequence, genesis, every snapshot/hash and captured `daily_close_chain` tip before/after.
-- [ ] Run `pnpm --filter @waitron/reporting exec vitest run src/backup-verification.test.ts src/daily-close-hash.test.ts src/verify-daily-close-chain.test.ts src/verify-daily-close-chain.tampered.test.ts`; expect new export/full-walk assertion red; keep existing tests intact.
-- [ ] Implement independent query mapping with existing pure hash. Do not cast a writable transaction or change the operational verifier. Core cannot pass if reporting refuses. GREEN same command.
-- [ ] Commit `git commit -s -m "feat(reporting): verify complete captured close history"`.
+- [x] RED `checks all nodes`, `rejects middle damage deleted tail and missing head`, `accepts honestly empty history`. Assert contiguous sequence, genesis, every snapshot/hash and captured `daily_close_chain` tip before/after.
+- [x] Run `pnpm --filter @waitron/reporting exec vitest run src/backup-verification.test.ts src/daily-close-hash.test.ts src/verify-daily-close-chain.test.ts src/verify-daily-close-chain.tampered.test.ts`; expect new export/full-walk assertion red; keep existing tests intact.
+- [x] Implement independent query mapping with existing pure hash. Do not cast a writable transaction or change the operational verifier. Core cannot pass if reporting refuses. GREEN same command.
+- [x] Commit `git commit -s -m "feat(reporting): verify complete captured close history"`.
 
 ### Task 8: Walk every fiscal chain segment and stored head
 
 **Files:** create `packages/fiscal-verifactu/src/backup-verification-chain.ts`, `packages/fiscal-verifactu/src/backup-verification-chain.test.ts`; modify `packages/fiscal-verifactu/package.json` (direct store dependency).
 **Consumes:** Task 2 queries, existing row decoder/fromRegistroRow and pure verifyHuella, all captured SIF/head rows. **Produces:** `verifyBackupFiscalChains(before:BackupQuery,after:BackupQuery):Promise<boolean>`.
 
-- [ ] RED `detects corruption older than the newest two records`, `checks all four predecessor fields`, `rejects gaps duplicate genesis and missing head`, `accepts re-registration with reset current pointer`, `detects tail loss from captured head`, `checks inactive and non-source nodes`. Use genuine alta/anulación/rectification/substitution history, multiple SIFs, and current SIF with no sales; a non-huella field edit must fail preservation.
-- [ ] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification-chain.test.ts`; expect missing export then last-two-only/missing-head denial red.
-- [ ] Implement full node sequence iteration, checking rebuilt records with existing `@waitron/verifactu` validate at their recorded generation instant (the policy used at `chain.ts:189`), and SIF boundaries derived from stored identities, genesis per legitimate segment and no invented cross-registration link. Match head sequence and pointer to current SIF's tip or legitimate reset-empty state; preserve every historical segment/tip before/after. Never call operational verifyChain/head readers or edit protected writers. GREEN same command.
-- [ ] Commit `git commit -s -m "feat(fiscal): verify complete captured fiscal chains"`.
+- [x] RED `detects corruption older than the newest two records`, `checks all four predecessor fields`, `rejects gaps duplicate genesis and missing head`, `accepts re-registration with reset current pointer`, `detects tail loss from captured head`, `checks inactive and non-source nodes`. Use genuine alta/anulación/rectification/substitution history, multiple SIFs, and current SIF with no sales; a non-huella field edit must fail preservation.
+- [x] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification-chain.test.ts`; expect missing export then last-two-only/missing-head denial red.
+- [x] Implement full node sequence iteration, checking rebuilt records with existing `@waitron/verifactu` validate at their recorded generation instant (the policy used at `chain.ts:189`), and SIF boundaries derived from stored identities, genesis per legitimate segment and no invented cross-registration link. Match head sequence and pointer to current SIF's tip or legitimate reset-empty state; preserve every historical segment/tip before/after. Never call operational verifyChain/head readers or edit protected writers. GREEN same command.
+- [x] Commit `git commit -s -m "feat(fiscal): verify complete captured fiscal chains"`.
 
 ### Task 9: Check registrations, allocations and captured public signatures
 
-**Files:** create `packages/fiscal-verifactu/src/backup-verification-history.ts`, `packages/fiscal-verifactu/src/backup-verification-history.test.ts`, `packages/fiscal-verifactu/src/backup-verification-trust.ts`.
-**Consumes:** Tasks 2/6; existing public receipt/signature readers with pinned public trust from target policy, never trust chosen by archive. **Produces:** `verifyBackupFiscalHistory(context:BackupVerificationContext):Promise<BackupModuleResult>` and release-pinned `FISCAL_BACKUP_PUBLIC_TRUST:{cloud:ReceiptTrust|null;paper:readonly PaperCustodianTrust[]}` in the new trust file. These are existing public trust types from cloud-evidence.ts/paper-evidence.ts; they contain no private key or operation authority. Hash its public data as `[cloud === null ? null : [cloud.issuer,sortedCloudKeyPairs],sortedPaperTriples]`, where paper triples are `[custodianId,publicKey,fingerprint]`, into the owner publicEvidenceDigest; no raw Map JSON serialisation. Null/empty means no applicable trusted key, never success for a signature requiring it.
+**Files:** create `packages/fiscal-verifactu/src/backup-verification-history.ts`, `packages/fiscal-verifactu/src/backup-verification-history.test.ts`, `packages/fiscal-verifactu/src/backup-verification-trust.ts`, `packages/fiscal-verifactu/src/backup-verification-trust.test.ts`.
+**Consumes:** Tasks 2/6; existing public receipt/signature readers with pinned public trust from target policy, never trust chosen by archive. **Produces:** `verifyBackupFiscalHistory(context:BackupVerificationContext):Promise<BackupModuleResult>` and release-pinned `FISCAL_BACKUP_PUBLIC_TRUST:{cloud:ReceiptTrust|null;paper:readonly PaperCustodianTrust[]}` in the new trust file. The trust file also exports `fiscalBackupPublicEvidenceDigest(trust = FISCAL_BACKUP_PUBLIC_TRUST):string`; the fiscal owner uses the release default. These are existing public trust types from cloud-evidence.ts/paper-evidence.ts; they contain no private key or operation authority. Hash its public data as `[cloud === null ? null : [cloud.issuer,sortedCloudKeyPairs],sortedPaperTriples]`, where paper triples are `[custodianId,publicKey,fingerprint]`, into the owner publicEvidenceDigest; no raw Map JSON serialisation. Null/empty means no applicable trusted key, never success for a signature requiring it.
 
-- [ ] RED `checks every revoked registration and allocation`, `rejects historical signature or source relationship changes`, `retains filing cases events sends flows and acknowledgements`, `requires no new allocation to read receipts`. Check allocation result/series/bases/approval/source binding and reservation source/target nodes, with older rows corrupted independently.
-- [ ] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification-history.test.ts src/cloud-evidence.test.ts src/paper-evidence.test.ts`; expect missing export then historical relationship/signature denial red.
-- [ ] Implement query-only checks for stored hour/cloud/signed-paper/declared-paper/emergency formats without new confirmations. Preserve all columns in SIF/allocations/reservations, filing cases/events, envios/flujo/acks and certificate history. Invalid signature with known trust is invalid; absent required trust is unsupported, never permission to accept self-asserted roots. Keep declared/emergency limitations explicit. Existing `initial-cloud-setup.ts:182` reads a host trust file; do not invoke it or follow its archived pathname in the child. Release ownership must supply reviewed public roots before that signed format can pass. Until then return unsupported for that format, with no fetch or self-trust fallback. GREEN same command; zero signing/preparation calls.
-- [ ] Commit `git commit -s -m "feat(fiscal): verify captured registration and receipt history"`.
+- [x] RED `checks every revoked registration and allocation`, `rejects historical signature or source relationship changes`, `retains filing cases events sends flows and acknowledgements`, `requires no new allocation to read receipts`. Check allocation result/series/bases/approval/source binding and reservation source/target nodes, with older rows corrupted independently.
+- [x] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification-history.test.ts src/cloud-evidence.test.ts src/paper-evidence.test.ts`; expect missing export then historical relationship/signature denial red.
+- [x] Implement query-only checks for stored hour/cloud/signed-paper/declared-paper/emergency formats without new confirmations. Preserve all columns in SIF/allocations/reservations, filing cases/events, envios/flujo/acks and certificate history. Invalid signature with known trust is invalid; absent required trust is unsupported, never permission to accept self-asserted roots. Keep declared/emergency limitations explicit. Existing `initial-cloud-setup.ts:182` reads a host trust file; do not invoke it or follow its archived pathname in the child. Release ownership must supply reviewed public roots before that signed format can pass. Until then return unsupported for that format, with no fetch or self-trust fallback. GREEN same command; zero signing/preparation calls.
+- [x] Commit `git commit -s -m "feat(fiscal): verify captured registration and receipt history"`.
+
+**Implementation qualification:** the stored Cloud envelope contains a reservation reference, while `cloud-preparation.ts:143–153` writes its signed receipt into a host file. The query-only reader returns `unsupported` for that reference and reads no archived pathname. Signed paper uses the existing public parsers and signature bytes without calling a reader that requires current confirmations. No public roots are configured in this release. Declared paper checks retained structure and digests; emergency checks retained checksum evidence. Neither supplies outside attestation or fresh activation authority. A malformed configured root also remains `unsupported`; it cannot establish archive corruption.
 
 ### Task 10: Validate A679 retained hour evidence and declare fiscal effects
 
 **Files:** create `packages/fiscal-verifactu/src/backup-verification.ts`, `packages/fiscal-verifactu/src/backup-verification.test.ts`; modify `packages/fiscal-verifactu/src/index.ts`, `packages/composition/src/modules.ts`.
 **Consumes:** Tasks 8/9/12 and pure history projection; execute this task after Task 12, before Task 13. **Produces:** `FISCAL_BACKUP_VERIFICATION:BackupVerificationContribution`.
 
-- [ ] RED `validates retained history before scope filtering`, `covers retired and foreign-node histories`, `absence follows the genuine capture rule`, `unresolved required data effect needs authority`, `activation-only effects stay unattempted`. Assert contradictions/extra private fields/schema-zero evidence refuse; genuine empty history is accepted only under its owner rule.
-- [ ] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification.test.ts src/hour-backup-state.test.ts src/hour-history-reader.test.ts`; expect new declaration then omitted-history/effect denial red.
-- [ ] Implement independent query-only mapping across every stored hour-history source plus optional `secrets/module-evidence/fiscal-verifactu/hour-history.json`. Classify fresh identity/series/registration/promotion as activation-only; all data effects have independent checks. Aggregate completed Tasks 8/9/12 without swallowing refusals; incomplete secret checking cannot pass. GREEN same command including a real complete fiscal owner pass.
-- [ ] Commit `git commit -s -m "feat(fiscal): declare backup history and effect obligations"`.
+- [x] RED `validates retained history before scope filtering`, `covers retired and foreign-node histories`, `absence follows the genuine capture rule`, `unresolved required data effect needs authority`, `activation-only effects stay unattempted`. Assert contradictions/extra private fields/schema-zero evidence refuse; genuine empty history is accepted only under its owner rule.
+- [x] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification.test.ts src/hour-backup-state.test.ts src/hour-history-reader.test.ts`; expect new declaration then omitted-history/effect denial red.
+- [x] Implement independent query-only mapping across every stored hour-history source plus optional `secrets/module-evidence/fiscal-verifactu/hour-history.json`. Classify fresh identity/series/registration/promotion as activation-only; all data effects have independent checks. Aggregate completed Tasks 8/9/12 without swallowing refusals; incomplete secret checking cannot pass. GREEN same command including a real complete fiscal owner pass.
+- [x] Commit `git commit -s -m "feat(fiscal): declare backup history and effect obligations"`.
 
 ### Task 11: Authenticate every application-vault row without a dependency cycle
 
 **Files:** create `packages/credentials/src/backup-verification.ts`, `packages/credentials/src/backup-verification.test.ts`, `packages/credentials/src/backup-key-inputs.ts`, `packages/credentials/src/backup-key-inputs.test.ts`, `packages/composition/src/credentials-backup-verification.ts`; modify `packages/credentials/src/index.ts`, `packages/credentials/package.json` (store dependency), `packages/composition/src/modules.ts`.
 **Consumes:** Task 2 query, all three archived env inputs through `resolveBackupKeyInputs`, existing keyring/cipher/payload readers. **Produces:** owner-owned `CREDENTIALS_BACKUP_POLICY` with the contribution's declarations but no callback; `verifyBackupCredentials(query:BackupQuery,keyInputs:Readonly<Record<string,string>>):Promise<"passed"|"invalid"|"unsupported"|"unavailable">`; `readBackupCredential(query:BackupQuery,keyInputs:Readonly<Record<string,string>>,purpose:string):Promise<Readonly<Record<string,string>>|null>`; composition's `CREDENTIALS_BACKUP_VERIFICATION:BackupVerificationContribution` wraps those exports and converts inconclusive status to `BackupCheckUnavailable`.
 
-- [ ] RED `authenticates all rows including previous key versions`, `key shape alone cannot pass`, `wrong AAD tag or payload refuses`, `unknown purpose is unsupported`, `deprecated purposes remain covered`, `missing external key is unavailable`, `all readers use later-file vault-key precedence`. Missing row is null; an undecryptable row must never masquerade as absent. Assert no reseal/rotation/writes.
-- [ ] Run `pnpm --filter @waitron/credentials exec vitest run src/backup-verification.test.ts src/backup-key-inputs.test.ts`; expect missing export then wrong-key acceptance assertion red.
-- [ ] Implement shared captured-key resolution and authenticated decrypt using each row's own key version and purpose AAD, then exact payload checks. Missing/wrong key without independent confirmation is unavailable, not corruption. Never return secrets in a module result. **Do not import module into credentials:** `packages/module/package.json` depends on fiscal, whose `packages/fiscal/package.json` depends on credentials; that would close a loop, and credentials' fiscal-import restriction remains intact. GREEN same command plus `pnpm exec vitest run scripts/workspace-cycles.test.ts`.
-- [ ] Commit `git commit -s -m "feat(credentials): verify every captured vault row"`.
+- [x] RED `authenticates all rows including previous key versions`, `key shape alone cannot pass`, `wrong AAD tag or payload refuses`, `unknown purpose is unsupported`, `deprecated purposes remain covered`, `missing external key is unavailable`, `all readers use later-file vault-key precedence`. Missing row is null; an undecryptable row must never masquerade as absent. Assert no reseal/rotation/writes.
+- [x] Run `pnpm --filter @waitron/credentials exec vitest run src/backup-verification.test.ts src/backup-key-inputs.test.ts`; expect missing export then wrong-key acceptance assertion red.
+- [x] Implement shared captured-key resolution and authenticated decrypt using each row's own key version and purpose AAD, then exact payload checks. Missing/wrong key without independent confirmation is unavailable, not corruption. Never return secrets in a module result. **Do not import module into credentials:** `packages/module/package.json` depends on fiscal, whose `packages/fiscal/package.json` depends on credentials; that would close a loop, and credentials' fiscal-import restriction remains intact. GREEN same command plus `pnpm exec vitest run scripts/workspace-cycles.test.ts`.
+- [x] Commit `git commit -s -m "feat(credentials): verify every captured vault row"`.
 
 ### Task 11a: Check the source membership private/public key pair
 
 **Files:** modify `packages/db/src/backup-evidence.ts`, `packages/db/src/backup-evidence.test.ts`, `packages/db/src/index.ts`, `packages/composition/src/core-backup-verification.ts`; create `packages/composition/src/core-backup-verification.test.ts`.
 **Consumes:** Tasks 6/11 queries, shared key inputs and authenticated credential reader. **Produces:** `verifyBackupMembershipIdentity(input:{before:BackupQuery;after:BackupQuery;nodeId:string;privateKey:string|null}):Promise<boolean>` in db, wired into core's secret obligation.
 
-- [ ] RED `malformed membership PKCS8 refuses`, `valid unrelated Ed25519 key refuses`, `matching source identity passes without signing`, `one missing key half refuses`, `explicit keyless source follows its absence rule`. Compare source public halves before and after migration; require zero generation/signing/writes and no secret output.
-- [ ] Run `pnpm --filter @waitron/db exec vitest run src/backup-evidence.test.ts` and `pnpm --filter @waitron/composition exec vitest run src/core-backup-verification.test.ts`; expect missing key-check export then false acceptance red.
-- [ ] Extend the core declaration with `vault:membership.node_key` and the declared env inputs. Add db-owned `verifyBackupMembershipIdentity(input:{before:BackupQuery;after:BackupQuery;nodeId:string;privateKey:string|null}):Promise<boolean>`: parse canonical base64 PKCS8 DER, require Ed25519, derive SPKI with `createPublicKey` without signing, and compare with the source node's captured public key before and after migration. Composition's core adapter obtains the private string through the credentials reader and passes it privately to that db function; db imports no credentials/module/membership package. Missing private key with a recorded public key, private key without its public half, malformed or valid-but-unrelated key refuses. Both absent is accepted only for an explicitly keyless source with no captured membership obligation requiring that identity; test the absence rule and a normal matching identity. Core cannot pass before this obligation is wired. Never generate, establish, endorse, rotate or sign an identity. GREEN the same commands plus `pnpm exec vitest run scripts/workspace-cycles.test.ts`.
-- [ ] Commit `git commit -s -m "feat(db): verify captured membership key usability"`.
+- [x] RED `malformed membership PKCS8 refuses`, `valid unrelated Ed25519 key refuses`, `matching source identity passes without signing`, `one missing key half refuses`, `explicit keyless source follows its absence rule`. Compare source public halves before and after migration; require zero generation/signing/writes and no secret output.
+- [x] Run `pnpm --filter @waitron/db exec vitest run src/backup-evidence.test.ts` and `pnpm --filter @waitron/composition exec vitest run src/core-backup-verification.test.ts`; expect missing key-check export then false acceptance red.
+- [x] Extend the core declaration with `vault:membership.node_key` and the declared env inputs. Add db-owned `verifyBackupMembershipIdentity(input:{before:BackupQuery;after:BackupQuery;nodeId:string;privateKey:string|null}):Promise<boolean>`: parse canonical base64 PKCS8 DER, require Ed25519, derive SPKI with `createPublicKey` without signing, and compare with the source node's captured public key before and after migration. Composition's core adapter obtains the private string through the credentials reader and passes it privately to that db function; db imports no credentials/module/membership package. Missing private key with a recorded public key, private key without its public half, malformed or valid-but-unrelated key refuses. Both absent is accepted only for an explicitly keyless source with no captured membership obligation requiring that identity; test the absence rule and a normal matching identity. Core cannot pass before this obligation is wired. Never generate, establish, endorse, rotate or sign an identity. GREEN the same commands plus `pnpm exec vitest run scripts/workspace-cycles.test.ts`.
+- [x] Commit `git commit -s -m "feat(db): verify captured membership key usability"`.
 
 ### Task 12: Check fiscal certificate data without signing or AEAT
 
 **Files:** create `packages/fiscal-verifactu/src/backup-verification-secrets.ts`, `packages/fiscal-verifactu/src/backup-verification-secrets.test.ts`; Task 10 subsequently wires its result into the fiscal aggregate.
 **Consumes:** Task 11 private credential reader and existing offline PFX opener. **Produces:** `verifyBackupFiscalSecrets(context:BackupVerificationContext):Promise<BackupModuleResult>` for Task 10's complete fiscal contribution.
 
-- [ ] RED `opens captured PFX without signing or network`, `preserves all certificate-install and reminder evidence`, `source-node credential matches latest applicable install`, `valid expired material requires future renewal not corruption`, `damaged material blocks success`. Other nodes' local history is preserved without pretending their keys are available; absent required source key stays unavailable.
-- [ ] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification-secrets.test.ts src/certificate-file.test.ts`; expect missing export then ignored-PFX denial red.
-- [ ] Implement offline private-key/certificate parsing and source relationship checks. Never call `checkWithAuthority`, install/renew, transport or signing. Preserve every historical install field. Distinguish malformed known material, unsupported encryption and inconclusive key inputs. Task 10 wires this already-tested reader into the real fiscal contribution; GREEN same command, with literal secret/fiscal identity sentinels absent from results.
-- [ ] Commit `git commit -s -m "feat(fiscal): verify captured certificate material offline"`.
+- [x] RED `opens captured PFX without signing or network`, `preserves all certificate-install and reminder evidence`, `source-node credential matches latest applicable install`, `valid expired material requires future renewal not corruption`, `damaged material blocks success`. Other nodes' local history is preserved without pretending their keys are available; absent required source key stays unavailable.
+- [x] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification-secrets.test.ts src/certificate-file.test.ts`; expect missing export then ignored-PFX denial red.
+- [x] Implement offline private-key/certificate parsing and source relationship checks. Never call `checkWithAuthority`, install/renew, transport or signing. Preserve every historical install field. Distinguish malformed known material, unsupported encryption and inconclusive key inputs. Task 10 wires this already-tested reader into the real fiscal contribution; GREEN same command, with literal secret/fiscal identity sentinels absent from results.
+- [x] Commit `git commit -s -m "feat(fiscal): verify captured certificate material offline"`.
 
 ### Task 13: Check identity secrets and authenticator state
 
@@ -478,13 +480,13 @@ Each task's checklist means: write the named red assertions; run its exact comma
 
 ### Task 14: Cover payments and declared offline provider secrets
 
-**Files:** create `packages/payments/src/backup-verification.ts`, `packages/payments/src/backup-verification.test.ts`; modify `packages/payments/src/index.ts`, `packages/payments/package.json` (module/store dependencies), `packages/composition/src/modules.ts`.
-**Consumes:** Tasks 6/11 and complete payments classification. **Produces:** `PAYMENTS_BACKUP_VERIFICATION:BackupVerificationContribution`.
+**Files:** create `packages/payments/src/backup-verification.ts`, `packages/payments/src/backup-verification.test.ts`; modify `packages/payments/src/index.ts`, `packages/payments/package.json` (module/store dependencies), `packages/payments/src/card-provider.ts`, `packages/composition/src/modules.ts`; add offline-check implementations and sibling `backup-verification.test.ts` suites in `payments-stripe` and `payments-sumup`.
+**Consumes:** Tasks 6/11 and complete payments classification. **Produces:** `paymentsBackupVerification(providers):BackupVerificationContribution`, composed with the existing `CARD_PROVIDERS` registry. Each adapter supplies a pure optional `verifyBackupCredential(payload, environment):boolean` on `CardProviderContribution`; a present credential without those semantics is unsupported. Provider names and payload parsing stay in the adapter packages; the existing no-provider-vocabulary guard remains unchanged.
 
-- [ ] RED `preserves refund hold resolution and outcome evidence`, `checks readers and sale relationships`, `checks present provider payloads without provider calls`, `permits absent credentials only for unconfigured providers`. Same-count immutable edits fail; in-flight work remains data, never executed.
-- [ ] Run `pnpm --filter @waitron/payments exec vitest run src/backup-verification.test.ts`; expect new export then omitted-evidence assertion red.
-- [ ] Implement complete row comparison, configured-provider requirements and offline payload/URL parsing. No provider connectivity claim, capture/refund/poller/terminal or webhook action. Instrument those functions to throw and require zero calls. GREEN same command.
-- [ ] Commit `git commit -s -m "feat(payments): verify backup data without payment effects"`.
+- [x] RED `preserves refund hold resolution and outcome evidence`, `checks readers and sale relationships`, `checks present provider payloads without provider calls`, `permits absent credentials only for unconfigured providers`. Same-count immutable edits fail; in-flight work remains data, never executed.
+- [x] Run `pnpm --filter @waitron/payments exec vitest run src/backup-verification.test.ts`; expect new export then omitted-evidence assertion red.
+- [x] Implement complete row comparison, configured-provider requirements and offline payload/URL parsing. No provider connectivity claim, capture/refund/poller/terminal or webhook action. Instrument those functions to throw and require zero calls. GREEN same command.
+- [x] Commit `git commit -s -m "feat(payments): verify backup data without payment effects"`.
 
 ### Task 15: Cover catalogue and actual media database state
 
@@ -511,10 +513,10 @@ Each task's checklist means: write the named red assertions; run its exact comma
 **Files:** create `packages/workforce/src/backup-verification.ts`, `packages/workforce/src/backup-verification.test.ts`; modify `packages/workforce/src/index.ts`, `packages/workforce/package.json` (module/store dependencies), `packages/composition/src/modules.ts`.
 **Consumes:** Task 6 comparison; pure workforce `chain-hash.ts` verifyChain and `pay-period-chain.ts` verifyPayPeriodClosures, never inserting head readers. **Produces:** `WORKFORCE_BACKUP_VERIFICATION`.
 
-- [ ] RED `walks every node-location time chain and stored head`, `detects old middle or tail loss`, `preserves corrections automatic entries pay closures and snapshots`, `never creates heads for empty data`. Include every extension/self-approval/response/correction field. Pay closures have no separate head at this pin: compare original full rows/tip across migration; do not invent external completeness evidence.
-- [ ] Run `pnpm --filter @waitron/workforce exec vitest run src/backup-verification.test.ts src/restore-continuation.test.ts src/pay-period-chain.test.ts`; expect new export then truncated-history denial red.
-- [ ] Implement read-only mapping/full walks/head equality and all owned state comparison. No closure/projection/automatic shift writes, mail or cross-node merge. GREEN same command with unedited restore-continuation and honest empty/retired-node controls.
-- [ ] Commit `git commit -s -m "feat(workforce): verify complete captured time history"`.
+- [x] RED `walks every node-location time chain and stored head`, `detects old middle or tail loss`, `preserves corrections automatic entries pay closures and snapshots`, `never creates heads for empty data`. Include every extension/self-approval/response/correction field. Pay closures have no separate head at this pin: compare original full rows/tip across migration; do not invent external completeness evidence.
+- [x] Run `pnpm --filter @waitron/workforce exec vitest run src/backup-verification.test.ts src/restore-continuation.test.ts src/pay-period-chain.test.ts`; expect new export then truncated-history denial red.
+- [x] Implement read-only mapping/full walks/head equality and all owned state comparison. No closure/projection/automatic shift writes, mail or cross-node merge. GREEN same command with unedited restore-continuation and honest empty/retired-node controls.
+- [x] Commit `git commit -s -m "feat(workforce): verify complete captured time history"`.
 
 ### Task 18: Cover workforce-es and staffing configuration
 
@@ -531,72 +533,72 @@ Each task's checklist means: write the named red assertions; run its exact comma
 **Files:** create `apps/server/src/backup-verification-compatibility.ts`, `apps/server/src/backup-verification-compatibility.test.ts`.
 **Consumes:** Tasks 2–4, owner policy declarations, existing manifest/entry/identity readers. **Produces:** strict compatibility signature above.
 
-- [ ] RED `refuses missing source module newer schema unknown hash and dependency gap`, `checks positive-schema inactive owners`, `refuses unexplained zero and unsupported target-only material`, `cross-checks modules.json manifest and actual migration records`. Assert unknown tables, extra secret entries, missing identity and environment disagreement refuse without calling migration. Valid compatible target-only empty state still passes.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/backup-verification-compatibility.test.ts src/restore-gate.test.ts`; expect missing export then missing-module acceptance denial red.
-- [ ] Implement source inventory/journal/hash/timestamp/dependency reconciliation, not counts alone. Entry allowlist is generated from required host files and module declarations; compare exact normalised destinations, no silent discard. Preserve permissive ordinary gate. GREEN same command; no migration added to paper over unsupported evidence.
-- [ ] Commit `git commit -s -m "feat(server): enforce complete backup verification compatibility"`.
+- [x] RED `refuses missing source module newer schema unknown hash and dependency gap`, `checks positive-schema inactive owners`, `refuses unexplained zero and unsupported target-only material`, `cross-checks modules.json manifest and actual migration records`. Assert unknown tables, extra secret entries, missing identity and environment disagreement refuse without calling migration. Valid compatible target-only empty state still passes.
+- [x] Run `pnpm --filter @waitron/server exec vitest run src/backup-verification-compatibility.test.ts src/restore-gate.test.ts`; expect missing export then missing-module acceptance denial red.
+- [x] Implement source inventory/journal/hash/timestamp/dependency reconciliation, not counts alone. Entry allowlist is generated from required host files and module declarations; compare exact normalised destinations, no silent discard. Preserve permissive ordinary gate. GREEN same command; no migration added to paper over unsupported evidence.
+- [x] Commit `git commit -s -m "feat(server): enforce complete backup verification compatibility"`.
 
 ### Task 19a: Validate authenticated archive files without losing raw manifest checks
 
 **Files:** create `apps/server/src/backup-verification-archive.ts`, `apps/server/src/backup-verification-archive.test.ts`; modify `apps/server/src/backup-archive-file.ts`, `apps/server/src/backup-archive-file.test.ts` only to add an exact-end option, preserving ordinary defaults.
 **Consumes:** existing decryptArtifactFile/unpackArchiveFile and exported validateDatabaseEntries/path/identity guards. **Produces:** `validateBackupArtifactFile(input:Omit<ValidationFileDeps,"skipSecrets"> & {expected:Pick<BackupVerificationRequest,"archive"|"capturedAt"|"sourceNodeId">}):Promise<ValidatedArtifact>` in the new archive file; `unpackArchiveFile(path:string,scratchDir:string,options?:{requireExactEnd?:true}):Promise<ArchiveInputEntry[]>` extends the existing codec.
 
-- [ ] RED `rejects duplicate or unknown raw manifest keys`, `refuses trailing framing bytes and duplicate db.dump`, `authenticates before unpack or placement`, `keeps ordinary archive caller behavior`. Assert required manifest version/time/environment/full module map exactly match the private binding; wrong GCM key remains unavailable at the host boundary; unsupported archive/cipher/manifest versions produce unsupported/archive_format_unsupported, not corruption.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/backup-verification-archive.test.ts src/backup-archive-file.test.ts src/restore-artifact-file.test.ts`; expect missing wrapper then duplicate/trailing-data denial red.
-- [ ] Implement authenticated file decode into owned scratch, with existing metadata limits (4096 entries, 4096 name bytes, 16 MiB metadata, 64 KiB chunks). Require exact end only on this verification path. Validate the raw manifest with duplicate-aware strict JSON before shared validation loses that information. Pass non-file entries, including any duplicate db.dump placeholder, to validateDatabaseEntries with the single extracted DB path so its shared destination/identity guards still run. Return an owned discard that closes/removes every partial file. Use archive measured identity at the host, not the stream source ID returned by shared database validation. GREEN same command with original file/ordinary-restore tests intact.
-- [ ] Commit `git commit -s -m "feat(server): strictly validate verification archive files"`.
+- [x] RED `rejects duplicate or unknown raw manifest keys`, `refuses trailing framing bytes and duplicate db.dump`, `authenticates before unpack or placement`, `keeps ordinary archive caller behavior`. Assert required manifest version/time/environment/full module map exactly match the private binding; wrong GCM key remains unavailable at the host boundary; unsupported archive/cipher/manifest versions produce unsupported/archive_format_unsupported, not corruption.
+- [x] Run `pnpm --filter @waitron/server exec vitest run src/backup-verification-archive.test.ts src/backup-archive-file.test.ts src/restore-artifact-file.test.ts`; expect missing wrapper then duplicate/trailing-data denial red.
+- [x] Implement authenticated file decode into owned scratch, with existing metadata limits (4096 entries, 4096 name bytes, 16 MiB metadata, 64 KiB chunks). Require exact end only on this verification path. Validate the raw manifest with duplicate-aware strict JSON before shared validation loses that information. Pass non-file entries, including any duplicate db.dump placeholder, to validateDatabaseEntries with the single extracted DB path so its shared destination/identity guards still run. Return an owned discard that closes/removes every partial file. Use archive measured identity at the host, not the stream source ID returned by shared database validation. GREEN same command with original file/ordinary-restore tests intact.
+- [x] Commit `git commit -s -m "feat(server): strictly validate verification archive files"`.
 
 ### Task 20: Share real private placement and migrations
 
 **Files:** create `apps/server/src/backup-data-placement.ts`, `apps/server/src/backup-data-placement.test.ts`; ordinary `apps/server/src/restore.ts` is read-only in this task.
 **Consumes:** Task 19 admission, Task 19a strict file validation, and existing restoreDatabase/restoreSecrets/migration functions. **Produces:** exact placement functions above.
 
-- [ ] RED `places genuine data and declared material`, `migrates populated supported catalogue predecessor preserving old columns`, `refuses traversal duplicate normalised destinations unknown entries and first-setup host paths`, `ordinary resume and hook-before-secrets ordering stay intact`. Predecessor stops before shipped catalogue 0034 and is seeded using its own columns; require new defaults and every original value after real migration.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/backup-data-placement.test.ts src/restore-file-placement.test.ts src/restore.test.ts src/restore-operation-placement.test.ts`; expect missing placement export then absent-data assertion red.
-- [ ] Compose existing exported placement primitives without changing A679 admission/resume/identity behavior. Verification uses fresh scratch and real migrationOptionsFor including append-only declarations; no hooks/series/marker. Validate archived backup.env then exclude it from the managed layout. GREEN same command; original encrypted input unchanged and logical preserved evidence equal.
-- [ ] Commit `git commit -s -m "refactor(server): share data placement without activation"`.
+- [x] RED `places genuine data and declared material`, `migrates populated supported catalogue predecessor preserving old columns`, `refuses traversal duplicate normalised destinations unknown entries and first-setup host paths`, `ordinary resume and hook-before-secrets ordering stay intact`. Predecessor stops before shipped catalogue 0034 and is seeded using its own columns; require new defaults and every original value after real migration.
+- [x] Run `pnpm --filter @waitron/server exec vitest run src/backup-data-placement.test.ts src/restore-file-placement.test.ts src/restore.test.ts src/restore-operation-placement.test.ts`; expect missing placement export then absent-data assertion red.
+- [x] Compose existing exported placement primitives without changing A679 admission/resume/identity behavior. Verification uses fresh scratch and real migrationOptionsFor including append-only declarations; no hooks/series/marker. Validate archived backup.env then exclude it from the managed layout. GREEN same command; original encrypted input unchanged and logical preserved evidence equal.
+- [x] Commit `git commit -s -m "refactor(server): share data placement without activation"`.
 
 ### Task 21: Complete small owners and real composition registration
 
 **Files:** create `packages/scheduler/src/backup-verification.ts`, `packages/scheduler/src/backup-verification.test.ts`, `packages/bookings/src/backup-verification.ts`, `packages/bookings/src/backup-verification.test.ts`, `packages/fiscal-none/src/backup-verification.ts`, `packages/fiscal-none/src/backup-verification.test.ts`; modify `packages/scheduler/src/index.ts`, `packages/bookings/src/index.ts`, `packages/fiscal-none/src/index.ts`, `packages/scheduler/package.json` (module/store), `packages/bookings/package.json` (store), `packages/fiscal-none/package.json` (module/store), `packages/composition/src/modules.ts`, `packages/composition/src/backup-verification.test.ts`.
 **Consumes:** Tasks 1–3/6 and all owner contributions. **Produces:** `SCHEDULER_BACKUP_VERIFICATION`, `BOOKINGS_BACKUP_VERIFICATION`, `FISCAL_NONE_BACKUP_VERIFICATION`, each `BackupVerificationContribution`, and complete generated real inventory.
 
-- [ ] RED `scheduler preserves runs without scheduling`, `bookings preserves all values without action`, `fiscal-none explicitly checks no-owned-state`, `every descriptor table nonDb source and restore effect has exactly one owner`. Set equality must use generated classifications/descriptors, including media. Delete every real contribution independently; each must refuse.
-- [ ] Run `pnpm --filter @waitron/scheduler exec vitest run src/backup-verification.test.ts`, `pnpm --filter @waitron/bookings exec vitest run src/backup-verification.test.ts`, `pnpm --filter @waitron/fiscal-none exec vitest run src/backup-verification.test.ts`, and `pnpm --filter @waitron/composition exec vitest run src/backup-verification.test.ts src/composition.test.ts`; expect missing declarations/real inventory assertions red.
-- [ ] Implement small explicit declarations; only fiscal-none claims database-only with its empty-journal source receipt. Require named independent checks for all data effects, and tests for empty secrets/entries/effects. Every package newly importing query types or module helpers declares that direct dependency; preserve credentials' structural adapter. GREEN all commands plus `pnpm exec vitest run scripts/workspace-cycles.test.ts`.
-- [ ] Commit `git commit -s -m "feat(composition): complete verification owner coverage"`.
+- [x] RED `scheduler preserves runs without scheduling`, `bookings preserves all values without action`, `fiscal-none explicitly checks no-owned-state`, `every descriptor table nonDb source and restore effect has exactly one owner`. Set equality must use generated classifications/descriptors, including media. Delete every real contribution independently; each must refuse.
+- [x] Run `pnpm --filter @waitron/scheduler exec vitest run src/backup-verification.test.ts`, `pnpm --filter @waitron/bookings exec vitest run src/backup-verification.test.ts`, `pnpm --filter @waitron/fiscal-none exec vitest run src/backup-verification.test.ts`, and `pnpm --filter @waitron/composition exec vitest run src/backup-verification.test.ts src/composition.test.ts`; expect missing declarations/real inventory assertions red.
+- [x] Implement small explicit declarations; only fiscal-none claims database-only with its empty-journal source receipt. Require named independent checks for all data effects, and tests for empty secrets/entries/effects. Every package newly importing query types or module helpers declares that direct dependency; preserve credentials' structural adapter. GREEN all commands plus `pnpm exec vitest run scripts/workspace-cycles.test.ts`.
+- [x] Commit `git commit -s -m "feat(composition): complete verification owner coverage"`.
 
 ### Task 22: Verify host state secrets and declared entry placement
 
 **Files:** create `apps/server/src/backup-verification-secrets.ts`, `apps/server/src/backup-verification-secrets.test.ts`.
 **Consumes:** required RECOVERY_FILES, optional state rules, owner declarations and Task 11 vault checks. **Produces:** `verifyBackupStateSecrets` and `verifyBackupKeyPlacement` signatures above; Task 23 calls the latter after actual private placement.
 
-- [ ] RED `requires all six recovery files`, `matches both CA and server private keys to certificates`, `checks server chain under captured CA`, `validates optional backup.env and modules.json without installing old destination`, `refuses cloud-connection and cloud-staff material`, `unseals selected-node state without publishing it`, `actual placed-layout keys equal captured effective keys`, `account key only in backup.env is unsupported`, `conflicting vault overrides cannot falsely pass`. Malformed keypair must fail even if PEM parsing passes; missing application key blocks success. Other nodes' opaque sealed rows retain an explicit node-local preservation rule.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/backup-verification-secrets.test.ts`; expect missing export then omitted-secret/key-mismatch denial red.
-- [ ] Implement offline key parsing/matching and CA signature checks without signing, issuing or networking. Validate archived configuration with pure parsers and no access to the old backup destination. Implement `verifyBackupKeyPlacement` using shared captured key resolution and actual `loadBoxEnv({}, placedStateDir)`, with the real host key derivation; Task 23 calls it after private placement. Include a passing redundant/equal override, a later-file override whose omission changes key bytes, an account key present only in backup.env, and a matching secrets/trading configuration. Refuse changed usability as unsupported/target_incompatible; the tests must inspect actual placed-layout resolution, not compare two calls to the same synthetic resolver. Authenticate selected `node_sealed_state` when present using the supplied matching archive recovery key through a separate private host call using the defined `sealedState` argument before accepting its check. Missing row is allowed only under its declared absence rule; no live env fallback. GREEN same command, scanning returned objects and captured stdout/stderr for secret/path sentinels.
-- [ ] Commit `git commit -s -m "feat(server): verify private recovery state material"`.
+- [x] RED `requires all six recovery files`, `matches both CA and server private keys to certificates`, `checks server chain under captured CA`, `validates optional backup.env and modules.json without installing old destination`, `refuses cloud-connection and cloud-staff material`, `unseals selected-node state without publishing it`, `actual placed-layout keys equal captured effective keys`, `account key only in backup.env is unsupported`, `conflicting vault overrides cannot falsely pass`. Malformed keypair must fail even if PEM parsing passes; missing application key blocks success. Other nodes' opaque sealed rows retain an explicit node-local preservation rule.
+- [x] Run `pnpm --filter @waitron/server exec vitest run src/backup-verification-secrets.test.ts`; expect missing export then omitted-secret/key-mismatch denial red.
+- [x] Implement offline key parsing/matching and CA signature checks without signing, issuing or networking. Validate archived configuration with pure parsers and no access to the old backup destination. Implement `verifyBackupKeyPlacement` using shared captured key resolution and actual `loadBoxEnv({}, placedStateDir)`, with the real host key derivation; Task 23 calls it after private placement. Include a passing redundant/equal override, a later-file override whose omission changes key bytes, an account key present only in backup.env, and a matching secrets/trading configuration. Refuse changed usability as unsupported/target_incompatible; the tests must inspect actual placed-layout resolution, not compare two calls to the same synthetic resolver. Authenticate selected `node_sealed_state` when present using the supplied matching archive recovery key through a separate private host call using the defined `sealedState` argument before accepting its check. Missing row is allowed only under its declared absence rule; no live env fallback. GREEN same command, scanning returned objects and captured stdout/stderr for secret/path sentinels.
+- [x] Commit `git commit -s -m "feat(server): verify private recovery state material"`.
 
 ### Task 23: Orchestrate measured verification with cleanup-gated output
 
 **Files:** create `apps/server/src/backup-verification.ts`, `apps/server/src/backup-verification.test.ts`; modify `apps/server/src/backup-verification-entry.ts`.
 **Consumes:** strict protocol/target, Task 19a file validation, all generated owners, compatibility, host secrets and real private placement. **Produces:** `BackupVerificationDeps`, `verifyBackupArtifact` and built export above.
 
-- [ ] RED `independently measures consumed encrypted bytes`, `input path replacement cannot swap decrypted bytes`, `wrong or missing key is unavailable not corrupt`, `all required owner checks complete without activation`, `close rm deadline quota cancellation and unexpected errors never yield success`. Assert exact bounded output, request/attempt/target/policy/measurement agreement, all modules exactly once, no secret/fiscal identifier/path/raw diagnostics, and no scratch/plaintext survives any completed attempt.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/backup-verification.test.ts`; expect missing export then cleanup/coverage/binding denial red. Use real placement and migrations; inject only owned filesystem cleanup failures, not fake checkers.
-- [ ] Implement pipeline: strict request/local target/deadline and delivered key version/reference admission; measured sealed-input copy; compare digest/length; authenticate decryption; shared validation/identity and bound manifest/node/time/environment checks; original SQLite integrity/FKs and journal reconciliation; real placement/migration; migrated integrity/FKs; actual captured-versus-placed cryptographic input comparison and all host/module data/secret checks; close handles, dispose original/placed state/plaintext and remove scratch before serialising verdict. Source Cloud installation provenance comes from trusted signed capture binding, never trading.env inference. Retain no reusable target directory or marker.
-- [ ] GREEN same command. Map completed deterministic corruption to invalid; missing module/semantics/format to unsupported; uncheckable data effect to needs_authority; missing/wrong key, resource/timeout/cancel/unexpected/cleanup uncertainty to unavailable. An unfinished required check cannot become a completed integrity verdict; cleanup uncertainty overrides any provisional verdict. Early failures have no invented measurement or module pass. Confirm child termination and controller cleanup remain separate Cloud admission requirements.
-- [ ] Commit `git commit -s -m "feat(server): verify backup artifacts without activation"`.
+- [x] RED `independently measures consumed encrypted bytes`, `input path replacement cannot swap decrypted bytes`, `wrong or missing key is unavailable not corrupt`, `all required owner checks complete without activation`, `close rm deadline quota cancellation and unexpected errors never yield success`. Assert exact bounded output, request/attempt/target/policy/measurement agreement, all modules exactly once, no secret/fiscal identifier/path/raw diagnostics, and no scratch/plaintext survives any completed attempt.
+- [x] Run `pnpm --filter @waitron/server exec vitest run src/backup-verification.test.ts`; expect missing export then cleanup/coverage/binding denial red. Use real placement and migrations; inject only owned filesystem cleanup failures, not fake checkers.
+- [x] Implement pipeline: strict request/local target/deadline and delivered key version/reference admission; measured sealed-input copy; compare digest/length; authenticate decryption; shared validation/identity and bound manifest/node/time/environment checks; original SQLite integrity/FKs and journal reconciliation; real placement/migration; migrated integrity/FKs; actual captured-versus-placed cryptographic input comparison and all host/module data/secret checks; close handles, dispose original/placed state/plaintext and remove scratch before serialising verdict. Source Cloud installation provenance comes from trusted signed capture binding, never trading.env inference. Retain no reusable target directory or marker.
+- [x] GREEN same command. Map completed deterministic corruption to invalid; missing module/semantics/format to unsupported; uncheckable data effect to needs_authority; missing/wrong key, resource/timeout/cancel/unexpected/cleanup uncertainty to unavailable. An unfinished required check cannot become a completed integrity verdict; cleanup uncertainty overrides any provisional verdict. Early failures have no invented measurement or module pass. Confirm child termination and controller cleanup remain separate Cloud admission requirements.
+- [x] Commit `git commit -s -m "feat(server): verify backup artifacts without activation"`.
 
 ### Task 24: Run genuine authority-boundary and installed deletion controls
 
 **Files:** create `apps/server/src/backup-verification.authority.test.ts`, `apps/server/src/backup-verification.installed.test.ts`, `apps/server/src/testing/backup-verification-fixture.ts`; retain existing restore/fiscal tests listed below unchanged.
 **Consumes:** Task 23 built genuine interface, existing authorised fixture helpers producing actual disposable sales/history/public evidence. **Produces:** counted boundary and installed omission receipts; no new production interface.
 
-- [ ] RED `genuine complete archive passes without operational authority`, `ordinary restore still refuses absent authority`, `ordinary authorised restore still needs genuine binding`, `verification never prepares activates promotes signs numbers or trades`. Instrument prohibited preparation/allocation, series/registry/number writers, signing, first-start and workers/listeners so any call fails; require zero calls and full captured logical evidence equality on success and every refusal, and an undeclared entry-read probe that refuses rather than exposing another owner's secret. Include genuine production-hour history without pretending new authority.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/backup-verification.authority.test.ts src/backup-verification.installed.test.ts src/restore-fiscal-e2e.test.ts src/restore-operation.test.ts src/restore-operation-placement.test.ts src/restore-operation-preparation.test.ts src/restore-fiscal-receipt.test.ts src/hour-backup-state.test.ts`; expect genuine-pass/boundary assertion red, never repaired issued fixtures. Implement only missing integration/fixture wiring; H2 unchanged. GREEN same command.
-- [ ] In installed **disposable copies** with dependencies, omit separately: complete coverage, strict compatibility, traversal/duplicate/unclaimed-entry checks, each required secret check, full fiscal walk, captured-head comparison and immutable equality. Run each owning named denial case, require its intended assertion to fail, then a legitimate accepting control and restored candidate green. Retain commands/output. Keep genuine archive/protected fixtures untouched; corruption lives only in extracted disposable DB copies.
-- [ ] Control read-only enforcement in separate installed copies: remove authorizer only and expect ATTACH/PRAGMA denial assertion failure; remove the complete authorizer/readOnly/query-only barrier and attempt UPDATE inside the callback, expecting the unchanged-evidence/refusal assertion to fail. State exactly which layer was measured; removing one of redundant guards alone does not prove the others absent. Task 26 adds independent local target-comparison omissions. Cloud container network/socket/host/quota/cleanup controls belong to lane D.
-- [ ] Commit `git commit -s -m "test(server): exercise genuine verification authority boundaries"` after restored green and running the unedited protected commands printed in Task 27 (no need to wait for that task). Use exact recorded own PIDs/scratch IDs only.
+- [x] RED `genuine complete archive passes without operational authority`, `ordinary restore still refuses absent authority`, `ordinary authorised restore still needs genuine binding`, `verification never prepares activates promotes signs numbers or trades`. Instrument prohibited preparation/allocation, series/registry/number writers, signing, first-start and workers/listeners so any call fails; require zero calls and full captured logical evidence equality on success and every refusal, and an undeclared entry-read probe that refuses rather than exposing another owner's secret. Include genuine production-hour history without pretending new authority.
+- [x] Run `pnpm --filter @waitron/server exec vitest run src/backup-verification.authority.test.ts src/backup-verification.installed.test.ts src/restore-fiscal-e2e.test.ts src/restore-operation.test.ts src/restore-operation-placement.test.ts src/restore-operation-preparation.test.ts src/restore-fiscal-receipt.test.ts src/hour-backup-state.test.ts`; expect genuine-pass/boundary assertion red, never repaired issued fixtures. Implement only missing integration/fixture wiring; H2 unchanged. GREEN same command.
+- [x] In installed **disposable copies** with dependencies, omit separately: complete coverage, strict compatibility, traversal/duplicate/unclaimed-entry checks, each required secret check, full fiscal walk, captured-head comparison and immutable equality. Run each owning named denial case, require its intended assertion to fail, then a legitimate accepting control and restored candidate green. Retain commands/output. Keep genuine archive/protected fixtures untouched; corruption lives only in extracted disposable DB copies.
+- [x] Control read-only enforcement in separate installed copies: remove authorizer only and expect ATTACH/PRAGMA denial assertion failure; remove the complete authorizer/readOnly/query-only barrier and attempt UPDATE inside the callback, expecting the unchanged-evidence/refusal assertion to fail. State exactly which layer was measured; removing one of redundant guards alone does not prove the others absent. Task 26 adds independent local target-comparison omissions. Cloud container network/socket/host/quota/cleanup controls belong to lane D.
+- [x] Commit `git commit -s -m "test(server): exercise genuine verification authority boundaries"` after restored green and running the unedited protected commands printed in Task 27 (no need to wait for that task). Use exact recorded own PIDs/scratch IDs only.
 
 ### Task 25: Negotiate snapshot recovery v2 with the current target
 
@@ -605,22 +607,22 @@ Each task's checklist means: write the named red assertions; run its exact comma
 
 `SnapshotRecoveryVerification = {protocol:"backup-data-restore/v1";target:BackupVerificationTarget;policyDigest:string;requestDigest:string;archiveSha256:string;archiveBytes:number;pointId:string}` lives in `cloud-recovery-v2.ts`. Export `assertSnapshotRecoveryTarget(verification:SnapshotRecoveryVerification,current:BackupVerificationTarget):void` (fixed existing Cloud-unavailable error on mismatch) and `readSavedSnapshotRecoveryTarget(stateDir:string):Promise<{requestId:string;pointId:string|undefined;target:BackupVerificationTarget}|null>` (strict version-2 saved-state reader, null for v1/absent state). Extend `CloudRecoveryOptions` with `snapshotProtocol?:2`, `target?:()=>BackupVerificationTarget`; the qualified caller supplies both. Existing default v1 callers remain their explicit old contract.
 
-- [ ] RED `v2 binds fresh request key request ID and target`, `qualified snapshots refuse absent or v1 descriptor`, `info read and post-download rechecks reject changed target`, `negotiation failure never downgrades`, `v1 and continuous behavior remains intact`. Saved state is a strict discriminated version 1/2 union; version 2 freezes its target/protocol, and old state cannot qualify.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/cloud-recovery-v2.test.ts src/cloud-recovery.test.ts src/setup-api.cloud-recovery.test.ts`; expect missing v2 export then absent-descriptor acceptance denial red.
-- [ ] Implement start/status proof bytes exactly `['waitron-cloud-recovery-request-v2',origin,requestId,action,publicKey,code,target.digest,nowMs]`; info/read/restored exactly `['waitron-cloud-recovery-v2',origin,requestId,action,archiveDigest,target.digest,nowMs]`. Start/status body is `{version:2,target,payload,signature}`; later body `{version:2,id:requestId,target,payload,signature}`. Signature commits to the complete target by recomputed digest. Require `version:2` response negotiation and strict `verification` on selected info/read; compare point/hash/size, complete target and policy on every recheck. Response target never replaces saved/local target. Keep old v1 arrays unedited.
-- [ ] GREEN same command. Exchange exact proof/result vectors and bounds with lane D **before enabling the qualified caller**. If Cloud lacks v2, new snapshot policy stays unavailable; this is a coordinated release dependency, not a fallback layer. No deployment enforcement or fiscal authority change.
-- [ ] Commit `git commit -s -m "feat(recovery): negotiate target-bound snapshot recovery v2"`.
+- [x] RED `v2 binds fresh request key request ID and target`, `qualified snapshots refuse absent or v1 descriptor`, `info read and post-download rechecks reject changed target`, `negotiation failure never downgrades`, `v1 and continuous behavior remains intact`. Saved state is a strict discriminated version 1/2 union; version 2 freezes its target/protocol, and old state cannot qualify.
+- [x] Run `pnpm --filter @waitron/server exec vitest run src/cloud-recovery-v2.test.ts src/cloud-recovery.test.ts src/setup-api.cloud-recovery.test.ts`; expect missing v2 export then absent-descriptor acceptance denial red.
+- [x] Implement start/status proof bytes exactly `['waitron-cloud-recovery-request-v2',origin,requestId,action,publicKey,code,target.digest,nowMs]`; info/read/restored exactly `['waitron-cloud-recovery-v2',origin,requestId,action,archiveDigest,target.digest,nowMs]`. Start/status body is `{version:2,target,payload,signature}`; later body `{version:2,id:requestId,target,payload,signature}`. Signature commits to the complete target by recomputed digest. Require `version:2` response negotiation and strict `verification` on selected info/read; compare point/hash/size, complete target and policy on every recheck. Response target never replaces saved/local target. Keep old v1 arrays unedited.
+- [x] GREEN same command. Exchange exact proof/result vectors and bounds with lane D **before enabling the qualified caller**. If Cloud lacks v2, new snapshot policy stays unavailable; this is a coordinated release dependency, not a fallback layer. No deployment enforcement or fiscal authority change.
+- [x] Commit `git commit -s -m "feat(recovery): negotiate target-bound snapshot recovery v2"`.
 
 ### Task 26: Recheck target at staging, restart and actual placement
 
 **Files:** create `apps/server/src/restore-request.verification.test.ts`; modify `apps/server/src/restore-request.ts`, `apps/server/src/restore.ts` (RestoreDeps/restoreOwned only), `apps/server/src/cloud-recovery.ts`, `apps/server/src/cloud-recovery-v2.ts`; preserve existing staged/stream/boot tests.
-**Consumes:** Task 25 binding/read/assert functions and ordinary recovery authority input. **Produces:** optional `snapshotVerification?:SnapshotRecoveryVerification` on `ArchiveRestoreRequest` and `RestoreDeps`; strict staged **version 2** archive marker for qualified snapshots. Stream request remains unchanged.
+**Consumes:** Task 25 binding/read/assert functions and ordinary recovery authority input. **Produces:** optional `snapshotVerification?:SnapshotRecoveryVerification` on `ArchiveRestoreRequest` and `RestoreDeps`, plus the staged `snapshotRequestKey` on `RestoreDeps`; strict staged **version 2** archive marker for qualified snapshots. Stream request remains unchanged.
 
-- [ ] RED `binary change after approval prevents staging`, `binary change after staging prevents placement`, `stripped binding or v1 marker cannot downgrade a saved v2 operation`, `refusal changes no destination files or placementStarted marker`, `matching v2 still requires ordinary fiscal authority`. Assert old DB/identity/secrets unchanged and zero restoreDatabase calls on mismatch; legitimate matching control reaches ordinary authority refusal or authorised restore.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/restore-request.verification.test.ts src/restore-request.test.ts src/restore-request.node-key.test.ts src/boot.restore.test.ts src/restore-stream.test.ts`; expect changed-binary/stripped-binding acceptance denial red.
-- [ ] Carry full verification descriptor with requestId/pointId/fresh key and archive hash/size into the version-2 marker. Stage compares fresh current target. On restart, read saved v2 binding as well as marker, reject stripped/downgraded marker, and compare current binary **before placementStarted, payload or destination mutation**. After validation, restoreOwned compares again immediately before writeValidated; measured artifact binding must still match. Preserve all operation/key/old-machine/resume/first-setup gates. Nonqualified v1 and continuous paths retain original behavior, never acquire current qualification from old evidence.
-- [ ] GREEN same command; in installed disposable copies omit the staging, restart and immediate pre-placement comparisons separately, run each corresponding changed-binary case with accepting control, restore and require green. Never weaken ordinary restore authority to reach placement.
-- [ ] Commit `git commit -s -m "feat(recovery): compare qualified snapshot target before placement"`.
+- [x] RED `binary change after approval prevents staging`, `binary change after staging prevents placement`, `stripped binding or v1 marker cannot downgrade a saved v2 operation`, `refusal changes no destination files or placementStarted marker`, `matching v2 still requires ordinary fiscal authority`. Assert old DB/identity/secrets unchanged and zero restoreDatabase calls on mismatch; legitimate matching control reaches ordinary authority refusal or authorised restore.
+- [x] Run `pnpm --filter @waitron/server exec vitest run src/restore-request.verification.test.ts src/restore-request.test.ts src/restore-request.node-key.test.ts src/boot.restore.test.ts src/restore-stream.test.ts`; expect changed-binary/stripped-binding acceptance denial red.
+- [x] Carry full verification descriptor with requestId/pointId/fresh key and archive hash/size into the version-2 marker. Stage compares fresh current target. On restart, read saved v2 binding as well as marker, reject stripped/downgraded marker, and compare current binary **before placementStarted, payload or destination mutation**. After validation, restoreOwned compares again immediately before writeValidated; measured artifact binding must still match. Preserve all operation/key/old-machine/resume/first-setup gates. Nonqualified v1 and continuous paths retain original behavior, never acquire current qualification from old evidence.
+- [x] GREEN same command; in installed disposable copies omit the staging, restart and immediate pre-placement comparisons separately, run each corresponding changed-binary case with accepting control, restore and require green. Never weaken ordinary restore authority to reach placement.
+- [x] Commit `git commit -s -m "feat(recovery): compare qualified snapshot target before placement"`.
 
 ### Task 27: Finish evidence, branch review and release handoff
 
@@ -658,3 +660,547 @@ A fresh-context read of the complete draft found two gaps: differing captured/pl
 ## Author self-review
 
 Coverage: owner/query/inventory Tasks 1–3; strict binding/build identity 4–5; core/reporting/fiscal data 6–10; vault/membership/fiscal/identity/payment secrets 11–14 including 11a; remaining owners 15–18/21; compatibility/strict archive/real placement 19–20 (including 19a); host secrets/cleanup 22–23; authority and installed omissions 24; negotiated v2/restart/pre-placement 25–26; branch/release evidence 27. All acceptance outcomes above are future assertions. No implementation or test was written or run to author this plan.
+
+## Execution checkpoint, 20 October 2026
+
+Tasks 1–3 are implemented. `@waitron/module` exports strict contribution/result validators and
+private bounded error signals. `@waitron/store` supplies the independently restricted query handle.
+`@waitron/composition` requires every supplied descriptor's semantics without selecting an enabled
+subset. The real descriptors gain their checks in the later owner tasks; this foundation does not
+verify an artifact or qualify a backup for recovery.
+
+| Command                                                                                                        | Observed result                                                           |
+| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `pnpm --filter @waitron/module exec vitest run src/backup-verification.test.ts`                                | 77 passed after missing-export and behavioral failures.                   |
+| `pnpm --filter @waitron/store exec vitest run src/backup-query.test.ts`                                        | 23 passed after missing-export and missing-authorizer failures.           |
+| `pnpm --filter @waitron/composition exec vitest run src/backup-verification.test.ts`                           | 29 passed after missing-export, missing-owner and invalid-name failures.  |
+| `pnpm --filter @waitron/module test:coverage`                                                                  | 172 passed; statements 99.60%, branches 99.46%, functions and lines 100%. |
+| `pnpm --filter @waitron/store test:coverage`                                                                   | 256 passed; all four measures 100%.                                       |
+| `pnpm --filter @waitron/composition test:coverage`                                                             | 62 passed; all four measures 100%.                                        |
+| `pnpm --filter @waitron/module typecheck`, and the same for store and composition                              | Each passed. Scoped ESLint also passed.                                   |
+| `pnpm exec vitest run scripts/workspace-cycles.test.ts`                                                        | 15 passed after adding the module-to-store dependency.                    |
+| `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts` | 20 passed with both test files unchanged.                                 |
+
+Mixed check outcomes use `unsupported`, then `needs_authority`, then `invalid`, then `passed` as
+precedence. An unfinished required check cannot certify an integrity verdict. `not_applicable` is
+accepted only as the sole passed check after the host admits that state; it cannot be declared as
+an ordinary data check.
+
+The store tests use minimal real SQLite files because importing the venue helper from db into
+store would close the existing db-to-store dependency loop. They close their handles and remove
+their temporary directories. On Node v26.11.1, a function denied by the authorizer returns code 1
+with `not authorized to use function: <name>`; the other tested authorization denials return 23.
+The function cases assert the exact authorization message as well as the code.
+
+Task 4 is next. Artifact placement, module-owned checks, installed independent guard-removal
+controls, qualified v2 recovery, branch review, current-head CI and joint release acceptance remain
+open. No source-level unit result in this checkpoint establishes a successful archive verification.
+
+### Task 4 execution and private protocol vector, 20 October 2026
+
+Task 4 adds bounded request/result readers, duplicate-key and integer-spelling admission,
+request binding, complete target-module coverage for passed output, and a target builder over
+resolved migration assets and declared package versions. Build provenance and the actual package
+version embedding remain Task 5. Owner checks, artifact verification and recovery integration
+remain open; these readers do not qualify a backup.
+
+The complete literal request is `VECTOR` in
+[`backup-verification-protocol.test.ts`](../../../apps/server/src/backup-verification-protocol.test.ts).
+Its independently calculated SHA-256 values are:
+
+| Value       | Literal digest                                                     |
+| ----------- | ------------------------------------------------------------------ |
+| Composition | `b4856410cd1eb08bbbbdca82780768cb4ede5c00c7a8bb3a1c17589ad0c4a7a5` |
+| Migrations  | `185384d2b168dcc542e78692a3649d220c8841ae26bab6cf93c7f1f997ac06c0` |
+| Policy      | `bd085f106c2acf118ed5d22b2b32b6104ab5d0546f6146a750c3e210025c15d5` |
+| Target      | `e7a8e1dc880ec7f846a6f22750dc610ea8159d02393b08d5c4bb08ed181a9e76` |
+| Request     | `ecac239bf44b948246432671c1f896219d079c9a3a11b1e3a96d7bd6240e786a` |
+
+For code-unit-sorted modules `m`, the composition subdigest hashes
+`m.map(x => [x.name, x.packageVersion, sortedRequiresPairs])`; the migration subdigest hashes
+`m.map(x => [x.name, x.schema, x.migrationTable, x.migrationDigest])`; the policy subdigest hashes
+`m.map(x => [x.name, x.semanticsVersion, x.policyDigest])`. Each module migration digest hashes
+`[1, sha256(rawJournalBytes), sortedRelativeSqlNameAndSha256Pairs]`, including SQL files outside the
+journal. The raw journal bytes bind its migration order. The target digest hashes
+`[1, [release, revision, fingerprint], completeSortedModuleArrays, compositionDigest,
+migrationDigest, policyDigest]`; each complete module array is
+`[name, packageVersion, sortedRequiresPairs, schema, migrationTable, migrationDigest,
+semanticsVersion, policyDigest]`. Array digests hash UTF-8 JSON; file digests hash their original bytes. Both use lowercase hexadecimal SHA-256.
+Dependency ranges preserve their literal printable spaces; opaque IDs reject whitespace.
+
+The result reader checks unique fixed check codes, aggregate status and complete module coverage.
+The host's contribution validator must additionally match each owner's declared check set; the
+wire target carries its policy digest, not the declaration itself. Cloud must still validate the
+actual child/image/claim and confirmed cleanup. A parsed result alone supplies none of those facts.
+
+Independent installed controls removed duplicate-key admission, request-digest comparison, passed
+module coverage, target-digest comparison, SQL-byte hashing and public-evidence policy binding one
+at a time. Each selected denial test failed an assertion beside a passing legitimate control;
+restoring the candidate returned both complete files to passing. The later semver correction
+changes only dependency-range text admission; those six guarded statements retain their tested
+shape. No existing test check or protected fiscal file changed.
+
+### Task 6 execution, 20 October 2026
+
+Core preservation now compares every classified table as a typed row multiset, including original
+columns, duplicate multiplicities, local state, append-only evidence and existing counters. SQL
+sorting uses explicit binary collation and a hexadecimal tie-break for equal INTEGER/REAL values;
+comparison streams rows instead of retaining a whole history in JavaScript. Only declared additive
+defaults and new empty tables are accepted. Source identity/environment, schema-declared foreign
+keys, sale/series counters, captured membership signatures and every amendment chain are checked.
+Membership verification uses the archive's own public keys; it is internal consistency only.
+
+The registered core owner returns one aggregate `data` check, rather than inventing separate
+per-check findings from a boolean result. Series replacement and first start are declared
+activation-only. Daily-close rows and heads are preserved here; their semantic walk remains Task 7.
+The host still needs to enforce scratch/temp-file quotas and qualify actual artifact placement.
+
+Observed commands on this task's tree:
+
+- `pnpm --filter @waitron/db exec vitest run src/backup-evidence.test.ts`: 60 passed after
+  behavioral failures, including cursor cleanup failure and four absent-source-table cases.
+- The same suite with `--coverage --coverage.include=src/backup-evidence.ts`: statements 99.27%,
+  branches 98.18%, functions and lines 100%. This is a focused file report, not package coverage.
+- `pnpm --filter @waitron/composition test:coverage`: 64 passed, all four measures 100%; the
+  JSON summary includes `core-backup-verification.ts`.
+- Both package typechecks and scoped ESLint passed. The root cycle/module-seam suites passed
+  3,357 cases; the unedited fiscal write-path/inmutability pair passed 20.
+- Six independent installed omissions failed the intended assertions beside accepting controls:
+  full-value preservation, complete amendment walk, source binding, foreign references, membership
+  signature and second-cursor release. Restoring the candidate passed all 60 cases.
+
+No original test file changed. The full verifier, remaining owners, qualified recovery, whole-branch
+review, current-head CI and joint release remain open; this task does not qualify a backup.
+
+### Task 8 execution checkpoint — 2026-10-20
+
+The independent query-only fiscal reader now walks every captured node and SIF
+segment, reconstructs and validates every record at its recorded generation
+instant, compares all four predecessor fields and the stored head, and preserves
+complete record, identity and head rows before and after migration. Re-registration
+keeps the node sequence and accepts a reset pointer only when the current identity
+has no recorded work. Reusing an earlier segment and linking across registrations
+refuse. No operational verifier or head creator is called.
+
+Focused tests cover genuine alta, void, correction and substitution records,
+retired segments, an empty current identity, older corruption, consistent but
+replaced histories, missing/shortened heads and malformed stored values. Thirteen
+independent guard omissions in an installed disposable candidate failed their
+intended assertions beside accepting controls; the restored suite passed. The
+existing writer/golden/immutability files remain unchanged. The exact command logs,
+counts and coverage are in Lane E's local Task 8 receipt ledger. This reader alone
+is not artifact qualification: registration/allocation/signature evidence, secrets,
+full module aggregation, placement/cleanup and v2 recovery remain later tasks.
+
+### Task 11 execution checkpoint — 20 October 2026
+
+Captured secrets/trading/optional backup env inputs now share archive-only resolution. The credentials
+owner compares all captured rows and authenticates every stored purpose/key version, including
+deprecated purposes; its private reader returns null only for a missing row. Failed authentication
+and unavailable keys remain unavailable, while authenticated malformed payloads refuse. No rotation,
+reseal, provisioning or application-vault write is part of this reader.
+
+Observed full credentials184PASS, coverage98.42/96.24/100/100; composition75PASS and all four100.
+The latter's JSON summary includes credentials-backup-verification.ts. Root cycle/seam3364PASS.
+These are module foundations, not artifact qualification, placed-key parity or a release handoff.
+The original public-export whole-shape assertion gains five API names; existing entries remain.
+Installed omission controls and final checkpoint receipts are recorded in the campaign ledger.
+
+### Task 11a execution checkpoint — 20 October 2026
+
+The core owner now authenticates the captured membership private key and checks its canonical
+Ed25519 PKCS8 representation against the source public half before and after migration. A private
+key without a public half, an unrelated pair or malformed material refuses. Explicitly keyless
+sources need no retained membership obligation requiring that identity; unrelated membership is
+accepted. Missing or inconclusive vault inputs remain unavailable.
+
+Observed db98PASS with scoped reader coverage99.44/98.75/100/100; full composition86PASS with
+100/98.36/100/100. Root3364 and protocol/target176PASS. Twelve installed omission/effect probes
+failed at their intended assertions with accepting controls; restored focused suites122PASS.
+The original56 db expectations remain exact. Four core result-shape assertions gain the required
+secret check while preserving all previous status/data values and behavioral assertions.
+Certificate/identity/provider secrets, real artifact orchestration and target-bound recovery remain
+open. These checks neither activate fiscal identity nor qualify an artifact by themselves.
+
+### Task 12 implementation checkpoint
+
+The query-only certificate reader opens captured PFX material, checks the source node and latest
+installation fields before and after migration, and compares complete installation/reminder rows.
+It accepts intact expired or future-valid material without renewal. Missing vault keys or an
+unconfirmed PFX passphrase remain unavailable; unsupported encryption remains unsupported.
+The fiscal contribution still needs Task 10 wiring; this is not artifact qualification.
+
+### Task 10 implementation checkpoint
+
+The registered fiscal owner combines the full-chain, registration, certificate and retained-hour
+readers. Query-only hour projection includes retired series, all registrations, allocations and
+reservations before and after migration. Retained evidence is validated before scope filtering;
+conflicts are checked in each captured taxpayer/environment scope. Schema-zero claims cannot
+hide database or retained hour evidence. Non-hour stored formats remain unsupported by this
+hour policy. Fresh installation, series, registration and promotion stay activation effects.
+The artifact verifier and the remaining owners remain open.
+
+### Task 13 implementation checkpoint
+
+The identity contribution compares every classified identity table and checks password/PIN,
+proof/session, passkey and ceremony representations on both copies. It authenticates all person
+and pending-enrolment TOTP ciphertexts using archived account-key inputs. Unknown formats stay
+unsupported; inconclusive decryption stays unavailable. It does not verify supplied passwords
+or issue a login. `apps/server/src/backup-verification-identity.test.ts` exercises the operational
+account-key helpers and enrolment writer, outside the later artifact/placement harness.
+That genuine archive integration remains in Tasks20–24. The existing composition pin for an
+absent identity backup contribution is replaced by its explicit owner; a separate case keeps
+migration composition working with an omitted backup contribution.
+
+### Task 15 implementation checkpoint
+
+Catalogue and media now register explicit custom verification contributions. They compare every
+classified table before and after migration, including immutable menu versions and image bytes.
+Catalogue checks declared foreign keys, document hashes and the document's complete image-reference
+set. Only the shipped suggestion-job additions `collect_cursor: null` and `collected_refs: '[]'`
+are permitted as new columns. Unknown menu document formats stay unsupported, including when a
+separate reference is broken.
+
+Media reads its database tables, without a file directory or image worker. It checks stored picture
+signatures and SHA-256 filenames, replacement blobs, edit bounds and references. Current references
+need a photo identity; historical version references can resolve retained WebP bytes from the blob
+table. Neither enabled-module filtering nor a schema-zero parameter skips these checks. Host
+schema-zero admission and genuine encrypted-archive qualification remain later plan work.
+
+The classification literal moved unchanged to `packages/media/src/classification.ts`; its original
+`module.ts` export remains. No existing assertion changed. The earlier identity test's cleanup
+callback now has an explicit block: the root teardown text scanner had interpreted the following
+query helper as that callback. The guard and all identity assertions remain unchanged.
+
+The artifact host, remaining owners, placement, recovery v2, whole-branch review and release
+qualification are still open. This checkpoint does not release Cloud integration or snapshots.
+
+### Task 17 implementation checkpoint
+
+The workforce contribution compares every classified table and walks full source and restored time-entry and pay-period-closure chains by node and location. It reads stored time heads directly and checks their sequence, id, hash and recorded time. Every correction and extension field is mapped to the existing pure hash reader; full stored rows and snapshots are preserved. No workforce restore hook or activation effect is added. A captured self-consistent closure prefix is not evidence of external completeness; migration loss is checked against the captured rows. Artifact placement and qualification remain later tasks.
+
+### Task 20 execution, 20 October 2026
+
+Private placement now uses `restoreDatabase`, descriptor-derived `migrationOptionsFor` and
+`applyMigrations`, then `restoreSecrets`. It writes declared recovery material, excludes the old
+`backup.env` from the managed layout and validates its captured settings without opening the old
+destination. It requires the captured vault env input. This adapter does not set aside identity,
+run restore hooks, settle series or create a rebuild marker. Ordinary `restore.ts` is unchanged.
+Full secret usability, orchestration, cleanup admission and recovery binding remain later tasks.
+
+The real catalogue predecessor stops before `0034_content_suggestion_collect_cursor`. The fixture
+uses that schema's columns and retains every original table value, adding the expected null cursor
+and empty collected-reference list. The migration engine also restores absent append-only triggers;
+both update and delete attempts are refused afterwards. File placement checks retained source
+ciphertext and logical source rows, private file/directory modes and declared material.
+
+The four required suites passed 133 tests. Five focused root suites passed 1,925 tests and the two
+protected fiscal suites passed 20 without edits. Server types, scoped lint and explicit source
+formatting passed. Focused coverage of the actual new source measured 23/23 statements, 8/8 branches,
+9/9 functions and 21/21 lines; this is not package-wide coverage. Eight independently omitted steps
+failed their intended assertions beside accepting controls in an installed disposable copy, and
+restoring the code passed all 16 new cases. The copy matched 8,553 tracked/candidate paths and was
+removed. An initial omission exposed a weak new excluded-file assertion; checking each filename
+separately caught the omission. No existing test assertion, migration or protected writer changed.
+
+### Task 21 small-owner checkpoint, 20 October 2026
+
+Scheduler and bookings now supply query-only checks that preserve every captured table value and
+refuse an owned-table presence inconsistent with an absent or applied source schema. Their real
+classifications supply their table lists. Fiscal-none explicitly declares database-only obligations
+with no owned tables, private inputs or effects; its empty journal and a real migrated table
+inventory are checked. All three are registered in composition without restore hooks.
+
+This is **partial Task 21**. The complete generated real inventory and independent removal of every
+real owner remain pending the payment contribution in Task 14. That task still follows the owner's
+Lane B-first ordering. No enabled-module filter or fallback supplies complete verification.
+
+Full scheduler coverage passed 120 tests, fiscal-none passed 20 and composition passed 100; all
+three package coverage bars passed. Four focused bookings Node suites passed 106 tests, and its
+new source's focused coverage passed all four measures with 23 cases. Five root suites passed
+5,295 tests; the four package type checks and scoped lint passed. Seven installed omissions caught
+row-preservation, source-schema and registration failures beside accepting controls; restored
+suites passed 26, 23, 4 and 34 cases respectively. The disposable installed copy matched 8,559
+candidate paths before removal. These checks do not establish full artifact or release acceptance.
+
+Two existing checks deliberately change under Task 21: scheduler's public-export list gains
+`SCHEDULER_BACKUP_VERIFICATION`; composition's fiscal-none check replaces absent `backup` with the
+exact `{ verification: FISCAL_NONE_BACKUP_VERIFICATION }` object. Other original expectations and
+protected fiscal assertions stay unchanged. The complete inventory acceptance remains open.
+
+The final four server consumer suites passed 228 tests and the protected fiscal pair passed 20
+unchanged. The first final formatting command flagged two new test fixtures and the ignored
+lockfile. The fixtures were formatted and the applicable source and explicit plan checks then
+passed. Their TypeScript parse trees and nontrivia token sequences matched before and after;
+a deliberately changed value differed in both comparisons. The installed control tree preceded
+that fixture formatting. The complete Task 21 inventory remains pending Task 14.
+
+### Task 22 host-secret checkpoint, 20 October 2026
+
+The host reader now checks all required recovery files, both TLS key/certificate pairs, the CA's
+self-signature and the server's issuer/signature. Expired or not-yet-valid material requires renewal
+and returns unavailable. Parseable unrelated keys return invalid; unexpected reader faults propagate
+for the orchestration layer to classify as unavailable. Optional backup settings and module
+configuration are parsed without opening a backup destination; archived Cloud authority files are
+refused.
+
+Selected-node sealed state is authenticated with its supplied recovery key and its host material
+and identity are checked privately. The caller must establish the selected row's absence before
+omitting that argument. Other nodes' sealed bytes remain under the core owner's complete row
+comparison, without claiming their keys are available. Task 23 must wire the selected-row read and
+these checks into the complete artifact flow.
+
+The placement check uses the real scratch files through `loadBoxEnv({}, placedStateDir)` and the
+host's vault/account derivation. It compares current/previous key bytes and versions and account
+keys with the shared captured-input resolution. Equal redundant overrides pass; an excluded
+`backup.env` override that changes usable keys refuses qualification. No key is moved or resealed.
+
+The new suite passed 85 tests and measured all 97 statements, 78 branches, 9 functions and 80 lines
+in its source. Eight focused server suites passed 274 tests. Nineteen independent omissions in an
+installed disposable copy failed their intended expectations beside an accepting control; the
+restored copy passed all 85 cases. These are host-reader checks, not complete artifact, authority,
+runtime or joint release acceptance. No existing test assertion or ordinary restore code changed.
+
+### Task 14 provider boundary correction — 21 October 2026
+
+The first full payments suite rejected provider names in the initial verifier draft through
+`no-provider-vocabulary.test.ts`. The guard is unchanged. The generic factory now takes the existing
+composition registry and authenticates its declared credential purposes. Each provider adapter
+parses its own stored fields offline; no provider adapter becomes a module descriptor.
+
+Disconnect refuses an active reader before deleting its credential (`apps/server/src/payments-api.ts`,
+the provider disconnect route). A disabled or deleted reader and historic payments may therefore
+remain without that credential. The verifier accepts that retained history, requires credentials for
+active undeleted readers, checks every present provider payload, and refuses credential presence
+lost between source and restored copies. It cannot identify a credential independently lost before
+capture where no separate connection marker remains. Missing keys remain inconclusive.
+
+The original Task 21 small-owner checkpoint above records its 20 October state. Its pending complete
+inventory is qualified separately after Task 14; neither checkpoint establishes complete artifact,
+Cloud, pinned-runtime or joint release acceptance. Tasks 5 and 23–27 remain required.
+
+### Tasks 14 and 21 qualification — 21 October 2026
+
+The payment owner compares all classified payment tables and the three append-only evidence
+sets. It checks declared relationships in both private copies and decrypts every present provider
+credential through the shared captured key resolver. Provider adapters supply their own offline
+payload checks through the existing registry. In-flight payments remain data.
+
+The complete real inventory now matches the database produced by the shipped migration descriptors,
+including media tables and inactive owners. Each real owner was removed independently and refused.
+Module-owned non-database entries match declared sources; declared data effects name independent
+checks, while activation effects remain outside verification.
+
+Local qualification: the full payments suite passed 763 cases and its coverage bars; composition
+passed 122 and its coverage bars. The two provider-focused runs passed 43 and 39; root boundary
+checks passed 5,344 and the unchanged protected fiscal pair passed 20. Eleven omissions in an
+installed independent candidate each failed the intended assertions; the restored payment and
+inventory suites passed 56 and 22. All 8,682 candidate paths matched before and after the experiments,
+and the owned temporary candidate was removed. No existing test assertion, guard or shipped SQL
+changed in this step. These are local module and inventory receipts, not CI or complete artifact
+qualification. Tasks 5 and 23–27 remain open before branch finishing and release handoff.
+
+### Task 5 build identity qualification — 21 October 2026
+
+The shared bundler embeds separate backup verification provenance beside the existing hour stamp.
+Its fingerprint binds the source revision, release, lockfile bytes and canonical module,
+migration and policy descriptor before the runtime fields are added. The current-target reader
+uses that embedded provenance and the shipped migration assets; absent provenance refuses
+qualification. This is version binding, not remote attestation.
+
+`pnpm --filter @waitron/server build` produced `dist/backup-verification.js` alongside the ordinary
+entries. The new entry exports the strict readers and target helpers; the artifact verifier is
+still Task 23. The real import test blocked listeners, socket connections, fetch, timers, workers
+and child processes, then read the complete target from copied migration assets. Its module
+versions were compared with the package manifests. Changing copied SQL changed the migration digest.
+
+The three build suites passed 57 cases, including the existing hour-stamp checks, and were run
+with `GIT_DIR` set. A focused coverage run measured both changed build helpers at 100% in each
+category. The protocol and target suites passed 179 cases; the affected composition suites
+passed 61, root boundary checks 3,710 and the unchanged fiscal golden/immutability pair 20.
+Server typechecking and focused lint passed. One new acceptance assertion initially omitted the
+migration helper's arguments; the corrected call passed without a product change.
+
+Eight independent installed-copy faults each failed the intended assertion beside a passing
+control: omit source, lockfile or descriptor binding; omit bundle provenance; omit absent-stamp
+refusal; substitute the running stamp; start a timer during import; omit SQL-byte binding.
+The restored copy passed the same 57 build and 179 protocol/target cases. The existing hour test's
+fixture gained the newly imported build helper; no existing assertion changed. These receipts
+cover local builds and target binding, not full artifact verification or the joint Cloud release.
+Tasks 23–27 remain before whole-branch finishing and release handoff.
+
+### Task 25 implementation checkpoint — 21 October 2026
+
+The opt-in client constructs and persists version-2 target-bound requests, signs the specified
+v2 proof arrays and checks negotiated responses before exposing a selected point. The descriptor
+is retained across status, read, post-download and restored-report checks. The saved-state reader
+checks the request key pair, target digest, protocol, selected descriptor and phase. It returns no
+qualification for an ordinary v1 request. Identity-only replacement access can still read a saved
+v2 identity; it does not perform v1 network operations for that request.
+
+The existing strict JSON parser is shared through `parseBackupVerificationJson`; its earlier
+request/result readers retain their limits. Recovery v2 uses at most 30,000 UTF-8 bytes for the
+target descriptor and 65,536 bytes for private state or a response, with the existing 30-second
+response deadline and 512 MiB archive limit. The target bound reserves space for both copies in a
+saved approval. V1 retains its 8,192-byte state and 16,384-byte response limits and original proof
+arrays. New local tests check larger compositions, overflow, duplicate keys, target changes and
+downgrade attempts. Installed disposable copies catch eleven independent omissions, and their
+restored accepting control passes.
+
+The setup caller in `boot.ts` is intentionally unchanged: Cloud's inspected recovery implementation
+still uses v1. Exact synthetic public wire arrays, payloads, signatures, descriptor and bounds are
+provided to lane D through the campaign exchange. Those examples are not admitted verification
+results. Enabling the qualified caller waits for the coordinated v2 interface; local pre-placement
+comparisons remain Task 26. There is no Cloud deployment, snapshot-availability or fiscal-authority
+change. The scoped two-file coverage diagnostic is below the package thresholds; final package
+coverage remains due.
+
+### Task 26 local recovery comparisons — 21 October 2026
+
+Qualified archive staging checks the locally built target and saved v2 approval before validation
+and again before replacing the pending request. Its version-2 marker retains the complete
+verification descriptor, request/point IDs and fresh public request key. Restart checks the saved
+approval and marker before reading the ciphertext, setting `placementStarted` or opening the
+restore target. Ordinary stream markers stay on their own path; a saved snapshot approval does
+not qualify a stream or prevent its independent ordinary restore.
+
+After archive validation and the source-liveness callback, `restoreOwned` checks the saved request,
+fresh key, validated ciphertext hash, length and current target immediately before `writeValidated`.
+Only that pre-placement block raises `SnapshotPlacementRefused`; the staged caller restores a
+newly set start marker for that refusal and retains the pending ciphertext and node credential.
+Later ordinary restore errors retain their previous replay behavior. No allocation, fiscal restore
+hook, key admission or first-setup gate was relaxed. The setup caller remains on v1 pending the
+Cloud release; these local checks do not enable snapshots or deployment enforcement.
+
+The new suite has 39 cases. Its real preproduction archive uses the actual migrated composition
+and encrypted file validation. The matching authority control runs `createRecoveryRestoreRunner`
+and receives `promotion.break_glass_invalid` before changing the destination. This is a local
+boundary test with synthetic target approval, not a Cloud qualification or an authorised fiscal
+activation. Task 24's production-environment genuine fiscal archive and ordinary authority
+assertions remain unchanged.
+
+Ten separate installed omissions each produced their intended assertion failures: staging,
+restart and final target comparisons, final and marker fresh-key checks, duplicate marker keys,
+saved descriptor equality, final measured archive checks, late-refusal marker recovery and
+staging archive checks. Each restored accepting selection passed, and the final restored suite
+passed all 39 cases. The first restart control was inconclusive because a deliberately missing
+ciphertext also raised the expected refusal. Keeping the ciphertext present made deletion of the
+restart comparison fail its assertion. Both control runs are retained; the first is no proof.
+
+Related server suites passed 300 cases; the protected commands passed 18, 2 and 13 cases without
+editing their tests. Five focused root suites passed 5,376 cases. Server types, scoped lint and
+build passed. Existing tracked tests, guards, fiscal writers and migrations are unchanged in this
+task. Earlier scoped coverage failures remain recorded; these noncoverage checks do not qualify
+package coverage or the whole branch. Task 27's complete audit, Claude review, normal push hook
+and current-head CI remain required before landing.
+
+
+### Task 27 distribution audit and local qualification — 21 October 2026
+
+The initial integration rebased all implementation commits onto `f17a43ad5f52c54fb9e502b7b97f45117a1e21ae`.
+The compiled import test exposed the missing final verifier in its earlier export assertion.
+The complete entry now also exports `BACKUP_VERIFICATION_MODULES`, so a controller can supply
+the actual owner callbacks from the compiled bundle without importing a source checkout.
+The Dockerfile copies the verification bundle and its generated dependency notices into the
+production image. Both missing-distribution assertions failed before those changes and passed
+afterwards. The Dockerfile check reads text; it does not establish image execution.
+
+A new fiscal-history fixture used a column-position insert into `envio_flujo`. After A942's
+additive migration it failed with four columns versus three values. Naming the original columns
+keeps its values and all assertions; the five complete backup-fiscal suites then pass 258 cases.
+No existing fiscal golden, writer, allocation or migration is edited.
+
+The focused server run includes every new verification suite and the ordinary restore/recovery
+consumers. Its diagnostic report over the new verifier sources passes the unchanged aggregate
+thresholds: statements 98.55%, branches 96.55%, functions 99.42%, lines 99.67%. This replaces
+neither package-wide coverage nor current-head CI. Earlier narrower reports remain historical
+failures. The requested twenty-package type check passes. Protected commands pass 18, 2 and 13
+cases with original assertions and bytes. The seven planned root/build suites pass 3,567 cases.
+
+The current developer guide documents the private entry and exact dependency inputs. The
+backlog leaves Cloud integration, current-claim admission, real child cleanup, target-bound
+negotiation and joint pinned runtime acceptance open. The setup caller remains on v1;
+no snapshot availability, deployment enforcement or fiscal activation is enabled here.
+Whole-branch Claude review, normal push hook, current-head package coverage and landing
+remain pending at this checkpoint.
+
+
+The distribution omissions were then deleted independently in an installed disposable clone:
+removing the bundle copy, notice copy or compiled owner export each failed its intended assertion.
+The restored build suite passes 19 cases. The existing image/bundler suites pass 113 cases;
+six further ordinary restore, setup-recovery and replacement consumers pass 82 cases.
+The final source changes name only the new fixture's insert columns and the compiled distribution;
+no existing protected fiscal assertion changes. The earlier guessed `recovery-replacement.test.ts`
+selector matched no file; the actual `cloud-replacement.test.ts` is included in this final readback.
+
+
+### Task 27 whole-branch review and corrections — 21 October 2026
+
+The one installed Claude review completed in 551 seconds against captured base
+`f17a43ad5f52c54fb9e502b7b97f45117a1e21ae` and candidate
+`658712701e997880ebfab2b8b906180ce319889e`. It exercised independent target, binding,
+cleanup, key, read-only and owner-inventory omissions and built/imported the distribution.
+Its two findings were accepted:
+
+- The not-applicable owner's existing row check lacked an effective test. A new case copies
+  the real target migrations into private temporary folders and seeds a scheduler row there.
+  Verification refuses it; independently removing only the row check makes the assertion fail.
+  The existing empty-table accepting control stays unchanged. No shipped migration changes.
+- A known v1 Cloud cache with loose permissions or a damaged cached key blocked an ordinary
+  archive restore. Two cases first fail at staging, then pass after the binding reader recognises
+  a bounded, duplicate-free v1 envelope without v2 fields before inspecting operational keys.
+  The cache supplies no authority. V2, downgraded, ambiguous and duplicate-key state still refuse.
+  A real local archive with the same unusable v1 cache reaches the existing recovery authority
+  refusal. Existing restore/golden assertions remain unchanged.
+
+The scope decision is deliberate: malformed JSON and unknown saved protocol versions remain
+refusals, because they do not establish that the pending operation is an unrelated v1 cache.
+Recognising v1 does not relax the Cloud client's own private-state validation. The helper is
+called at staging, restart and final placement; every existing v2 downgrade check remains.
+
+The review did not independently qualify every owner's history/provider probes, WAL/concurrent
+execution, documentation or Docker execution. Driver owner-suite and prior installed-control
+receipts remain separate evidence; CI supplies package coverage and the image build. Actual
+Cloud isolation/admission, joint release and trading authority remain outside this review.
+This is the normal single review followed by its test-first correction pass, not a new design.
+
+
+Post-review qualification: all four affected complete suites pass 187 cases. Independent
+installed omission controls for the seeded-row check and legacy-cache separation fail their
+intended assertions; restoring the candidate passes all 187. The final candidate comparison
+finds no tracked-content difference. Fifteen complete server suites covering verification,
+ordinary restore, Cloud setup, replacement and authority consumers pass 582 cases. Server types,
+scoped lint, formatting and whitespace checks pass. The normal hook and current-head CI remain
+the next gates; the review is retained across these focused fixes.
+
+
+### Task 27 first CI readback and measured scheduling inputs — 21 October 2026
+
+PR #1939 at `1d975f487b624c0bffb941114d8ecd5d5558d009` passed CI run 39595996508
+(66 successful jobs, one skipped) and licence/sign-off run 39595996341. This includes
+full package coverage, shared mutation and the production image smoke job. Fiscal coverage
+passed 186 files and 4,096 cases at 98.06% statements, 96.61% branches, 99.27% functions
+and 98.97% lines. Its timing exceeds the four-minute target; the measured separate
+performance work is recorded in the CI backlog, without attributing an unmeasured cause.
+
+The server's sixteen completed shard logs supply the new test-file durations. The refresh
+adds measured entries absent from the committed table while retaining every existing value
+from its earlier multi-run sample. No shard algorithm, count, test, guard or threshold changes.
+Every reported server test path occurs in exactly one of those sixteen logs. Current-head CI
+will run again for this scheduling-data update before landing; the completed Claude review
+is retained because no product behavior changed.
+
+
+### Task 27 approved fixture correction — 21 October 2026
+
+The owner approved the exact first-setup fixture correction: freeze `Date` and `performance`
+together, retaining every assertion and the original date. An installed disposable checkout
+reproduced `clock_corrected` with a real 1,200 ms wait before provision; the one-line correction
+passed that same delayed case. The shipping fixture contains no added wait and passes all three
+original cases. The six unchanged clock/protected fiscal suites pass 50 cases, and seven complete
+recovery/verification integration suites pass 257 cases after the required rebase.
+
+The rebase preserves all 142 existing non-Markdown A850 paths byte for byte; its sole manual
+conflict keeps both backlog sections. The completed 551-second Claude review remains applicable.
+The closed clock-fixture approval backlog entry is removed. Normal push validation and
+current-head CI are still required before landing; the release and Cloud gates above remain.

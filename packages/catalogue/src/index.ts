@@ -169,3 +169,5 @@ export * from "./content-suggestion-store.js";
 export type * from "./content-suggestion-types.js";
 
 export { assertProductWritable } from "./archive.js";
+
+export { CATALOGUE_BACKUP_VERIFICATION } from "./backup-verification.js";

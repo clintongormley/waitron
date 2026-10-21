@@ -18,3 +18,4 @@ export { WORKFORCE_ES_CONFIGURATION_TRANSFER } from "./configuration-transfer.js
 import "./errors.js";
 
 export { prepareTimeRecordExport, WORKFORCE_ES_RECORD_EXPORT } from "./record-export.js";
+export { WORKFORCE_ES_BACKUP_VERIFICATION } from "./backup-verification.js";

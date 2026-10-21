@@ -205,6 +205,7 @@ COPY --from=build --chown=waitron:waitron /src/apps/server/dist/guide/ /app/guid
 COPY --from=build --chown=waitron:waitron \
   /src/apps/server/dist/server.js \
   /src/apps/server/dist/node-entry.js \
+  /src/apps/server/dist/backup-verification.js \
   /src/apps/server/dist/bin-restore.js \
   /src/apps/server/dist/bin-rejoin.js \
   /src/apps/server/dist/bin-break-glass.js \
@@ -222,6 +223,7 @@ COPY --from=build --chown=waitron:waitron /src/deploy/third-party/ /app/third-pa
 COPY --from=build --chown=waitron:waitron \
   /src/apps/server/dist/server.js.NOTICES.txt \
   /src/apps/server/dist/node-entry.js.NOTICES.txt \
+  /src/apps/server/dist/backup-verification.js.NOTICES.txt \
   /src/apps/server/dist/bin-restore.js.NOTICES.txt \
   /src/apps/server/dist/bin-rejoin.js.NOTICES.txt \
   /src/apps/server/dist/bin-break-glass.js.NOTICES.txt \

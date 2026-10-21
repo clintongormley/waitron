@@ -1,5 +1,9 @@
+import { CARD_PROVIDERS } from "./card-providers.js";
 import { MEDIA_MODULE } from "@waitron/media";
+import { CREDENTIALS_BACKUP_VERIFICATION } from "./credentials-backup-verification.js";
+import { CORE_BACKUP_VERIFICATION } from "./core-backup-verification.js";
 import {
+  ADJUSTMENTS_BACKUP_VERIFICATION,
   ADJUSTMENTS_CHANGE_SOURCES,
   ADJUSTMENTS_CLASSIFICATION,
   ADJUSTMENTS_CONFIGURATION_TRANSFER,
@@ -10,6 +14,7 @@ import {
 import { CREDENTIALS_CLASSIFICATION } from "@waitron/credentials";
 import {
   CATALOGUE_CLASSIFICATION,
+  CATALOGUE_BACKUP_VERIFICATION,
   CATALOGUE_CHANGE_SOURCES,
   CATALOGUE_CONFIGURATION_TRANSFER,
   CATALOGUE_PROVISIONING,
@@ -20,7 +25,7 @@ import {
   CORE_CONFIGURATION_TRANSFER,
   CORE_CHANGE_SOURCES,
 } from "@waitron/db";
-import { FISCAL_NONE_SLOT } from "@waitron/fiscal-none";
+import { FISCAL_NONE_SLOT, FISCAL_NONE_BACKUP_VERIFICATION } from "@waitron/fiscal-none";
 import {
   FISCAL_ALERTS,
   FISCAL_CLASSIFICATION,
@@ -30,12 +35,14 @@ import {
   FISCAL_RECOVERY_PACK,
   FISCAL_RECOVERY_DOCUMENT,
   FISCAL_HOUR_BACKUP_STATE,
+  FISCAL_BACKUP_VERIFICATION,
   assertFiscalRestoreCommitted,
   FISCAL_SLOT,
   FISCAL_VOCABULARY,
 } from "@waitron/fiscal-verifactu";
 import {
   BOOKINGS_CLASSIFICATION,
+  BOOKINGS_BACKUP_VERIFICATION,
   BOOKINGS_CHANGE_SOURCES,
   BOOKINGS_FLOOR_ANNOTATIONS,
   BOOKINGS_TABLE_REMOVAL,
@@ -44,6 +51,7 @@ import {
 } from "@waitron/bookings";
 import {
   IDENTITY_CLASSIFICATION,
+  IDENTITY_BACKUP_VERIFICATION,
   IDENTITY_CONFIGURATION_TRANSFER,
   IDENTITY_CHANGE_SOURCES,
 } from "@waitron/identity";
@@ -52,11 +60,13 @@ import type { ModuleConfigurationTransfer, WaitronModule } from "@waitron/module
 import {
   PAYMENTS_ALERTS,
   PAYMENTS_CLASSIFICATION,
+  paymentsBackupVerification,
   PAYMENTS_CONFIGURATION_TRANSFER,
   PAYMENTS_CHANGE_SOURCES,
 } from "@waitron/payments";
-import { SCHEDULER_CLASSIFICATION } from "@waitron/scheduler";
+import { SCHEDULER_CLASSIFICATION, SCHEDULER_BACKUP_VERIFICATION } from "@waitron/scheduler";
 import {
+  STAFFING_BACKUP_VERIFICATION,
   STAFFING_CHANGE_SOURCES,
   STAFFING_CLASSIFICATION,
   STAFFING_CONFIGURATION_TRANSFER,
@@ -65,6 +75,7 @@ import {
   describeShifts,
 } from "@waitron/staffing";
 import {
+  WORKFORCE_BACKUP_VERIFICATION,
   WORKFORCE_CLASSIFICATION,
   WORKFORCE_CONFIGURATION_TRANSFER,
   WORKFORCE_CHANGE_SOURCES,
@@ -73,6 +84,7 @@ import {
 import {
   VENUE_SERVICE,
   VENUE_SERVICE_ALERTS,
+  VENUE_SERVICE_BACKUP_VERIFICATION,
   VENUE_SERVICE_CLASSIFICATION,
   VENUE_SERVICE_CHANGE_SOURCES,
   VENUE_SERVICE_CONFIGURATION_TRANSFER,
@@ -81,6 +93,7 @@ import {
   VENUE_SERVICE_ROUTES,
 } from "@waitron/venue-service";
 import {
+  WORKFORCE_ES_BACKUP_VERIFICATION,
   WORKFORCE_ES_CLASSIFICATION,
   WORKFORCE_ES_CHANGE_SOURCES,
   WORKFORCE_ES_CONFIGURATION_TRANSFER,
@@ -132,6 +145,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     classification: CORE_CLASSIFICATION,
     changes: CORE_CHANGE_SOURCES,
     configurationTransfer: CORE_TRANSFER,
+    backup: { verification: CORE_BACKUP_VERIFICATION },
   },
   {
     name: "catalogue",
@@ -144,6 +158,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../catalogue/drizzle",
     },
     classification: CATALOGUE_CLASSIFICATION,
+    backup: { verification: CATALOGUE_BACKUP_VERIFICATION },
     changes: CATALOGUE_CHANGE_SOURCES,
     configurationTransfer: CATALOGUE_CONFIGURATION_TRANSFER,
     provisioning: CATALOGUE_PROVISIONING,
@@ -158,6 +173,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_venue_service",
       from: "../venue-service/drizzle",
     },
+    backup: { verification: VENUE_SERVICE_BACKUP_VERIFICATION },
     classification: VENUE_SERVICE_CLASSIFICATION,
     changes: VENUE_SERVICE_CHANGE_SOURCES,
     venueService: VENUE_SERVICE,
@@ -179,6 +195,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../identity/drizzle",
     },
     classification: IDENTITY_CLASSIFICATION,
+    backup: { verification: IDENTITY_BACKUP_VERIFICATION },
     changes: IDENTITY_CHANGE_SOURCES,
     configurationTransfer: IDENTITY_CONFIGURATION_TRANSFER,
   },
@@ -192,6 +209,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_workforce",
       from: "../workforce/drizzle",
     },
+    backup: { verification: WORKFORCE_BACKUP_VERIFICATION },
     classification: WORKFORCE_CLASSIFICATION,
     changes: WORKFORCE_CHANGE_SOURCES,
     permissions: WORKFORCE_PERMISSIONS,
@@ -208,6 +226,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../workforce-es/drizzle",
     },
     vocabulary: WORKFORCE_ES_VOCABULARY,
+    backup: { verification: WORKFORCE_ES_BACKUP_VERIFICATION },
     classification: WORKFORCE_ES_CLASSIFICATION,
     changes: WORKFORCE_ES_CHANGE_SOURCES,
     configurationTransfer: WORKFORCE_ES_CONFIGURATION_TRANSFER,
@@ -224,6 +243,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../payments/drizzle",
     },
     classification: PAYMENTS_CLASSIFICATION,
+    backup: { verification: paymentsBackupVerification(CARD_PROVIDERS) },
     changes: PAYMENTS_CHANGE_SOURCES,
     configurationTransfer: PAYMENTS_CONFIGURATION_TRANSFER,
     alerts: PAYMENTS_ALERTS,
@@ -239,6 +259,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../scheduler/drizzle",
     },
     classification: SCHEDULER_CLASSIFICATION,
+    backup: { verification: SCHEDULER_BACKUP_VERIFICATION },
     configurationTransfer: { kind: "none" },
   },
   {
@@ -252,6 +273,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../credentials/drizzle",
     },
     classification: CREDENTIALS_CLASSIFICATION,
+    backup: { verification: CREDENTIALS_BACKUP_VERIFICATION },
     configurationTransfer: { kind: "none" },
   },
   {
@@ -274,6 +296,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       recoveryPack: FISCAL_RECOVERY_PACK,
       recoveryDocument: FISCAL_RECOVERY_DOCUMENT,
       nonDbState: [FISCAL_HOUR_BACKUP_STATE],
+      verification: FISCAL_BACKUP_VERIFICATION,
       assertRestoreCommitted: assertFiscalRestoreCommitted,
     },
     alerts: FISCAL_ALERTS,
@@ -290,6 +313,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../fiscal-none/drizzle",
     },
     fiscal: FISCAL_NONE_SLOT,
+    backup: { verification: FISCAL_NONE_BACKUP_VERIFICATION },
     configurationTransfer: { kind: "none" },
   },
   {
@@ -303,6 +327,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../bookings/drizzle",
     },
     classification: BOOKINGS_CLASSIFICATION,
+    backup: { verification: BOOKINGS_BACKUP_VERIFICATION },
     changes: BOOKINGS_CHANGE_SOURCES,
     routes: BOOKINGS_ROUTES,
     permissions: BOOKINGS_PERMISSIONS,
@@ -320,6 +345,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_adjustments",
       from: "../adjustments/drizzle",
     },
+    backup: { verification: ADJUSTMENTS_BACKUP_VERIFICATION },
     classification: ADJUSTMENTS_CLASSIFICATION,
     changes: ADJUSTMENTS_CHANGE_SOURCES,
     routes: ADJUSTMENTS_ROUTES,
@@ -337,6 +363,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_staffing",
       from: "../staffing/drizzle",
     },
+    backup: { verification: STAFFING_BACKUP_VERIFICATION },
     classification: STAFFING_CLASSIFICATION,
     changes: STAFFING_CHANGE_SOURCES,
     routes: STAFFING_ROUTES,

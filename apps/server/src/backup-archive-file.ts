@@ -57,6 +57,7 @@ export async function* packArchiveStream(
 export async function unpackArchiveFile(
   path: string,
   scratchDir: string,
+  options?: { requireExactEnd?: true },
 ): Promise<ArchiveInputEntry[]> {
   const file = await open(path, "r");
   const databasePath = join(scratchDir, "venue.db");
@@ -111,6 +112,7 @@ export async function unpackArchiveFile(
         });
       }
     }
+    if (options?.requireExactEnd && offset !== size) invalid("trailing_data");
     return entries;
   } catch (error) {
     if (ownedDatabase) await unlink(databasePath);

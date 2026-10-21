@@ -17,6 +17,7 @@
     "@waitron/migrations": "workspace:*",
     "@waitron/server-kit": "workspace:*",
     "@waitron/shared": "workspace:*",
+    "@waitron/store": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
     "hono": "^4.13.13",
     "semver": "^7.7.0"

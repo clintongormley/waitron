@@ -1,16 +1,29 @@
 import {
   createHash,
   createPrivateKey,
-  createPublicKey,
   generateKeyPairSync,
   randomInt,
   randomUUID,
   sign,
 } from "node:crypto";
-import { lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { lstat, mkdir, open, rename, rm } from "node:fs/promises";
 import { Agent } from "node:https";
 import { join } from "node:path";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  parseBackupVerificationJson,
+  type BackupVerificationTarget,
+} from "./backup-verification-protocol.js";
+import {
+  assertSnapshotRecoveryTarget,
+  cloudRecoveryUnavailable as unavailable,
+  readCloudRecoveryState,
+  readSnapshotRecoveryVerification,
+  sameSnapshotRecoveryVerification,
+  snapshotRecoveryTarget,
+  type SavedCloudRecoveryState as SavedState,
+  type SnapshotRecoveryVerification,
+} from "./cloud-recovery-v2.js";
 import type { ArchiveRestoreRequest } from "./restore-request.js";
 
 const MAX_BYTES = 512 * 1024 * 1024;
@@ -22,9 +35,6 @@ const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const validDate = (value: unknown): value is string =>
   typeof value === "string" && Number.isFinite(Date.parse(value));
-function unavailable(): never {
-  throw new Error("Cloud recovery is unavailable. Try again.");
-}
 class ExpiredRequest extends Error {}
 
 export interface CloudRecoveryPoint {
@@ -48,18 +58,6 @@ export interface CloudRecoveryView {
   state: "awaiting_owner" | "approved" | "expired";
   point?: Pick<CloudRecoveryPoint, "id" | "venueId" | "capturedAt" | "modules">;
 }
-interface SavedState {
-  version: 1;
-  origin: string;
-  environment: "preproduction";
-  requestId: string;
-  publicKey: string;
-  privateKey: string;
-  code: string;
-  expiresAt?: string;
-  pointId?: string;
-  phase?: "staged" | "restored" | "reported";
-}
 interface Grant {
   point: CloudRecoveryPoint;
   location: { endpoint: string; bucket: string; region: string };
@@ -74,6 +72,8 @@ export interface CloudRecoveryOptions {
   environment: "preproduction" | "production";
   fetch?: typeof fetch;
   storageCa?: string;
+  snapshotProtocol?: 2;
+  target?: () => BackupVerificationTarget;
   download?: (grant: Grant) => Promise<Uint8Array>;
 }
 
@@ -162,44 +162,24 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       active = false;
     }
   }
-  async function read(): Promise<SavedState | undefined> {
+  function currentTarget(): BackupVerificationTarget {
     try {
-      const info = await lstat(path);
-      if (!info.isFile() || info.size > 8192 || info.mode & 0o077) unavailable();
-      const value: unknown = JSON.parse(await readFile(path, "utf8"));
-      if (
-        !record(value) ||
-        value.version !== 1 ||
-        value.origin !== options.origin ||
-        value.environment !== "preproduction" ||
-        !uuid(value.requestId) ||
-        typeof value.code !== "string" ||
-        !/^\d{8}$/.test(value.code) ||
-        typeof value.publicKey !== "string" ||
-        typeof value.privateKey !== "string"
-      )
-        unavailable();
-      const privateKey = createPrivateKey({
-        key: Buffer.from(value.privateKey, "base64url"),
-        format: "der",
-        type: "pkcs8",
-      });
-      if (
-        privateKey.asymmetricKeyType !== "ed25519" ||
-        createPublicKey(privateKey)
-          .export({ type: "spki", format: "der" })
-          .toString("base64url") !== value.publicKey ||
-        (value.expiresAt !== undefined && !validDate(value.expiresAt)) ||
-        (value.pointId !== undefined && !uuid(value.pointId)) ||
-        (value.phase !== undefined &&
-          !["staged", "restored", "reported"].includes(String(value.phase)))
-      )
-        unavailable();
-      return value as unknown as SavedState;
-    } catch (error) {
-      if (record(error) && error.code === "ENOENT") return undefined;
+      if (!options.target || options.snapshotProtocol !== 2) unavailable();
+      return snapshotRecoveryTarget(options.target());
+    } catch {
       return unavailable();
     }
+  }
+  function assertCurrent(state: SavedState) {
+    if (state.version === 2) {
+      if (currentTarget().digest !== state.target.digest) unavailable();
+    } else if (options.snapshotProtocol !== undefined || options.target !== undefined)
+      unavailable();
+  }
+  async function read(): Promise<SavedState | undefined> {
+    const state = await readCloudRecoveryState(options.stateDir);
+    if (state && state.origin !== options.origin) unavailable();
+    return state;
   }
   async function readForSetup(): Promise<SavedState | undefined> {
     const state = await read();
@@ -216,12 +196,14 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
     return state;
   }
   async function save(value: SavedState) {
+    const raw = JSON.stringify(value);
+    if (value.version === 2 && Buffer.byteLength(raw) > 65536) unavailable();
     await mkdir(options.stateDir, { recursive: true, mode: 0o700 });
     const temporary = `${path}.${randomUUID()}.tmp`;
     try {
       const file = await open(temporary, "wx", 0o600);
       try {
-        await file.writeFile(JSON.stringify(value));
+        await file.writeFile(raw);
         await file.sync();
       } finally {
         await file.close();
@@ -239,8 +221,18 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
   }
   function fresh(): SavedState {
     const key = generateKeyPairSync("ed25519");
+    const binding =
+      options.snapshotProtocol === 2
+        ? {
+            version: 2 as const,
+            protocol: "backup-data-restore/v1" as const,
+            target: currentTarget(),
+          }
+        : options.target === undefined
+          ? { version: 1 as const }
+          : unavailable();
     return {
-      version: 1,
+      ...binding,
       origin: options.origin,
       environment: "preproduction",
       requestId: randomUUID(),
@@ -254,28 +246,55 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
     action: "start" | "status" | "info" | "read" | "restored",
     digest = "",
   ) {
-    const bytes = Buffer.from(
-      JSON.stringify(
-        action === "start" || action === "status"
-          ? [
-              "waitron-cloud-recovery-request-v1",
-              options.origin,
-              state.requestId,
-              action,
-              state.publicKey,
-              state.code,
-              Date.now(),
-            ]
-          : [
-              "waitron-cloud-recovery-v1",
-              options.origin,
-              state.requestId,
-              action,
-              digest,
-              Date.now(),
-            ],
-      ),
-    );
+    assertCurrent(state);
+    const bytes =
+      state.version === 2
+        ? Buffer.from(
+            JSON.stringify(
+              action === "start" || action === "status"
+                ? [
+                    "waitron-cloud-recovery-request-v2",
+                    options.origin,
+                    state.requestId,
+                    action,
+                    state.publicKey,
+                    state.code,
+                    state.target.digest,
+                    Date.now(),
+                  ]
+                : [
+                    "waitron-cloud-recovery-v2",
+                    options.origin,
+                    state.requestId,
+                    action,
+                    digest,
+                    state.target.digest,
+                    Date.now(),
+                  ],
+            ),
+          )
+        : Buffer.from(
+            JSON.stringify(
+              action === "start" || action === "status"
+                ? [
+                    "waitron-cloud-recovery-request-v1",
+                    options.origin,
+                    state.requestId,
+                    action,
+                    state.publicKey,
+                    state.code,
+                    Date.now(),
+                  ]
+                : [
+                    "waitron-cloud-recovery-v1",
+                    options.origin,
+                    state.requestId,
+                    action,
+                    digest,
+                    Date.now(),
+                  ],
+            ),
+          );
     return {
       payload: bytes.toString("base64url"),
       signature: sign(
@@ -299,9 +318,16 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(
-          action === "start" || action === "status"
-            ? proof(state, action)
-            : { id: state.requestId, ...proof(state, action, digest) },
+          state.version === 2
+            ? {
+                version: 2,
+                ...(action === "start" || action === "status" ? {} : { id: state.requestId }),
+                target: state.target,
+                ...proof(state, action, digest),
+              }
+            : action === "start" || action === "status"
+              ? proof(state, action)
+              : { id: state.requestId, ...proof(state, action, digest) },
         ),
         signal: AbortSignal.timeout(30_000),
       });
@@ -313,10 +339,15 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       if (!response.body) unavailable();
       for await (const chunk of response.body) {
         size += chunk.length;
-        if (size > 16384) unavailable();
+        if (size > (state.version === 2 ? 65536 : 16384)) unavailable();
         chunks.push(chunk);
       }
-      return JSON.parse(Buffer.concat(chunks, size).toString()) as unknown;
+      const raw = Buffer.concat(chunks, size).toString();
+      const result: unknown =
+        state.version === 2 ? parseBackupVerificationJson(raw, 65536) : JSON.parse(raw);
+      if (state.version === 2 && (!record(result) || result.version !== 2)) unavailable();
+      assertCurrent(state);
+      return result;
     } catch (error) {
       if (error instanceof ExpiredRequest) throw error;
       return unavailable();
@@ -338,6 +369,24 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
         ? { point: { id: p.id, venueId: p.venueId, capturedAt: p.capturedAt, modules: p.modules } }
         : {}),
     };
+  }
+  function checkedVerification(
+    state: SavedState,
+    response: Record<string, unknown>,
+    p: CloudRecoveryPoint,
+  ): SnapshotRecoveryVerification | undefined {
+    if (state.version === 1) return undefined;
+    const verification = readSnapshotRecoveryVerification(response.verification);
+    assertSnapshotRecoveryTarget(verification, currentTarget());
+    if (
+      verification.pointId !== p.id ||
+      verification.archiveSha256 !== p.digest ||
+      verification.archiveBytes !== p.size ||
+      (state.snapshotVerification &&
+        !sameSnapshotRecoveryVerification(state.snapshotVerification, verification))
+    )
+      unavailable();
+    return verification;
   }
   async function statusOf(state: SavedState, action: "start" | "status") {
     let result: unknown;
@@ -377,7 +426,9 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       unavailable();
     const p = point(info.point);
     if (state.pointId && state.pointId !== p.id) unavailable();
+    const verification = checkedVerification(state, info, p);
     state.pointId = p.id;
+    if (state.version === 2) state.snapshotVerification = verification;
     await save(state);
     return view(state, "approved", p, info.operationExpiresAt);
   }
@@ -397,6 +448,7 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       Date.parse(info.operationExpiresAt) <= Date.now()
     )
       unavailable();
+    const verification = checkedVerification(state, info, p);
     const result = await post(state, "read", p.digest);
     if (
       !record(result) ||
@@ -412,6 +464,7 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       unavailable();
     const granted = point(result.point);
     if (JSON.stringify(granted) !== JSON.stringify(p)) unavailable();
+    checkedVerification(state, result, granted);
     const grant = result as unknown as Grant;
     const archive = await (
       options.download ?? ((g: Grant) => downloadArchive(g, options.storageCa))
@@ -429,11 +482,14 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       Date.parse(after.operationExpiresAt) <= Date.now()
     )
       unavailable();
+    checkedVerification(state, after, p);
+    assertCurrent(state);
     const request: ArchiveRestoreRequest = {
       artifact: archive,
       recoveryKey: grant.recoveryKey,
       environment: "preproduction",
       managedCloud: { requestId: state.requestId, pointId: p.id },
+      ...(verification === undefined ? {} : { snapshotVerification: verification }),
     };
     return { state, request };
   }
@@ -555,6 +611,7 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
         if (!record(info)) unavailable();
         const p = point(info.point);
         if (p.id !== state.pointId) unavailable();
+        checkedVerification(state, info, p);
         const result = await post(state, "restored", p.digest);
         if (!record(result) || result.status !== "restored") unavailable();
         state.phase = "reported";

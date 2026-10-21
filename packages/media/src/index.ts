@@ -9,3 +9,5 @@ export * from "./framing.js";
 export * from "./image-edits.js";
 export * from "./renditions.js";
 export { readPresentations, renditionUrl } from "./presentation.js";
+
+export { MEDIA_BACKUP_VERIFICATION } from "./backup-verification.js";

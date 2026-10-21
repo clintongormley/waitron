@@ -623,3 +623,57 @@ times slower. Caching the advance width per string is the untried fix; it may al
 invoice rendering. Left open by A801. Receipts:
 [A801](../developers/ci-and-gates.md#runners-come-in-two-speeds-and-the-busiest-shard-is-the-one-that-crosses-4-minutes),
 [A938](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration).
+
+
+## Fiscal coverage outlasts the four-minute job target
+
+A850's run [39595996508](https://github.com/clintongormley/waitron/actions/runs/39595996508),
+`test-fiscal-verifactu`, passed 186 files and 4,096 cases in a 385 s job. Its test step took
+322 s. The new backup-history, chain, secret and owner files took 43.581, 34.037, 22.040
+and 11.594 file-seconds respectively; the trust file took 0.010 s. Those file durations
+include parallel execution and are not an additive wall-clock regression measurement.
+
+Two recent successful main jobs were already above four minutes: run 39577652501 took
+316 s, with a 273 s test step; run 39576603102 took 350 s, with a 299 s test step.
+These runs used different runners. Their timings do not isolate disk or CPU as the cause.
+The current Node project uses the outer four-worker cap; its browser project follows it
+with file parallelism disabled. Profile the heavy files and the sequential browser phase
+before changing scheduling. Retain the full package coverage checks and existing fiscal
+assertions. The A850 driver recorded this as separate performance work rather than
+changing concurrency or guards without that measurement.
+
+
+## Job metadata outlasted the CI check's ten-minute wait
+
+The required CI cross-check can fail while a job's steps all show success. On 21 October
+2026, A850 run [39618481608](https://github.com/clintongormley/waitron/actions/runs/39618481608)
+polled the attempt's jobs API 21 times, from 14:52:53 to 15:03:36 UTC. Every poll reported
+`not completed: test-server-merge, test-dashboard (1)`, then the cross-check exited 1.
+The dashboard's final step completed at 14:42:48 UTC; the server merge's at 14:52:39 UTC.
+Both job and check responses still said `in_progress` at the later read-back. Their successful
+final steps do not supply the missing required CI result.
+
+You can read the retained cross-check log and exact attempt response with:
+
+```sh
+gh api --allow-escape-sequences repos/clintongormley/waitron/actions/jobs/119293063691/logs
+gh api 'repos/clintongormley/waitron/actions/runs/39618481608/attempts/1/jobs?per_page=100'
+```
+
+The earlier A674 change, `d7e8654c4` (#1792), allows twenty 30-second waits between
+21 reads; API calls add to that duration. This run exceeds that allowance. Its cause
+is unverified. Keep the gate intact, inspect the job and check states again after they
+settle, and decide how to recover the failed cross-check from that evidence. An unchanged
+rerun does not establish a repair. No test or workflow guard changed for this finding.
+
+
+### Status read-back, 21 October 2026 at 15:41 UTC
+
+The exact-attempt jobs API now reports both delayed jobs completed successfully:
+`test-dashboard (1)` (119285664001) and `test-server-merge` (119292111753).
+All 67 jobs have settled: 65 succeeded, one was skipped and the final `ci` job failed.
+That final failure remains a required-check failure; the later job statuses do not
+change its earlier result. This read-back establishes that the status mismatch ended,
+without establishing its internal cause. Keep the incident open for recovery guidance
+and qualify the next published branch head through the normal hook and CI. No workflow,
+package code or test changed in response to the status mismatch.

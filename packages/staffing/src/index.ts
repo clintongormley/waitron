@@ -37,3 +37,4 @@ export {
   removeRotaShift,
   changeRotaWeek,
 } from "./rota.js";
+export { STAFFING_BACKUP_VERIFICATION } from "./backup-verification.js";

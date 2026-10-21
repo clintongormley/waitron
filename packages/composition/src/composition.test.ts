@@ -1,3 +1,4 @@
+import { FISCAL_NONE_BACKUP_VERIFICATION } from "@waitron/fiscal-none";
 import {
   ADJUSTMENTS_CHANGE_SOURCES,
   ADJUSTMENTS_CLASSIFICATION,
@@ -23,6 +24,7 @@ import {
 } from "@waitron/fiscal-verifactu";
 import {
   IDENTITY_MIGRATIONS,
+  IDENTITY_BACKUP_VERIFICATION,
   registerModulePermissions,
   roleHasPermission,
 } from "@waitron/identity";
@@ -126,9 +128,16 @@ describe("ALL_MODULES backup contribution", () => {
       ),
     ).toEqual(["media_images", "media_image_data", "media_image_blobs", "media_image_edits"]);
   });
-  it("a module may omit backup (open contribution set)", () => {
+  it("identity declares its offline verification owner", () => {
     const identity = ALL_MODULES.find((m) => m.name === "identity");
-    expect(identity?.backup).toBeUndefined();
+    expect(identity?.backup?.verification).toBe(IDENTITY_BACKUP_VERIFICATION);
+  });
+  it("migration composition still accepts a module without a backup contribution", () => {
+    const modules = ALL_MODULES.map((module) =>
+      module.name === "identity" ? { ...module, backup: undefined } : module,
+    );
+    expect(modules.find((module) => module.name === "identity")?.backup).toBeUndefined();
+    expect(orderedMigrationSets(modules)).toEqual(manifestSets());
   });
 });
 
@@ -291,11 +300,11 @@ describe("ALL_MODULES fiscal-none member", () => {
     expect(none?.fiscal?.id).toBe("none");
     expect(none?.tier).toBe("provision-only");
   });
-  it("declares no provisioning or vocabulary — it owns nothing beyond the slot", () => {
+  it("declares no provisioning or vocabulary and explicitly verifies its empty backup obligations", () => {
     const none = ALL_MODULES.find((m) => m.name === "fiscal-none");
     expect(none?.provisioning).toBeUndefined();
     expect(none?.vocabulary).toBeUndefined();
-    expect(none?.backup).toBeUndefined();
+    expect(none?.backup).toEqual({ verification: FISCAL_NONE_BACKUP_VERIFICATION });
   });
 });
 

@@ -5193,12 +5193,16 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 
 _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
-- **A850. Verify backup data without fiscal activation.** Implement the
-  [Waitron plan](superpowers/plans/2026-10-20-a850-backup-verification.md) for the
-  [approved Cloud contract](https://github.com/waitron-io/waitron-cloud/blob/f8e243f4b6fa232756a64c7113f05e3bf835158b/docs/superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md).
-  The plan is written; the interface and runtime checks remain unimplemented. Cloud integration
-  follows the implementing Waitron release. Snapshots stay unavailable until complete module checks,
-  target-bound recovery and joint acceptance pass.
+- **Cloud backup qualification and target-bound recovery: integrate the released Waitron verifier.**
+  Wire Cloud to the boot-free `backup-verification.js` bundle and its generated owner inventory,
+  then negotiate recovery v2 before enabling the qualified caller. Preserve the separate fiscal
+  authority checks. Snapshots remain unavailable until the pinned capture, publication, full data
+  verification, cleanup, current-claim admission and recovery proof passes with the continuous
+  source absent. Qualify timeout, resource limits, wrong/missing keys, unsupported public trust,
+  stale/forged output and uncertain cleanup under the existing limits. Cloud owns its child,
+  catalogue and deployment gates; see the
+  [Waitron implementation and release handoff](superpowers/plans/2026-10-20-a850-backup-verification.md#task-27-finish-evidence-branch-review-and-release-handoff)
+  and [box limits](backlog/box.md#backup-data-verification-and-cloud-release).
 
 - **A917 — the owner chooses the server's `.local` name instead of `waitron.local`** — DESIGNED
   2026-10-20 (revised after review rounds 1–3), waiting for the owner's answers to three questions
@@ -5967,9 +5971,20 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 - **The server's duration table is refreshed by hand.** Nothing says when
-  `apps/server/test-durations.json` has gone stale. The first refresh expected is when
-  `a850-backup-verification` lands with its new server test files. Left open by A938.
+  `apps/server/test-durations.json` has gone stale. Left open by A938.
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
+
+- **Job metadata can outlast the CI cross-check's wait.** A850 run 39618481608
+  exhausted all 21 reads after two jobs' final steps succeeded but their API statuses stayed
+  in progress. Investigate the job/check states and recovery without relaxing the required gate.
+  [Receipt](backlog/ci.md#job-metadata-outlasted-the-ci-checks-ten-minute-wait)
+
+- **Fiscal-verifactu's coverage job exceeds the four-minute target.** A850's
+  [run 39595996508](https://github.com/clintongormley/waitron/actions/runs/39595996508)
+  took 385 s, including 322 s running tests; two recent main jobs took 316 and 350 s.
+  Profile the new history, chain and secret checks alongside the existing Node/browser work,
+  then reduce the time without dropping checks or changing coverage bars.
+  [Measurements](backlog/ci.md#fiscal-coverage-outlasts-the-four-minute-job-target)
 
 - **The other sharded packages still use Vitest's file-count split.** Till, dashboard,
   venue-service, db and provisioning do not pack their shards by measured duration as the server

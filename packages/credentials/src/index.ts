@@ -26,3 +26,11 @@ export { CREDENTIALS_CLASSIFICATION } from "./classification.js";
 // Keeps errors.ts's augmentation reachable from the public barrel; guard:
 // scripts/errors-reachable.test.ts.
 import "./errors.js";
+
+export { resolveBackupKeyInputs } from "./backup-key-inputs.js";
+export {
+  BackupCredentialReadError,
+  CREDENTIALS_BACKUP_POLICY,
+  readBackupCredential,
+  verifyBackupCredentials,
+} from "./backup-verification.js";

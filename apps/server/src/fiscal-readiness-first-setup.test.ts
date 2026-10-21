@@ -25,7 +25,7 @@ import { request, PASSWORD } from "../test/first-fiscal.js";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00.000Z"));
 });
 afterEach(() => vi.useRealTimers());

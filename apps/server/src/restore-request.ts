@@ -1,6 +1,6 @@
 import { assertVenueFirstSetupAllowed, inspectFirstSetupMarker } from "@waitron/provisioning";
 import { lockVenueDatabase } from "@waitron/db";
-import { chmod, copyFile, mkdtemp, open, readFile, rename, rm } from "node:fs/promises";
+import { chmod, copyFile, mkdtemp, open, readFile, rename, rm, stat } from "node:fs/promises";
 import { VENUE_FILE } from "@waitron/store";
 import { join } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
@@ -26,6 +26,16 @@ import {
   type WriteStreamArgs,
 } from "./restore-stream.js";
 import "./errors.js";
+import { currentBackupVerificationTarget } from "./backup-verification-target.js";
+import { parseBackupVerificationJson } from "./backup-verification-protocol.js";
+import {
+  assertSnapshotRecoveryArchive,
+  assertSnapshotRecoveryTarget,
+  cloudRecoveryUnavailable,
+  readSnapshotRecoveryBinding,
+  SnapshotPlacementRefused,
+  type SnapshotRecoveryVerification,
+} from "./cloud-recovery-v2.js";
 import {
   createRecoveryRestoreRunner,
   parseRecoveryOperationInput,
@@ -133,6 +143,7 @@ export interface ArchiveRestoreRequest {
   recoveryKey: string;
   environment: DeploymentEnvironment;
   managedCloud?: { requestId: string; pointId: string };
+  snapshotVerification?: SnapshotRecoveryVerification;
   recoveryOperation?: RecoveryOperationInput;
   nodeRecoverySecret?: string;
   recoveryContext?: RecoveryEntryContext;
@@ -160,6 +171,26 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
   request: R,
   validate?: (request: R) => Promise<void>,
 ): Promise<void> {
+  if (request.kind === "stream" && "snapshotVerification" in request) cloudRecoveryUnavailable();
+  const checkSnapshot = async () => {
+    if (request.kind === "stream") return undefined;
+    const binding = await readSnapshotRecoveryBinding(stateDir, request);
+    if (binding) {
+      if (request.environment !== "preproduction") cloudRecoveryUnavailable();
+      try {
+        assertSnapshotRecoveryTarget(binding.verification, currentBackupVerificationTarget());
+      } catch {
+        cloudRecoveryUnavailable();
+      }
+      assertSnapshotRecoveryArchive(
+        binding.verification,
+        recoveryArchiveSourceId(request.artifact),
+        request.artifact.byteLength,
+      );
+    }
+    return binding;
+  };
+  await checkSnapshot();
   const recoveryOperation =
     request.recoveryOperation === undefined
       ? undefined
@@ -187,6 +218,7 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
         : recoveryArchiveSourceId(request.artifact),
     );
   }
+  const snapshot = await checkSnapshot();
   await rm(join(stateDir, MARKER), { force: true });
   await clearNodeKey(stateDir);
   try {
@@ -202,7 +234,7 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
     await writeFileAtomic(
       join(stateDir, MARKER),
       JSON.stringify({
-        version: 1,
+        version: snapshot ? 2 : 1,
         environment: request.environment,
         ...(request.kind === "stream"
           ? { kind: "stream" }
@@ -212,6 +244,12 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
         ...(recoveryOperation === undefined ? {} : { recoveryOperation }),
         ...(secret === undefined ? {} : { nodeRecoveryKey: true }),
         ...(context === undefined ? {} : { recoveryContext: context }),
+        ...(snapshot === undefined
+          ? {}
+          : {
+              snapshotVerification: snapshot.verification,
+              snapshotRequestKey: snapshot.publicKey,
+            }),
       }),
       0o600,
     );
@@ -312,6 +350,66 @@ export async function runStagedRestore(
     await clearNodeKey(deps.stateDir);
     throw error;
   }
+  let candidate: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed))
+      candidate = parsed as Record<string, unknown>;
+  } catch {
+    // V1 syntax errors use cleanup below; saved v2 requests must refuse before cleanup.
+  }
+  const snapshot =
+    candidate.version === 1 &&
+    candidate.kind === "stream" &&
+    candidate.snapshotVerification === undefined &&
+    candidate.snapshotRequestKey === undefined
+      ? undefined
+      : await readSnapshotRecoveryBinding(deps.stateDir, {
+          managedCloud: candidate.managedCloud as ArchiveRestoreRequest["managedCloud"],
+          snapshotVerification: candidate.snapshotVerification as
+            SnapshotRecoveryVerification | undefined,
+        });
+  if (
+    snapshot ||
+    candidate.snapshotVerification !== undefined ||
+    candidate.snapshotRequestKey !== undefined
+  ) {
+    try {
+      parseBackupVerificationJson(raw, 65536);
+      const allowed = [
+        "version",
+        "environment",
+        "managedCloud",
+        "recoveryOperation",
+        "nodeRecoveryKey",
+        "placementStarted",
+        "recoveryContext",
+        "snapshotVerification",
+        "snapshotRequestKey",
+      ];
+      if (
+        !snapshot ||
+        candidate.version !== 2 ||
+        candidate.environment !== "preproduction" ||
+        candidate.kind !== undefined ||
+        candidate.snapshotRequestKey !== snapshot.publicKey ||
+        (candidate.nodeRecoveryKey !== undefined &&
+          (candidate.nodeRecoveryKey !== true || candidate.recoveryOperation === undefined)) ||
+        (candidate.placementStarted !== undefined &&
+          (candidate.placementStarted !== true || candidate.nodeRecoveryKey !== true)) ||
+        Object.keys(candidate).some((key) => !allowed.includes(key))
+      )
+        cloudRecoveryUnavailable();
+      assertSnapshotRecoveryTarget(snapshot.verification, currentBackupVerificationTarget());
+      assertSnapshotRecoveryArchive(
+        snapshot.verification,
+        await recoveryArchiveFileSourceId(join(deps.stateDir, ARTIFACT)),
+        (await stat(join(deps.stateDir, ARTIFACT))).size,
+      );
+    } catch {
+      cloudRecoveryUnavailable();
+    }
+  }
   if ((await inspectFirstSetupMarker(deps.venueDir)) !== null) {
     const claimHold = await lockVenueDatabase(deps.venueDir);
     try {
@@ -336,7 +434,7 @@ export async function runStagedRestore(
       recoveryContext?: unknown;
     };
     if (
-      marker.version !== 1 ||
+      (marker.version !== 1 && !(marker.version === 2 && snapshot)) ||
       (marker.placementStarted !== undefined &&
         (marker.placementStarted !== true || marker.nodeRecoveryKey !== true)) ||
       (marker.nodeRecoveryKey !== undefined &&
@@ -485,6 +583,12 @@ export async function runStagedRestore(
           ...(marker.managedCloud
             ? { managedCloud: marker.managedCloud as { requestId: string; pointId: string } }
             : {}),
+          ...(snapshot === undefined
+            ? {}
+            : {
+                snapshotVerification: snapshot.verification,
+                snapshotRequestKey: snapshot.publicKey,
+              }),
         });
     }
     managedCloud = marker.managedCloud as typeof managedCloud;
@@ -503,7 +607,9 @@ export async function runStagedRestore(
   } catch (error) {
     // Refused admission never runs placement. A later failure can follow activation and must
     // retain the checked-replay marker.
-    if (
+    if (snapshot && error instanceof SnapshotPlacementRefused) {
+      if (markedStarted) await writeFileAtomic(join(deps.stateDir, MARKER), raw, 0o600);
+    } else if (
       !resuming &&
       (admissionRefused || (isAppError(error) && error.code === "provisioning.database_in_use"))
     ) {

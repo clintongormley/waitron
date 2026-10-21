@@ -14,7 +14,7 @@
     }
   },
   "scripts": {
-    "build": "node scripts/copy-migrations.mjs && node ../../scripts/bundle-node.mjs src/bin.ts=dist/server.js scripts/record-one-sale.ts=dist/record-one-sale.js scripts/register-till.ts=dist/register-till.js scripts/settle-invoice-first.ts=dist/settle-invoice-first.js src/bin-recovery.ts=dist/bin-recovery.js src/bin-break-glass.ts=dist/bin-break-glass.js src/bin-restore.ts=dist/bin-restore.js src/bin-rejoin.ts=dist/bin-rejoin.js src/node-entry.ts=dist/node-entry.js",
+    "build": "node scripts/copy-migrations.mjs && node ../../scripts/bundle-node.mjs src/bin.ts=dist/server.js scripts/record-one-sale.ts=dist/record-one-sale.js scripts/register-till.ts=dist/register-till.js scripts/settle-invoice-first.ts=dist/settle-invoice-first.js src/bin-recovery.ts=dist/bin-recovery.js src/bin-break-glass.ts=dist/bin-break-glass.js src/bin-restore.ts=dist/bin-restore.js src/bin-rejoin.ts=dist/bin-rejoin.js src/node-entry.ts=dist/node-entry.js src/backup-verification-entry.ts=dist/backup-verification.js",
     "dev": "node scripts/dev-server.mjs",
     "dev:setup": "tsx scripts/dev-setup.ts",
     "dev:reset": "tsx scripts/dev-setup.ts --reset",

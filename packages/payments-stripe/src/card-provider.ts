@@ -1,7 +1,7 @@
 import Stripe from "stripe";
 import { withTransaction } from "@waitron/db";
 import type { Database, DeploymentEnvironment } from "@waitron/db";
-import { getCredential } from "@waitron/credentials";
+import { getCredential, validatePayload } from "@waitron/credentials";
 import type { KeyRing } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
 import type {
@@ -137,6 +137,18 @@ export function createStripeCardProvider(
   return {
     providerId: PROVIDER_ID,
     credentialPurpose: CREDENTIAL_PURPOSE,
+    verifyBackupCredential(payload, environment) {
+      try {
+        validatePayload(CREDENTIAL_PURPOSE, payload);
+        secretKeyFromSealed(payload, environment);
+        return [payload.successUrl!, payload.cancelUrl!].every((value) =>
+          ["https:", "http:"].includes(new URL(value).protocol),
+        );
+      } catch (error) {
+        if (error instanceof AppError || error instanceof TypeError) return false;
+        throw error;
+      }
+    },
     credentialFields: [
       { name: "secretKey", labelKey: "payments.stripe.secret_key", secret: true },
       { name: "webhookSecret", labelKey: "payments.stripe.webhook_secret", secret: true },

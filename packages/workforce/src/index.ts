@@ -175,3 +175,4 @@ export type {
 } from "./attendance-contract.js";
 export { WORKFORCE_PERMISSIONS } from "./permissions.js";
 export { readPersonHours, readManagerHours } from "./hours-reads.js";
+export { WORKFORCE_BACKUP_VERIFICATION } from "./backup-verification.js";

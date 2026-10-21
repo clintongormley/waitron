@@ -30,6 +30,7 @@ import type { FiscalContribution } from "@waitron/fiscal";
 import type { ModuleProvisioning } from "./provisioning.js";
 import type { ModuleOperationPreparation } from "./operation-preparation.js";
 import type { RestoreHook } from "./restore.js";
+import type { BackupVerificationContribution } from "./backup-verification.js";
 import type { ModuleAlerts } from "./alerts.js";
 import "./errors.js";
 
@@ -1471,6 +1472,7 @@ export type NonDbSource =
 
 /** A module's backup contribution: the non-DB state it owns, and what it does after a restore. */
 export interface ModuleBackupContribution {
+  readonly verification?: BackupVerificationContribution;
   readonly nonDbState?: readonly NonDbSource[];
   readonly restore?: RestoreHook;
   /** A resume must already have committed locally. Preparation still supplies current authority. */
