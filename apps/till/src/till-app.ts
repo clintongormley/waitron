@@ -2569,6 +2569,7 @@ export class TillApp extends LitElement {
   #groupsReadFor: string | null = null;
   readonly #menuPoll = new MenuStatePoll({
     onTick: (signal) => {
+      if (this.#themeHash !== undefined) followVenueTheme(this.#themeHash);
       const tab = this.#activeTab();
       if (
         this.#inShell() &&
@@ -5564,7 +5565,6 @@ export class TillApp extends LitElement {
 
   #onMenuState(zoneId: string, state: MenuStateAnswer): void {
     this.#noteSetupRevision(state.setupRevision);
-    if (this.#themeHash !== undefined) followVenueTheme(this.#themeHash);
     if (zoneId === this.counterServiceZoneId) {
       const unavailableMoved = this.#counterOffers.setUnavailable(state.unavailable);
       if (this.#counterGridOffers.setUnavailable(state.unavailable) || unavailableMoved)

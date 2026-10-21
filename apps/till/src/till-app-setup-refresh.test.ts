@@ -858,4 +858,19 @@ describe("A841 the till follows the theme in use", () => {
     await vi.waitFor(() => expect(bg()).toBe(FIXTURE_LIGHT_BG));
     expect(themeFetch).toHaveBeenCalledTimes(3);
   });
+
+  it("a failing theme fetch is sent once per poll, however many zones the poll reads", async () => {
+    const el = await openTill(moved);
+    themeAnswer = new TypeError("Failed to fetch");
+    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
+    await poll(el);
+    await vi.waitFor(() => expect(themeFetch).toHaveBeenCalledTimes(2));
+    for (const expected of [3, 4]) {
+      const reads = api.menuState.mock.calls.length;
+      await poll(el);
+      await flush(el);
+      expect(api.menuState.mock.calls.length - reads).toBe(2);
+      expect(themeFetch).toHaveBeenCalledTimes(expected);
+    }
+  });
 });

@@ -1495,9 +1495,11 @@ included, after a refresh deletes that course. `themeHash`, the hash `/api/theme
 the theme in use, is in the answer and moves `setupRevision` when the theme in use changes or is
 saved with new choices. `#applyVenueSetup` hands `themeHash` to `followVenueTheme`
 (`packages/ui/src/venue-theme.ts`), which fetches `/api/theme` and replaces the venue's sheet when
-it differs from the one applied, and each menu-state answer asks again, so a failed fetch is
-retried within a poll; pinned by "A841 the till follows the theme in use" in
-`apps/till/src/till-app-setup-refresh.test.ts`.
+it differs from the one applied, and each poll asks again once, however many zones it reads, so
+a failed fetch is retried within a poll; pinned by "A841 the till follows the theme in use" in
+`apps/till/src/till-app-setup-refresh.test.ts`. The till fetches `/api/theme` from the page's own
+address, not through `ServerRouter`: right while a venue has one node (§5 of `CLAUDE.md`), so
+failover work must route it.
 
 Some of those values change only when the server restarts, and the revision covers them, so an open
 till takes the new value after a restart without reloading: tips come from `WAITRON_TILL_TIPS`
