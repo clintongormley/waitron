@@ -649,7 +649,7 @@ Not closed in slice 1, because product writes go through `withTransaction`, whic
 - a root guard refusing a bare `.transaction(` on the venue database outside `withWriteLock` in
   product code.
 
-## Till surfaces that still show their own message for a full disk, and the kitchen display's silence
+## Till surfaces that still show their own message for a full disk, and the station screen's silence
 
 Left open by A798-B slice 3 (#<this pull request>), for slice 6. Since slice 3, once a save has
 failed for a full disk every till write except the open ones answers `507 storage.disk_full` until
@@ -664,7 +664,8 @@ not fit:
 - the unpaid departure (`#onDepartureContinue` in `apps/till/src/till-app.ts`);
 - any other till write surface decision 12 does not name.
 
-The kitchen display's station screen shows nothing for a refused bump: `#advance` in
+The station screen shows nothing for a refused bump, on a kitchen display and on a till's own
+Station tab (`apps/till/src/till-app.ts` renders the same `till-station-screen`): `#advance` in
 `apps/till/src/screens/till-station-screen.ts` swallows every refusal but a changed screen and
 reloads the queue. Under the stop its tickets do not move and nothing says why.
 

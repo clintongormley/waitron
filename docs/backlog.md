@@ -5484,20 +5484,22 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   and
   [Q52](compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21).
 
-- **Till surfaces that still show their own message for a full disk, and the kitchen display's
+- **Till surfaces that still show their own message for a full disk, and the station screen's
   silence.** Left open by A798-B slice 3 (#<this pull request>) for slice 6: the draft save's
   refusals and the unpaid departure, among others, now meet a full disk whenever the stop holds, and
-  the station screen shows nothing for a refused bump, so its tickets do not move and nothing says why.
-  [Detail](backlog/box.md#till-surfaces-that-still-show-their-own-message-for-a-full-disk-and-the-kitchen-displays-silence)
+  the station screen, on a kitchen display and on a till's Station tab, shows nothing for a refused bump.
+  [Detail](backlog/box.md#till-surfaces-that-still-show-their-own-message-for-a-full-disk-and-the-station-screens-silence)
 
 - **A full-disk stop on a box nobody writes to outlives the freed space.** It clears only when a till
-  or kitchen screen tries a write and reads 16 MiB free (`apps/server/src/disk-full-state.ts`), so
-  the red stays until the strip reads `full()` (slice 6) or the free-space watch clears it (slice 5).
+  or kitchen screen tries a write that is not on the open list and reads 16 MiB free
+  (`apps/server/src/disk-full-state.ts`), so the stop stays until the status strip slice 6 adds reads
+  `full()` or slice 5's free-space watch clears it.
   Left open by A798-B slice 3 (#<this pull request>).
 
-- **Corrections, substitutions and voids under a clock before 28-10-2024 still answer
-  `fiscal.record_invalid`**, as does the setup readiness check's test sale; only sales answer
-  `clock.unusable`. Left open by A798-B slice 3 (#<this pull request>) for slice 8.
+- **A cancel's whole-invoice credit under a clock before 28-10-2024 reaches the chain without the
+  clock check** (`creditWholeInvoice`, `apps/server/src/cancel-credit.ts`), and so, read not run,
+  answers `fiscal.record_invalid`; so does the setup readiness check's test sale. No product path
+  records a substitution or a void today. Left open by A798-B slice 3 (#<this pull request>) for slice 8.
 
 - **Which alert area `clock.unusable` belongs to.** `CORE_ALERTS` (`packages/db/src/alerts.ts`) gives
   the `clock.` prefix to the area `fiscal`, while design §4.3 puts `clock.unusable` under "Equipo";

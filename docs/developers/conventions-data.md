@@ -2405,9 +2405,9 @@ itself and keeps nothing.
 ### A full disk stops the till's writes
 
 Since A798-B slice 3 (#<this pull request>), one save refused for a full disk stops every write the
-till app and the kitchen screens send, until the venue folder has 16 MiB free again. The owner
-chose this on 2026-10-21, in the design's words (§4.6 item 5): every sale, order, kitchen send and
-clock-in is refused, even one that would still fit. The decisions behind it are numbered in the
+till app and the kitchen screens send, except a short open list (below), until the venue folder
+has 16 MiB free again. The owner chose this on 2026-10-21, following the design's §4.6 item 5:
+every sale, order, kitchen send and clock-in is refused, even one whose own save would still fit. The decisions behind it are numbered in the
 [slice 3 plan](../superpowers/plans/2026-10-21-a798-3-refuse-before-reader.md#decisions-this-plan-makes-that-the-spec-does-not).
 
 **How the box knows.**
@@ -2426,8 +2426,8 @@ clock-in is refused, even one that would still fit. The decisions behind it are 
   forgotten and the write goes on; under it, or unreadable, the stop holds. A reading does not clear
   the stop when another refusal was noted while it was in flight, even one noted after a faster
   reading had already cleared it. With the stop off, nothing is read: each of those checks awaits
-  `full()` only while `since()` names a refusal, because the extra await let another write's
-  transaction get into the write queue ahead of a payment's first transaction.
+  `full()` only while `since()` names a refusal, because the extra await would let another write's
+  transaction get into the write queue ahead of a payment's first transaction (b6283f6fd).
 
 **What is refused, and where.**
 
@@ -2435,24 +2435,25 @@ clock-in is refused, even one that would still fit. The decisions behind it are 
   mounts the till and the kitchen screens write through: `mountTillApi`, `mountDeviceApi` and
   `mountScheduleApi`. It is put on the parent app route by route, for each `POST`, `PUT`, `PATCH`
   and `DELETE` under `/api/` that the mount registers, never as a `use`: in Hono 4.13.13 an
-  `app.use` reaches every route registered after it, and a sub-app's middleware is copied into the
+  `app.use` reaches every matching route registered after it, and a sub-app's middleware is copied into the
   parent as a catch-all that reaches every later route too, so either would refuse the dashboard's
   `/api/backup/*` and `/api/box/*` (the plan's M7 probes). A new write route on those mounts is
   refused by construction; only an open one is named. The gate answers
-  `507 { code: "storage.disk_full", params: {} }` itself, before the route authenticates, and logs
+  507 `storage.disk_full` itself, before the route authenticates, and logs
   `storage.disk_full_stop_refused` with the route.
 - Open on the till mount (`TILL_OPEN_WHILE_DISK_FULL`, `apps/server/src/till-api.ts`): sign-in,
   sign-out and the session's language, because a refused sign-out keeps someone signed in on a
-  shared till; the four sale routes, refused inside instead (below); eight POSTs that save nothing
-  of their own — the three dead-end questions, four previews, and the practice card simulator's
+  shared till and a refused sign-in keeps the next shift out; the four sale routes, refused inside instead (below); eight POSTs that save nothing
+  of their own — the three checks for dishes whose kitchen station is closed or switched off
+  (`/api/dead-ends/*`), four previews, and the practice card simulator's
   cancel, `POST /api/demo-reader/cancel`, registered only with that simulator, which refused would
   leave a practice payment waiting at the reader. A refused send-preview would turn into the till's
   generic table error and the round would never be sent, so the kitchen send itself is what is
   refused. Open on the device mount (`DEVICE_OPEN_WHILE_DISK_FULL`, `device-api.ts`): the device's
   own joining, zones, equipment, active profile and battery. The schedule mount opens nothing. Each
   open route still fails by itself, `storage.disk_full`, if its own save does not fit. Opening or
-  closing a kitchen station for the day (`PUT /api/device/stations/:stationId/today`,
-  `station-today-api.ts`, mounted inside `mountTillApi`) is refused.
+  closing a kitchen station for the day (`station-today-api.ts`, mounted inside `mountTillApi`) is
+  refused.
 - The four sale routes — `POST /api/sales`, `POST /api/pay`, `POST /api/working-orders/:id/collect`
   and `POST /api/working-orders/:id/payments` — refuse a new sale inside their first transaction,
   after their replay checks, so a resend of a sale or payment already recorded is still answered
@@ -2471,14 +2472,17 @@ clock-in is refused, even one that would still fit. The decisions behind it are 
   it (`sayCardChargedOnFullDisk`, set in `till-api.ts`'s `POST /api/pay` and
   `bill-payments-api.ts`); every other caller, the dashboard's stuck-payment resolve route among
   them, still answers `storage.disk_full`.
-- Not gated: every dashboard route, the provider webhook, node enrolment and the background duties.
-  Their writes that do not fit fail by themselves and note the stop.
+- Not gated: every route outside those three mounts, among them every dashboard route, the print
+  agent's routes (`print-api.ts`), the provider webhook and node enrolment; and the background
+  duties. Their writes that do not fit fail by themselves and note the stop.
 
 **The clock refusal beside it.** A sale under a clock reading before 28-10-2024 is refused
 `clock.unusable { clockAt, offsetMinutes }`, thrown by the Veri\*Factu module through the fiscal
 seat's `FiscalBackend.assertRecordableAt` (`packages/fiscal/src/backend.ts`). The server calls it at
-the issue reading, `issueMoment` (`apps/server/src/issue-moment.ts`), whose clock every `recordSale` call
-in `apps/server/src`, outside its tests and `src/testing/`, takes, and before the reader: in `payIntegrated` and in `beginBillPayment`.
+the issue reading, `issueMoment` (`apps/server/src/issue-moment.ts`), whose clock every
+`recordSale` call in `apps/server/src`, outside its tests and `src/testing/`, takes; before the
+reader for a new sale (`payIntegrated`); and on every bill payment, cash included
+(`beginBillPayment`).
 
 **Weaker than the rule.**
 
@@ -2491,13 +2495,15 @@ in `apps/server/src`, outside its tests and `src/testing/`, takes, and before th
 - The sweeps in `till-api.disk-full-gate.test.ts`, `device-api.test.ts` and `schedule-api.test.ts`
   send every write route of a mount built with test deps, so a route registered only in a
   configuration they do not build is never sent by them. The demo reader's cancel is one; its
-  staying open is pinned by its own case in `till-api.fiscal-sale-paths.test.ts`.
+  staying open is pinned by its own case in `till-api.fiscal-sale-paths.test.ts`. They also pick
+  routes by the gate's own verbs and `/api/` filter, so a route the gate's selection misses is
+  missed by the sweeps too.
 - The gate refuses by verb, so a write inside a `GET` still runs, as with the read-only gate
   (`read-only-gate.ts`).
 - The free-space reading counts bytes (`bavail` times `frsize`, `free-bytes.ts`), not inodes. A
   full-disk refusal on a disk with bytes free but no inodes left is noted, then cleared by the next
-  gated write's reading, which goes on and fails by itself as it did before slice 3. Reasoned from
-  the code, not run.
+  gated write's reading, which goes on, and fails by itself only if its own save cannot be written.
+  Reasoned from the code, not run.
 
 ### A full disk is not one error code
 

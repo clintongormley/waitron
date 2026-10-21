@@ -1962,6 +1962,8 @@ is built from the routes the mount registers.
   a bill's captured card (`bill-payments-loop.ts`), the print queue and the payment release pass.
   Their writes that do not fit fail by themselves with `storage.disk_full` and note the stop
   (decision 1); this task adds no refusal there.
+  **As built (2026-10-21):** that list is not complete: every route outside the three mounts is
+  ungated, the print agent's `POST /print-api/agent/*` routes (`print-api.ts`) among them.
 
 **What the till shows.** The gate and 12c answer `507 { error: { code: "storage.disk_full",
 params: {} } }`, the shape the error boundary gives (`packages/server-kit/src/error-boundary.ts:34-39`)
