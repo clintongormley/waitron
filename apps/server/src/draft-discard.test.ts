@@ -274,6 +274,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
         draftId: null,
         revision: 0,
         lines: [{ menuItemId: venue.item("Bread"), quantity: "1" }],
+        personId: venue.staffId,
       });
       expect(saved.status).toBe(200);
       const draft = (saved.json as unknown as BillDraftSnapshot).draft!;
@@ -324,6 +325,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
         draftId: null,
         revision: 0,
         lines: [{ menuItemId: venue.item("Bread"), quantity: "1" }],
+        personId: venue.managerId,
       },
       venue.cookie.manager,
     );
@@ -480,6 +482,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
       draftId: current.id,
       revision: current.revision,
       lines: [...current.lines, { menuItemId: venue.item("Bread"), quantity: "1" }],
+      personId: venue.staffId,
     });
     expect(saved.status, JSON.stringify(saved.json)).toBe(200);
     p.draft = (saved.json as unknown as BillDraftSnapshot).draft!;
@@ -745,6 +748,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
       draftId: null,
       revision: 0,
       lines: [{ menuItemId: venue.item("Bread"), quantity: "1" }],
+      personId: venue.staffId,
     });
     expect(saved.status).toBe(200);
     const draft = (saved.json as unknown as BillDraftSnapshot).draft!;

@@ -4552,7 +4552,14 @@ describe("TillApi: a party's drafts", () => {
     await api.listDrafts("v1", { signal });
     await api.saveDraft(
       "v1",
-      { billId: "wo-4", draftId: null, revision: 0, expectedEdit: emptyEdit, lines: [beer] },
+      {
+        billId: "wo-4",
+        draftId: null,
+        revision: 0,
+        expectedEdit: emptyEdit,
+        lines: [beer],
+        personId: "p1",
+      },
       { signal },
     );
 
@@ -4585,6 +4592,7 @@ describe("TillApi: a party's drafts", () => {
         revision: 0,
         expectedEdit: emptyEdit,
         lines: [beer],
+        personId: "p1",
       }),
     ).resolves.toEqual({ draft, edit });
 
@@ -4596,6 +4604,7 @@ describe("TillApi: a party's drafts", () => {
         revision: 0,
         expectedEdit: emptyEdit,
         lines: [beer],
+        personId: "p1",
       }),
     );
   });
@@ -4613,6 +4622,7 @@ describe("TillApi: a party's drafts", () => {
       revision: 1,
       expectedEdit: observed,
       lines: [],
+      personId: "p1",
     });
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -4623,6 +4633,7 @@ describe("TillApi: a party's drafts", () => {
         revision: 1,
         expectedEdit: observed,
         lines: [],
+        personId: "p1",
       }),
     );
   });
@@ -4647,6 +4658,7 @@ describe("TillApi: a party's drafts", () => {
         revision: 1,
         expectedEdit: observed,
         lines: [beer],
+        personId: "p1",
       }),
     ).rejects.toEqual({
       code: "draft.taken_over",
@@ -4674,6 +4686,7 @@ describe("TillApi: a party's drafts", () => {
         revision: 0,
         expectedEdit: emptyEdit,
         lines: [beer],
+        personId: "p1",
       }),
     ).rejects.toEqual({ code: "draft.out_of_date", status: 409, draftId: "d1", revision: 3 });
   });

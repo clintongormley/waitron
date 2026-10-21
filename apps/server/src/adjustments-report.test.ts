@@ -86,7 +86,7 @@ async function member(name: string, role: "staff" | "supervisor" = "staff"): Pro
 }
 
 async function call(who: Member, method: string, path: string, body?: unknown) {
-  body = await observedDraftCommandBody(venue.db, method, path, body);
+  body = await observedDraftCommandBody(venue.db, method, path, body, who.id);
   const adjustment = /^\/api\/working-orders\/([^/]+)\/adjustments$/.exec(path);
   if (adjustment !== null && body !== null && typeof body === "object")
     body = {

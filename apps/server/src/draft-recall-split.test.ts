@@ -251,6 +251,7 @@ describe("splitting a recalled dish through the public group command", () => {
     const p = await setup();
     const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
       billId: p.billId,
+      personId: venue.staffId,
       draftId: p.draft.id,
       revision: p.draft.revision,
       expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
@@ -283,6 +284,7 @@ describe("splitting a recalled dish through the public group command", () => {
     const stable = await frozen();
     const stale = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
       billId: p.billId,
+      personId: venue.staffId,
       draftId: p.draft.id,
       revision: old.revision,
       expectedEdit: {

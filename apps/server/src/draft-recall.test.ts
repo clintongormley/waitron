@@ -63,6 +63,7 @@ async function call(method: string, path: string, body?: unknown) {
       method,
       path,
       await observedGroupSubmitBody(venue.db, path, body),
+      venue.operatorId,
     ),
   );
 }

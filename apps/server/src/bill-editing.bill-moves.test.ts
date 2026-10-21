@@ -458,7 +458,10 @@ describe("bill merges require both editors and release the consumed bill", () =>
       expect((await send(venue.app, venue.cookie, "GET", "/api/till")).status).toBe(200);
       const beforeHttp = await allRows();
       expect(
-        await send(venue.app, venue.cookie, "PUT", `/api/parties/${p.partyId}/drafts`, original),
+        await send(venue.app, venue.cookie, "PUT", `/api/parties/${p.partyId}/drafts`, {
+          ...original,
+          personId: venue.operatorId,
+        }),
       ).toEqual({
         status: 400,
         json: { code: "management.request_invalid", params: { field: "billId" } },
@@ -468,6 +471,7 @@ describe("bill merges require both editors and release the consumed bill", () =>
         await send(venue.app, venue.cookie, "PUT", `/api/parties/${p.partyId}/drafts`, {
           ...original,
           billId: p.tabId,
+          personId: venue.operatorId,
           expectedEdit: { ...right.edit, billId: p.tabId },
         }),
       ).toEqual({

@@ -29,6 +29,8 @@ export const DRAFT_REFUSALS: ReadonlySet<string> = new Set([
   "draft.already_submitted",
 ]);
 
+export const DRAFT_PERSON_REFUSAL = "draft.person_not_signed_in";
+
 /** A table draft: a tap adds into a line that orders the same thing, as the server's save does. */
 export class DraftStore extends WorkingOrderStore {
   #billStatus: WorkingOrderStatus = "open";
@@ -795,12 +797,21 @@ export class DraftSync {
           revision: this.#revision,
           expectedEdit,
           lines,
+          personId: this.personId,
         },
         { signal: limit.signal },
       );
     } catch (error) {
-      if (this.#ended || this.#invalidateSave(expectedEdit)) return "failed";
-      return await this.#refused(error);
+      if (this.#ended) return "failed";
+      if (!this.#invalidateSave(expectedEdit)) return await this.#refused(error);
+      const refusal = asRefusal(error);
+      if (refusal?.refused !== DRAFT_PERSON_REFUSAL) return "failed";
+      // onRefused can close this sync (the till does while this person is still signed in), and
+      // closing while a save is out keeps the lines on screen, which can be a newer edit's, over the
+      // kept lines holding this person's.
+      this.#saving = false;
+      this.#options.onRefused(refusal.refused);
+      return refusal;
     } finally {
       this.#saving = false;
       limit.done();

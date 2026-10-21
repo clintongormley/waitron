@@ -336,6 +336,7 @@ describe("existing service in a closed zone", () => {
           draftId: null,
           revision: 0,
           lines: [line(v)],
+          personId: v.operatorId,
         });
         expect(saved.status).toBe(200);
         draft = (saved.json as unknown as { draft: typeof draft }).draft;

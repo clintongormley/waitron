@@ -81,6 +81,7 @@ async function setup() {
   };
   const saved = await send(venue.app, venue.cookie, "PUT", `/api/parties/${partyId}/drafts`, {
     billId,
+    personId: venue.operatorId,
     draftId: null,
     revision: 0,
     expectedEdit: { billId, editorVersion: 0, draftId: null, draftRevision: null },

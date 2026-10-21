@@ -441,7 +441,7 @@ export function draftServer(
             line.unavailable = server.unavailable.has(line.menuItemId);
       return answer;
     },
-    save(partyId: string, save: Omit<DraftSave, "expectedEdit">): Draft {
+    save(partyId: string, save: Omit<DraftSave, "expectedEdit" | "personId">): Draft {
       const own = server.drafts.find(
         (draft) =>
           draft.partyId === partyId &&
