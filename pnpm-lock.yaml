@@ -78,6 +78,9 @@ importers:
       '@waitron/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@waitron/ui-core':
+        specifier: workspace:*
+        version: link:../../packages/ui-core
       '@waitron/venue-service':
         specifier: workspace:*
         version: link:../../packages/venue-service

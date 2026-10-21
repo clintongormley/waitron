@@ -3,6 +3,7 @@ import type { AllergenDeclaration as AllergenEntry } from "@waitron/catalogue/sr
 export type { AllergenEntry };
 import type { BusinessDayClock, DepartmentReceiptWrite } from "@waitron/shared";
 import type { PlanPlacement, VenueThemeAnswer } from "@waitron/ui";
+import type { ThemeChoices, ThemeWarning } from "@waitron/ui-core/theme";
 import type { CatalogueSettings } from "@waitron/catalogue/src/settings-types.js";
 export type { CatalogueSettings };
 import type {
@@ -2083,6 +2084,21 @@ const CARD_PROVIDER_READ_LIMIT_MS = 250_000;
 /** Keep above the battery deadline in apps/server/src/alert-sources.ts; no shared constant enforces it. */
 const ALERTS_READ_LIMIT_MS = 55_000;
 
+export interface ThemeView {
+  readonly id: string;
+  readonly name: string;
+  readonly updatedAt: string;
+  readonly choices: ThemeChoices | null;
+  readonly light: Readonly<Record<string, string>> | null;
+  readonly dark: Readonly<Record<string, string>> | null;
+  readonly warnings: readonly ThemeWarning[];
+}
+
+export interface ThemeList {
+  readonly themes: readonly ThemeView[];
+  readonly inUse: string | null;
+}
+
 export class DashboardApi {
   readonly liveData = new LiveData();
   #menuRevision: { value?: MenuReadRevision } = {};
@@ -2419,6 +2435,14 @@ export class DashboardApi {
 
   getVenueTheme(): Promise<VenueThemeAnswer> {
     return this.background.#request<VenueThemeAnswer>("/api/theme", "GET");
+  }
+
+  listThemes(): Promise<ThemeList> {
+    return this.#request<ThemeList>("/management-api/themes", "GET");
+  }
+
+  saveTheme(id: string, theme: ThemeChoices): Promise<ThemeView> {
+    return this.#request<ThemeView>(`/management-api/themes/${id}`, "PUT", { theme });
   }
 
   getContentLanguageRules(): Promise<ContentLanguageRules> {

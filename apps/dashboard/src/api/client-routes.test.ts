@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
+import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import { DashboardApi, type BackupApplyBody, type ProductEditorInput } from "./client.js";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
@@ -484,6 +485,33 @@ describe("DashboardApi routes", () => {
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/venue-defaults", "GET", undefined],
       ["/management-api/venue-defaults", "PUT", { defaultProductVatClass: "zero" }],
+    ]);
+  });
+
+  it("reads the themes and saves one theme's choices", async () => {
+    const LEMON: ThemeChoices = { ...WAITRON_CHOICES, brandColor: "#f2d300" };
+    const view = {
+      id: "t1",
+      name: "Café Limón",
+      updatedAt: "2026-10-21T10:00:00.000Z",
+      choices: LEMON,
+      light: { "--wt-color-primary": "#f2d300" },
+      dark: { "--wt-color-primary": "#f2d300" },
+      warnings: [],
+    };
+    const list = { themes: [view], inUse: "t1" };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(list))
+      .mockResolvedValueOnce(jsonResponse(view));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.listThemes()).resolves.toEqual(list);
+    await expect(api.saveTheme("t1", LEMON)).resolves.toEqual(view);
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/themes", "GET", undefined],
+      ["/management-api/themes/t1", "PUT", { theme: LEMON }],
     ]);
   });
 

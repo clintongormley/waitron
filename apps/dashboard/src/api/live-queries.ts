@@ -95,6 +95,7 @@ export const QUERY_DEPENDENCIES = {
   getCatalogueSettings: ["catalogue_settings"],
   getContentLanguages: ["content_languages"],
   getVenueTheme: ["custom_themes"],
+  listThemes: ["custom_themes"],
   // The server works the rules out once at boot, so no table change moves them.
   getContentLanguageRules: [],
   getContentTranslationGaps: TRANSLATION_READS,
