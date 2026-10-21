@@ -14,8 +14,9 @@ Revision 2026-10-21: pictures 1, 2 and 4 were redrawn with item d)'s new opening
 cloud, from asesor question Q53) and with the items labelled «1.a)» as the design's §4 labels them.
 
 Second revision 2026-10-22: picture 5 was redrawn for the owner's 22:25 answers — five-symbol minute names
-(`0CNNW` → `0JMV7`), the upgrade making the change only while it can read the internet's clock (with what
-happens when it cannot), and no request to print a new recovery sheet.
+(`0CNNW` → `0JMV7`), the upgrade checking the internet's clock while the old version still sells and only then
+making the change (with what happens when it cannot), and no request to print a new recovery sheet.
 
 `question.txt` holds the four owner questions, asked one at a time and all answered on 2026-10-21; then the
-first revision's two questions (the second withdrawn on 2026-10-22); then the second revision's two questions.
+first revision's two questions (both superseded on 2026-10-22: the first by the second revision's question 1,
+the second withdrawn); then the second revision's two questions.

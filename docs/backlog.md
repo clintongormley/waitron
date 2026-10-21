@@ -171,19 +171,22 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   producer's NIF, so a new producer (the owner → a future Waitron company), a new code, or a move
   to another fiscal policy (the owner: one installation, one policy) makes a different system.
   Each chain stores the producer and compliance mode it was opened under (today `registro_sif`
-  stores neither, `packages/fiscal-verifactu/src/schema/sif.ts:20-22`); every start compares them
-  with the running release's and, on a difference, opens a new installation, series and chain in
+  stores neither, `packages/fiscal-verifactu/src/schema/sif.ts:20-22`); the upgrade's step and
+  every start compare them with the running release's and, on a difference, open a new installation, series and chain in
   one transaction, on the filing node only, through a new `identity-change` activation that only
-  that start step can authorise (CLAUDE.md §5's "does not mint an installation number" sentence is
-  amended in the same change); a guard, proven by deletion, refuses to add a record to a chain
+  the upgrade's step, or a start that finds the change not made, can authorise (A947's slice 4a
+  amends CLAUDE.md §5's "does not mint an installation number" sentence; A993 adds the one
+  allocation no person asks for); a guard, proven by deletion, refuses to add a record to a chain
   opened under another identity. Corrections of invoices issued before the change join the new
   chain; the design asks for asesor Q53(d)(2) to be widened to cover that. The name is A947's
   five-symbol UTC minute (A947 §6.5), so A947's slice 4a lands first; no new recovery sheet is
   asked for. Because A947 needs a second clock for every name and a start has nobody present, the
-  design recommends that the upgrade make the change before the new release serves, only while it
-  can read the internet's clock, and otherwise change nothing and start the old release again — the
-  owner's choice, A940's second-revision question 2. After A940's slice 1; before the first
-  production venue goes live. A move between fiscal modules stays a refused start until the first non-Veri\*Factu mode.
+  design recommends that the upgrade check the clock while the old release still serves, and make
+  the change only once that check passes — otherwise the old release never stops. A sale can still
+  wait on the internet after a crash between the migration and the change, or when the new release
+  is started by hand. The owner's choice, A940's second-revision question 2. After A940's slice 1;
+  before the first production venue goes live. A move between fiscal modules stays a refused start
+  until the first non-Veri\*Factu mode.
   [Design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md#56-when-the-systems-identity-changes-a-new-installation-by-itself-a993)
 
 - **A696. Invoice issue dates and record offsets follow the process zone.**

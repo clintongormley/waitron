@@ -34,13 +34,19 @@ for the automatic identity change (§5.6).
 >   venue whose till is the box's own screen (the USB installer's default, B3), with no internet,
 >   the first revision's design would sell nothing until a phone opened a page: something outside
 >   the venue blocking a sale, which CLAUDE.md §5 forbids. This revision weighs four ways out, each
->   with a worked example, and recommends **A: the upgrade makes the change itself, before the new
->   release serves, and only while it can read the internet's clock; when it cannot, it changes
->   nothing and the old release goes on selling under the old identity until a later attempt
->   can.** A release reaches a box only by download (checked in §5.6), so the internet is normally
->   there at that moment. The first revision's "a manager confirms the clock" path is gone: A947
->   allows no confirmation. One case still waits on an outside clock, disclosed in §5.6: a new
->   release started some other way than through the upgrade.
+>   with a worked example, and recommends **A: the upgrade checks the internet's clock, and waits
+>   out A947's short wait, while the old release is still selling; only when that passes does it
+>   stop the old release, check again on the box alone, migrate and make the change. When the check
+>   cannot pass, the old release is never stopped and goes on selling under the old identity until
+>   a later attempt.** A release reaches a box only by download (checked in §5.6), so the internet is
+>   normally there at that moment. The change itself can then wait until the next attempt — hours,
+>   or the next morning — beyond the owner's "at most the next minute"; only the sale is protected.
+>   The first revision's "a manager confirms the clock" path is gone: A947 allows no confirmation.
+>   Two cases still make a sale wait on the internet's clock, disclosed in §5.6: a power cut or
+>   crash between the migration and the change (the two cannot share one transaction on today's
+>   code), and a new release started some other way than through the upgrade. (Corrected the same
+>   day after a fresh-context review: the first draft of this revision stopped the old release
+>   before the clock check and claimed one transaction for the migration and the change.)
 > - **§5.4** (the runbook's first line), **§8** (cases for the upgrade's step), **§10** (slice 1b
 >   needs A947's slice 4a and carries the upgrade's step), **§11** and **§12** follow.
 > - **Picture 5 redrawn**: five-symbol names, the upgrade reading the internet's clock, no print
@@ -743,8 +749,9 @@ holds every installation code its venue has used, switches to a spare included (
 the box can read"); so the extra wait A947 §6.7 adds for a first setup or a restore, which cannot
 see every earlier name, does not apply. Normally the box takes the current minute. By A947's rules
 3 and 4 it waits, at most 150 seconds, when a code it knows is a little later than its clock, and
-refuses when one is further ahead; under the recommended timing below, the old release goes on
-selling meanwhile. The installation number must still differ from every earlier installation of
+refuses when one is further ahead. The 150 seconds is beyond the owner's "at most for the next
+minute", as A947 discloses for its own switches; under the recommended timing below the wait runs
+while the old release is still selling. The installation number must still differ from every earlier installation of
 the taxpayer, of any producer: «Deberá distinguirlo de otros posibles SIF utilizados para realizar
 la facturación del obligado a expedir facturas … incluso aunque en dichas instalaciones se emplee
 el mismo SIF de un productor» (Orden, annex block 2.6, `NumeroInstalacion`, read by eye).
@@ -768,9 +775,12 @@ a sale, which CLAUDE.md §5 forbids ("Nothing EXTERNAL may block a sale").
 *What was checked for this revision.*
 
 - **A release reaches a box only by download.** Today `waitron.sh install` fetches the box's files
-  and pulls or builds its images — each step stopping the script when the network fails — before
-  `docker compose up` starts anything (`deploy/waitron.sh:607-630`; the pull and its failure at
-  `:329-330`); a failed pull leaves the running containers as they were, since nothing has been stopped
+  and pulls or builds its images before `docker compose up` starts anything
+  (`deploy/waitron.sh:607-630`). The box-file fetch and the image pull stop the script when the
+  network fails (the script runs under `set -euo pipefail`, `:13`; the pull's failure at
+  `:329-330`); two earlier steps do not — the script's own refresh carries on with the running copy,
+  and the print agent's AppArmor step falls back to Docker's default
+  (`scripts/waitron-sh.test.mjs:714`, `:857`); a failed pull leaves the running containers as they were, since nothing has been stopped
   yet, though the box's files may already be the new ones (read, not run). `grep -n 'docker load' deploy/waitron.sh` finds no way to install an image from
   a file. A release will pull its published image by its tag (§5.5). B3's stick fetches the newest
   release over the network — "every install now has the internet, and so network time" (B3 §5.4)
@@ -800,30 +810,84 @@ at 11:15 Madrid on Monday 1 March 2027 (10:15 UTC; Madrid is one hour ahead of U
 while the fibre is down until 14:00. With the internet up, all four do the same: close `0CNNW`
 (last receipt `A-0CNNW/1234`), take `0JMV7`, first receipt `A-0JMV7/1`.
 
-- **A — recommended: the upgrade makes the change, only while it can read the internet's clock;
-  until then the old release goes on selling.** The upgrade stops the app, as it must anyway, and
-  runs a one-off command from the new image — beside the image's existing commands such as
-  `waitron-restore` and `waitron-rejoin` (`apps/server/package.json:8-14`) — before the new release
-  serves. The command first compares the chain's stored identity with the new release's, reading
-  only. If they match, it does nothing. If they differ, it reads the internet's clock and applies
-  A947 §6.5's clock check and minute rules **before it changes anything in the database,
-  migrations included**: once the new release has migrated the database, the old one refuses to
-  start on it (`assertNotAhead`, `apps/server/src/node-entry.ts:245`, CLAUDE.md §3). With a usable
-  reading it migrates and makes the change in one transaction, and the upgrade starts the new
-  release. Without one — no internet, a box clock more than 30 seconds out, or A947's rule 4
-  refusing — it exits having changed nothing; the upgrade starts the old release again from its own
-  image, still on the box under its own tag (§5.5); and the upgrade reports «Actualización a 1.4.0
-  pendiente: hace falta internet para abrir la nueva instalación fiscal» — today `waitron.sh
-  install` prints it and stops with an error, and A950 reports it wherever it reports a failed
-  upgrade (one of its open questions, "Where the failure is reported"). The next attempt —
-  the person running `waitron.sh install` again, or A950's next quiet hour — tries again.
-  *Example:* at 11:15 the command finds no internet; 1.3.2 starts again and the bar sells all day
-  on `A-0CNNW/1235` onwards, every record naming the owner and version 1.3.2, both true. At the
-  next morning's attempt, 09:05 Madrid on 2 March, the fibre is back: `0JP45`, first receipt
-  `A-0JP45/1`. *Cost:* an identity-changing release can reach a box late, and until it does the box
-  runs the old release, which its own declaration covers. I found nothing in the sources this
-  design quotes that sets a date by which a venue must take a new release. The guard is
-  unchanged. One step in `waitron.sh install` now, and the same step in A950's updater.
+- **A — recommended: the upgrade makes the change, and only while it can read the internet's clock;
+  until then the old release goes on selling.** The order is new work in slice 1b, in `waitron.sh
+  install`, and the same in A950's updater:
+  1. **While the old release still serves**, once the new image is on the box, the upgrade runs the
+     new image's one-off step in a *check* mode. It is run with the image's entrypoint overridden:
+     the image's entrypoint is `node /app/node-entry.js`, and a command that does not override it
+     has its arguments added to that one, which refuses them (`deploy/Dockerfile:283-286`; the same
+     point is pinned for `waitron.sh`'s own reads at `scripts/waitron-sh.test.mjs:1243-1257`). It
+     opens the venue database without taking it from the running server, reading only (the
+     `exclusive: false` way CLAUDE.md §3 gives a tool that runs beside the server), and compares the
+     chain's stored identity with the new release's. If they match, the upgrade carries on as an
+     ordinary one. If they differ, it reads the internet's clock (one reading takes at most 5
+     seconds, `packages/fiscal-verifactu/src/hour-clock-internet.ts:62-67`), applies A947 §6.5's
+     clock check, works out the earliest minute A947's rules 1–4 allow, and waits for it — rule 3's
+     wait, at most 150 seconds — all while the old release sells. If it cannot pass (the three
+     refusals below), it stops here, and the old release was never stopped.
+  2. **The upgrade stops the old release.**
+  3. **A quick check again, on the box alone**, with the venue lock held: the history is read again,
+     and the box's clock must have moved as the host's steady clock (the one that only counts
+     seconds since start-up and cannot be set) has moved since step 1's reading, so a clock set by
+     hand in between is caught. If either fails, nothing has been changed yet: the upgrade starts
+     the old release again and reports it. No outside reading is taken here, so while the app is
+     stopped nothing waits on anything outside the box.
+  4. **Migrate, then make the change.** These are two commits, not one transaction:
+     `applyMigrations` opens its own store, runs each migration set in its own drizzle transaction,
+     commits it and closes (`packages/migrations/src/apply.ts:43-93`). The change is one transaction
+     after them, under the step's own lock.
+  5. **The upgrade starts the new release.**
+
+  *What the stop costs.* Steps 2 to 5 are the stop every upgrade already makes (stop, migrate,
+  start), plus a check on the box and one transaction — reasoned from the order, not measured. The
+  script then waits up to 36 tries 5 seconds apart for the new release to report healthy
+  (`deploy/waitron.sh:574-576`); that is how long it is willing to wait, not how long a start takes.
+
+  *The three refusals, each with its own words in the upgrade's report.*
+  - No internet: «Actualización a 1.4.0 pendiente: hace falta conexión a internet para abrir la
+    nueva instalación fiscal. Se volverá a intentar.»
+  - The box's clock more than 30 seconds from the internet's: «Actualización a 1.4.0 pendiente: la
+    hora de este equipo difiere ‹N› segundos de la de internet. Hay que corregir la hora del equipo;
+    volver a intentarlo no sirve hasta entonces.» A box that is online normally keeps its own clock
+    right (A798-B, cited in A947 §6.5); a way to put it right with no internet and no terminal is
+    A947's open point (§13), not solved here.
+  - A947's rule 4, a code the box knows more than 150 seconds ahead of its clock: «Actualización a
+    1.4.0 pendiente: ya se usó un minuto posterior a la hora de este equipo. Se podrá a partir de
+    las ‹HH:MM›.» — A947's refusal, which names the time from which it will be allowed.
+
+  *The one gap left, disclosed.* A power cut or crash in step 4, after the migration has committed
+  and before the change has. The old release then refuses the migrated database (`assertNotAhead`,
+  `apps/server/src/node-entry.ts:245`), and the new release starts with the change unmade — the
+  start's fallback below, where **a sale does wait on the internet's clock** until one can be read.
+  The window is the migration plus one transaction: seconds, by reasoning, not measured. A950's
+  snapshot, put back before the first order, would close it; today's script takes no snapshot
+  (`docs/backlog/box.md`, "It takes no backup first"). One transaction for both was weighed and not
+  taken: it needs a way to run every migration set inside the change's transaction, but
+  `applyMigrations` removes the change feed and installs the append-only triggers around the sets,
+  and drizzle's migrator runs each set in a transaction of its own (`apply.ts:59-93`, and the comment
+  at `:80-84`). That is a change
+  to how every set migrates, larger than this slice, and not shown to be sound for every set.
+
+  *Putting the old release back is new work too.* Today `waitron.sh install` records nothing about
+  what it replaces: `refresh_self` may already have replaced the script itself
+  (`deploy/waitron.sh:75-139`); the box files are overwritten (`:199-205`); for `main` the same tag
+  is pulled again, so the old image loses its tag (`:326-330`); and for a branch `.env` is rewritten
+  before anything starts (`:352-353`). So slice 1b records the previous image and box files before
+  it overwrites them, and puts them back when the step changes nothing.
+
+  *Example:* at 11:15 the check finds no internet; 1.3.2 was never stopped and the bar sells all
+  day on `A-0CNNW/1235` onwards, every record naming the owner and version 1.3.2, both true. At 14:00
+  the fibre is back, but nothing retries until the next attempt — the next quiet hour, or someone
+  running the upgrade again; say 09:05 Madrid on 2 March: `0JP45`, first receipt `A-0JP45/1`.
+
+  *Cost.* The change itself can wait until the next attempt — hours, or the next morning — where the
+  owner's answer of 22:25 says A993's change waits "at most for the next minute"; what is protected
+  is the sale, not the change's timing. Rule 3's wait of up to 150 seconds is a departure from the
+  same answer, as A947 discloses for a switch (its second revision note); here it runs while the old
+  release sells. Until the change is made the box runs the old release, which its own declaration
+  covers; I found nothing in the sources this design quotes that sets a date by which a venue must
+  take a new release. The guard is unchanged.
 - **B — the new release sells on the old installation, under the old identity, until it can read a
   second clock.** The guard would have to let 1.4.0 add records to a chain opened under the old
   producer, and those records would name the owner as producer of version 1.4.0, which he has not
@@ -855,15 +919,15 @@ removes A's delay, but adds a reservation and a rule that cancels it when a late
 between (a switch to the spare, say) — more fiscal code, to save a delay that costs no sale.
 
 **Under A, what a start does.** Every start still compares the identities (above). After an
-upgrade through its step they match. If they differ — only when the new release was started some
-other way, for instance `docker compose up` typed by hand — the start makes the change itself,
-under A947's rules, with the internet's clock, and **until then does not trade**; its recovery page
-says «Esta versión abre una nueva instalación fiscal y necesita la hora de internet: conecta el
-equipo a internet». Disclosed: on that path a sale does wait on something outside, as with §5.1's
-refusal of a test build; the upgrade's step is what keeps a venue off it. Whether that page should
-also take a phone's clock, as in C, is left open (§12). The first revision's decision that after a
-rule-4 refusal "the box keeps running without issuing invoices" is replaced: under A, the old
-release keeps selling.
+upgrade through its step they match. They differ in two cases: the new release was started some
+other way, for instance `docker compose up` typed by hand; or a power cut or crash came between the
+step's migration and its change (way A, "the one gap left"). Then the start makes the change
+itself, under A947's rules, with the internet's clock, and **until then does not trade**; its
+recovery page says «Esta versión abre una nueva instalación fiscal y necesita la hora de internet:
+conecta el equipo a internet». Disclosed: in both cases a sale does wait on something outside the
+box, as with §5.1's refusal of a test build. Whether that page should also take a phone's clock, as
+in C, is left open (§12). The first revision's decision that after a rule-4 refusal "the box keeps
+running without issuing invoices" is replaced: under A, the old release keeps selling.
 
 **Why no person has to approve it, when W41s asks one for a promotion.** W41s asks for a person
 where another machine may still hold the identity being replaced. A declared restore needs the
@@ -1045,16 +1109,32 @@ migration (slice 5).
   minute of the box's clock, the next record is the first of a new chain and the old chain's unsent
   record is still sent with its old producer; and a case under the same identity that checks that
   nothing is allocated and no clock is read.
-- **An upgrade that cannot read a clock changes nothing** (§5.6, way A): a case that runs the step
-  under a changed identity with the internet's clock unavailable, and checks that the database's
-  files and migration journal are as they were and that the old release then starts and records a
-  sale on its own chain. Proven by deletion: with the clock check moved after the migration, the
-  case must fail, because the old release then refuses the migrated database
-  (`provisioning.database_ahead`). The same case with a box clock 31 seconds out, ahead and behind,
-  changes nothing either.
+- **An upgrade that cannot read a clock changes nothing, and stops nothing** (§5.6, way A): a case
+  that runs the upgrade under a changed identity with the internet's clock unavailable, using a test
+  release that **carries a migration the database has not had** (without one, the proof below
+  cannot fail), and checks that the old release was never stopped and records a sale meanwhile, and
+  that the database's files and migration journal are as they were. Proven by deletion: with the
+  clock check moved after the migration, the case must fail, because the database is then migrated
+  and the old release refuses it (`provisioning.database_ahead`). The same case with a box clock 31
+  seconds out, ahead and behind, changes nothing either, and each refusal reports its own words.
+- **The quick check after the stop** (§5.6, way A, step 3): a case that sets the box's clock by
+  hand between the check and the stop, and one that adds a name to the history in between; each
+  must start the old release again with nothing changed.
+- **A crash between the migration and the change** (§5.6, way A, "the one gap left"): a case that
+  stops the step after the migration commits and before the change, then starts the new release
+  with no internet, and checks that it does not trade and the old chain gains nothing; and, with the
+  internet back, that the start makes the change and then trades.
 - **A start that finds the change not made does not trade without a second clock** (§5.6, "Under
-  A, what a start does"): a case that starts the new release under a changed identity with no
-  internet and checks that no sale is recorded and the old chain gains nothing.
+  A, what a start does"): a case that starts the new release directly under a changed identity with
+  no internet and checks that no sale is recorded and the old chain gains nothing.
+- **A restore of an old-producer backup onto a new release** (§5.6, "What each chain stores"): a
+  case that restores a backup whose chain was opened under the old producer onto a box running a
+  release with the new one, and checks that the restore's activation writes the new identity and
+  that the first start's identity step then does nothing. By my reading of
+  `apps/server/src/restore.ts:363-386`, the restore migrates its copy of the backup and runs its
+  fiscal activation on that copy, under the running release, before placing it
+  (`checkBeforePlacement`, which runs the restore's module operation,
+  `apps/server/src/recovery-module-operation.ts:132-134`); read, not run.
 
 ## 9. What is NOT a release
 
@@ -1073,7 +1153,7 @@ Each slice is one pull request.
 | Slice | What | Path |
 | --- | --- | --- |
 | 1 | `software-identity.ts`; the records carry the producer — the owner personally, his name and NIF, which he still has to supply — not the taxpayer; the name "Waitron"; the release's version; `TipoUsoPosibleSoloVerifactu` = S (unchanged), `TipoUsoPosibleMultiOT` = N (was S), `IndicadorMultiplesOT` = N (unchanged); the cancellation reader and the drain's grouping keep the taxpayer's name | FULL, **fiscal: the owner lands it** |
-| 1b | **A993**, the automatic identity change (§5.6): each chain stores its producer and mode; the upgrade's one-off step and every start compare; a difference opens a new installation under A947's five-symbol rules, only with a second clock (way A, if the owner chooses it); `waitron.sh install` runs the step and puts the old release back when it changes nothing; the guard; the dashboard notice | FULL, **fiscal: the owner lands it** |
+| 1b | **A993**, the automatic identity change (§5.6): each chain stores its producer and mode; the upgrade's one-off step and every start compare; a difference opens a new installation under A947's five-symbol rules, only with a second clock (way A, if the owner chooses it); `waitron.sh install` runs the step — checking the clock while the old release serves — records the previous image and box files, and puts the old release back when the step changes nothing; the guard; the dashboard notice | FULL, **fiscal: the owner lands it** |
 | 2 | The template, `functions.md`, the renderer, the "agree" and "headings" guards, `pnpm release prepare` and `tag`, and the release runbook | FULL |
 | 3 | `/legal/declaration` (HTML, PDF, plain text) in every mode and on the landing and recovery listeners; About Waitron on the dashboard, the till's More menu, the ⓘ corners and the setup wizard; guides in English and Spanish | LIGHT |
 | 4 | CI on a `v*` tag: the version and the rendered declaration in the image, the PDF and text on the GitHub Release; `waitron.sh install v<version>` pulls the published image; production refuses an unreleased build; the "never changes" guard | FULL (the box's start path) |
@@ -1117,8 +1197,10 @@ Asked one at a time through the campaign watcher; the original text is in the mo
 4. **Production boxes run releases only. Answered: A**, "Releases only." §5.1 stands.
 
 **The first revision's questions** (in `question.txt`): approve the revised design; and how the
-automatic identity change names its new installation — the second withdrawn on 2026-10-22, the
-owner having settled the name form at about 22:25 on 2026-10-21 (A947 §6.5).
+automatic identity change names its new installation. Both are superseded on 2026-10-22: the first
+by the second revision's question 1 (its example's hour codes and its new recovery sheet no longer
+hold), the second withdrawn, the owner having settled the name form at about 22:25 on 2026-10-21
+(A947 §6.5).
 
 **The second revision's questions** (in `question.txt`, asked one at a time): approve this
 revision; and, for A993, what happens when the change cannot read a second clock (§5.6, ways A to
@@ -1150,11 +1232,10 @@ D, A recommended).
   second revision moved them and updated B3's citations. B3 §4 also decides that the declaration's
   PDF does not go on the stick and hands §7.2's last sentence back to A940; that sentence is not
   changed by this revision.
-- **The upgrade's step (§5.6, way A), for the builder:** how `waitron.sh install` puts the old
-  release back (today it records a branch's image in `.env`, `deploy/waitron.sh:352-353`, and a
-  release's tag is slice 4's work, §5.5); how the one-off command reaches the fiscal module without
-  `apps/server` importing it (§5.3's composition rule); and that it reads the stored identity
-  without writing, so that nothing changes before the clock has passed.
+- **The upgrade's step (§5.6, way A), for the builder:** how the one-off command reaches the
+  fiscal module without `apps/server` importing it (§5.3's composition rule); how step 1's clock
+  reading and steady-clock reading reach step 3, which is a separate run of the command; and how
+  long after step 1 step 3 may still rely on it before step 1 must be run again.
 - **A950's rollback after the change.** If A950 puts back its snapshot after the step but before
   the first order, the restored database no longer records that the new code was spent. Nothing
   was filed under it (A950 files nothing before its check passes), and the next attempt takes a
@@ -1163,7 +1244,8 @@ D, A recommended).
   also take a phone's clock, which is new work (way C), and its exact wording.
 - **"No new sheet" rests on A947's slice 4a.** That slice takes the installation code off the
   recovery sheet and the restore form only if its committed test passes (A947 §6.7). If it does
-  not, the code stays on the sheet and the notice's reprint question comes back with it.
+  not, that goes back to the owner, whose "prove it" condition it is (A947 §12) — not straight to a
+  reprint.
 
 ## Provenance
 
