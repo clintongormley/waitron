@@ -13,8 +13,16 @@ import { diag } from "./diagnostics.js";
 import { isTrustBroken } from "./trust-check.js";
 import "./till-app.js";
 
+const watchedFetch = watchBuild(fetch, {
+  origin: location.origin,
+  onChange: () => window.dispatchEvent(new Event(BUILD_CHANGED_EVENT)),
+});
 applyTokens(document.documentElement);
-startVenueTheme(document.documentElement);
+// `/api/theme` reads no session or device and is asked of the page's own origin, so its fetch
+// skips the router and the dev device header.
+startVenueTheme(document.documentElement, {
+  fetchImpl: createInstrumentedFetch(watchedFetch, diag),
+});
 startThemeChoice(document.documentElement);
 
 installErrorCapture(window, diag);
@@ -28,10 +36,6 @@ async function bootTill(): Promise<void> {
     render(trustInstructions(), app);
     return;
   }
-  const watchedFetch = watchBuild(fetch, {
-    origin: location.origin,
-    onChange: () => window.dispatchEvent(new Event(BUILD_CHANGED_EVENT)),
-  });
   const router = new ServerRouter({ origin: location.origin, fetchImpl: watchedFetch });
   const fetchImpl = createInstrumentedFetch(
     withDevDeviceHeader(withServerTarget(watchedFetch, router)),

@@ -20,6 +20,8 @@ export interface StartupProbeResult {
   readonly bgAfter: string;
   readonly storedAfter: string | null;
   readonly themeRequests: number;
+  /** Theme requests carrying the `x-request-id` the app's instrumented fetch sets. */
+  readonly themeRequestsTraced: number;
   readonly appRendered: boolean;
 }
 
@@ -73,6 +75,7 @@ export function venueThemeStartupProbe(indexHtml: URL): BrowserCommand<[StartupS
       const errors: string[] = [];
       subject.on("pageerror", (error) => errors.push(error.message));
       let themeRequests = 0;
+      let themeRequestsTraced = 0;
       let markHandled!: () => void;
       const themeHandled = new Promise<void>((resolve) => (markHandled = resolve));
       await subject.route(
@@ -91,6 +94,7 @@ export function venueThemeStartupProbe(indexHtml: URL): BrowserCommand<[StartupS
             return;
           }
           themeRequests += 1;
+          if (route.request().headers()["x-request-id"] !== undefined) themeRequestsTraced += 1;
           const answered = answerTheme(route, scenario);
           if (answered === undefined) markHandled();
           else await answered.then(markHandled);
@@ -164,6 +168,7 @@ export function venueThemeStartupProbe(indexHtml: URL): BrowserCommand<[StartupS
         firstThemedBg,
         firstThemedAtMs: firstThemed?.[2] ?? null,
         themeRequests,
+        themeRequestsTraced,
         ...settled,
       };
     } finally {

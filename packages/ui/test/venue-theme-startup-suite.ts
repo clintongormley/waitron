@@ -42,6 +42,7 @@ export function describeVenueThemeStartup(app: string): void {
       expect(result.bgAfter).toBe(FIXTURE_LIGHT_BG);
       expect(result.appRendered).toBe(true);
       expect(result.themeRequests).toBe(1);
+      expect(result.themeRequestsTraced).toBe(1);
     });
 
     it("with no stored copy the first frame is Waitron's", async () => {

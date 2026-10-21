@@ -14,16 +14,8 @@ import { DASHBOARD_ICONS } from "./icons.js";
 import "./dashboard-app.js";
 import "./screens/attendance-corrections-screen.js";
 
-applyTokens(document.documentElement);
-startVenueTheme(document.documentElement);
-startThemeChoice(document.documentElement);
-registerIcons(DASHBOARD_ICONS);
-
-installErrorCapture(window, diag);
-
-const app = document.querySelector<HTMLElement>("#app")!;
-// One instrumented fetch for both the api and the module-request primitive, so a module screen's
-// round trips land in the same diagnostics trail as the app client's.
+// One instrumented fetch for the api, the module-request primitive and the theme fetch, so every
+// round trip lands in the same diagnostics trail as the app client's.
 const instrumentedFetch = createInstrumentedFetch(
   watchBuild(fetch, {
     origin: location.origin,
@@ -31,6 +23,14 @@ const instrumentedFetch = createInstrumentedFetch(
   }),
   diag,
 );
+applyTokens(document.documentElement);
+startVenueTheme(document.documentElement, { fetchImpl: instrumentedFetch });
+startThemeChoice(document.documentElement);
+registerIcons(DASHBOARD_ICONS);
+
+installErrorCapture(window, diag);
+
+const app = document.querySelector<HTMLElement>("#app")!;
 const signals = createSessionSignals();
 const api = new DashboardApi("", instrumentedFetch, signals.reportError, signals.reportActivity);
 const liveUpdates = new LiveConnection(api.liveData, { onSessionInvalid: signals.reportError });

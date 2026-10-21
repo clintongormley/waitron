@@ -2363,7 +2363,9 @@ WAITRON_STARTUP_ENGINES=chromium,webkit pnpm --filter @waitron/till exec vitest 
 which runs sixteen per app. `node -e "const p=require('playwright').webkit.executablePath();console.log(p, require('fs').existsSync(p))"`,
 run from an app, prints `true` when WebKit is installed. The command refuses any other engine name
 (`not a start-up engine: firefox`). Each result carries the engine's name and version and
-`firstThemedAtMs`, the page's `performance.now()` at the first frame that carried the theme root.
+`firstThemedAtMs`, the page's `performance.now()` at the first frame that carried the theme root,
+and `themeRequestsTraced`, the theme requests that carried the `x-request-id` header the app's
+instrumented fetch sets.
 
 **Route API calls by PATH, never by glob.** The page's own modules are served by the Vitest server
 from the same origin, so a Playwright route on `**/api/**` also catches `/src/api/client.ts`; the
