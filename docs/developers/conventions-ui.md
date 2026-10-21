@@ -1056,10 +1056,10 @@ that holds a name: "Missing triggers:" and "Changed triggers:". `/recovery-api/s
 **A full disk at start** (A798-B slice 2). A start that finds under 256 MiB free first deletes what
 it can make again: rotated logs but the newest, crash reports older than a week, and the copies a
 cut-off backup run left in backup staging unless the venue folder's holder file shows a fresh
-heartbeat (`apps/server/src/start-space.ts`). If
-it is still below that floor and cannot write its count back unchanged because the disk is full, it
-serves the page AT ONCE under `storage.disk_full`, and writes nothing. The count was not raised, so
-where the page would say "Failed N times." it says "Level: recovery. This start was not counted: the
+heartbeat (`apps/server/src/start-space.ts`). If it is still below that floor, or the folders a
+first-setup resolution chose in their place are, and it cannot write its count back unchanged
+because the disk is full, it serves the page AT ONCE under `storage.disk_full`, and writes nothing.
+The count was not raised, so where the page would say "Failed N times." it says "Level: recovery. This start was not counted: the
 disk is full." («Nivel: recovery. Este arranque no se ha contado: el disco está lleno.»). The
 full-disk action begins "The box has deleted what it could make again, and that was not enough."
 («El equipo ha quitado lo que podía volver a crear, y no ha bastado.»). That start writes no

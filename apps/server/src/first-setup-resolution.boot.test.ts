@@ -550,3 +550,90 @@ it.each(["anchor", "selected"] as const)(
     }
   },
 );
+
+/** The supervised entry's dependencies for a selected workspace, every staged step a no-op. */
+function selectedEntryDeps(
+  f: Awaited<ReturnType<typeof replacement>>,
+  over: Partial<Parameters<typeof entry.runEntry>[0]>,
+): Parameters<typeof entry.runEntry>[0] {
+  return {
+    ...f.anchor,
+    args: [],
+    statfs: plentyOfSpace,
+    baseEnv: {},
+    readRecoveryState: async () => FRESH,
+    writeRecoveryState: async () => {},
+    withRecoveryLock: async (_path, body) => body(),
+    loadBoxEnv: async (base) => base,
+    runStagedRestore: async () => false,
+    runStagedReset: async () => false,
+    clearReplacedDatabases: async () => {},
+    assertNotAhead: async () => {},
+    startServer: stopped,
+    serveRecovery: async () => {
+      throw new Error("unexpected page");
+    },
+    scheduleStayedUp: () => {},
+    installShutdownHandlers: () => {},
+    log: () => {},
+    ...over,
+  };
+}
+
+const diskFull = () => Object.assign(new Error("database or disk is full"), { errcode: 13 });
+
+it("serves the full-disk page at once when the selected workspace's disk is full and the original folders have room", async () => {
+  const f = await replacement();
+  try {
+    const workspaces = join(f.anchor.stateDir, "first-setup-workspaces");
+    const statfs = vi.fn(async (dir: string) => ({
+      bavail: dir.startsWith(workspaces) ? 10 : Number.MAX_SAFE_INTEGER,
+      frsize: 1,
+    }));
+    let page: Hono | undefined;
+    const startServer = vi.fn(stopped);
+    await entry.runEntry(
+      selectedEntryDeps(f, {
+        statfs,
+        freeSpaceFloor: 1000,
+        withRecoveryLock: () => Promise.reject(diskFull()),
+        startServer,
+        serveRecovery: async (surface) => {
+          page = surface;
+        },
+      }),
+    );
+    expect(startServer).not.toHaveBeenCalled();
+    expect(await (await page!.request("/recovery-api/status")).json()).toMatchObject({
+      lastErrorCode: "storage.disk_full",
+      level: "recovery",
+    });
+  } finally {
+    await f.dispose();
+  }
+});
+
+it("fails the start as before when the selected workspace's free space cannot be read", async () => {
+  const f = await replacement();
+  try {
+    const workspaces = join(f.anchor.stateDir, "first-setup-workspaces");
+    const error = diskFull();
+    const serveRecovery = vi.fn(async () => {});
+    await expect(
+      entry.runEntry(
+        selectedEntryDeps(f, {
+          statfs: async (dir: string) =>
+            dir.startsWith(workspaces)
+              ? Promise.reject(new Error("ENOSYS"))
+              : { bavail: Number.MAX_SAFE_INTEGER, frsize: 1 },
+          freeSpaceFloor: 1000,
+          withRecoveryLock: () => Promise.reject(error),
+          serveRecovery,
+        }),
+      ),
+    ).rejects.toBe(error);
+    expect(serveRecovery).not.toHaveBeenCalled();
+  } finally {
+    await f.dispose();
+  }
+});

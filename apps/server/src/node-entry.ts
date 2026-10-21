@@ -276,9 +276,10 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
  *    creates a missing `venue.db`.
  * 6. Below the floor, the start deletes what it can make again before first-setup resolution, whose
  *    inspection opens the database.
- * 7. Still below it, the start writes the count back unchanged before resolution's app or the page
- *    is served: a finished setup's inspection fails on a full disk and would serve resolution (plan
- *    F4), and its admission takes the venue lock before the count.
+ * 7. Still below it, or below it in the folders first-setup resolution chose instead, the start
+ *    writes the count back unchanged before resolution's app or the page is served: a finished
+ *    setup's inspection fails on a full disk and would serve resolution (plan F4), and its
+ *    admission takes the venue lock before the count.
  *
  * `startServer` resolving is the signal rather than a healthy `/health`, because `/health` is 503
  * on a setup box by design, so a health-gated reset would drive every unprovisioned box into
@@ -295,11 +296,12 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   }
 
   const now = deps.now ?? (() => new Date());
+  const floor = deps.freeSpaceFloor ?? START_FREE_SPACE_FLOOR;
   const space = await freeSpaceAtStart({
     stateDir: deps.stateDir,
     venueDir: deps.venueDir,
     logDir: deps.logDir ?? join(deps.stateDir, "logs"),
-    floor: deps.freeSpaceFloor ?? START_FREE_SPACE_FLOOR,
+    floor,
     now,
     statfs: deps.statfs,
     readVenueHolder: deps.readVenueHolder ?? readVenueHolder,
@@ -343,10 +345,13 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       WAITRON_VENUE_DIR: admission.roots.venueDir,
     },
   };
+  const dirs = [rooted.stateDir, rooted.venueDir];
+  const moved = rooted.stateDir !== deps.stateDir || rooted.venueDir !== deps.venueDir;
+  const belowFloor =
+    space.belowFloor || (moved && ((await lowestFreeBytes(dirs, deps.statfs)) ?? floor) < floor);
   let check: CountCheck;
-  if (space.belowFloor && !(check = await countWritable(rooted)).written) {
+  if (belowFloor && !(check = await countWritable(rooted)).written) {
     const exit = deps.exit ?? DEFAULT_EXIT;
-    const dirs = [rooted.stateDir, rooted.venueDir];
     await deps.serveRecovery(
       recoveryApp({
         state: fullDiskAtStart(await deps.readRecoveryState(rooted.stateDir), now()),
