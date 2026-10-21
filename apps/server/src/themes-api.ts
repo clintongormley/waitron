@@ -10,7 +10,13 @@ import {
   setThemeInUse,
   type StoredTheme,
 } from "@waitron/layouts";
-import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
+import {
+  createErrorBoundary,
+  readJsonBody,
+  requireManagementSession,
+  requireNullableString,
+  requireString,
+} from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { deriveThemeFrom, type ThemeChoices, type ThemeWarning } from "@waitron/ui-core/theme";
 import type { Logger } from "./logger.js";
@@ -92,10 +98,7 @@ export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): 
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readBody(c);
-      if (typeof body.name !== "string") {
-        throw new AppError("management.request_invalid", { field: "name" });
-      }
-      const name = body.name;
+      const name = requireString(body.name, "name");
       const theme = requireTheme(body);
       if (body.inUse !== undefined && typeof body.inUse !== "boolean") {
         throw new AppError("management.request_invalid", { field: "inUse" });
@@ -124,10 +127,7 @@ export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): 
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readBody(c);
-      const customThemeId = body.customThemeId;
-      if (customThemeId !== null && typeof customThemeId !== "string") {
-        throw new AppError("management.request_invalid", { field: "customThemeId" });
-      }
+      const customThemeId = requireNullableString(body.customThemeId, "customThemeId");
       const inUse = await withTransaction(deps.db, (tx) =>
         setThemeInUse(tx, { managementSessionId, customThemeId }),
       );
