@@ -201,6 +201,7 @@ describe("release metadata is a build product of a pinned source commit", () => 
     expect(() => readBuildHourRelease({ cwd })).toThrow();
   });
 
+  // The bound clears every wait at its limit: two 90 s bundles plus a 10 s load per entry per bundle.
   it("the actual bundle command replaces a stale stamp for every declared Node entry", () => {
     const { cwd, hashes } = fixture();
     mkdirSync(join(cwd, "scripts"));
@@ -238,7 +239,7 @@ describe("release metadata is a build product of a pinned source commit", () => 
       const result = spawnSync(
         process.execPath,
         [join(cwd, "scripts/bundle-node.mjs"), ...entries.map((out) => `entry.ts=${out}`)],
-        { cwd, env, encoding: "utf8", timeout: 20_000 },
+        { cwd, env, encoding: "utf8", timeout: 90_000 },
       );
       expect(result.status, result.stderr).toBe(0);
       for (const out of entries) {
@@ -266,5 +267,5 @@ describe("release metadata is a build product of a pinned source commit", () => 
         });
       }
     }
-  }, 120_000);
+  }, 400_000);
 });

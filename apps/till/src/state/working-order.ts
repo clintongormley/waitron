@@ -206,6 +206,7 @@ export class WorkingOrderStore {
   #label?: string;
   #priced: Priced | null = null;
   #total: Decimal | null = null;
+  readonly #price: typeof priceBasket;
   /**
    * Whether {@link id} already names an OPEN row server-side. A persisted order must be synced with
    * `updateWorkingOrder`, never re-parked: park is idempotent, so a re-park with the same id discards
@@ -236,6 +237,10 @@ export class WorkingOrderStore {
   #limit: Decimal | null = null;
   #fullInvoiceOrderId?: string;
   canSelectProduct: ((product: TillProduct) => boolean) | undefined;
+
+  constructor(price: typeof priceBasket = priceBasket) {
+    this.#price = price;
+  }
 
   #refusesSelection(product: TillProduct): boolean {
     if (this.canSelectProduct?.(product) !== false) return false;
@@ -411,7 +416,7 @@ export class WorkingOrderStore {
 
   get #pricedOrder(): Priced {
     if (this.#priced === null) {
-      this.#priced = priceBasket(
+      this.#priced = this.#price(
         this.#lines.map((line) => toPriceable(line)),
         localToday(),
       );

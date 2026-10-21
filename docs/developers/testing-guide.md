@@ -1348,6 +1348,13 @@ Preloading that library before the old module mocks reproduces `startRegistratio
 module mock replacing an already-loaded browser ES module. Evidence and limits: #303's commit
 message.
 
+A spy mock (`vi.mock(path, { spy: true })`) of the till's pricing module failed the same way in
+main run 39515985837's `test-till (6)`, the only failed run among the last 200 CI runs in which that
+test failed (one run's jobs could not be read). Six local runs of that shard's files on Vitest
+4.1.11 all passed; the cause was not found. Where a browser test must see what code
+hands a function, have the code take the function as a parameter and pass a spy around the real
+one (`WorkingOrderStore`'s constructor, A943). Nothing guards it.
+
 ## Browser recovery tests read the native control inside a shared component.
 
 A host's `checked` property can report the expected value while its inner checkbox remains visibly
