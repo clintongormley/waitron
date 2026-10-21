@@ -1236,6 +1236,41 @@ describe("till-app table ordering: refused and failed table actions", () => {
     },
   );
 
+  it.each([
+    ["join-tables", "storage.disk_full", 507, { tableId: "t9", bills: "merge" }, "joinTables"],
+    ["join-tables", "server.internal", 500, { tableId: "t9", bills: "merge" }, "joinTables"],
+    [
+      "change-line",
+      "storage.disk_full",
+      507,
+      { lineNo: 1, lineName: "Coffee", patch: { note: "no sugar" }, revision: 0 },
+      "updateOrderLine",
+    ],
+    [
+      "change-line",
+      "server.internal",
+      500,
+      { lineNo: 1, lineName: "Coffee", patch: { note: "no sugar" }, revision: 0 },
+      "updateOrderLine",
+    ],
+  ] as const)(
+    "a %s refused %s shows that refusal's sentence",
+    async (type, code, status, detail, method) => {
+      const { el } = await mountApp({
+        ...seatedFloor(),
+        [method]: vi.fn().mockRejectedValue({ code, status }),
+      });
+      const screen = await toTableOrder(el);
+
+      emit(screen, type, detail);
+      await flush(el);
+
+      expect(banner(el)!.textContent!.trim()).toBe(
+        code === "storage.disk_full" ? codeMessage(code) : t("table.error"),
+      );
+    },
+  );
+
   it.each(["bill.presented", "bill.paid", "bill.other_party", "bill.payments_received"])(
     "a merge refused %s says so in that code's own words",
     async (code) => {

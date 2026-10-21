@@ -555,6 +555,7 @@ const TABLE_REFUSALS = new Set([
   "bill.received_exceeds_total",
   "bill.refund_in_progress",
   "working_order.not_open",
+  "storage.disk_full",
 ]);
 
 /** Refusals about the money already on a bill: after one, the party's bills and the shown bill's
@@ -811,6 +812,7 @@ const ACTIONABLE_REFUSALS = new Set([
   "sale.total_exceeds_simplified_limit",
   "department.operation_description_required",
   "sale.department_missing",
+  "storage.disk_full",
 ]);
 
 /** A refusal for passing the simplified-invoice limit that names the limit, as the server sends it. */
@@ -881,7 +883,9 @@ function counterError(error: unknown, fallback: StringKey): CounterError {
 function discardError(error: unknown): CounterError {
   if (isPaymentsReceived(error)) return "held.discard_holds_money";
   const code = (error as { code?: string } | undefined)?.code;
-  return code === "order.payment_in_flight" || code === "bill.refund_in_progress"
+  return code === "order.payment_in_flight" ||
+    code === "bill.refund_in_progress" ||
+    code === "storage.disk_full"
     ? { code }
     : "held.stale";
 }
@@ -7869,9 +7873,12 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.api.advanceTicketItem(itemId, stationId, to);
-    } catch {
+    } catch (error) {
       if (session !== this.#operatorSession) return;
-      this.errorKey = "station.advance_error";
+      this.errorKey =
+        (error as { code?: string } | undefined)?.code === "storage.disk_full"
+          ? { code: "storage.disk_full" }
+          : "station.advance_error";
     }
     if (session !== this.#operatorSession) return;
     await this.#refreshStationQueue();

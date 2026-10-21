@@ -7243,6 +7243,21 @@ describe("till-app", () => {
     });
   });
 
+  it.each([
+    [{ code: "storage.disk_full", status: 507 }, () => codeMessage("storage.disk_full")],
+    [{ code: "server.internal", status: 500 }, () => t("held.park_error")],
+  ])("park-order refused %o shows that refusal's sentence", async (refused, shown) => {
+    const { el } = await mountApp({ parkOrder: vi.fn().mockRejectedValue(refused) });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+
+    emit(c, "park-order", { label: "Table 4" });
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(shown());
+  });
+
   it("a failed parkOrder keeps the counter and the basket, showing a non-fatal error", async () => {
     const { el } = await mountApp({
       parkOrder: vi.fn().mockRejectedValue({ code: "working_order.rejected" }),
@@ -7896,6 +7911,22 @@ describe("till-app", () => {
     // the recovery refresh runs even though the discard rejected, so the stale row drops off
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
     expect(c.heldOrders).toEqual([]);
+  });
+
+  it.each([
+    [{ code: "storage.disk_full", status: 507 }, () => codeMessage("storage.disk_full")],
+    [{ code: "server.internal", status: 500 }, () => t("held.stale")],
+  ])("discard-order refused %o shows that refusal's sentence", async (refused, shown) => {
+    const { el } = await mountApp({
+      abandonWorkingOrder: vi.fn().mockRejectedValue(refused),
+      listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+    });
+    const c = await toCounter(el);
+
+    emit(c, "discard-order", { id: "wo-1" });
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(shown());
   });
 
   it("discard-order: refused for an order still holding money, says to give it back, and refreshes", async () => {
@@ -11490,6 +11521,26 @@ describe("till-app", () => {
       expect(el.shadowRoot!.textContent).not.toContain("working_order.rejected");
     });
 
+    it.each([
+      [{ code: "storage.disk_full", status: 507 }, () => codeMessage("storage.disk_full")],
+      [{ code: "server.internal", status: 500 }, () => t("place.error")],
+    ])("place-order refused %o shows that refusal's sentence", async (refused, shown) => {
+      const { el } = await mountApp({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        placeOrder: vi.fn().mockRejectedValue(refused),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(currentApi.placeOrder).toHaveBeenCalledOnce();
+      expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(shown());
+    });
+
     it("place: a PERMANENT fiscal refusal surfaces place.refused, which says nothing about money", async () => {
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
@@ -12836,6 +12887,23 @@ describe("till-app", () => {
       // once on entering the counter, once after the advance.
       expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
       expect(stationQueueWidget(el)).toBeNull();
+    });
+
+    it.each([
+      [{ code: "storage.disk_full", status: 507 }, () => codeMessage("storage.disk_full")],
+      [{ code: "server.internal", status: 500 }, () => t("station.advance_error")],
+    ])("advance-ticket-item refused %o shows that refusal's sentence", async (refused, shown) => {
+      const { el } = await mountApp({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        advanceTicketItem: vi.fn().mockRejectedValue(refused),
+      });
+      const c = await toCounter(el);
+
+      emit(c, "advance-ticket-item", { itemId: "ti-1", stationId: "st-1", to: "preparing" });
+      await flush(el);
+
+      expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(shown());
     });
 
     it("a failed advance-ticket-item still refreshes the queue and shows a non-fatal error", async () => {
