@@ -1284,9 +1284,9 @@ export type ReaderBillPaymentDeps = BillPaymentDeps & {
   /** The chosen reader's `card_readers.id`, passed to `collect`; absent for the simulator. */
   readerId?: string;
   /**
-   * Set by the till's routes: a full disk after a card was charged answers
-   * `sale.charged_not_recorded`, so staff are told not to charge again. Unset, it answers
-   * `storage.disk_full`.
+   * Set by the till's routes: a full disk after `collect` returned a charge, or on SumUp's or
+   * Stripe's own save of one inside it, answers `sale.charged_not_recorded`, so staff are told not
+   * to charge again. Unset, it answers `storage.disk_full`.
    */
   sayCardChargedOnFullDisk?: boolean;
 };
