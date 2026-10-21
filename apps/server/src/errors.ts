@@ -55,6 +55,16 @@ declare module "@waitron/shared" {
       clocksChangeOn?: string;
       saveFrom?: string | null;
     };
+    "venue.time_zone_repair_not_needed": Record<string, never>;
+    "venue.time_zone_repaired": {
+      nodeId: string;
+      locationId: string;
+      timeZone: string;
+      previousRevision: number;
+      clockRevision: number;
+      oldCategory: "missing" | "invalid";
+      oldFingerprint: string;
+    };
     "venue.business_day_changed": Record<string, never>;
     "venue.business_day_locked": { reason: string };
     "venue.detail_invalid": { field: string; reason: string };

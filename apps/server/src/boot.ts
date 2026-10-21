@@ -133,6 +133,7 @@ import { createOriginAllowlist } from "./allowed-origins.js";
 import { corsForVenue } from "./cors.js";
 import { mountDiagnosticsApi } from "./diagnostics-api.js";
 import { mountAlertsApi } from "./alerts-api.js";
+import { ZONE_REPAIR_ALERT_CLAIM } from "./venue-zone-repair.js";
 import { createAlertRegistry } from "./alerts.js";
 import {
   appendOnlyRestoredAlertSource,
@@ -2597,7 +2598,7 @@ async function bootServer(
     );
   }
   const alertRegistry = createAlertRegistry({
-    claims: ALL_ALERT_CLAIMS,
+    claims: [...ALL_ALERT_CLAIMS, ZONE_REPAIR_ALERT_CLAIM],
     sources: [...enabledAlertSources(setsToMigrate), ...serverAlertSources],
   });
   mountAlertsApi(app, { db, registry: alertRegistry, now }, log);
