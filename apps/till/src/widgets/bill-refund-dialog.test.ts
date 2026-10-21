@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./bill-refund-dialog.js";
 import type { TillBillRefundDialog } from "./bill-refund-dialog.js";
@@ -10,6 +11,7 @@ import type { RefundAsk } from "../state/bill-payment.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("en"));
+afterEach(() => setLocale("en"));
 
 function paymentOf(over: Partial<BillPaymentView> = {}): BillPaymentView {
   return {
@@ -53,7 +55,12 @@ const text = (node: Element | null) => (node?.textContent ?? "").replace(/\s+/g,
 const money = (amount: string) => formatMoney(amount, currentLocale());
 const field = (el: TillBillRefundDialog, name: string) =>
   root(el).querySelector<
-    HTMLElement & { error: string; required: boolean; updateComplete: Promise<unknown> }
+    HTMLElement & {
+      label: string;
+      error: string;
+      required: boolean;
+      updateComplete: Promise<unknown>;
+    }
   >(`wt-input[name="${name}"]`);
 const actions = (el: TillBillRefundDialog) =>
   root(el).querySelector<HTMLElement & { error: string }>("wt-form-actions")!;
@@ -82,6 +89,38 @@ function capture<T>(el: TillBillRefundDialog, type: string): T[] {
   el.addEventListener(type, (event) => seen.push((event as CustomEvent<T>).detail));
   return seen;
 }
+
+describe.each(["en", "es"] as const)("A803 refund wording (%s)", (locale) => {
+  it("names the refund and its amount on the rendered controls", async () => {
+    setLocale(locale);
+    const el = await mount();
+    const dialog = root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!;
+    expect(dialog.heading).toBe(locale === "en" ? "Refund a payment" : es["bill_refund.title"]);
+    expect(text(button(el, "[data-refund-continue]"))).toBe(
+      (locale === "en" ? "Refund {amount}" : es["bill_refund.continue"])
+        .replace("{amount}", money("50.00"))
+        .replace(/\s+/g, " "),
+    );
+    await pick(el, "part");
+    expect(field(el, "amount")!.label).toBe(
+      locale === "en" ? "Amount to refund" : es["bill_refund.amount"],
+    );
+    expect(text(root(el).querySelector("legend"))).toBe(
+      locale === "en" ? "How much to refund" : es["bill_refund.how_much"],
+    );
+  });
+
+  it("names the separate terminal's completed refund", async () => {
+    setLocale(locale);
+    const el = await mount({
+      payment: paymentOf({ method: "card", entry: "manual" }),
+      terminal: true,
+    });
+    expect(text(button(el, "[data-refund-terminal-done]"))).toBe(
+      locale === "en" ? "Refunded on the terminal" : es["bill_refund.terminal_done"],
+    );
+  });
+});
 
 describe("till-bill-refund-dialog: how much and why", () => {
   it("gives back the whole payment, its tip with it, with the reason typed", async () => {

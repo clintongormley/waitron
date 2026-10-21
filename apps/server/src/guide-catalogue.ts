@@ -10,6 +10,7 @@ export const GUIDE_PAGES = [
   "kitchen-service",
   "appearance",
   "aeat-certificate",
+  "table-service",
 ] as const;
 
 export function guideRoot(): string {

@@ -1,5 +1,7 @@
 # A803 Bills and Tables Implementation Plan
 
+> **2026-10-22 implementation:** independent slice 5 calls payment returns Refund in English, retaining the approved Spanish wording. The table-service guide now covers this refund flow in both languages. Other slices and their gates below remain open.
+
 > **For agentic workers:** Use `superpowers:executing-plans` for inline execution, task by task. Do not automatically dispatch per-task agents. Read the approved spec and this amendment-aware plan together. Steps use checkboxes. This document authorizes no implementation during its plan-only firing.
 
 **Goal:** Give every dish a permanent portion identity, every bill a clear identity, and table moves one consistent picker, without changing issued invoices.

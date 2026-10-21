@@ -46,7 +46,8 @@ export const en = {
   "cancel_item.yes": "Yes",
   "cancel_item.no": "No",
   "cancel_item.started": "Already being prepared or served",
-  "cancel_item.refund_at_till": "Give the money back at a till: Refund a payment on the receipt.",
+  "cancel_item.refund_at_till":
+    "Refund the payment at a till: choose Refund a payment on the receipt.",
   "cancel_item.paid": "This bill is paid",
   "cancel_item.choice": "What happens to the charge?",
   "cancel_item.still_charge": "Cancel, still charge",
@@ -1359,7 +1360,7 @@ export const en = {
   "held.options_changed": "An item's choices have changed — open the line and choose again",
   "held.stale": "That order is no longer available",
   "held.discard_holds_money":
-    "This order still holds money from a payment. Give it back before discarding the order",
+    "This order still holds money from a payment. Refund it before discarding the order",
   "held.reread_failed":
     "The order could not be read again. Park it, then retrieve it, to check it.",
   "held.changed_elsewhere":
@@ -1414,7 +1415,7 @@ export const en = {
   "table.still_to_pay": "Still to pay at this table",
   "table.finish": "Finish table",
   "table.finish_bill_holds_money":
-    "A bill on this table owes nothing but still holds money. Give it back before finishing the table",
+    "A bill on this table owes nothing but still holds money. Refund it before finishing the table",
   "table.request_bill": "Mark bill requested for {party}",
   "table.cancel_bill_request": "Cancel the bill request for {party}",
   "table.action_move_bill": "Move this bill",
@@ -1429,10 +1430,10 @@ export const en = {
   "bill.pay_with_bill_payments":
     "Part of this bill is already paid: take the rest as a bill payment",
   "bill.received_exceeds_total_excess":
-    "Moving these items would leave this bill owing {amount} less than has already been paid on it. Move fewer items, or give {amount} back first.",
+    "Moving these items would leave this bill owing {amount} less than has already been paid on it. Move fewer items, or refund {amount} first.",
   "bill.received_exceeds_total_line_excess":
-    "This change would leave this bill owing {amount} less than has already been paid on it. Change less, or give {amount} back first.",
-  "bill.refund_excess": "Give back {amount}",
+    "This change would leave this bill owing {amount} less than has already been paid on it. Change less, or refund {amount} first.",
+  "bill.refund_excess": "Refund {amount}",
   "sale.over_simplified_limit":
     "This would take the order over {amount}, the most this till accepts without a full invoice naming the customer, which it cannot issue. Take something off the order.",
   "bill.take_rest": "Take the rest",
@@ -1557,31 +1558,31 @@ export const en = {
   "paid.back": "Back to the table",
   "bill_pay.pending_where":
     "If it does not finish, a manager can clear it on the dashboard's Card payments screen.",
-  "bill_pay.refunded": "Given back: {amount}",
+  "bill_pay.refunded": "Refunded: {amount}",
   "bill_pay.refund_waiting": "Refund of {amount} waiting for the card provider",
   "bill_pay.refund_failed_row": "Refund of {amount} did not go through",
   "bill_pay.refund": "Refund",
   "bill_pay.refund_label": "Refund payment {n}, {amount}",
-  "bill_refund.title": "Give back a payment",
-  "bill_refund.how_much": "How much to give back",
+  "bill_refund.title": "Refund a payment",
+  "bill_refund.how_much": "How much to refund",
   "bill_refund.whole": "The whole payment: {amount}",
   "bill_refund.whole_tip": "The whole payment: {amount}, with its {tip} tip",
   "bill_refund.part": "Part of it",
   "bill_refund.whole_only":
-    "This payment was for particular items, so it is given back whole: {amount}. Those items can then be paid for again.",
-  "bill_refund.amount": "Amount to give back",
+    "This payment was for particular items, so it is refunded in full: {amount}. Those items can then be paid for again.",
+  "bill_refund.amount": "Amount to refund",
   "bill_refund.amount_invalid": "Enter an amount above zero and no more than {amount}",
   "bill_refund.reason": "Reason",
-  "bill_refund.reason_invalid": "Say why this is given back",
+  "bill_refund.reason_invalid": "Say why this is refunded",
   "bill_refund.reason_long": "Keep the reason to 500 characters or fewer",
-  "bill_refund.continue": "Give back {amount}",
+  "bill_refund.continue": "Refund {amount}",
   "bill_refund.approval_next":
     "If you cannot give refunds yourself, a supervisor or manager approves it with their PIN next.",
   "bill_refund.terminal_next":
-    "Next, give it back on the separate card terminal it was keyed on. A supervisor or manager then approves it with their PIN.",
+    "Next, refund it on the separate card terminal it was keyed on. A supervisor or manager then approves it with their PIN.",
   "bill_refund.terminal":
-    "This card was keyed on a separate card terminal, so Waitron cannot give it back itself. Give back {amount} on that terminal first, then confirm it here. A supervisor or manager approves it with their PIN.",
-  "bill_refund.terminal_done": "Given back on the terminal",
+    "This card was keyed on a separate card terminal, so Waitron cannot refund it itself. Refund {amount} on that terminal first, then confirm it here. A supervisor or manager approves it with their PIN.",
+  "bill_refund.terminal_done": "Refunded on the terminal",
   "bill_refund.approvers_failed": "Could not read who can approve this. Try again.",
   "bill_refund.unconfirmed":
     "The refund got no answer, so it may have been made. Check this bill's payments before trying again.",
@@ -1630,13 +1631,12 @@ export const en = {
   "cancel_credit.done": "Credit note {number} issued. The bill is cancelled.",
   "cancel_credit.done_unnumbered": "A credit note was issued and the bill is cancelled.",
   "cancel_credit.done_action": "Done",
-  "bill_refund.done_cash": "Given back: {amount}. Hand it over in cash.",
-  "bill_refund.done_card": "Given back: {amount} to the card.",
+  "bill_refund.done_cash": "Refunded: {amount}. Hand it over in cash.",
+  "bill_refund.done_card": "Refunded: {amount} to the card.",
   "bill_refund.done_terminal": "The refund of {amount} on the card terminal is recorded.",
   "bill_refund.pending":
     "The card refund of {amount} is waiting for the card provider. This bill cannot be changed until it finishes. If it does not finish, a manager can follow it on the dashboard's Card payments screen.",
-  "bill_refund.failed":
-    "The card refund of {amount} did not go through, so nothing was given back.",
+  "bill_refund.failed": "The card refund of {amount} did not go through, so nothing was refunded.",
   // Said after a table action was refused because another device changed the party first.
   "party.changed": "Another device changed table {table}, so it has been reloaded.",
   "party.changed_named": "Another device changed {table}, so it has been reloaded.",
