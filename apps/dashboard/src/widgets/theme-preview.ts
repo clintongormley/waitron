@@ -47,9 +47,12 @@ export class ThemePreview extends LitElement {
         margin-block-end: var(--wt-space-2);
         font-size: var(--wt-font-size-sm);
       }
+      /* The side menu stays beside the body while the body's narrowest content fits, and goes
+         above it otherwise, whatever the language's word lengths; on its own line it takes the
+         width, beside the body the body takes it. */
       .panel {
-        display: grid;
-        grid-template-columns: auto 1fr;
+        display: flex;
+        flex-wrap: wrap;
         gap: var(--wt-space-3);
         padding: var(--wt-space-3);
         background: var(--wt-color-bg);
@@ -59,6 +62,7 @@ export class ThemePreview extends LitElement {
       }
       .nav {
         display: flex;
+        flex: 1 1 auto;
         flex-direction: column;
       }
       .nav-item {
@@ -73,9 +77,9 @@ export class ThemePreview extends LitElement {
       }
       .body {
         display: flex;
+        flex: 1000 1 0;
         flex-direction: column;
         gap: var(--wt-space-3);
-        min-width: 0;
         padding: var(--wt-space-3);
         background: var(--wt-color-surface);
         border-radius: var(--wt-radius-md);
@@ -94,6 +98,7 @@ export class ThemePreview extends LitElement {
         color: var(--wt-color-field-label-focus);
       }
       .field-value {
+        contain: inline-size;
         color: var(--wt-color-field-value);
         overflow: hidden;
         text-overflow: ellipsis;

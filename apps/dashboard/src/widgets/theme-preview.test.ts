@@ -1,8 +1,9 @@
 import { afterEach, expect, it } from "vitest";
-import { commands } from "vitest/browser";
+import { commands, page } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { WAITRON_CHOICES, themeSheet, type ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
+import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./theme-preview.js";
 
@@ -43,6 +44,7 @@ function paintPage(): void {
 
 afterEach(async () => {
   cleanupWidgets();
+  setLocale("en-GB");
   outside?.remove();
   outside = undefined;
   if (venueSheet !== undefined) {
@@ -143,3 +145,52 @@ it("shows the theme's name in the focused field, and a new name keeps the draft'
   expect(field()).toBe("Lemon Café");
   expect(primary(panel(el, "light"))).toBe("#1e5b3a");
 });
+
+/** Every box in a panel, or in a panel's sample body, that ends past that box's inner edge. */
+function overflowing(el: Preview): string[] {
+  return [...el.shadowRoot!.querySelectorAll<HTMLElement>(".panel, .body")].flatMap((box) => {
+    const edge = box.getBoundingClientRect().right - box.clientLeft;
+    return [...box.querySelectorAll("*")]
+      .map((node) => [node, node.getBoundingClientRect().right - edge] as const)
+      .filter(([, past]) => past > 0.5)
+      .map(
+        ([node, past]) =>
+          `${box.closest("figure")!.dataset.mode} .${box.className} .${node.className} ${past.toFixed(1)}px`,
+      );
+  });
+}
+
+for (const locale of ["en-GB", "es-ES"] as const) {
+  it(`each panel's sample fits inside its panel from a phone's width up (${locale})`, async () => {
+    const { innerWidth: width, innerHeight: height } = window;
+    await page.viewport(1280, 900);
+    try {
+      setLocale(locale);
+      const { el, host } = await mountWidget<Preview>("dashboard-theme-preview", {
+        theme: deriveTheme(LUCIA_DARK_FIX),
+        name: "Bar Lucía",
+      });
+      const found: string[] = [];
+      for (let previewWidth = 220; previewWidth <= 900; previewWidth += 8) {
+        host.style.width = `${previewWidth}px`;
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        found.push(...overflowing(el).map((line) => `${previewWidth}px ${line}`));
+      }
+      expect(found).toEqual([]);
+      const besideAt = (previewWidth: number) => {
+        host.style.width = `${previewWidth}px`;
+        const light = panel(el, "light");
+        const nav = light.querySelector(".nav")!.getBoundingClientRect();
+        return nav.right <= light.querySelector(".body")!.getBoundingClientRect().left;
+      };
+      expect([besideAt(220), besideAt(900)]).toEqual([false, true]);
+      el.name = "The Long-Named Neighbourhood Tapas and Vermouth Bar";
+      await el.updateComplete;
+      host.style.width = "900px";
+      expect(overflowing(el)).toEqual([]);
+      expect(besideAt(900)).toBe(true);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+}
