@@ -25,6 +25,7 @@ import { issueOrderInvoice } from "./testing/issue-order.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { parkOrder } from "./working-order.js";
+import type { Logger } from "./logger.js";
 import "./errors.js";
 
 let venue: BillVenue;
@@ -112,6 +113,20 @@ function orderRow(id: string): { status: string; attemptAt: string | null } {
   return row!;
 }
 
+async function placedIssuedOrder(): Promise<string> {
+  const id = randomUUID();
+  const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
+  await parkOrder(deps, venue.cfg, {
+    id,
+    lines: lines(1),
+    zoneId: counter.zoneId,
+    operatorId: venue.operatorId,
+  });
+  await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
+  await placeOrder(deps, venue.cfg, id, venue.operatorId);
+  return id;
+}
+
 async function openOrder(): Promise<string> {
   const id = randomUUID();
   await parkOrder({ db: venue.db }, venue.cfg, { id, lines: lines(1), zoneId: counter.zoneId });
@@ -165,16 +180,7 @@ describe("POST /api/pay while the full-disk stop holds", () => {
   });
 
   it("refuses a placed order whose invoice is filed, before the reader", async () => {
-    const id = randomUUID();
-    const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
-    await parkOrder(deps, venue.cfg, {
-      id,
-      lines: lines(1),
-      zoneId: counter.zoneId,
-      operatorId: venue.operatorId,
-    });
-    await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
-    await placeOrder(deps, venue.cfg, id, venue.operatorId);
+    const id = await placedIssuedOrder();
     const was = orderRow(id);
     expect(was.status).toBe("placed");
     const disk = diskState({ bytes: 0 });
@@ -189,6 +195,38 @@ describe("POST /api/pay while the full-disk stop holds", () => {
     expect(orderRow(id)).toEqual(was);
   });
 
+  it("asks the reader for a placed order whose invoice is filed when nothing is noted", async () => {
+    const id = await placedIssuedOrder();
+    const before = collects();
+
+    const answer = await payAgain(diskState({ bytes: 0 }), id);
+
+    expect(answer.status).toBe(200);
+    expect(answer.json.outcome).toBe("captured");
+    expect(collects()).toBe(before + 1);
+  });
+
+  it("logs the refusal with the order it refused", async () => {
+    const entries: { level: string; event: string; fields: Record<string, unknown> }[] = [];
+    const log: Logger = (level, event, fields) => {
+      entries.push({ level, event, fields: fields ?? {} });
+    };
+    const disk = diskState({ bytes: 0 });
+    disk.noteRefused();
+    const id = randomUUID();
+
+    const answer = await send(venue.appWith({ disk, log }), venue.cookie, "POST", "/api/pay", {
+      id,
+      lines: lines(1),
+      zoneId: counter.zoneId,
+    });
+
+    expect(answer.status).toBe(507);
+    expect(entries.filter((entry) => entry.event === "storage.disk_full_stop_refused")).toEqual([
+      { level: "warn", event: "storage.disk_full_stop_refused", fields: { workingOrderId: id } },
+    ]);
+  });
+
   it("files a card already charged while the stop holds, without asking the reader again", async () => {
     const id = await openOrder();
     await withTransaction(venue.db, (tx) =>
@@ -201,7 +239,7 @@ describe("POST /api/pay while the full-disk stop holds", () => {
         settledAt: new Date(),
       }),
     );
-    const disk = diskState({ bytes: FULL_DISK_BYTES });
+    const disk = diskState({ bytes: 0 });
     disk.noteRefused();
     const before = collects();
 
@@ -209,6 +247,7 @@ describe("POST /api/pay while the full-disk stop holds", () => {
 
     expect(answer.status).toBe(200);
     expect(answer.json.outcome).toBe("captured");
+    expect(disk.since()).not.toBeNull();
     expect(collects()).toBe(before);
     expect(count("sales", "working_order_id", id)).toBe(1);
     expect(registroCount(venue, id)).toBe(1);
@@ -257,6 +296,7 @@ describe("POST /api/pay while the full-disk stop holds", () => {
       await queuedBody();
 
       expect(answer.status).toBe(200);
+      expect(answer.json.outcome).toBe("captured");
       expect(collects()).toBe(before + 1);
     });
   });
@@ -298,6 +338,7 @@ describe("POST /api/pay while the full-disk stop holds", () => {
       const answer = await payAgain(disk, id);
 
       expect(answer.status).toBe(200);
+      expect(answer.json.outcome).toBe("captured");
       expect(collects()).toBe(before + 1);
     });
   });

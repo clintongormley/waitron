@@ -604,7 +604,8 @@ export type IntegratedPayDeps = TillSaleDeps & {
   /** The device profile the route checked the request under, passed to `provider.collect`. */
   deviceProfileId?: string;
   /**
-   * Optional only for suites that never reach the reader-pay path; a live boot always supplies it.
+   * Unset in suites that test no full-disk stop; unset, nothing is refused for a full disk. A live
+   * boot supplies it.
    */
   disk?: DiskFullState;
 };

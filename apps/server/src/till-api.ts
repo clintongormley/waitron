@@ -280,7 +280,8 @@ export interface TillApiDeps {
    */
   pool?: CardProviderPool;
   /**
-   * Optional only for suites that never reach the reader-pay path; a live boot always supplies it.
+   * Unset in suites that test no full-disk stop; unset, nothing is refused for a full disk. A live
+   * boot supplies it.
    */
   disk?: DiskFullState;
   /**
