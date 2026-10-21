@@ -2437,8 +2437,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   refusal on course editing, and check that unselected same-course work stays held. Allergy release
   preserves cross-bill groups while refusing ticks from another group. The obsolete server course
   Fire helpers are removed. Expo server items and course/group sections omit the retired Away
-  fields; legacy stamps leave their remaining ready work unchanged. The kitchen clients, floor
-  en-route projections and their consumers still need retirement before PR A can be published.
+  fields; legacy stamps leave their remaining ready work unchanged. The floor server projection
+  omits en-route; ready/pending line counts still follow Serve and Undo, regardless of old Away
+  stamps. The kitchen clients and floor client/display consumers still need coordinated retirement
+  before PR A can be published.
   Add Requested and pass release,
   remove Away/Done, and finish the station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before
   each slice. The plan carries A797's completed Q42 amendments; its revised pictures/design remain

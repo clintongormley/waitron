@@ -8090,8 +8090,6 @@ export interface TableState {
   pendingToServe: number;
   /** Those unserved lines whose ticket item is `ready`. */
   readyToServe: number;
-  /** Those unserved lines the pass has sent away. Such a line counts in `readyToServe` too. */
-  enRoute: number;
   /**
    * The worst age band over those unserved lines that were fired; a counter delivery does not feed
    * it.
@@ -8132,7 +8130,6 @@ export async function listTablesWithState(
     tab_total: string | null;
     pending_to_serve: number;
     ready_to_serve: number;
-    en_route: number;
     // Classified in JS, never in SQL, so server and client share one classifier.
     tab_unserved_lines: string;
     pending_deliveries: number;
@@ -8152,7 +8149,6 @@ export async function listTablesWithState(
       tab.tab_total,
       cast(coalesce(tab.pending_to_serve, 0) as int) as pending_to_serve,
       cast(coalesce(tab.ready_to_serve, 0) as int) as ready_to_serve,
-      cast(coalesce(tab.en_route, 0) as int) as en_route,
       coalesce(tab.unserved_lines, '[]') as tab_unserved_lines,
       cast(coalesce(del.pending, 0) as int) as pending_deliveries
     from dining_tables dt
@@ -8172,7 +8168,6 @@ export async function listTablesWithState(
              -- neither multiplies wol rows (line_count / tab_total stay correct) nor double-counts. An
              -- unfired, made-here or not-yet-ready line has ti.state null or != 'ready' and is excluded by the filter.
              cast(count(*) filter (where ti.state = 'ready' and wol.served_at is null) as int) as ready_to_serve,
-             cast(count(*) filter (where ti.away_at is not null and wol.served_at is null) as int) as en_route,
              -- A count of whole cents read raw, cast to text and converted by rawCentsToDecimal in
              -- the mapping below -- see its doc comment for why it is text and not an integer cast.
              cast(coalesce(sum(wol.line_total) filter (where wo.status = 'open'), 0) as text) as tab_total,
@@ -8256,7 +8251,6 @@ export async function listTablesWithState(
       }),
       pendingToServe: Number(r.pending_to_serve),
       readyToServe: Number(r.ready_to_serve),
-      enRoute: Number(r.en_route),
       timingBand,
       pendingDeliveries,
       today: today.get(r.id)!,

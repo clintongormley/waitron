@@ -2480,8 +2480,10 @@ components no longer hold up ready food, and a group with no remaining kitchen w
 Floor and counter ready/waiting signals use remaining kitchen quantities; fully served or cancelled
 work contributes neither signal, and separately routed extras count remaining parent dishes.
 Expo server items and course/group sections no longer expose Away. Real table and counter reads
-retain their ready work with identical projections after legacy Away/Done stamps. Kitchen clients
-and the floor en-route contract still require coordinated retirement before PR A publication.
+retain their ready work with identical projections after legacy Away/Done stamps. The floor
+server projection omits en-route; Serve and Undo still update ready/pending line counts, and old
+Away stamps leave those counts unchanged. Kitchen clients and floor client/display consumers
+still require coordinated retirement before PR A publication.
 Client/internal-helper retirement, Requested and scoped pass release, station configuration,
 ticket presentation and schema retirement remain. Recheck A756's
 settings and current lane reservations before each working slice. A803's station/pass additions follow it. The plan
