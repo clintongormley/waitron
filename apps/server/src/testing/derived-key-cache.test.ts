@@ -122,6 +122,26 @@ describe("the test-side derived-key cache", () => {
     expect(since(before).derived).toBe(1);
   });
 
+  it("refuses N given as text after the same number succeeded", () => {
+    expect(deriveKey("text-cost-pass", salt, cheap)).toHaveLength(32);
+    expect(() =>
+      deriveKey("text-cost-pass", salt, { ...cheap, N: String(cheap.N) as unknown as number }),
+    ).toThrow(expect.objectContaining({ code: "ERR_INVALID_ARG_TYPE" }));
+  });
+
+  it("derives each passphrase that is not text for real", () => {
+    const first = new DataView(new Uint8Array([1, 2, 3]).buffer);
+    const second = new DataView(new Uint8Array([4, 5, 6]).buffer);
+    const before = derivedKeyStats();
+    const one = deriveKey(first as unknown as string, salt, cheap);
+    const two = deriveKey(second as unknown as string, salt, cheap);
+    expect(since(before).derived).toBe(2);
+    expect(two).toEqual(
+      scryptSync(second, salt, 32, { N: 2 ** 14, r: 8, p: 1, maxmem: cheap.maxmem }),
+    );
+    expect(two).not.toEqual(one);
+  });
+
   it("a call that must throw still throws after a success", () => {
     expect(deriveKey("throw-pass", salt, cheap)).toHaveLength(32);
     expect(() => deriveKey("throw-pass", salt, { ...cheap, maxmem: 1024 })).toThrow();
