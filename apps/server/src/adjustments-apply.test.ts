@@ -452,7 +452,7 @@ describe("the receipt (ruling R13)", () => {
     ["Pan de pueblo", "2.50", undefined, undefined],
   ];
 
-  it("prints the Burger at €12.00 with an Invitación line beneath it, when the bill is paid and when it is printed again", async () => {
+  it("prints the Burger at €12.00 with a Descuento 100% line beneath it, when the bill is paid and when it is printed again", async () => {
     const billId = await compBurgerAndDiscountBottle();
 
     const ticket = await payWorkingOrder(
@@ -480,7 +480,7 @@ describe("the receipt (ruling R13)", () => {
     );
     const burger = printed.findIndex((line) => /^1 {2}Hamburguesa +12,00$/u.test(line));
     expect(burger).toBeGreaterThanOrEqual(0);
-    expect(printed[burger + 1]).toMatch(/^ {2}Invitación +-12,00$/u);
+    expect(printed[burger + 1]).toMatch(/^ {2}Descuento 100% +-12,00$/u);
   });
 
   it("shows the change on a card reader's receipt too", async () => {

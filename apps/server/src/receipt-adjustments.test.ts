@@ -591,13 +591,93 @@ describe("receiptLines", () => {
     const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));
     expect(printed.slice(start, rule)).toEqual([
       at80("1  Hamburguesa", "12,00"),
-      at80("  Invitación", "-12,00"),
+      at80("  Descuento 100%", "-12,00"),
       at80("1  Rioja crianza", "30,00"),
       at80("  Descuento 20%", "-6,00"),
       at80("1  Pan de pueblo", "2,50"),
       at80("Descuento 10%", "-2,65"),
     ]);
     expect(printed).toContain(`TOTAL${" ".repeat(9)}23,85 €`);
+  });
+
+  describe("a full comp", () => {
+    const at80 = (label: string, amount: string) =>
+      label + " ".repeat(42 - label.length - amount.length) + amount;
+
+    /** Pays the bill in cash and returns the result and its printed goods, up to the first rule. */
+    async function payAndPrint(billId: string, amount: string) {
+      const result = await payWorkingOrder(
+        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        venue.cfg,
+        { id: billId, tender: { method: "cash", amount }, lines: [] },
+      );
+      const printed = printedLines(
+        formatReceipt({
+          result,
+          issuer: { venueName: "Ajustes SL", nif: "62000003K" },
+          receipt: {},
+          invoiceLocale: "es-ES",
+          printer: { paperWidth: "80mm", resolution: "180dpi" },
+        }),
+      );
+      const start = printed.findIndex((line) => line.startsWith(`${result.invoiceNumber} `)) + 2;
+      const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));
+      return { result, goods: printed.slice(start, rule) };
+    }
+
+    it("prints an amount that took the Burger's whole price as Descuento 100%", async () => {
+      const billId = await bill([{ name: "Burger" }]);
+      await adjust(billId, {
+        lineId: await lineIdOf(venue, billId, 1),
+        action: "discount_amount",
+        amount: "12.00",
+      });
+
+      const { result, goods } = await payAndPrint(billId, "0.00");
+
+      expect(result.lines[0]!.adjustments).toEqual([{ kind: "comp", amount: "12.00" }]);
+      expect(goods).toEqual([at80("1  Hamburguesa", "12,00"), at80("  Descuento 100%", "-12,00")]);
+    });
+
+    it("prints an amount that took what a 50% left with its amount", async () => {
+      const billId = await bill([{ name: "Burger" }]);
+      const burger = await lineIdOf(venue, billId, 1);
+      await adjust(billId, { lineId: burger, action: "discount_percent", percentBp: 5000 });
+      await adjust(billId, { lineId: burger, action: "discount_amount", amount: "6.00" });
+
+      const { result, goods } = await payAndPrint(billId, "0.00");
+
+      expect(result.lines[0]!.adjustments).toEqual([
+        { kind: "discount", percentBp: 5000, amount: "6.00" },
+        { kind: "discount", amount: "6.00" },
+      ]);
+      expect(goods).toEqual([
+        at80("1  Hamburguesa", "12,00"),
+        at80("  Descuento 50%", "-6,00"),
+        at80("  Descuento", "-6,00"),
+      ]);
+    });
+
+    it("prints a Free comp of one of three Burgers beneath the Burger it carved off", async () => {
+      const billId = await bill([{ name: "Burger", quantity: "3" }]);
+      await adjust(billId, {
+        lineId: await lineIdOf(venue, billId, 1),
+        action: "comp",
+        quantity: "1",
+      });
+
+      const { result, goods } = await payAndPrint(billId, "24.00");
+
+      expect(result.lines.map((line) => [line.quantity, line.adjustments])).toEqual([
+        ["2", undefined],
+        ["1", [{ kind: "comp", amount: "12.00" }]],
+      ]);
+      expect(goods).toEqual([
+        at80("2  Hamburguesa", "24,00"),
+        at80("1  Hamburguesa", "12,00"),
+        at80("  Descuento 100%", "-12,00"),
+      ]);
+    });
   });
 
   it("stores the unit price before a discount on a bill paid at once, and nothing on an untouched line", async () => {

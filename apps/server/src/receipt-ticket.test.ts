@@ -238,22 +238,21 @@ describe("saved F1 operation date", () => {
 it.each(
   [PRINTER_58, PRINTER_80].flatMap((printer) =>
     [
-      ["es-ES", "IVA incluido", "Descuento", "Invitación"],
-      ["ca-ES", "IVA inclòs", "Descompte", "Invitació"],
-      ["gl-ES", "IVE incluído", "Desconto", "Invitación"],
-      ["eu-ES", "BEZa barne", "Deskontua", "Gonbidapena"],
-      ["en-GB", "IVA incluido", "Descuento", "Invitación"],
-    ].map(([locale, included, discount, comp]) => ({
+      ["es-ES", "IVA incluido", "Descuento"],
+      ["ca-ES", "IVA inclòs", "Descompte"],
+      ["gl-ES", "IVE incluído", "Desconto"],
+      ["eu-ES", "BEZa barne", "Deskontua"],
+      ["en-GB", "IVA incluido", "Descuento"],
+    ].map(([locale, included, discount]) => ({
       printer,
       locale: locale!,
       included: included!,
       discount: discount!,
-      comp: comp!,
     })),
   ),
 )(
   "prints F1 reductions before VAT, at their rate, on $printer.paperWidth in $locale",
-  ({ printer, locale, included, discount, comp }) => {
+  ({ printer, locale, included, discount }) => {
     const invoice = {
       ...FILED_SALE,
       total: "10.30",
@@ -314,7 +313,7 @@ it.each(
     expect(full).toContain(`1 Plato ${figure("9.92")} ${figure("9.92")} 21%`);
     expect(full).toContain(`1 Extra ${figure("1.00")} ${figure("1.00")} 10%`);
     expect(full).toContain(`${discount} -${figure("1.41")} 21%`);
-    expect(full).toContain(`${comp} -${figure("1.00")} 10%`);
+    expect(full).toContain(`${discount} 100% -${figure("1.00")} 10%`);
     expect(full).toMatch(/10[,.]?0?%/);
     expect(render("F2")).not.toContain(`(${included})`);
   },
@@ -2228,14 +2227,14 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     expect(first).toBeGreaterThanOrEqual(0);
     expect(lines.slice(first, first + 11)).toEqual([
       at80("1  Hamburguesa", "12,00"),
-      at80("  Invitación", "-12,00"),
+      at80("  Descuento 100%", "-12,00"),
       at80("1  Tabla de quesos", "12,00"),
       at80("  Descuento 20%", "-2,40"),
       at80("2  Agua mineral", "4,00"),
       at80("1  Pizza margarita", "9,00"),
       // The comp covers the dish and its extras, so it prints after them.
       at80("  Aceitunas", "1,50"),
-      at80("  Invitación", "-10,50"),
+      at80("  Descuento 100%", "-10,50"),
       at80("3  Croquetas", "9,99"),
       at80("  Descuento", "-0,99"),
       rule(PRINTER_80),
@@ -2273,7 +2272,7 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
   });
 
   it.each([PRINTER_80, { paperWidth: "80mm", resolution: "203dpi" } as const])(
-    "prints the comp's label as Invitación ($resolution)",
+    "prints a full comp as Descuento 100% ($resolution)",
     (printer) => {
       const lines = printedLines(
         formatReceipt({
@@ -2284,7 +2283,7 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
           printer,
         }),
       );
-      expect(lines.filter((line) => line.startsWith("  Invitación "))).toHaveLength(2);
+      expect(lines.filter((line) => line.startsWith("  Descuento 100% "))).toHaveLength(2);
     },
   );
 
@@ -2316,7 +2315,7 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     expect(lines.slice(first, first + 3)).toEqual([
       "1  Tostada con tomate y jamón",
       `   ibérico de bellota${" ".repeat(4)}12,50`,
-      `  Invitación${" ".repeat(12)}-12,50`,
+      `  Descuento 100%${" ".repeat(8)}-12,50`,
     ]);
   });
 
@@ -2355,6 +2354,47 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     expect(lines.filter((line) => line.endsWith("-123,45"))).toHaveLength(1);
     expect(lines.filter((line) => line.endsWith("-1000,00"))).toHaveLength(1);
   });
+
+  it("prints a full comp on the whole bill as Descuento 100% at the foot", () => {
+    const lines = printed80({
+      ...BILL_DISCOUNT,
+      total: "0.00",
+      vatBreakdown: [{ rate: "10", base: "0.00", tax: "0.00" }],
+      lines: BILL_DISCOUNT.lines.map((line) => ({ ...line, gross: "0.00" })),
+      billAdjustments: [{ kind: "comp", amount: "6.50" }],
+    });
+    const first = lines.indexOf(at80("2  Agua mineral", "4,00"));
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(lines.slice(first, first + 4)).toEqual([
+      at80("2  Agua mineral", "4,00"),
+      at80("1  Pan de pueblo", "2,50"),
+      at80("Descuento 100%", "-6,50"),
+      rule(PRINTER_80),
+    ]);
+  });
+
+  it.each(
+    (["F1", "F2"] as const).flatMap((invoiceType) =>
+      ["es-ES", "ca-ES", "gl-ES", "eu-ES"].map((locale) => ({ invoiceType, locale })),
+    ),
+  )(
+    "keeps a full comp's line within 58 mm in $locale ($invoiceType)",
+    ({ invoiceType, locale }) => {
+      const lines = printedLines(
+        formatReceipt({
+          result: { ...ADJUSTED, invoiceType },
+          issuer: ISSUER,
+          receipt: {},
+          invoiceLocale: locale,
+          printer: PRINTER_58,
+        }),
+      );
+      for (const line of lines) {
+        expect(line.length, line).toBeLessThanOrEqual(columnsFor(PRINTER_58.paperWidth));
+      }
+      if (locale === "eu-ES") expect(lines.join("\n")).toContain("Deskontua 100%");
+    },
+  );
 });
 
 describe("the receipt's fixed words follow its language", () => {
@@ -2464,7 +2504,7 @@ describe("the receipt's fixed words follow its language", () => {
         customer: "Client",
         header: "Uts. Concepte Preu Import",
         registeredAddress: "Domicili fiscal: Calle Fiscal 27, Madrid",
-        comp: "Invitació -12,00",
+        comp: "Descompte 100% -12,00",
         discount: "Descompte 12,5% -1,50",
         base: "Base imposable 21% 10,00 €",
         vat: "IVA 21% 2,10 €",
@@ -2500,7 +2540,7 @@ describe("the receipt's fixed words follow its language", () => {
         customer: "Cliente",
         header: "Uds. Concepto Prezo Importe",
         registeredAddress: "Domicilio fiscal: Calle Fiscal 27, Madrid",
-        comp: "Invitación -12,00",
+        comp: "Desconto 100% -12,00",
         discount: "Desconto 12,5% -1,50",
         base: "Base impoñible 21% 10,00 €",
         vat: "IVE 21% 2,10 €",
@@ -2536,7 +2576,7 @@ describe("the receipt's fixed words follow its language", () => {
         customer: "Bezeroa",
         header: "Kop. Kontzeptua Prezioa Zenbatekoa",
         registeredAddress: "Helbide fiskala: Calle Fiscal 27, Madrid",
-        comp: "Gonbidapena -12,00",
+        comp: "Deskontua 100% -12,00",
         discount: "Deskontua 12,5% -1,50",
         base: "Zerga-oinarria 21% 10,00 €",
         vat: "BEZ 21% 2,10 €",
@@ -2604,6 +2644,28 @@ describe("the receipt's fixed words follow its language", () => {
         expect(ticket.join("\n"), `${name}: ${spanish}`).not.toContain(spanish);
       }
     }
+  });
+
+  it("keeps a full invoice's Descuento 100% row within 58 mm in Basque", () => {
+    const lines = printedLines(
+      formatReceipt({
+        result: {
+          ...FULL_SALE,
+          lines: [
+            { ...FULL_SALE.lines[0]!, listUnitPriceGross: "12.00" },
+            ...FULL_SALE.lines.slice(1),
+          ],
+        },
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "eu-ES",
+        printer: PRINTER_58,
+      }),
+    );
+    for (const line of lines) {
+      expect(line.length, line).toBeLessThanOrEqual(columnsFor(PRINTER_58.paperWidth));
+    }
+    expect(lines.some((line) => line.includes("Deskontua 100%"))).toBe(true);
   });
 
   it("prints the Veri*Factu legend and the QR caption identically in every language", () => {

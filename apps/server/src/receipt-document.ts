@@ -97,14 +97,14 @@ function adjustmentLabel(
   locale: string,
   label: ReceiptLabels,
 ): string {
-  if (adjustment.kind === "comp") return label.comp;
-  if (adjustment.percentBp === undefined) return label.discount;
+  const percentBp = adjustment.kind === "comp" ? 10000 : adjustment.percentBp;
+  if (percentBp === undefined) return label.discount;
   let formatter = percentFormatters.get(locale);
   if (formatter === undefined) {
     formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
     percentFormatters.set(locale, formatter);
   }
-  return `${label.discount} ${formatter.format(adjustment.percentBp / 100)}%`;
+  return `${label.discount} ${formatter.format(percentBp / 100)}%`;
 }
 
 // Accents are not folded: a near-match prints twice rather than dropping the filed address.
@@ -289,11 +289,12 @@ export function buildReceiptDocument({
   });
   const discountRow = (discount: GroupDiscount, indent: number): ReceiptTableRow => ({
     units: "",
-    item: discount.comp
-      ? label.comp
-      : discount.named !== null
+    item:
+      discount.named !== null
         ? adjustmentLabel(discount.named, locale, label)
-        : label.discount,
+        : discount.comp
+          ? adjustmentLabel({ kind: "comp", amount: "0" }, locale, label)
+          : label.discount,
     ...(indent > 0 ? { itemIndent: indent } : {}),
     price: "",
     amount: `-${formatAmount(discount.amount, locale)}`,
