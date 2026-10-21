@@ -2183,7 +2183,8 @@ v26.7.0), a connection-scoped pragma — which a read-only connection does not r
 ## A refused statement does NOT abort the transaction here, and all a savepoint still buys is confinement of a losing attempt's own writes
 
 **This is the sentence in the file most worth getting right: a refusal leaves the transaction
-usable.** A full disk is the exception: see
+usable.** A full disk sometimes ends the whole transaction, as `RAISE(ROLLBACK)`,
+`INSERT OR ROLLBACK` and `ON CONFLICT ROLLBACK` always do: see
 [A full disk sometimes ends the whole transaction](#a-full-disk-sometimes-ends-the-whole-transaction).
 Measured 2026-09-22 on `node:sqlite`, Node v26.7.0, inside one `begin immediate`: a
 duplicate primary key (errcode 1555), a null in a `not null` column (1299) and a trigger's
@@ -2227,7 +2228,8 @@ copy — as a habit whose receipt has expired, not as a rule with one.
 
 ### A full disk sometimes ends the whole transaction
 
-The exception to the measurement above. Measured 2026-10-21 on `node:sqlite`, Node v26.11.1,
+Exceptions to the measurement above: a full disk sometimes ends the whole transaction, as
+`RAISE(ROLLBACK)`, `INSERT OR ROLLBACK` and `ON CONFLICT ROLLBACK` always do (E13, E5). Measured 2026-10-21 on `node:sqlite`, Node v26.11.1,
 macOS, for A798-B slice 1. The probe scripts were kept outside the repository; the plan lists them
 and how each ran
 ([plan, "Measured for this plan"](../superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md#measured-for-this-plan)).
