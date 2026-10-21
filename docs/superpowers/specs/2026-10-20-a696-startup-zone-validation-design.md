@@ -1,5 +1,13 @@
 # A696: validate the saved venue zone before admitting trading
 
+> **Owner approval and planning update, 2026-10-21:** the owner approved the
+> [startup design](2026-10-20-a696-startup-zone-validation-design.md), including the minimal
+> A166 country-zone list and creation/import checks first, and authorised its plan and build
+> (lane E questions, “OWNER ANSWER — A696”, approximately 02:25). Follow the
+> [implementation plan](../plans/2026-10-21-a696-startup-zone-validation.md). Earlier approval
+> statements below record their dates; the product remains unbuilt. The production fiscal PR
+> must finish green and wait for the owner to land it.
+
 **Status, 2026-10-20: requirements-reviewed redesign, unbuilt.** The owner approved the saved-zone
 behavior and the startup redesign direction, not this full design, its implementation plan or
 the separate FULL fiscal build. The fresh-context requirements review returned “nothing important

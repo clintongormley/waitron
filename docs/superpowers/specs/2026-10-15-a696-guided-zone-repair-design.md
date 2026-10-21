@@ -1,5 +1,13 @@
 # A696: guided repair of an unusable saved time zone
 
+> **Owner approval and planning update, 2026-10-21:** the owner approved the
+> [startup design](2026-10-20-a696-startup-zone-validation-design.md), including the minimal
+> A166 country-zone list and creation/import checks first, and authorised its plan and build
+> (lane E questions, “OWNER ANSWER — A696”, approximately 02:25). Follow the
+> [implementation plan](../plans/2026-10-21-a696-startup-zone-validation.md). Earlier approval
+> statements below record their dates; the product remains unbuilt. The production fiscal PR
+> must finish green and wait for the owner to land it.
+
 > **Historical proposal, superseded 2026-10-20:** the owner's 2026-10-15 ~22:25 direction did
 > not approve this mid-payment repair design. The [startup redesign](2026-10-20-a696-startup-zone-validation-design.md)
 > replaces its post-capture state, resume action and reporting consequence with startup validation,
