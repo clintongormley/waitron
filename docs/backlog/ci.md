@@ -641,3 +641,27 @@ with file parallelism disabled. Profile the heavy files and the sequential brows
 before changing scheduling. Retain the full package coverage checks and existing fiscal
 assertions. The A850 driver recorded this as separate performance work rather than
 changing concurrency or guards without that measurement.
+
+
+## Job metadata outlasted the CI check's ten-minute wait
+
+The required CI cross-check can fail while a job's steps all show success. On 21 October
+2026, A850 run [39618481608](https://github.com/clintongormley/waitron/actions/runs/39618481608)
+polled the attempt's jobs API 21 times, from 14:52:53 to 15:03:36 UTC. Every poll reported
+`not completed: test-server-merge, test-dashboard (1)`, then the cross-check exited 1.
+The dashboard's final step completed at 14:42:48 UTC; the server merge's at 14:52:39 UTC.
+Both job and check responses still said `in_progress` at the later read-back. Their successful
+final steps do not supply the missing required CI result.
+
+You can read the retained cross-check log and exact attempt response with:
+
+```sh
+gh api --allow-escape-sequences repos/clintongormley/waitron/actions/jobs/119293063691/logs
+gh api 'repos/clintongormley/waitron/actions/runs/39618481608/attempts/1/jobs?per_page=100'
+```
+
+The earlier A674 change, `d7e8654c4` (#1792), allows twenty 30-second waits between
+21 reads; API calls add to that duration. This run exceeds that allowance. Its cause
+is unverified. Keep the gate intact, inspect the job and check states again after they
+settle, and decide how to recover the failed cross-check from that evidence. An unchanged
+rerun does not establish a repair. No test or workflow guard changed for this finding.

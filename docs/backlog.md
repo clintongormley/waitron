@@ -5971,6 +5971,11 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   `apps/server/test-durations.json` has gone stale. Left open by A938.
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
+- **Job metadata can outlast the CI cross-check's wait.** A850 run 39618481608
+  exhausted all 21 reads after two jobs' final steps succeeded but their API statuses stayed
+  in progress. Investigate the job/check states and recovery without relaxing the required gate.
+  [Receipt](backlog/ci.md#job-metadata-outlasted-the-ci-checks-ten-minute-wait)
+
 - **Fiscal-verifactu's coverage job exceeds the four-minute target.** A850's
   [run 39595996508](https://github.com/clintongormley/waitron/actions/runs/39595996508)
   took 385 s, including 322 s running tests; two recent main jobs took 316 and 350 s.
