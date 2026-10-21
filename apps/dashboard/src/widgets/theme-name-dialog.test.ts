@@ -7,6 +7,7 @@ import {
   mountWidget,
 } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
+import { es } from "../i18n/strings.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { ThemeNameDialog, ThemeNameRequest } from "./theme-name-dialog.js";
 import "./theme-name-dialog.js";
@@ -97,11 +98,11 @@ it("Rename opens with the current name, Save quiet until it changes, and no swit
   expect(save(dialog).disabled).toBe(true);
   await press(el, dialog);
   expect(submit).not.toHaveBeenCalled();
-  await type(el, dialog, "Navidad");
+  await type(el, dialog, "Holiday");
   expect(save(dialog).variant).toBe("primary");
   expect(save(dialog).disabled).toBe(false);
   await press(el, dialog);
-  expect(submit).toHaveBeenCalledWith({ name: "Navidad", inUse: false });
+  expect(submit).toHaveBeenCalledWith({ name: "Holiday", inUse: false });
 });
 
 it("the first save opens empty, Save disabled until a name is typed", async () => {
@@ -221,7 +222,7 @@ it("a double press saves once", async () => {
 
 it("dismiss closes without a request", async () => {
   const { el, dialog, submit } = await open({ kind: "rename", name: "Christmas" });
-  await type(el, dialog, "Navidad");
+  await type(el, dialog, "Holiday");
   const closed = dialogClosed(dialog);
   el.dismiss();
   await el.updateComplete;
@@ -271,14 +272,42 @@ for (const outcome of ["resolves", "rejects"] as const) {
   });
 }
 
+it("a late success from an earlier opening leaves a reopened dialog open", async () => {
+  let settle!: () => void;
+  const first = vi.fn<Submit>(
+    () =>
+      new Promise<void>((resolve) => {
+        settle = resolve;
+      }),
+  );
+  const { el, dialog } = await open({ kind: "copy", name: "Christmas" }, first);
+  save(dialog).click();
+  await el.updateComplete;
+  expect(first).toHaveBeenCalledTimes(1);
+  const closed = dialogClosed(dialog);
+  el.dismiss();
+  await el.updateComplete;
+  await closed;
+  el.show({ kind: "rename", name: "Summer", inUse: false, warningLines: [], submit: vi.fn() });
+  await el.updateComplete;
+  await expect.poll(() => dialog.open).toBe(true);
+  await type(el, dialog, "Holiday");
+  settle();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await el.updateComplete;
+  expect(dialog.open).toBe(true);
+  expect(input(dialog).value).toBe("Holiday");
+  expect(save(dialog).disabled).toBe(false);
+});
+
 it("Spanish", async () => {
   setLocale("es-ES");
   const { el, dialog } = await open({ kind: "copy", name: "Christmas" });
-  expect(dialog.heading).toBe("Pon nombre a este tema");
-  expect(input(dialog).label).toBe("Nombre");
-  expect(toggle(dialog)!.label).toBe("Usarlo ya en todas las pantallas");
+  expect(dialog.heading).toBe(es["appearance.name_heading"]);
+  expect(input(dialog).label).toBe(es["appearance.name_label"]);
+  expect(toggle(dialog)!.label).toBe(es["appearance.name_use_now"]);
   expect(dialog.querySelector("[data-test=name-back]")!.textContent!.trim()).toBe(t("action.back"));
   await type(el, dialog, "Waitron");
   await press(el, dialog);
-  expect(input(dialog).error).toBe("«Waitron» es el nombre del tema integrado. Elige otro.");
+  expect(input(dialog).error).toBe(es["appearance.name_reserved"]);
 });
