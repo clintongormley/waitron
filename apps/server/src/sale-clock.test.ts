@@ -74,7 +74,7 @@ function cashSale(iso: string, workingOrderId: string) {
   });
 }
 
-it("refuses a cash sale under a clock in 2001 by name, before the invoice number", async () => {
+it("refuses a cash sale under a clock in 2001 by name, and records nothing", async () => {
   const id = randomUUID();
   const before = ledger();
 
@@ -89,6 +89,8 @@ it("refuses a cash sale under a clock in 2001 by name, before the invoice number
   expect(venue.db.all(sql`select id from working_orders where id = ${id}`)).toEqual([]);
 });
 
+// No case in this file records a sale dated after this one: a later-dated record would trip the
+// clock-behind stop (A798-B slice 8) rather than test the first issue date.
 it("records the same sale at 00:00 local on 28-10-2024", async () => {
   const before = ledger();
 
