@@ -151,7 +151,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md) drafts the text
   from AEAT's worked example, makes `pnpm release` write and freeze each version's copy, adds
   About Waitron to the dashboard, the till's More menu and an ⓘ corner, serves it at
-  `/legal/declaracion-responsable` before setup, and attaches it to each GitHub Release. It found
+  `/legal/declaration` before setup, and attaches it to each GitHub Release. It found
   two defects in what every record tells AEAT, fixed first in a fiscal slice the owner lands:
   `Version` is always `0.0.0`, and the `SistemaInformatico` producer fields carry the taxpayer's
   name and NIF (`packages/fiscal-verifactu/src/backend.ts:641-653`). Four questions in §11. No

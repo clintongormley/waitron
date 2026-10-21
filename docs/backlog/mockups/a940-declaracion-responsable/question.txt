@@ -7,26 +7,31 @@ software on every till and the dashboard, and outside it before anyone installs.
 today. The design (docs/superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md) drafts
 the text, makes one per release, and adds "About Waitron" to every terminal (pictures 1-4).
 
-While researching it, two things turned up in what every invoice record already tells AEAT: the
-version is always "0.0.0", and the "software producer" fields carry the restaurant's name and tax
-number instead of the producer's. Both get fixed before the first declaration, as a fiscal pull
-request you land yourself. Nothing has been filed in production, so no wrong record exists at AEAT.
+Found while researching it, fixed first in a fiscal pull request you land yourself: every invoice
+record tells AEAT the software version is "0.0.0", and puts the restaurant's name and tax number in
+the fields AEAT reserves for the software's producer. As far as the repository shows, nothing has
+been filed with AEAT for real yet, so no wrong record exists there.
+
+FYI, no answer needed: the @waitron/verifactu library, published on its own, gets its own
+declaration per library release, as the repository's July analysis of AEAT's rules says.
 
 ----------------------------------------------------------------------------------------------------
 Question 1 of 4 — who is the producer on the first declaration?
 
-The declaration must give the producer's name, Spanish tax number (NIF) and a full postal contact
-address. It is shown on every box and published on the public GitHub releases page, and every
-invoice record will carry the same name and tax number.
+The declaration gives the producer's name, Spanish tax number (NIF) and a full postal contact
+address. It is shown on every box and on the public GitHub releases page. The same name and tax
+number also go into every invoice record AEAT receives, in the "producer" fields.
 
-Example: the deli goes live on version 1.0.0. Its declaration says, in item h), «Nombre y
-apellidos de la persona productora: <your name>», item i) your NIF, item j) the address you choose.
-When a Waitron company exists, the next release's declaration names the company instead (every
-release has its own declaration anyway).
+Example: the deli goes live on version 1.0.0. Its declaration says «Nombre y apellidos de la persona
+productora: <your name>», then your NIF, then the address you choose, and every record the deli
+files carries your name and NIF as the software's producer. In 2027 a Waitron company exists;
+release 1.4.0 names it, and from that release every new record carries the company's NIF instead —
+part-way through the deli's running chain of records. Nothing found says AEAT minds that, but
+nothing found says it doesn't; the asesor should confirm.
 
 - A (recommended) — you personally, now: your name, your NIF, and a postal address you are content
   to publish (it need not be your home, but it must reach you). Reply with the three facts, or say
-  you will put them in yourself.
+  you will put them in yourself; the switch to the company goes to the asesor.
 - B — form the company first (compliance plan Step 6) and wait to release until it exists.
 - Stop here — I'll write.
 
@@ -35,14 +40,16 @@ Question 2 of 4 — the two yes/no answers
 
 The declaration must say (e) whether Waitron can only work as Veri*Factu, and (f) whether one
 installation can keep the invoicing of several taxpayers. Each invoice record carries the same two
-answers, and they must agree.
+answers.
 
-Example: a box holds exactly one company (the deli). It can only file the Veri*Factu way. So
-(e) = Yes and (f) = No. Today the records say (e) Yes, (f) Yes — the (f) Yes was a placeholder
-marked "unverified" in the code.
+Example: a box holds exactly one company (the deli), and a Spanish box can only file the
+Veri*Factu way. So (e) = Yes and (f) = No. Today the records say (e) Yes and (f) Yes — the (f) Yes
+was a placeholder the code itself marks "unverified". One wrinkle for (e): the same build also has
+a no-filing mode, which only a UK venue gets. Whether that counts as "can also work outside
+Veri*Factu" is a legal reading.
 
-- A (recommended) — (e) Yes, (f) No; records change to (f) No in the same fiscal fix; ask the
-  asesor to confirm both in the next batch.
+- A (recommended) — (e) Yes, (f) No; the records change to (f) No in the same fiscal fix; ask the
+  asesor to confirm both, including the UK mode, in the next batch.
 - B — keep (f) Yes, in case one box ever serves two companies (a future version could say Yes
   when it can actually do that).
 - Stop here — I'll write.
@@ -50,11 +57,31 @@ marked "unverified" in the code.
 ----------------------------------------------------------------------------------------------------
 Question 3 of 4 — the wording
 
-The full Spanish text is in the design, section 4, with an English summary under it. Its headings
-are the law's own words (they must be). The parts you choose: the description in item d) (what
-Waitron is, its parts, its main functions), "Waitron" rather than "Waitron POS" as the name, no
-hardware listed (the server is the venue's own machine), and the annex (info@waitron.io and the
-GitHub releases page as the archive of every version's declaration).
+The headings are AEAT's own worked example, word for word. The parts that are ours:
+
+(a) name: «Waitron» (today the records say "Waitron POS"; they change to match)
+
+(d) what it is — «Waitron es un software de punto de venta para restaurantes y bares. Se instala
+en un equipo servidor del propio usuario, situado en su establecimiento, y los terminales del
+establecimiento se conectan a él por la red local.» Then its parts: the server (makes, chains,
+keeps and sends the invoice records), the @waitron/verifactu library with its version, the till,
+handheld, kitchen-screen and dashboard apps («Los terminales no generan registros de
+facturación»), the print agent, and the outside parts we take responsibility for (Node.js with
+SQLite, Litestream, Linux with Docker). No hardware: the server is the venue's own machine.
+«Cada instalación lleva la facturación de un único obligado tributario.»
+
+(d) main functions, checked at each release against what the software can really do. On main
+today: «toma de pedidos por mesa o en barra, cobro en efectivo y con tarjeta, expedición de
+facturas simplificadas, facturas rectificativas, consulta de las facturas emitidas, cierre de caja
+e informes de ventas». Full invoices, substitute invoices and cancellations are left out because
+no screen can make them yet.
+
+(g) no signature of our own: AEAT's example sentence, unchanged.
+
+Annex: info@waitron.io, and the GitHub releases page as the archive of every version's declaration.
+
+Example: a customer reads (d) and asks for a full invoice. Today the till refuses one, so (d) must
+not promise it; the release that turns full invoices on adds them to the list.
 
 - A (recommended) — approve as drafted, with question 1's facts filled in.
 - B — approve with changes (say which).
@@ -67,11 +94,13 @@ Every version needs its own declaration, however small the change. A box that in
 on main would be running a version with no declaration.
 
 Example: Friday you push a fix to main and run `waitron.sh install` on the deli's box, which
-installs main. On Saturday it is selling on a version nobody declared. With releases only, the fix reaches the
-deli when you cut 1.0.1 (one command, which writes and freezes 1.0.1's declaration).
+installs main. On Saturday it is selling on a version nobody declared. With releases only, the
+fix reaches the deli when you cut 1.0.1 (two commands, which write and freeze 1.0.1's declaration
+in a pull request and then tag it).
 
-- A (recommended) — a production box refuses to trade on a build that is not a tagged release
-  (it shows the recovery page: "This box is running a test build. Install a release."), and
-  `waitron.sh install v1.0.1` pulls the published image. Test boxes run anything.
+- A (recommended) — a production box refuses to start on a build that is not a tagged release
+  (the recovery page says "This box is running a test build. Install a release."), and
+  `waitron.sh install v1.0.1` pulls the published image. Test boxes run anything. The check runs
+  only at start, never during service.
 - B — allow any build in production and rely on the habit of releasing.
 - Stop here — I'll write.
