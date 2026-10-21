@@ -117,6 +117,37 @@ describe("bill payments under a clock before 28-10-2024", () => {
     expect(collects()).toBe(before + 1);
   });
 
+  // Part payments: neither records a sale.
+  it("answers a retry of a reader payment taken earlier under a clock in 2001", async () => {
+    const billId = await paella();
+    const body = readerPart();
+    const first = await pay(billId, body);
+    expect(first.status).toBe(200);
+    const before = collects();
+
+    const retry = await pay(billId, body, { clock: clockAt("2001-01-01T11:00:00.000Z") });
+
+    expect(retry.status).toBe(200);
+    expect((retry.json.payment as { id: string }).id).toBe(
+      (first.json.payment as { id: string }).id,
+    );
+    expect(collects()).toBe(before);
+  });
+
+  it("answers a retry of a cash payment taken earlier under a clock in 2001", async () => {
+    const billId = await paella();
+    const body = cashPart();
+    const first = await pay(billId, body);
+    expect(first.status).toBe(200);
+
+    const retry = await pay(billId, body, { clock: clockAt("2001-01-01T11:00:00.000Z") });
+
+    expect(retry.status).toBe(200);
+    expect((retry.json.payment as { id: string }).id).toBe(
+      (first.json.payment as { id: string }).id,
+    );
+  });
+
   it("refuses a reader payment under a clock in 2001, before the reader", async () => {
     const billId = await paella();
     const before = collects();
@@ -232,7 +263,9 @@ describe("a reader bill payment while the full-disk stop holds", () => {
     expect(disk.since()).toBeNull();
   });
 
-  it("refuses before the reader when the free-space read answers full", async () => {
+  // A real state cannot answer full() true with noted() false; this double pins that the read
+  // taken before the first transaction is consulted.
+  it("refuses before the reader on the free-space read taken before the first transaction", async () => {
     const billId = await paella();
     const disk: DiskFullState = {
       noteRefused: () => {},
