@@ -236,7 +236,7 @@ export class AdjustmentReportScreen extends LitElement {
         overflow-x: auto;
       }
       wt-combobox[name="reason"] {
-        width: calc(var(--wt-cell-name-max-width) + var(--wt-space-4));
+        width: fit-content;
         max-width: 100%;
       }
       table {
@@ -977,6 +977,7 @@ export class AdjustmentReportScreen extends LitElement {
       </div>
       <wt-combobox
         name="reason"
+        stable-width
         label=${t("adjustment_report.column.reason")}
         search="auto"
         .options=${this.#reasonOptions(report)}

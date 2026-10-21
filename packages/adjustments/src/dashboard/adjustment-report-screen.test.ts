@@ -439,19 +439,22 @@ describe("the adjustment report", () => {
   });
 
   it.each([1280, 390])(
-    "draws the Reason field at the width the orders screen's filters take, within %i pixels",
+    "draws the Reason field as wide as its longest choice, uncut in Spanish, within %i pixels",
     async (width) => {
       await atWidth(width, async () => {
+        setLocale("es");
         const el = await mount(fakeApi());
         part(el, "show-all")!.click();
         await settle(el);
-        const probe = document.createElement("div");
-        probe.style.width = "calc(var(--wt-cell-name-max-width) + var(--wt-space-4))";
-        el.shadowRoot!.appendChild(probe);
-        const expected = Math.min(probe.getBoundingClientRect().width, width);
         const field = el.shadowRoot!.querySelector('wt-combobox[name="reason"]')!;
-        expect(expected).toBeGreaterThan(0);
-        expect(field.getBoundingClientRect().width).toBeCloseTo(expected, 0);
+        const shown = field.shadowRoot!.querySelector<HTMLElement>(".value")!;
+        expect(shown.textContent!.trim()).toBe(
+          ADJUSTMENTS_STRINGS.es["adjustment_report.entries.all_reasons"],
+        );
+        expect(shown.scrollWidth).toBeLessThanOrEqual(shown.clientWidth);
+        const box = field.getBoundingClientRect();
+        expect(box.right).toBeLessThanOrEqual(width + 0.5);
+        expect(box.width).toBeLessThan(part(el, "entries")!.getBoundingClientRect().width / 2);
       });
     },
   );
