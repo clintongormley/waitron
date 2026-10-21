@@ -76,8 +76,7 @@ const READ_LIMIT_MS = 25_000;
  * or by group for a seated party's bill.
  *
  * At a till it shows the device's pass screen when the device chose one, else All stations; a
- * kitchen display (`deviceMode`) shows its own pass screen, its levers on the device's routes. All
- * stations hides fully-away courses and groups; a pass screen keeps them until its own Done. A pass
+ * kitchen display (`deviceMode`) shows its own pass screen, its levers on the device's routes. A pass
  * monitor (`monitor`) is a kitchen display's read-only All stations, narrowed: no button of any kind.
  *
  * AGE. An expo order's items can span several stations, each with its own thresholds, so each item is
@@ -122,12 +121,6 @@ export class TillExpoScreen extends LitElement {
         gap: var(--wt-space-3);
       }
 
-      .done-notice {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2);
-      }
       .stale {
         margin: 0;
       }
@@ -510,12 +503,9 @@ export class TillExpoScreen extends LitElement {
   #choiceRead = false;
   #choiceRequest = 0;
   #appliedChoice = 0;
-  @state() private doneErrorCode?: string;
-  @state() private doneNotice?: { ids: string[]; dish: string };
   @state() private stale = false;
   #lastGoodAt = new Date();
   #refreshTimer?: ReturnType<typeof setInterval>;
-  #undoTimer?: ReturnType<typeof setTimeout>;
   readonly #refreshReads = new Set<AbortController>();
   #request = 0;
   #appliedRequest = 0;
@@ -554,7 +544,6 @@ export class TillExpoScreen extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     clearInterval(this.#refreshTimer);
-    clearTimeout(this.#undoTimer);
     for (const read of this.#refreshReads) read.abort();
     this.#refreshReads.clear();
   }
@@ -593,7 +582,6 @@ export class TillExpoScreen extends LitElement {
         this.orders = [];
         this.lostLines = [];
         this.nothingLeft = false;
-        this.doneNotice = undefined;
       }
       this.selected = next;
     }
@@ -668,38 +656,6 @@ export class TillExpoScreen extends LitElement {
 
   #isCurrent(boardId: "all" | "pass" | "monitor"): boolean {
     return this.isConnected && this.#boardId() === boardId;
-  }
-
-  /** Offered only on a pass screen's board. */
-  async #done(ids: string[], dish: string): Promise<void> {
-    this.doneErrorCode = undefined;
-    try {
-      await this.api.markDevicePassDone(ids, true);
-      if (!this.#isCurrent("pass")) return;
-      this.doneNotice = { ids, dish };
-      clearTimeout(this.#undoTimer);
-      this.#undoTimer = setTimeout(() => {
-        this.doneNotice = undefined;
-      }, 10_000);
-      await this.#reload();
-    } catch (error) {
-      if (this.#switched(error, false)) return;
-      if (this.#isCurrent("pass"))
-        this.doneErrorCode = (error as { code?: string }).code ?? "server.internal";
-    }
-  }
-
-  async #undo(notice: { ids: string[] }): Promise<void> {
-    this.doneNotice = undefined;
-    clearTimeout(this.#undoTimer);
-    try {
-      await this.api.markDevicePassDone(notice.ids, false);
-      if (this.#isCurrent("pass")) await this.#reload();
-    } catch (error) {
-      if (this.#switched(error, false)) return;
-      if (this.#isCurrent("pass"))
-        this.doneErrorCode = (error as { code?: string }).code ?? "server.internal";
-    }
   }
 
   /** At a till a rejected call (a race, an already-dispatched course) is SWALLOWED; the reload
@@ -875,8 +831,6 @@ export class TillExpoScreen extends LitElement {
         }
         ${this.#shows() ? this.#overdueBadge() : nothing}
         ${!this.#shows() ? nothing : html`<p class="stale" role="status" ?data-stale=${this.stale}>${this.stale ? html`<till-stale-since .since=${this.#lastGoodAt}></till-stale-since>` : nothing}</p>`}
-        ${this.doneNotice && this.#shows() ? this.#undoLine(this.doneNotice) : nothing}
-        ${this.doneErrorCode ? html`<p class="error" role="alert">${codeMessage(this.doneErrorCode)}</p>` : nothing}
         ${
           this.reprintErrorCode
             ? html`<p class="error" role="alert">${codeMessage(this.reprintErrorCode)}</p>`
@@ -903,15 +857,6 @@ export class TillExpoScreen extends LitElement {
     `;
   }
 
-  #undoLine(notice: { ids: string[]; dish: string }): TemplateResult {
-    return html`<p class="done-notice" role="status">
-      ${t("expo.marked_done").replace("{dish}", notice.dish)}
-      <wt-button data-undo variant="secondary" @click=${() => void this.#undo(notice)}
-        >${t("expo.undo")}</wt-button
-      >
-    </p>`;
-  }
-
   #shows(): boolean {
     return !this.passGone && !this.nothingLeft;
   }
@@ -930,13 +875,10 @@ export class TillExpoScreen extends LitElement {
   }
 
   #empty(): TemplateResult {
-    return html`<p class="empty">
-      ${t(this.#keepsUntilDone() ? "expo.watcher_empty" : "expo.empty")}
-    </p>`;
+    return html`<p class="empty">${t(this.#isPass() ? "expo.watcher_empty" : "expo.empty")}</p>`;
   }
 
-  /** A pass screen keeps each dish until its own Done; All stations drops it once away. */
-  #keepsUntilDone(): boolean {
+  #isPass(): boolean {
     return this.selected === "pass";
   }
 
@@ -963,21 +905,6 @@ export class TillExpoScreen extends LitElement {
               this.#groupSection(order, order.party!, group),
             )
       }
-      ${
-        this.#keepsUntilDone()
-          ? html`<wt-button
-              data-all-done=${order.orderId}
-              @click=${() =>
-                void this.#done(
-                  (order.party === undefined ? order.courses : (order.groups ?? [])).flatMap(
-                    (section) => section.items.map((item) => item.id),
-                  ),
-                  `#${order.orderNumber}`,
-                )}
-              >${t("expo.all_done")}</wt-button
-            >`
-          : nothing
-      }
       ${this.#onDevice() || this.#isMonitor() ? nothing : this.#reprintAction(order)}
     </article>`;
   }
@@ -995,13 +922,13 @@ export class TillExpoScreen extends LitElement {
 
   #visibleCourses(order: ExpoOrder): ExpoCourse[] {
     return order.courses
-      .filter((course) => this.#keepsUntilDone() || !course.away)
+      .filter((course) => this.#isPass() || !course.away)
       .sort((a, b) => courseOrder(a) - courseOrder(b));
   }
 
   #visibleGroups(order: ExpoOrder): ExpoGroup[] {
     return (order.groups ?? [])
-      .filter((group) => this.#keepsUntilDone() || !group.away)
+      .filter((group) => this.#isPass() || !group.away)
       .sort((a, b) => groupOrder(a) - groupOrder(b));
   }
 
@@ -1021,7 +948,7 @@ export class TillExpoScreen extends LitElement {
             </div>`
       }
       <ul class="items">
-        ${group.items.map((item) => html`<li>${this.#item(item, this.#keepsUntilDone())}${this.#keepsUntilDone() ? this.#doneButton(item) : nothing}</li>`)}
+        ${group.items.map((item) => html`<li>${this.#item(item, this.#isPass())}</li>`)}
       </ul>
       ${group.groupId === null ? nothing : this.#groupLever(order, party, group, group.groupId, name)}
     </div>`;
@@ -1035,7 +962,7 @@ export class TillExpoScreen extends LitElement {
     groupId: string,
     name: string,
   ): TemplateResult | typeof nothing {
-    if (!this.#drawsLevers() || (this.#keepsUntilDone() && group.away)) return nothing;
+    if (!this.#drawsLevers() || (this.#isPass() && group.away)) return nothing;
     if (group.state === "held") {
       if (this.fireControl !== "expo") return nothing;
       return html`<button
@@ -1048,7 +975,7 @@ export class TillExpoScreen extends LitElement {
       </button>`;
     }
     if (
-      this.#keepsUntilDone()
+      this.#isPass()
         ? (group as WatcherGroup).allReady
         : group.items.every((item) => item.state === "ready")
     ) {
@@ -1057,16 +984,10 @@ export class TillExpoScreen extends LitElement {
         data-group-away=${groupId}
         aria-label=${`${t("expo.away")} ${name}`}
         @click=${() => {
-          const keeps = this.#keepsUntilDone();
           void this.#groupAct(order, party, async (command) => {
             const result = this.deviceMode
               ? await this.api.markDeviceGroupAway(party.id, groupId, command)
               : await this.api.markGroupAway(party.id, groupId, command);
-            if (keeps)
-              await this.#done(
-                group.items.map((item) => item.id),
-                name,
-              );
             return result;
           });
         }}
@@ -1093,7 +1014,7 @@ export class TillExpoScreen extends LitElement {
     return html`<div class="course" data-course=${course.courseId ?? "none"}>
       ${course.courseName ? html`<div class="course-head">${course.courseName}</div>` : nothing}
       <ul class="items">
-        ${course.items.map((item) => html`<li>${this.#item(item, this.#keepsUntilDone())}${this.#keepsUntilDone() ? this.#doneButton(item) : nothing}</li>`)}
+        ${course.items.map((item) => html`<li>${this.#item(item, this.#isPass())}</li>`)}
       </ul>
       ${this.#lever(order, course)}
     </div>`;
@@ -1127,15 +1048,6 @@ export class TillExpoScreen extends LitElement {
         `item-diet-${item.id}`,
       )}${kitchenAllergyBlock(item.allergy)}
     </span>`;
-  }
-
-  #doneButton(item: ExpoItem): TemplateResult {
-    return html`<wt-button
-      data-done=${item.id}
-      aria-label=${t("expo.done_dish").replace("{dish}", item.name)}
-      @click=${() => void this.#done([item.id], item.name)}
-      >${t("expo.done")}</wt-button
-    >`;
   }
 
   #customisation(item: ExpoItem): TemplateResult | typeof nothing {
@@ -1187,7 +1099,7 @@ export class TillExpoScreen extends LitElement {
    * Lit fixes an attribute NAME at template-compile time, so one binding cannot name three attributes.
    */
   #lever(order: ExpoOrder, course: ExpoCourse): TemplateResult | typeof nothing {
-    if (!this.#drawsLevers() || (this.#keepsUntilDone() && course.away)) return nothing;
+    if (!this.#drawsLevers() || (this.#isPass() && course.away)) return nothing;
     if (course.courseId === null) return nothing;
     const courseId = course.courseId;
     const name = course.courseName ?? "";
@@ -1203,7 +1115,7 @@ export class TillExpoScreen extends LitElement {
       </button>`;
     }
     if (
-      this.#keepsUntilDone()
+      this.#isPass()
         ? (course as WatcherCourse).allReady
         : course.items.every((item) => item.state === "ready")
     ) {
@@ -1212,16 +1124,10 @@ export class TillExpoScreen extends LitElement {
         data-away=${courseId}
         aria-label=${`${t("expo.away")} ${name}`}
         @click=${() => {
-          const keeps = this.#keepsUntilDone();
           void this.#act(order, async () => {
             await (this.deviceMode
               ? this.api.markDeviceCourseAway(order.orderId, courseId)
               : this.api.markCourseAway(order.orderId, courseId));
-            if (keeps)
-              await this.#done(
-                course.items.map((item) => item.id),
-                name,
-              );
           });
         }}
       >
@@ -1258,7 +1164,7 @@ export class TillExpoScreen extends LitElement {
     return worstBand(
       sections.flatMap((section) =>
         section.items
-          .filter((item) => !this.#keepsUntilDone() || item.awayAt === null)
+          .filter((item) => !this.#isPass() || item.awayAt === null)
           .map((item) => this.#itemBand(item)),
       ),
     );

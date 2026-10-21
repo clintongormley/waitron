@@ -2457,6 +2457,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   bindings; its waiter Fire actions remain independent of that retired setting. Expo still uses
   the shared allergy controller until its own retirement.
   The newly landed floor map counts ready food without a legacy dispatch fallback.
+  The pass no longer offers Done, All done or their Undo, including automatic Done after legacy Away.
+  Ready still drives device-refusal screen switching; table serving retains its own Undo.
+  Expo Fire/Away and shared kitchen client/controller retirement remain before PR A publication.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held

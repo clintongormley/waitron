@@ -56,7 +56,7 @@ copies with the resulting kitchen work; it does not replace the guest's instruct
 ## Keep food visible until service ends {#service-lifetime}
 
 A paid bill can still have food waiting for its guests. The pass and its monitor keep that food
-visible until you mark it served or finish the table's service. If tables have joined another
+visible until you mark it served or finish the table's service. The pass has no separate Done action. If tables have joined another
 party, their paid bills stay visible until the surviving party finishes.
 
 On the table, a ready dish stays **Ready** in its detail window until you mark it served.

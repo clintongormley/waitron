@@ -218,7 +218,7 @@ async function flush(el: TillExpoScreen): Promise<void> {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (theme) => {
-  it("has no violations on a kitchen display's pass screen with its lost lines, levers, a refusal and Undo notice", async () => {
+  it("has no violations on a kitchen display's pass screen with its lost lines, levers and a refusal without Done", async () => {
     const board = {
       orders: queue.map((order) => ({
         ...order,
@@ -260,11 +260,10 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     el.shadowRoot!.querySelector<HTMLElement>("[data-fire]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
-    el.shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!.click();
-    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-done], [data-all-done], [data-undo]")).toBeNull();
     await expectNoA11yViolations(host);
   });
-  it("has no violations on a till's pass screen with its lost lines, levers and Undo notice", async () => {
+  it("has no violations on a till's pass screen with its lost lines and levers without Done", async () => {
     const stations = [
       { id: "st-1", name: "Parrilla", available: true },
       { id: "st-2", name: "Freidora", available: false },
@@ -304,9 +303,8 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     expect(el.shadowRoot!.querySelectorAll("[data-unavailable]")).toHaveLength(2);
     expect(el.shadowRoot!.querySelector(".lever")).not.toBeNull();
     await expectNoA11yViolations(host);
-    el.shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!.click();
-    await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-undo]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-done], [data-all-done], [data-undo]")).toBeNull();
+    expect(api.markDevicePassDone).not.toHaveBeenCalled();
     await expectNoA11yViolations(host);
   });
 

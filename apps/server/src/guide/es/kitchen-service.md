@@ -62,7 +62,8 @@ persona.
 ## Mantén la comida visible hasta terminar el servicio {#service-lifetime}
 
 Una cuenta cobrada puede tener comida pendiente de servir. El pase y su monitor conservan esa
-comida hasta que la marques como servida o termines el servicio de la mesa. Si las mesas se han
+comida hasta que la marques como servida o termines el servicio de la mesa. El pase no tiene una
+acción Hecho aparte. Si las mesas se han
 unido a otro grupo de comensales, sus cuentas cobradas siguen visibles hasta que termine el grupo
 que las reúne.
 

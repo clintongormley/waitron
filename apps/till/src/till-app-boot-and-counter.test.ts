@@ -490,7 +490,7 @@ describe("till-app session activity", () => {
     expect(grid.shadowRoot!.querySelector("till-expo-screen")).toBeNull();
   });
 
-  describe("a Done refused because the device's screen changed", () => {
+  describe("a Ready refused because the device's screen changed", () => {
     const passOrder = {
       orderId: "wo-1",
       orderNumber: 5,
@@ -499,12 +499,12 @@ describe("till-app session activity", () => {
       groups: [],
       courses: [
         {
-          courseId: null,
-          courseName: null,
+          courseId: "course-1",
+          courseName: "Starter",
           displayOrder: null,
           fired: true,
           away: false,
-          allReady: true,
+          allReady: false,
           items: [
             {
               id: "ti-0",
@@ -512,7 +512,7 @@ describe("till-app session activity", () => {
               name: "Pan",
               qty: "1.000",
               stationName: "Barra",
-              state: "ready",
+              state: "preparing",
               firedAt: "2026-08-17T10:00:00.000Z",
               awayAt: null,
               queuedAt: "2026-08-17T10:00:00.000Z",
@@ -553,7 +553,7 @@ describe("till-app session activity", () => {
       ],
     };
 
-    async function pressDone(
+    async function pressReady(
       locale: string,
       now: KitchenScreenKind,
       settle: (el: TillApp) => Promise<void> = async (el) => {
@@ -571,25 +571,25 @@ describe("till-app session activity", () => {
           ...till,
           locale,
           formFactor: "kds",
-          capabilities: ["act-as-kds"],
+          capabilities: ["act-as-kds", "run-the-pass"],
         }),
         getDeviceIdentity,
         getDevicePassScreen: vi.fn().mockResolvedValue(board),
         getDeviceStationScreen: vi.fn().mockResolvedValue(stationBoard),
-        markDevicePassDone: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+        bumpDeviceCourseReady: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
       });
       await flush(el);
       const grid = () => el.shadowRoot!;
       grid()
         .querySelector("till-expo-screen")!
-        .shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!
+        .shadowRoot!.querySelector<HTMLElement>('[data-ready="course-1"]')!
         .click();
       await settle(el);
       return { el, grid, getDeviceIdentity };
     }
 
     it("opens the station screen at once, and says so", async () => {
-      const { grid, getDeviceIdentity } = await pressDone("en-GB", "station");
+      const { grid, getDeviceIdentity } = await pressReady("en-GB", "station");
       expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
       expect(grid().querySelector("till-station-screen")).not.toBeNull();
       expect(grid().querySelector("till-expo-screen")).toBeNull();
@@ -599,14 +599,14 @@ describe("till-app session activity", () => {
     });
 
     it("says so in Spanish", async () => {
-      const { grid } = await pressDone("es-ES", "station");
+      const { grid } = await pressReady("es-ES", "station");
       expect(grid().querySelector("[data-screen-switched]")!.textContent!.trim()).toBe(
         "Ahora muestra: Pantalla de estación",
       );
     });
 
     it("says nothing when the re-boot opens a pass screen again", async () => {
-      const { grid, getDeviceIdentity } = await pressDone("en-GB", "pass");
+      const { grid, getDeviceIdentity } = await pressReady("en-GB", "pass");
       expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
       expect(grid().querySelector("till-expo-screen")).not.toBeNull();
       expect(grid().querySelector("[data-screen-switched]")).toBeNull();
@@ -614,7 +614,7 @@ describe("till-app session activity", () => {
 
     it("takes the line away after ten seconds", async () => {
       try {
-        const { el, grid } = await pressDone("en-GB", "station", async (app) => {
+        const { el, grid } = await pressReady("en-GB", "station", async (app) => {
           vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
           await vi.advanceTimersByTimeAsync(0);
           await vi.advanceTimersByTimeAsync(0);
