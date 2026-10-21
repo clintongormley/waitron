@@ -762,9 +762,10 @@ Each set's append-only triggers are installed in the same run; see
 
 `pnpm --filter @waitron/server build` runs `scripts/copy-migrations.mjs` (copies every migration
 package's `drizzle/` folder to `dist/drizzle/<set-name>`, reading the same
-`migrations.manifest.json` `@waitron/migrations` itself reads, so the two cannot name different sets)
-and then bundles `src/bin.ts` to `dist/server.js` with esbuild. Run the bundle directly:
-`node dist/server.js`.
+`migrations.manifest.json` `@waitron/migrations` itself reads, so the two cannot name different sets;
+it also copies ui-core's `package.json` and its two token files, `src/tokens/colors.css` and
+`src/tokens/structure.css`, under `dist/node_modules/@waitron/ui-core/`) and then bundles
+`src/bin.ts` to `dist/server.js` with esbuild. Run the bundle directly: `node dist/server.js`.
 
 `scripts/copy-migrations.mjs` also writes `dist/package.json` (`{"type":"module"}`), so `dist/` is
 portable as a directory on its own — copied into a Docker image with nothing else from this

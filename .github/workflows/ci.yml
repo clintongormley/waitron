@@ -540,6 +540,15 @@ jobs:
             exit 1
           fi
 
+      - name: Assert the built bundle carries ui-core's token files
+        run: |
+          for name in colors.css structure.css; do
+            if [ ! -f "apps/server/dist/node_modules/@waitron/ui-core/src/tokens/$name" ]; then
+              echo "expected apps/server/dist/node_modules/@waitron/ui-core/src/tokens/$name beside dist/server.js" >&2
+              exit 1
+            fi
+          done
+
       # The server bundle is smoke-tested by STARTING it, not by making it fail.
       #
       # It used to be made to fail: with no DATABASE_URL there was no database to reach, boot threw
