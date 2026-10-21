@@ -567,7 +567,7 @@ async function holdGroup(partyId: string, lines: Line[]): Promise<string> {
   return placed.groups[0]!.id;
 }
 
-/** The bill's kitchen items, the dish's first, then its extras'. */
+/** The bill's dish's kitchen item, and its first extra's. */
 async function kitchenItems(billId: string) {
   const rows = await inTx(venue, (tx) =>
     tx
@@ -772,8 +772,13 @@ describe("readOrderStateCounts on a party's bill", () => {
     expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 2, unsent: 1, ready: 1 });
     expect(await totalOf()).toEqual(before);
 
-    await saveBillDraft(partyId, billId, [draftLine("Tarta"), draftLine("Paella", "150")], draft);
-    expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 3, unsent: 2, ready: 1 });
+    await saveBillDraft(
+      partyId,
+      billId,
+      [draftLine("Tarta", "2"), draftLine("Paella", "150")],
+      draft,
+    );
+    expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 4, unsent: 3, ready: 1 });
 
     await inTx(venue, (tx) =>
       tx.update(orderDrafts).set({ state: "discarded" }).where(eq(orderDrafts.id, draft.id)),
@@ -814,6 +819,7 @@ describe("readOrderStateCounts on a party's bill", () => {
     const one = await statementsFor(bills.slice(0, 1));
     const three = await statementsFor(bills);
 
+    expect(one.counts).toEqual(new Map([[bills[0], { ...zero, ordered: 2, unsent: 1, ready: 1 }]]));
     expect(three.statements).toBe(one.statements);
     expect(three.counts).toEqual(
       new Map([
