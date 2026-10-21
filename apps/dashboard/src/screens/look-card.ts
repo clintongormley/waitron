@@ -8,6 +8,7 @@ import {
   focusFirstInvalid,
   readVenueTheme,
   saveActionState,
+  submitOnEnter,
   type DraftScope,
   type LeaveCoordinator,
 } from "@waitron/ui";
@@ -464,6 +465,8 @@ export class LookCard extends LitElement {
           event.preventDefault();
           void this.#save();
         }}
+        @keydown=${(event: KeyboardEvent) =>
+          submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
       >
         <div class="editor">
           <div class="choices">

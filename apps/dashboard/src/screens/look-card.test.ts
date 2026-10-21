@@ -850,6 +850,89 @@ describe("saving a draft that is hard to read", () => {
   });
 });
 
+describe("Enter in the code box", () => {
+  async function pressEnterInCode(el: Card) {
+    codeField(el).shadowRoot!.querySelector("input")!.focus();
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+  }
+
+  it("saves a valid code with no warning once", async () => {
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    await typeInCode(el, "#dd5f5f");
+    expect(deriveTheme({ ...LUCIA, brandColor: "#dd5f5f", brandFix: {} }).warnings).toEqual([]);
+    await pressEnterInCode(el);
+    await expect.poll(() => editing(el)).toBe(false);
+    expect(saveTheme).toHaveBeenCalledTimes(1);
+    expect(saveTheme.mock.calls[0]![1]).toEqual({ ...LUCIA, brandColor: "#dd5f5f", brandFix: {} });
+  });
+
+  it("sends nothing while the draft is unchanged", async () => {
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    await pressEnterInCode(el);
+    await frame();
+    expect(saveTheme).not.toHaveBeenCalled();
+    expect(editing(el)).toBe(true);
+  });
+
+  it("opens Hard to read for a draft with a warning, before any request", async () => {
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    await typeInCode(el, "#f2d300");
+    await pressEnterInCode(el);
+    await expect.poll(() => dialogOf(el).open).toBe(true);
+    expect(saveTheme).not.toHaveBeenCalled();
+    expect(editing(el)).toBe(true);
+  });
+});
+
+describe("a save answer that arrives after the card was taken out and put back", () => {
+  async function detachedWhileSaving() {
+    setLocale("en-GB");
+    const opened = await mountEditing(inUse(lucia));
+    let settle!: { resolve: (view: ThemeView) => void; reject: (error: unknown) => void };
+    opened.saveTheme.mockImplementationOnce(
+      () =>
+        new Promise<ThemeView>((resolve, reject) => {
+          settle = { resolve, reject };
+        }),
+    );
+    const heard = vi.fn();
+    opened.el.addEventListener("look-saved", heard);
+    await chooseSegment(opened.el, "corners", "Square");
+    await userEvent.click(button(opened.el, "save"));
+    await expect.poll(() => opened.saveTheme.mock.calls.length).toBe(1);
+    const parent = opened.el.parentNode!;
+    opened.el.remove();
+    parent.appendChild(opened.el);
+    await opened.el.updateComplete;
+    await chooseSegment(opened.el, "background", "Neutral");
+    return { ...opened, settle, heard };
+  }
+
+  it("an old success neither announces a save nor closes or replaces the new draft", async () => {
+    const { el, settle, heard } = await detachedWhileSaving();
+    settle.resolve(saved("t-lucia", "Bar Lucía", { ...LUCIA, corners: "square" }));
+    await frame();
+    await el.updateComplete;
+    expect(heard).not.toHaveBeenCalled();
+    expect(editing(el)).toBe(true);
+    expect(segmented(el, "background").value).toBe("neutral");
+    expect(segmented(el, "corners").value).toBe("square");
+    expect(button(el, "save").disabled).toBe(false);
+  });
+
+  it("an old refusal shows nothing on the new editor", async () => {
+    const { el, settle } = await detachedWhileSaving();
+    settle.reject({ code: "theme.not_found" });
+    await frame();
+    await el.updateComplete;
+    expect(await bottom(el)).toBe("");
+    expect(editing(el)).toBe(true);
+    expect(segmented(el, "background").value).toBe("neutral");
+    expect(button(el, "save").disabled).toBe(false);
+  });
+});
+
 class LookLeaveHost extends LitElement {
   readonly leave = new LeaveController(this);
   api!: DashboardApi;
