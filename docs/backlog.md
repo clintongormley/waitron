@@ -5971,6 +5971,14 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   `apps/server/test-durations.json` has gone stale. Left open by A938.
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
+- **The first-setup readiness test freezes only one of its two clocks.**
+  `apps/server/src/fiscal-readiness-first-setup.test.ts:28` freezes `Date` while
+  `performance.now()` advances. [A850 CI](https://github.com/clintongormley/waitron/actions/runs/39603059551/job/119232431853)
+  refused its final provision with `clock_corrected`. A disposable exact-head checkout
+  reproduces that refusal with a 1,200 ms delay before provision. Freezing both clocks
+  passes all three original cases with that delay; all 17 original clock cases pass
+  unchanged. The exact one-line fixture correction awaits owner approval in Lane E's
+  questions. Keep the production refusal and every existing assertion unchanged.
 - **Fiscal-verifactu's coverage job exceeds the four-minute target.** A850's
   [run 39595996508](https://github.com/clintongormley/waitron/actions/runs/39595996508)
   took 385 s, including 322 s running tests; two recent main jobs took 316 and 350 s.
