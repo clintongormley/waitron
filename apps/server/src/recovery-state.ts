@@ -148,6 +148,11 @@ export function withFailureCode(
   return failureRecord(current, current.failures, errorCode, at, holderKind);
 }
 
+/** What a start serves, never writes, when it cannot record itself because the disk is full. */
+export function fullDiskAtStart(current: RecoveryState, at: Date): RecoveryState {
+  return { ...withFailureCode(current, "storage.disk_full", at), level: "recovery" };
+}
+
 /** The count back to nothing, one clear on from `current`. */
 export function cleared(current: RecoveryState): RecoveryState {
   return { ...FRESH, clears: current.clears + 1 };

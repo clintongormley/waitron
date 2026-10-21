@@ -43,8 +43,8 @@ export const request = {
   rectificativeSeriesCode: "R",
   admin: { displayName: "Elena", email: "elena@example.test", password: PASSWORD, pin: "4826" },
 };
-export async function firstFiscalFixture() {
-  const root = await mkdtemp(join(tmpdir(), "first-fiscal-"));
+export async function firstFiscalFixture(parent: string = tmpdir()) {
+  const root = await mkdtemp(join(parent, "first-fiscal-"));
   try {
     const stateDir = join(root, "state");
     const venueDir = join(root, "venue");

@@ -1284,6 +1284,25 @@ describe("every change to recovery.json happens inside the recovery lock", () =>
     expect(volume.outside).toEqual([]);
   });
 
+  it("the start's write-back on a nearly full disk", async () => {
+    const volume = lockedVolume(FRESH);
+    await expect(
+      runEntry(
+        deps({
+          ...volume.deps,
+          statfs: async () => ({ bavail: 0, frsize: 4096 }),
+          startServer: vi.fn(() =>
+            Promise.reject(
+              new AppError("migrations.set_missing", { name: "core", folder: "/app/drizzle" }),
+            ),
+          ),
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(volume.deps.writeRecoveryState).toHaveBeenCalledTimes(3);
+    expect(volume.outside).toEqual([]);
+  });
+
   it("the undo of a start a live holder refused, and the count of one a stalled holder refused", async () => {
     for (const heartbeatAt of ["2026-09-24T11:59:55.000Z", "2026-09-24T11:59:00.000Z"]) {
       const volume = lockedVolume(FRESH);
