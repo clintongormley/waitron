@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { connectionPair } from "./connections.js";
 import { openVenueStore } from "./index.js";
 import { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
+import { createWriteQueue } from "./write-queue.js";
 
 const opened: { close: () => Promise<void> }[] = [];
 
@@ -705,5 +706,131 @@ describe("telling listeners about a full disk", () => {
     ).toMatchObject(DISK_FULL);
     expect(node.calls.n).toBe(1);
     expect(venue.calls.n).toBe(0);
+  });
+});
+
+describe("telling listeners about a full disk at each refusal point", () => {
+  const diskFullError = () =>
+    Object.assign(new Error("database or disk is full"), { errcode: 13, code: "ERR_SQLITE_ERROR" });
+  /** A writer whose `exec` of `refused` throws a full disk, after a rollback when `ends`. */
+  const refusing = (refused: (text: string) => boolean, ends: boolean) => {
+    const real = new DatabaseSync(":memory:");
+    real.exec("create table t (who text)");
+    const { db: w } = scriptExec(real, (text, target) => {
+      if (!refused(text)) return target.exec(text);
+      if (ends) target.exec("rollback");
+      throw diskFullError();
+    });
+    const connections = connectionPair(w, w);
+    const calls = { n: 0 };
+    connections.onDiskFull(() => void calls.n++);
+    return { real, connections, calls };
+  };
+
+  it("calls it once for a refusal on the read connection", async () => {
+    const write = new DatabaseSync(":memory:");
+    write.exec("create table t (who text)");
+    const read = new Proxy(new DatabaseSync(":memory:"), {
+      get(target, property) {
+        if (property === "prepare") {
+          return () => {
+            throw diskFullError();
+          };
+        }
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === "function"
+          ? (value as (...a: unknown[]) => unknown).bind(target)
+          : value;
+      },
+    });
+    const connections = connectionPair(write, read);
+    const calls = { n: 0 };
+    connections.onDiskFull(() => void calls.n++);
+    const db = drizzleNodeSqlite(connections, { schema: {} });
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const body = db.transaction(async () => {
+      await released;
+    });
+    let outside: unknown;
+    try {
+      db.execute("select who from t");
+    } catch (error) {
+      outside = error;
+    }
+    release();
+    await body;
+    expect(outside).toMatchObject(DISK_FULL);
+    expect(calls.n).toBe(1);
+  });
+
+  it("calls it once for a refused begin immediate in the write queue", async () => {
+    const { connections, calls } = refusing((text) => text === "begin immediate", false);
+    await expect(createWriteQueue(connections).run(async () => {})).rejects.toMatchObject(
+      DISK_FULL,
+    );
+    expect(calls.n).toBe(1);
+  });
+
+  for (const ends of [true, false]) {
+    const how = ends ? "that ended the transaction" : "that left the transaction open";
+    it(`calls it once for a refused commit in the write queue ${how}`, async () => {
+      const { real, connections, calls } = refusing((text) => text === "commit", ends);
+      await expect(
+        createWriteQueue(connections).run(async () => {
+          real.exec("insert into t values ('x')");
+        }),
+      ).rejects.toMatchObject(DISK_FULL);
+      expect(calls.n).toBe(1);
+    });
+
+    it(`calls it once for a refused commit in the adapter's own transaction ${how}`, async () => {
+      const { connections, calls } = refusing((text) => text === "commit", ends);
+      const db = drizzleNodeSqlite(connections, { schema: {} });
+      await expect(
+        db.transaction(async () => {
+          db.execute("insert into t values ('x')");
+        }),
+      ).rejects.toMatchObject(DISK_FULL);
+      expect(calls.n).toBe(1);
+    });
+  }
+
+  it("calls it once for a refused release of a nested transaction", async () => {
+    const { connections, calls } = refusing((text) => text.startsWith("release"), false);
+    const db = drizzleNodeSqlite(connections, { schema: {} });
+    await expect(
+      createWriteQueue(connections).run(async () => {
+        await db.transaction(async () => {
+          db.execute("insert into t values ('x')");
+        });
+      }),
+    ).rejects.toMatchObject(DISK_FULL);
+    expect(calls.n).toBe(1);
+  });
+
+  it("keeps a listener's rejected promise from changing what the caller sees", async () => {
+    const { store, fill, limit, errorOf } = await open();
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    const calls = { n: 0 };
+    let failure: unknown;
+    try {
+      store.venue.onDiskFull(async () => {
+        throw new Error("async listener broke");
+      });
+      store.venue.onDiskFull(() => void calls.n++);
+      limit(4);
+      failure = await errorOf(fill);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+    expect(failure).toMatchObject(DISK_FULL);
+    expect(unhandled).toEqual([]);
+    expect(calls.n).toBe(1);
   });
 });

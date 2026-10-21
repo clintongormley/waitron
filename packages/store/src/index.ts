@@ -104,9 +104,9 @@ export type StoreHandle<TSchema extends Record<string, unknown>> = NodeSqliteDat
    */
   onCommit: (listener: CommitListener) => () => void;
   /**
-   * Registers `listener` for each statement, `begin`, `commit` or `release` on this file the engine
-   * refuses because the disk is full, called before `storage.disk_full` is thrown; returns the
-   * unsubscribe. A refusal re-thrown after the engine ended the transaction is not reported again.
+   * Registers `listener` for each statement, `withWriteLock` `begin`, `commit` or `release` on this
+   * file the engine refuses because the disk is full, called before `storage.disk_full` is thrown;
+   * returns the unsubscribe. A refusal re-thrown after the engine ended the transaction is not reported again.
    */
   onDiskFull: (listener: DiskFullListener) => () => void;
   /** Closes both of this file's connections. {@link VenueStore.close} closes both files. */
