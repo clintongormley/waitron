@@ -18,12 +18,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId as brandLocationId } from "@waitron/shared";
-import {
-  readOpeningHoursModel,
-  replaceMenuWeek,
-  saveMenuPeriod,
-  updateMenuPeriod,
-} from "./menu-timetable.js";
+import { readOpeningHoursModel, replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, type VenueScope } from "./operations.js";
@@ -874,45 +869,6 @@ describe("saveSeasonWeeks", () => {
         reason: "overlap",
       }),
     );
-    expect(await stored(p)).toEqual(before);
-  });
-
-  it("checks each department's end offsets over the written result, refusing the clash by its place in the list and writing nothing", async () => {
-    const p = await painted();
-    await scoped((tx) =>
-      updateMenuPeriod(tx, p.cfg, p.terrace.period, { endOffsetMinutes: -119 }, 0),
-    );
-    const before = await stored(p);
-    const dinner = { periodId: p.dinner, startsAt: "20:00", endsAt: "23:00" };
-    await expect(
-      scoped((tx) =>
-        saveSeasonWeeks(
-          tx,
-          p.cfg,
-          p.winter,
-          {
-            departments: [
-              { departmentId: p.departmentId, days: menuWeek([dinner]) },
-              {
-                departmentId: p.terrace.id,
-                days: menuWeek([
-                  { periodId: p.terrace.period, startsAt: "16:00", endsAt: "17:00" },
-                ]),
-              },
-            ],
-          },
-          AT,
-          0,
-        ),
-      ),
-    ).rejects.toMatchObject({
-      code: "menu_timetable.invalid",
-      params: {
-        field: `departments.1.days.${TUESDAY}.slots`,
-        reason: "end_offset",
-        periodId: p.terrace.period,
-      },
-    });
     expect(await stored(p)).toEqual(before);
   });
 

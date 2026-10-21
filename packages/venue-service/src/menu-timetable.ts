@@ -173,8 +173,6 @@ export async function readDepartmentWeekReads(
   };
 }
 
-type EndOffsetClash = NonNullable<Awaited<ReturnType<typeof endOffsetClash>>>;
-
 /** With `only`, each listed department is checked as it would be alone, in list order. */
 async function endOffsetClash(
   tx: Transaction,
@@ -661,33 +659,10 @@ export async function replaceMenuWeek(
     expectedClockRevision,
   );
   await staged.write();
-  await assertWeekEndOffsets(tx, cfg, lastOrdersClock(clock, at), [{ departmentId, ...staged }]);
   if (staged.changed) await assertWaitingChangeFits(tx, cfg, at, clock);
 }
 
-/** Refuses the first sending cutoff in the listed departments that runs into what follows it,
- *  naming the field through the week that holds it. */
-export async function assertWeekEndOffsets(
-  tx: Transaction,
-  cfg: VenueScope,
-  clock: LastOrdersClock,
-  weeks: readonly { departmentId: string; clashField: (clash: EndOffsetClash) => string }[],
-): Promise<void> {
-  const clash = await endOffsetClash(
-    tx,
-    cfg,
-    weeks.map((week) => week.departmentId),
-    false,
-    clock,
-  );
-  if (clash === null) return;
-  const week = weeks.find((entry) => entry.departmentId === clash.departmentId)!;
-  invalidTimetable(week.clashField(clash), { reason: "end_offset", ...clash });
-}
-
-/** A department week checked and compared with what its seasons hold, written by `write`; its
- *  end offsets are left to `assertWeekEndOffsets`, which the caller runs once every week of the
- *  request is written. */
+/** A department week checked and compared with what its seasons hold, written by `write`. */
 export async function stageMenuWeek(
   tx: Transaction,
   cfg: VenueScope,
@@ -696,11 +671,7 @@ export async function stageMenuWeek(
   clock: BusinessDayClock,
   season: string | Season | undefined,
   reads?: DepartmentWeekReads,
-): Promise<{
-  changed: boolean;
-  write: () => Promise<void>;
-  clashField: (clash: EndOffsetClash) => string;
-}> {
+): Promise<{ changed: boolean; write: () => Promise<void> }> {
   const week = parseMenuWeek(days, (value, field) => {
     const parsed = scheduleCutovers(clock).map((cutover) => parseServiceDay(value, field, cutover));
     return parsed[0]!;
@@ -712,7 +683,6 @@ export async function stageMenuWeek(
     week.slots.map((slots, weekday) => ({ field: `days.${week.indexOf[weekday]}.slots`, slots })),
   );
   const targets = typeof season === "object" ? [season] : await targetSeasons(tx, cfg, season);
-  const seasonId = typeof season === "object" ? season.id : season;
   const samePeriod = (a: ServiceRange, b: ServiceRange) => a.periodId === b.periodId;
   const seasonWeek = week.slots.map((slots) => joinTouching(slots, samePeriod));
   const seasonsNow = known.seasonWeeks.get(departmentId);
@@ -739,11 +709,6 @@ export async function stageMenuWeek(
         targets.flatMap((season) => (holding.has(season.id) ? [] : [season.id])),
         seasonWeek,
       ),
-    // A boundary clash lies in another season's day, which this request does not hold.
-    clashField: (clash) =>
-      clash.weekday === undefined || (seasonId !== undefined && clash.seasonId !== seasonId)
-        ? "days"
-        : `days.${week.indexOf[clash.weekday]}.slots`,
   };
 }
 

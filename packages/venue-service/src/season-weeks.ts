@@ -7,7 +7,7 @@ import {
   assertWaitingChangeFits,
   sameScheduleRanges,
 } from "./business-day-schedule.js";
-import { assertWeekEndOffsets, readDepartmentWeekReads, stageMenuWeek } from "./menu-timetable.js";
+import { readDepartmentWeekReads, stageMenuWeek } from "./menu-timetable.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
 import { storedTime, wireTime, type VenueScope } from "./operations.js";
 import {
@@ -20,7 +20,7 @@ import {
 import type { Season } from "./season-rules.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { rangeSpan, type ClosedRange, type ServiceRange } from "./service-day.js";
-import { inForceClock, lastOrdersClock } from "./service-day-context.js";
+import { inForceClock } from "./service-day-context.js";
 import { readServiceZones, stageZoneClosedWeek } from "./zone-closed-times.js";
 import "./errors.js";
 
@@ -313,9 +313,8 @@ async function within<T>(prefix: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Every listed department week and zone week of one season, under one revision check; each
- *  department's end offsets are checked once every week is written, then `afterWrite` runs with
- *  the clock and zones this save read. */
+/** Every listed department week and zone week of one season, under one revision check; once every
+ *  week is written `afterWrite` runs with the clock and zones this save read. */
 export async function saveSeasonWeeks(
   tx: Transaction,
   cfg: VenueScope,
@@ -343,16 +342,11 @@ export async function saveSeasonWeeks(
   );
   const departmentWeeks = [];
   for (const [index, entry] of departmentEntries.entries()) {
-    const prefix = `departments.${index}.`;
-    const staged = await within(prefix, () =>
-      stageMenuWeek(tx, cfg, entry.departmentId, entry.days, inForce, season, departmentReads),
+    departmentWeeks.push(
+      await within(`departments.${index}.`, () =>
+        stageMenuWeek(tx, cfg, entry.departmentId, entry.days, inForce, season, departmentReads),
+      ),
     );
-    departmentWeeks.push({
-      ...staged,
-      departmentId: entry.departmentId,
-      clashField: (clash: Parameters<typeof staged.clashField>[0]) =>
-        `${prefix}${staged.clashField(clash)}`,
-    });
   }
   const zoneEntries = input.zones ?? [];
   const serving = new Map(
@@ -384,7 +378,6 @@ export async function saveSeasonWeeks(
     expectedClockRevision,
   );
   for (const week of [...departmentWeeks, ...zoneWeeks]) await week.write();
-  await assertWeekEndOffsets(tx, cfg, lastOrdersClock(clock, at), departmentWeeks);
   await afterWrite?.({ clock, departmentOf: serving });
   if (changed) await assertWaitingChangeFits(tx, cfg, at, clock);
 }

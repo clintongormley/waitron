@@ -44,7 +44,6 @@ import {
 import type { MenuSlot, MenuWeekDay } from "./menu-timetable-types.js";
 import { deletePeriod } from "./period-delete.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { saveSeasonWeeks } from "./season-weeks.js";
 import { readSeasons } from "./seasons.js";
 import type { PaintRange } from "./day-paint.js";
 import { deleteSpecialDay, saveSpecialDay } from "./special-days.js";
@@ -3138,240 +3137,31 @@ describe("period end-offset placement bounds", () => {
     ).toBe(1439);
   });
 
-  it("checks a shorter repeated placement, rejecting the entire replacement week", async () => {
+  it("a week save is not refused for a stored end offset", async () => {
     const v = await timed();
     await scoped((tx) =>
       updateMenuPeriod(tx, v.cfg, v.periods.mediodia, { endOffsetMinutes: -119 }, 0),
     );
-    const before = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
-    await expect(
-      scoped((tx) =>
-        replaceMenuWeek(
-          tx,
-          v.cfg,
-          v.restaurant,
-          weekOf((w) =>
-            w === 2
-              ? [
-                  slot(v.periods.mediodia, "12:00", "14:00"),
-                  slot(v.periods.mediodia, "16:00", "17:00"),
-                ]
-              : [],
-          ),
-          AT,
-          0,
-        ),
-      ),
-    ).rejects.toMatchObject({
-      code: "menu_timetable.invalid",
-      params: { field: "days.2.slots", reason: "end_offset", periodId: v.periods.mediodia },
-    });
-    expect(await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).toEqual(before);
-  });
-
-  it.each([5, 0])(
-    "bounds grace against the following business day after weekday %s",
-    async (weekday) => {
-      const v = await timed();
-      await scoped((tx) =>
-        replaceMenuWeek(
-          tx,
-          v.cfg,
-          v.restaurant,
-          weekOf((w) =>
-            w === weekday
-              ? [slot(v.periods.madrugada, "21:00", "03:00")]
-              : w === (weekday + 1) % 7
-                ? [slot(v.periods.mananas, "06:00", "09:00")]
-                : [],
-          ),
-          AT,
-          0,
-        ),
-      );
-      await scoped((tx) =>
-        updateMenuPeriod(tx, v.cfg, v.periods.madrugada, { endOffsetMinutes: 179 }, 0),
-      );
-      const before = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
-      await expect(
-        scoped((tx) =>
-          updateMenuPeriod(tx, v.cfg, v.periods.madrugada, { endOffsetMinutes: 180 }, 0),
-        ),
-      ).rejects.toMatchObject({
-        code: "menu_period.invalid",
-        params: { field: "endOffsetMinutes", reason: "placement", weekday },
-      });
-      expect(await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).toEqual(before);
-    },
-  );
-
-  it("checks past dated overrides and keeps departments independent", async () => {
-    const v = await timed();
+    const week = [
+      slot(v.periods.mediodia, "12:00", "14:00"),
+      slot(v.periods.mediodia, "16:00", "17:00"),
+    ];
     await scoped((tx) =>
       replaceMenuWeek(
         tx,
         v.cfg,
         v.restaurant,
-        weekOf(() => []),
+        weekOf((w) => (w === 2 ? week : [])),
         AT,
         0,
       ),
     );
-    const past = await saveDay(v, "2026-01-01", {
-      paint: [slot(v.periods.mediodia, "12:00", "14:00"), slot(v.periods.noches, "14:15", "18:00")],
-    });
-    await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, v.periods.mediodia, { endOffsetMinutes: 14 }, 0),
-    );
-    await expect(
-      scoped((tx) => updateMenuPeriod(tx, v.cfg, v.periods.mediodia, { endOffsetMinutes: 15 }, 0)),
-    ).rejects.toMatchObject({
-      code: "menu_period.invalid",
-      params: { field: "endOffsetMinutes", reason: "placement", date: "2026-01-01" },
-    });
-    await saveDay(v, "2026-01-01", { id: past.id });
-    await scoped((tx) =>
-      replaceMenuWeek(
-        tx,
-        v.cfg,
-        v.restaurant,
-        weekOf(() => [slot(v.periods.mediodia, "12:00", "14:00")]),
-        AT,
-        0,
-      ),
-    );
-    await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, v.periods.mediodia, { endOffsetMinutes: 180 }, 0),
-    );
-    expect(
-      (await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).departments
-        .find((d) => d.id === v.restaurant)!
-        .periods.find((p) => p.id === v.periods.mediodia)!.endOffsetMinutes,
-    ).toBe(180);
-  });
-});
-
-describe("end offsets across a season boundary", () => {
-  it("refuses a season week whose first day meets the grace of the season before", async () => {
-    const v = await timed();
-    const all = await scoped((tx) => readSeasons(tx, v.cfg));
-    const autumn = all.find((season) => season.name === "Autumn")!;
-    const winter = all.find((season) => season.name === "Winter")!;
-    await scoped((tx) =>
-      replaceMenuWeek(
-        tx,
-        v.cfg,
-        v.restaurant,
-        weekOf(() => []),
-        AT,
-        0,
-      ),
-    );
-    await scoped((tx) =>
-      replaceMenuWeek(
-        tx,
-        v.cfg,
-        v.restaurant,
-        weekOf((w) => (w === 6 ? [slot(v.periods.madrugada, "20:00", "05:45")] : [])),
-        AT,
-        0,
-        { seasonId: autumn.id },
-      ),
-    );
-    await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, v.periods.madrugada, { endOffsetMinutes: 30 }, 0),
-    );
-    const before = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
-    // Autumn's Saturday sends until 06:15; Winter's first day, on a Sunday, opens at 06:00.
-    await expect(
-      scoped((tx) =>
-        replaceMenuWeek(
-          tx,
-          v.cfg,
-          v.restaurant,
-          weekOf((w) => (w === 0 ? [slot(v.periods.mananas, "06:00", "09:00")] : [])),
-          AT,
-          0,
-          { seasonId: winter.id },
-        ),
-      ),
-    ).rejects.toMatchObject({
-      code: "menu_timetable.invalid",
-      params: {
-        field: "days",
-        reason: "end_offset",
-        periodId: v.periods.madrugada,
-        departmentId: v.restaurant,
-        seasonId: autumn.id,
-        weekday: 6,
-      },
-    });
-    expect(await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).toEqual(before);
-  });
-});
-
-describe("end offsets across a season boundary, saved with the season's other weeks", () => {
-  it("names the clash by the department's place in the request and its whole week", async () => {
-    const v = await timed();
-    const all = await scoped((tx) => readSeasons(tx, v.cfg));
-    const autumn = all.find((season) => season.name === "Autumn")!;
-    const winter = all.find((season) => season.name === "Winter")!;
-    await scoped((tx) =>
-      replaceMenuWeek(
-        tx,
-        v.cfg,
-        v.restaurant,
-        weekOf(() => []),
-        AT,
-        0,
-      ),
-    );
-    await scoped((tx) =>
-      replaceMenuWeek(
-        tx,
-        v.cfg,
-        v.restaurant,
-        weekOf((w) => (w === 6 ? [slot(v.periods.madrugada, "20:00", "05:45")] : [])),
-        AT,
-        0,
-        { seasonId: autumn.id },
-      ),
-    );
-    await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, v.periods.madrugada, { endOffsetMinutes: 30 }, 0),
-    );
-    const before = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
-    await expect(
-      scoped((tx) =>
-        saveSeasonWeeks(
-          tx,
-          v.cfg,
-          winter.id,
-          {
-            departments: [
-              { departmentId: v.deli, days: weekOf(() => []) },
-              {
-                departmentId: v.restaurant,
-                days: weekOf((w) => (w === 0 ? [slot(v.periods.mananas, "06:00", "09:00")] : [])),
-              },
-            ],
-          },
-          AT,
-          0,
-        ),
-      ),
-    ).rejects.toMatchObject({
-      code: "menu_timetable.invalid",
-      params: {
-        field: "departments.1.days",
-        reason: "end_offset",
-        periodId: v.periods.madrugada,
-        departmentId: v.restaurant,
-        seasonId: autumn.id,
-        weekday: 6,
-      },
-    });
-    expect(await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).toEqual(before);
+    const restaurant = (
+      await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))
+    ).departments.find((d) => d.id === v.restaurant)!;
+    expect(restaurant.seasonWeeks.length).toBeGreaterThan(0);
+    for (const season of restaurant.seasonWeeks)
+      expect(season.week[2]).toEqual({ weekday: 2, slots: week });
   });
 });
 

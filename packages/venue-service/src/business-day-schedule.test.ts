@@ -1085,25 +1085,6 @@ describe("a waiting change checks the hours written while it waits", () => {
     expect(await periodsLeft(v)).toEqual([v.periodId, otherPeriod].sort());
     expect(await stored(v)).toEqual(kept);
   });
-  it("answers a season week whose last orders clash only under the waiting start as a waiting-change conflict", async () => {
-    const v = await fixture([], { offset: 30 });
-    await waiting(v);
-    const week = weekOf(v.periodId, 5, [range("01:00", "03:00")]);
-    week[6]!.slots = [{ periodId: v.periodId, ...range("03:00", "04:00") }];
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        saveSeasonWeeks(
-          tx,
-          v.cfg,
-          v.seasonId,
-          { departments: [{ departmentId: v.departmentId, days: week }] },
-          at,
-          1,
-        ),
-      ),
-    ).rejects.toMatchObject({ code: "hours.clock_change_conflict", params: offsetClash });
-    expect(await stored(v)).toEqual([]);
-  });
   it("answers a season save's zone week crossing the waiting start as a waiting-change conflict", async () => {
     const v = await fixture([], { zone: true });
     await waiting(v);
