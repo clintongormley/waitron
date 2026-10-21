@@ -6,23 +6,14 @@ import { isLocalDate, weekdayOf } from "./hours-rules.js";
 import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
 import { isReadableClock } from "./hours-clock.js";
 import { menuPeriodName } from "./menu-timetable-rules.js";
-import {
-  findSeasonEndOffsetClash,
-  parseEndOffsetMinutes,
-  type DatedSchedule,
-} from "./period-end-offset.js";
+import { parseEndOffsetMinutes } from "./period-end-offset.js";
 import { layerPaint, type PaintRange } from "./day-paint.js";
 import { civilDateOf } from "@waitron/reporting";
 import { ZONE_PAINT_KINDS } from "./schema/seasons.js";
 import { SERVICE_STEP_STARTS } from "./schema/service-steps.js";
 import { MAX_SERVICE_STEP_MINUTES, MAX_SERVICE_STEPS } from "./service-step-limits.js";
 import { parseSeasonStart, seasonOn } from "./season-rules.js";
-import {
-  firstSkippedEnd,
-  NO_HOLIDAY_DATES,
-  sharedSpecialDate,
-  specialDateIn,
-} from "./special-days.js";
+import { firstSkippedEnd, NO_HOLIDAY_DATES, sharedSpecialDate } from "./special-days.js";
 import {
   parseClosedRanges,
   parseServiceDay,
@@ -56,16 +47,6 @@ function parsedAs<T>(table: string, parse: () => T): T {
       refuse(table);
     throw error;
   }
-}
-
-/** Each period's end offset; a row without one takes the column's default, 0. */
-function periodOffsets(tables: Tables): Map<string, number> {
-  return new Map(
-    (tables.menu_periods ?? []).map((row) => [
-      row.id as string,
-      (row.end_offset_minutes ?? 0) as number,
-    ]),
-  );
 }
 
 function ids(rows: readonly Row[] | undefined): Set<unknown> {
@@ -455,64 +436,6 @@ function refuseSkippedPaint(
       refuse(table);
 }
 
-/** Each department's end offsets over the bundle's seasons and special days, under the bundle's
- *  one changeover; run after the shape checks, which refuse ranges without a
- *  changeover. */
-function validateEndOffsets(tables: Tables, bundle?: { readonly dayCutover: string }): void {
-  const seasonRows = tables.department_day_ranges ?? [];
-  if (bundle === undefined || seasonRows.length === 0) return;
-  const days = new Map((tables.department_days ?? []).map((row) => [row.id, row]));
-  const repeats = new Map((tables.special_days ?? []).map((row) => [row.id, row.repeats_yearly]));
-  const range = (row: Row): ServiceRange => ({
-    periodId: row.period_id as string,
-    startsAt: (row.starts_at as string).slice(0, 5),
-    endsAt: (row.ends_at as string).slice(0, 5),
-  });
-  const offsets = periodOffsets(tables);
-  const weeks = new Map<unknown, ServiceRange[][]>();
-  const paint = new Map<string, PaintRange[]>();
-  for (const row of seasonRows) {
-    const day = days.get(row.day_id)!;
-    if ((day.special_day_date_id ?? null) !== null) {
-      const key = JSON.stringify([day.department_id, day.special_day_date_id]);
-      paint.set(key, [
-        ...(paint.get(key) ?? []),
-        { ...range(row), periodId: (row.period_id ?? null) as string | null },
-      ]);
-      continue;
-    }
-    const key = JSON.stringify([day.department_id, day.season_id]);
-    const week = weeks.get(key) ?? Array.from({ length: 7 }, (): ServiceRange[] => []);
-    week[day.weekday as number]!.push(range(row));
-    weeks.set(key, week);
-  }
-  for (const departmentId of ids(tables.departments)) {
-    const seasons = (tables.seasons ?? []).map((season) => ({
-      seasonId: season.id as string,
-      startsOn: season.starts_on as string,
-      week: weeks.get(JSON.stringify([departmentId, season.id])) ?? [],
-    }));
-    const specialDays: DatedSchedule[] = (tables.special_day_dates ?? []).map((date) => {
-      const rule = {
-        date: date.date as LocalDate,
-        repeats: repeats.get(date.special_day_id) === 1,
-        holidayName: (date.holiday_name ?? null) as string | null,
-      };
-      return {
-        date: rule.date,
-        closeWholeVenue: date.closed_all_day === 1,
-        ...(rule.repeats
-          ? { occursIn: (year: number) => specialDateIn(rule, year, NO_HOLIDAY_DATES) }
-          : {}),
-        paint: paint.get(JSON.stringify([departmentId, date.id])) ?? [],
-        specialDayId: date.special_day_id as string,
-      };
-    });
-    const clash = findSeasonEndOffsetClash(seasons, specialDays, offsets, bundle.dayCutover);
-    if (clash !== null) refuse("department_day_ranges");
-  }
-}
-
 function validateDepartmentTransfers(tables: Tables): void {
   const departments = ids(tables.departments);
   const profiles = ids(tables.device_profiles);
@@ -761,7 +684,6 @@ function validateVenueServiceConfiguration(
   validateHolidayConfiguration(tables);
   validateMenuTimetables(tables);
   validateSeasonWeeks(tables, bundle);
-  validateEndOffsets(tables, bundle);
   validateDepartmentTransfers(tables);
   validateRoutingConfiguration(tables);
 }

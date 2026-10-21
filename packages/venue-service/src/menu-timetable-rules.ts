@@ -1,20 +1,12 @@
 import { AppError } from "@waitron/shared";
-import type { LocalDate } from "./hours-types.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
 import "./errors.js";
 
 export function invalidTimetable(
   field: string,
-  clash?: {
-    date?: LocalDate;
-    departmentId?: string;
-    periodId?: string;
-    seasonId?: string;
-    weekday?: number;
-    reason: "overlap" | "clock_skips" | "empty" | "order" | "step" | "end_offset";
-  },
+  refusal?: { reason: "overlap" | "clock_skips" | "empty" | "order" | "step" },
 ): never {
-  throw new AppError("menu_timetable.invalid", { field, ...clash });
+  throw new AppError("menu_timetable.invalid", { field, ...refusal });
 }
 
 export interface ParsedMenuWeek {

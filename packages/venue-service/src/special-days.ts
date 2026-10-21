@@ -105,7 +105,7 @@ export function specialDateIn(
 
 /** Whether a date's place in `year` comes from its holiday's name, not its month and day: every
  *  year after its first, for a repeating date saved on a public holiday. */
-export function followsHolidayIn(rule: SpecialDayDateRule, year: number): boolean {
+function followsHolidayIn(rule: SpecialDayDateRule, year: number): boolean {
   return followsHoliday(rule) && year > yearOf(rule.date);
 }
 
@@ -465,72 +465,6 @@ export async function missingHolidaysIn(
           year,
         });
   return [...missing.values()];
-}
-
-export interface SpecialDaySchedule {
-  specialDayId: string;
-  name: string;
-  date: LocalDate;
-  repeats: boolean;
-  holidayName: string | null;
-  closedAllDay: boolean;
-  /** By department. */
-  paint: ReadonlyMap<string, PaintRange[]>;
-}
-
-/** Every special-day date of the venue with its department paint (of `departmentIds` only, when
- *  given): one read of the dates and one of the paint. */
-export async function readSpecialDaySchedules(
-  tx: Transaction,
-  cfg: VenueScope,
-  departmentIds?: readonly string[],
-): Promise<SpecialDaySchedule[]> {
-  const dates = await tx
-    .select({
-      dateId: specialDayDates.id,
-      specialDayId: specialDays.id,
-      name: specialDays.name,
-      date: specialDayDates.date,
-      repeats: specialDays.repeatsYearly,
-      holidayName: specialDayDates.holidayName,
-      closedAllDay: specialDayDates.closedAllDay,
-    })
-    .from(specialDayDates)
-    .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
-    .where(eq(specialDayDates.locationId, cfg.locationId))
-    .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
-  if (dates.length === 0) return [];
-  const paint = await tx
-    .select({
-      dateId: departmentDays.specialDayDateId,
-      departmentId: departmentDays.departmentId,
-      periodId: departmentDayRanges.periodId,
-      startsAt: departmentDayRanges.startsAt,
-      endsAt: departmentDayRanges.endsAt,
-    })
-    .from(departmentDays)
-    .innerJoin(departmentDayRanges, eq(departmentDayRanges.dayId, departmentDays.id))
-    .where(
-      and(
-        inArray(
-          departmentDays.specialDayDateId,
-          dates.map((row) => row.dateId),
-        ),
-        departmentIds === undefined
-          ? undefined
-          : inArray(departmentDays.departmentId, departmentIds),
-      ),
-    );
-  const byDate = new Map<string, Map<string, PaintRange[]>>();
-  for (const row of paint) {
-    const owners = byDate.get(row.dateId!) ?? new Map<string, PaintRange[]>();
-    byDate.set(row.dateId!, owners);
-    owners.set(row.departmentId, [
-      ...(owners.get(row.departmentId) ?? []),
-      { periodId: row.periodId, startsAt: wireTime(row.startsAt), endsAt: wireTime(row.endsAt) },
-    ]);
-  }
-  return dates.map(({ dateId, ...row }) => ({ ...row, paint: byDate.get(dateId) ?? new Map() }));
 }
 
 export interface SpecialDayInput {

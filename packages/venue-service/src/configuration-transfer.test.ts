@@ -239,38 +239,6 @@ describe("the menu timetable rows of a bundle", () => {
     expect(() => validateMenuTimetables(tables)).not.toThrow();
   });
 
-  it("refuses imported grace reaching the next business day's period in a season week", () => {
-    const tables = menuTables();
-    tables.menu_periods![1]!.end_offset_minutes = 240;
-    expect(() => validate(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
-    tables.seasons = [
-      { id: "s-year", location_id: "location", name: "Year", starts_on: "01-01", colour: "grey" },
-    ];
-    tables.department_days = [5, 6].map((weekday) => ({
-      id: `d-${weekday}`,
-      department_id: RESTAURANT,
-      season_id: "s-year",
-      weekday,
-      special_day_date_id: null,
-    }));
-    tables.department_day_ranges = [
-      ["d-5", MADRUGADA, "22:00:00", "02:00:00"],
-      ["d-6", MANANAS, "06:00:00", "09:00:00"],
-    ].map(([dayId, periodId, startsAt, endsAt]) => ({
-      id: randomUUID(),
-      day_id: dayId,
-      department_id: RESTAURANT,
-      period_id: periodId,
-      starts_at: startsAt,
-      ends_at: endsAt,
-    }));
-    expect(() => validate(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
-      refusal("department_day_ranges"),
-    );
-    tables.menu_periods![1]!.end_offset_minutes = 239;
-    expect(() => validate(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
-  });
-
   const BARRA = "z-barra";
   const MANANAS = "11111111-1111-4111-8111-111111111111";
   const MADRUGADA = "22222222-2222-4222-8222-222222222222";
@@ -1396,45 +1364,6 @@ describe("season weeks in a configuration bundle", () => {
     expect(() => validate(yellow, clock)).not.toThrow();
   });
 
-  it("refuses a period's end offset reaching the next day's placement in the same season", () => {
-    const tables = seasonTables();
-    tables.menu_periods![1]!.end_offset_minutes = 240;
-    expect(() => validate(tables, clock)).toThrowError(refusal("department_day_ranges"));
-    tables.menu_periods![1]!.end_offset_minutes = 239;
-    expect(() => validate(tables, clock)).not.toThrow();
-  });
-
-  it("checks the end offset across a season boundary, and accepts different weeks that meet no grace", () => {
-    const tables = seasonTables();
-    tables.menu_periods![1]!.end_offset_minutes = 240;
-    // Winter, which runs to 31 August, holds no Saturday. Its Friday Late sends until 06:00, when
-    // Autumn's first day, on a Saturday, opens Lunch.
-    tables.department_days = tables.department_days!.filter((row) => row.id !== "w-sat");
-    tables.department_day_ranges = tables.department_day_ranges!.filter(
-      (row) => row.day_id !== "w-sat",
-    );
-    expect(() => validate(tables, clock)).toThrowError(refusal("department_day_ranges"));
-    // Autumn's Lunch from 06:15 is clear of that grace; the two seasons' weeks still differ.
-    for (const row of tables.department_day_ranges)
-      if (row.day_id === "a-sat") row.starts_at = "06:15:00";
-    expect(() => validate(tables, clock)).not.toThrow();
-  });
-
-  it("refuses a period's end offset reaching the first day of the next season", () => {
-    const tables = seasonTables();
-    // Autumn's Friday Late sends until 06:00; Winter's first day, on a Saturday, opens Lunch then.
-    tables.department_days = [day("a-fri", "s-autumn", 5), day("w-sat", "s-winter", 6)];
-    tables.department_day_ranges = [
-      range("a-fri", LATE, "22:00:00", "02:00:00"),
-      range("w-sat", LUNCH, "06:00:00", "09:00:00"),
-    ];
-    tables.zone_days![0]!.season_id = "s-autumn";
-    tables.menu_periods![1]!.end_offset_minutes = 240;
-    expect(() => validate(tables, clock)).toThrowError(refusal("department_day_ranges"));
-    tables.menu_periods![1]!.end_offset_minutes = 239;
-    expect(() => validate(tables, clock)).not.toThrow();
-  });
-
   it.each([
     ["department_days", "season_id", { season_id: "missing" }],
     ["department_days", "department_id", { department_id: "missing" }],
@@ -1897,29 +1826,6 @@ describe("special days in a configuration bundle", () => {
   it("accepts paint ending at the changeover on the night the clocks skip it", () => {
     const tables = painted("2026-03-28", 0, "22:00:00", "02:30:00");
     expect(() => validate(tables, { ...clock, dayCutover: "02:30" })).not.toThrow();
-  });
-
-  it("refuses paint whose period's end offset reaches the next day's paint", () => {
-    const tables = painted("2026-11-23", 0, "22:00:00", "02:00:00");
-    tables.special_day_dates!.push({
-      id: "fiesta-24",
-      special_day_id: "fiesta",
-      location_id: "venue",
-      date: "2026-11-24",
-      closed_all_day: 0,
-    });
-    tables.department_days!.push({
-      id: "dd-24",
-      department_id: RESTAURANT,
-      season_id: null,
-      weekday: null,
-      special_day_date_id: "fiesta-24",
-    });
-    tables.department_day_ranges!.push(range("dd-24", LUNCH, "06:00:00", "09:00:00"));
-    tables.menu_periods![0]!.end_offset_minutes = 240;
-    expect(() => validate(tables, clock)).toThrowError(refusal("department_day_ranges"));
-    tables.menu_periods![0]!.end_offset_minutes = 239;
-    expect(() => validate(tables, clock)).not.toThrow();
   });
 });
 

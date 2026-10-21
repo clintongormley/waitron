@@ -10,7 +10,6 @@ import type {
   VenueDetailValues,
   VenueDetailWrite,
 } from "./venue-detail-types.js";
-import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
 
 const fields: readonly VenueDetailField[] = [
@@ -258,17 +257,5 @@ export async function writeVenueDetails(
   }
   if (Object.keys(delta).length === 0) return { changed: false, model };
   await tx.update(locations).set(delta).where(eq(locations.id, cfg.locationId));
-  if (delta.timeZone !== undefined) {
-    try {
-      await VENUE_SERVICE.assertPeriodEndOffsets(
-        tx,
-        cfg as Parameters<typeof VENUE_SERVICE.assertPeriodEndOffsets>[1],
-      );
-    } catch (error) {
-      if (error instanceof AppError && error.code === "menu_timetable.invalid")
-        invalid("timeZone", "end_offset");
-      throw error;
-    }
-  }
   return { changed: true, model: await readVenueDetails(tx, cfg, at) };
 }

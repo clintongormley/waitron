@@ -99,13 +99,7 @@ declare module "@waitron/shared" {
     "floor_plan_set.is_default": { setId: string };
     "menu_timetable.invalid": {
       field: string;
-      periodId?: string;
-      date?: string;
-      departmentId?: string;
-      seasonId?: string;
-      weekday?: number;
-      specialDayId?: string;
-      reason?: "overlap" | "clock_skips" | "empty" | "order" | "step" | "end_offset";
+      reason?: "overlap" | "clock_skips" | "empty" | "order" | "step";
     };
     "zone.name_taken": { name: string };
     "service_zone.default_missing": Record<string, never>;

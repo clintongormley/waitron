@@ -741,7 +741,6 @@ export interface VenueServiceContribution {
     changeKind: "time" | "metadata",
     expectedClockRevision: number,
   ): Promise<void>;
-  assertPeriodEndOffsets(tx: Transaction, cfg: { locationId: LocationId }): Promise<void>;
   listDepartmentTransferDestinations(
     tx: Transaction,
     cfg: { locationId: LocationId },

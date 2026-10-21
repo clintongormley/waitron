@@ -25,7 +25,7 @@ import {
 } from "./service-day.js";
 import { CALENDAR_COLOURS } from "./hours-types.js";
 import { invalidTimetable, menuPeriodName, parseMenuWeek } from "./menu-timetable-rules.js";
-import { findSeasonEndOffsetClash, parseEndOffsetMinutes } from "./period-end-offset.js";
+import { parseEndOffsetMinutes } from "./period-end-offset.js";
 import type {
   DepartmentService,
   OpeningHoursModel,
@@ -34,12 +34,6 @@ import type {
   PeriodRoutingUse,
 } from "./menu-timetable-types.js";
 import { assertDepartment, resolveZoneContext, wireTime, type VenueScope } from "./operations.js";
-import {
-  followsHolidayIn,
-  holidayDatesFor,
-  readSpecialDaySchedules,
-  specialDateIn,
-} from "./special-days.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
@@ -163,64 +157,6 @@ export async function readDepartmentWeekReads(
     periods,
     seasonWeeks: await readDepartmentSeasonWeeks(tx, cfg, ids, clock.dayCutover),
   };
-}
-
-async function endOffsetClash(tx: Transaction, cfg: VenueScope) {
-  const periods = await tx
-    .select({
-      id: menuPeriods.id,
-      departmentId: menuPeriods.departmentId,
-      offset: menuPeriods.endOffsetMinutes,
-    })
-    .from(menuPeriods)
-    .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
-    .where(eq(departments.locationId, cfg.locationId));
-  const clock = await readLocationClock(tx, cfg.locationId);
-  const offsets = new Map(periods.map((period) => [period.id, period.offset]));
-  const departmentIds = [...new Set(periods.map((period) => period.departmentId))];
-  const specialDays = await readSpecialDaySchedules(tx, cfg, departmentIds);
-  const holidays = await holidayDatesFor(tx, cfg, specialDays);
-  const allSeasons = await readSeasons(tx, cfg);
-  const weeks = await readDepartmentSeasonWeeks(tx, cfg, departmentIds, clock.dayCutover);
-  for (const id of departmentIds) {
-    const clash = findSeasonEndOffsetClash(
-      allSeasons.map((season) => ({
-        seasonId: season.id,
-        startsOn: season.startsOn,
-        week: weeks.get(id)?.get(season.id) ?? [],
-      })),
-      specialDays.map((day) => ({
-        date: day.date,
-        closeWholeVenue: day.closedAllDay,
-        ...(day.repeats
-          ? {
-              occursIn: (year: number) => specialDateIn(day, year, holidays),
-              followsHolidayIn: (year: number) => followsHolidayIn(day, year),
-            }
-          : {}),
-        paint: day.paint.get(id) ?? [],
-        specialDayId: day.specialDayId,
-      })),
-      offsets,
-      clock,
-    );
-    if (clash !== null) {
-      return {
-        periodId: clash.periodId,
-        seasonId: clash.seasonId,
-        weekday: clash.weekday,
-        date: clash.date,
-        departmentId: id,
-        ...(clash.specialDayId === undefined ? {} : { specialDayId: clash.specialDayId }),
-      };
-    }
-  }
-  return null;
-}
-
-export async function assertPeriodEndOffsets(tx: Transaction, cfg: VenueScope): Promise<void> {
-  const clash = await endOffsetClash(tx, cfg);
-  if (clash !== null) invalidTimetable("dayCutover", { reason: "end_offset", ...clash });
 }
 
 export async function departmentDay(
