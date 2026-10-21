@@ -122,22 +122,42 @@ From the pre-merge review:
 
 ## The SumUp Solo experiments
 
+**A949 checkpoint, 2026-10-21:** every read-only request with the saved API credential returned
+`401`, including memberships, readers, reader status, history and transaction lookup. An invalid-key
+control also returned `401`; reader permissions and availability were not established. The saved
+experiment file has no affiliate credentials. No checkout, refund or pairing write was sent. See the
+[probe results and operator steps](../research/2026-09-10-sumup-solo-experiments.md#8-a949-checkpoint-2026-10-21).
+The current published refund description explicitly uses major units, conflicting with §4b's
+September cents measurement; the adapter's three fake-HTTP wire checks still pass with cents.
+Keep the adapter unchanged until the controlled live re-test settles this.
+
 - **The SumUp Solo experiments** ([runbook](../research/2026-09-10-sumup-solo-experiments.md)). Question
   4 was answered on 2026-09-11: a Solo paired to SumUp's cloud cannot also take a payment on its own,
   so the owner chose a separate standalone card machine for the internet-down case
   ([deli hardware](../superpowers/specs/2026-07-30-deli-hardware-design.md) §5). Still open: whether we
-  may supply the idempotency key, whether reader webhooks are signed, and whether `void` maps onto
-  the refund endpoint.
+  can look up a supplied reference before and after payment, whether a duplicate reference is
+  refused, actual reader webhook headers, signature-card handling, and a fresh immediate full
+  refund. September's full-refund result is not a measurement of a distinct authorisation void.
 
 ## The deli's outage card machine
 
-- **The deli's outage card machine** (the deli hardware design §5). Buy the standalone machine, and
-  decide how a payment keyed on it and recorded in the till as a manual card tender is matched to the
-  record SumUp keeps with no sale of ours attached — the reconciler's sweep, and whether it can see a
-  manual tender at all, decide it. Replace the design's estimated prices with real quotes. A barcode
-  scanner only if the deli sells barcoded goods — nothing in the till reads one today.
+- **The deli's outage card machine** (the deli hardware design §5). Buy the standalone machine and
+  replace estimated prices with real quotes. The owner chose three supported cases for A949 on
+  2026-10-21: automatically match manually recorded payments from a second Solo on the same account
+  by amount and time, with unmatched payments listed for a manager; identify other providers'
+  manual payments as paid outside Waitron, carrying the operation number and machine through the
+  till, day report and accountant exports; and check cash-only service without a backup machine.
+  Live history and standalone-payment samples remain unavailable at the experiment checkpoint.
+  A barcode scanner only if the deli sells barcoded goods; nothing in the till reads one today.
 
 ## The SumUp reconciler
+
+**A949, owner 2026-10-21:** build after the reference experiments establish the matching inputs.
+Include the backup-machine contract above and W44's durable reversal attempts: write an attempt
+before the provider call, then recover an uncertain outcome without a fresh blind refund. The
+[experiment checkpoint](../research/2026-09-10-sumup-solo-experiments.md#8-a949-checkpoint-2026-10-21)
+records the refused credential and the unresolved refund-unit discrepancy. No reconciler was built
+by that checkpoint.
 
 - **The SumUp reconciler** — settlement-report audit and orphan self-heal. `resolvePending` is the
   interim backstop; without an affiliate key a create whose response is lost resolves `failed` and
@@ -248,6 +268,12 @@ establish a physical print; these checks remain unverified. Left open by W102.
   monthly allowance first, which needs no second merchant account.
 
 ## Some card payments ask the cardholder to sign instead of enter a PIN — open question, nothing built
+
+**A949, 2026-10-21:** the Cloud API documents a `WAITING_FOR_SIGNATURE` reader state, but no
+signature-required payment was observed. Capture, merchant acceptance and retention ownership
+remain open. Follow the physical-card check in the
+[experiment checkpoint](../research/2026-09-10-sumup-solo-experiments.md#8-a949-checkpoint-2026-10-21)
+before deciding whether Waitron needs a signature step. Keep this entry open.
 
 - **Some card payments ask the cardholder to sign instead of enter a PIN — open question, nothing
   built.** When a card or its issuer picks signature as the way it proves the person is who they say

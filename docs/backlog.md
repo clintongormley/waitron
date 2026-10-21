@@ -4026,13 +4026,19 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   design's wording, or the code if a move can change what a bill charges (ask the owner first).
 
 - **The SumUp Solo experiments** ([runbook](research/2026-09-10-sumup-solo-experiments.md)). Still
-  open: whether we may supply the idempotency key, whether reader webhooks are signed, and whether
-  `void` maps onto the refund endpoint. [Detail](backlog/payments.md#the-sumup-solo-experiments)
+  open: supplied-reference lookup and deduplication, actual webhook headers, signature-card
+  handling, and fresh full/partial-refund observations. **A949, 2026-10-21:** all eight read-only
+  probes returned `401`; the saved experiment file has no affiliate credentials. Published refund units conflict
+  with September's measurement. Restore experiment credentials and run the operator checks in
+  [the checkpoint](research/2026-09-10-sumup-solo-experiments.md#8-a949-checkpoint-2026-10-21).
+  [Detail](backlog/payments.md#the-sumup-solo-experiments)
 
-- **The deli's outage card machine** (the deli hardware design §5). Buy the standalone machine, and
-  decide how a payment keyed on it and recorded in the till as a manual card tender is matched to
-  the record SumUp keeps with no sale of ours attached — the reconciler's sweep, and whether it can
-  see a manual tender at all, decide it. Replace the design's estimated prices with real quotes.
+- **The deli's outage card machine** (the deli hardware design §5). Buy the standalone machine.
+  **A949, owner 2026-10-21:** match manual payments on a second Solo on the same account by amount
+  and time, listing unmatched ones for a manager. Other providers' manual payments are reconciled
+  outside Waitron; the till, day report and accountant exports must identify that path with the
+  operation number and machine. Check cash-only service when no backup machine exists. Replace
+  the design's estimated prices with real quotes.
   [Detail](backlog/payments.md#the-delis-outage-card-machine)
 
 - **The printer-cradle experiment** (hardware not yet owned). SumUp's OpenAPI has no `print` and no
@@ -4047,6 +4053,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **The SumUp reconciler** — settlement-report audit and orphan self-heal. `resolvePending` is the
   interim backstop; without an affiliate key a create whose response is lost resolves `failed` and
   raises `payment.pending_outcome_unactionable` for a human.
+  A949 also includes durable reversal attempts (W44) and the owner's backup-machine matching
+  contract. Its experiment checkpoint leaves the live reference and refund-unit questions open.
   [Detail](backlog/payments.md#the-sumup-reconciler)
 
 - **A SumUp API drift-detection suite** on a Virtual Solo in a sandbox merchant account — would have

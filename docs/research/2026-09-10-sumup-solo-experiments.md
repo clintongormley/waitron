@@ -1,5 +1,11 @@
 # SumUp Solo experiments — answering the four questions with the reader in hand
 
+**2026-10-21, A949:** the saved API credential returned `401` on every read-only probe.
+The affiliate experiments, webhook capture and signature-card observation remain open.
+Read [the current checkpoint](#8-a949-checkpoint-2026-10-21) before following the historical
+instructions below, especially the partial-refund commands: today's published units conflict
+with September's measured result. No new checkout or refund was sent.
+
 **Date written:** 2026-09-10. **Runs from:** 2026-09-11.
 **Status:** IN PROGRESS (2026-09-11). Setup 0.2–0.6 are run and recorded below: the Solo is paired
 (`rdr_19F1G0V4JF98NBRQDARRW2293X`) and the healthy path works end to end. Experiment 1 onwards —
@@ -858,3 +864,116 @@ from.
 "OpenAPI file" is <https://raw.githubusercontent.com/sumup/sumup-openapi/refs/heads/main/openapi.yaml>,
 fetched 2026-09-10; the copy read had SHA-256 prefix `5f752211d29897ad` (8,789 lines). A later read
 that differs is a documentation change, not a contradiction of this file.
+
+## 8. A949 checkpoint, 2026-10-21
+
+You need a working API credential and an operator at the Solo before continuing the paid
+experiments. The unattended run reached the API, but authentication failed. It did not establish
+today's reader status, transaction history, refund behaviour or webhook headers. The September
+results above remain historical observations.
+
+### Read-only probes
+
+Before sending these requests, the probe plan stated that successful setup would return `200`,
+while an authentication refusal would return `401` or `403`. It also specified the absent-reader
+control: an authorised request should return `404`, distinguishable from an invalid key's `401`.
+Both absent-reader requests returned `401`, so this control established no reader permission.
+
+Requests used the API, merchant and reader variables in `~/.sumup-experiments/env`. No credential
+value or authorisation header was copied into the repository.
+
+| GET request                                                                       | HTTP result            |
+| --------------------------------------------------------------------------------- | ---------------------- |
+| `/v0.1/memberships`                                                               | `401`, `Unauthorized.` |
+| `/v0.1/merchants/{merchant}/readers`                                              | `401`, `Unauthorized.` |
+| `/v0.1/merchants/{merchant}/readers/{reader}/status`                              | `401`, `Unauthorized.` |
+| Reader lookup with an absent, 30-character id and the saved key                   | `401`, `Unauthorized.` |
+| Same absent-reader lookup with a deliberately invalid key                         | `401`, `Unauthorized.` |
+| `/v2.1/merchants/{merchant}/transactions/history?limit=25&order=descending`       | `401`, `Unauthorized.` |
+| Transaction lookup by the full-refund control's id from §0.6                      | `401`, `Unauthorized.` |
+| Transaction lookup by a newly generated, never submitted `foreign_transaction_id` | `401`, `Unauthorized.` |
+
+These refusals do not say whether the key was revoked, expired or belongs to the intended account.
+The env file contains no `SUMUP_AFFILIATE_APP_ID` or `SUMUP_AFFILIATE_KEY` assignment either.
+No POST, pairing change, termination or refund was attempted.
+
+### What the current sources settle, and what they leave open
+
+The OpenAPI download had SHA-256
+`071392b12ebeed5a1778d95a49575e851a0c523c1f703ebea507acba8c24b2fb`.
+It differs from the September copy. Read the sources below as documentation evidence; none
+replaces the missing physical experiment.
+
+| Question                                          | Source's words, read 2026-10-21                                                                                                                                                                                                                                   | Consequence for the next experiment                                                                                                                                                                                  |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Can a Solo carry our reference?                   | The [OpenAPI schema](https://raw.githubusercontent.com/sumup/sumup-openapi/refs/heads/main/openapi.yaml) describes `affiliate.foreign_transaction_id` as a “unique identifier”.                                                                                   | §2a must measure lookup before and after payment; §2b must separately measure duplicate creation. Correlation does not establish deduplication.                                                                      |
+| What credentials are needed?                      | [Affiliate Keys](https://developer.sumup.com/tools/authorization/affiliate-keys): “Affiliate Keys are mandatory for card-present integrations”.                                                                                                                   | Configure the affiliate app id and key before §2. The downloaded schema requires only `total_amount` at the checkout body's top level; live enforcement of the documentation's affiliate requirement was not tested. |
+| Are Solo callbacks signed?                        | The schema's reader callback says “retried up to 5 times with exponential backoff”. Its callback declaration specifies no signature header. [Webhooks](https://developer.sumup.com/online-payments/webhooks) says “must always verify” the event through the API. | Capture actual headers in §3a. The online-checkout page's four retry delays describe a different documented event path; do not claim either schedule was observed on the Solo.                                       |
+| Who owns cardholder signing?                      | The [Cloud API changelog](https://developer.sumup.com/changelog/cloud-api) describes `WAITING_FOR_SIGNATURE` as “Waiting for customer signature”.                                                                                                                 | Observe the physical prompt, completion and any merchant verification step. A named state does not establish who captures or retains the signature.                                                                  |
+| Which units does a partial refund take?           | The [refund reference](https://developer.sumup.com/api/transactions/refund) and downloaded schema now explicitly say “major units”.                                                                                                                               | This conflicts with §4b's September cents measurement. Repeat a controlled partial refund before changing either refund wire method.                                                                                 |
+| Does the Go endpoint settle Solo retry behaviour? | The [reader reference](https://developer.sumup.com/api/readers/create-checkout) calls Go's `client_transaction_id` “used as the idempotency key”.                                                                                                                 | That contract belongs to `go-checkout`; test the Solo's different checkout endpoint separately.                                                                                                                      |
+
+The [reader reference](https://developer.sumup.com/api/readers/create-checkout) separately describes
+`client_transaction_id` deduplication for `/v0/merchants/{merchant}/readers/{reader}/go-checkout`.
+That is the Go endpoint; the Solo experiment here uses `/v0.1/.../checkout`. Do not transfer the
+Go contract to the Solo.
+
+The current adapter's wire checks were run with:
+
+`pnpm --filter @waitron/payments-sumup exec vitest run --project node src/sumup-client.test.ts -t 'sends a partial refund amount|omits the amount for a full refund|sends the exact amount in minor units'`
+
+Result: **3 passed, 50 skipped**. These fake-HTTP checks assert that `refund` and `sendRefund`
+send `40` for EUR 0.40, and that the full-refund path omits `amount`. They establish the adapter's
+request bodies, not which units today's SumUp service applies. No test or product code changed.
+
+### Continue with the operator
+
+1. Replace the refused API credential outside the repository. Set the affiliate app id and key
+   in the experiment env file, keeping its permissions at `0600`. Re-run §0.3 and the reader
+   status baseline. Do not start a checkout until membership and reader reads succeed and you
+   have confirmed the intended account and physical reader.
+2. Run §§2a and 3a together on one EUR 1 checkout with a fresh foreign reference and the capture
+   listener's HTTPS URL. Record lookup before the tap, then tap and record lookup afterwards,
+   response ids and complete callback headers. Failure is a refused create, an unfindable
+   reference or missing callback. No signature-like header means this delivery supplied none;
+   it does not establish a universal policy.
+3. Only after that payment finishes, repeat its foreign reference once (§2b). A new accepted
+   checkout means vendor deduplication failed this probe. Cancel it without paying again and
+   record which transaction the reference lookup returns. Do not infer deduplication from the
+   reader rejecting a simultaneous checkout as busy. Run §3b separately for the retry schedule.
+4. Re-test refund units on a fresh EUR 1 capture. Read its refund events and refundable amount
+   first, send `{"amount":0.40}` once, then read both again. A new EUR 0.40 event and a EUR 0.60
+   balance support the current major-unit description. A `201` with no movement does not prove a
+   refund. If the answer is uncertain, read back and stop; do not resend. Use a separate fresh
+   EUR 1 capture for the control: read its initial events and balance, then send `{"amount":40}`
+   once. A EUR 0.40 event supports
+   cents; a refusal because 40 exceeds the balance supports the other interpretation. Retain
+   actual events and balances, including any outcome that matches neither prediction.
+5. On a separate fresh capture, run §4a immediately and record both the HTTP answer and refund
+   event. §4a's old full refund supports a refund operation; it does not establish a distinct
+   authorisation void, today's acceptance or a returned fee. Record the customer's statement
+   and fee outcome later (§4c).
+6. With a card known to require a signature, record the firmware, Solo screen text and status
+   while signing. Record where the signature is entered, any merchant acceptance, whether the
+   API completes before or after that step, and any receipt or retrieval route. If no suitable
+   card is available, leave this experiment open. An ordinary PIN or contactless payment does
+   not answer it.
+
+### Work still required by A949
+
+The reconciler design must retain the owner's three outage cases: match a second Solo's manual
+payments on the same account using amount and time, list unmatched payments for a manager, label
+other providers' manual payments for external reconciliation with the operation number and machine,
+and check cash-only service when no backup machine exists. Matching collisions must remain visible;
+the authenticated history and standalone-payment samples are still missing.
+
+W44 also remains open: persist the reconciler's reversal attempt before sending it and recover an
+uncertain outcome without a fresh blind refund. Signature handling and the reconciler build have
+not been completed by this documentation checkpoint.
+
+The private campaign receipt is `~/waitron-campaign-g/receipts/a949-20261021-215715/`:
+`probe-plan.md` predates the calls; `http-manifest.json` records paths, UTC times, statuses and body
+hashes; `openapi.yaml` and `schema-extracts.json` retain the schema; `adapter-refund-wire.log`
+retains the three passing checks. Public developer pages were read through the web tool; direct
+Python downloads were refused, so no local HTML capture is claimed. API keys remain outside these
+artifacts and the repository.
