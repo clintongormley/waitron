@@ -79,7 +79,8 @@ interface TransferRow {
 
 /**
  * A sent row keeps showing after another department took the tab, so it carries counts only while
- * the tab is still the viewer's department's and in the viewer's zones. Incoming rows always may.
+ * the tab is still the viewer's department's and in the viewer's zones, or in none. Incoming rows
+ * always may.
  */
 async function withCounts<T extends TransferRow>(
   tx: Transaction,
@@ -91,14 +92,11 @@ async function withCounts<T extends TransferRow>(
   let visible = (_row: T) => true;
   if (viewer !== "receiver") {
     const scope = await readZoneScope(tx, deps.cfg, viewer.profileId);
-    const zones =
-      scope === null
-        ? new Map<string, string>()
-        : await VENUE_SERVICE.findOrderZones(
-            tx,
-            deps.cfg,
-            rows.map((row) => row.tabId),
-          );
+    const zones = await VENUE_SERVICE.findOrderZones(
+      tx,
+      deps.cfg,
+      rows.map((row) => row.tabId),
+    );
     visible = (row) =>
       row.currentDepartmentId === viewer.departmentId && inScope(scope, zones.get(row.tabId));
   }
