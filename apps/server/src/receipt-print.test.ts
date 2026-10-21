@@ -2772,7 +2772,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
           );
           await enqueueSaleReceipt(tx, value.cfg, value.ticket, value.saleId);
         }),
-      ).rejects.toThrow(/no transaction is active|no such savepoint/u);
+      ).rejects.toThrow("engine transaction invalidated");
       expect(warning.mock.calls).toEqual([]);
       expect(await suite.db.select().from(sales)).toEqual([]);
       expect(await suite.db.select().from(printJobs)).toEqual([]);
