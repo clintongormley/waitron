@@ -46,6 +46,18 @@ describe("the user guides", () => {
     },
   );
 
+  it.each(GUIDE_LANGUAGES)("the appearance guide in %s registers its sections", (lang) => {
+    expect(GUIDE_PAGES).toContain("appearance");
+    const markdown = readGuide(root, lang, "appearance");
+    expect(markdown).toBeDefined();
+    expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
+      "look",
+      "edit",
+      "hard-to-read",
+      "save",
+    ]);
+  });
+
   it.each(GUIDE_PAGES)("every page renders in English: %s", (page) => {
     expect(english(page).sections.length).toBeGreaterThan(0);
   });

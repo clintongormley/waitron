@@ -84,8 +84,11 @@ the browser draws those from `color-scheme` and never from `data-theme`. Without
 got the light drawing, and an unchecked radio came out as a solid white dot heavier than the checked
 one's ring. `color-scheme` is an inherited property, so the base block's `color-scheme: light` also
 stops a theme root nested inside a dark one from being drawn dark while its colour tokens resolve
-light. Both are pinned in `packages/ui-core/src/tokens/colors.test.ts`; nothing nests a theme root today,
-so the second is a constructed case rather than an observed one.
+light. Both are pinned in `packages/ui-core/src/tokens/colors.test.ts`. The dashboard nests theme roots
+inside its own (`applyTokens(document.documentElement)`, `apps/dashboard/src/main.ts:26`): the
+Appearance page's preview makes each of its two panels one inside its shadow root, with
+`data-theme="light"` and `"dark"` (`apps/dashboard/src/widgets/theme-preview.ts`), and the equipment
+label's print frame is one (`apps/dashboard/src/widgets/equipment-label.ts:42-44`).
 
 **Every rule in the token layer — the `prefers-color-scheme` block and both `data-theme` blocks —
 is wrapped in `:where(...)`, which contributes zero specificity.** `data-theme` still wins over
@@ -104,6 +107,12 @@ workbench itself uses (each panel sets `data-theme` directly). See
 even when data-theme is set` for the regression test.
 
 ## Retheming a deployment
+
+A venue changes its look on Settings → Appearance, which stores a theme and writes the 22 colours
+and three radii of `THEME_TOKENS` (`packages/ui-core/src/theme/tokens.ts`) from the venue's
+choices, warning about hard-to-read colours rather than refusing them. The override described
+below is for a deployment's own stylesheet. A venue theme's sheet, built from worked-out values
+only, outranks the token layer the same way.
 
 Override tokens on the theme root, with a selector of your own (a class or ID — not an inline
 style, and not a bare `[data-wt-theme-root]`/`[data-theme]` selector, which only matches the token
@@ -199,12 +208,12 @@ highlighted table row; the new value is 4.5:1 or more on `--wt-color-bg`, `--wt-
 text" cases in `packages/ui-core/src/tokens/colors.test.ts` hold. It
 holds its own value rather than reading `--wt-color-primary`, so a deployment that overrides the
 primary colour has to override this one as well, with a light and a dark value: no single colour
-reaches 4.5:1 on both themes' `--wt-color-bg`. A venue's custom theme writes it: worked out
+reaches 4.5:1 on both themes' `--wt-color-bg`. A venue's theme writes it: worked out
 from the theme's own button colour, unless it is set by hand, and Waitron's own value when the theme
 chooses neither (`THEME_COLOURS`, `packages/ui-core/src/theme/tokens.ts`). The dashboard and the
-till apply the theme in use (`packages/ui/src/venue-theme.ts`); until the editor lands (A841
-slice 5), no screen writes one; the management API (`/management-api/themes`,
-`/management-api/theme-in-use`) and a configuration transfer already can.
+till apply the theme in use (`packages/ui/src/venue-theme.ts`). A manager edits it on Settings →
+Appearance (A841), and the management API (`/management-api/themes`,
+`/management-api/theme-in-use`) and a configuration transfer can write it too.
 
 Text in the brand colour — a link, a status word, a badge, a hovered card action's label — reads
 `--wt-color-primary-text`. `--wt-color-primary` paints fills, lines, outlines, icons and spinners,
@@ -2722,6 +2731,8 @@ and the staffing grid's block editor in the A761 entry):
   A689 brought the translations dialog's Translate all under it: it is drawn `secondary` while the
   latest suggestion read does not say the service is on, or while a run is being sent or
   translated, and keeps its own variant while its own press is being sent.
+  A841 slice 5 brought the Look card's Use Waitron's look under it: drawn `secondary` and disabled
+  while the draft already is Waitron's look.
   Not covered: a button disabled only while a request is being sent, an action blocked by its own
   field checks and the sign-in screens. Nothing guards it across screens.
 
@@ -2770,6 +2781,9 @@ and nothing guards it across screens:
 - A755: Venue settings' Venue card and Defaults card, each editing in place. Their leave cases are
   in `apps/dashboard/src/screens/venue-details-panel.unsaved.test.ts` and
   `apps/dashboard/src/screens/venue-defaults-panel.unsaved.test.ts`;
+- A841 slice 5: the Look card on Settings → Appearance, editing in place
+  (`apps/dashboard/src/screens/look-card.ts`). Its leave cases are in `look-card.unsaved.test.ts`
+  beside it;
 - A231q: the mail server settings form (`apps/dashboard/src/widgets/email-settings-form.ts`); the
   order detail's invoice email form (`apps/dashboard/src/widgets/invoice-email-dialog.ts`); an office
   printer's Add (`apps/dashboard/src/widgets/page-printer-add.ts`); the office printers panel's
@@ -3987,6 +4001,36 @@ rather than assuming this composition applies unchanged.
   "Add …" / "Añadir …", never "New …" / "Nuevo …"
   — "Add" is a verb like "Delete"; "New" is an adjective. A create action never says "Create" /
   "Crear", and the dialog it opens is headed "Add …" to match it (owner, 2026-10-09, A450).
+
+### Appearance (venue themes)
+
+Settings → Appearance holds one card, Look (`apps/dashboard/src/screens/look-card.ts`, A841
+slice 5), built with `settingsCard` and `settingsRows`:
+
+- **Saved, its rows are** Theme in use, Brand colour (a chip and the value, "Custom · " before a
+  colour that is not a swatch, and the shade of each kind of screen whose fix is taken), Background,
+  Corners and Colours set by hand. Below them comes one warning line for each warning the server
+  sends with the theme, then the note about each screen's own Theme setting.
+- **Edit opens the editor in place**, in the same card. It is offered only to a person holding
+  `layout.configure`, and only while one of the venue's own themes is in use.
+- **The editor lays out by the card's width, never the window's** (container queries): the choices
+  and the preview sit side by side when the form is at least 900px wide, and the preview's two
+  panels sit side by side when the preview is at least 640px wide. Narrower, each stacks, the
+  preview below the choices and the light panel above the dark.
+- **The preview's Light and Dark panels are painted from the draft inside the card and nowhere
+  else** (`apps/dashboard/src/widgets/theme-preview.ts`). Each panel is a theme root inside the
+  preview's shadow root, painted by a constructed sheet adopted into that shadow root only. The draft
+  never reaches the page itself; the page repaints after a save.
+- **A readability warning is drawn with the warning icon in `--wt-color-warning`, never as a field
+  error**, and never disables Save. A brand-colour warning with a fix carries the fix as a button
+  below it, and a fix taken shows its shade with Undo; two or more warnings with fixes add a Fix all
+  line.
+- **Save with a warning opens the Hard to read dialog**
+  (`apps/dashboard/src/widgets/hard-to-read-dialog.ts`): one line per warning, then Back, Save
+  anyway and, only when fixing all would leave no warning, Fix and save. With Fix and save offered
+  it is the main button and Save anyway is `secondary`; without it, Save anyway is the main button.
+- **A theme saved with warnings keeps them on the saved card**, one warning line each, in the same
+  warning colour and icon.
 
 ## Event discipline
 

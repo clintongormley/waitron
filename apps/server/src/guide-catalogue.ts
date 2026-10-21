@@ -8,6 +8,7 @@ export const GUIDE_PAGES = [
   "modifiers",
   "content-and-images",
   "kitchen-service",
+  "appearance",
 ] as const;
 
 export function guideRoot(): string {
