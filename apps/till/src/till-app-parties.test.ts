@@ -3378,7 +3378,7 @@ describe("till-app: moving a bill", () => {
       id: "wo-check",
       orderNumber: 14,
       label: "4",
-      itemCount: 1,
+      counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
       total: "30.00",
       outstanding: "30.00",
       hasPayments: false,

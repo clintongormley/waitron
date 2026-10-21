@@ -1320,7 +1320,7 @@ export interface HeldOrderSummary {
   orderNumber: number;
   label: string | null;
   tableLabel?: string;
-  itemCount: number;
+  counts: OrderStateCounts;
   total: string;
   /** `total` less the money the bill has received. */
   outstanding: string;

@@ -19,6 +19,7 @@ import { outOfServiceJoined, seatsGuests, shownName } from "../state/floor-today
 import { signalChipStyles, signalChips } from "./signal-chips.js";
 import "./bill-choice-dialog.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
+import { orderCountStyles, orderCounts } from "./order-counts.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import type { BillChoiceDetail } from "./bill-choice-dialog.js";
 import type { FloorZone, HeldOrderSummary, TableState } from "../api/client.js";
@@ -47,6 +48,7 @@ export class TillHeldOrders extends LitElement {
     tableTargetStyles,
     signalChipStyles,
     orderNumberStyles,
+    orderCountStyles,
     helpAnchorStyles,
     css`
       :host {
@@ -229,7 +231,7 @@ export class TillHeldOrders extends LitElement {
   }
 
   #meta(order: HeldOrderSummary): string {
-    const parts = [`${order.itemCount}`, formatMoney(order.total, currentLocale())];
+    const parts = [formatMoney(order.total, currentLocale())];
     if (paidInPart(order))
       parts.push(
         t("table.bill_to_pay").replace("{amount}", () =>
@@ -240,7 +242,7 @@ export class TillHeldOrders extends LitElement {
   }
 
   #signals(order: HeldOrderSummary): TemplateResult | typeof nothing {
-    const chips = signalChips(order.signals);
+    const chips = signalChips(order.signals.filter((signal) => signal.kind !== "ready"));
     return chips.length === 0
       ? nothing
       : html`<span class="signals">${renderFloorChips(chips)}</span>`;
@@ -260,7 +262,7 @@ export class TillHeldOrders extends LitElement {
           <span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>
           ${label ? html`<span class="label">${label}</span>` : nothing}
           <span class="meta">${this.#meta(order)}</span>
-          ${this.#signals(order)}
+          ${orderCounts(order.counts)} ${this.#signals(order)}
         </button>
         <div class="controls">
           <wt-button

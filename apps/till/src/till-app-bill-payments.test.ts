@@ -3311,7 +3311,7 @@ describe("till-app: a partly paid order at the counter", () => {
     id: "wo-1",
     orderNumber: 5,
     label: "Ana",
-    itemCount: 5,
+    counts: { ordered: 5, unsent: 0, held: 0, waiting: 0, ready: 0 },
     total: "120.00",
     outstanding: "70.00",
     hasPayments: true,

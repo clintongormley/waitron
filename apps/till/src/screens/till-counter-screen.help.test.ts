@@ -32,7 +32,7 @@ const heldOrder: HeldOrderSummary = {
   id: "held",
   orderNumber: 1,
   label: "Ana",
-  itemCount: 1,
+  counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
   total: "1.50",
   outstanding: "1.50",
   hasPayments: false,

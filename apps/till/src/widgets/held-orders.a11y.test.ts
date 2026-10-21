@@ -10,7 +10,7 @@ const orders: HeldOrderSummary[] = [
     id: "wo-1",
     orderNumber: 5,
     label: "Mesa 4",
-    itemCount: 2,
+    counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
     total: "3.00",
     outstanding: "3.00",
     hasPayments: false,
@@ -23,7 +23,7 @@ const orders: HeldOrderSummary[] = [
     id: "wo-2",
     orderNumber: 6,
     label: null,
-    itemCount: 1,
+    counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
     total: "1.50",
     outstanding: "1.50",
     hasPayments: false,
@@ -61,19 +61,28 @@ describe.each(["light", "dark"] as const)("till-held-orders a11y (%s theme)", (t
       {
         ...orders[0]!,
         label: "Ana",
+        counts: { ordered: 9, unsent: 1, held: 2, waiting: 3, ready: 2 },
         signals: [
           { kind: "ready", byStation: [{ stationId: "bar", stationName: "Bar", count: 2 }] },
           { kind: "long_wait", band: "warm" },
         ],
       },
-      { ...orders[1]!, signals: [{ kind: "long_wait", band: "forgotten" }] },
+      {
+        ...orders[1]!,
+        counts: { ordered: 5, unsent: 1, held: 1, waiting: 1, ready: 1 },
+        signals: [{ kind: "long_wait", band: "forgotten" }],
+      },
     ];
     const { el, host } = await mountWidget<TillHeldOrders>(
       "till-held-orders",
       { orders: signalled },
       theme,
     );
-    expect(el.shadowRoot!.querySelectorAll("[data-chip]")).toHaveLength(3);
+    expect(el.shadowRoot!.querySelectorAll("[data-chip]")).toHaveLength(2);
+    for (const row of el.shadowRoot!.querySelectorAll(".order"))
+      expect(
+        [...row.querySelectorAll<HTMLElement>("[data-count]")].map((chip) => chip.dataset.count),
+      ).toEqual(["ordered", "unsent", "held", "waiting", "ready"]);
     await expectNoA11yViolations(host);
   });
 

@@ -60,7 +60,7 @@ const parked: HeldOrderSummary = {
   id: "parked",
   orderNumber: 41,
   label: "Alex Morgan Smith Jones, covered garden terrace",
-  itemCount: 1,
+  counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
   total: "125.95",
   outstanding: "125.95",
   hasPayments: false,

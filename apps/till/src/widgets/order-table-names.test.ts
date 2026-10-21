@@ -46,7 +46,7 @@ describe("A765 visible order table names", () => {
       orders: [
         {
           ...base,
-          itemCount: 2,
+          counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
           outstanding: "18.50",
           hasPayments: false,
           partyId: "party",
@@ -132,7 +132,7 @@ describe("A765 visible order table names", () => {
           ...base,
           label,
           tableLabel: label ?? undefined,
-          itemCount: 0,
+          counts: { ordered: 0, unsent: 0, held: 0, waiting: 0, ready: 0 },
           outstanding: "18.50",
           hasPayments: false,
           partyId: null,
@@ -157,7 +157,7 @@ describe.each(["en-GB", "es-ES"])("A765 native table names %s", (locale) => {
             orders: [
               {
                 ...base,
-                itemCount: 2,
+                counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
                 outstanding: "18.50",
                 hasPayments: false,
                 partyId: "party",
