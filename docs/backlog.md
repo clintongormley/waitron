@@ -3248,7 +3248,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   sweeps and the token-list guard, in `@waitron/ui-core/theme`. Slice 2 landed
   2026-10-21 (#1932): custom themes stored in `custom_themes` (`tenant_themes` retired), their
   routes, the theme in use served at `/api/theme`, the till's `themeHash`, and configuration copies
-  at format 6. Slice 3 landed 2026-10-21: the theme in use reaches the screens — the dashboard and
+  at format 6. Slice 3 landed 2026-10-21 (#1940): the theme in use reaches the screens — the dashboard and
   the till apply the browser's stored copy at start and fetch `/api/theme` without waiting on it;
   an open dashboard follows through a passive live read of `custom_themes`, and a signed-in till
   through its `themeHash` once per poll. Next: slice 4 (primary-coloured text), then slice 5 (the editor).
@@ -3260,6 +3260,20 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Playwright cache a key per engine so Chromium-only jobs do not save a cache without WebKit, and set
   the variable for those suites. Whether WebKit's Linux libraries are missing from `ubuntu-latest`
   is an assumption to check first.
+
+- **A dashboard that signs in takes a fresh theme from its live stream alone (A841 slice 3, #1940).**
+  Since #1940 the sign-in read reuses the start-up answer from `/api/theme` instead of asking again;
+  the live stream's opening read is what picks up anything newer. If that stream neither opens nor
+  errors, the start-up answer stays until the query's own refresh, which reading the code puts at
+  60 seconds (not measured). Decide whether that is acceptable, or whether sign-in should ask again
+  when the start-up answer is older than some bound.
+
+- **A841 slice 3 tidy-ups its review left (#1940's finish-branch, 2026-10-21).** Optional: about
+  twenty dashboard test files repeat the same stub setup and could share a helper (the stubs predate
+  #1940); the till still checks that the theme hash is a string although its type says so (removing
+  it means changing test fixtures); the till's poll skips its theme check while an earlier zone read
+  is still out, which only means fewer retries; two result fields of the start-up probe are never
+  read; and nothing checks that each app registers the start-up probe.
 
 - **A841 slice 1 tidy-ups its review left (#1927's finish-branch, 2026-10-21).** Optional, no
   behaviour change: `checkRules` (`packages/ui-core/src/theme/contrast-rules.ts`) and `failing`
