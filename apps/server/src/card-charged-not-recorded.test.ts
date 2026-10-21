@@ -105,8 +105,8 @@ function walkUpPay(id: string, log?: Logger, lineCount = 1) {
   });
 }
 
-function payAgain(id: string) {
-  return send(venue.app, venue.cookie, "POST", "/api/pay", {
+function payAgain(id: string, log?: Logger) {
+  return send(venue.appWith(log === undefined ? {} : { log }), venue.cookie, "POST", "/api/pay", {
     id,
     lines: [],
     zoneId: counter.zoneId,
@@ -125,6 +125,61 @@ function capturedPayments(id: string): number {
     sql`select count(*) as n from payments where working_order_id = ${id} and state = 'captured'`,
   );
   return row!.n;
+}
+
+function capturedUnlinked(id: string): number {
+  const [row] = venue.db.all<{ n: number }>(
+    sql`select count(*) as n from payments
+        where working_order_id = ${id} and state = 'captured' and sale_id is null`,
+  );
+  return row!.n;
+}
+
+async function placedIssuedOrder(): Promise<string> {
+  const id = randomUUID();
+  const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
+  await parkOrder(deps, venue.cfg, {
+    id,
+    lines: lines(),
+    zoneId: counter.zoneId,
+    operatorId: venue.operatorId,
+  });
+  await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
+  await placeOrder(deps, venue.cfg, id, venue.operatorId);
+  return id;
+}
+
+function strandCapturedPayment(id: string) {
+  return withTransaction(venue.db, (tx) =>
+    insertCapturedPayment(tx, {
+      origin: venue.cfg.origin,
+      workingOrderId: id,
+      provider: "fake",
+      paymentRef: `fake-${randomUUID()}`,
+      amount: decimal("10.00"),
+      settledAt: new Date(),
+    }),
+  );
+}
+
+/**
+ * Inside the next card collect, arms the next write transaction to fail for a full disk after its
+ * body has run, where `withTransaction`'s own drain and the commit run: a fault no wrap inside the
+ * body can see.
+ */
+function fullDiskAfterNextBody() {
+  const collect = venue.card.collect.bind(venue.card);
+  vi.spyOn(venue.card, "collect").mockImplementationOnce(async (params) => {
+    const result = await collect(params);
+    const real = venue.db.withWriteLock.bind(venue.db);
+    vi.spyOn(venue.db, "withWriteLock").mockImplementationOnce(<T>(body: () => Promise<T>) =>
+      real(async () => {
+        await body();
+        throw new AppError("storage.disk_full", {});
+      }),
+    );
+    return result;
+  });
 }
 
 const chargedNotRecorded = (workingOrderId: string) => ({
@@ -161,16 +216,25 @@ describe("POST /api/pay when the sale fails for a full disk after the card was c
   });
 
   it("says so when a placed order's settlement fails after the charge", async () => {
-    const id = randomUUID();
-    const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
-    await parkOrder(deps, venue.cfg, {
-      id,
-      lines: lines(),
-      zoneId: counter.zoneId,
-      operatorId: venue.operatorId,
-    });
-    await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
-    await placeOrder(deps, venue.cfg, id, venue.operatorId);
+    const { log, charged } = capturingLog();
+    const id = await placedIssuedOrder();
+    settleFault.armed = true;
+    const before = collects();
+
+    const answer = await payAgain(id, log);
+
+    expect(answer.status).toBe(507);
+    expect(answer.json).toEqual(chargedNotRecorded(id));
+    expect(collects()).toBe(before + 1);
+    expect(capturedUnlinked(id)).toBe(1);
+    expect(charged()).toEqual([
+      { level: "error", event: "sale.charged_not_recorded", fields: { workingOrderId: id } },
+    ]);
+  });
+
+  it("says so when Pay again settles a charged card for a placed order on a still-full disk", async () => {
+    const id = await placedIssuedOrder();
+    await strandCapturedPayment(id);
     settleFault.armed = true;
     const before = collects();
 
@@ -178,22 +242,14 @@ describe("POST /api/pay when the sale fails for a full disk after the card was c
 
     expect(answer.status).toBe(507);
     expect(answer.json).toEqual(chargedNotRecorded(id));
-    expect(collects()).toBe(before + 1);
+    expect(collects()).toBe(before);
+    expect(capturedUnlinked(id)).toBe(1);
   });
 
   it("says so when Pay again recovers a charged card on a still-full disk", async () => {
     const id = randomUUID();
     await parkOrder({ db: venue.db }, venue.cfg, { id, lines: lines(), zoneId: counter.zoneId });
-    await withTransaction(venue.db, (tx) =>
-      insertCapturedPayment(tx, {
-        origin: venue.cfg.origin,
-        workingOrderId: id,
-        provider: "fake",
-        paymentRef: `fake-${randomUUID()}`,
-        amount: decimal("10.00"),
-        settledAt: new Date(),
-      }),
-    );
+    await strandCapturedPayment(id);
     vi.spyOn(venue.backend, "recordSale").mockRejectedValueOnce(diskFull());
     const before = collects();
 
@@ -254,6 +310,46 @@ describe("a real full database after the charge", () => {
     } finally {
       disk.lift();
     }
+  });
+
+  it("says so when a full disk fails a sale's transaction after its body has run", async () => {
+    const id = randomUUID();
+    const before = collects();
+    fullDiskAfterNextBody();
+
+    const answer = await walkUpPay(id);
+
+    expect(answer.status).toBe(507);
+    expect(answer.json).toEqual(chargedNotRecorded(id));
+    expect(collects()).toBe(before + 1);
+    expect(count("sales", "working_order_id", id)).toBe(0);
+  });
+
+  it("says so when a full disk fails a bill payment's transaction after its body has run", async () => {
+    const billId = await tabWith(venue, "Paella");
+    const before = collects();
+    fullDiskAfterNextBody();
+
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "35.00",
+        method: "card",
+        entry: "reader",
+        applied: "35.00",
+        tip: "0.00",
+      },
+    );
+
+    expect(answer.status).toBe(507);
+    expect(answer.json).toEqual(chargedNotRecorded(billId));
+    expect(collects()).toBe(before + 1);
+    expect((await paymentRows(venue, billId)).map((row) => row.state)).toEqual(["pending"]);
   });
 
   it("says so on a bill's reader payment when the database is full when it completes the bill", async () => {

@@ -1228,15 +1228,17 @@ function refuseForStop(workingOrderId: string, log: Logger | undefined): never {
 }
 
 /**
- * Runs work that follows a card charged on a connected reader. A full disk becomes
- * `sale.charged_not_recorded`, so the till can say the card was charged; any other error passes
- * through unchanged.
+ * Runs work that follows a card charged on a connected reader. When `deps` opts in, a full disk
+ * becomes `sale.charged_not_recorded`, so the till can say the card was charged; any other error,
+ * and every error when it does not, passes through unchanged.
  */
 export async function afterCardCharged<T>(
+  deps: { sayCardChargedOnFullDisk?: boolean; log?: Logger },
   workingOrderId: string,
-  log: Logger | undefined,
   work: () => Promise<T>,
 ): Promise<T> {
+  if (deps.sayCardChargedOnFullDisk !== true) return work();
+  const { log } = deps;
   try {
     return await work();
   } catch (error) {
@@ -1256,6 +1258,12 @@ export type ReaderBillPaymentDeps = BillPaymentDeps & {
   /** The chosen reader's `card_readers.id`, passed to `collect`; absent for the simulator. */
   readerId?: string;
   disk?: DiskFullState;
+  /**
+   * Set by the till's routes: a full disk after a card was charged answers
+   * `sale.charged_not_recorded`, so staff are told not to charge again. Unset, it answers
+   * `storage.disk_full`.
+   */
+  sayCardChargedOnFullDisk?: boolean;
 };
 
 /** Who confirmed a payment's or a refund's outcome by hand, and their note. */
@@ -1432,7 +1440,7 @@ export async function takeReaderBillPayment(
       const settledAt = result.settledAt!;
       // Wrapped outside the transaction: when a full disk ended it or refused its commit,
       // `withTransaction` throws the store's own error (`failure` in `node-sqlite-adapter.ts`).
-      return await afterCardCharged(workingOrderId, deps.log, () =>
+      return await afterCardCharged(deps, workingOrderId, () =>
         withTransaction(deps.db, async (tx) => {
           const done = await completeBillPayment(
             tx,

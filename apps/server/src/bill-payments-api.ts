@@ -256,6 +256,7 @@ export function mountBillPaymentsApi(
             ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
             deviceProfileId: device.deviceProfileId,
             ...(deps.disk === undefined ? {} : { disk: deps.disk }),
+            sayCardChargedOnFullDisk: true,
           },
           saleCfg,
           id,

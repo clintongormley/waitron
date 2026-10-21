@@ -608,6 +608,12 @@ export type IntegratedPayDeps = TillSaleDeps & {
    * boot supplies it.
    */
   disk?: DiskFullState;
+  /**
+   * Set by the till's routes: a full disk after a card was charged answers
+   * `sale.charged_not_recorded`, so staff are told not to charge again. Unset, it answers
+   * `storage.disk_full`.
+   */
+  sayCardChargedOnFullDisk?: boolean;
 };
 
 /**
@@ -1320,13 +1326,13 @@ async function payIntegrated(
   // P2 is skipped entirely: the card was already charged.
   if (prepared.kind === "recover") {
     const { captured, attendanceKey } = prepared;
-    return afterCardCharged(req.id, deps.log, () =>
+    return afterCardCharged(deps, req.id, () =>
       finalizeRecovery(deps, cfg, req, captured, operatorId, attendanceKey),
     );
   }
   if (prepared.kind === "recover-settle") {
     const { captured, outstanding, attendanceKey } = prepared;
-    return afterCardCharged(req.id, deps.log, () =>
+    return afterCardCharged(deps, req.id, () =>
       finalizeSettleRecovery(deps, cfg, req, captured, outstanding, attendanceKey),
     );
   }
@@ -1378,13 +1384,13 @@ async function payIntegrated(
     const { outstanding, attendanceKey } = prepared;
     return {
       outcome: "captured",
-      ticket: await afterCardCharged(req.id, deps.log, () =>
+      ticket: await afterCardCharged(deps, req.id, () =>
         finalizeSettle(deps, cfg, req, outstanding, tip, result, attendanceKey),
       ),
     };
   }
   const { gross, identities, wasPlaced, attendanceKey } = prepared;
-  const ticket = await afterCardCharged(req.id, deps.log, () =>
+  const ticket = await afterCardCharged(deps, req.id, () =>
     finalizeCapture(
       deps,
       cfg,
