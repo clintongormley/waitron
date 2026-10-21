@@ -5300,7 +5300,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   proof from AEAT or two devices that the clock is right, and at most 24 hours behind (question 4,
   2026-10-20). It adds a module seat for staff notices and one
   migration in the Veri*Factu module's set. Slice 1 of 10 (a full disk reported as
-  `storage.disk_full`; nothing written after one that ended the transaction can commit) is built on
+  `storage.disk_full`; nothing a body writes through the write queue after one that ended its
+  transaction can commit, except as the entry below says) is built on
   `feat/a798-1-full-disk-store`. Open asesor questions:
   [Q51](compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21)
   and

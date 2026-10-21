@@ -2183,7 +2183,9 @@ v26.7.0), a connection-scoped pragma — which a read-only connection does not r
 ## A refused statement does NOT abort the transaction here, and all a savepoint still buys is confinement of a losing attempt's own writes
 
 **This is the sentence in the file most worth getting right: a refusal leaves the transaction
-usable.** Measured 2026-09-22 on `node:sqlite`, Node v26.7.0, inside one `begin immediate`: a
+usable.** A full disk is the exception: see
+[A full disk sometimes ends the whole transaction](#a-full-disk-sometimes-ends-the-whole-transaction).
+Measured 2026-09-22 on `node:sqlite`, Node v26.7.0, inside one `begin immediate`: a
 duplicate primary key (errcode 1555), a null in a `not null` column (1299) and a trigger's
 `RAISE(ABORT)` (1811) were each caught and the next statement ran normally, and at `commit` the rows
 written before AND after every refusal were all present while the refused rows were not.
@@ -2280,6 +2282,8 @@ importing its own `packages/store/src` and `apps/server/src`. A "page limit" bel
   ROLLBACK algorithm "aborts the current SQL statement with an SQLITE_CONSTRAINT error and rolls
   back the current transaction" (<https://www.sqlite.org/lang_conflict.html>, read 2026-10-21; not
   run here). A grep of `packages` and `apps` for the three found them only in comments and tests.
+  The record of E5 gives no failing case; it says only that the run matched the design's §12
+  experiment 5.
 
 **A real full disk at commit (E7).** A 4 MB HFS+ image (`hdiutil create -size 4m -fs HFS+`), the
 database in WAL mode on it, cache large and spill off, a filler file leaving 16 KiB. Printed
@@ -2295,7 +2299,8 @@ itself and keeps nothing.
     errcode 1`, `sales: []` — the queue's own rollback hid the full disk;
   - a body that caught it and carried on: `caught: database or disk is full`, the caller saw
     `cannot rollback …`, and `sales: ["part 2"]` — **a statement after the failure committed by
-    itself.** Control, a caught unique refusal: `sales: ["part 1","part 2"]`;
+    itself.** For slice 1's fix, the failing case is anything but `sales: []`. Control, a caught
+    unique refusal: `sales: ["part 1","part 2"]`;
   - a nested `db.transaction(...)` that filled: the nested caller saw `no such savepoint: wt_sp_1`,
     the outer caller `cannot rollback …`, `sales: []`;
   - the outer body swallowed the nested failure, wrote a row, then opened another nested
@@ -2306,9 +2311,11 @@ itself and keeps nothing.
     - no transaction is active | errcode 1`, then `next transaction: ok`.
 - E9, a migration that fills: drizzle's migrator on a store at its page limit printed
   `caller sees: Failed to run the query 'ROLLBACK' | first engine failure in chain:
-  {"errcode":1,"message":"cannot rollback - no transaction is active"}`. The migrator issues its own
-  `ROLLBACK` after a failure, and `packages/migrations/src/apply.ts` then coded the errcode 1 as
-  `migrations.apply_failed`: a full disk while migrating read as a failed migration.
+  {"errcode":1,"message":"cannot rollback - no transaction is active"}` and `filler table exists:
+  0`. The migrator issues its own `ROLLBACK` after a failure. Read, not run: `runSet` in
+  `packages/migrations/src/apply.ts` wraps any error carrying an engine failure as
+  `migrations.apply_failed`, so that errcode 1 would reach the start as a failed migration, not a
+  full disk; E9 printed only drizzle's error. The record of E9 gives no failing case.
 - E14, a full disk that left the transaction open, through the same queue: a body inserted
   `before`, then a three-row `update` filled; the run rejected `database or disk is full | errcode
   13`, the next run was `ok`, and the table held `["a","b","c","next"]`, without `before`. Through
@@ -2325,8 +2332,11 @@ itself and keeps nothing.
 
 - Every result code 13 that reaches a statement through the store comes out as
   `AppError("storage.disk_full")`. Where drizzle wraps it, it is in the cause chain, which the
-  error boundary and the start's classifier read: a route answers `507` with `storage.disk_full`
-  unless its own status table names the code, and a start that fails on one is classified
+  error boundary and the start's classifier read: a route behind `createErrorBoundary`
+  (`packages/server-kit/src/error-boundary.ts`) answers `507` with `storage.disk_full` unless its
+  own status table names the code. The Stripe webhook (`apps/server/src/webhook.ts`) is not behind
+  it: it catches its own failures and answers a bare `500` for any code outside its two client
+  codes, a full disk included. A start that fails on one is classified
   `storage.disk_full` and has its own recovery-page text.
 - When the writer had a transaction open before the statement and none after it, the store records
   that failure for its connection pair. While the record stands, a statement or a `transaction()`
@@ -2352,12 +2362,12 @@ itself and keeps nothing.
 - Nothing was measured on Linux's filesystems, which is what the box runs.
 - The commit point is tested on a stand-in: a `Proxy` over a real in-memory connection whose
   `commit` runs the real `rollback` and then throws errcode 13. Through the old queue it printed the
-  same lines the real disk image did (E8's last case), but no page-limit shape met the limit at
-  commit, so no CI test can reach it on a real database.
+  same lines the real disk image did (E8's last case). No page-limit shape TRIED met the limit at
+  commit (E3, E3b); slice 2's real-disk harness is to add an at-commit case (the plan's decision 1).
 - The change-feed shape in E13 was a copy of its trigger, not the feed itself.
 - **The record of an ended transaction belongs to the connection pair, not to the body.** An
   outermost `db.transaction` opened outside the write queue, while a queue body's transaction is
-  ended, clears the record, and that body's later writes then run and commit by themselves.
+  ended, clears the record, and that body's later writes are kept.
   Measured with a throwaway test through the store, each ordering after a queue body filled the
   disk and waited:
   - A, the outside transaction finished first (inserting `outside`), then the body inserted
@@ -2366,7 +2376,8 @@ itself and keeps nothing.
     write kept, and the run rejected with the queue's generic error, not `storage.disk_full`;
   - B, the body wrote while the outside transaction was open, which then threw:
     `B outside: Error: outside body throws | part2: ran | run: resolved | rows:
-    [{"body":"outside"},{"body":"part 2"}]` — the run resolved and the body's write was kept.
+    [{"body":"outside"},{"body":"part 2"}]` — the run resolved and the body's write was kept, and
+    so was the outside transaction's own write, although its body threw.
 
   Not closed, because product writes go through `withTransaction` (`packages/db/src/tenancy.ts`),
   which runs inside `withWriteLock`.
