@@ -588,3 +588,30 @@ the preview and staging handlers (`apps/server/src/boot.ts:1073` and `:1109`) an
 own tests. A938 cached only the tests' derivations (`apps/server/src/testing/derived-key-cache.ts`).
 Left open by A938.
 [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration).
+
+## A transaction opened outside the write queue can let a body's writes after a full disk commit
+
+Left open by A798-B slice 1 (`feat/a798-1-full-disk-store`). After a statement fills the disk and
+the engine ends the transaction, the store records that failure and refuses every later statement
+issued from inside the body. The record belongs to the connection pair, not to the body, and an
+outermost `db.transaction` opened outside the write queue clears it when it begins. Measured with
+a throwaway test through the store, after a queue body filled the disk and waited:
+
+- A, the outside transaction finished first, then the body wrote: the body's write committed by
+  itself, and the run rejected with the queue's generic "the engine ended this transaction" error,
+  not `storage.disk_full`.
+- B, the body wrote while the outside transaction was open: the run resolved, and the body's write
+  was kept.
+
+Not closed in slice 1, because product writes go through `withTransaction`
+(`packages/db/src/tenancy.ts`), which runs inside `withWriteLock`, and a grep for a bare
+`.transaction(` on the usual names of the venue database found it only under `test/` and
+`src/testing/` folders — weaker than "none": a receiver with another name is not matched. Two ways
+to close it:
+
+- key the record to the body, which needs a token for the body carried through every nested
+  savepoint; or
+- a root guard refusing a bare `.transaction(` on the venue database outside `withWriteLock` in
+  product code.
+
+[Receipt](../developers/conventions-data.md#a-full-disk-sometimes-ends-the-whole-transaction).

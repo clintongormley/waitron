@@ -490,9 +490,19 @@ called weaker than its name, the topic file lists what it does not see.
   rollback then removed. Guard: the routing cases in `packages/store/src/index.test.ts` and
   `connections.test.ts`, weaker than the set looks. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#a-read-taken-while-another-callers-write-transaction-is-open-sees-committed-rows-only).
-- **A statement this engine refuses backs out ITSELF, not the transaction around it** — so catching
-  a refusal and carrying on in the same `tx` is safe. **A TEST still catches such a
-  refusal OUTSIDE the transaction**, around the whole `withTransaction`, and no guard enforces that.
+- **A statement this engine refuses backs out ITSELF, not the transaction around it — except a
+  full disk, which sometimes ends the whole transaction** (as `RAISE(ROLLBACK)`,
+  `INSERT OR ROLLBACK` and `ON CONFLICT ROLLBACK` always do; nothing here uses them). Measured at a
+  page limit: an insert into a table with no insert trigger ended it; a multi-row update, an index
+  build, or an insert into a table with an insert trigger (one shaped like the change feed's
+  included) backed out only the statement. So catching a refusal and carrying on in the same
+  `tx` is safe. Either way the caller gets `storage.disk_full`, and after one that ended the
+  transaction the store refuses every later statement in that body — inside the write queue; a
+  transaction opened outside it in between defeats this. **A TEST still catches such a refusal
+  OUTSIDE the transaction**, around the whole `withTransaction`, and no guard enforces that.
+  Guard: `packages/store/src/disk-full.test.ts` and `write-queue.test.ts`, weaker than their
+  names — a page limit, not a real disk, and both at-commit cases are a stand-in. Receipt:
+  [conventions-data.md](docs/developers/conventions-data.md#a-full-disk-sometimes-ends-the-whole-transaction).
 - **A refusal under result code 1811 is identified by its words, never by `isRefusal` alone.** An
   `ON DELETE RESTRICT` key and every trigger's `RAISE(ABORT)` share the code; `restrictRefused` and `triggerRaised` (`packages/db/src/constraint-target.ts`) read the message
   too. Nothing guards it.
