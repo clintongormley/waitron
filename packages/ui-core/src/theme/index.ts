@@ -7,3 +7,4 @@ export { type AgainstItem, groupAgainst } from "./warnings.js";
 export * from "./document-check.js";
 export * from "./names.js";
 export * from "./sheet.js";
+export * from "./answer.js";

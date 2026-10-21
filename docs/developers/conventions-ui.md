@@ -1493,7 +1493,13 @@ limit and full invoices. Every read of the setup is numbered when sent, and an a
 once a read sent after it has been applied. A draft line keeps the course it was given, name
 included, after a refresh deletes that course. `themeHash`, the hash `/api/theme` answers for
 the theme in use, is in the answer and moves `setupRevision` when the theme in use changes or is
-saved with new choices; the till reads neither it nor `/api/theme`.
+saved with new choices. `#applyVenueSetup` hands `themeHash` to `followVenueTheme`
+(`packages/ui/src/venue-theme.ts`), which fetches `/api/theme` and replaces the venue's sheet when
+it differs from the one applied, and each poll asks again once, however many zones it reads, so
+a failed fetch is retried on the next poll; pinned by "A841 the till follows the theme in use" in
+`apps/till/src/till-app-setup-refresh.test.ts`. The till fetches `/api/theme` from the page's own
+address, not through `ServerRouter`; moved to another server, it would keep the theme it has, or
+take the old server's while that one still answers, so failover work must route it.
 
 Some of those values change only when the server restarts, and the revision covers them, so an open
 till takes the new value after a restart without reloading: tips come from `WAITRON_TILL_TIPS`
@@ -1516,7 +1522,8 @@ Fixed until the till starts again (a reload, or a server switch, which runs `#bo
   (`#reconcileSavedDeviceZones`), and at no other time. They change the layout and which screens the
   till offers; applied mid-session they could take away the screen the person is on, and at those
   three points the till already lays itself out again (the default A768 chose; whether to change it is backlog A787).
-- A kitchen screen in device mode: nothing. Nobody signs in on it, so it runs no poll (backlog A785).
+- A kitchen screen in device mode: nothing, the theme included. Nobody signs in on it, so it runs
+  no poll (backlog A785); it takes the theme in use when it starts.
 
 Pinned by `apps/till/src/till-app-setup-refresh.test.ts` ("A768 the till follows the venue's setup
 revision"): courses reach an open table, bump mode and fire control reach the station screen, the

@@ -137,6 +137,15 @@ export {
 } from "./theme-choice.js";
 export type { ThemeChoice } from "./theme-choice.js";
 export {
+  VENUE_THEME_STORAGE_KEY,
+  applyVenueTheme,
+  followVenueTheme,
+  readVenueTheme,
+  startVenueTheme,
+} from "./venue-theme.js";
+export type { VenueThemeReading } from "./venue-theme.js";
+export type { VenueThemeAnswer } from "@waitron/ui-core/theme";
+export {
   HelpModeController,
   currentHelpMode,
   setHelpMode,

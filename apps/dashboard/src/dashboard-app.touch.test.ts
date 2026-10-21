@@ -30,6 +30,7 @@ it("keeps touch nav rows at 44px and their chevrons visible without hover", asyn
       permissions: [],
       modules: [],
     }),
+    getVenueTheme: async () => ({ hash: "waitron", css: "", logo: null }),
     getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es"] }),
     listAlerts: async () => ({ visible: false, alerts: [] }),
     getSalesOverview: async () => ({

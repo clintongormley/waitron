@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, customThemes } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import type { ThemeChoices } from "@waitron/ui-core/theme";
+import { isVenueThemeAnswer, type ThemeChoices } from "@waitron/ui-core/theme";
 import { mountThemesApi } from "./themes-api.js";
 import { WAITRON_THEME_ANSWER, forgetVenueTheme, venueThemeAnswer } from "./venue-theme.js";
 
@@ -45,6 +45,17 @@ describe("GET /api/theme", () => {
     const body = await res.json();
     expect(body).toEqual(venueThemeAnswer({ id: row!.id, choices: LEMON }));
     expect(body).not.toEqual(WAITRON_THEME_ANSWER);
+  });
+
+  it("the answer passes the browser's check, with and without a theme in use", async () => {
+    const without = await (await app().request("/api/theme")).json();
+    expect(isVenueThemeAnswer(without)).toBe(true);
+    await suite.db
+      .insert(customThemes)
+      .values({ name: "Lemon", nameKey: "lemon", inUse: 1, theme: LEMON });
+    const lemon = await (await app().request("/api/theme")).json();
+    expect(lemon).not.toEqual(without);
+    expect(isVenueThemeAnswer(lemon)).toBe(true);
   });
 
   it.each(["{broken", '{"tokens":{}}'])(

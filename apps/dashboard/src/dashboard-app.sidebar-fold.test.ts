@@ -52,6 +52,7 @@ function stubApi(me: Record<string, unknown> = {}): DashboardApi {
       modules: ["bookings"],
       ...me,
     }),
+    getVenueTheme: async () => ({ hash: "waitron", css: "", logo: null }),
     getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es"] }),
     listAlerts: async () => ({ visible: false, alerts: [] }),
     getSalesOverview: async () => ({

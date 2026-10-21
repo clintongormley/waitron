@@ -513,6 +513,7 @@ function api(
     getCatalogueSettings: vi
       .fn()
       .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
+    getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),

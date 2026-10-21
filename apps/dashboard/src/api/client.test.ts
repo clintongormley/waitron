@@ -3257,6 +3257,19 @@ it("does not offer reversible zone removal", () => {
   expect(new DashboardApi()).not.toHaveProperty("deactivateZone");
 });
 
+it("the venue theme read is a passive GET of /api/theme, even from the active client", async () => {
+  const reply = { hash: "h", css: "", logo: null };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(reply));
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  expect(await api.getVenueTheme()).toEqual(reply);
+  const [path, init] = fetchImpl.mock.calls[0]!;
+  expect(new URL(path, "http://localhost").pathname).toBe("/api/theme");
+  expect(init.method).toBe("GET");
+  expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
+  expect(active).not.toHaveBeenCalled();
+});
+
 it("encodes retained translation cell tuples and keeps their background read passive", async () => {
   const cells = [
     { kind: "unit" as const, id: "u:a&b", language: "es", field: "abbreviation" as const },

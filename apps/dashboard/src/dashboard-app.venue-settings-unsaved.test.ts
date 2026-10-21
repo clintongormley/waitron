@@ -91,6 +91,7 @@ async function mount(
           onboardingIntent: "prepare",
         }),
         getGoogleConfig: async () => ({ configured: false }),
+        getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
         getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
         getStaffRoster: async () => [{ personId: "p1", displayName: "Ada" }],
         listMyShifts: async () => [],

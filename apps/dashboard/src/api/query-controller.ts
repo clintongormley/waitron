@@ -54,4 +54,19 @@ export class DashboardQueries {
   ): Promise<void> {
     return this.#queries.watch(name, dashboardQuery(this.#client(name), name, args), apply);
   }
+
+  /** `watch`, with each read sent through `send`, which may wrap its answer. */
+  watchSent<N extends DashboardQueryName, T>(
+    name: N,
+    args: Parameters<DashboardApi[N]>,
+    send: (read: () => Promise<Awaited<ReturnType<DashboardApi[N]>>>) => Promise<T>,
+    apply: (value: T) => void,
+  ): Promise<void> {
+    const query = dashboardQuery(this.#client(name), name, args);
+    return this.#queries.watch(
+      name,
+      { ...query, key: `sent:${query.key}`, read: () => send(query.read) },
+      apply,
+    );
+  }
 }

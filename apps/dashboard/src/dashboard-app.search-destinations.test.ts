@@ -133,6 +133,7 @@ async function mount(
       modules: options.modules ?? ["search-fixture"],
     }),
     getGoogleConfig: async () => ({ configured: false }),
+    getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
     getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
     listAlerts: async () => ({ visible: false, alerts: [] }),
     getSalesOverview: () => new Promise(() => undefined),

@@ -94,6 +94,7 @@ function stubApi(role = "manager", permissions = ["test.use"]): DashboardApi {
     getCatalogueSettings: vi
       .fn()
       .mockResolvedValue({ defaultProductVatClass: "reduced", defaultColor: null }),
+    getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     getSalesOverview: pending(),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),

@@ -129,6 +129,7 @@ function signedInApi(locale: Locale = "en-GB"): DashboardApi {
       permissions: ["sale.take_payment"],
       modules: [],
     }),
+    getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),

@@ -5,6 +5,10 @@ import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
 import { pointerGestureCommands } from "@waitron/ui/src/vitest-pointer-gestures.js";
 import { probeTillReload } from "./test/native-reload.js";
 import { holdDraftLine } from "./test/hold-draft-line.js";
+import {
+  startupEnginesFromEnv,
+  venueThemeStartupProbe,
+} from "@waitron/ui/test/venue-theme-startup.js";
 
 type ColorScheme = "light" | "dark" | null;
 
@@ -28,8 +32,8 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 };
 
 export default defineConfig({
-  // Pre-bundled up front rather than discovered by the optimizer partway through a run.
   optimizeDeps: {
+    // Pre-bundled up front rather than discovered by the optimizer partway through a run.
     include: [
       "axe-core",
       "qrcode-generator",
@@ -39,12 +43,16 @@ export default defineConfig({
       "lit/directives/live.js",
       "lit/async-directive.js",
     ],
+    entries: ["src/main.ts"],
   },
   test: {
     globals: true,
     clearMocks: false,
     // A crashed Stryker run leaves mutated copies of the source, tests included, in .stryker-tmp.
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
+    provide: {
+      startupEngines: startupEnginesFromEnv(),
+    },
     browser: {
       enabled: true,
       provider: playwright({}),
@@ -60,6 +68,7 @@ export default defineConfig({
         },
         ...parkPointerCommands,
         ...pointerGestureCommands,
+        probeVenueThemeStartup: venueThemeStartupProbe(new URL("./index.html", import.meta.url)),
       },
     },
     coverage: {

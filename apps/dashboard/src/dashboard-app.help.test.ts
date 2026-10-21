@@ -65,6 +65,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listMyAbsences: vi.fn().mockResolvedValue([]),
     listCatalogues: vi.fn().mockResolvedValue([]),
     getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+    getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listCategories: vi.fn().mockResolvedValue([]),
     listProducts: vi.fn().mockResolvedValue([]),
