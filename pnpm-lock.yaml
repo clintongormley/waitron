@@ -266,6 +266,9 @@ importers:
       '@waitron/tunnel':
         specifier: workspace:*
         version: link:../../packages/tunnel
+      '@waitron/ui-core':
+        specifier: workspace:*
+        version: link:../../packages/ui-core
       '@waitron/venue-service':
         specifier: workspace:*
         version: link:../../packages/venue-service
@@ -722,6 +725,9 @@ importers:
       '@waitron/identity':
         specifier: workspace:*
         version: link:../identity
+      '@waitron/layouts':
+        specifier: workspace:*
+        version: link:../layouts
       '@waitron/media':
         specifier: workspace:*
         version: link:../media
@@ -1273,6 +1279,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      '@waitron/ui-core':
+        specifier: workspace:*
+        version: link:../ui-core
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4(@electric-sql/pglite@0.5.10)(@types/pg@8.23.1)(pg@8.23.1)

@@ -1752,6 +1752,10 @@ describe("startServer, against a migrated venue directory", () => {
         fullInvoices: false,
       });
 
+      const theme = await fetch(`http://127.0.0.1:${port}/api/theme`);
+      expect(theme.status).toBe(200);
+      expect(await theme.json()).toMatchObject({ css: "", logo: null });
+
       // A bare 404: no setup routes, and no till SPA catch-all since WAITRON_TILL_APP_DIR is unset.
       const status = await fetch(`http://127.0.0.1:${port}/setup-api/status`);
       expect(status.status).toBe(404);

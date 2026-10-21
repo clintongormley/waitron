@@ -188,6 +188,32 @@ describe("ALL_MODULES configuration transfer contribution", () => {
     );
     expect(tables.find((table) => table.name === "printers")?.omit).toContain("poll_token_hash");
   });
+
+  it("the core module refuses an invalid theme row and still runs its own checks", () => {
+    const core = ALL_MODULES.find((module) => module.name === "core")?.configurationTransfer;
+    if (core?.kind !== "tables" || !core.validate) throw new Error("core transfers no tables");
+    const validate = core.validate;
+    const theme = {
+      id: "theme-1",
+      name: "Lemon",
+      name_key: "lemon",
+      in_use: 1,
+      theme: '{"tokens":{}}',
+      updated_at: "2026-10-21T10:00:00.000Z",
+    };
+    expect(() => validate({ custom_themes: [theme] })).toThrow(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "custom_themes.theme" },
+      }),
+    );
+    expect(() => validate({ kitchen_stations: [{ colour: "invalid-colour" }] })).toThrow(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "kitchen_stations.colour" },
+      }),
+    );
+  });
 });
 
 describe("ALL_MODULES vocabulary seat", () => {

@@ -1255,6 +1255,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // This suite's configuration carries no regime limit.
       simplifiedInvoiceLimit: null,
       fullInvoices: false,
+      themeHash: "e5b913bdac6111b271019fdd50363b9b68977f24809cb00fb7a0cb54c2e72146",
     });
     // Nothing sensitive: no pin, certificate, connection string or AEAT verification url reaches the
     // wire. `verificationUrl` is named exactly rather than a bare `url`, because `servers[].url` is a

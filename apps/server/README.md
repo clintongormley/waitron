@@ -40,9 +40,10 @@ There is no connection string. The whole database is a **directory** — see
 `WAITRON_VENUE_DIR`, it is `venue` under whatever `WAITRON_STATE_DIR` names.
 
 Build with `pnpm --filter @waitron/server build` — this bundles `src/bin.ts` with esbuild AND copies
-every migration package's `drizzle/` folder beside the bundle (`scripts/copy-migrations.mjs`), which
-`WAITRON_MIGRATIONS_DIR` defaults to finding there. Running `dist/server.js` without that copy step
-fails loudly at boot with `migrations.set_missing`, not silently.
+every migration package's `drizzle/` folder beside the bundle, and ui-core's two token files under
+`dist/node_modules/@waitron/ui-core/` (`scripts/copy-migrations.mjs`); `WAITRON_MIGRATIONS_DIR`
+defaults to finding the folders there. Running `dist/server.js` without that copy step stops with an
+error as it starts, not silently.
 
 If your first setup is interrupted, direct and supervised startup can serve a restricted recovery
 API before ordinary database opens or staged restore/reset work. It currently offers inspection,
@@ -762,9 +763,10 @@ Each set's append-only triggers are installed in the same run; see
 
 `pnpm --filter @waitron/server build` runs `scripts/copy-migrations.mjs` (copies every migration
 package's `drizzle/` folder to `dist/drizzle/<set-name>`, reading the same
-`migrations.manifest.json` `@waitron/migrations` itself reads, so the two cannot name different sets)
-and then bundles `src/bin.ts` to `dist/server.js` with esbuild. Run the bundle directly:
-`node dist/server.js`.
+`migrations.manifest.json` `@waitron/migrations` itself reads, so the two cannot name different sets;
+it also copies ui-core's `package.json` and its two token files, `src/tokens/colors.css` and
+`src/tokens/structure.css`, under `dist/node_modules/@waitron/ui-core/`) and then bundles
+`src/bin.ts` to `dist/server.js` with esbuild. Run the bundle directly: `node dist/server.js`.
 
 `scripts/copy-migrations.mjs` also writes `dist/package.json` (`{"type":"module"}`), so `dist/` is
 portable as a directory on its own — copied into a Docker image with nothing else from this

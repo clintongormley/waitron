@@ -176,6 +176,7 @@ import { mountPaymentsApi } from "./payments-api.js";
 import { createCardProviderPool } from "./card-provider-pool.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { mountThemesApi } from "./themes-api.js";
 import { mountReceiptPreviewApi } from "./receipt-preview-api.js";
 import { drawLogoRasters } from "./receipt-logo.js";
 import { mountManagementApi } from "./management-api.js";
@@ -1852,6 +1853,7 @@ async function bootServer(
     archive: null,
     cloud: null,
   };
+  mountThemesApi(app, { db }, log);
   mountLocationSettingsApi(
     app,
     { db, cfg: till, fiscal: enabledFiscal, readBackupDeadlines: () => ({ ...backupDeadlines }) },

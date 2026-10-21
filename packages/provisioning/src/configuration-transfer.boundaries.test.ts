@@ -48,7 +48,7 @@ async function scratch(run: (tx: Transaction) => Promise<void>) {
 it.each([
   { value: null, field: "artifact" },
   { value: [], field: "artifact" },
-  { value: { version: 6 }, field: "version" },
+  { value: { version: 7 }, field: "version" },
   { value: { ...configurationBundle(), createdAt: "bad-date" }, field: "artifact" },
   { value: { ...configurationBundle(), modules: { module: -1 } }, field: "artifact" },
   { value: { ...configurationBundle(), reconnect: [3] }, field: "artifact" },

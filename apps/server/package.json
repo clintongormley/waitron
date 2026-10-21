@@ -71,6 +71,7 @@
     "@waitron/stream": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
     "@waitron/tunnel": "workspace:*",
+    "@waitron/ui-core": "workspace:*",
     "@waitron/venue-service": "workspace:*",
     "@waitron/workforce": "workspace:*",
     "@waitron/workforce-es": "workspace:*",

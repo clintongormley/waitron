@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 import { Hono } from "hono";
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
   installChangeFeed,
@@ -11,7 +11,6 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
-import type { ThemeOverride } from "@waitron/layouts";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
@@ -19,14 +18,10 @@ import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
-/**
- * The theme and retired canvas routes over HTTP, with the manager and staff
- * sessions a real sign-in mints.
- */
+/** The retired canvas routes over HTTP, with the manager session a real sign-in mints. */
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
-const STAFF_EMAIL = "clerk@x.com";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -94,13 +89,6 @@ async function provisionTenant(): Promise<Record<string, never>> {
         passwordHash: hashPassword(PASSWORD),
         role: "manager",
       },
-      {
-        displayName: "The Clerk",
-        email: STAFF_EMAIL,
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword(PASSWORD),
-        role: "staff",
-      },
     ]);
   });
   return {};
@@ -134,105 +122,6 @@ async function login(app: Hono, email: string): Promise<string> {
 }
 
 const JSON_HEADERS = { "content-type": "application/json" };
-
-describe("Management API — tenant theme (Task 11)", () => {
-  let managerCookie: string;
-
-  beforeAll(async () => {
-    await setupTenant();
-    managerCookie = await login(mountApp(), MANAGER_EMAIL);
-  });
-
-  it("GET returns { theme: null } for a tenant that has never authored a theme", async () => {
-    const app = mountApp();
-    const res = await app.request("/management-api/theme", { headers: { cookie: managerCookie } });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ theme: null });
-  });
-
-  it("PUT → 204, then GET reads the theme back (round-trip)", async () => {
-    const app = mountApp();
-    const theme: ThemeOverride = { tokens: { "--wt-color-primary": "#ff0000" } };
-    const put = await app.request("/management-api/theme", {
-      method: "PUT",
-      headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ theme }),
-    });
-    expect(put.status).toBe(204);
-    expect(await put.text()).toBe("");
-
-    const got = await app.request("/management-api/theme", { headers: { cookie: managerCookie } });
-    expect(got.status).toBe(200);
-    expect(await got.json()).toEqual({ theme });
-  });
-
-  it("PUT with an unknown token → 400 theme.invalid", async () => {
-    const app = mountApp();
-    const res = await app.request("/management-api/theme", {
-      method: "PUT",
-      headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ theme: { tokens: { "--evil": "red" } } }),
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "theme.invalid" },
-    });
-  });
-
-  it("PUT with a body omitting theme → 400 management.request_invalid naming the field", async () => {
-    const app = mountApp();
-    const empty = await app.request("/management-api/theme", {
-      method: "PUT",
-      headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({}),
-    });
-    expect(empty.status).toBe(400);
-    expect(
-      (await empty.json()) as { error: { code: string; params: { field: string } } },
-    ).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "theme" } },
-    });
-
-    // A JSON `null` body is read as `{}`, so the same field screen answers.
-    const nul = await app.request("/management-api/theme", {
-      method: "PUT",
-      headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: "null",
-    });
-    expect(nul.status).toBe(400);
-    expect((await nul.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "management.request_invalid" },
-    });
-  });
-
-  it("refuses the theme routes for a STAFF-role session with 403 (the authorizeManager gate)", async () => {
-    const app = mountApp();
-    const staffCookie = await login(app, STAFF_EMAIL);
-    const cases = [
-      app.request("/management-api/theme", { headers: { cookie: staffCookie } }),
-      app.request("/management-api/theme", {
-        method: "PUT",
-        headers: { ...JSON_HEADERS, cookie: staffCookie },
-        body: JSON.stringify({ theme: { tokens: { "--wt-color-primary": "#000000" } } }),
-      }),
-    ];
-    for (const res of await Promise.all(cases)) {
-      expect(res.status).toBe(403);
-      expect((await res.json()) as { error: { code: string } }).toMatchObject({
-        error: { code: "authorization.not_permitted" },
-      });
-    }
-  });
-
-  it("refuses the theme routes unauthenticated with 401", async () => {
-    const app = mountApp();
-    const res = await app.request("/management-api/theme");
-    expect(res.status).toBe(401);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "management_session.required" },
-    });
-  });
-});
 
 describe("A182 canvas retirement", () => {
   it("answers retired canvas routes like an unknown route while profiles remain available", async () => {

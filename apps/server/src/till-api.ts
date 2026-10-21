@@ -250,7 +250,7 @@ import {
   switchToReceipt,
 } from "./invoice-delivery-actions.js";
 import { canEmailInvoice } from "./invoice-email-contact.js";
-import { readTillSetup, setupRevisionOf } from "./till-setup.js";
+import { completeTillSetup, readTillSetup, setupRevisionOf } from "./till-setup.js";
 import { resolveLoginLocale } from "./login-locale.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
@@ -1476,7 +1476,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // is due.
       const device = await tryReadDevice({ db: deps.db, devMode: deps.devMode }, c);
       const held = await readNodeMembership(deps.db);
-      const setup = await withTransaction(deps.db, (tx) => readTillSetup(tx, deps, device));
+      const setup = completeTillSetup(
+        await withTransaction(deps.db, (tx) => readTillSetup(tx, deps, device)),
+      );
       return c.json({
         ...setup,
         setupRevision: setupRevisionOf(setup),
@@ -1584,7 +1586,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { device } = session;
       const asked = c.req.query("zoneId");
       const zoneId = asked === undefined ? undefined : requireUuidParam(asked, "ServiceZoneId");
-      const state = await withTransaction(deps.db, async (tx) => {
+      const { state, setupRead } = await withTransaction(deps.db, async (tx) => {
         if (zoneId !== undefined) await checkZones(tx, deps.cfg, session, [{ zoneId }]);
         const zone =
           zoneId === undefined
@@ -1596,19 +1598,19 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             : (await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId)).zoneId;
         const at = new Date();
         const menuState = await VENUE_SERVICE.menuState(tx, deps.cfg, zone, at);
+        const defaultMenuId = await VENUE_SERVICE.resolveDefaultMenu(
+          tx,
+          deps.cfg,
+          zone,
+          at,
+          menuState.menus.map((menu) => menu.menuId),
+        );
         return {
-          ...menuState,
-          defaultMenuId: await VENUE_SERVICE.resolveDefaultMenu(
-            tx,
-            deps.cfg,
-            zone,
-            at,
-            menuState.menus.map((menu) => menu.menuId),
-          ),
-          setupRevision: setupRevisionOf(await readTillSetup(tx, deps, device)),
+          state: { ...menuState, defaultMenuId },
+          setupRead: await readTillSetup(tx, deps, device),
         };
       });
-      return c.json(state);
+      return c.json({ ...state, setupRevision: setupRevisionOf(completeTillSetup(setupRead)) });
     }),
   );
 

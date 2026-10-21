@@ -35,7 +35,8 @@ RUN set -eux; \
   bounded pnpm install --frozen-lockfile
 
 # `@waitron/server`'s build emits dist/server.js, dist/node-entry.js (this image's ENTRYPOINT), the
-# four operator CLIs and dist/drizzle/ (copy-migrations.mjs); the three web apps emit dist/ via vite.
+# four operator CLIs, dist/drizzle/ and dist/node_modules/@waitron/ui-core/ (copy-migrations.mjs);
+# the three web apps emit dist/ via vite.
 RUN pnpm --filter @waitron/server build \
   && pnpm --filter @waitron/till build \
   && pnpm --filter @waitron/dashboard build \
@@ -216,6 +217,7 @@ COPY --from=build --chown=waitron:waitron /src/apps/dashboard/dist/ /app/web/das
 COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/ /app/web/setup/
 COPY --from=build --chown=waitron:waitron /src/apps/server/scripts/demo-seed/media/ /app/demo-media/
 COPY --from=build --chown=waitron:waitron /sharp-runtime/node_modules/ /app/node_modules/
+COPY --from=build --chown=waitron:waitron /src/apps/server/dist/node_modules/@waitron/ /app/node_modules/@waitron/
 COPY --from=build --chown=waitron:waitron /src/deploy/third-party/ /app/third-party/
 COPY --from=build --chown=waitron:waitron \
   /src/apps/server/dist/server.js.NOTICES.txt \

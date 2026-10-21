@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { THEME_RULES, checkRules } from "./contrast-rules.js";
 import { MODES, type Mode } from "./defaults.js";
-import { type Background, WAITRON_CHOICES, type DerivedTheme } from "./theme.js";
+import { BACKGROUNDS, type Background, WAITRON_CHOICES, type DerivedTheme } from "./theme.js";
 import { colourToken, THEME_TOKENS } from "./tokens.js";
 import { deriveTheme, WAITRON_DEFAULTS } from "./waitron.js";
 
@@ -11,7 +11,6 @@ const hex = (value: number) => value.toString(16).padStart(2, "0");
 const BRANDS = STEPS.flatMap((r) =>
   STEPS.flatMap((g) => STEPS.map((b) => `#${hex(r)}${hex(g)}${hex(b)}`)),
 );
-const BACKGROUNDS: readonly Background[] = ["neutral", "tinted"];
 
 const failingRules = (theme: DerivedTheme, mode: Mode) =>
   checkRules(

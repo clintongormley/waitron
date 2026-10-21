@@ -4,7 +4,9 @@ import { type Memo, type ModeResult, settleMode, withMemo } from "./derive.js";
 import { nextFix, warningsFor, warns } from "./warnings.js";
 import { type Corners, type ThemeColour, THEME_COLOURS, handTokens } from "./tokens.js";
 
-export type Background = "neutral" | "tinted";
+export const BACKGROUNDS = ["neutral", "tinted"] as const;
+
+export type Background = (typeof BACKGROUNDS)[number];
 
 export interface ThemeChoices {
   /** `null` is Waitron's own brand colour. */

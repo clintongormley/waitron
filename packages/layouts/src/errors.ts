@@ -1,4 +1,5 @@
 import "@waitron/shared";
+import type { ThemeNameRefusal, ThemeRefusalReason } from "@waitron/ui-core/theme";
 
 // Receipt params name known fields and approved languages, never authored text or unknown keys.
 declare module "@waitron/shared" {
@@ -42,10 +43,9 @@ declare module "@waitron/shared" {
     "device_profile.not_found": { field?: "approvedProfileIds" };
     "device_profile.name_taken": Record<string, never>;
     "device_profile.in_use": Record<string, never>;
-    "theme.invalid": {
-      reason: "not_object" | "bad_tokens" | "unknown_token" | "bad_value" | "too_long";
-      token?: string;
-      maxLength?: number;
-    };
+    "theme.invalid": { field: string; reason: ThemeRefusalReason | ThemeNameRefusal };
+    "theme.name_taken": { field: "name" };
+    "theme.not_found": Record<string, never>;
+    "setup.request_invalid": { field: string };
   }
 }

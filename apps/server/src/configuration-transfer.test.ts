@@ -79,6 +79,7 @@ import {
   drawerOpens,
   stationPrinters,
   CORE_CONFIGURATION_TRANSFER,
+  customThemes,
   products,
   sales,
   tenantReceipts,
@@ -397,7 +398,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 5,
+  version: 6,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -2416,6 +2417,102 @@ it.each([null, [], {}, 1, false, "invalid-colour"])(
   },
 );
 
+describe("custom themes in a configuration copy", () => {
+  const lemon = {
+    brandColor: "#f2d300",
+    brandFix: {},
+    background: "neutral",
+    corners: "standard",
+    handSet: { light: {}, dark: {} },
+  };
+  const darkGreen = { ...lemon, brandColor: "#1e5b3a", background: "tinted" };
+
+  async function themedBundle(taxId: string) {
+    const source = await applyVenue(planVenue(venue(taxId), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await suite.db.insert(customThemes).values([
+      { name: "Lemon Bar", nameKey: "lemon bar", inUse: null, theme: lemon },
+      { name: "Green Room", nameKey: "green room", inUse: 1, theme: darkGreen },
+    ]);
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-21T10:00:00Z"),
+      versions,
+    );
+    return { transferred, versions };
+  }
+
+  function importInto(
+    taxId: string,
+    transferred: ConfigurationBundle,
+    versions: Awaited<ReturnType<typeof schemaVersionsByModule>>,
+  ) {
+    return applyVenue(planVenue(venue(taxId), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    });
+  }
+
+  async function expectNothingKept(): Promise<void> {
+    expect((await targetSuite.db.execute(sql`select count(*) as n from tenants`)).rows).toEqual([
+      { n: 0 },
+    ]);
+    expect(
+      (await targetSuite.db.execute(sql`select count(*) as n from custom_themes`)).rows,
+    ).toEqual([{ n: 0 }]);
+  }
+
+  it("carries the custom themes and which one is in use, a hard-to-read one included", async () => {
+    const { transferred, versions } = await themedBundle("B13572480");
+    await importInto("B97531880", transferred, versions);
+    const sourceIds = new Set(
+      (await suite.db.select({ id: customThemes.id }).from(customThemes)).map((row) => row.id),
+    );
+    const imported = await targetSuite.db.select().from(customThemes);
+    expect(
+      imported
+        .map((row) => ({
+          name: row.name,
+          nameKey: row.nameKey,
+          inUse: row.inUse,
+          choices: row.theme,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    ).toEqual([
+      { name: "Green Room", nameKey: "green room", inUse: 1, choices: darkGreen },
+      { name: "Lemon Bar", nameKey: "lemon bar", inUse: null, choices: lemon },
+    ]);
+    expect(imported.every((row) => !sourceIds.has(row.id))).toBe(true);
+  });
+
+  it("refuses a copy with two themes in use without keeping venue rows", async () => {
+    const { transferred, versions } = await themedBundle("B13572481");
+    for (const row of transferred.tables.custom_themes!) row.in_use = 1;
+    await expect(importInto("B97531881", transferred, versions)).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "custom_themes.in_use" },
+    });
+    await expectNothingKept();
+  });
+
+  it("refuses a copy whose name key is not its name's", async () => {
+    const { transferred, versions } = await themedBundle("B13572482");
+    transferred.tables.custom_themes![0]!.name_key = "another theme";
+    await expect(importInto("B97531882", transferred, versions)).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "custom_themes.name_key" },
+    });
+    await expectNothingKept();
+  });
+});
+
 it("transfers a printer on two stations in configuration export", async () => {
   const source = await applyVenue(planVenue(venue("B13572470"), ALL_MODULES), {
     db: suite.db,
@@ -4381,7 +4478,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(5);
+  expect(exported.version).toBe(6);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

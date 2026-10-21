@@ -24,6 +24,17 @@ for (const set of manifest) {
 await cp(join(packageRoot, "src/assets"), join(distDir, "assets"), { recursive: true });
 await cp(join(packageRoot, "src/guide"), join(distDir, "guide"), { recursive: true });
 
+// ui-core's `exports` has no "./package.json" entry, so its manifest is found by path, not by name.
+const uiCoreRoot = resolve(packageRoot, "../../packages/ui-core");
+const uiCoreTarget = join(distDir, "node_modules/@waitron/ui-core");
+await rm(uiCoreTarget, { recursive: true, force: true });
+await mkdir(join(uiCoreTarget, "src/tokens"), { recursive: true });
+await cp(join(uiCoreRoot, "package.json"), join(uiCoreTarget, "package.json"));
+for (const name of ["colors.css", "structure.css"]) {
+  await cp(join(uiCoreRoot, "src/tokens", name), join(uiCoreTarget, "src/tokens", name));
+}
+process.stdout.write("copied ui-core token files\n");
+
 // The ESM bundle carries its own module type, so a `dist/` copied out alone does not depend on
 // finding apps/server/package.json above it or on Node's syntax detection.
 await writeFile(join(distDir, "package.json"), `${JSON.stringify({ type: "module" })}\n`);

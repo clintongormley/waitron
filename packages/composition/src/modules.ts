@@ -47,7 +47,8 @@ import {
   IDENTITY_CONFIGURATION_TRANSFER,
   IDENTITY_CHANGE_SOURCES,
 } from "@waitron/identity";
-import type { WaitronModule } from "@waitron/module";
+import { validateThemeConfiguration } from "@waitron/layouts";
+import type { ModuleConfigurationTransfer, WaitronModule } from "@waitron/module";
 import {
   PAYMENTS_ALERTS,
   PAYMENTS_CLASSIFICATION,
@@ -87,6 +88,22 @@ import {
   WORKFORCE_ES_VOCABULARY,
 } from "@waitron/workforce-es";
 
+type TransferValidate = NonNullable<
+  Extract<ModuleConfigurationTransfer, { kind: "tables" }>["validate"]
+>;
+
+// The custom_themes rows' check lives in @waitron/layouts, which packages/db does not depend on,
+// so it joins the core module's check here.
+const validateCore: TransferValidate = CORE_CONFIGURATION_TRANSFER.validate;
+
+const CORE_TRANSFER: ModuleConfigurationTransfer = {
+  ...CORE_CONFIGURATION_TRANSFER,
+  validate: (tables, bundle) => {
+    validateCore(tables, bundle);
+    validateThemeConfiguration(tables);
+  },
+};
+
 /**
  * Every Waitron module, in composition order. The one place that names every module package: the
  * server, the provisioning CLI and the root guards all read this list. What
@@ -114,7 +131,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     alerts: CORE_ALERTS,
     classification: CORE_CLASSIFICATION,
     changes: CORE_CHANGE_SOURCES,
-    configurationTransfer: CORE_CONFIGURATION_TRANSFER,
+    configurationTransfer: CORE_TRANSFER,
   },
   {
     name: "catalogue",

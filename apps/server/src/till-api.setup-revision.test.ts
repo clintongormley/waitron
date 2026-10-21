@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
-import { deviceProfiles, locations, withTransaction } from "@waitron/db";
+import { eq, sql } from "drizzle-orm";
+import { beforeEach, describe, expect, it } from "vitest";
+import { customThemes, deviceProfiles, locations, withTransaction } from "@waitron/db";
 import { loginWithPin } from "@waitron/identity";
+import { readThemeInUse } from "@waitron/layouts";
+import type { ThemeChoices } from "@waitron/ui-core/theme";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createServiceZone, setProfileServiceAccess } from "@waitron/venue-service";
@@ -10,6 +12,7 @@ import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed
 import { DEVICE_COOKIE } from "./device-session.js";
 import { createCourse, updateCourse } from "./kitchen.js";
 import { SESSION_COOKIE } from "./till-session.js";
+import { WAITRON_THEME_ANSWER, forgetVenueTheme, venueThemeAnswer } from "./venue-theme.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import {
@@ -22,6 +25,37 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });
+
+const LEMON: ThemeChoices = {
+  brandColor: "#f2d300",
+  brandFix: {},
+  background: "neutral",
+  corners: "standard",
+  handSet: { light: {}, dark: {} },
+};
+
+const DARK_GREEN: ThemeChoices = { ...LEMON, brandColor: "#1e5b3a" };
+
+beforeEach(() => {
+  forgetVenueTheme();
+});
+
+async function storeTheme(name: string, theme: ThemeChoices, inUse: boolean): Promise<string> {
+  const [row] = await suite.db
+    .insert(customThemes)
+    .values({ name, nameKey: name.toLowerCase(), inUse: inUse ? 1 : null, theme })
+    .returning({ id: customThemes.id });
+  return row!.id;
+}
+
+async function putInUse(id: string): Promise<void> {
+  await suite.db.update(customThemes).set({ inUse: null }).where(eq(customThemes.inUse, 1));
+  await suite.db.update(customThemes).set({ inUse: 1 }).where(eq(customThemes.id, id));
+}
+
+async function hashInUse(): Promise<string> {
+  return venueThemeAnswer(await withTransaction(suite.db, readThemeInUse)).hash;
+}
 
 let nifCounter = 0;
 const nextNif = () => nifWithControlLetter(72_000_000 + ++nifCounter);
@@ -137,5 +171,86 @@ describe("the till's setup revision", () => {
       .where(eq(deviceProfiles.id, second.profileId));
     expect(await startRevision(second.till)).toBe(firstRevision);
     expect(await menuStateRevision(second.till)).toBe(firstRevision);
+  });
+
+  it("switching the theme in use moves the revision, and themeHash is /api/theme's hash", async () => {
+    const till = await setupTill();
+    const waitron = await sendAsTill(till, "GET", "/api/till");
+    expect(waitron.status).toBe(200);
+    expect(waitron.body.themeHash).toBe(WAITRON_THEME_ANSWER.hash);
+    const lemonId = await storeTheme("Lemon", LEMON, true);
+    const greenId = await storeTheme("Dark green", DARK_GREEN, false);
+    const lemon = await sendAsTill(till, "GET", "/api/till");
+    expect(lemon.body.themeHash).toBe(await hashInUse());
+    expect(lemon.body.themeHash).not.toBe(WAITRON_THEME_ANSWER.hash);
+    expect(lemon.body.setupRevision).not.toBe(waitron.body.setupRevision);
+    await putInUse(greenId);
+    const green = await sendAsTill(till, "GET", "/api/till");
+    expect(green.body.themeHash).toBe(await hashInUse());
+    expect(green.body.themeHash).not.toBe(lemon.body.themeHash);
+    expect(green.body.setupRevision).not.toBe(lemon.body.setupRevision);
+    await putInUse(lemonId);
+    expect(await startRevision(till)).toBe(lemon.body.setupRevision);
+  });
+
+  it("saving the theme in use with new choices moves the revision", async () => {
+    const till = await setupTill();
+    const lemonId = await storeTheme("Lemon", LEMON, true);
+    const before = await sendAsTill(till, "GET", "/api/till");
+    await suite.db
+      .update(customThemes)
+      .set({ theme: { ...LEMON, brandColor: "#1e5b3a" } })
+      .where(eq(customThemes.id, lemonId));
+    const after = await sendAsTill(till, "GET", "/api/till");
+    expect(after.body.themeHash).toBe(await hashInUse());
+    expect(after.body.themeHash).not.toBe(before.body.themeHash);
+    expect(after.body.setupRevision).not.toBe(before.body.setupRevision);
+    expect(await menuStateRevision(till)).toBe(after.body.setupRevision);
+  });
+
+  it("saving a theme that is not in use leaves the revision", async () => {
+    const till = await setupTill();
+    await storeTheme("Lemon", LEMON, true);
+    const greenId = await storeTheme("Dark green", DARK_GREEN, false);
+    const before = await startRevision(till);
+    await suite.db
+      .update(customThemes)
+      .set({ theme: { ...DARK_GREEN, corners: "square" } })
+      .where(eq(customThemes.id, greenId));
+    expect(await startRevision(till)).toBe(before);
+    expect(await menuStateRevision(till)).toBe(before);
+  });
+
+  it("the menu-state poll's revision is the start read's", async () => {
+    const till = await setupTill();
+    await storeTheme("Lemon", LEMON, true);
+    const start = await sendAsTill(till, "GET", "/api/till");
+    expect(start.body.themeHash).toBe(await hashInUse());
+    expect(start.body.themeHash).not.toBe(WAITRON_THEME_ANSWER.hash);
+    expect(await menuStateRevision(till)).toBe(start.body.setupRevision);
+  });
+
+  it.each(["{broken", '{"tokens":{}}'])(
+    "a stored document this release cannot use still answers the start read: %s",
+    async (text) => {
+      const till = await setupTill();
+      await suite.db.run(
+        sql`insert into custom_themes (id, name, name_key, in_use, theme, updated_at)
+            values ('5d9f0a8e-1c2b-4e3d-8f4a-6b7c8d9e0f1a', 'Stored', 'stored', 1, ${text},
+                    '2026-10-21T00:00:00.000Z')`,
+      );
+      const start = await sendAsTill(till, "GET", "/api/till");
+      expect(start.status).toBe(200);
+      expect(start.body.themeHash).toBe(WAITRON_THEME_ANSWER.hash);
+      expect(await menuStateRevision(till)).toBe(start.body.setupRevision);
+    },
+  );
+
+  it("the lemon brand (#f2d300) in use answers the lemon's hash", async () => {
+    const till = await setupTill();
+    const id = await storeTheme("Lemon", LEMON, true);
+    const start = await sendAsTill(till, "GET", "/api/till");
+    expect(start.status).toBe(200);
+    expect(start.body.themeHash).toBe(venueThemeAnswer({ id, choices: LEMON }).hash);
   });
 });

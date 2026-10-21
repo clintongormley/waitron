@@ -69,7 +69,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
     { name: "page_printers", locationColumns: ["location_id"], reconnect: true },
     { name: "device_profile_printers" },
     { name: "station_printers" },
-    { name: "tenant_themes" },
+    { name: "custom_themes" },
   ],
   validate: validateCoreConfiguration,
 } as const;

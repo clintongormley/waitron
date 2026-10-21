@@ -96,6 +96,7 @@ export async function clockApp(
     servers: [],
     simplifiedInvoiceLimit: null,
     fullInvoices: false,
+    themeHash: "theme",
     setupRevision: "clock",
   };
   const write = (status: TillClockState["state"]) => {
