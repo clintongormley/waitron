@@ -1,3 +1,4 @@
+import { makeAuthority as makeCertificateAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +12,8 @@ import { loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { resolveEmailDelivery } from "./email-delivery.js";
 import { createSetupOperationStore } from "./setup-operation.js";
+
+const certificate = makeCertificateAuthority().issue({ passphrase: "fiscal-fixture" });
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -73,7 +76,13 @@ function body(mode: "live" | "demo" | "prepare" = "live"): Record<string, unknow
       },
     },
     ...(mode === "live"
-      ? { aeatCert: { pfxBase64: "AA==", passphrase: "fiscal-fixture", certKind: "sello" } }
+      ? {
+          aeatCert: {
+            pfxBase64: certificate.pfx.toString("base64"),
+            passphrase: "fiscal-fixture",
+            certKind: "sello",
+          },
+        }
       : {}),
   };
 }

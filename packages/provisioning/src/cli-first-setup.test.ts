@@ -1,3 +1,4 @@
+import { makeAuthority as makeCertificateAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -868,8 +869,11 @@ it("a refusal after stamping retains the environment without writing the venue",
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
 });
 
+const certificateAuthority = makeCertificateAuthority();
+const productionMaterial = certificateAuthority.issue({ passphrase: "SYNTHETIC-production-cert" });
+const replacementMaterial = certificateAuthority.issue({ passphrase: "SYNTHETIC-production-cert" });
 const productionCertificate = {
-  pfxBase64: "c3ludGhldGlj",
+  pfxBase64: productionMaterial.pfx.toString("base64"),
   passphrase: "SYNTHETIC-production-cert",
   certKind: "sello",
 };
@@ -979,7 +983,10 @@ it.each(["certificate", "build", "key"] as const)(
       await writeFile(
         f.settingsPath,
         JSON.stringify({
-          aeatCert: { ...productionCertificate, pfxBase64: "YW5vdGhlcg==" },
+          aeatCert: {
+            ...productionCertificate,
+            pfxBase64: replacementMaterial.pfx.toString("base64"),
+          },
           email: productionEmail,
         }),
       );
@@ -1035,7 +1042,10 @@ it("production activation seals the checked settings snapshot if its source file
         await writeFile(
           f.settingsPath,
           JSON.stringify({
-            aeatCert: { ...productionCertificate, pfxBase64: "YW5vdGhlcg==" },
+            aeatCert: {
+              ...productionCertificate,
+              pfxBase64: replacementMaterial.pfx.toString("base64"),
+            },
             email: { ...productionEmail, password: "SYNTHETIC-raced" },
           }),
         );
