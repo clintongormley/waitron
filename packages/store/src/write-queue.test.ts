@@ -18,27 +18,18 @@ const full = (db: DatabaseSync) => {
 
 const fill = (db: DatabaseSync) => db.exec("insert into t (who) values (zeroblob(65536))");
 
-/**
- * Stands in for a disk that fills at `commit`. E7 and K in
- * `docs/superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md` measured a real full disk
- * answering this way: the commit refused with errcode 13 and the engine had already rolled the
- * whole transaction back, leaving none open.
- */
-const fullAtCommit = (real: DatabaseSync) => {
+/** `real`, with `exec` answered by `exec` instead; every `exec` text is recorded in `execs`. */
+const scriptExec = (
+  real: DatabaseSync,
+  exec: (text: string, target: DatabaseSync) => void,
+): { db: DatabaseSync; execs: string[] } => {
   const execs: string[] = [];
   const db = new Proxy(real, {
     get(target, property) {
       if (property === "exec") {
         return (text: string) => {
           execs.push(text);
-          if (text === "commit") {
-            target.exec("rollback");
-            throw Object.assign(new Error("database or disk is full"), {
-              errcode: 13,
-              code: "ERR_SQLITE_ERROR",
-            });
-          }
-          target.exec(text);
+          exec(text, target);
         };
       }
       const value: unknown = Reflect.get(target, property, target);
@@ -49,6 +40,23 @@ const fullAtCommit = (real: DatabaseSync) => {
   });
   return { db, execs };
 };
+
+const diskFullError = () =>
+  Object.assign(new Error("database or disk is full"), { errcode: 13, code: "ERR_SQLITE_ERROR" });
+
+/**
+ * Stands in for a disk that fills at `commit`. E7 and K in
+ * `docs/superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md` measured a real full disk
+ * answering this way: the commit refused with errcode 13 and the engine had already rolled the
+ * whole transaction back, leaving none open. `endsTransaction: false` is a commit refused with
+ * errcode 13 that leaves the transaction open, which no measurement produced.
+ */
+const fullAtCommit = (real: DatabaseSync, { endsTransaction = true } = {}) =>
+  scriptExec(real, (text, target) => {
+    if (text !== "commit") return target.exec(text);
+    if (endsTransaction) target.exec("rollback");
+    throw diskFullError();
+  });
 
 const who = (db: DatabaseSync) =>
   db.prepare("select who from t order by id").all() as { who: string }[];
@@ -250,15 +258,44 @@ describe("when the engine ends the queue's transaction itself", () => {
   it("hands back storage.disk_full when the disk fills at commit, and issues no rollback of its own", async () => {
     const real = open();
     const { db, execs } = fullAtCommit(real);
+    const c = connectionPair(db, db);
+    const queue = createWriteQueue(c);
+    await expect(
+      queue.run(async () => {
+        real.prepare("insert into t (who) values (?)").run("A");
+      }),
+    ).rejects.toMatchObject({ code: "storage.disk_full" });
+    expect(execs).toEqual(["begin immediate", "commit"]);
+    expect(who(real)).toEqual([]);
+    expect(real.isTransaction).toBe(false);
+    expect(c.endedBy()).toBeUndefined();
+  });
+
+  it("rolls back a commit refused for a full disk that left the transaction open", async () => {
+    const real = open();
+    const { db, execs } = fullAtCommit(real, { endsTransaction: false });
     const queue = createWriteQueue(connectionPair(db, db));
     await expect(
       queue.run(async () => {
         real.prepare("insert into t (who) values (?)").run("A");
       }),
     ).rejects.toMatchObject({ code: "storage.disk_full" });
-    expect(execs.slice(execs.indexOf("commit") + 1)).not.toContain("rollback");
-    expect(who(real)).toEqual([]);
+    expect(execs).toEqual(["begin immediate", "commit", "rollback"]);
     expect(real.isTransaction).toBe(false);
+    expect(who(real)).toEqual([]);
+  });
+
+  it("passes a refused begin through unchanged and clears a stale record of an ended transaction", async () => {
+    const refusal = new Error("begin refused");
+    const { db } = scriptExec(open(), (text, target) => {
+      if (text === "begin immediate") throw refusal;
+      target.exec(text);
+    });
+    const c = connectionPair(db, db);
+    c.noteEnded(new Error("stale"));
+    const queue = createWriteQueue(c);
+    await expect(queue.run(async () => "never")).rejects.toBe(refusal);
+    expect(c.endedBy()).toBeUndefined();
   });
 
   it("still rolls back a commit the engine refused and left open", async () => {

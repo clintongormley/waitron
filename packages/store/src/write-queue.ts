@@ -13,11 +13,12 @@ import { asDiskFull } from "./disk-full.js";
  * get partway through and then fail to upgrade.
  *
  * The queue rolls back only a transaction that is still open. A full disk at a statement or at
- * `commit` can end the transaction inside the engine, which rolls the whole of it back itself (E1 and E7 in
- * `docs/superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md`); a `rollback` issued then is refused "cannot rollback - no transaction is
- * active", and that refusal would hide the full disk. A full disk that leaves the transaction open
- * (E13, E14) is still rolled back here, or the next `begin immediate` would be refused. A body
- * that returns after its transaction was ended is not reported as a success.
+ * `commit` can end the transaction inside the engine, which rolls the whole of it back itself (E1
+ * and E7 in `docs/superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md`); a `rollback`
+ * issued then is refused "cannot rollback - no transaction is active", and that refusal would hide
+ * the full disk. A full disk that leaves the transaction open (E13, E14) is still rolled back here,
+ * or the next `begin immediate` would be refused. A body that returns after its transaction was
+ * ended is not reported as a success.
  */
 export function createWriteQueue(connections: Connections) {
   let tail: Promise<unknown> = Promise.resolve();

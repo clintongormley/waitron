@@ -103,7 +103,8 @@ export interface Connections {
   insideBody: () => boolean;
   /**
    * Records `error` as the failure that ended the writer's open transaction. The FIRST one is kept
-   * until {@link Connections.clearEnded}: later statements fail only because of it.
+   * until {@link Connections.clearEnded}; while it is, `./node-sqlite-adapter.ts` throws it for a
+   * statement or a `transaction()` issued from inside a body.
    */
   noteEnded: (error: unknown) => void;
   /** The failure {@link Connections.noteEnded} recorded, if any. */
@@ -194,17 +195,17 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
     asTransactionBody: <T>(body: () => T): T => {
       const token = Symbol("transaction body");
       running.add(token);
-      const ended = () => {
+      const finished = () => {
         running.delete(token);
       };
       let result: T;
       try {
         result = context.run(token, body);
       } catch (error) {
-        ended();
+        finished();
         throw error;
       }
-      return settle(result, ended, ended);
+      return settle(result, finished, finished);
     },
     forStatement: () => (running.size === 0 || insideBody() ? write : read),
     insideBody,
