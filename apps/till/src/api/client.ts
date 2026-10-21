@@ -207,7 +207,7 @@ export interface TillInfo {
   simplifiedInvoiceLimit: string | null;
   /** Whether the server can issue a full invoice naming the customer (F1). */
   fullInvoices: boolean;
-  /** `/api/theme`'s hash for the theme in use; the till does not read it. */
+  /** `/api/theme`'s hash for the theme in use; the till follows it through `followVenueTheme`. */
   themeHash: string;
   /** A hash of every field here but `servers`; `/api/menu-state` names it too. */
   setupRevision: string;

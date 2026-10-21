@@ -46,6 +46,7 @@ import {
   registerIcons,
   NUTRITION_ICONS,
   ThemeChoiceController,
+  followVenueTheme,
   setHelpMode,
 } from "@waitron/ui";
 import {
@@ -2205,6 +2206,8 @@ export class TillApp extends LitElement {
   #bootGeneration = 0;
   /** The setup revision of the last setup applied. */
   #setupRevision?: string;
+  /** `/api/theme`'s hash for the theme in use, from the last setup applied. */
+  #themeHash?: string;
   /** A read of the setup a poll asked for, while it is out. */
   #setupRead?: Promise<void>;
   /** Each read of the setup is numbered when it is sent; an answer applies its venue values only
@@ -5561,6 +5564,7 @@ export class TillApp extends LitElement {
 
   #onMenuState(zoneId: string, state: MenuStateAnswer): void {
     this.#noteSetupRevision(state.setupRevision);
+    if (this.#themeHash !== undefined) followVenueTheme(this.#themeHash);
     if (zoneId === this.counterServiceZoneId) {
       const unavailableMoved = this.#counterOffers.setUnavailable(state.unavailable);
       if (this.#counterGridOffers.setUnavailable(state.unavailable) || unavailableMoved)
@@ -9305,6 +9309,10 @@ export class TillApp extends LitElement {
     this.activeReaders = till.activeReaders ?? [];
     this.defaultReaderId = till.defaultReaderId;
     this.#setupRevision = till.setupRevision;
+    if (typeof till.themeHash === "string") {
+      this.#themeHash = till.themeHash;
+      followVenueTheme(till.themeHash);
+    }
   }
 
   /** A poll named a setup revision: read the setup again when it is not the one applied. */

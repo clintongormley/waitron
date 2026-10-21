@@ -26,6 +26,8 @@ import { ServerRouter } from "./api/server-router.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { WtCombobox } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { applyTokens, startVenueTheme, VENUE_THEME_STORAGE_KEY } from "@waitron/ui";
+import { FIXTURE_ANSWER, FIXTURE_LIGHT_BG } from "@waitron/ui/test/venue-theme-fixture.js";
 
 // Mesa 4 holds party v1, on tab wo-4, in zone z1, whose Lunch menu offers Beer, Steak and Flan.
 
@@ -763,5 +765,97 @@ describe("A768 a settings read that gets no answer", () => {
     await tick(el, 15_000);
     expect(api.getTill.mock.calls.length).toBe(reads + 2);
     expect(courseIds(venue(el).courses)).toEqual(["drinks", "mains", "desserts"]);
+  });
+});
+
+describe("A841 the till follows the theme in use", () => {
+  let themeAnswer: unknown;
+  const themeFetch = vi.fn(async () => {
+    if (themeAnswer instanceof Error) throw themeAnswer;
+    return new Response(JSON.stringify(themeAnswer));
+  });
+  const never = () => new Promise<Response>(() => {});
+
+  const bg = (): string =>
+    getComputedStyle(document.documentElement).getPropertyValue("--wt-color-bg").trim();
+
+  beforeEach(() => {
+    server = draftServer();
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    applyTokens(document.documentElement);
+    localStorage.removeItem(VENUE_THEME_STORAGE_KEY);
+    themeFetch.mockClear();
+    themeAnswer = { hash: "h1", css: "", logo: null };
+    startVenueTheme(document.documentElement, { fetchImpl: themeFetch as typeof fetch });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanupWidgets();
+    localStorage.removeItem(VENUE_THEME_STORAGE_KEY);
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+  });
+
+  async function poll(el: TillApp): Promise<void> {
+    vi.advanceTimersByTime(15_000);
+    await flush(el);
+  }
+
+  const first = { ...till(drillFormFactor), themeHash: "h1", setupRevision: "s1" };
+  const moved = { ...till(drillFormFactor), themeHash: "h2", setupRevision: "s2" };
+  const fixture = { ...FIXTURE_ANSWER, hash: "h2" };
+
+  async function openTill(next: typeof first) {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValueOnce(first).mockResolvedValue(next),
+    });
+    await openMesa(el);
+    expect(themeFetch).toHaveBeenCalledTimes(1);
+    return el;
+  }
+
+  it("a moved theme hash repaints an open till without a reload", async () => {
+    const el = await openTill(moved);
+    themeAnswer = fixture;
+    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
+    await poll(el);
+    await vi.waitFor(() => expect(bg()).toBe(FIXTURE_LIGHT_BG));
+    expect(themeFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("a setup change that keeps the theme fetches nothing", async () => {
+    const el = await openTill({ ...moved, themeHash: "h1" });
+    const reads = api.getTill.mock.calls.length;
+    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
+    await poll(el);
+    expect(api.getTill.mock.calls.length).toBe(reads + 1);
+    await flush(el);
+    expect(themeFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("the same revision fetches nothing", async () => {
+    const el = await openTill(first);
+    const checks = api.menuState.mock.calls.length;
+    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s1"));
+    await poll(el);
+    await poll(el);
+    expect(api.menuState.mock.calls.length).toBeGreaterThan(checks);
+    expect(themeFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("a failed theme fetch is tried again on the next poll", async () => {
+    const el = await openTill(moved);
+    const before = bg();
+    themeAnswer = new TypeError("Failed to fetch");
+    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
+    await poll(el);
+    await vi.waitFor(() => expect(themeFetch).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(bg()).toBe(before);
+    expect(before).not.toBe(FIXTURE_LIGHT_BG);
+    themeAnswer = fixture;
+    await poll(el);
+    await vi.waitFor(() => expect(bg()).toBe(FIXTURE_LIGHT_BG));
+    expect(themeFetch).toHaveBeenCalledTimes(3);
   });
 });
