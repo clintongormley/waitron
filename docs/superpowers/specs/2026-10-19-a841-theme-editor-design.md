@@ -1874,6 +1874,12 @@ optional. The guard is weaker than its name: it reads `color:` declarations as t
 redeclared token (`printers-screen.ts:218`, `--wt-color-text: var(--wt-color-primary)`), a `fill:` or
 `stroke:` (`apps/setup/src/setup-app.ts:472`, `packages/ui/src/components/wt-floor-map.ts:319`), and a
 read from script; the plan lists those by hand.
+(2026-10-21, A841 slice 4: at `32416bfa3` there were 17 such lines — `initial-setup-screen.ts:26`
+and `first-hour.ts:87` arrived with `4e318802f`, and `content-translations-dialog.ts:144` left with
+its file in #1913. 12 moved to `--wt-color-primary-text`; the 5 icons and spinners stay, listed in
+`scripts/primary-coloured-text.test.ts`. In `apps/setup` the two link rules moved,
+`form-styles.ts:49` and `initial-setup-screen.ts:26`; the provisioning spinner,
+`provisioning-screen.ts:41`, stays.)
 
 **On a hard-to-read choice: warn, offer the fix, never refuse** (owner, Q2, 2026-10-19: "Don't
 refuse, this is easy to fix. Instead show the warning and offer to fix automatically"). A colour the

@@ -206,6 +206,38 @@ till apply the theme in use (`packages/ui/src/venue-theme.ts`); until the editor
 slice 5), no screen writes one; the management API (`/management-api/themes`,
 `/management-api/theme-in-use`) and a configuration transfer already can.
 
+Text in the brand colour — a link, a status word, a badge, a hovered card action's label — reads
+`--wt-color-primary-text`. `--wt-color-primary` paints fills, lines, outlines, icons and spinners,
+which need 3:1 against what they sit on rather than 4.5:1. Guard:
+`scripts/primary-coloured-text.test.ts`, weaker than its name: it reads text, and refuses only a
+`color:` declaration whose value is `var(--wt-color-primary)` (with or without a fallback) outside
+the icons and spinners its `GRAPHIC_USES` list names by file and selector
+(`scripts/primary-coloured-text.test.ts:56-82`). Its header lists what it misses
+(`scripts/primary-coloured-text.test.ts:9-19`):
+
+- a rule that sets another token to the brand colour, such as
+  `--wt-color-text: var(--wt-color-primary)`;
+- `fill:`, `stroke:` (an SVG `<text>`) and `-webkit-text-fill-color`;
+- a `var()` inside another function, such as `color-mix(…)` or `rgb(from …)`;
+- `currentColor` or `inherit` taken from a parent painted in the brand colour;
+- a colour set from script: `.style.color`, `style.setProperty`, `styleMap`, an SVG `fill="…"`
+  attribute;
+- an inline `style="…"` in an `.html` file, since it reads only an `.html` file's `<style>` blocks;
+- a declaration inside a literal that holds `/*` before it and `*/` after it, which it reads as a
+  comment;
+- an allowlisted selector whose element later shows text, since the list names a selector, not what
+  it draws;
+- files `git ls-files` does not list (a new file before `git add`, a coverage report), files outside
+  `apps/` and `packages/`, files ending `.test.ts`, and `.js` and `.mjs` files.
+
+Two uses of the button colour it cannot see were checked by hand on 2026-10-21 and stay, being
+graphics: the logo's waiter drawing, `fill: var(--wt-color-primary)` in
+`apps/setup/src/setup-app.ts:500`, and the floor map's drag line, `stroke: var(--wt-color-primary)`
+in `packages/ui/src/components/wt-floor-map.ts:348`. The one text site of that kind found then, the
+printer name's redeclared `--wt-color-text` (`apps/dashboard/src/screens/printers-screen.ts:218`),
+moved to `--wt-color-primary-text`, and a case in `printers-screen.test.ts` sets the two tokens to
+different values and checks the name takes the text one.
+
 `--wt-color-primary-hover` and `--wt-color-danger-hover` are the fills a primary and a danger
 `wt-button` take under the pointer: `#1a5fd0` and `#9a1f18` light, `#78a9ff` and `#ffa197` dark,
 each further from its button's text colour than the resting fill, so the label reads at 4.5:1 or
@@ -3870,7 +3902,7 @@ pills. Colour appears only on **hover**, via `wt-button`'s exposed `button` CSS 
 ```css
 .card-action.accent-primary::part(button):hover {
   border-color: var(--wt-color-primary);
-  color: var(--wt-color-primary);
+  color: var(--wt-color-primary-text);
 }
 .card-action.accent-danger::part(button):hover {
   border-color: var(--wt-color-danger);

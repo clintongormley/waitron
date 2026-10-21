@@ -373,6 +373,11 @@ called weaker than its name, the topic file lists what it does not see.
   (scans `packages/ui` alone; the rule covers any component or view) and
   `scripts/style-token-names.test.ts`, weaker than its name — it reads text and matches a read
   against declarations anywhere in the tree.
+- **Text in the brand colour reads `--wt-color-primary-text`; `--wt-color-primary` paints fills,
+  lines and icons.** Cost: Waitron's own blue read 4.33:1 as text on its light page, under 4.5:1
+  (A841). Guard: `scripts/primary-coloured-text.test.ts`, weaker than its name — it reads `color:`
+  declarations as text, in tracked files only; what it misses is in
+  [design-system.md](docs/developers/design-system.md).
 - **A new `wt-*` primitive needs two specific tests**, not "some tests": a token-painting test, and an
   axe accessibility test in a sibling `*.a11y.test.ts` covering each distinct state in both themes.
 - **A shared `wt-*` component's custom events are named `wt-*`, carry `detail`, and are dispatched

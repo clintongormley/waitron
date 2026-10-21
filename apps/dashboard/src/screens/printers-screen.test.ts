@@ -841,6 +841,17 @@ describe("guided printer calibration", () => {
     expect(api.updatePrinter).not.toHaveBeenCalled();
   });
 
+  it("draws a printer's name in the brand's text colour, not the button colour", async () => {
+    const api = stubApi({ listPrinters: vi.fn().mockResolvedValue(printers) });
+    const { el, host } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "printers");
+    host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
+    const button = q(el, "[data-test=printer-row-p1]")!.shadowRoot!.querySelector("button")!;
+    expect(getComputedStyle(button).color).toBe("rgb(4, 5, 6)");
+  });
+
   it("does not resend detail edits when finishing calibration", async () => {
     let stored = { ...printers[0]! };
     const api = stubApi({
