@@ -5743,7 +5743,7 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   [Reproduction](developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
 
 - **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**, a median of 144 s over six
-  runs in A938. A938's profile put its slowest test's time under `width()`; caching the advance width per string
+  runs in A938. A938's profile of its slowest test, without coverage, put 95% of the time under `width()`; caching the advance width per string
   is the untried fix. Left open by A801.
   [Detail](backlog/ci.md#the-invoice-pdf-test-took-162-s-on-one-ci-run)
 
@@ -5752,11 +5752,15 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   has landed, or find why each restart test boots the real entry point twice. Left open by A938.
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
-- **The server's duration table is refreshed by hand, and the other sharded packages still use the
-  hash split.** Nothing says when `apps/server/test-durations.json` has gone stale; till, dashboard,
-  venue-service, db and provisioning still shard by Vitest's file-count split. The first refresh
-  expected is when `a850-backup-verification` lands with its new server test files. Left open by
-  A938. [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
+- **The server's duration table is refreshed by hand.** Nothing says when
+  `apps/server/test-durations.json` has gone stale. The first refresh expected is when
+  `a850-backup-verification` lands with its new server test files. Left open by A938.
+  [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
+
+- **The other sharded packages still use Vitest's file-count split.** Till, dashboard,
+  venue-service, db and provisioning do not pack their shards by measured duration as the server
+  does. Left open by A938.
+  [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 - **Nothing checks, on every CI run, that each server test file ran in exactly one shard.** The
   guard checks the packing over a walk of the tree, and A938's pull request records one run's

@@ -1165,7 +1165,7 @@ A file's time is the seconds on its `[file-progress] end` line in the job log, a
 **Why packing, and why 16.** `python3 -I balanced.py files.txt old.kv` and
 `python3 -I firsttable.py files.txt` in the model folder pack each run with a table built from the
 other five (leave one out), so the table never sees the run it is judged on, and judge the run on its
-own times with the local scrypt memo's savings applied (`memo` in the scripts). "Sim" is a simulation of four files at a time
+own times with the local scrypt memo's savings applied (`memo` in the scripts); the shipped cache saved less than the memo on the one file measured above, so these figures may be optimistic too. "Sim" is a simulation of four files at a time
 (`maxWorkers: 4`), longest first, plus 48 s:
 
 | shards | busiest file-seconds per run | slowest job (0.262 ×) | slowest job (sim) | median job (sim) |
@@ -1209,11 +1209,10 @@ pnpm exec prettier --check apps/server/test-durations.json
 
 `scripts/test-durations.mjs` takes each file's median over the logs (the mean of the middle two for
 an even count), rounded to 0.1 s, at least 0.1 s. The models above used the six runs named at the top
-of this section (872 paths). The table this branch commits was rebuilt after #1929 landed, from the
+of this section (872 paths). The committed table was rebuilt after #1929 landed, from the
 six newest `main` runs that ran the server shards (39449527877, 39500330558, 39503634628,
 39507125783, 39518421998, 39530877061): 66 logs, 877 paths, the five more being #1929's new test
-files. The next refresh expected is when the
-`a850-backup-verification` branch lands with its new server test files.
+files.
 
 **Guards, each weaker than its name.** The "apps/server's config packs every server test file into
 exactly one shard" case in `scripts/vitest-duration-sequencer.test.mjs` checks that the config's table

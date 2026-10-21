@@ -614,7 +614,7 @@ Receipt for the checkout half:
 `apps/server/src/invoice-pdf.test.ts` took 162 s on run 39068745456, the slowest server file then
 (the next was 99 s), so it sets a floor under whichever shard holds it. Over A938's six `main` runs
 (39425472781, 39444354037, 39449527877, 39500330558, 39503634628, 39507125783) it took 109 to 172 s,
-a median of 144 s (`apps/server/test-durations.json`). A938's local profile of its slowest test,
+a median of 144 s. A938's local profile of its slowest test,
 without coverage, put 95% of the time under `width()` (`apps/server/src/invoice-page.ts:47`,
 `invoiceFont.layout(text).advanceWidth`). For a word that does not fit on the line, `wrap()`
 measures a growing string once per character, and the 480-layout test measures the same strings
