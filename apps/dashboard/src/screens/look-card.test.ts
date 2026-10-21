@@ -453,6 +453,66 @@ describe("editing the Look card in place", () => {
   });
 });
 
+describe("another dashboard changes the themes while this one edits", () => {
+  const OTHER = theme("t-other", "Terraza", { ...WAITRON_CHOICES, brandColor: "#b12525" });
+
+  async function newList(el: Card, list: ThemeList) {
+    el.list = list;
+    await el.updateComplete;
+  }
+
+  it("an unchanged draft follows a newer read", async () => {
+    const { el } = await mountEditing(inUse(lucia));
+    await newList(el, inUse(theme("t-lucia", "Bar Lucía", { ...LUCIA, corners: "square" })));
+    expect(segmented(el, "corners").value).toBe("square");
+    expect(preview(el).theme.light["--wt-radius-md"]).toBe(
+      deriveTheme({ ...LUCIA, corners: "square" }).light["--wt-radius-md"],
+    );
+    expect(button(el, "save").variant).toBe("secondary");
+    expect(button(el, "save").disabled).toBe(true);
+  });
+
+  it("a changed draft is kept over a newer read", async () => {
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    await chooseSegment(el, "background", "Neutral");
+    await newList(el, inUse(theme("t-lucia", "Bar Lucía", { ...LUCIA, corners: "square" })));
+    expect(segmented(el, "background").value).toBe("neutral");
+    expect(segmented(el, "corners").value).toBe("round");
+    expect(button(el, "save").variant).toBe("primary");
+    expect(button(el, "save").disabled).toBe(false);
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    expect(saveTheme.mock.calls[0]![1]).toEqual({ ...LUCIA, background: "neutral" });
+  });
+
+  it("a switch made elsewhere changes the editing line", async () => {
+    setLocale("en-GB");
+    const { el } = await mountEditing(inUse(lucia));
+    await newList(el, { themes: [lucia, OTHER], inUse: "t-other" });
+    expect(text(q(el, "[data-test=editing-line]"))).toBe(t("appearance.editing_not_in_use"));
+    expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(true);
+    await newList(el, { themes: [lucia, OTHER], inUse: "t-lucia" });
+    expect(text(q(el, "[data-test=editing-line]"))).toBe(
+      "Theme in use: Bar Lucía. Saving changes every screen.",
+    );
+  });
+
+  it("a theme deleted elsewhere keeps the draft", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    await chooseSegment(el, "corners", "Square");
+    await newList(el, { themes: [OTHER], inUse: null });
+    expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(true);
+    expect(segmented(el, "corners").value).toBe("square");
+    expect(text(q(el, "[data-test=editing-line]"))).toBe(t("appearance.editing_not_in_use"));
+    saveTheme.mockRejectedValueOnce({ code: "theme.not_found" });
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => bottom(el)).toBe(codeMessage("theme.not_found"));
+    expect(button(el, "save").disabled).toBe(false);
+    expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(true);
+  });
+});
+
 class LookLeaveHost extends LitElement {
   readonly leave = new LeaveController(this);
   api!: DashboardApi;

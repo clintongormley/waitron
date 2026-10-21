@@ -2,9 +2,11 @@ import { LitElement, css, html, nothing, type PropertyValues, type TemplateResul
 import { customElement, property, state } from "lit/decorators.js";
 import {
   CATEGORY_PALETTE,
+  applyVenueTheme,
   baseStyles,
   draftScopeFor,
   focusFirstInvalid,
+  readVenueTheme,
   saveActionState,
   type DraftScope,
   type LeaveCoordinator,
@@ -174,6 +176,7 @@ export class LookCard extends LitElement {
   }
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("canEdit") && !this.canEdit) this.#cancel();
+    if (changed.has("list")) this.#adopt();
     const choices = this.draft?.choices;
     if (choices && choices !== this.#derivedFrom) {
       this.#derivedFrom = choices;
@@ -188,6 +191,25 @@ export class LookCard extends LitElement {
     this.refusedCode = "";
     this.actionError = "";
     this.#registerDraft();
+  }
+  #adopt(): void {
+    const editing = this.#editing;
+    const expected = this.#expected;
+    if (!this.draft || !editing || !expected || !sameDraft(this.draft, expected)) return;
+    const view = this.list?.themes.find((theme) => theme.id === editing.id);
+    if (!view) return;
+    const next = openDraft(view.choices);
+    if (sameDraft(next, expected)) return;
+    this.#expected = next;
+    this.draft = next;
+    this.#scope?.commit(next);
+  }
+  #repaint(): void {
+    void readVenueTheme(() => this.api.getVenueTheme()).then(
+      ({ answer, sentAt }) => applyVenueTheme(answer, sentAt),
+      // The shell's live read follows the same change, so a failed read here costs only the wait.
+      () => {},
+    );
   }
   #registerDraft(): void {
     if (!this.isConnected || !this.draft || !this.#expected || this.#scope) return;
@@ -252,6 +274,7 @@ export class LookCard extends LitElement {
     try {
       const answer = await this.api.saveTheme(editing.id, normaliseChoices(draft.choices));
       if (generation !== this.#generation) return;
+      if (this.list?.inUse === editing.id) this.#repaint();
       this.dispatchEvent(
         new CustomEvent("look-saved", { detail: answer, bubbles: true, composed: true }),
       );
