@@ -1654,14 +1654,16 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **The "Add to" offer reads every special day with every date** (`GET …/special-days`) to show a
   name and a latest date — left open by A506-5, #1603.
 
-- **A789 — last orders without an offset: a period is when its menu can be ordered** — DESIGNED
-  2026-10-18, waiting for the owner's answer to one question (Q39 in lane C's questions file;
+- **A789 — last orders without an offset: a period is when its menu can be ordered** — APPROVED
+  2026-10-18 (Q39: all recommended; whether a late send needs a manager's PIN is a setting, off by
+  default); building — slice 1 on `feat/a789-1-retire-end-offset`, plan
+  [2026-10-21-a789-last-orders](superpowers/plans/2026-10-21-a789-last-orders.md);
   [design](superpowers/specs/2026-10-18-a789-last-orders-design.md), pictures in
-  [mockups/a789-last-orders/](backlog/mockups/a789-last-orders/)); not built. The period end offset
+  [mockups/a789-last-orders/](backlog/mockups/a789-last-orders/). The period end offset
   and the period "Keep open" go (the zone one stays); a dish taken during a period and sent after it
   ends opens a window asking the waiter to check with the kitchen, and once confirmed it is sent and
-  marked on the kitchen ticket. Four slices; the till slice waits for lane G's A773-1, whose design
-  says a period-ended line is never sent.
+  marked on the kitchen ticket. Four slices; A773-1 has landed (#1897); the till slice is built in its
+  editor.
 
 - **A painter opened from a Painted in chip in the Periods window does not return to the window
   when it closes**, so a manager loses their place — left open by A506-11, #1694.
