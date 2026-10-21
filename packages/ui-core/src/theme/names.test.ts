@@ -11,6 +11,11 @@ describe("themeNameKey", () => {
     expect(themeNameKey("  Zoë Studio ")).toBe(themeNameKey("zoë studio"));
     expect(themeNameKey("  Zoë Studio ")).toBe("zoë studio");
   });
+
+  it("composes again after lower-casing, so a capital and its small letter share a key", () => {
+    expect(themeNameKey("T̈")).toBe("ẗ");
+    expect(themeNameKey("T̈")).toBe(themeNameKey("ẗ"));
+  });
 });
 
 describe("checkThemeName", () => {

@@ -189,6 +189,16 @@ describe("custom theme store against a real migrated database", () => {
     expect(await rowCount()).toBe(2);
   });
 
+  it("refuses a capital whose small letter composes only after lower-casing", async () => {
+    const { manager } = await setup();
+    await create(manager, "ẗ");
+    expect(await errorOf(() => create(manager, "T̈"))).toEqual({
+      code: "theme.name_taken",
+      params: { field: "name" },
+    });
+    expect(await rowCount()).toBe(1);
+  });
+
   it("switches by clearing the old theme before setting the new one", async () => {
     const { manager } = await setup();
     const a = await create(manager, "A", LEMON, true);

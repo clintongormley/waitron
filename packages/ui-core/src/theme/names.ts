@@ -2,7 +2,8 @@ export const THEME_NAME_MAX_LENGTH = 60;
 
 export const BUILT_IN_THEME_NAME = "Waitron";
 
-export const themeNameKey = (name: string): string => name.normalize("NFC").trim().toLowerCase();
+export const themeNameKey = (name: string): string =>
+  name.normalize("NFC").trim().toLowerCase().normalize("NFC");
 
 export type ThemeNameRefusal = "empty" | "too_long" | "reserved";
 
