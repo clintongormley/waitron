@@ -1172,3 +1172,20 @@ finds no tracked-content difference. Fifteen complete server suites covering ver
 ordinary restore, Cloud setup, replacement and authority consumers pass 582 cases. Server types,
 scoped lint, formatting and whitespace checks pass. The normal hook and current-head CI remain
 the next gates; the review is retained across these focused fixes.
+
+
+### Task 27 first CI readback and measured scheduling inputs — 21 October 2026
+
+PR #1939 at `1d975f487b624c0bffb941114d8ecd5d5558d009` passed CI run 39595996508
+(66 successful jobs, one skipped) and licence/sign-off run 39595996341. This includes
+full package coverage, shared mutation and the production image smoke job. Fiscal coverage
+passed 186 files and 4,096 cases at 98.06% statements, 96.61% branches, 99.27% functions
+and 98.97% lines. Its timing exceeds the four-minute target; the measured separate
+performance work is recorded in the CI backlog, without attributing an unmeasured cause.
+
+The server's sixteen completed shard logs supply the new test-file durations. The refresh
+adds measured entries absent from the committed table while retaining every existing value
+from its earlier multi-run sample. No shard algorithm, count, test, guard or threshold changes.
+Every reported server test path occurs in exactly one of those sixteen logs. Current-head CI
+will run again for this scheduling-data update before landing; the completed Claude review
+is retained because no product behavior changed.

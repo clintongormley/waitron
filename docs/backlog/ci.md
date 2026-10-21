@@ -623,3 +623,21 @@ times slower. Caching the advance width per string is the untried fix; it may al
 invoice rendering. Left open by A801. Receipts:
 [A801](../developers/ci-and-gates.md#runners-come-in-two-speeds-and-the-busiest-shard-is-the-one-that-crosses-4-minutes),
 [A938](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration).
+
+
+## Fiscal coverage outlasts the four-minute job target
+
+A850's run [39595996508](https://github.com/clintongormley/waitron/actions/runs/39595996508),
+`test-fiscal-verifactu`, passed 186 files and 4,096 cases in a 385 s job. Its test step took
+322 s. The new backup-history, chain, secret and owner files took 43.581, 34.037, 22.040
+and 11.594 file-seconds respectively; the trust file took 0.010 s. Those file durations
+include parallel execution and are not an additive wall-clock regression measurement.
+
+Two recent successful main jobs were already above four minutes: run 39577652501 took
+316 s, with a 273 s test step; run 39576603102 took 350 s, with a 299 s test step.
+These runs used different runners. Their timings do not isolate disk or CPU as the cause.
+The current Node project uses the outer four-worker cap; its browser project follows it
+with file parallelism disabled. Profile the heavy files and the sequential browser phase
+before changing scheduling. Retain the full package coverage checks and existing fiscal
+assertions. The A850 driver recorded this as separate performance work rather than
+changing concurrency or guards without that measurement.

@@ -5968,9 +5968,15 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 - **The server's duration table is refreshed by hand.** Nothing says when
-  `apps/server/test-durations.json` has gone stale. The first refresh expected is when
-  `a850-backup-verification` lands with its new server test files. Left open by A938.
+  `apps/server/test-durations.json` has gone stale. Left open by A938.
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
+
+- **Fiscal-verifactu's coverage job exceeds the four-minute target.** A850's
+  [run 39595996508](https://github.com/clintongormley/waitron/actions/runs/39595996508)
+  took 385 s, including 322 s running tests; two recent main jobs took 316 and 350 s.
+  Profile the new history, chain and secret checks alongside the existing Node/browser work,
+  then reduce the time without dropping checks or changing coverage bars.
+  [Measurements](backlog/ci.md#fiscal-coverage-outlasts-the-four-minute-job-target)
 
 - **The other sharded packages still use Vitest's file-count split.** Till, dashboard,
   venue-service, db and provisioning do not pack their shards by measured duration as the server
