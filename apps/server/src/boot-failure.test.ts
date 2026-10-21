@@ -106,6 +106,21 @@ describe("classifyBootFailure", () => {
     ).toBe("storage.disk_full");
   });
 
+  it("names a full disk before the migration failure that wraps it", () => {
+    const failed = (cause: Error) =>
+      Object.assign(new AppError("migrations.apply_failed", { set: "__drizzle_migrations" }), {
+        cause,
+      });
+    expect(
+      classifyBootFailure(
+        failed(Object.assign(new Error("database or disk is full"), { errcode: 13 })),
+      ),
+    ).toBe("storage.disk_full");
+    expect(
+      classifyBootFailure(failed(Object.assign(new Error("no such table: t"), { errcode: 1 }))),
+    ).toBe("migrations.apply_failed");
+  });
+
   it("pins the unreachable-database codes to SQLITE_CANTOPEN alone", () => {
     expect(UNREACHABLE_RESULT_CODES).toEqual([14]);
   });

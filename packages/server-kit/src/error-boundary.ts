@@ -13,7 +13,7 @@ declare module "hono" {
 }
 
 /**
- *  - A full disk anywhere in the cause chain (`diskFullIn`) → `{ error: { code: "storage.disk_full",
+ *  - A full disk in the cause chain (`diskFullIn`) → `{ error: { code: "storage.disk_full",
  *    params: {} } }` at the status `status` assigns it, or 507, logged at `error`.
  *  - Any other `AppError` → `{ error: { code, params } }` at the status `status` assigns the code,
  *    or 400 when the map omits it, logged at `warn` — a mapped 5xx included. Its log-only `reason`, if
