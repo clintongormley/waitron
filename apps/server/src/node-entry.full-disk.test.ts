@@ -1,12 +1,14 @@
 import { existsSync, mkdtempSync, realpathSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Hono } from "hono";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { FRESH, levelFor, type RecoveryState } from "./recovery-state.js";
 import { escapeHtml } from "./recovery-surface.js";
-import { runEntry } from "./node-entry.js";
+import { AppError } from "@waitron/shared";
+import { startFailureCode } from "./boot-failure.js";
+import { recordedStartFailureCode, runEntry } from "./node-entry.js";
 import { firstFiscalFixture } from "../test/first-fiscal.js";
 
 type StartServer = (env: NodeJS.ProcessEnv) => Promise<{ close: () => Promise<void> }>;
@@ -308,5 +310,127 @@ describe("a start below the free-space floor", () => {
     expect(await (await servedApp(d).request("/")).text()).toContain(
       "Free space on the box&#39;s disk: 2 MB.",
     );
+  });
+});
+
+/** A state volume holding one `recovery.json`, so the test reads what the start persisted. */
+function recoveryVolume() {
+  let stored: RecoveryState = FRESH;
+  return {
+    current: () => stored,
+    deps: {
+      readRecoveryState: vi.fn(() => Promise.resolve(stored)),
+      writeRecoveryState: vi.fn((_stateDir: string, next: RecoveryState) => {
+        stored = next;
+        return Promise.resolve();
+      }),
+    },
+  };
+}
+
+/** The shape a full disk printed in F5 and F14. */
+const diskIoError = () =>
+  Object.assign(new Error("disk I/O error"), { errcode: 4874, code: "ERR_SQLITE_ERROR" });
+
+const MIB = 1024 * 1024;
+
+async function pageEvents(logDir: string): Promise<Record<string, unknown>[]> {
+  const text = await readFile(join(logDir, "waitron.log"), "utf8");
+  return text
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
+describe("a start that fails on a full disk", () => {
+  it("records storage.disk_full for a database the engine cannot open below the floor", async () => {
+    const { logDir } = await logsWithLeftover();
+    const volume = recoveryVolume();
+    const error = diskIoError();
+    const d = deps(
+      { ...volume.deps, logDir, startServer: vi.fn<StartServer>(() => Promise.reject(error)) },
+      () => 10,
+    );
+    await expect(runEntry(d)).rejects.toBe(error);
+    expect(volume.current()).toMatchObject({ lastErrorCode: "storage.disk_full", failures: 1 });
+    const failed = (await pageEvents(logDir)).find((line) => line.event === "server.boot_failed");
+    expect(failed?.errorCode).toBe("storage.disk_full");
+  });
+
+  it("keeps database_unreachable when there is room", async () => {
+    const volume = recoveryVolume();
+    const error = cannotOpen();
+    const d = deps(
+      { ...volume.deps, startServer: vi.fn<StartServer>(() => Promise.reject(error)) },
+      () => 100 * MIB,
+    );
+    await expect(runEntry(d)).rejects.toBe(error);
+    expect(volume.current().lastErrorCode).toBe("provisioning.database_unreachable");
+  });
+
+  it("deletes the leftovers when the failure was a full disk, even with room", async () => {
+    const { logDir, leftover } = await logsWithLeftover();
+    const seen: boolean[] = [];
+    const error = diskFull();
+    const d = deps(
+      {
+        logDir,
+        writeRecoveryState: vi.fn(() => {
+          seen.push(existsSync(leftover));
+          return Promise.resolve();
+        }),
+        startServer: vi.fn<StartServer>(() => Promise.reject(error)),
+      },
+      () => 100 * MIB,
+    );
+    await expect(runEntry(d)).rejects.toBe(error);
+    expect(existsSync(leftover)).toBe(false);
+    expect(seen[1]).toBe(false);
+  });
+
+  it("deletes nothing for any other failure", async () => {
+    const { logDir, leftover } = await logsWithLeftover();
+    const error = new AppError("migrations.set_missing", { name: "core", folder: "/missing" });
+    const d = deps(
+      { logDir, startServer: vi.fn<StartServer>(() => Promise.reject(error)) },
+      () => 100 * MIB,
+    );
+    await expect(runEntry(d)).rejects.toBe(error);
+    expect(existsSync(leftover)).toBe(true);
+  });
+
+  it("hands on the code it recorded, even when deleting freed more than 16 MiB", async () => {
+    const { logDir, leftover } = await logsWithLeftover();
+    await writeFile(leftover, Buffer.alloc(20 * MIB));
+    const volume = recoveryVolume();
+    const statfs = vi.fn(() =>
+      Promise.resolve({ bavail: existsSync(leftover) ? 10 : 100 * MIB, frsize: 1 }),
+    );
+    const d = deps({
+      ...volume.deps,
+      logDir,
+      statfs,
+      // Above 10, so the leftover survives the start and is still there when the attempt fails.
+      freeSpaceFloor: 1,
+      startServer: vi.fn<StartServer>(() => Promise.reject(diskIoError())),
+    });
+    const error: unknown = await runEntry(d).then(
+      () => undefined,
+      (thrown: unknown) => thrown,
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect(existsSync(leftover)).toBe(false);
+    expect(volume.current().lastErrorCode).toBe("storage.disk_full");
+    expect(recordedStartFailureCode(error)).toBe("storage.disk_full");
+    // Why it is handed on: read again now, the freed space names the same failure unknown.
+    expect(await startFailureCode(error, [STATE_DIR, VENUE_DIR], statfs)).toBe("unknown");
+
+    const refused: unknown = await runEntry(deps({ args: ["x"] })).then(
+      () => undefined,
+      (thrown: unknown) => thrown,
+    );
+    expect(refused).toMatchObject({ code: "server.entry_arguments_refused" });
+    expect(recordedStartFailureCode(refused)).toBeUndefined();
+    expect(recordedStartFailureCode("a thrown string")).toBeUndefined();
   });
 });

@@ -52,7 +52,7 @@ import { runStagedReset, type StagedResetDeps } from "./reset-request.js";
 import { clearReplacedDatabases } from "./restore.js";
 import { loadCloudOrigin } from "./cloud-client.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
-import { classifyBootFailure, fullDiskFailure } from "./boot-failure.js";
+import { fullDiskFailure, startFailureCode } from "./boot-failure.js";
 import { errnoOf } from "./errno.js";
 import type { Statfs } from "./free-bytes.js";
 import { START_FREE_SPACE_FLOOR, freeSpaceAtStart, lowestFreeBytes } from "./start-space.js";
@@ -406,6 +406,17 @@ async function countWritable(deps: EntryDeps): Promise<CountCheck> {
   }
 }
 
+const recordedCodes = new WeakMap<object, string>();
+
+/**
+ * The code a failed attempt classified its failure as, or undefined for a failure outside one.
+ * Reading free space again is no substitute: the deletion after a full disk can leave room, which
+ * would name the same failure `unknown`.
+ */
+export function recordedStartFailureCode(error: unknown): string | undefined {
+  return typeof error === "object" && error !== null ? recordedCodes.get(error) : undefined;
+}
+
 async function runAdmittedEntry(deps: EntryDeps, transport: RecoveryServeOptions): Promise<void> {
   // Outside the recovery lock: it decides only whether this start boots or serves the page. Every change
   // below re-reads under the lock, so a write made since is kept rather than overwritten.
@@ -512,8 +523,22 @@ async function runAdmittedEntry(deps: EntryDeps, transport: RecoveryServeOptions
     // Both channels first, so the real reason survives even if the state write fails.
     const detail = failureDetail(error);
     (deps.reportFailure ?? (() => {}))(detail);
-    const code = classifyBootFailure(error);
+    const code = await startFailureCode(error, [deps.stateDir, deps.venueDir], deps.statfs);
     page("error", "server.boot_failed", { errorCode: code, detail });
+    if (code === "storage.disk_full") {
+      await freeSpaceAtStart({
+        stateDir: deps.stateDir,
+        venueDir: deps.venueDir,
+        logDir,
+        floor: deps.freeSpaceFloor ?? START_FREE_SPACE_FLOOR,
+        force: true,
+        now,
+        statfs: deps.statfs,
+        readVenueHolder: deps.readVenueHolder ?? readVenueHolder,
+        log: deps.log,
+      });
+    }
+    if (typeof error === "object" && error !== null) recordedCodes.set(error, code);
     const at = now();
     if (code === "provisioning.database_in_use") {
       await recordRefusal(deps, attempt, at);
@@ -596,9 +621,12 @@ function bootThisProcess(): Promise<void> {
     scheduleStayedUp: (ms, onStayedUp) => void setTimeout(onStayedUp, ms).unref(),
     log,
     exit: DEFAULT_EXIT,
-  }).catch((error: unknown) => {
+  }).catch(async (error: unknown) => {
     // The code alone: for a failed attempt, `runEntry`'s catch has already reported the detail.
-    log("error", "server.boot_failed", { errorCode: classifyBootFailure(error) });
+    log("error", "server.boot_failed", {
+      errorCode:
+        recordedStartFailureCode(error) ?? (await startFailureCode(error, [stateDir, venueDir])),
+    });
     process.exit(1);
   });
 }
