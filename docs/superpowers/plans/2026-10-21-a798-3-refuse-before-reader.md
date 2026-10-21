@@ -713,6 +713,11 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
     on a bill, the payment stays pending and the pending-payment pass completes it from the
     provider's row once it can (`bill-payments-loop.ts:153-158`; read). **A cross-package
     contract change** (server ↔ till): Review focus 7.
+    **As built (2026-10-21):** the answer is opt-in. Only the till's two card routes set
+    `sayCardChargedOnFullDisk` (`POST /api/pay` in `till-api.ts`, the bill payment route in
+    `bill-payments-api.ts`), read by `afterCardCharged` (`bill-payments.ts`); every other caller of
+    the same paths, the dashboard's stuck-payment resolve route among them, still answers
+    `storage.disk_full` (`payments-api.stuck.test.ts`).
 19. **The sale-only disk sentence's English.** Design §3 and picture 1 give only the Spanish.
     DEFAULT: "Sale not recorded: the box is out of disk space. Don't take payment until it is
     fixed; tell a manager." The Spanish is the design's, word for word.
@@ -744,6 +749,10 @@ Decisions 21-29 are Task 12's: what the owner's answer (a) does not settle.
     owner's sentence. That they save nothing of their own was read, not run; if one does, its
     write goes through as a GET's does (the read-only gate's documented limit,
     `read-only-gate.ts:8-10`).
+    **As built (2026-10-21):** eight POSTs. `POST /api/demo-reader/cancel` is open too: it saves
+    nothing, is registered only with the practice card simulator, and refused would leave a practice
+    payment waiting at the reader (`TILL_OPEN_WHILE_DISK_FULL`, `till-api.ts`; its case is in
+    `till-api.fiscal-sale-paths.test.ts`).
 23. **The device's own housekeeping and the staff schedule.** DEFAULT: joining, zones, equipment,
     profile and battery stay open (not a sale, order, kitchen send or clock-in; refusing them would
     unsettle the device itself); the schedule's swap and absence requests are refused, so the
@@ -1216,6 +1225,14 @@ assertion should change. If one does, it belongs to this list.
   full disk (`packages/server-kit/src/error-boundary.ts:34-39`); the refusal sites log their own
   event (Tasks 5, 7).
 
+  **As built (2026-10-21):** `full()` records the count of `noteRefused` calls when its reading
+  starts. It answers `true` when the reading is under `FULL_DISK_BYTES` or unreadable, or when any
+  `noteRefused` was made while the reading was in flight — even one made after a faster reading had
+  already cleared the stop (`"keeps a refusal noted after one read cleared and before a slower read
+  returns"`). Otherwise it clears the stop, logging `storage.disk_space_back` only if no other
+  reading cleared it first, and answers `false`. `noteRefused`'s doc also names a start under
+  `FULL_DISK_BYTES`.
+
 - [ ] **Step 1: Write the failing tests** in `disk-full-state.test.ts`, with a `statfs` stub whose
   answer each case sets (`{ bavail, frsize: 1 }` gives `bavail` bytes) and which counts its calls:
   - `"is not full, and reads nothing, until a refusal is noted"`: `full()` → `false`; statfs calls 0;
@@ -1507,6 +1524,10 @@ assertion should change. If one does, it belongs to this list.
   `("error", "sale.charged_not_recorded", { workingOrderId })`; any other error is rethrown
   unchanged. On the bill route only the `captured` branch (`completeBillPayment`) is wrapped. One
   helper wraps all five calls.
+- **As built (2026-10-21):** the helper, `afterCardCharged` (`bill-payments.ts`), converts only
+  when its deps set `sayCardChargedOnFullDisk: true`, and only the till's `POST /api/pay` and bill
+  payment routes set it; otherwise every error passes through, so the dashboard's stuck-payment
+  resolve route still answers `storage.disk_full` (decision 18's note).
 
 - [ ] **Step 1: Write the failing tests** in `card-charged-not-recorded.test.ts`, on
   `provisionBillVenue`. Each failure is made by
@@ -1928,6 +1949,8 @@ is built from the routes the mount registers.
   (`apps/till/src/state/party-allergy-flow.ts:19-34` turns any failure into `unread`;
   `apps/till/src/till-app.ts:3684`; read), so the kitchen send itself must be the request that is
   refused, with Task 9c's sentence.
+- **As built (2026-10-21):** an eighth, `POST /api/demo-reader/cancel`, registered only with the
+  practice card simulator; see decision 22's note.
 - On the device API (12b): the device's own housekeeping — `POST /api/device/join`
   (`device-api.ts:208`), `PUT /api/device/zones` (`:347`), `PUT /api/device/equipment` (`:379`),
   `POST /api/device/active-profile` (`:400`), `PUT /api/device/battery` (`:413`). None is a sale,
@@ -2189,7 +2212,11 @@ read) — and any till surface outside decision 12 that shows its own fallback.
   (`:595`) inherits it, and to `BillPaymentDeps` (`bill-payments.ts:105`), so
   `ReaderBillPaymentDeps` (`:1217`) inherits it; remove the copies Tasks 5 and 7 added.
 - `runPayWorkingOrder` (serving `/api/sales` through `runTillSale`, `:2214`) and `runCollectOrder`:
-  before `withTransaction`, `const preRead = (await deps.disk?.full()) ?? false;`; inside, on the
+  before `withTransaction`, `const preRead = (await deps.disk?.full()) ?? false;`; **as built (2026-10-21)**,
+  `deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full())`, the same in
+  `payIntegrated`, `takeBillPayment` and `takeReaderBillPayment`: awaiting `full()` with nothing
+  noted added an event-loop tick that let another write's transaction overtake a payment's first
+  transaction (b6283f6fd); inside, on the
   line after the replay return (`:663-665`; `:2076-2078`),
   `if (preRead || (deps.disk?.noted() ?? false)) refuse…(req.id)` — the same log and
   `diskFullRefusal()` as Tasks 5 and 7 (if each defined its own closure, add one exported
