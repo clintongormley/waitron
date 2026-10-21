@@ -72,6 +72,7 @@ import { moveDishesToStation, type StationMoveRequest } from "./station-move.js"
 import { madeHereAnswer, sendingCfg } from "./made-here.js";
 import { requestCfg } from "./request-config.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
+import type { DiskFullState } from "./disk-full-state.js";
 import {
   collectOrder,
   payWorkingOrderIntegrated,
@@ -278,6 +279,10 @@ export interface TillApiDeps {
    * Optional only for suites that never reach the reader-pay path; a live boot always supplies it.
    */
   pool?: CardProviderPool;
+  /**
+   * Optional only for suites that never reach the reader-pay path; a live boot always supplies it.
+   */
+  disk?: DiskFullState;
   /**
    * Optional only for suites that never reach the reader-pay path; a live boot always supplies it.
    */
@@ -1787,6 +1792,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           deviceProfileId: device.deviceProfileId,
           log,
           attendance: deps.attendance,
+          disk: deps.disk,
         },
         saleCfg,
         { ...body, zoneId, guests },

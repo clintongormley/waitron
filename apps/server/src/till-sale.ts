@@ -74,6 +74,7 @@ import {
 } from "./attendance-integrated.js";
 type TillSaleDeps = BaseTillSaleDeps & { attendance?: AttendanceRecorder };
 import { issuancePass } from "./issuance-pass.js";
+import { diskFullRefusal, type DiskFullState } from "./disk-full-state.js";
 import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js";
 import { issueMoment } from "./issue-moment.js";
 import { cashChange, ZERO } from "./bill-allocation.js";
@@ -602,6 +603,10 @@ export type IntegratedPayDeps = TillSaleDeps & {
   readerId?: string;
   /** The device profile the route checked the request under, passed to `provider.collect`. */
   deviceProfileId?: string;
+  /**
+   * Optional only for suites that never reach the reader-pay path; a live boot always supplies it.
+   */
+  disk?: DiskFullState;
 };
 
 /**
@@ -1113,6 +1118,13 @@ async function payIntegrated(
   admit: WriteAdmission,
   onLive: (entry: string) => void,
 ): Promise<IntegratedPayOutcome> {
+  const refuseForStop = (): never => {
+    deps.log?.("warn", "storage.disk_full_stop_refused", { workingOrderId: req.id });
+    throw diskFullRefusal();
+  };
+  // Read before the queue wait; `noted()` then catches a refusal noted while this pay waited.
+  const preRead = (await deps.disk?.full()) ?? false;
+  const stopped = () => preRead || (deps.disk?.noted() ?? false);
   // ---- P1 (tx A) ----
   const prepared = await withTransaction(deps.db, async (tx) => {
     await admit(tx);
@@ -1192,6 +1204,7 @@ async function payIntegrated(
             ticket,
           };
         }
+        if (stopped()) refuseForStop();
         if (locked.status === "placed") onLive(PLACED_ATTEMPT);
         const attendanceKey = await beginIntegratedAttendance(
           tx,
@@ -1261,6 +1274,7 @@ async function payIntegrated(
       await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
       return { kind: "owes-nothing" as const, ticket };
     }
+    if (stopped()) refuseForStop();
     // P3 files THESE gross lines, whatever changes while the reader runs, at the rates of the day it
     // issues the invoice.
     const gross = await issuancePass(tx, cfg, req.id, order);
@@ -1322,6 +1336,13 @@ async function payIntegrated(
     prepared.kind === "settle" ? prepared.outstanding.amountDue : prepared.gross.total;
   // Only a collect of an open order marked it; a settle is of a placed order.
   const attemptAt = prepared.kind === "collect" ? prepared.attemptAt : null;
+  if (deps.disk?.noted() === true) {
+    await withTransaction(deps.db, (tx) =>
+      finishIntegratedAttendance(tx, deps.attendance, prepared.attendanceKey, "refused"),
+    );
+    await releasePaymentAttempt(deps, req.id, attemptAt);
+    refuseForStop();
+  }
   let result: PaymentResult;
   try {
     result = await deps.provider.collect({
