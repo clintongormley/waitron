@@ -1,3 +1,4 @@
+export { verifyBackupArtifact, type BackupVerificationDeps } from "./backup-verification.js";
 export {
   backupVerificationRequestDigest,
   readBackupVerificationRequest,
