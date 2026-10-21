@@ -442,7 +442,7 @@ an empty-history assertion or the current clock.
 
 Later setup requires its own authorisation, taxpayer and sole-seller checks, readiness,
 certificate/settings steps and recovery-document retention. It uses the existing epoch,
-four-character UTC-hour code, clock comparisons, strict history/release floors and one
+four-character UTC-hour code, clock comparisons, strict history/release floors and one [Dated pointer, 2026-10-21: superseded by the owner's 22:25 answer — every series name is five symbols for the UTC minute, with no "last hour" question and no code on the recovery sheet; see the A947 design's second revision, §6.5 and §6.7. Not rewritten here.]
 prefix per purpose. It cannot reuse an old series or its invoice numbers. This is a separate
 process, not an extra permission hidden inside the A732 approval.
 

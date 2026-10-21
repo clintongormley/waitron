@@ -168,7 +168,7 @@ last hour?", waiting until the next hour if the answer is yes or don't know. A b
 itself after an upgrade cannot answer that.
 
 Example: the bar's box starts on 1.4.0 at 11:15 on 1 March 2027.
-- With A, it takes the hour-and-minute name A947 proposes for a switch to the spare box: 09YA-15,
+- With A, it takes the hour-and-minute name A947 proposes for a switch to the spare box: 09YA-15, [Dated pointer, 2026-10-21: superseded by the owner's 22:25 answer — every series name is five symbols for the UTC minute, with no "last hour" question and no code on the recovery sheet; see the A947 design's second revision, §6.5 and §6.7. Not rewritten here.]
   series A-09YA-15, and normally sells at 11:15. Your second venue's main box, upgraded at 11:17,
   gets 09YA-17.
 - With B, it uses the four-character hour and takes the "don't know" path: it sells nothing until

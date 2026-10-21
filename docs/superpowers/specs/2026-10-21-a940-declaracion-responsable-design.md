@@ -694,7 +694,7 @@ del obligado a expedir facturas … incluso aunque en dichas instalaciones se em
 un productor» (Orden, annex block 2.6, `NumeroInstalacion`, read by eye). Three ways, put to the
 owner as the revision's second question:
 
-1. **Recommended: A947's promotion name** — the hour, a hyphen and the minute (`06XV-40`), with
+1. **Recommended: A947's promotion name** — the hour, a hyphen and the minute (`06XV-40`), with [Dated pointer, 2026-10-21: superseded by the owner's 22:25 answer — every series name is five symbols for the UTC minute, with no "last hour" question and no code on the recovery sheet; see the A947 design's second revision, §6.5 and §6.7. Not rewritten here.]
    A947's check against every code the box knows
    ([A947 design](2026-10-21-a947-two-box-failover-design.md) §6.5, its slice 4a). No question and
    no wait for the next hour: normally the box takes the current minute and invoices again as soon
