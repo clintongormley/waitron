@@ -490,7 +490,10 @@ declare module "@waitron/shared" {
      * the request is on. A discarded draft is not found.
      */
     "draft.not_found": { draftId: string };
-    /** A till saved an order for a person who is not the one signed in on the device. */
+    /**
+     * A till saved an order naming a person who is not the one signed in on the device. `personId`
+     * is the person the save named.
+     */
     "draft.person_not_signed_in": { personId: string };
     /**
      * A group command needs a HELD group — a join, a move into or out of one, a fire, a reorder —

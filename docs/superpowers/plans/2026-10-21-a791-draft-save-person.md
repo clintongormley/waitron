@@ -179,7 +179,7 @@ These settle the questions the plan had to answer. Each says how it was establis
 - [ ] **Step 1: Write the tests.** New test names, and whether each must fail first:
 
   In `apps/till/src/state/draft-sync.test.ts`:
-  - `describe("DraftSync: saving")` → **`it("names the sync's person in every save, whoever signs in later")`** — must FAIL first. `const draft = sync("p7");` load, `addProduct(beer, "1")`, `settle()`; expect `server.saveDraft.mock.calls[0]![1].personId` toBe `"p7"`; add steak, settle; the second call's `personId` toBe `"p7"`.
+  - `describe("DraftSync: saving")` → **`it("names the sync's person in every save")`** — must FAIL first. `const draft = sync("p7");` load, `addProduct(beer, "1")`, `settle()`; expect `server.saveDraft.mock.calls[0]![1].personId` toBe `"p7"`; add steak, settle; the second call's `personId` toBe `"p7"`.
   - `describe("DraftSync: a refused save")` → **`it("answers failed and says nothing when a refusal for the order's person lands after the order was dropped")`** — a PIN on existing behaviour (`#ended` in `#saveNow`'s error branch, `draft-sync.ts:802`); it passes before and after. Modelled on "does not send a save once dropped" (:501): hold the first save with a deferred that then rejects `{ code: "draft.person_not_signed_in", status: 409 }`; `drop()` before releasing it; expect the queued flush toBe `"failed"`, `refused` toEqual `[]`, `server.listDrafts` toHaveBeenCalledOnce.
 
   In `apps/till/src/till-app-drafts.test.ts`, `describe("A773 retained bill candidates in the app")` (:9121):
@@ -190,7 +190,7 @@ These settle the questions the plan had to answer. Each says how it was establis
 - [ ] **Step 2: Run them and watch the four failing-first cases fail**
 
   `pnpm --filter @waitron/till exec vitest run src/state/draft-sync.test.ts src/till-app-drafts.test.ts -t "person"`
-  This name filter also runs existing cases whose names contain "person". The ones that must be seen FAILING are: "names the sync's person in every save, whoever signs in later" (`personId` undefined); the `it.each` row "…after save refused for another signed-in person without exposing it to the next person" (no lock); "signs the order's person out on this screen…" (no lock, generic banner, a second save after the refresh); "names the signed-in person in each save, and the next person in theirs" (`personId` undefined). The pin "answers failed and says nothing…" passes.
+  This name filter also runs existing cases whose names contain "person". The ones that must be seen FAILING are: "names the sync's person in every save" (`personId` undefined); the `it.each` row "…after save refused for another signed-in person without exposing it to the next person" (no lock); "signs the order's person out on this screen…" (no lock, generic banner, a second save after the refresh); "names the signed-in person in each save, and the next person in theirs" (`personId` undefined). The pin "answers failed and says nothing…" passes.
 
 - [ ] **Step 3: Implement**
 
@@ -341,7 +341,7 @@ If either group passes about 60 tool calls unfinished, stop at a green point, co
 
 - [ ] **Step 4: Run and see them pass**, with the neighbouring rules:
   `pnpm --filter @waitron/server exec vitest run src/till-api.drafts.test.ts`
-  Expected: the file passes, including "saves the session's person's draft, whatever operator the body names" (:623) and "refuses 409 draft.taken_over for a save or a submit by someone other than the owner" (:643), both unchanged.
+  Expected: the file passes, including "saves the session's person's draft, whatever operatorId the body carries" (renamed, body otherwise unchanged) and "refuses 409 draft.taken_over for a save or a submit by someone other than the owner, writing nothing" (unchanged).
 
 - [ ] **Step 5: Proofs by deletion** — (a) comment out the new throw: the two refusing cases must fail with 200. (b) Remove the `.toLowerCase()` from Task 3's read: the case-insensitive same-person case must fail with 409. Restore both.
 
