@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
 import { openVenueDatabase, stampDeployment, type Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
-import type { FiscalContribution, TrustedClock } from "@waitron/fiscal";
+import { prepareIssueClock, type FiscalContribution, type TrustedClock } from "@waitron/fiscal";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets, type WaitronModule } from "@waitron/module";
 import { nodeId, seriesId, jobOrigin, AppError } from "@waitron/shared";
@@ -107,10 +107,15 @@ export async function submitFiscalReadiness(args: {
     `);
     if (existing.rows[0]!.count === 0) {
       const now = (args.now ?? (() => new Date()))();
-      await withIssuanceTransaction(db, (tx) =>
-        recordSale(
+      await withIssuanceTransaction(db, async (tx) => {
+        const clock = await prepareIssueClock(
           tx,
-          args.contribution.makeBackend({ db, clock: args.clock(), environment: "preproduction" }),
+          { nodeId: venue.nodeId, locationId: venue.locationId },
+          args.clock(),
+        );
+        return recordSale(
+          tx,
+          args.contribution.makeBackend({ db, clock, environment: "preproduction" }),
           {
             origin: jobOrigin("readiness_test"),
             nodeId: nodeId(venue.nodeId),
@@ -129,14 +134,14 @@ export async function submitFiscalReadiness(args: {
                 lineTotal: "1.00",
               },
             ],
-            clock: args.clock(),
+            clock,
             settlement: {
               kind: "immediate",
               tenders: [{ method: "cash", amount: "1.00", tipAmount: "0.00", settledAt: now }],
             },
           },
-        ),
-      );
+        );
+      });
     }
     let result;
     try {

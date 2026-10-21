@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { withTransaction, type Database } from "@waitron/db";
+import { readIssueZone } from "@waitron/fiscal";
 import { enabledModules, type WaitronModule } from "@waitron/module";
 import { AppError, locationId, nodeId } from "@waitron/shared";
 import { parseInitialVenueInput, type InitialVenueInput } from "./initial-venue-input.js";
@@ -41,6 +42,7 @@ export async function recoverProvisionedVenue(
         and n.name = ${venue.location.name}`);
     if (found.rows.length !== 1) return refuse();
     const row = found.rows[0]!;
+    await readIssueZone(tx, { nodeId: row.nodeId, locationId: row.locationId });
     if (initial !== undefined) {
       if (row.nodeId !== initial.nodeId) return refuse();
       const administrator = await tx.execute<{ id: string }>(sql`

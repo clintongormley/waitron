@@ -99,3 +99,83 @@ it("reports a sample the real Veri*Factu drain files as rejected as rejected, wi
     rejections: [{ code: "1161", message: "Valor incorrecto" }],
   });
 });
+
+it("uses one supplied isolated issue reading for the sample invoice and actual generation, apart from tender time", async () => {
+  const {
+    submitFiscalReadiness: submit,
+    fiscalReadinessInput,
+    fiscalReadinessDatabaseKey,
+  } = await import("@waitron/provisioning");
+  const { DatabaseSync } = await import("node:sqlite");
+  const stateDir = await mkdtemp(join(tmpdir(), "readiness-zone-generation-"));
+  dirs.push(stateDir);
+  const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+  const modules = enabledModules(ALL_MODULES, selected.config);
+  const contribution = {
+    ...selected.contribution!,
+    drain: async () => ({
+      ...(await import("@waitron/fiscal")).emptyDrainResult(),
+      recordsAccepted: 1,
+    }),
+  };
+  const input = fiscalReadinessInput({
+    venue,
+    contribution,
+    secret: undefined,
+    moduleVersions: { core: 1 },
+    applicationVersion: "saved-zone-reading",
+  });
+  const clock = vi.fn(() => ({
+    now: () => ({
+      instant: new Date("2026-10-14T23:30:00Z"),
+      offsetMinutes: 0,
+      confident: true,
+      confidence: "anchored" as const,
+      anchorAgeSeconds: 0,
+    }),
+    anchor: () => {
+      throw new Error("unused anchor");
+    },
+    currentAnchor: () => null,
+  }));
+  await expect(
+    submit({
+      stateDir,
+      modules,
+      venue,
+      contribution,
+      secret: undefined,
+      ring: {} as never,
+      readinessInput: input,
+      clock,
+      now: () => new Date("2026-10-20T12:00:00Z"),
+    }),
+  ).resolves.toEqual({ status: "accepted" });
+  expect(clock).toHaveBeenCalledTimes(1);
+  const db = new DatabaseSync(
+    join(stateDir, `fiscal-readiness-db-${fiscalReadinessDatabaseKey(input)}`, "venue.db"),
+  );
+  try {
+    expect(db.prepare("select issued_at, issued_offset_minutes from sales").all()).toEqual([
+      { issued_at: "2026-10-14T23:30:00.000Z", issued_offset_minutes: 120 },
+    ]);
+    expect(
+      db
+        .prepare(
+          "select fecha_expedicion_factura, fecha_hora_huso_gen_registro, offset_minutos from registros_facturacion",
+        )
+        .all(),
+    ).toEqual([
+      {
+        fecha_expedicion_factura: "2026-10-15",
+        fecha_hora_huso_gen_registro: "2026-10-14T23:30:00.000Z",
+        offset_minutos: 120,
+      },
+    ]);
+    expect(db.prepare("select settled_at from tenders").all()).toEqual([
+      { settled_at: "2026-10-20T12:00:00.000Z" },
+    ]);
+  } finally {
+    db.close();
+  }
+});

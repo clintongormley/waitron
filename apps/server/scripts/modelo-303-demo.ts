@@ -1,4 +1,8 @@
 import { withIssuanceTransaction } from "@waitron/core";
+import { prepareIssueClock } from "@waitron/fiscal";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { requireCountryTimeZone } from "@waitron/country-packs";
 import { resolveVenueClock } from "@waitron/reporting";
 // Demonstrates `@waitron/reporting`'s VAT roll-ups and the DR303 "por fichero" file over a month of
 // sales rung up through the real write path against the fake `FiscalBackend`, in a throwaway venue
@@ -249,13 +253,15 @@ interface Venue {
  * Drizzle inserts, not raw SQL: the `id` values come from `$defaultFn`, which raw SQL does not run
  * (`packages/db/src/schema/columns.ts`).
  */
-async function seedVenue(db: Database): Promise<Venue> {
+export async function seedVenue(db: Database, timeZone: string = "Europe/Madrid"): Promise<Venue> {
+  const savedZone = requireCountryTimeZone("ES", timeZone);
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "50000000K", legalName: "Deli Demo SL" });
   const [loc] = await db
     .insert(locations)
     .values({
+      timeZone: savedZone,
       name: "Sala principal",
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
@@ -453,7 +459,7 @@ async function main(): Promise<void> {
   const db = store.venue;
   try {
     await FakeFiscalBackend.install(db);
-    const venue = await seedVenue(db);
+    const venue = await seedVenue(db, "Europe/Madrid");
     const backend = new FakeFiscalBackend(db);
 
     // A one-time admin action recordSale never performs.
@@ -492,7 +498,10 @@ async function main(): Promise<void> {
         settlement: { kind: "deferred" },
       };
       const { saleId } = await withIssuanceTransaction(db, async (tx) => {
-        return recordSale(tx, backend, input);
+        return recordSale(tx, backend, {
+          ...input,
+          clock: await prepareIssueClock(tx, node, input.clock),
+        });
       });
       saleIds.push(saleId);
     }
@@ -530,7 +539,10 @@ async function main(): Promise<void> {
       authz: { sessionId: authorizerSession.id },
     };
     await withIssuanceTransaction(db, async (tx) => {
-      await recordCorrection(tx, backend, correctionInput);
+      await recordCorrection(tx, backend, {
+        ...correctionInput,
+        clock: await prepareIssueClock(tx, node0, correctionInput.clock),
+      });
     });
 
     await seedPurchaseInvoices(db);
@@ -890,8 +902,13 @@ function reconcileQuarterEqualsMonths(
   }
 }
 
-main().catch((error: unknown) => {
-  console.error("modelo-303-demo: failed");
-  console.error(error);
-  process.exit(1);
-});
+if (
+  process.argv[1] !== undefined &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+) {
+  main().catch((error: unknown) => {
+    console.error("modelo-303-demo: failed");
+    console.error(error);
+    process.exit(1);
+  });
+}

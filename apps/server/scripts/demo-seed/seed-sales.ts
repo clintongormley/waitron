@@ -14,8 +14,13 @@ import { withIssuanceTransaction } from "@waitron/core";
 import { eq } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput, RecordSaleLine } from "@waitron/core";
-import type { FiscalBackend, TrustedClock, VatBreakdownLine } from "@waitron/fiscal";
-import { locations, nodes, withTransaction } from "@waitron/db";
+import {
+  prepareIssueClock,
+  type FiscalBackend,
+  type TrustedClock,
+  type VatBreakdownLine,
+} from "@waitron/fiscal";
+import { locations, nodes, withTransaction, type Transaction } from "@waitron/db";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { Database } from "@waitron/db";
 import {
@@ -88,7 +93,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** `anchor`/`currentAnchor` are never called by `recordSale`, so they throw / return null. */
 function backDatingClock(): BackDatingClock {
   let instant = new Date();
-  let offsetMinutes = -instant.getTimezoneOffset();
+  let offsetMinutes = 0;
   const clock: TrustedClock = {
     now: () => ({
       instant,
@@ -145,17 +150,16 @@ function totalOf(breakdown: readonly VatBreakdownLine[]): Decimal {
 
 async function nodeBackend(
   db: Database,
+  tx: Transaction,
   nodeId: string,
   clock: TrustedClock,
   environment: DeploymentEnvironment,
 ): Promise<FiscalBackend> {
-  const [node] = await withTransaction(db, (tx) =>
-    tx
-      .select({ filingModule: nodes.filingModule, territory: locations.fiscalTerritory })
-      .from(nodes)
-      .innerJoin(locations, eq(locations.id, nodes.locationId))
-      .where(eq(nodes.id, nodeId)),
-  );
+  const [node] = await tx
+    .select({ filingModule: nodes.filingModule, territory: locations.fiscalTerritory })
+    .from(nodes)
+    .innerJoin(locations, eq(locations.id, nodes.locationId))
+    .where(eq(nodes.id, nodeId));
   if (node === undefined) throw new Error(`seedSales: no node ${nodeId}`);
   const modules = enabledModules(
     ALL_MODULES,
@@ -193,14 +197,13 @@ export async function seedSales(
   );
 
   const backDating = clock ?? backDatingClock();
-  const backend = await nodeBackend(db, venue.nodeId, backDating.clock, environment);
 
   const nodeId = brandNodeId(venue.nodeId);
   const seriesId = brandSeriesId(venue.seriesId);
 
   const rng = makeLcg(0x9e3779b9);
   const now = Date.now();
-  const inputs: { instant: Date; offsetMinutes: number; input: RecordSaleInput }[] = [];
+  const inputs: { instant: Date; chosen: SeedSalesProduct[]; method: string }[] = [];
 
   for (let dayIndex = 0; dayIndex < days; dayIndex += 1) {
     // The calendar date `dayIndex` days ago (UTC). Sales are placed at UTC hours safely inside the
@@ -230,16 +233,24 @@ export async function seedSales(
         continue;
       }
 
-      const offsetMinutes = -instant.getTimezoneOffset();
-      // The rate in force on the sale's own day, as a real sale files it.
-      const on = localCalendarDate(instant, offsetMinutes);
-
-      // `lineNo` tracks `lines.length` rather than the loop index, because `RecordSaleLine` allows
-      // a dish to expand into more than one row.
       const lineCount = randInt(rng, 1, 4);
+      const chosen: SeedSalesProduct[] = [];
+      for (let l = 0; l < lineCount; l += 1)
+        chosen.push(products[randInt(rng, 0, products.length - 1)]!);
+      const method = rng() < 0.6 ? "cash" : "card";
+      inputs.push({ instant, chosen, method });
+    }
+  }
+
+  inputs.sort((a, b) => a.instant.getTime() - b.instant.getTime());
+  for (const { instant, chosen, method } of inputs) {
+    await withIssuanceTransaction(db, async (tx) => {
+      backDating.set(instant, 0);
+      const clock = await prepareIssueClock(tx, { nodeId }, backDating.clock);
+      const backend = await nodeBackend(db, tx, venue.nodeId, clock, environment);
+      const on = localCalendarDate(instant, clock.now().offsetMinutes);
       const lines: RecordSaleLine[] = [];
-      for (let l = 0; l < lineCount; l += 1) {
-        const product = products[randInt(rng, 0, products.length - 1)]!;
+      for (const product of chosen) {
         const gross = toScale(decimal(product.unitPrice), MONEY_SCALE);
         const rate = vatRateOn(product.vatClass, on);
         const base = baseFromGross(gross, rate);
@@ -270,8 +281,6 @@ export async function seedSales(
 
       const vatBreakdown = breakdownOf(lines);
       const total = totalOf(vatBreakdown);
-      const method = rng() < 0.6 ? "cash" : "card";
-
       const input: RecordSaleInput = {
         origin: jobOrigin("demo_seed"),
         nodeId,
@@ -286,17 +295,11 @@ export async function seedSales(
           kind: "immediate",
           tenders: [{ method, amount: total, tipAmount: "0.00", settledAt: instant }],
         },
-        clock: backDating.clock,
+        clock,
       };
 
-      inputs.push({ instant, offsetMinutes, input });
-    }
-  }
-
-  inputs.sort((a, b) => a.instant.getTime() - b.instant.getTime());
-  for (const { instant, offsetMinutes, input } of inputs) {
-    backDating.set(instant, offsetMinutes);
-    await withIssuanceTransaction(db, (tx) => recordSale(tx, backend, input));
+      await recordSale(tx, backend, input);
+    });
   }
 
   return { count: inputs.length };

@@ -16,7 +16,7 @@
 import { recordSale, withIssuanceTransaction } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
-import type { TrustedClock } from "@waitron/fiscal";
+import { prepareIssueClock, type TrustedClock } from "@waitron/fiscal";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { openVenueDatabase } from "@waitron/db";
@@ -101,17 +101,18 @@ export async function recordOneSale(
   const db = store.venue;
   try {
     const clock = systemClock();
-    const backend = new VerifactuBackend({
-      clock,
-      db,
-      environment: deploymentEnvironment(env),
-      deploymentEnvironment: deploymentEnvironment(env),
-      // `recordSale` never contacts AEAT, so this is never called.
-      resolveClient: () =>
-        Promise.reject(
-          new Error("record-one-sale: resolveClient must never be called by recordSale"),
-        ),
-    });
+    const backendFor = (clock: TrustedClock) =>
+      new VerifactuBackend({
+        clock,
+        db,
+        environment: deploymentEnvironment(env),
+        deploymentEnvironment: deploymentEnvironment(env),
+        // `recordSale` never contacts AEAT, so this is never called.
+        resolveClient: () =>
+          Promise.reject(
+            new Error("record-one-sale: resolveClient must never be called by recordSale"),
+          ),
+      });
 
     const input: RecordSaleInput = {
       origin: jobOrigin("operator_script"),
@@ -140,7 +141,10 @@ export async function recordOneSale(
       clock,
     };
 
-    return await withIssuanceTransaction(db, (tx) => recordSale(tx, backend, input));
+    return await withIssuanceTransaction(db, async (tx) => {
+      const issueClock = await prepareIssueClock(tx, { nodeId: node }, clock);
+      return recordSale(tx, backendFor(issueClock), { ...input, clock: issueClock });
+    });
   } finally {
     await store.close();
   }

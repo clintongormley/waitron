@@ -1,3 +1,6 @@
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { requireCountryTimeZone } from "@waitron/country-packs";
 // Authors EU 1169/2011 Annex II allergen declarations on catalogue products in a throwaway venue
 // directory, reads them back as the till does, and prints an allergen matrix and a single-dish lookup.
 //
@@ -31,13 +34,15 @@ interface Venue {
  * Drizzle inserts, not raw SQL: `locations.id` comes from `$defaultFn`, which raw SQL does not run
  * (`packages/db/src/schema/columns.ts`).
  */
-async function seedVenue(db: Database): Promise<Venue> {
+export async function seedVenue(db: Database, timeZone: string = "Europe/Madrid"): Promise<Venue> {
+  const savedZone = requireCountryTimeZone("ES", timeZone);
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "50000000K", legalName: "Deli Demo SL" });
   const [loc] = await db
     .insert(locations)
     .values({
+      timeZone: savedZone,
       name: "Sala principal",
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
@@ -46,7 +51,6 @@ async function seedVenue(db: Database): Promise<Venue> {
   return { locationId: loc!.id };
 }
 
-/** `apps/*` is out of the english-only guard's scope, so the Spanish menu names are fine here. */
 function label(p: AvailableProduct): string {
   return p.name || `product ${p.id}`;
 }
@@ -135,7 +139,7 @@ async function main(): Promise<void> {
   const store = await openVenueDatabase(venueDir);
   const db = store.venue;
   try {
-    const venue = await seedVenue(db);
+    const venue = await seedVenue(db, "Europe/Madrid");
 
     await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
@@ -213,8 +217,13 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error: unknown) => {
-  console.error("allergens-demo: failed");
-  console.error(error);
-  process.exit(1);
-});
+if (
+  process.argv[1] !== undefined &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+) {
+  main().catch((error: unknown) => {
+    console.error("allergens-demo: failed");
+    console.error(error);
+    process.exit(1);
+  });
+}

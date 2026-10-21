@@ -82,7 +82,11 @@ function gbVenueRequest(taxId: string): VenueRequest {
   return {
     ...venueRequest(taxId),
     country: "GB",
-    location: { ...venueRequest(taxId).location, fiscalTerritory: "GB-vat" },
+    location: {
+      ...venueRequest(taxId).location,
+      fiscalTerritory: "GB-vat",
+      timeZone: "Europe/London",
+    },
   };
 }
 

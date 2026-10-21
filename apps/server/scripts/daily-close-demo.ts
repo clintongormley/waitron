@@ -1,4 +1,8 @@
 import { withIssuanceTransaction } from "@waitron/core";
+import { prepareIssueClock } from "@waitron/fiscal";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { requireCountryTimeZone } from "@waitron/country-packs";
 import { resolveVenueClock } from "@waitron/reporting";
 // Rings up a day of trade through the real write path against the fake `FiscalBackend`, in a
 // throwaway venue directory, and prints `@waitron/reporting`'s `DailyClose` for a human to check.
@@ -81,13 +85,15 @@ interface Venue {
  * Drizzle inserts, not raw SQL: the `id` values come from `$defaultFn`, which raw SQL does not run
  * (`packages/db/src/schema/columns.ts`).
  */
-async function seedVenue(db: Database): Promise<Venue> {
+export async function seedVenue(db: Database, timeZone: string = "Europe/Madrid"): Promise<Venue> {
+  const savedZone = requireCountryTimeZone("ES", timeZone);
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "50000000K", legalName: "Deli Demo SL" });
   const [loc] = await db
     .insert(locations)
     .values({
+      timeZone: savedZone,
       name: "Sala principal",
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
@@ -130,7 +136,7 @@ async function main(): Promise<void> {
   const db = store.venue;
   try {
     await FakeFiscalBackend.install(db);
-    const venue = await seedVenue(db);
+    const venue = await seedVenue(db, "Europe/Madrid");
     const backend = new FakeFiscalBackend(db);
     const clock = fixedClock();
 
@@ -165,7 +171,10 @@ async function main(): Promise<void> {
       },
     };
     const saleA = await withIssuanceTransaction(db, async (tx) => {
-      return recordSale(tx, backend, saleAInput);
+      return recordSale(tx, backend, {
+        ...saleAInput,
+        clock: await prepareIssueClock(tx, venue, saleAInput.clock),
+      });
     });
 
     // Sale B — deferred (invoice-first), base 50.00 @ 10%.
@@ -191,7 +200,10 @@ async function main(): Promise<void> {
       settlement: { kind: "deferred" },
     };
     const saleB = await withIssuanceTransaction(db, async (tx) => {
-      return recordSale(tx, backend, saleBInput);
+      return recordSale(tx, backend, {
+        ...saleBInput,
+        clock: await prepareIssueClock(tx, venue, saleBInput.clock),
+      });
     });
 
     // Settle Sale B later the same day, by card.
@@ -232,7 +244,10 @@ async function main(): Promise<void> {
       authz: { sessionId: authorizerSession.id },
     };
     await withIssuanceTransaction(db, async (tx) => {
-      await recordCorrection(tx, backend, correctionInput);
+      await recordCorrection(tx, backend, {
+        ...correctionInput,
+        clock: await prepareIssueClock(tx, venue, correctionInput.clock),
+      });
     });
 
     const close = await withTransaction(db, async (tx) => {
@@ -250,8 +265,13 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error: unknown) => {
-  console.error("daily-close-demo: failed");
-  console.error(error);
-  process.exit(1);
-});
+if (
+  process.argv[1] !== undefined &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+) {
+  main().catch((error: unknown) => {
+    console.error("daily-close-demo: failed");
+    console.error(error);
+    process.exit(1);
+  });
+}
