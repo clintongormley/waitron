@@ -1484,8 +1484,7 @@ describe("a start refused the venue folder by a real second process", () => {
   }
 
   /** Starts a process that holds `venueDir` until killed. `kind` names it through the store's
-   *  holder file; `null` holds the bare engine lock and writes no holder file. The timer references
-   *  the bare connection because a collected one closes and lets the lock go. */
+   *  holder file; `null` holds the bare engine lock and writes no holder file. */
   async function holdVenue(venueDir: string, kind: string | null): Promise<void> {
     const script =
       kind === null

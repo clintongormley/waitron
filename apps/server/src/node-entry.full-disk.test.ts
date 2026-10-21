@@ -8,16 +8,18 @@ import { FRESH, levelFor, type RecoveryState } from "./recovery-state.js";
 import { escapeHtml } from "./recovery-surface.js";
 import { AppError } from "@waitron/shared";
 import { lockVenueDatabase } from "@waitron/db";
+import { VENUE_HOLDER_FILE } from "@waitron/store";
 import { dumpFileName } from "./backup-keys.js";
 import { startFailureCode } from "./boot-failure.js";
 import { recordedStartFailureCode, runEntry } from "./node-entry.js";
 import { firstFiscalFixture } from "../test/first-fiscal.js";
+import { holdVenueElsewhere } from "./testing/venue-held-elsewhere.js";
 
 type StartServer = (env: NodeJS.ProcessEnv) => Promise<{ close: () => Promise<void> }>;
 type Lock = <T>(stateDir: string, body: () => Promise<T>) => Promise<T>;
 
 const SHARED_LOG_DIR = mkdtempSync(join(tmpdir(), "wt-entry-full-log-"));
-// Real folders: below the floor the start deletes under the state folder's backup staging.
+// Real folders: every start deletes under the state folder's backup staging.
 const STATE_DIR = realpathSync(mkdtempSync(join(tmpdir(), "wt-entry-full-state-")));
 const VENUE_DIR = realpathSync(mkdtempSync(join(tmpdir(), "wt-entry-full-venue-")));
 afterAll(async () => {
@@ -58,7 +60,9 @@ function deps(
 }
 
 const dirs: string[] = [];
+const stops: (() => Promise<void>)[] = [];
 afterEach(async () => {
+  await Promise.all(stops.splice(0).map((stop) => stop()));
   await Promise.all(dirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
 
@@ -350,6 +354,46 @@ describe("a start below the free-space floor", () => {
   });
 });
 
+/** A cut-off backup run's copy in the state folder's backup staging. */
+async function stagedLeftover(): Promise<string> {
+  const staged = join(STATE_DIR, "backup-staging", dumpFileName(new Date("2026-10-20T00:00:00Z")));
+  await mkdir(join(STATE_DIR, "backup-staging"), { recursive: true });
+  await writeFile(staged, "copy");
+  dirs.push(join(STATE_DIR, "backup-staging"));
+  return staged;
+}
+
+describe("an ordinary start with room", () => {
+  it("deletes a cut-off backup run's copy in backup staging", async () => {
+    const staged = await stagedLeftover();
+    const d = deps({}, () => 100 * MIB);
+    await runEntry(d);
+    expect(d.startServer).toHaveBeenCalledTimes(1);
+    expect(existsSync(staged)).toBe(false);
+    expect(d.log).toHaveBeenCalledWith("info", "storage.start_backup_leftovers_deleted", {
+      deleted: 1,
+    });
+  });
+
+  it("keeps it while another process holds the venue folder", async () => {
+    const staged = await stagedLeftover();
+    stops.push((await holdVenueElsewhere(VENUE_DIR)).stop);
+    const d = deps({ lockVenue: lockVenueDatabase, readVenueHolder: () => null }, () => 100 * MIB);
+    await expect(runEntry(d)).rejects.toMatchObject({ code: "provisioning.database_in_use" });
+    expect(existsSync(staged)).toBe(true);
+  });
+
+  it("deletes it under a fresh holder file whose holder is gone", async () => {
+    const staged = await stagedLeftover();
+    const heartbeatAt = new Date().toISOString();
+    const left = { kind: "server", pid: 4242, host: "box", lockedAt: heartbeatAt, heartbeatAt };
+    await writeFile(join(VENUE_DIR, VENUE_HOLDER_FILE), `${JSON.stringify(left)}\n`);
+    const d = deps({ lockVenue: lockVenueDatabase }, () => 100 * MIB);
+    await runEntry(d);
+    expect(existsSync(staged)).toBe(false);
+  });
+});
+
 /** A state volume holding one `recovery.json`, so the test reads what the start persisted. */
 function recoveryVolume() {
   let stored: RecoveryState = FRESH;
@@ -432,21 +476,27 @@ describe("a start that fails on a full disk", () => {
       dumpFileName(new Date("2026-10-20T00:00:00Z")),
     );
     await mkdir(join(STATE_DIR, "backup-staging"), { recursive: true });
-    await writeFile(staged, "copy");
     dirs.push(join(STATE_DIR, "backup-staging"));
     const error = diskFull();
+    let reads = 0;
     const d = deps(
       {
+        // Written after the clean-up every start runs, so only the full-disk one can delete it.
+        readRecoveryState: vi.fn(async () => {
+          if ((reads += 1) === 1) await writeFile(staged, "copy");
+          return FRESH;
+        }),
         lockVenue: lockVenueDatabase,
         startServer: vi.fn<StartServer>(() => Promise.reject(error)),
       },
       () => 100 * MIB,
     );
     await expect(runEntry(d)).rejects.toBe(error);
+    expect(reads).toBeGreaterThan(0);
     expect(existsSync(staged)).toBe(false);
   });
 
-  it("keeps backup staging after a full-disk failure while another process's holder is fresh", async () => {
+  it("keeps backup staging after a full-disk failure while another process holds the venue folder", async () => {
     const staged = join(
       STATE_DIR,
       "backup-staging",
@@ -456,17 +506,12 @@ describe("a start that fails on a full disk", () => {
     await writeFile(staged, "copy");
     dirs.push(join(STATE_DIR, "backup-staging"));
     const error = diskFull();
-    const heartbeatAt = new Date().toISOString();
+    stops.push((await holdVenueElsewhere(VENUE_DIR)).stop);
     const d = deps(
       {
         runStagedRestore: () => Promise.reject(error),
-        readVenueHolder: () => ({
-          kind: "server",
-          pid: process.pid + 1,
-          host: "box",
-          lockedAt: heartbeatAt,
-          heartbeatAt,
-        }),
+        lockVenue: lockVenueDatabase,
+        readVenueHolder: () => null,
       },
       () => 100 * MIB,
     );
@@ -479,7 +524,7 @@ describe("a start that fails on a full disk", () => {
     expect(existsSync(staged)).toBe(true);
   });
 
-  it("deletes nothing for any other failure", async () => {
+  it("the failure's clean-up deletes nothing for any other failure", async () => {
     const { logDir, leftover } = await logsWithLeftover();
     const error = new AppError("migrations.set_missing", { name: "core", folder: "/missing" });
     const d = deps(

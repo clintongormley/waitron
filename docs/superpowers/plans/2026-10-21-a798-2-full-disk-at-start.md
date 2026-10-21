@@ -286,6 +286,7 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
      `backup-encrypt-*` folders; a symbolic-link `logs`, `crash-reports` or `backup-staging` is
      skipped; and the forced clean-up ignores the holder file while admission holds the folder,
      `venueHeld`.)
+     (2026-10-21, A978: the start now takes the venue lock first and reads the holder file only when the lock fails for another reason; see `docs/developers/conventions-data.md`, "Every start takes the venue lock".)
    Nothing else: never `venue.lock`, `recovery.lock`, `recovery.json`, the databases,
    `restore-staging` (`restore.ts:85`; a staged restore runs after this step and reads it), a
    configured backup folder, or any file whose name is not listed above. `<logDir>` is
@@ -377,6 +378,7 @@ leaves behind a plaintext copy of the whole venue database (readable by the box'
 the free space? A start beside a running server would still keep them while that server's
 heartbeat is fresh (decision 5). **DEFAULT: follow the design — the start deletes them only when
 the disk has under 256 MiB free** (design §4.7 item 1).
+(2026-10-21: answered by A978 — every start deletes them; see `docs/backlog/box.md` → Decisions and deliberate limits.)
 
 ---
 
@@ -474,6 +476,7 @@ action with `toContain`, and the new action contains it whole, so it keeps passi
    a full disk, where the heartbeat cannot be written (F13; decision 5 states the cost) — and its
    write-back runs under the recovery lock. The real-disk file checks that `venue.lock` and `recovery.lock` keep
    their inodes (Task 5a).
+   (2026-10-21, A978: the start now takes the venue lock first and reads the holder file only when the lock fails for another reason; see `docs/developers/conventions-data.md`, "Every start takes the venue lock".)
 6. **The real disk.** The harness cannot fill a big filesystem; a skip is visible and CI fails
    rather than skips; the at-commit case reaches the commit (statement ok, commit refused).
 

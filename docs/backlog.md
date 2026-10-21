@@ -5213,14 +5213,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   a planned "re-trust every device" event — devices pair again in place of their old entries, and the
   old name only points at the new one for 14 days. Five slices; no migration.
 
-- **A backup run that is cut off leaves a plaintext copy of the whole venue database**, and its
-  encrypted copy, in `<state>/backup-staging` until a start deletes them under 256 MiB free or after
-  a start that failed on a full disk; nothing else in the server deletes them, and a box reset
-  does. **Owner question:** should every start delete them, whatever the free space? Found by A798.
-  [Detail](backlog/box.md#a-backup-run-that-is-cut-off-leaves-a-plaintext-copy-of-the-whole-venue-database)
-
 - **A box whose first setup was retired into a new workspace keeps that workspace's backup staging
-  through the clean-up before the count.** Accepted for A798-B slice 2.
+  through the clean-up before the count.** Since A978 that keeps a cut-off backup run's plaintext
+  copy there through every ordinary start; not yet put to the owner.
   [Detail](backlog/box.md#a-box-whose-first-setup-was-retired-into-a-new-workspace-keeps-that-workspaces-backup-staging-through-the-clean-up-before-the-count)
 
 - **On a full disk, a box whose kept certificates cannot be used shows the connection set-up page,

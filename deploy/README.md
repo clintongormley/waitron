@@ -241,18 +241,22 @@ Never edit rows in the database to repair it.
 
 #### When the page names `storage.disk_full`
 
-The box's disk is full, so Waitron cannot save anything. Before it opens its database, every start
-checks the free space in the state folder and in the database's folder. Below 256 MiB, it deletes
-what it can make again:
+The box's disk is full, so Waitron cannot save anything. Before it opens its database, every start,
+whatever the free space, deletes the database copy and encrypted copy a backup run that was cut off
+left in `backup-staging` in the state folder, found by the names a backup run gives them. It keeps
+them while another process, such as a running server, holds the database folder. When the start
+cannot find that out, as on a disk with no room left for the note it writes while it holds the
+folder, it keeps them while that folder's holder note shows a heartbeat less than 30 seconds old.
+One exception, read in the code but not tried: on a box whose first setup was moved into a new
+workspace, an ordinary start does not clean that workspace's `backup-staging`; only a start that
+fails on a full disk does.
+
+Every start also checks the free space in the state folder and in the database's folder. Below
+256 MiB, it deletes as well:
 
 - rotated log files except the newest (`waitron.log.2` and later; `waitron.log` and `waitron.log.1`
   stay);
-- crash reports in the `logs` volume's `crash-reports` folder that are more than a week old;
-- the database copy and encrypted copy a backup run that was cut off left in `backup-staging` in
-  the state folder, found by the names a backup run gives them, unless a running server's heartbeat
-  shows it may still be using them. On a full disk that heartbeat cannot
-  be written, so from about half a minute after the disk fills, a start beside a running server
-  deletes that server's backup in progress too, and that backup run may fail.
+- crash reports in the `logs` volume's `crash-reports` folder that are more than a week old.
 
 It deletes nothing else: never the database, the lock files, `recovery.json` or a finished backup,
 even one whose local backup folder was set inside `backup-staging`. If `logs`, its `crash-reports`
