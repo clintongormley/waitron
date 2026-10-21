@@ -2554,3 +2554,17 @@ operational calls. Keep ordinary restore authority tests and fiscal golden files
 Use installed disposable copies for independent omission controls, then restore each change and
 run an accepting control. The [A850 plan](../superpowers/plans/2026-10-20-a850-backup-verification.md)
 records the owner checks and the remaining Cloud isolation/admission requirements.
+
+
+## Freeze both clocks in a fixed first-setup fixture
+
+A fixed first-setup clock fixture must freeze `Date` and `performance` together. The production
+`hour-setup-clock.ts` compares their elapsed times and refuses a difference over one second.
+Keep the separate correction-refusal tests on their explicitly controlled clocks.
+
+Measured on 21 October 2026 for A850: an installed disposable checkout with a real 1,200 ms wait
+before the final provision in `fiscal-readiness-first-setup.test.ts` returned
+`sif.allocation_invalid` / `clock_corrected` at the original success assertion. Changing only
+`toFake: ["Date"]` to `toFake: ["Date", "performance"]` passed that same delayed case.
+The delay is an experiment, not part of the shipped fixture. The owner approved the exact
+one-line correction; every assertion and the initial date stay unchanged.

@@ -1189,3 +1189,18 @@ from its earlier multi-run sample. No shard algorithm, count, test, guard or thr
 Every reported server test path occurs in exactly one of those sixteen logs. Current-head CI
 will run again for this scheduling-data update before landing; the completed Claude review
 is retained because no product behavior changed.
+
+
+### Task 27 approved fixture correction — 21 October 2026
+
+The owner approved the exact first-setup fixture correction: freeze `Date` and `performance`
+together, retaining every assertion and the original date. An installed disposable checkout
+reproduced `clock_corrected` with a real 1,200 ms wait before provision; the one-line correction
+passed that same delayed case. The shipping fixture contains no added wait and passes all three
+original cases. The six unchanged clock/protected fiscal suites pass 50 cases, and seven complete
+recovery/verification integration suites pass 257 cases after the required rebase.
+
+The rebase preserves all 142 existing non-Markdown A850 paths byte for byte; its sole manual
+conflict keeps both backlog sections. The completed 551-second Claude review remains applicable.
+The closed clock-fixture approval backlog entry is removed. Normal push validation and
+current-head CI are still required before landing; the release and Cloud gates above remain.
