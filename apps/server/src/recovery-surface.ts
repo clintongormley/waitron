@@ -6,6 +6,8 @@ import type { Context } from "hono";
 import { FALLBACK_LOCALE, type ErrorCode, type SupportedLocale } from "@waitron/shared";
 import { LOG_FILE_NAME, type VenueHolderKind } from "@waitron/db";
 import { resolveLoginLocale } from "./login-locale.js";
+import { errnoOf } from "./errno.js";
+import type { Logger } from "./logger.js";
 import { redactSecrets } from "./redact-secrets.js";
 import type { RecoveryLevel, RecoveryState } from "./recovery-state.js";
 
@@ -20,6 +22,7 @@ export interface RecoveryDeps {
   freeSpace?: () => Promise<number | null>;
   /** This start could not record its failure, so `failures` does not count it. */
   uncounted?: true;
+  log?: Logger;
 }
 
 /** The page is served before any authentication exists; see `OPERATOR_TEXT` for what reaches it. */
@@ -480,11 +483,15 @@ type FreeSpaceReading = number | null | undefined;
 
 async function readFreeSpace(deps: RecoveryDeps): Promise<FreeSpaceReading> {
   if (deps.freeSpace === undefined) return undefined;
+  let bytes: number | null;
   try {
-    return await deps.freeSpace();
-  } catch {
+    bytes = await deps.freeSpace();
+  } catch (error) {
+    deps.log?.("warn", "recovery.free_space_unreadable", { errno: errnoOf(error) ?? null });
     return null;
   }
+  if (bytes === null) deps.log?.("warn", "recovery.free_space_unreadable", { errno: null });
+  return bytes;
 }
 
 function freeSpaceLine(bytes: FreeSpaceReading, locale: SupportedLocale): string {

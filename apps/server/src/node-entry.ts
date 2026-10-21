@@ -362,6 +362,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
           exit(0);
         },
         freeSpace: () => lowestFreeBytes(dirs, deps.statfs),
+        log: deps.log,
       }),
       transport,
     );
@@ -450,6 +451,7 @@ async function runAdmittedEntry(
           exit(0);
         },
         freeSpace: () => lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs),
+        log: deps.log,
       }),
       {
         stateDir: deps.stateDir,

@@ -299,6 +299,41 @@ describe("a start below the free-space floor", () => {
     expect(failing.writeRecoveryState).not.toHaveBeenCalled();
   });
 
+  it("logs a free-space read that finds nothing on either page it serves", async () => {
+    let started = false;
+    const atOnce = deps(
+      {
+        withRecoveryLock: () => {
+          started = true;
+          return Promise.reject(diskFull());
+        },
+      },
+      () => 10,
+    );
+    vi.mocked(atOnce.statfs).mockImplementation(() =>
+      started
+        ? Promise.reject(new Error("statfs failed"))
+        : Promise.resolve({ bavail: 10, frsize: 1 }),
+    );
+    await runEntry(atOnce);
+    await servedApp(atOnce).request("/");
+    expect(atOnce.log).toHaveBeenCalledWith("warn", "recovery.free_space_unreadable", {
+      errno: null,
+    });
+
+    const level = deps({
+      readRecoveryState: vi.fn(() =>
+        Promise.resolve({ ...FRESH, failures: 3, level: levelFor(3) }),
+      ),
+    });
+    await runEntry(level);
+    vi.mocked(level.statfs).mockRejectedValue(new Error("statfs failed"));
+    await servedApp(level).request("/");
+    expect(level.log).toHaveBeenCalledWith("warn", "recovery.free_space_unreadable", {
+      errno: null,
+    });
+  });
+
   it("shows free space on the page a box at the recovery level serves", async () => {
     const d = deps(
       {

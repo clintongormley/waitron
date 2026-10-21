@@ -1015,6 +1015,29 @@ describe("the full-disk page's free space and uncounted start", () => {
     expect(await res.text()).toContain(escapeHtml("Free space on the box's disk: unknown."));
   });
 
+  it("logs a free-space read that fails or finds nothing, and serves the same page", async () => {
+    const quiet = await bodyOf(appWith({ freeSpace: async () => null }));
+    const log = vi.fn();
+    const failing = appWith({
+      freeSpace: () => Promise.reject(Object.assign(new Error("statfs failed"), { code: "EIO" })),
+      log,
+    });
+    const res = await failing.request("/");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(quiet);
+    expect(log).toHaveBeenCalledWith("warn", "recovery.free_space_unreadable", { errno: "EIO" });
+
+    const nothing = vi.fn();
+    expect(await bodyOf(appWith({ freeSpace: async () => null, log: nothing }))).toBe(quiet);
+    expect(nothing).toHaveBeenCalledWith("warn", "recovery.free_space_unreadable", {
+      errno: null,
+    });
+
+    const read = vi.fn();
+    await bodyOf(appWith({ freeSpace: async () => 0, log: read }));
+    expect(read).not.toHaveBeenCalled();
+  });
+
   it("shows no free-space line when none is given", async () => {
     const english = await pageFor("storage.disk_full");
     const spanish = await pageFor("storage.disk_full", undefined, SPANISH);
