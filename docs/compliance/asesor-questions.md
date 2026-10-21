@@ -662,10 +662,15 @@ depends on the answers, and no enquiry has been sent.
 peanut"), usually without a name, and the table can be linked to a booking that has one. The
 AEPD says its Facilita RGPD tool «no podrá utilizarse para tratamientos que impliquen un alto
 riesgo para los derechos y libertades de las personas, como datos de salud». GDPR art. 30.5 lifts
-the record-keeping duty for firms under 250 staff «a menos que el tratamiento que realice … no sea
-ocasional, o incluya categorías especiales de datos personales». Art. 37.1.c requires a DPO for
-«el tratamiento a gran escala de categorías especiales de datos». Our reading: the record is
-required and a DPO is not. We cannot settle (a) and (b) from the texts.
+the record-keeping duty for firms under 250 staff «a menos que el tratamiento que realice pueda
+entrañar un riesgo para los derechos y libertades de los interesados, no sea ocasional, o incluya
+categorías especiales de datos personales»; the three triggers are alternatives, and a
+restaurant's staff and invoice processing is not occasional. Art. 37.1.c requires a DPO where «las
+actividades principales» consist of «el tratamiento a gran escala de categorías especiales de
+datos»; recital 97 says core activities are the controller's primary activities, «no …
+el tratamiento de datos personales como actividades auxiliares», and recital 91 says one doctor,
+health professional or lawyer is not «a gran escala». (a) and (b) are open; (c) and (d) ask you
+to confirm our reading.
 
 > Un restaurante anota, cuando el cliente lo comunica, las alergias de los comensales de una mesa
 > (por ejemplo «ventana, asiento 2: cacahuete»), normalmente sin nombre, para preparar la comida
@@ -679,79 +684,87 @@ required and a DPO is not. We cannot settle (a) and (b) from the texts.
 > alto riesgo …, como datos de salud». ¿Puede este restaurante usar Facilita, o debe hacer su
 > propio análisis de riesgos?
 >
-> **(c)** Entendemos que la excepción del art. 30.5 RGPD no se aplica, porque el tratamiento no es
-> ocasional e incluye categorías especiales, y que el restaurante debe llevar el registro de
-> actividades de tratamiento. ¿Es correcto?
+> **(c)** Confírmenos que la excepción del art. 30.5 RGPD no se aplica, porque basta uno de sus
+> supuestos y el tratamiento de personal y facturación no es ocasional, de modo que el
+> restaurante debe llevar el registro de actividades de tratamiento.
 >
-> **(d)** Entendemos que no debe designar delegado de protección de datos: no trata categorías
-> especiales «a gran escala» (art. 37.1.c RGPD) ni figura en la lista del art. 34.1 LOPDGDD. ¿Es
-> correcto?
+> **(d)** Confírmenos que no debe designar delegado de protección de datos: su actividad
+> principal es la restauración, las notas de alergias son auxiliares (considerando 97), no trata
+> categorías especiales «a gran escala» (art. 37.1.c RGPD; considerando 91) y no figura en la
+> lista del art. 34.1 LOPDGDD.
 
 ---
 
-### Q55. A former employee's working-time record: blocked, or available to her representatives? (added 2026-10-22)
+### Q55. A former employee's email and sign-in details (added 2026-10-22)
 
-**Why we ask.** ET art. 34.9 says the daily records are kept four years and «permanecerán a
-disposición de las personas trabajadoras, de sus representantes legales y de la Inspección de
-Trabajo y Seguridad Social». LOPDGDD art. 32 obliges the controller to block data «cuando proceda
-a su rectificación o supresión», which prevents processing «incluyendo su visualización, excepto
-para la puesta a disposición de los datos a los jueces y tribunales, el Ministerio Fiscal o las
-Administraciones Públicas competentes». Worker representatives are not in that exception. The
-design proposes keeping the former employee's email for one year after she leaves, the window in
-ET art. 59.1 («prescribirán al año de su terminación»), then clearing it and keeping her name.
+**Why we ask.** The design proposes keeping a former employee's email for one year after she
+leaves, the period in ET art. 59.1 («Las acciones derivadas del contrato de trabajo que no tengan
+señalado plazo especial prescribirán al año de su terminación»), then clearing it and keeping her
+name with her time record. It also proposes deleting her PIN, password, two-factor secret,
+passkeys and recovery codes when the account is deactivated: the software already deletes exactly
+these when a manager resets a login or re-invites a suspended person, so this extends existing
+security behaviour (GDPR art. 32) rather than setting a retention period.
 
-> Una trabajadora que dejó la empresa pide la supresión de sus datos. La empresa conserva su
-> registro de jornada por el art. 34.9 ET, denegando la supresión de ese registro por el art.
-> 17.3.b RGPD.
+> **(a)** ¿Es proporcionado conservar el correo electrónico de una extrabajadora durante un año
+> desde la baja (art. 59.1 ET), para atender sus solicitudes y enviarle su registro de jornada, y
+> después borrarlo conservando su nombre junto al registro? ¿Debe borrarse antes o conservarse más?
 >
-> **(a)** ¿Debe la empresa bloquear ese registro conforme al art. 32 LOPDGDD? Si lo bloquea, ¿pueden
-> seguir consultándolo la propia trabajadora y los representantes legales, que el art. 34.9 ET
-> menciona pero el art. 32.2 LOPDGDD no?
->
-> **(b)** Proponemos conservar su correo electrónico durante un año desde la baja (art. 59.1 ET),
-> para atender sus solicitudes y enviarle su registro, y después borrarlo, conservando su nombre
-> junto al registro. Su PIN, contraseña y llaves de acceso se borran el mismo día de la baja.
-> ¿Es proporcionado, o debe borrarse antes o conservarse más tiempo?
+> **(b)** Proponemos borrar sus credenciales de acceso (PIN, contraseña, segundo factor, llaves de
+> acceso y códigos de recuperación) en el momento de la baja, como medida de seguridad, sin tocar
+> el registro de jornada ni otros registros. ¿Tiene alguna objeción?
 
 ---
 
-### Q56. An invoice customer's refused erasure: does blocking still apply? (added 2026-10-22)
+### Q56. Blocking when erasure is refused because the law requires the data (added 2026-10-22)
 
-**Why we ask.** A full invoice must carry the recipient's «Nombre y apellidos, razón o
-denominación social completa» (RD 1619/2012 art. 6.1.c), its copy must be kept (art. 19.1.b), and
-the filed record is already at AEAT. In Waitron both the sale and the filed record are
-append-only. LOPDGDD art. 32.1 ties blocking to the controller «proceda a su rectificación o
-supresión»; when erasure is refused under GDPR art. 17.3.b, nothing is erased.
+**Why we ask.** LOPDGDD art. 32.1 says the controller «estará obligado a bloquear los datos cuando
+proceda a su rectificación o supresión»; art. 32.2 defines blocking as preventing processing
+«incluyendo su visualización, excepto para la puesta a disposición de los datos a los jueces y
+tribunales, el Ministerio Fiscal o las Administraciones Públicas competentes, en particular de las
+autoridades de protección de datos, para la exigencia de posibles responsabilidades derivadas del
+tratamiento y solo por el plazo de prescripción de las mismas». When erasure is refused under GDPR
+art. 17.3.b, nothing is erased. Two cases: a former employee's time record, which ET art. 34.9
+keeps four years and says «permanecerán a disposición de las personas trabajadoras, de sus
+representantes legales y de la Inspección de Trabajo y Seguridad Social»; and an invoice
+customer's name, NIF and address, which a full invoice must carry (RD 1619/2012 art. 6.1.c),
+whose copy must be kept (art. 19.1.b), and which the filed record has already sent to AEAT. In
+Waitron the sale and the filed record cannot be changed.
 
-> Un cliente autónomo que pidió factura completa (nombre, NIF y dirección) solicita que se borren
-> sus datos. La copia de la factura y el registro de facturación remitido a la AEAT no pueden
-> modificarse.
+> **(a)** Si la empresa deniega la supresión por el art. 17.3.b RGPD, porque la ley le obliga a
+> conservar el registro de jornada de una extrabajadora o los datos de la factura de un cliente
+> autónomo, ¿debe aplicar igualmente el bloqueo del art. 32 LOPDGDD, ocultando esos datos de las
+> pantallas habituales del personal? En el caso del registro de jornada, si se bloquea, ¿pueden
+> seguir consultándolo la trabajadora y sus representantes legales, que el art. 34.9 ET menciona
+> pero el art. 32.2 LOPDGDD no?
 >
-> **(a)** Si la empresa deniega la supresión por el art. 17.3.b RGPD, ¿debe aplicar igualmente el
-> bloqueo del art. 32 LOPDGDD, ocultando esos datos de las pantallas habituales del personal y
-> reservándolos para la Administración, o el bloqueo solo procede cuando la empresa efectivamente
-> suprime datos?
->
-> **(b)** La dirección de correo a la que se envió la factura, ¿puede borrarse a petición del
+> **(b)** La dirección de correo a la que se envió una factura, ¿puede borrarse a petición del
 > cliente una vez entregada, o conviene conservarla como prueba de la remisión?
 
 ---
 
-### Q57. Waitron's role when it receives bug reports from a venue (added 2026-10-22)
+### Q57. Waitron's role for bug reports and for its remote-access relay (added 2026-10-22)
 
 **Why we ask.** When Waitron Cloud hosts or backs up a venue's data, Waitron is the venue's
-processor under a GDPR art. 28 contract. Waitron also plans to receive bug reports from the box
-(technical logs and, when a manager chooses, a description of what they were doing), which it uses
-to fix its own software. LOPDGDD art. 33.2 treats as controller «quien figurando como encargado
-utilizase los datos para sus propias finalidades».
+processor under a GDPR art. 28 contract. Two other routes are unclear. First, Waitron plans to
+receive bug reports from the box (technical logs and, when a manager chooses, a description of
+what they were doing) and to use them to fix its own software. LOPDGDD art. 33.2 treats as
+controller «quien figurando como encargado utilizase los datos para sus propias finalidades», and
+GDPR art. 28.10 says a processor that determines «los fines y medios del tratamiento» is
+considered controller for that processing. Second, when a venue turns on remote access, the
+dashboard's encrypted traffic passes through Waitron's relay, which cannot read it; GDPR art. 4.2
+counts «comunicación por transmisión» as processing.
 
-> **(a)** Para los informes de errores que el software del restaurante envía a Waitron y que
-> Waitron utiliza para corregir su propio producto, ¿actúa Waitron como encargado del restaurante
-> o como responsable?
+> **(a)** Corregir su propio software con los informes de errores que envía el restaurante, ¿es
+> una finalidad propia de Waitron que la convierte en responsable de esos informes (art. 33.2
+> LOPDGDD, art. 28.10 RGPD), o un servicio prestado por cuenta del restaurante como encargado?
 >
-> **(b)** Si es responsable, ¿queda fuera del RGPD el informe cuando se eliminan los datos
+> **(b)** Si es responsable, ¿quedan los informes fuera del RGPD cuando se eliminan los datos
 > personales antes del envío (registros enmascarados, sin texto escrito por el personal)? ¿Qué debe
 > decir el aviso de privacidad del restaurante sobre ese envío?
+>
+> **(c)** El relé por el que pasa cifrado el tráfico del panel cuando el restaurante activa el
+> acceso remoto, sin que Waitron pueda leerlo, ¿hace de Waitron encargado del tratamiento y exige
+> contrato del art. 28 RGPD?
 
 ---
 
@@ -760,17 +773,23 @@ utilizase los datos para sus propias finalidades».
 **Why we ask.** The till stamps the employee on every void, refund, cash-drawer opening and order
 change, and the device on every clock-in; those stamps cannot be deleted. There is no location
 tracking, video or sound. ET art. 20.3 lets the employer adopt «las medidas que estime más
-oportunas de vigilancia y control». LOPDGDD art. 87.3 requires criteria for the employer's
+oportunas de vigilancia y control para verificar el cumplimiento por el trabajador de sus
+obligaciones y deberes laborales, guardando en su adopción y aplicación la consideración debida a
+su dignidad». ET art. 64.5 gives the works committee the right to «emitir informe, con carácter
+previo a la ejecución por parte del empresario de las decisiones adoptadas por este» on «f) La
+implantación y revisión de sistemas de organización y control del trabajo», and art. 62.2 gives
+staff delegates «las mismas competencias». LOPDGDD art. 87.3 requires criteria for the employer's
 digital devices, in whose drafting «deberán participar los representantes de los trabajadores».
 
 > **(a)** ¿Es este registro de operaciones por empleado una medida de vigilancia y control del
-> art. 20.3 ET que exige información previa específica a la plantilla y, en su caso, a sus
-> representantes?
+> art. 20.3 ET, o un «sistema de organización y control del trabajo» sobre el que el comité o los
+> delegados de personal deben poder emitir informe previo (arts. 64.5.f y 62.2 ET)?
 >
 > **(b)** ¿Se aplica el art. 87.3 LOPDGDD a un TPV compartido que la empresa pone a disposición del
 > personal?
 >
-> **(c)** ¿Basta con mencionarlo en el aviso de privacidad del personal, como proponemos?
+> **(c)** ¿Basta con mencionarlo en el aviso de privacidad del personal, como proponemos, o hace
+> falta una información previa específica?
 
 ---
 

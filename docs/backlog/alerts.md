@@ -50,7 +50,9 @@ is GitHub issues; for now a bundle only needs to be copy-pastable.
     better.
   - **Where the freeze reports are (#608).** One JSON file per process the watchdog kills, in
     `<logDir>/crash-reports/` — on a box `/var/lib/waitron/logs/crash-reports/` on the persistent
-    `logs` volume, outside the venue database. Nothing reads or deletes them yet.
+    `logs` volume, outside the venue database. Nothing reads them yet. A start that finds under
+    256 MiB free, or that failed on a full disk, deletes those more than a week old
+    (`apps/server/src/start-space.ts:119-133`; `deploy/README.md:254-258`).
 
 ## The Alerts table makes long station warnings hard to read on a phone
 
