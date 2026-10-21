@@ -18,9 +18,11 @@ A (recommended) — the stick carries everything and asks once. About 15 minutes
   in the first build), no internet needed. The box's screen shows the disk and what it holds
   ("Windows"), and one press on «Borrar e instalar» starts it. If the box already holds a Waitron
   restaurant, the screen names it («Bar Santet», Live, last sale 20/10/2026 23:41, 3 records not yet
-  sent to AEAT), says its own backups go with the disk, and the button works only after the
-  restaurant's name is typed. This is weaker than `waitron.sh`, which refuses to wipe a Live box; it
-  follows your A732 answer that a broken box is reinstalled. The deli reaches the setup wizard by about 10:15 and can
+  sent to AEAT), says its own backups and its record of past filings go with the disk, and the button works only after the
+  restaurant's name is typed (`waitron.sh` asks for the word «production» in the same place). This
+  makes the stick the repair for ANY broken box, Live ones included. Your A732 answer ("you just
+  reinstall the box and start again") was about a box whose owner lost the password and recovery
+  sheet; choosing A confirms it for every broken box. The deli reaches the setup wizard by about 10:15 and can
   prepare its menu before the line arrives. Cost: a large download per release for whoever writes
   the stick; a box with no screen needs one plugged in for the install.
 B — a small stick that downloads the release during the install. Always the newest release, but the

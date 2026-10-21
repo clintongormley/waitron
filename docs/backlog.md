@@ -5268,10 +5268,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   ready-made Waitron disk (Debian 13, Docker, the release's images; btrfs subvolumes for A950) and
   needs no internet; it erases nothing without a press on the box's screen, and a venue's name typed
   if the disk holds one. Built and booted in CI for every release. Not built. Box image constraints
-  under [Box image constraints (B3)](backlog/box.md#box-image-constraints-b3). Left open by the
-  design (§12), each to become its own entry once the design is approved: moving a box from Debian 13
-  to 14 before Chromium's fixes stop; disk encryption; a stick file over GitHub's 2 GiB limit;
-  changing the box's Wi-Fi after install without a terminal.
+  under [Box image constraints (B3)](backlog/box.md#box-image-constraints-b3). The design's §12
+  lists what it leaves open, each to become its own entry once the design is approved (among them
+  moving a box from Debian 13 to 14 before Chromium's fixes stop, disk encryption, and setting the
+  clock by hand without a terminal, handed to A798).
 
 - **The box image carries the WireGuard link.** [Detail](backlog/box.md#box-image-constraints-b3)
 

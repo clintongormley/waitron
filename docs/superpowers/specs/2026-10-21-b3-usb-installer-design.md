@@ -21,7 +21,8 @@ operating-system, partition, network or account step).
 
 The owner decided on 2026-10-21 that the first venue's boxes are installed from the USB installer,
 which makes B3 go-live work. Four other pieces of work are already waiting on what B3 lays down
-(A950 is a queued item with a backlog entry, not yet a design; the other three are designs):
+(A950 is a lane A campaign item for the backlog entry "Automatic upgrades that can be undone",
+`docs/backlog/box.md:39-69`, not yet a design; the other three are designs):
 
 - **A950, automatic upgrades that can be undone** — needs a disk that can take a snapshot. "The B3
   installer lays the disk out, so it can put the folder holding Docker's volumes on btrfs"
@@ -36,8 +37,9 @@ which makes B3 go-live work. Four other pieces of work are already waiting on wh
 
 And the owner's 2026-10-21 answer on A732 — no recovery desk: "But this isn't needed. You just
 reinstall the box and start again" (recorded in lane E's questions file, outside the repository;
-the repo's A732 entry at `docs/backlog.md:362` predates it) — makes the stick the way a broken box
-is repaired, not only the way a new one starts. Backups held elsewhere (an archive file, the
+the repo's A732 entry under the fiscal area of `docs/backlog.md` predates it). That answer was
+about a box whose owner lost the password and the recovery sheet; this design makes the stick the
+repair for any broken box, Live ones included, which §13 Q1 asks the owner to confirm. Backups held elsewhere (an archive file, the
 bucket, a Cloud copy) survive the wipe and are restored in the setup wizard.
 
 ## 1. Goals, non-goals, anti-goals
@@ -48,7 +50,8 @@ bucket, a Cloud copy) survive the wipe and are restored in the setup wizard.
    and a network cable, and ends at the setup wizard's first page, in about a quarter of an hour
    (an estimate; slice 1 measures it).
 2. Every box installed from one release's stick starts from the same disk, apart from what the
-   installer writes for that box (its network settings, its clock, a fresh machine identity, §7);
+   installer and the first start write for that box (its network settings, its clock, a fresh
+   machine identity, the disk grown to fill the box, the print agent's AppArmor line, §7);
    CI builds the stick and installs it in a virtual machine before it is published.
 3. The install needs no internet (§4). The box's clock, network and disk are ready for what A798,
    A947 and A950 ask of them.
@@ -113,7 +116,7 @@ once the browser is there (slice 3).
 
 | | Ready-made disk (chosen) | Debian's installer with an answer file |
 | --- | --- | --- |
-| What reaches each box | The same bytes CI built and booted | A fresh install from packages on the stick; each box can differ |
+| What reaches each box | The disk CI built and booted | A fresh install from packages on the stick; each box can differ |
 | Disk layout | Declared up front, any subvolumes (P6) | One btrfs subvolume, for `/`, only (P5); the rest by hand-written script at the end |
 | A question the answers missed | Cannot happen: nothing is asked but §5's | A critical one stops the install (P3, P4) |
 | Time per box | Copying an image (to be measured, slice 1) | A full package install (not measured) |
@@ -133,8 +136,8 @@ Its parts (sizes are not measured; slice 1 measures them):
 2. **The ready-made box disk** (§6), compressed.
 3. **A folder readable on any Windows or Mac computer**, named `WAITRON`, holding: `LEEME.html` /
    `README.html` (what this stick is and how to use it), the release's declaración responsable as
-   PDF and text (A940 §7.1), the licence notices and the written offer for source code (§8), and a
-   checksum list for the stick's own files.
+   PDF and text (A940 §7.1), a `licencias` folder with the licence notices and the written offer
+   for source code (§8), and a checksum list for the stick's own files.
 
 **Everything the box needs is on the stick: the install needs no internet.** That answers the
 backlog's open question "whether the stick carries the images so install needs no internet" (the
@@ -161,15 +164,16 @@ Waitron sells (slice 6 finds it; §11).
    - **A disk holding a Waitron venue** gets a red warning (picture 2). It names the venue, whether
      it is Live (filing with AEAT), its last sale, and **how many records it has not yet sent to
      AEAT**, which an erase loses unless a backup holding them is restored. It says the box's own
-     backups are on this disk and go with it: the venue's data comes back only from a copy held
+     backups, and its own record of past filings that a later recovery checks
+     (`docs/operations/hour-recovery.md:21-23`), are on this disk and go with it: the venue's data comes back only from a copy held
      elsewhere (an archive file, the bucket, a Cloud copy) restored in the setup wizard, or from a
      spare box (A947); either way this box starts a new fiscal chain (CLAUDE.md §5). The button
      stays disabled until the person types the venue's name. **My call**, as the strongest check
      that needs no password: the name is on every receipt, a stray press cannot type it.
-   - **This departs from `waitron.sh`**, which refuses to reset a Live box ("Recover a broken
-     production box from a backup", `deploy/waitron.sh:659`). The owner's A732 answer makes a
-     reinstall the repair, so the stick erases a Live box — but only with the name typed and the
-     unsent count shown.
+   - **The same shape as `waitron.sh`, with a different word typed.** `waitron.sh` refuses to reset
+     a Live box ("Recover a broken production box from a backup") unless run with
+     `--force-production` and the word «production» typed (`deploy/waitron.sh:659-662`). The stick
+     asks for the venue's name instead, and shows the unsent count, which `waitron.sh` does not.
    - **It fails closed.** A disk that looks like Waitron's (the stick's own layout, or a Docker
      volume named `waitron_state`) but whose venue cannot be read — encrypted, damaged, or a layout
      the installer does not know — is treated as a venue: the warning says it may hold a
@@ -208,10 +212,12 @@ Waitron sells (slice 6 finds it; §11).
    to start from USB first follows that order is untested (slice 6); the printed card says to take
    the stick out either way.
 
-**After the restart** (picture 5), the box's screen shows what `waitron.sh` prints today: the
-links, the box's IP-address link and a QR code to the trust page (`deploy/waitron.sh:374-391`,
-written to `/dev/tty1` at `:439-446`) — the IP link matters when another box already answers
-`waitron.local` (A917 §4.3). With the full-screen browser (§13 Q2, slice 3) the screen instead opens
+**After the restart** (picture 5), the box's screen shows the links `waitron.sh` prints today
+(`deploy/waitron.sh:374-391`, written to `/dev/tty1` at `:439-446`; all of them, and the QR code,
+point at `waitron.local`, `:21`), **plus a link and QR code to the box's IP address**, which
+`waitron.sh` does not print yet: A917's design adds it (§4.3, unbuilt) for when another box already
+answers `waitron.local` — A947's second box, here. The first-start service prints it whether or
+not A917 has landed. With the full-screen browser (§13 Q2, slice 3) the screen instead opens
 the setup wizard's first page — A917's naming page once that is built, today's "Is this page
 secure?" page until then (`apps/setup/src/setup-app.ts:545`). The installer asks nothing the wizard asks: not the name,
 not new-venue-or-spare (A947 §9), not the fiscal mode.
@@ -264,9 +270,11 @@ installer would add, such as the clock service (P23; inference, not built):
   archive on the disk; the builder picks, and either way nothing is downloaded. The box's
   `compose.yml` names those tags, never `:main`.
 - **A first-start service** — nothing starts Waitron otherwise: a restart policy takes effect only
-  after a container has started once (P29). It runs `docker compose up -d`, waits as `wait_healthy`
-  does, and prints the links, IP link and QR code to the screen as `announce_ready` does, or the
-  last log lines as `report_unhealthy` does (`deploy/waitron.sh:574-601`). After that, Docker's
+  after a container has started once (P29). It runs `docker compose up -d` (`deploy/waitron.sh:629`),
+  waits as `wait_healthy` does (`:574-586`), and writes to the screen either the links, the IP link
+  and QR code (`announce_ready` writes its links to `/dev/tty1`, `:439-446`) or, on failure, the
+  last log lines — not `report_unhealthy`'s advice, which names `waitron.sh` commands a stick box
+  cannot run (`:590-601`). After that, Docker's
   restart policy brings Waitron back after a power cut, as today.
 - **The box files `waitron.sh install` writes today** — `compose.yml`, `.env`, the print agent's
   AppArmor profile and the Bluetooth drop-in (`deploy/waitron.sh:184-319`). Two of those steps read
@@ -280,7 +288,8 @@ installer would add, such as the clock service (P23; inference, not built):
   `bluetooth.service`. Keeping the two install paths equal is a test, not a promise: slice 1
   compares a stick-installed box's files with a hand-installed one's.
 - **`apparmor`, `bluez` and `dbus`** — the print agent's container binds the host's D-Bus socket and
-  fails to start without it (`deploy/compose.yml:149-153`).
+  fails to start without it (`deploy/compose.yml:149-153`) — and **`qrencode`**, without which
+  `waitron.sh` draws no QR code (`deploy/waitron.sh:390`).
 - **A blank machine identity** (`/etc/machine-id`), made fresh on each box's first start, as systemd
   asks of a generic image (P30): two boxes from one stick on one switch (A947) must not share one.
 - **Firmware for common network cards** (wired and Wi-Fi), with its notices (P25).
@@ -290,8 +299,10 @@ installer would add, such as the clock service (P23; inference, not built):
 - **`unattended-upgrades`**, which by default takes Debian's security fixes and its point releases
   and never reboots on its own (P15). Its default list takes only Debian's own sources (P15), so
   Docker's packages would never be updated. **My call:** add Docker's package source to its list,
-  installed only in A950's quiet hour, with Docker's `live-restore` setting on so a Docker upgrade
-  does not restart Waitron's containers (the builder confirms both on the real box). When the box
+  held to the image's Docker version line and installed only in A950's quiet hour, with Docker's
+  `live-restore` setting on. Docker documents `live-restore` as keeping containers running across
+  "patch releases (YY.MM.x), not for major (YY.MM) daemon upgrades" (P31), so a newer Docker line
+  arrives only with a Waitron release. The builder confirms both on the real box. When the box
   may restart for a kernel fix is also A950's quiet hour.
 - **NetworkManager**, for the Wi-Fi the installer set (§5 step 2).
 - **WireGuard's tools**, so the link Cloud sets up later (`docs/backlog/box.md:355`) needs nothing
@@ -354,7 +365,7 @@ changes with it.
 
 A950 designs how a box upgrades; this design says only where it learns a release exists, the
 backlog's other open question, "unattended updates for a box we did not sell"
-(`docs/backlog.md:5263-5264`).
+(the B3 entry in `docs/backlog.md` as it stood on main 76adaee84).
 
 - **A small service on the box checks once a day for a new release**: a signed list attached to
   the latest GitHub Release, checked against Waitron's public key built into the image (P17). It
@@ -366,10 +377,12 @@ backlog's other open question, "unattended updates for a box we did not sell"
 - **Two public keys in every image** (**my call**): the one that signs today and a spare kept
   offline, so a lost or leaked key is replaced by a list signed with the other, without
   reinstalling every box. Who holds them is the owner's, at slice 7.
-- **A repair needs a stick at least as new as the box's data.** A restore refuses a database
-  written by a newer release (`apps/server/src/restore.ts:288`, through `assertNotAhead`), so a box
-  that has upgraded itself past its stick is reinstalled from the newest release's stick; the
-  stick's `LEEME` says so.
+- **A repair needs a stick at least as new as the box's data.** A box refuses to start on a
+  database carrying migrations its image does not ship (`assertNotAhead`, called before the server
+  starts, `apps/server/src/node-entry.ts:231-238`). So a backup made by a newer release, restored
+  on a box installed from an older stick, leaves a box that will not start (my reading of the
+  restore path, not run). A box that has upgraded itself past its stick is therefore reinstalled
+  from the newest release's stick; the stick's `LEEME` says so.
 - **A box installed by hand with `waitron.sh` has no such service** and upgrades as today.
 - **Debian's own security fixes** arrive through `unattended-upgrades` (§7) whatever Waitron
   releases.
@@ -434,7 +447,8 @@ Asked one at a time, with pictures, through the watcher. The full text, with the
 is in [`question.txt`](../../backlog/mockups/b3-usb-installer/question.txt).
 
 1. **What the stick does.** **A (recommended):** carries everything, needs no internet, asks one
-   confirmation on the box's screen before erasing (§3–§5). **B:** a small stick that downloads
+   confirmation on the box's screen before erasing (§3–§5), and the venue's name typed before it
+   erases a box that holds one — Live boxes included, which extends the owner's A732 answer (§0). **B:** a small stick that downloads
    the release during the install. **C:** fully unattended, erasing with no question, for boxes
    with no screen — and a stick left in a box can erase a venue.
 2. **The full-screen browser on every box** (the owner's lean of 2026-09-29). **A (recommended):**
@@ -476,8 +490,10 @@ is in [`question.txt`](../../backlog/mockups/b3-usb-installer/question.txt).
    clock, the four traps, a power cut with the stick left in (anti-goal 1).
 7. **The release check** — §9's service, handed to A950.
 
-Slices 1, 2 and 5 are the go-live minimum: a Live box runs only a release (A940 §5.1), so the
-first venue's stick is built from the first release tag, which waits for A940's release slices.
+Slices 1, 2, 5 and 6 are the go-live minimum: a Live box runs only a release (A940 §5.1), so the
+first venue's stick is built from the first release tag, which waits for A940's release slices;
+and the boot-menu key, the boot order, Secure Boot and the power-cut test are found only on the
+real box.
 Slices 3 and 4 follow the answers. None is fiscal.
 
 ## 15. What this design does not settle, for the builder
@@ -528,3 +544,4 @@ Fetched 2026-10-21 with `curl`; the source's own words are quoted in
 | P28 | "By default, Windows uses localtime" for the hardware clock | https://wiki.archlinux.org/title/System_time, fetched 2026-10-21 by the second review |
 | P29 | "A restart policy only takes effect after a container starts successfully" | https://docs.docker.com/engine/containers/start-containers-automatically/, fetched 2026-10-21 by the second review |
 | P30 | `/etc/machine-id` "should be either missing or an empty file in the generic file system image" | machine-id(5), freedesktop.org, fetched 2026-10-21 by the second review |
+| P31 | "Live restore allows you to keep containers running across Docker daemon updates, but is only supported when installing patch releases (YY.MM.x), not for major (YY.MM) daemon upgrades." | https://docs.docker.com/engine/daemon/live-restore/, fetched 2026-10-21 by the third review |
