@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveData, setLocale, tableNoMatches } from "@waitron/dashboard-kit";
+import { formatMoney } from "@waitron/shared";
 import { applyTokens } from "@waitron/ui";
 import type { AdjustmentsApi } from "./client.js";
 import { ADJUSTMENTS_STRINGS, kindTotalName, tf } from "./strings.js";
@@ -542,7 +543,7 @@ describe("the drill-down", () => {
     expect(comp.Time).toBe(
       `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}`,
     );
-    expect(comp.Action).toBe("Give away");
+    expect(comp.Action).toBe("Comp 100%");
     expect(comp.When).toBe("After serving");
     expect(comp.Reason).toBe("Cold food");
     expect(comp.Note).toBe("Came out cold");
@@ -554,7 +555,7 @@ describe("the drill-down", () => {
     expect(comp["Approved by"]).toBe("Mia");
     expect(comp.Order).toBe("40");
     const cancel = list[1]!.cells;
-    expect(cancel.Action).toBe("Cancel");
+    expect(cancel.Action).toBe("Void");
     expect(cancel["Taken off"]).toBe("€0.00");
     expect(cancel["List value"]).toBe("€12.00");
     expect(cancel.Note).toBe("—");
@@ -579,18 +580,78 @@ describe("the drill-down", () => {
     expect(api.listEntries).toHaveBeenCalledWith("2026-09-29", "2026-09-29", "everyone");
     expect(text(part(el, "entries-heading"))).toBe("Every adjustment");
     const cells = row(part(el, "entries")!, "e4");
-    expect(cells.Action).toBe("Amount discount");
+    expect(cells.Action).toBe("Comp €3.00");
     expect(cells.When).toBe("Whole bill");
     expect(cells.Item).toBe("Whole bill");
     expect(cells.Quantity).toBe("—");
   });
 
-  it("writes a percentage discount's percentage beside its action", async () => {
+  it("writes a percentage comp's percentage after Comp", async () => {
     const entry = { ...samEntry(), action: "discount_percent" as const, percentBp: 1250 };
     const el = await mount(fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([entry])) }));
     part(el, "show-all")!.click();
     await settle(el);
-    expect(row(part(el, "entries")!, "e4").Action).toBe("Percentage discount (12.5%)");
+    expect(row(part(el, "entries")!, "e4").Action).toBe("Comp 12.5%");
+  });
+
+  it("calls an amount comp that took the item's whole list value Comp 100%, and one that took less by its amount", async () => {
+    const whole = {
+      ...samEntry(),
+      id: "whole",
+      beforeAmount: "12.00",
+      afterAmount: "0.00",
+      reduction: "12.00",
+      nominalValue: "12.00",
+    };
+    const rest = {
+      ...samEntry(),
+      id: "rest",
+      beforeAmount: "6.00",
+      afterAmount: "0.00",
+      reduction: "6.00",
+      nominalValue: "12.00",
+    };
+    const el = await mount(
+      fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([whole, rest])) }),
+    );
+    part(el, "show-all")!.click();
+    await settle(el);
+    expect(row(part(el, "entries")!, "whole").Action).toBe("Comp 100%");
+    expect(row(part(el, "entries")!, "rest").Action).toBe("Comp €6.00");
+  });
+
+  it("calls a 100% percentage comp Comp 100%", async () => {
+    const entry = { ...samEntry(), action: "discount_percent" as const, percentBp: 10000 };
+    const el = await mount(fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([entry])) }));
+    part(el, "show-all")!.click();
+    await settle(el);
+    expect(row(part(el, "entries")!, "e4").Action).toBe("Comp 100%");
+  });
+
+  it("writes each entry's words in Spanish", async () => {
+    setLocale("es-ES");
+    const percent = new Intl.NumberFormat("es", { style: "percent", maximumFractionDigits: 2 });
+    // The cells are read through `text`, which turns the formatters' non-breaking spaces into spaces.
+    const comp = (amount: string) =>
+      tf("adjustment_report.entry.comp", { amount }, "es").replace(/\s+/g, " ");
+    const percentage = {
+      ...samEntry(),
+      id: "e5",
+      action: "discount_percent" as const,
+      percentBp: 2000,
+    };
+    const el = await mount(
+      fakeApi({
+        listEntries: vi.fn().mockResolvedValue(onePage([...alexEntries(), samEntry(), percentage])),
+      }),
+    );
+    part(el, "show-all")!.click();
+    await settle(el);
+    const action = (key: string) => Object.values(row(part(el, "entries")!, key))[1];
+    expect(action("e3")).toBe(ADJUSTMENTS_STRINGS.es["adjustment_report.entry.void"]);
+    expect(action("e1")).toBe(comp(percent.format(1)));
+    expect(action("e4")).toBe(comp(formatMoney("3.00", "es")));
+    expect(action("e5")).toBe(comp(percent.format(0.2)));
   });
 
   it("lists the guests' adjustments, and says so in words when there are none", async () => {
@@ -1130,6 +1191,17 @@ describe("sorting and columns", () => {
       await sortBy(el, "entries", key);
       expect(keys(part(el, "entries")!), key).toEqual(order);
     }
+  });
+
+  it("sorts the listed adjustments by the words in the Action column", async () => {
+    const [cancel, , comp] = alexEntries();
+    const el = await mount(
+      fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([cancel!, comp!])) }),
+    );
+    part(el, "show-all")!.click();
+    await settle(el);
+    await sortBy(el, "entries", "action");
+    expect(keys(part(el, "entries")!)).toEqual(["e1", "e3"]);
   });
 
   it("shows whom each adjustment's item was credited to once that column is chosen", async () => {

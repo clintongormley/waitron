@@ -8,7 +8,7 @@ import {
   formatIsoMinute,
   tableNoMatches,
 } from "@waitron/dashboard-kit";
-import { addDecimal, decimal, formatMoney } from "@waitron/shared";
+import { addDecimal, compareDecimal, decimal, formatMoney } from "@waitron/shared";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import { MAX_ENTRY_PAGE_SIZE } from "../entry-pages.js";
 import type {
@@ -26,7 +26,7 @@ import type {
 import { firstReadThenPassive } from "./first-read.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { perLocale } from "./per-locale.js";
-import { actionName, kindTotalName, stageName, t, tf } from "./strings.js";
+import { kindTotalName, stageName, t, tf } from "./strings.js";
 
 const COMP_ACTIONS: readonly AdjustmentAction[] = ["comp", "discount_percent", "discount_amount"];
 const KINDS: readonly { kind: "void" | "comp"; actions: readonly AdjustmentAction[] }[] = [
@@ -111,6 +111,27 @@ function sumTallies(tallies: AdjustmentTally[]): AdjustmentTally {
 /** How many, and what they took off; just the count when there were none. */
 function tallyCell(tally: AdjustmentTally): string {
   return tally.count === 0 ? count(0) : `${count(tally.count)} · ${money(tally.reduction)}`;
+}
+
+/** What was done, as staff name it: "Void", or "Comp" and how much (design §3.6). */
+function entryWords(entry: AdjustmentEntry, locale: string): string {
+  if (entry.action === "cancel") return t("adjustment_report.entry.void");
+  const amount =
+    entry.action === "comp" || tookWholeValue(entry)
+      ? percentFormat(locale).format(1)
+      : entry.percentBp !== null
+        ? percentFormat(locale).format(entry.percentBp / 10000)
+        : money(entry.reduction);
+  return tf("adjustment_report.entry.comp", { amount });
+}
+
+/** An amount comp that took the item's whole list value is a full comp. */
+function tookWholeValue(entry: AdjustmentEntry): boolean {
+  return (
+    entry.action === "discount_amount" &&
+    compareDecimal(decimal(entry.afterAmount), decimal("0")) === 0 &&
+    compareDecimal(decimal(entry.beforeAmount), decimal(entry.nominalValue)) === 0
+  );
 }
 
 function personName(ref: PersonRef): string {
@@ -607,11 +628,8 @@ export class AdjustmentReportScreen extends LitElement {
         key: "action",
         label: t("adjustment_report.column.action"),
         choosable: "shown",
-        sortValue: (entry) => actionName(entry.action),
-        cell: (entry) =>
-          entry.percentBp === null
-            ? actionName(entry.action)
-            : `${actionName(entry.action)} (${percentFormat(locale).format(entry.percentBp / 10000)})`,
+        sortValue: (entry) => entryWords(entry, locale),
+        cell: (entry) => entryWords(entry, locale),
       },
       {
         key: "stage",

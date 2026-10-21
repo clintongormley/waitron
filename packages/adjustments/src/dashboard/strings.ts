@@ -159,6 +159,8 @@ const en = {
   "adjustment_report.entries.quantity": "Quantity",
   "adjustment_report.entries.list_value": "List value",
   "adjustment_report.entries.requested_by": "Requested by",
+  "adjustment_report.entry.void": "Void",
+  "adjustment_report.entry.comp": "Comp {amount}",
   "adjustment_report.entries.credited_to": "Credited to",
   "adjustment_report.entries.order": "Order",
   "adjustment_report.entries.guest": "Guest",
@@ -320,6 +322,8 @@ const es: Record<keyof typeof en, string> = {
   "adjustment_report.entries.quantity": "Cantidad",
   "adjustment_report.entries.list_value": "Valor de carta",
   "adjustment_report.entries.requested_by": "Solicitado por",
+  "adjustment_report.entry.void": "Cancelado",
+  "adjustment_report.entry.comp": "Descuento {amount}",
   "adjustment_report.entries.credited_to": "Atribuido a",
   "adjustment_report.entries.order": "Pedido",
   "adjustment_report.entries.guest": "Cliente",
@@ -350,14 +354,6 @@ export const t = makeT<StringKey>();
 export function tf(key: StringKey, values: Record<string, string>, locale?: string): string {
   return t(key, locale).replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);
 }
-
-/** The short name a list shows for each action. */
-const ACTION_NAMES: NameTable = {
-  cancel: { en: "Cancel", es: "Anular" },
-  comp: { en: "Give away", es: "Invitación" },
-  discount_percent: { en: "Percentage discount", es: "Descuento en porcentaje" },
-  discount_amount: { en: "Amount discount", es: "Descuento en importe" },
-};
 
 /** How the editor's checkboxes name a Comp reason's offers. */
 const ACTION_CHOICES: NameTable = {
@@ -391,10 +387,6 @@ const ROLE_NAMES: NameTable = {
   manager: { en: "Manager", es: "Encargado" },
   admin: { en: "Admin", es: "Administrador" },
 };
-
-export function actionName(action: string, locale?: string): string {
-  return resolveNameTable(ACTION_NAMES, action, locale);
-}
 
 export function actionChoice(action: string, locale?: string): string {
   return resolveNameTable(ACTION_CHOICES, action, locale);
