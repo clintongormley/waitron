@@ -4,6 +4,8 @@ import type { WtButton, WtInput } from "@waitron/ui";
 import { SetupApp } from "./setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import type { FirstSetupInspection } from "./api/first-setup-types.js";
+import { setLocale } from "./i18n/t.js";
+import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { initial, venue, wizardApi } from "../test/first-setup-browser.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 
@@ -21,6 +23,7 @@ const inspection: FirstSetupInspection = {
 };
 afterEach(async () => {
   cleanupWidgets();
+  setLocale("en-GB");
   sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
   await navigator.locks.request(`waitron:first-setup:attempt:${initial.attemptId}`, () => {});
 });
@@ -442,3 +445,26 @@ it("keeps a failed ownership inspection on the repair page when connection Conti
   expect(q(app, "resume-password")).toBeNull();
   expect(q<WtButton>(app, "reconnect-first").disabled).toBe(false);
 });
+
+it.each(["en-GB", "es-ES"])(
+  "opens public secure connection help separately in %s without submitting a private draft",
+  async (locale) => {
+    const { app, requests } = await mount();
+    setLocale(locale);
+    await app.updateComplete;
+    await password(app);
+    await app.updateComplete;
+    const link = q<HTMLAnchorElement>(app, "secure-connection");
+    expect(link).not.toBeNull();
+    expect(link.textContent).toBe(
+      initialOwnerStrings[locale.startsWith("es") ? "es" : "en"].secureConnection,
+    );
+    expect(link.getAttribute("href")).toBe("/setup/connection");
+    expect(link.target).toBe("_blank");
+    expect(link.rel.split(" ")).toEqual(expect.arrayContaining(["noopener", "noreferrer"]));
+    expect(q<WtInput>(app, "resume-password").shadowRoot!.querySelector("input")!.value).toBe(
+      venue.admin.password,
+    );
+    expect(requests.some((r) => /\/(recover|start-again|provision)$/.test(r.path))).toBe(false);
+  },
+);

@@ -170,3 +170,61 @@ it("operator TLS refuses box repair without modifying the managed material", asy
     code: "ENOENT",
   });
 });
+
+it("offers one public repair action, retains installed trust and omits private controls", async () => {
+  const { app } = await fixture();
+  const html = await (await app.request("http://waitron.local:8080/setup/connection")).text();
+  expect(html).toContain('id="connection-repair"');
+  expect(html).toContain("Set up secure connection");
+  expect(html).toContain("Keep your installed Waitron certificate.");
+  expect(html).not.toContain("Remove any old Waitron certificate");
+  expect(html).not.toMatch(/<(input|textarea|select|form)\b/);
+});
+
+it("healthy public help offers HTTPS continuation without a rotation button", async () => {
+  const { app } = await fixture(true);
+  const html = await (await app.request("/setup/connection")).text();
+  expect(html).toContain("Your secure connection is ready.");
+  expect(html).toContain('href="https://waitron.local:8080"');
+  expect(html).not.toContain('id="connection-repair"');
+});
+
+it("uses the explicit page language before browser preferences, without accepting it as repair input", async () => {
+  const { app, stateDir } = await fixture();
+  const page = await app.request("http://waitron.local:8080/setup/connection?lang=es", {
+    headers: { "Accept-Language": "en-GB" },
+  });
+  expect(await page.text()).toContain('<html lang="es">');
+  const fallback = await app.request("/setup/connection", {
+    headers: { "Accept-Language": "fr-FR,es-ES;q=0.9,en;q=0.8" },
+  });
+  expect(await fallback.text()).toContain('<html lang="es">');
+  const refused = await app.request(`${url}?lang=es`, { method: "POST", headers: allowed });
+  expect(refused.status).toBe(403);
+  await expect(readFile(join(stateDir, "tls/server.key"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+it("offers a continuation retry after a failed post-repair handoff without rotating healthy TLS", async () => {
+  const f = await fixture();
+  f.onRepaired.mockRejectedValueOnce(new Error("private continuation details"));
+  const first = new EventEmitter();
+  expect(
+    (await f.app.request(url, { method: "POST", headers: allowed }, { outgoing: first })).status,
+  ).toBe(200);
+  first.emit("finish");
+  await vi.waitFor(() => expect(f.onRepaired).toHaveBeenCalledOnce());
+  const ca = await readFile(join(f.stateDir, "tls/ca.crt"), "utf8");
+  const page = await (await f.app.request("/setup/connection")).text();
+  expect(page).toContain('id="connection-repair"');
+  expect(page).toContain(">Reconnect</button>");
+  expect(page).not.toContain("private continuation details");
+  const retry = new EventEmitter();
+  expect(
+    (await f.app.request(url, { method: "POST", headers: allowed }, { outgoing: retry })).status,
+  ).toBe(200);
+  retry.emit("finish");
+  await vi.waitFor(() => expect(f.onRepaired).toHaveBeenCalledTimes(2));
+  expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(ca);
+});

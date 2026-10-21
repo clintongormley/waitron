@@ -1,16 +1,22 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeAll } from "vitest";
 import { buildLandingApp } from "./landing-app.js";
 
+import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
+let material: SelfSignedMaterial;
+beforeAll(() => {
+  material = mintSelfSignedServerCert({
+    now: new Date(),
+    hostnames: ["waitron.local"],
+    ipAddresses: ["127.0.0.1"],
+  });
+});
 function stateDirWithCa(): string {
   const d = mkdtempSync(join(tmpdir(), "waitron-land-"));
   mkdirSync(join(d, "tls"), { recursive: true });
-  writeFileSync(
-    join(d, "tls", "ca.crt"),
-    "-----BEGIN CERTIFICATE-----\nMII...\n-----END CERTIFICATE-----\n",
-  );
+  writeFileSync(join(d, "tls", "ca.crt"), material.caCertPem);
   return d;
 }
 
@@ -191,4 +197,24 @@ describe("the guide opens the visitor's own device", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+});
+
+it("provides connection help without shadowing the landing page and refuses malformed public certificates", async () => {
+  const dir = stateDirWithCa();
+  try {
+    const app = buildLandingApp({
+      stateDir: dir,
+      reachUrls: ["https://waitron.local:8443"],
+      httpsUrl: "https://waitron.local:8443",
+      log: () => {},
+    });
+    const connection = await app.request("http://waitron.local/setup/connection?lang=es");
+    expect(connection.status).toBe(200);
+    expect(await connection.text()).toContain('<html lang="es">');
+    writeFileSync(join(dir, "tls", "ca.crt"), "broken certificate");
+    expect((await app.request("/ca.crt")).status).toBe(404);
+    expect(await (await app.request("/")).text()).not.toContain('href="/ca.crt"');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

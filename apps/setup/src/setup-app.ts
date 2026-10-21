@@ -2246,6 +2246,15 @@ export class SetupApp extends LitElement {
         @click=${() => void this.#reconnectFirstSetup()}
         >${t.reconnect}</wt-button
       >
+      <p>
+        <a
+          data-test="secure-connection"
+          href="/setup/connection"
+          target="_blank"
+          rel="noopener noreferrer"
+          >${t.secureConnection}</a
+        >
+      </p>
     </section>`;
   }
 

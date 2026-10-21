@@ -1,3 +1,5 @@
+import type { BoxTlsInspection } from "./box-tls-repair.js";
+import { renderConnectionPage } from "./connection-bootstrap-page.js";
 import { DEVICE_HELP, DEVICE_ORDER, type DeviceHelp, type DeviceId } from "./trust-page-devices.js";
 import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
 
@@ -5,6 +7,8 @@ export const CA_CONTENT_TYPE = "application/x-x509-ca-cert";
 export const CA_FILENAME = "waitron-ca.crt";
 
 export interface TrustPageInput {
+  connection?: BoxTlsInspection & { repairAllowed?: boolean; continuationRequired?: boolean };
+  locale?: "en" | "es";
   reachUrls: string[];
   caAvailable: boolean;
   caDownloadPath: string;
@@ -22,10 +26,6 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-/**
- * Step one, not an aside: installing a new certificate while the old one is still trusted changes
- * nothing an operator can see — the browser keeps the entry it already has.
- */
 const REMOVAL_INTRO = `If you have installed a Waitron certificate on this computer before, then you
   will need to remove it before installing the new certificate. Remove only Waitron's own entry — if
   you cannot tell which one it is, ask whoever installed this server.`;
@@ -73,6 +73,7 @@ function installSection(device: DeviceId | "unknown"): string {
 
 /** No external assets: certificate recovery must remain readable without internet access. */
 export function renderTrustPage(input: TrustPageInput): string {
+  if (input.connection) return renderConnectionPage({ ...input, connection: input.connection });
   const { reachUrls, caAvailable, caDownloadPath, qrSvg, httpsUrl, device } = input;
   const urlItems = reachUrls
     .map((u) => `<li><a href="${escapeHtml(u)}">${escapeHtml(u)}</a></li>`)

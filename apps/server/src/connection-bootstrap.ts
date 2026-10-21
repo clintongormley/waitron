@@ -6,6 +6,7 @@ import { inspectBoxTls, repairBoxTls, type BoxTlsRepairDeps } from "./box-tls-re
 import { caCertPath } from "./box-secrets.js";
 import { CA_CONTENT_TYPE, CA_FILENAME, renderTrustPage } from "./trust-page.js";
 import { trustDeviceForRequest } from "./detect-device.js";
+import { connectionLocale } from "./connection-bootstrap-page.js";
 import type { Logger } from "./logger.js";
 
 export interface ConnectionBootstrapDeps extends BoxTlsRepairDeps {
@@ -14,6 +15,7 @@ export interface ConnectionBootstrapDeps extends BoxTlsRepairDeps {
   onRepaired: () => Promise<void>;
   log: Logger;
   repairAllowed?: boolean;
+  continuationRequired?: boolean;
 }
 
 async function emptyBody(request: Request): Promise<boolean> {
@@ -43,40 +45,58 @@ async function emptyBody(request: Request): Promise<boolean> {
   }
 }
 
-export function mountConnectionBootstrap(app: Hono, deps: ConnectionBootstrapDeps): void {
+export function mountConnectionBootstrap(
+  app: Hono,
+  deps: ConnectionBootstrapDeps,
+  aliases = true,
+): void {
   let transitioning = false;
-  app.use("*", async (c, next) => {
-    c.header("Cache-Control", "no-store");
-    c.header("Referrer-Policy", "no-referrer");
-    await next();
-  });
-  app.on("GET", ["/", "/setup/connection", "/setup/trust"], async (c) => {
-    const status = await inspectBoxTls(deps);
-    const html = renderTrustPage({
-      caAvailable: status.caAvailable,
-      caDownloadPath: "/ca.crt",
-      httpsUrl: deps.reachUrls[0]!,
-      reachUrls: deps.reachUrls,
-      device: trustDeviceForRequest(c.req),
+  let transitionFailed = false;
+  const publicPaths = aliases ? ["*"] : ["/setup/connection", "/setup-api/connection/repair"];
+  for (const path of publicPaths)
+    app.use(path, async (c, next) => {
+      c.header("Cache-Control", "no-store");
+      c.header("Referrer-Policy", "no-referrer");
+      await next();
     });
-    return c.html(html.replace("<body", `<body data-connection-state="${status.state}"`));
-  });
-  app.on("GET", ["/ca.crt", "/setup-api/ca.crt"], async (c) => {
-    const status = await inspectBoxTls(deps);
-    if (status.caAvailable) {
-      try {
-        const pem = await readFile(caCertPath(deps.stateDir), "utf8");
-        if (new X509Certificate(pem).fingerprint256 === status.fingerprint)
-          return c.body(pem, 200, {
-            "Content-Type": CA_CONTENT_TYPE,
-            "Content-Disposition": `attachment; filename="${CA_FILENAME}"`,
-          });
-      } catch {
-        // A failed public read cannot expose filesystem details on this unauthenticated surface.
+  app.on(
+    "GET",
+    aliases ? ["/", "/setup/connection", "/setup/trust"] : ["/setup/connection"],
+    async (c) => {
+      const status = await inspectBoxTls(deps);
+      const html = renderTrustPage({
+        caAvailable: status.caAvailable,
+        caDownloadPath: "/ca.crt",
+        httpsUrl: deps.reachUrls[0]!,
+        reachUrls: deps.reachUrls,
+        device: trustDeviceForRequest(c.req),
+        connection: {
+          ...status,
+          repairAllowed: deps.repairAllowed,
+          continuationRequired: transitionFailed || deps.continuationRequired,
+        },
+        locale: connectionLocale(c.req.query("lang") ?? c.req.header("accept-language")),
+      });
+      return c.html(html);
+    },
+  );
+  if (aliases)
+    app.on("GET", ["/ca.crt", "/setup-api/ca.crt"], async (c) => {
+      const status = await inspectBoxTls(deps);
+      if (status.caAvailable) {
+        try {
+          const pem = await readFile(caCertPath(deps.stateDir), "utf8");
+          if (new X509Certificate(pem).fingerprint256 === status.fingerprint)
+            return c.body(pem, 200, {
+              "Content-Type": CA_CONTENT_TYPE,
+              "Content-Disposition": `attachment; filename="${CA_FILENAME}"`,
+            });
+        } catch {
+          // A failed public read cannot expose filesystem details on this unauthenticated surface.
+        }
       }
-    }
-    return c.json({ error: "no_box_ca" }, 404);
-  });
+      return c.json({ error: "no_box_ca" }, 404);
+    });
   app.post("/setup-api/connection/repair", async (c) => {
     const request = c.req.raw;
     const url = new URL(request.url);
@@ -103,6 +123,7 @@ export function mountConnectionBootstrap(app: Hono, deps: ConnectionBootstrapDep
         transitioning = true;
         void deps.onRepaired().catch(() => {
           transitioning = false;
+          transitionFailed = true;
           deps.log("warn", "connection.transition_failed");
         });
       });

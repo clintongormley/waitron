@@ -107,6 +107,11 @@ function caPublic(bytes: Buffer | null, now: Date): X509Certificate | null {
     return null;
   }
 }
+export async function readBoxPublicCa(stateDir: string, now = new Date()): Promise<string | null> {
+  const pem = await fs.readFile(join(stateDir, "tls", "ca.crt"), "utf8");
+  return caPublic(Buffer.from(pem), now) === null ? null : pem;
+}
+
 function signingAuthority(s: Snapshot, now: Date): boolean {
   try {
     return (

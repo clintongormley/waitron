@@ -3,11 +3,20 @@ import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ALL_MODULES } from "@waitron/composition";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeAll, expect, it } from "vitest";
 import { request } from "../test/first-fiscal.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+let publicCa: string;
+beforeAll(() => {
+  publicCa = mintSelfSignedServerCert({
+    now: new Date(),
+    hostnames: ["waitron.local", "localhost"],
+    ipAddresses: ["127.0.0.1"],
+  }).caCertPem;
+});
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -81,7 +90,7 @@ it.each([
       caDownloadAvailable: false,
     });
     await mkdir(join(f.stateDir, "tls"));
-    await writeFile(join(f.stateDir, "tls", "ca.crt"), "public-certificate");
+    await writeFile(join(f.stateDir, "tls", "ca.crt"), publicCa);
     const discovery = await admitted.app.request("/setup-api/discovery");
     expect(discovery.headers.get("Cache-Control")).toBe("no-store");
     expect(await discovery.json()).toEqual({ caDownloadAvailable: true });
@@ -141,3 +150,14 @@ it.each(["not JSON", "null"])(
     await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
   },
 );
+
+it("does not advertise a malformed retained CA on resolution discovery", async () => {
+  const f = await fixture(null);
+  await mkdir(join(f.stateDir, "tls"));
+  await writeFile(join(f.stateDir, "tls/ca.crt"), "broken public certificate");
+  const admission = await resolveFirstSetupEntry(f, {});
+  expect(admission.kind).toBe("resolution");
+  if (admission.kind !== "resolution") throw new Error("Expected resolution");
+  const response = await admission.app.request("/setup-api/discovery");
+  expect(await response.json()).toEqual({ caDownloadAvailable: false });
+});

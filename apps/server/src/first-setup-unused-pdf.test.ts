@@ -369,7 +369,7 @@ it("HTTPS accepts a fresh consulted-register answer for the same interrupted unu
   const pending = (await inspectFirstSetupWorkspaceSelection(f))!;
   await ensureBoxSecrets({
     stateDir: f.stateDir,
-    hostnames: ["localhost"],
+    hostnames: ["localhost", "waitron.local"],
     now: () => new Date(),
     listIpv4: () => ["127.0.0.1"],
   });

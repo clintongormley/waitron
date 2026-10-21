@@ -1529,3 +1529,28 @@ changes.
 
 Nothing guards a new field: a new `/api/till` field moves the revision, but reaches an open till
 only once someone adds it to `#applyVenueSetup`.
+
+
+## Public secure-connection repair
+
+`connection-bootstrap.ts` mounts `/setup/connection` and the empty-body
+`POST /setup-api/connection/repair`. A damaged retained box certificate admits only the public
+connection app on the main HTTP port and enabled landing port. The protected recovery app,
+Retry, setup inspection and private setup actions stay off that fallback. Normal discovery and
+landing apps mirror the connection guide; their CA downloads parse the public certificate and
+check its signing authority, validity and box constraints before offering it. Resolution discovery
+uses the same public-CA check. An operator TLS choice refuses box repair.
+
+The resolution screen opens the guide in a separate tab without passing its draft, owner token or
+password. The page sends no body and omits credentials. Its fixed EN/ES messages distinguish
+retained trust from a new trust installation; retained trust does not instruct you to remove the old
+certificate. The original `/setup/trust` help remains available. A failed direct handoff exposes a
+Reconnect action on a fresh public page, even though the repaired files are already healthy.
+
+`connection-bootstrap-page.test.ts` exercises the rendered script in Chromium, including refusal,
+retry, pending requests and both trust outcomes. `connection-bootstrap.entry.test.ts` binds actual
+HTTP and CA-verified HTTPS listeners. `box-tls-repair.process.test.ts` interrupts child processes
+after archive-file sync and the manifest, candidate and active-file renames, then resumes in a new
+process; it also runs two competing repair processes. These process interruptions do not simulate
+power loss or prove the storage device honours a flush. The Origin check does not authenticate an
+HTTP peer or prevent an arbitrary network client from requesting this public transport operation.

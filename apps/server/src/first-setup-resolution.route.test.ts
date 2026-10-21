@@ -1,3 +1,4 @@
+import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { randomBytes } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -17,7 +18,7 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
     try {
       await ensureBoxSecrets({
         stateDir: f.stateDir,
-        hostnames: ["localhost"],
+        hostnames: ["localhost", "waitron.local"],
         now: () => new Date(),
         listIpv4: () => ["127.0.0.1"],
       });
@@ -119,7 +120,7 @@ it("HTTPS rejects foreign origins, stale snapshots and malformed resolution requ
   try {
     await ensureBoxSecrets({
       stateDir: f.stateDir,
-      hostnames: ["localhost"],
+      hostnames: ["localhost", "waitron.local"],
       now: () => new Date(),
       listIpv4: () => ["127.0.0.1"],
     });
@@ -271,14 +272,21 @@ it.each(["recover", "start-again"])(
           body: "not even JSON",
         },
       );
-      expect(response.status).toBe(403);
-      expect(await response.json()).toEqual({
-        error: { code: "setup.owner_required", params: {} },
-      });
+      expect(response.status).toBe(404);
+      expect(await response.text()).toBe("404 Not Found");
       expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
       if (path === "recover") {
+        expect(
+          (await fetch(`http://127.0.0.1:${port}/setup-api/first-setup/resolution`)).status,
+        ).toBe(404);
+        const admission = await resolveFirstSetupEntry(
+          { stateDir: f.stateDir, venueDir: f.venueDir },
+          {},
+        );
+        expect(admission.kind).toBe("resolution");
+        if (admission.kind !== "resolution") throw new Error("Expected retained setup resolution");
         const inspection = await (
-          await fetch(`http://127.0.0.1:${port}/setup-api/first-setup/resolution`)
+          await admission.app.request("https://localhost/setup-api/first-setup/resolution")
         ).json();
         const valid = await fetch(
           `http://127.0.0.1:${port}/setup-api/first-setup/resolution/recover`,
@@ -294,7 +302,8 @@ it.each(["recover", "start-again"])(
             }),
           },
         );
-        expect(valid.status).toBe(403);
+        expect(valid.status).toBe(404);
+        expect(await valid.text()).toBe("404 Not Found");
         expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
       }
     } finally {

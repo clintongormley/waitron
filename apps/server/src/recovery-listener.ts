@@ -67,7 +67,11 @@ export function connectionDepsFor(
     listIpv4: () => ips,
     now: () => new Date(),
     origins: hosts.map((host) => origin("http", host, listenerPort)),
-    reachUrls: hosts.map((host) => origin("https", host, opts.port)),
+    reachUrls: (opts.httpHost !== undefined && isLoopbackHost(opts.httpHost)
+      ? [opts.httpHost]
+      : hosts
+    ).map((host) => origin("https", host, opts.port)),
+    continuationRequired: opts.bootstrapOnly,
     onRepaired: opts.onRepaired ?? (async () => {}),
     log: opts.log,
     repairAllowed: opts.operatorTls !== true,
@@ -131,6 +135,8 @@ export async function serveRecovery(
               ? []
               : (opts.landing?.boxAddresses ?? listBoxIpv4()),
           discoveryEnabled: false,
+          connectionHostnames: BOX_LEAF_HOSTNAMES,
+          onConnectionRepaired: opts.onRepaired,
         },
         opts.log,
       );

@@ -2,7 +2,7 @@ import { get as httpGet } from "node:http";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { startLandingListener } from "./boot.js";
 import type { ServerConfig } from "./config.js";
 import type { Logger } from "./logger.js";
@@ -15,24 +15,27 @@ import { freePort } from "./testing/free-ports.js";
  * so those branches need no socket.
  */
 
+import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
+let material: SelfSignedMaterial;
+beforeAll(() => {
+  material = mintSelfSignedServerCert({
+    now: new Date(),
+    hostnames: ["waitron.local", "localhost"],
+    ipAddresses: ["127.0.0.1"],
+  });
+});
 const dirs: string[] = [];
 afterEach(async () => {
   for (const d of dirs.splice(0)) await rm(d, { recursive: true, force: true });
 });
 
-// A minted-leaf + CA state dir: `mintedBoxLeaf` keys off `tls/server.{crt,key}`, and `/ca.crt` reads
-// `tls/ca.crt`. The bytes are placeholders — nothing here completes a TLS handshake (the landing
-// listener is plain HTTP); it only needs the files to exist.
 async function stateDirWithLeaf(): Promise<string> {
   const d = await mkdtemp(join(tmpdir(), "waitron-land-boot-"));
   dirs.push(d);
   await mkdir(join(d, "tls"), { recursive: true });
-  await writeFile(join(d, "tls", "server.crt"), "leaf-cert");
-  await writeFile(join(d, "tls", "server.key"), "leaf-key");
-  await writeFile(
-    join(d, "tls", "ca.crt"),
-    "-----BEGIN CERTIFICATE-----\nMII...\n-----END CERTIFICATE-----\n",
-  );
+  await writeFile(join(d, "tls", "server.crt"), material.serverCertPem);
+  await writeFile(join(d, "tls", "server.key"), material.serverKeyPem);
+  await writeFile(join(d, "tls", "ca.crt"), material.caCertPem);
   return d;
 }
 

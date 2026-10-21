@@ -1999,7 +1999,7 @@ describe("serveRecovery", () => {
       expect(html).not.toContain("module.config_invalid");
       const trust = await fetch(`http://127.0.0.1:${port}/setup/trust`);
       expect(trust.status).toBe(200);
-      expect(await trust.text()).toContain("to this Waitron server");
+      expect(await trust.text()).toContain("Set up secure connection");
 
       const retried = await fetch(`http://127.0.0.1:${port}/recovery-api/retry`, {
         method: "POST",

@@ -38,7 +38,7 @@ it.each(
     );
     await ensureBoxSecrets({
       stateDir: f.stateDir,
-      hostnames: ["localhost"],
+      hostnames: ["localhost", "waitron.local"],
       now: () => new Date(),
       listIpv4: () => ["127.0.0.1"],
     });
@@ -204,7 +204,7 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
     const frozen = (await host.store.read())!.frozen;
     await ensureBoxSecrets({
       stateDir: f.stateDir,
-      hostnames: ["localhost"],
+      hostnames: ["localhost", "waitron.local"],
       now: () => new Date(),
       listIpv4: () => ["127.0.0.1"],
     });
@@ -371,7 +371,7 @@ async function fixture() {
     venueDir = join(root, "venue");
   await mkdir(stateDir);
   await mkdir(venueDir);
-  const [port] = await freePorts(1);
+  const [port, landingPort] = await freePorts(2);
   const migrations = join(root, "migrations");
   await copyMigrationsRoot(migrations);
   const setupApp = join(root, "setup-app");
@@ -397,7 +397,7 @@ async function fixture() {
     WAITRON_ENV: "dev",
     WAITRON_SETUP_APP_DIR: setupApp,
   });
-  return { root, stateDir, venueDir, port, env };
+  return { root, stateDir, venueDir, port, landingPort, env };
 }
 
 function childProcess(script: string, env: NodeJS.ProcessEnv, args: string[] = []) {
@@ -524,10 +524,22 @@ it.each([
     await writeFile(join(f.stateDir, "restore-request.json"), "retained-restore");
     await writeFile(join(f.stateDir, "reset-request.json"), "retained-reset");
     const marker = await readFile(join(f.venueDir, "first-setup-claim.json"));
-    const child = childProcess(script, f.env);
+    await ensureBoxSecrets({
+      stateDir: f.stateDir,
+      hostnames: ["localhost", "waitron.local"],
+      now: () => new Date(),
+      listIpv4: () => ["127.0.0.1"],
+    });
+    const agent = new Agent({ connect: { ca: await readFile(join(f.stateDir, "tls/ca.crt")) } });
+    const fetch: typeof globalThis.fetch = (url, init) =>
+      globalThis.fetch(url, { ...init, dispatcher: agent } as RequestInit);
+    const child = childProcess(script, {
+      ...f.env,
+      WAITRON_HTTP_LANDING_PORT: String(f.landingPort),
+    });
     try {
-      const base = `http://127.0.0.1:${f.port}`;
-      expect(await ready(child, base)).toEqual({ claimed: true, resolution: true });
+      const base = `https://127.0.0.1:${f.port}`;
+      expect(await ready(child, base, agent)).toEqual({ claimed: true, resolution: true });
       const inspection = await fetch(`${base}/setup-api/first-setup/resolution`);
       expect(inspection.status).toBe(200);
       const inspected = await inspection.json();
@@ -549,7 +561,7 @@ it.each([
       });
       const discovery = await fetch(`${base}/setup-api/discovery`);
       expect(discovery.status).toBe(200);
-      expect(await discovery.json()).toEqual({ caDownloadAvailable: false });
+      expect(await discovery.json()).toEqual({ caDownloadAvailable: true });
       for (const path of [
         "/retry",
         "/setup-api/provision",
@@ -561,19 +573,22 @@ it.each([
         expect(response.status, path).toBe(404);
         await response.body?.cancel();
       }
-      const refused = await fetch(`${base}/setup-api/first-setup/resolution/recover`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          password: PASSWORD,
-          inspectionId: inspected.inspectionId,
-          revision: inspected.revision,
-          ownerGeneration: inspected.ownerGeneration,
-          clientClaimNonce: randomBytes(32).toString("base64url"),
-        }),
-      });
-      expect(refused.status).toBe(403);
-      expect(await refused.json()).toMatchObject({ error: { code: "setup.owner_required" } });
+      const refused = await globalThis.fetch(
+        `http://127.0.0.1:${f.landingPort}/setup-api/first-setup/resolution/recover`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            password: PASSWORD,
+            inspectionId: inspected.inspectionId,
+            revision: inspected.revision,
+            ownerGeneration: inspected.ownerGeneration,
+            clientClaimNonce: randomBytes(32).toString("base64url"),
+          }),
+        },
+      );
+      expect(refused.status).toBe(404);
+      expect(await refused.text()).toBe("404 Not Found");
       await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
       expect(await readFile(join(f.venueDir, "first-setup-claim.json"))).toEqual(marker);
       expect(await readFile(join(f.stateDir, "restore-request.json"), "utf8")).toBe(
@@ -582,6 +597,7 @@ it.each([
       expect(await readFile(join(f.stateDir, "reset-request.json"), "utf8")).toBe("retained-reset");
     } finally {
       await child.stop();
+      await agent.close();
     }
   },
 );

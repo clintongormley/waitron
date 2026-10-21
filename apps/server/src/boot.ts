@@ -696,6 +696,8 @@ export function startLandingListener(
     httpsUrl: reach.hostnameUrl,
     log,
     connection: config.connection,
+    landingPort: config.landingPort,
+    connectionHostnames: BOX_LEAF_HOSTNAMES,
   });
   const server = serve(
     buildServeOptions(
@@ -993,6 +995,7 @@ async function bootServer(
       listIpv4: boxAddresses,
       discoveryEnabled: config.till === undefined,
       serveBoxCa: config.tls === undefined,
+      connectionHostnames: BOX_LEAF_HOSTNAMES,
     },
     log,
   );

@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { request as httpsRequest, get as httpsGet } from "node:https";
 import { Hono } from "hono";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
-import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
+import {
+  mintSelfSignedServerCert,
+  reissueServerLeaf,
+  type SelfSignedMaterial,
+} from "./self-signed-cert.js";
 import { serveRecovery } from "./recovery-listener.js";
 import { closeListener } from "./close-listener.js";
 import { freePorts } from "./testing/free-ports.js";
@@ -28,7 +32,7 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 async function fixture(
-  damage: "missing-key" | "malformed" | "mismatch" | "missing-ca" = "missing-key",
+  damage: "missing-key" | "malformed" | "mismatch" | "missing-ca" | "expired" = "missing-key",
 ) {
   const root = await mkdtemp(join(tmpdir(), "connection-entry-"));
   dirs.push(root);
@@ -46,6 +50,17 @@ async function fixture(
   if (damage === "missing-key") await rm(join(stateDir, "tls/server.key"));
   if (damage === "malformed") await writeFile(join(stateDir, "tls/server.crt"), "malformed");
   if (damage === "mismatch") await writeFile(join(stateDir, "tls/server.key"), material.caKeyPem);
+  if (damage === "expired")
+    await writeFile(
+      join(stateDir, "tls/server.crt"),
+      reissueServerLeaf({
+        caCertPem: material.caCertPem,
+        caKeyPem: material.caKeyPem,
+        hostnames: ["waitron.local", "localhost"],
+        ipAddresses: ["127.0.0.1"],
+        now: new Date("2020-01-01T00:00:00Z"),
+      }).serverCertPem,
+    );
   if (damage === "missing-ca") await rm(join(stateDir, "tls/ca.crt"));
   await writeFile(join(stateDir, "secrets.env"), "retained evidence");
   return { root, stateDir, venueDir };
@@ -83,7 +98,7 @@ async function repair(port: number) {
   return response.json();
 }
 
-it.each(["missing-key", "malformed", "mismatch", "missing-ca"] as const)(
+it.each(["missing-key", "malformed", "mismatch", "missing-ca", "expired"] as const)(
   "real recovery listeners expose only connection bootstrap for %s",
   async (damage) => {
     const f = await fixture(damage);
@@ -168,10 +183,17 @@ it("direct repair re-enters resolution on verified HTTPS and the returned handle
   });
 });
 
-it.each(["normal", "resolution", "recovery"] as const)(
-  "supervised %s transport repairs before any staged work or recovery counter mutation",
-  async (level) => {
-    const f = await fixture("malformed");
+it.each(
+  (["normal", "resolution", "recovery"] as const).flatMap((level) =>
+    (["malformed", "expired", "mismatch", "missing-key"] as const).map((damage) => ({
+      level,
+      damage,
+    })),
+  ),
+)(
+  "supervised $level transport repairs $damage before any staged work or recovery counter mutation",
+  async ({ level, damage }) => {
+    const f = await fixture(damage);
     if (level === "resolution")
       await writeFile(join(f.venueDir, "first-setup-claim.json"), "retained torn claim");
     const [port] = (await freePorts(1)) as [number];
@@ -252,6 +274,7 @@ it("a failed direct continuation keeps public retry available and the next retry
     const page = await get(port, "/setup/connection");
     const body = await page.text();
     expect(body).toContain('data-connection-state="healthy"');
+    expect(body).toContain(">Reconnect</button>");
     expect(body).not.toContain("PRIVATE boot failure detail");
   });
   await repair(port);
@@ -395,4 +418,102 @@ it("recovery respects operator TLS selected in the retained settings without exp
   await expect(readFile(join(f.stateDir, "tls/server.key"))).rejects.toMatchObject({
     code: "ENOENT",
   });
+});
+
+it.each(["malformed", "mismatch", "missing-ca", "expired"] as const)(
+  "direct %s repair returns through full admission to a verified HTTPS listener",
+  async (damage) => {
+    const f = await fixture(damage);
+    const [port] = (await freePorts(1)) as [number];
+    const strict = vi.fn(async () => {
+      const app = new Hono();
+      app.get("/", (c) => c.text("admitted after connection repair"));
+      const server = await serveRecovery(app, {
+        stateDir: f.stateDir,
+        port,
+        httpHost: "127.0.0.1",
+        log: () => {},
+      });
+      return { close: () => closeListener(server) };
+    });
+    const handle = await startServerOrFirstSetupResolution(
+      {
+        WAITRON_STATE_DIR: f.stateDir,
+        WAITRON_VENUE_DIR: f.venueDir,
+        WAITRON_HTTP_HOST: "127.0.0.1",
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_HTTP_LANDING_PORT: "0",
+      },
+      {},
+      { startServer: strict },
+    );
+    closes.push(handle.close);
+    expect(strict).not.toHaveBeenCalled();
+    const result = await repair(port);
+    expect(result).toMatchObject({
+      state: "healthy",
+      trust: damage === "missing-ca" ? "new-required" : "retained",
+    });
+    const installedCa = await readFile(join(f.stateDir, "tls/ca.crt"), "utf8");
+    await vi.waitFor(async () =>
+      expect(await verifiedGet(port, "/", installedCa)).toEqual({
+        status: 200,
+        body: "admitted after connection repair",
+      }),
+    );
+    expect(strict).toHaveBeenCalledOnce();
+    if (damage === "missing-ca") {
+      expect(installedCa).not.toBe(material.caCertPem);
+      await expect(verifiedGet(port, "/", material.caCertPem)).rejects.toMatchObject({
+        code: "CERT_SIGNATURE_FAILURE",
+      });
+    } else expect(installedCa).toBe(material.caCertPem);
+    expect(await readFile(join(f.stateDir, "secrets.env"), "utf8")).toBe("retained evidence");
+    await expect(readFile(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
+  },
+);
+
+it("actual HTTP rejects forged/private requests and archive reads before a legitimate empty repair", async () => {
+  const f = await fixture();
+  const [port] = (await freePorts(1)) as [number];
+  const server = await serveRecovery(new Hono(), {
+    stateDir: f.stateDir,
+    port,
+    httpHost: "127.0.0.1",
+    log: () => {},
+  });
+  closes.push(() => closeListener(server));
+  const origin = `http://127.0.0.1:${port}`;
+  for (const [path, headers, body] of [
+    ["", {}, undefined],
+    ["", { Origin: "null" }, undefined],
+    ["", { Origin: "http://foreign.example" }, undefined],
+    ["", { Origin: `https://127.0.0.1:${port}`, "X-Forwarded-Proto": "https" }, undefined],
+    ["?lang=en", { Origin: origin }, undefined],
+    ["", { Origin: origin, Cookie: "owner=private" }, undefined],
+    ["", { Origin: origin, Authorization: "Bearer private" }, undefined],
+    ["", { Origin: origin }, "password=private"],
+    ["", { Origin: origin }, JSON.stringify({ privateKey: "private" })],
+  ] as [string, Record<string, string>, string | undefined][]) {
+    const response = await fetch(`${origin}/setup-api/connection/repair${path}`, {
+      method: "POST",
+      headers,
+      body,
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "connection.refused" });
+    expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(material.caCertPem);
+    await expect(readFile(join(f.stateDir, "tls/server.key"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  }
+  for (const path of [
+    "/setup-api/connection/repair",
+    "/tls/repair-archive",
+    "/tls/ca.key",
+    "/setup-api/first-setup/resolution",
+  ])
+    expect((await get(port, path)).status).toBe(404);
+  await repair(port);
+  expect((await get(port, "/tls/repair-archive")).status).toBe(404);
 });

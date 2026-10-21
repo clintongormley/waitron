@@ -440,7 +440,7 @@ it("HTTPS hour restart takes local observations without a register declaration",
   await suite.db.archiveTo(join(f.venueDir, "venue.db"));
   await ensureBoxSecrets({
     stateDir: f.stateDir,
-    hostnames: ["localhost"],
+    hostnames: ["localhost", "waitron.local"],
     now: () => new Date(),
     listIpv4: () => ["127.0.0.1"],
   });
@@ -752,7 +752,7 @@ it("real HTTPS resolution boot finishes the retained hour database without docum
   await suite.db.archiveTo(join(f.venueDir, "venue.db"));
   await ensureBoxSecrets({
     stateDir: f.stateDir,
-    hostnames: ["localhost"],
+    hostnames: ["localhost", "waitron.local"],
     now: () => new Date(),
     listIpv4: () => ["127.0.0.1"],
   });
@@ -853,7 +853,7 @@ it("real HTTPS hour Finish survives a discarded answer and two trading boots wit
   await suite.db.archiveTo(join(f.venueDir, "venue.db"));
   await ensureBoxSecrets({
     stateDir: f.stateDir,
-    hostnames: ["localhost"],
+    hostnames: ["localhost", "waitron.local"],
     now: () => new Date(),
     listIpv4: () => ["127.0.0.1"],
   });
