@@ -123,6 +123,56 @@ describe("createDiskFullState", () => {
     ]);
   });
 
+  function heldReadings(disk: ReturnType<typeof stubStatfs>) {
+    const pending: ((bytes: number) => void)[] = [];
+    disk.answer = () =>
+      new Promise((resolve) => {
+        pending.push((bytes) => resolve({ bavail: bytes, frsize: 1 }));
+      });
+    return {
+      answer(index: number, bytes: number) {
+        pending[index]?.(bytes);
+      },
+    };
+  }
+
+  it("keeps a refusal noted while a read was in flight", async () => {
+    const { disk, logs, state } = setup();
+    const readings = heldReadings(disk);
+    state.noteRefused();
+    const reading = state.full();
+    state.noteRefused();
+    readings.answer(0, FULL_DISK_BYTES);
+    expect(await reading).toBe(true);
+    expect(state.noted()).toBe(true);
+    expect(logs.events("storage.disk_space_back")).toHaveLength(0);
+  });
+
+  it("keeps a refusal noted after one read cleared and before a slower read returns", async () => {
+    const { disk, logs, state } = setup();
+    const readings = heldReadings(disk);
+    state.noteRefused();
+    const first = state.full();
+    const second = state.full();
+    readings.answer(0, FULL_DISK_BYTES);
+    expect(await first).toBe(false);
+    state.noteRefused();
+    readings.answer(1, FULL_DISK_BYTES);
+    expect(await second).toBe(true);
+    expect(state.noted()).toBe(true);
+    expect(logs.events("storage.disk_space_back")).toHaveLength(1);
+  });
+
+  it("clears when no refusal is noted while its read is in flight", async () => {
+    const { disk, state } = setup();
+    const readings = heldReadings(disk);
+    state.noteRefused();
+    const reading = state.full();
+    readings.answer(0, FULL_DISK_BYTES);
+    expect(await reading).toBe(false);
+    expect(state.noted()).toBe(false);
+  });
+
   it("notes again after it cleared", async () => {
     const { disk, logs, state } = setup();
     state.noteRefused();

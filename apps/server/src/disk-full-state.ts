@@ -4,7 +4,10 @@ import { freeBytes, type Statfs } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
 
 export interface DiskFullState {
-  /** The engine refused a write because the disk is full. Keeps the first time until cleared. */
+  /**
+   * A full disk was detected: an engine refusal, or a start under FULL_DISK_BYTES. Keeps the first
+   * time until cleared.
+   */
   noteRefused(): void;
   /** Whether a refusal is noted now. Reads no disk. */
   noted(): boolean;
@@ -24,8 +27,10 @@ export function createDiskFullState(deps: {
   statfs?: Statfs;
 }): DiskFullState {
   let since: Date | null = null;
+  let refusals = 0;
   return {
     noteRefused() {
+      refusals += 1;
       if (since !== null) return;
       since = deps.now();
       deps.log("warn", "storage.disk_full_noted", {});
@@ -34,8 +39,11 @@ export function createDiskFullState(deps: {
     since: () => since,
     async full() {
       if (since === null) return false;
+      const seen = refusals;
       const free = await freeBytes(deps.dir, deps.statfs);
       if (free === null || free < FULL_DISK_BYTES) return true;
+      // A refusal noted after this reading began may postdate the space it found.
+      if (refusals !== seen) return true;
       // A read racing this one may already have cleared it.
       if (since !== null) {
         since = null;
