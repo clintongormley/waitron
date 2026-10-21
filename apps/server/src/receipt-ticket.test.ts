@@ -313,8 +313,9 @@ it.each(
     expect(full).toContain(`1 Plato ${figure("9.92")} ${figure("9.92")} 21%`);
     expect(full).toContain(`1 Extra ${figure("1.00")} ${figure("1.00")} 10%`);
     expect(full).toContain(`${discount} -${figure("1.41")} 21%`);
-    // At 80 mm in Basque the indented item column is 14 wide, so the table wraps «100%» under
-    // the figures, as it does for any 100% percentage there.
+    // At 80 mm in Basque the VAT-rate column leaves the item column 14 wide, and the 2-character
+    // indent leaves no room for «Deskontua 100%», so the table wraps «100%» under the figures, as
+    // it does for any 100% percentage there.
     expect(full).toContain(
       locale === "eu-ES" && printer.paperWidth === "80mm"
         ? "Deskontua -1,00 10% 100%"
@@ -2379,6 +2380,13 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     ]);
   });
 
+  const DISCOUNT_WORDS: Record<string, string> = {
+    "es-ES": "Descuento",
+    "ca-ES": "Descompte",
+    "gl-ES": "Desconto",
+    "eu-ES": "Deskontua",
+  };
+
   it.each(
     (["F1", "F2"] as const).flatMap((invoiceType) =>
       ["es-ES", "ca-ES", "gl-ES", "eu-ES"].map((locale) => ({ invoiceType, locale })),
@@ -2399,6 +2407,8 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
         expect(line.length, line).toBeLessThanOrEqual(columnsFor(PRINTER_58.paperWidth));
       }
       if (locale === "eu-ES") expect(lines.join("\n")).toContain("Deskontua 100%");
+      const word = DISCOUNT_WORDS[locale]!;
+      expect(lines.some((line) => line.includes(word) && line.includes("100%"))).toBe(true);
     },
   );
 });

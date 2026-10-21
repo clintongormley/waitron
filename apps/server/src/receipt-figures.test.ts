@@ -722,7 +722,7 @@ describe("invoiceDiscounts", () => {
       expect(result.under.get(0)?.map((d) => [d.rate, d.amount])).toEqual([["10", "1.04"]]);
     });
 
-    it("does not call a row an invitation when a discounted extra beside the comped dish is still charged", () => {
+    it("does not call a row a full comp when a discounted extra beside the comped dish is still charged", () => {
       const result = invoiceDiscounts([group(0, 0, comped, olives)], []);
       expect(result.under.get(0)?.map((d) => [d.rate, d.amount, d.comp])).toEqual([
         ["21.00", "24.91", false],

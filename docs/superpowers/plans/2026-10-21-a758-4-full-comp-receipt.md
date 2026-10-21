@@ -511,7 +511,7 @@ and the adjustments come from the adjustment harness as `adjustments-apply.test.
 - [ ] **The look script.** Add two samples to `SAMPLES` in `apps/server/scripts/receipt-look.ts`
   (`:439-480`): `"simplified-full-comps"` — a Free Burger and a whole-price amount on a Bottle
   (each `{ kind: "comp" }`), and Bread with `{ kind: "discount", percentBp: 5000 }` then
-  `{ kind: "discount" }` for what was left; and `"full-comp-eu-58"` — `FULL` as F1 with one
+  `{ kind: "discount" }` for what was left; and `"full-comp-eu"` — `FULL` as F1 with one
   full-comp line and `invoiceLocale: "eu-ES"`. The
   script is typechecked (`apps/server/tsconfig.json:7` includes `scripts`), never run by CI.
 - [ ] **Run** the six files again (read each count), the receipt and invoice neighbours that pin
@@ -594,7 +594,7 @@ Tests read text; nobody has seen the new words on paper or on the till. Look at 
 
 - [ ] **Printed.** `pnpm --filter @waitron/server exec tsx scripts/receipt-look.ts
   /Users/clintongormley/waitron-campaign-c/a758-4-shots/receipts`. Open the 58 mm and 80 mm PNGs of
-  `simplified-full-comps`, `full-comp-eu-58` and the existing `full-comped-weighed` (thermal and A4,
+  `simplified-full-comps`, `full-comp-eu` and the existing `full-comped-weighed` (thermal and A4,
   and its PDF). Check: «Descuento 100%» sits under the comped item, indented like «Descuento 20%»;
   its amount is right-aligned with the others; on 58 mm a wrapped «(BEZa barne)» keeps the amount
   on the line it belongs to; the full invoice's row prints «Descuento 100%» in the item column.

@@ -497,7 +497,7 @@ const SAMPLES: Record<string, ReceiptDocumentInput> = {
       tender: { method: "cash", change: "0.00" },
     },
   },
-  "full-comp-eu-58": {
+  "full-comp-eu": {
     ...FULL,
     surface: "thermal",
     invoiceLocale: "eu-ES",

@@ -53,7 +53,10 @@ export interface GroupDiscount {
   amount: Decimal;
   /** Every line of the family at this rate has a filed base of zero; always false on an end row. */
   comp: boolean;
-  /** The adjustment whose words name the row, or null for plain «Descuento». */
+  /**
+   * The adjustment whose words name the row, or null when no one adjustment does: the row then
+   * prints the full-comp words when `comp` is set, and the bare discount word otherwise.
+   */
   named: ReceiptAdjustment | null;
 }
 

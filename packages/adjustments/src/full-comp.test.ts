@@ -29,4 +29,9 @@ describe("isFullComp", () => {
   it("compares amounts as values, not text", () => {
     expect(isFullComp(row("discount_amount", "12.0", "0", "12.00"))).toBe(true);
   });
+
+  it("compares amounts exactly, not as floating-point numbers", () => {
+    expect(Number("12.0000000000000001")).toBe(Number("12.00"));
+    expect(isFullComp(row("discount_amount", "12.0000000000000001", "0.00", "12.00"))).toBe(false);
+  });
 });

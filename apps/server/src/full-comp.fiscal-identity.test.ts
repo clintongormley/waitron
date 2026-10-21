@@ -1,5 +1,4 @@
-// The host's offset can be stamped on a record and hashed (till-backend.ts), so the zone is pinned
-// before anything loads.
+// Pinned before anything loads: a clock not replaced here would stamp the host's offset.
 process.env.TZ = "Europe/Madrid";
 
 import { createHash } from "node:crypto";

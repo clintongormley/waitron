@@ -658,6 +658,27 @@ describe("receiptLines", () => {
       ]);
     });
 
+    it("prints an amount on the whole bill as Descuento 100% only when it took the bill's whole price", async () => {
+      const whole = await bill([{ name: "Burger" }]);
+      await adjust(whole, { action: "discount_amount", amount: "12.00" });
+      const part = await bill([{ name: "Burger" }]);
+      await adjust(part, { action: "discount_amount", amount: "5.00" });
+
+      const wholePrinted = await payAndPrint(whole, "0.00");
+      const partPrinted = await payAndPrint(part, "7.00");
+
+      expect(wholePrinted.result.billAdjustments).toEqual([{ kind: "comp", amount: "12.00" }]);
+      expect(wholePrinted.goods).toEqual([
+        at80("1  Hamburguesa", "12,00"),
+        at80("Descuento 100%", "-12,00"),
+      ]);
+      expect(partPrinted.result.billAdjustments).toEqual([{ kind: "discount", amount: "5.00" }]);
+      expect(partPrinted.goods).toEqual([
+        at80("1  Hamburguesa", "12,00"),
+        at80("Descuento", "-5,00"),
+      ]);
+    });
+
     it("prints a Free comp of one of three Burgers beneath the Burger it carved off", async () => {
       const billId = await bill([{ name: "Burger", quantity: "3" }]);
       await adjust(billId, {
