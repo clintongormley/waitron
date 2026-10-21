@@ -304,6 +304,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     floor,
     now,
     statfs: deps.statfs,
+    lockVenue: deps.lockVenue ?? lockVenueDatabase,
     readVenueHolder: deps.readVenueHolder ?? readVenueHolder,
     log: deps.log,
   });
@@ -546,6 +547,7 @@ async function runAdmittedEntry(
         venueHeld,
         now,
         statfs: deps.statfs,
+        lockVenue: deps.lockVenue ?? lockVenueDatabase,
         readVenueHolder: deps.readVenueHolder ?? readVenueHolder,
         log: deps.log,
       });

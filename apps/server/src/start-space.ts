@@ -1,6 +1,7 @@
 import { lstat, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { LOG_FILE_NAME, isVenueHolderFresh, type VenueHolder } from "@waitron/db";
+import { LOG_FILE_NAME, isVenueHolderFresh, type VenueHolder, type VenueLock } from "@waitron/db";
+import { isAppError } from "@waitron/shared";
 import { BACKUP_ENCRYPT_DIR_PREFIX, BACKUP_KEY_PREFIX } from "./backup-keys.js";
 import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
@@ -36,22 +37,23 @@ export interface StartSpaceDeps {
   floor: number;
   /** Delete logs and crash reports whatever the free space: a start whose failure was a full disk. */
   force?: boolean;
-  /**
-   * This process holds the venue folder's lock for the whole call. No other process can then hold
-   * it, so the holder file is this process's own and does not keep backup staging.
-   */
+  /** This process holds the venue folder's lock for the whole call, so no other process can. */
   venueHeld?: boolean;
   now: () => Date;
   statfs?: Statfs;
+  /** Refused with `provisioning.database_in_use` while another process holds the venue folder. */
+  lockVenue: (venueDir: string) => Promise<VenueLock>;
+  /** Asked only when the lock fails for another reason. */
   readVenueHolder: (venueDir: string) => VenueHolder | null;
   log: Logger;
 }
 
 /**
  * Every call deletes the dumps and `backup-encrypt-*` folders a backup run leaves in backup staging,
- * unless the venue folder's holder heartbeat is fresh and `venueHeld` is not set. Below `floor` (or
- * when forced) it also deletes rotated logs but the newest and crash reports older than
- * {@link CRASH_REPORT_KEEP_MS}. A folder that is a symbolic link is skipped. Never throws.
+ * unless another process holds the venue folder's lock — or, when the lock cannot be taken for any
+ * other reason, the folder's holder heartbeat is fresh. Below `floor` (or when forced) it also
+ * deletes rotated logs but the newest and crash reports older than {@link CRASH_REPORT_KEEP_MS}. A
+ * folder that is a symbolic link is skipped. A filesystem or lock failure is logged, never thrown.
  */
 export async function freeSpaceAtStart(
   deps: StartSpaceDeps,
@@ -69,11 +71,7 @@ export async function freeSpaceAtStart(
       failed(error);
     }
   };
-  const removeBackupStaging = async () => {
-    const holder = deps.venueHeld === true ? null : deps.readVenueHolder(deps.venueDir);
-    // The time is read again: the deletions before this can outlast VENUE_HOLDER_STALE_MS, and a
-    // live heartbeat judged against the start of them reads as one from the future.
-    if (holder !== null && isVenueHolderFresh(holder, deps.now())) return;
+  const deleteBackupStaging = async () => {
     const stagingDir = join(deps.stateDir, BACKUP_STAGING_DIR);
     for (const name of (await entries(stagingDir, BACKUP_STAGING_DIR, deps.log, failed)) ?? []) {
       if (STAGED_DUMP.test(name)) await remove(join(stagingDir, name), false);
@@ -81,10 +79,32 @@ export async function freeSpaceAtStart(
         await remove(join(stagingDir, name), true);
     }
   };
+  // The backup run that writes staging runs inside the process holding the venue folder's lock.
+  const removeBackupStaging = async () => {
+    // Taking the lock would create a missing venue folder; with none, no process can hold it.
+    if (deps.venueHeld === true || (await missing(deps.venueDir))) return deleteBackupStaging();
+    let hold: VenueLock;
+    try {
+      hold = await deps.lockVenue(deps.venueDir);
+    } catch (error) {
+      if (isAppError(error) && error.code === "provisioning.database_in_use") return;
+      failed(error);
+      const holder = deps.readVenueHolder(deps.venueDir);
+      // The time is read again: the deletions before this can outlast VENUE_HOLDER_STALE_MS, and a
+      // live heartbeat judged against the start of them reads as one from the future.
+      if (holder !== null && isVenueHolderFresh(holder, deps.now())) return;
+      return deleteBackupStaging();
+    }
+    try {
+      await deleteBackupStaging();
+    } finally {
+      hold.release();
+    }
+  };
 
   if (!deps.force && (before === null || before >= deps.floor)) {
     await removeBackupStaging();
-    if (deleted > 0) deps.log("info", "storage.backup_leftovers_deleted", { deleted });
+    if (deleted > 0) deps.log("info", "storage.start_backup_leftovers_deleted", { deleted });
     return { freeBytes: before, belowFloor: false };
   }
   const now = deps.now();
@@ -121,6 +141,15 @@ export async function freeSpaceAtStart(
     floor: deps.floor,
   });
   return { freeBytes: after, belowFloor: after !== null && after < deps.floor };
+}
+
+async function missing(dir: string): Promise<boolean> {
+  try {
+    await lstat(dir);
+    return false;
+  } catch (error) {
+    return errnoOf(error) === "ENOENT";
+  }
 }
 
 /**

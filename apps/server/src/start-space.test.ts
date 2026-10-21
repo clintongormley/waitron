@@ -2,9 +2,11 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { VenueHolder } from "@waitron/db";
+import { lockVenueDatabase, readVenueHolder, type VenueHolder } from "@waitron/db";
+import { VENUE_HOLDER_FILE } from "@waitron/store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dumpFileName } from "./backup-keys.js";
+import { holdVenueElsewhere } from "./testing/venue-held-elsewhere.js";
 import {
   CRASH_REPORT_KEEP_MS,
   START_FREE_SPACE_FLOOR,
@@ -25,6 +27,7 @@ let root: string;
 let stateDir: string;
 let venueDir: string;
 let logDir: string;
+const stops: (() => Promise<void>)[] = [];
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "wt-start-space-"));
@@ -38,6 +41,7 @@ beforeEach(async () => {
 afterEach(async () => {
   // Drops a queued one-off rejection a failed case left unused; stat delegates to the real one again.
   vi.mocked(stat).mockReset();
+  await Promise.all(stops.splice(0).map((stop) => stop()));
   await rm(root, { recursive: true, force: true });
 });
 
@@ -80,6 +84,7 @@ function deps(over: Partial<StartSpaceDeps> & { free?: number }): {
       floor: 1000,
       now: () => NOW,
       statfs: statfsStub({ [stateDir]: [free], [venueDir]: [free] }),
+      lockVenue: lockVenueDatabase,
       readVenueHolder: () => null,
       log,
       ...over,
@@ -89,6 +94,15 @@ function deps(over: Partial<StartSpaceDeps> & { free?: number }): {
 
 const rotated = (n: number) => join(logDir, `waitron.log.${n}`);
 const staging = () => join(stateDir, "backup-staging", "waitron-20261020T000000Z.dump");
+
+/** Another process holds the venue folder's lock until the case ends. */
+async function heldElsewhere(): Promise<void> {
+  stops.push((await holdVenueElsewhere(venueDir)).stop);
+}
+
+/** The lock fails for a reason other than another holder, as a full disk can make it. */
+const failingLock = () =>
+  Promise.reject(Object.assign(new Error("no space left on device"), { code: "ENOSPC" }));
 
 function holder(heartbeatAgeMs: number): VenueHolder {
   return {
@@ -110,7 +124,6 @@ describe("freeSpaceAtStart", () => {
       join(logDir, "crash-reports", "notes.txt"),
       join(stateDir, "recovery.json"),
       join(stateDir, "recovery.lock"),
-      join(venueDir, "venue.lock"),
       join(venueDir, "venue.db"),
       join(stateDir, "restore-staging", "x"),
     ];
@@ -123,6 +136,7 @@ describe("freeSpaceAtStart", () => {
       join(stateDir, "backup-staging", "backup-encrypt-x", "artifact"),
     ];
     for (const path of [...kept, ...gone]) await touch(path);
+    await writeFile(join(venueDir, "venue.lock"), "");
     await touch(join(logDir, "crash-reports", "holder-frozen-a.json"), 8 * DAY_MS);
     await touch(join(logDir, "crash-reports", "holder-frozen-b.json"), 6 * DAY_MS);
     await touch(join(logDir, "crash-reports", "notes.txt"), 30 * DAY_MS);
@@ -134,7 +148,8 @@ describe("freeSpaceAtStart", () => {
 
     for (const path of gone) expect(existsSync(path), path).toBe(false);
     expect(existsSync(join(stateDir, "backup-staging", "backup-encrypt-x"))).toBe(false);
-    for (const path of kept) expect(existsSync(path), path).toBe(true);
+    for (const path of [...kept, join(venueDir, "venue.lock")])
+      expect(existsSync(path), path).toBe(true);
     expect(result).toEqual({ freeBytes: 700, belowFloor: true });
     expect(log).toHaveBeenCalledWith("warn", "storage.start_space_low", {
       freeBytesBefore: 100,
@@ -153,7 +168,7 @@ describe("freeSpaceAtStart", () => {
     expect(await freeSpaceAtStart(d)).toEqual({ freeBytes: 1000, belowFloor: false });
   });
 
-  it("deletes nothing when free space is exactly the floor", async () => {
+  it("deletes no logs when free space is exactly the floor", async () => {
     await touch(rotated(2));
     const { deps: d, log } = deps({ free: 1000 });
     expect(await freeSpaceAtStart(d)).toEqual({ freeBytes: 1000, belowFloor: false });
@@ -184,7 +199,7 @@ describe("freeSpaceAtStart", () => {
     expect(existsSync(rotated(2))).toBe(false);
   });
 
-  it("deletes nothing when no folder can report", async () => {
+  it("deletes no logs when no folder can report", async () => {
     await touch(rotated(2));
     const { deps: d, log } = deps({
       statfs: statfsStub({ [stateDir]: [new Error("x")], [venueDir]: [new Error("y")] }),
@@ -194,28 +209,27 @@ describe("freeSpaceAtStart", () => {
     expect(log).not.toHaveBeenCalled();
   });
 
-  it("keeps backup staging while a live process holds the venue folder", async () => {
+  it("keeps backup staging while another process holds the venue folder", async () => {
     await touch(staging());
     await touch(rotated(2));
-    const { deps: fresh } = deps({ readVenueHolder: () => holder(5_000) });
-    await freeSpaceAtStart(fresh);
+    await heldElsewhere();
+    const readVenueHolder = vi.fn(() => null);
+    const { deps: d } = deps({ readVenueHolder });
+    await freeSpaceAtStart(d);
     expect(existsSync(staging())).toBe(true);
     expect(existsSync(rotated(2))).toBe(false);
-
-    const readVenueHolder = vi.fn(() => holder(60_000));
-    const { deps: stale } = deps({ readVenueHolder });
-    await freeSpaceAtStart(stale);
-    expect(existsSync(staging())).toBe(false);
-    expect(readVenueHolder).toHaveBeenCalledWith(venueDir);
+    expect(readVenueHolder).not.toHaveBeenCalled();
   });
 
   it("deletes backup staging under a fresh holder when this process holds the venue folder", async () => {
     await touch(staging());
     const readVenueHolder = vi.fn(() => holder(5_000));
-    const { deps: d } = deps({ venueHeld: true, readVenueHolder });
+    const lockVenue = vi.fn(lockVenueDatabase);
+    const { deps: d } = deps({ venueHeld: true, readVenueHolder, lockVenue });
     await freeSpaceAtStart(d);
     expect(existsSync(staging())).toBe(false);
     expect(readVenueHolder).not.toHaveBeenCalled();
+    expect(lockVenue).not.toHaveBeenCalled();
   });
 
   it("judges the holder at the time it reads it, after a slow clean-up", async () => {
@@ -228,13 +242,86 @@ describe("freeSpaceAtStart", () => {
       now.mockReturnValue(later);
       return { ...holder(0), heartbeatAt: new Date(later.getTime() - 50).toISOString() };
     });
-    const { deps: d } = deps({ now, readVenueHolder });
+    const { deps: d } = deps({ now, readVenueHolder, lockVenue: failingLock });
     await freeSpaceAtStart(d);
     expect(existsSync(staging())).toBe(true);
     expect(existsSync(join(logDir, "crash-reports", "holder-frozen-a.json"))).toBe(false);
   });
 
-  describe("above the floor", () => {
+  // A holder killed mid-backup leaves its file with a recent heartbeat, and Docker restarts the
+  // container at once; the lock, which died with it, is what tells.
+  it.each([100, 5000])(
+    "deletes backup staging under a fresh holder file whose holder is gone (%i bytes free)",
+    async (free) => {
+      await touch(staging());
+      await writeFile(join(venueDir, VENUE_HOLDER_FILE), `${JSON.stringify(holder(1_000))}\n`);
+      expect(readVenueHolder(venueDir)).toEqual(holder(1_000));
+      const { deps: d } = deps({ free, readVenueHolder });
+      await freeSpaceAtStart(d);
+      expect(existsSync(staging())).toBe(false);
+    },
+  );
+
+  it.each([100, 5000])(
+    "deletes backup staging and makes no venue folder when there is none (%i bytes free)",
+    async (free) => {
+      await touch(staging());
+      const absent = join(root, "no-venue");
+      const lockVenue = vi.fn(lockVenueDatabase);
+      const { deps: d } = deps({
+        venueDir: absent,
+        lockVenue,
+        statfs: statfsStub({ [stateDir]: [free], [absent]: [new Error("ENOENT")] }),
+      });
+      await freeSpaceAtStart(d);
+      expect(existsSync(staging())).toBe(false);
+      expect(existsSync(absent)).toBe(false);
+      expect(lockVenue).not.toHaveBeenCalled();
+    },
+  );
+
+  it("releases the lock it took once the deletions are done", async () => {
+    await touch(staging());
+    const order: string[] = [];
+    const lockVenue = vi.fn(async (dir: string) => {
+      const hold = await lockVenueDatabase(dir);
+      order.push("lock");
+      return {
+        release: () => {
+          order.push(`release:${existsSync(staging()) ? "kept" : "deleted"}`);
+          hold.release();
+        },
+      };
+    });
+    const { deps: d } = deps({ free: 5000, lockVenue });
+    await freeSpaceAtStart(d);
+    expect(lockVenue).toHaveBeenCalledWith(venueDir);
+    expect(order).toEqual(["lock", "release:deleted"]);
+  });
+
+  describe("when the lock fails for another reason, the holder's heartbeat decides", () => {
+    it.each([100, 5000])("at %i bytes free", async (free) => {
+      await touch(staging());
+      const { deps: fresh, log } = deps({
+        free,
+        lockVenue: failingLock,
+        readVenueHolder: () => holder(5_000),
+      });
+      await expect(freeSpaceAtStart(fresh)).resolves.toMatchObject({ freeBytes: free });
+      expect(existsSync(staging())).toBe(true);
+      expect(log).toHaveBeenCalledWith("warn", "storage.start_cleanup_failed", {
+        errno: "ENOSPC",
+      });
+
+      const readVenueHolder = vi.fn(() => holder(60_000));
+      const { deps: stale } = deps({ free, lockVenue: failingLock, readVenueHolder });
+      await freeSpaceAtStart(stale);
+      expect(existsSync(staging())).toBe(false);
+      expect(readVenueHolder).toHaveBeenCalledWith(venueDir);
+    });
+  });
+
+  describe("at or above the floor, or with no free-space reading", () => {
     const encryptFolder = () => join(stateDir, "backup-staging", "backup-encrypt-x");
 
     it("deletes backup staging, and keeps rotated logs and old crash reports", async () => {
@@ -251,27 +338,30 @@ describe("freeSpaceAtStart", () => {
       expect(existsSync(rotated(2))).toBe(true);
       expect(existsSync(join(logDir, "crash-reports", "holder-frozen-a.json"))).toBe(true);
       expect(log.mock.calls).toEqual([
-        ["info", "storage.backup_leftovers_deleted", { deleted: 2 }],
+        ["info", "storage.start_backup_leftovers_deleted", { deleted: 2 }],
       ]);
     });
 
-    it("keeps backup staging while a live process holds the venue folder", async () => {
+    it("keeps backup staging while another process holds the venue folder", async () => {
       await touch(staging());
-      const { deps: d, log } = deps({ free: 5000, readVenueHolder: () => holder(5_000) });
+      await heldElsewhere();
+      const readVenueHolder = vi.fn(() => null);
+      const { deps: d, log } = deps({ free: 5000, readVenueHolder });
       await freeSpaceAtStart(d);
       expect(existsSync(staging())).toBe(true);
       expect(log).not.toHaveBeenCalled();
+      expect(readVenueHolder).not.toHaveBeenCalled();
     });
 
     it("deletes backup staging under a fresh holder when this process holds the venue folder", async () => {
       await touch(staging());
-      const { deps: d } = deps({
-        free: 5000,
-        venueHeld: true,
-        readVenueHolder: () => holder(5_000),
-      });
+      const readVenueHolder = vi.fn(() => holder(5_000));
+      const lockVenue = vi.fn(lockVenueDatabase);
+      const { deps: d } = deps({ free: 5000, venueHeld: true, readVenueHolder, lockVenue });
       await freeSpaceAtStart(d);
       expect(existsSync(staging())).toBe(false);
+      expect(readVenueHolder).not.toHaveBeenCalled();
+      expect(lockVenue).not.toHaveBeenCalled();
     });
 
     it("deletes backup staging when no folder can report free space", async () => {
@@ -283,7 +373,9 @@ describe("freeSpaceAtStart", () => {
       expect(await freeSpaceAtStart(d)).toEqual({ freeBytes: null, belowFloor: false });
       expect(existsSync(staging())).toBe(false);
       expect(existsSync(rotated(2))).toBe(true);
-      expect(log).toHaveBeenCalledWith("info", "storage.backup_leftovers_deleted", { deleted: 1 });
+      expect(log).toHaveBeenCalledWith("info", "storage.start_backup_leftovers_deleted", {
+        deleted: 1,
+      });
     });
   });
 
