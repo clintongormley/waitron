@@ -5169,9 +5169,12 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   through the clean-up before the count.** Accepted for A798-B slice 2.
   [Detail](backlog/box.md#a-box-whose-first-setup-was-retired-into-a-new-workspace-keeps-that-workspaces-backup-staging-through-the-clean-up-before-the-count)
 
-- **The connection-bootstrap path on a full disk was not run.** A798-B slice 2's probes ran the
-  recovery page on a full disk with freshly made certificates only (`needsConnectionBootstrap`,
-  `apps/server/src/node-entry.ts`).
+- **On a full disk, a box whose kept certificates cannot be used shows the connection set-up page,
+  with no word of the full disk.** The connection-bootstrap branch (`needsConnectionBootstrap`,
+  `apps/server/src/node-entry.ts`) returns before the count check, as A798-B slice 2's plan
+  decided. Its pre-merge review ran `runEntry` on a filled 32 MiB HFS+ image with an empty TLS
+  folder, and `/` answered "Set up secure connection" and did not contain "disk is full". Open:
+  should that page also say the disk is full and show the free space?
 
 - **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
   (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; A798-B slice 2 names `ENOSPC`
