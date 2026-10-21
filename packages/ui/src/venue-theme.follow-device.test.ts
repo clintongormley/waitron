@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands } from "vitest/browser";
 import { applyTokens } from "@waitron/ui-core/tokens";
 import { WAITRON_CHOICES, themeSheet } from "@waitron/ui-core/theme";
-import { deriveTheme } from "@waitron/ui-core/theme/waitron";
+import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
 import { THEME_CHOICES, THEME_STORAGE_KEY, chooseTheme, startThemeChoice } from "./theme-choice.js";
 import { VENUE_THEME_STORAGE_KEY, startVenueTheme } from "./venue-theme.js";
 
@@ -13,8 +13,8 @@ declare module "vitest/browser" {
 }
 
 const PRIMARY = "--wt-color-primary";
-const WAITRON_LIGHT_PRIMARY = "#1f6feb";
-const WAITRON_DARK_PRIMARY = "#4c8dff";
+const WAITRON_LIGHT_PRIMARY = WAITRON_DEFAULTS.light[PRIMARY]!;
+const WAITRON_DARK_PRIMARY = WAITRON_DEFAULTS.dark[PRIMARY]!;
 
 const theme = deriveTheme({
   ...WAITRON_CHOICES,
@@ -64,8 +64,11 @@ describe("Follow device with a venue theme", () => {
     start();
   });
 
-  it("has light and dark versions that differ", () => {
+  it("has light and dark versions that differ from each other and from Waitron's", () => {
     expect(theme.light[PRIMARY]).not.toBe(theme.dark[PRIMARY]);
+    expect(theme.light[PRIMARY]).not.toBe(WAITRON_LIGHT_PRIMARY);
+    expect(theme.dark[PRIMARY]).not.toBe(WAITRON_DARK_PRIMARY);
+    expect(WAITRON_LIGHT_PRIMARY).not.toBe(WAITRON_DARK_PRIMARY);
   });
 
   it.each(PAIRS)(

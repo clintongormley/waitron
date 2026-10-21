@@ -10,23 +10,24 @@ import {
   readVenueTheme,
   startVenueTheme,
 } from "./venue-theme.js";
+import {
+  FIXTURE_ANSWER as GREEN,
+  FIXTURE_DARK_BG as GREEN_DARK_BG,
+  FIXTURE_LIGHT_BG as GREEN_LIGHT_BG,
+  WAITRON_DARK_BG,
+  WAITRON_LIGHT_BG,
+  bg,
+} from "../test/venue-theme-fixture.js";
 
 const KEY = VENUE_THEME_STORAGE_KEY;
-const WAITRON_LIGHT_BG = "#f7f7f8";
 
-const greenTheme = deriveTheme({ ...WAITRON_CHOICES, brandColor: "#1e5b3a", background: "tinted" });
 const lemonTheme = deriveTheme({ ...WAITRON_CHOICES, brandColor: "#f2d300", background: "tinted" });
-const GREEN = { hash: "green-hash", css: themeSheet(greenTheme), logo: null };
 const LEMON = {
   hash: "lemon-hash",
   css: themeSheet(lemonTheme),
   logo: { light: "lemon-light", dark: null },
 };
-const GREEN_LIGHT_BG = greenTheme.light["--wt-color-bg"]!;
 const LEMON_LIGHT_BG = lemonTheme.light["--wt-color-bg"]!;
-
-const bg = (): string =>
-  getComputedStyle(document.documentElement).getPropertyValue("--wt-color-bg").trim();
 
 const never = vi.fn(() => new Promise<Response>(() => {}));
 
@@ -78,6 +79,14 @@ afterEach(() => {
 describe("startVenueTheme", () => {
   it("has two distinct test colours", () => {
     expect(LEMON_LIGHT_BG).not.toBe(GREEN_LIGHT_BG);
+  });
+
+  it("the shared fixture differs from Waitron's own colours in light and dark", () => {
+    expect(GREEN_LIGHT_BG).not.toBe(WAITRON_LIGHT_BG);
+    expect(GREEN_DARK_BG).not.toBe(WAITRON_DARK_BG);
+    expect([GREEN_LIGHT_BG, GREEN_DARK_BG, WAITRON_LIGHT_BG, WAITRON_DARK_BG]).toEqual(
+      Array(4).fill(expect.stringMatching(/^#[0-9a-f]{6}$/)),
+    );
   });
 
   it("the stored copy paints before the fetch answers", () => {

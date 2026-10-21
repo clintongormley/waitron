@@ -2349,8 +2349,9 @@ build provenance on real build metadata; these fixed-clock fixtures qualify comm
 `apps/dashboard/src/venue-theme-startup.test.ts` and `apps/till/src/venue-theme-startup.test.ts`
 open each app's real `index.html` in a fresh browser context through the shared command
 `packages/ui/test/venue-theme-startup.ts`, and check the venue theme's first frames. Each file runs
-its eight cases once per engine named in `WAITRON_STARTUP_ENGINES`, read by the app's
-`vitest.config.ts` and passed to the test through `provide`; unset, it is `chromium`. CI installs
+its eight cases once per engine named in `WAITRON_STARTUP_ENGINES`, read by
+`startupEnginesFromEnv` in that command file and passed to the test through each app's
+`vitest.config.ts` `provide`; unset, empty or blank, it is `chromium`. CI installs
 Chromium alone (every `playwright install` in `.github/workflows/` names `chromium`), so CI runs
 eight cases per app. A WebKit run is local:
 
@@ -2366,6 +2367,19 @@ run from an app, prints `true` when WebKit is installed. The command refuses any
 `firstThemedAtMs`, the page's `performance.now()` at the first frame that carried the theme root,
 and `themeRequestsTraced`, the theme requests that carried the `x-request-id` header the app's
 instrumented fetch sets.
+
+WebKit is launched once per run, on its first case, and closed through Vitest's `onClose`; each
+case opens its own context in it. Measured 2026-10-21 with a marker written on launch and on
+disconnect: one `launched` and one `disconnected` per sixteen-case till run; with the `onClose`
+registration removed, `launched` alone, and Vitest printed `something prevents the main process
+from exiting`.
+
+After the theme request is answered (or, for a server that never answers, received), each case
+waits five more animation frames, not a fixed time. Measured 2026-10-21 in both apps: making a
+refused answer empty the sheet and the stored copy failed the refused case (`expected '#f7f7f8' to be '#f0f9f3'`);
+making a failed or non-JSON answer empty it failed the till's failed and not-JSON cases; and
+dropping an answer that took over 300 ms failed the late case. A fault that acts later than
+those five frames after the answer is not seen.
 
 **Route API calls by PATH, never by glob.** The page's own modules are served by the Vitest server
 from the same origin, so a Playwright route on `**/api/**` also catches `/src/api/client.ts`; the
@@ -2393,3 +2407,5 @@ Measured 2026-10-21, Playwright 1.64.1, Chromium 156.0.8078.4 and WebKit 27.2, o
 Mac: both apps `Tests 16 passed (16)`. Control: with `startVenueTheme` removed from the till's `main.ts`, its
 WebKit cases printed `Tests 6 failed | 2 passed (8)`, the stored-copy case
 `expected '#f7f7f8' to be '#edf6f0'` and the dark case `expected '#101216' to be '#0b110d'`.
+The fixture's light background was typed by hand then; it is now derived from the theme and reads
+`#f0f9f3`.

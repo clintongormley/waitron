@@ -1,10 +1,13 @@
 import { readFileSync } from "node:fs";
 import type { Browser, Page, Route } from "playwright";
-import type { BrowserCommand } from "vitest/node";
+import type { BrowserCommand, Vitest } from "vitest/node";
 
 export type StartupAnswer = "never" | "late" | "refused" | "failed" | "not-json";
 
 export interface StartupScenario {
+  /** `VENUE_THEME_STORAGE_KEY`, passed in because Node's own loader, which loads this file for an
+   * app's config, cannot import `../src/venue-theme.js`. */
+  readonly storageKey: string;
   readonly stored: string | null;
   readonly answer: StartupAnswer;
   readonly answerBody: string;
@@ -25,14 +28,39 @@ export interface StartupProbeResult {
   readonly appRendered: boolean;
 }
 
-const STORAGE_KEY = "waitron-venue-theme";
-const SETTLE_MS = 500;
 const LATE_MS = 500;
+// Enough frames for the page to read an answer it was already sent.
+const SETTLE_FRAMES = 5;
 const REPAINT_LIMIT_MS = 5_000;
 const LOAD_LIMIT_MS = 15_000;
 const ASK_LIMIT_MS = 5_000;
 
 type Frame = readonly [themedRoot: boolean, bg: string, atMs: number];
+
+/** The engines named in `WAITRON_STARTUP_ENGINES`; unset, empty or blank means `chromium`. */
+export function startupEnginesFromEnv(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string[] {
+  const named = env["WAITRON_STARTUP_ENGINES"]?.trim() ?? "";
+  return (named === "" ? "chromium" : named).split(",").map((engine) => engine.trim());
+}
+
+const webkitByRun = new WeakMap<Vitest, Promise<Browser>>();
+
+/** One WebKit per Vitest run, closed when the run's server closes. */
+function webkitFor(vitest: Vitest): Promise<Browser> {
+  const cached = webkitByRun.get(vitest);
+  if (cached !== undefined) return cached;
+  const browser = import("playwright").then(({ webkit }) => webkit.launch());
+  webkitByRun.set(vitest, browser);
+  vitest.onClose(() =>
+    browser.then(
+      (opened) => opened.close(),
+      () => undefined,
+    ),
+  );
+  return browser;
+}
 
 function answerTheme(route: Route, scenario: StartupScenario): Promise<void> | undefined {
   switch (scenario.answer) {
@@ -66,9 +94,10 @@ export function venueThemeStartupProbe(indexHtml: URL): BrowserCommand<[StartupS
       throw new Error(`not a start-up engine: ${String(scenario.engine)}`);
     }
     const html = readFileSync(indexHtml, "utf8");
-    const ownBrowser: Browser | null =
-      scenario.engine === "webkit" ? await (await import("playwright")).webkit.launch() : null;
-    const browser = ownBrowser ?? runner.context().browser()!;
+    const browser =
+      scenario.engine === "webkit"
+        ? await webkitFor(context.project.vitest)
+        : runner.context().browser()!;
     const subjectContext = await browser.newContext({ colorScheme: scenario.colorScheme });
     try {
       const subject = await subjectContext.newPage();
@@ -117,7 +146,7 @@ export function venueThemeStartupProbe(indexHtml: URL): BrowserCommand<[StartupS
           };
           requestAnimationFrame(sample);
         },
-        { key: STORAGE_KEY, stored: scenario.stored },
+        { key: scenario.storageKey, stored: scenario.stored },
       );
       const readFrames = () =>
         subject.evaluate(() => (window as unknown as { __startupFrames: Frame[] }).__startupFrames);
@@ -140,7 +169,13 @@ export function venueThemeStartupProbe(indexHtml: URL): BrowserCommand<[StartupS
         new Promise<void>((resolve) => (timer = setTimeout(resolve, ASK_LIMIT_MS))),
       ]);
       clearTimeout(timer);
-      await subject.waitForTimeout(SETTLE_MS);
+      const sampled = (await readFrames()).length;
+      await subject.waitForFunction(
+        (count) =>
+          (window as unknown as { __startupFrames: Frame[] }).__startupFrames.length >= count,
+        sampled + SETTLE_FRAMES,
+        { timeout: REPAINT_LIMIT_MS },
+      );
       const firstThemed = (await readFrames()).find(([themed]) => themed);
       const firstThemedBg = firstThemed?.[1] ?? null;
       if (scenario.answer === "late") {
@@ -162,7 +197,7 @@ export function venueThemeStartupProbe(indexHtml: URL): BrowserCommand<[StartupS
           storedAfter: window.localStorage.getItem(key),
           appRendered: document.querySelector("#app")?.firstElementChild != null,
         };
-      }, STORAGE_KEY);
+      }, scenario.storageKey);
       return {
         engine: `${browser.browserType().name()} ${browser.version()}`,
         firstThemedBg,
@@ -173,7 +208,6 @@ export function venueThemeStartupProbe(indexHtml: URL): BrowserCommand<[StartupS
       };
     } finally {
       await subjectContext.close();
-      await ownBrowser?.close();
     }
   };
 }

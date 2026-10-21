@@ -2,7 +2,10 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 import { playwright } from "@vitest/browser-playwright";
 import type { BrowserCommand } from "vitest/node";
 import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
-import { venueThemeStartupProbe } from "@waitron/ui/test/venue-theme-startup.js";
+import {
+  startupEnginesFromEnv,
+  venueThemeStartupProbe,
+} from "@waitron/ui/test/venue-theme-startup.js";
 
 type ColorScheme = "light" | "dark" | null;
 type ReducedMotion = "reduce" | "no-preference" | null;
@@ -49,9 +52,7 @@ const browserProject = {
       "src/dashboard-app.touch.test.ts",
     ],
     provide: {
-      startupEngines: (process.env["WAITRON_STARTUP_ENGINES"] ?? "chromium")
-        .split(",")
-        .map((engine) => engine.trim()),
+      startupEngines: startupEnginesFromEnv(),
     },
     browser: {
       enabled: true,

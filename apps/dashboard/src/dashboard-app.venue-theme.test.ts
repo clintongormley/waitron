@@ -10,6 +10,7 @@ import {
   FIXTURE_ANSWER,
   FIXTURE_LIGHT_BG,
   WAITRON_LIGHT_BG,
+  bg,
 } from "@waitron/ui/test/venue-theme-fixture.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { DashboardApp } from "./dashboard-app.js";
@@ -19,14 +20,11 @@ import { setLocale } from "./i18n/t.js";
 
 const SECOND_ANSWER = {
   hash: "second-fixture-hash",
-  css: FIXTURE_ANSWER.css.replace(FIXTURE_LIGHT_BG, "#fff3f3"),
+  css: FIXTURE_ANSWER.css.replace(`--wt-color-bg: ${FIXTURE_LIGHT_BG};`, "--wt-color-bg: #fff3f3;"),
   logo: null,
 };
 
 const rejecting = vi.fn<typeof fetch>(() => Promise.reject(new TypeError("Failed to fetch")));
-
-const bg = (): string =>
-  getComputedStyle(document.documentElement).getPropertyValue("--wt-color-bg").trim();
 
 const meResponse = {
   personId: "p1",

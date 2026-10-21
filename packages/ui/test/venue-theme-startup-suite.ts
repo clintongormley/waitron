@@ -1,5 +1,6 @@
 import { commands } from "vitest/browser";
 import { describe, expect, inject, it } from "vitest";
+import { VENUE_THEME_STORAGE_KEY } from "../src/venue-theme.js";
 import {
   FIXTURE_ANSWER,
   FIXTURE_DARK_BG,
@@ -28,6 +29,7 @@ export function describeVenueThemeStartup(app: string): void {
   describe.each(engines)(`the ${app}'s start-up in %s`, { timeout: 30_000 }, (engine) => {
     const probe = (scenario: Partial<StartupScenario>) =>
       commands.probeVenueThemeStartup({
+        storageKey: VENUE_THEME_STORAGE_KEY,
         stored: null,
         answer: "never",
         answerBody: STORED,

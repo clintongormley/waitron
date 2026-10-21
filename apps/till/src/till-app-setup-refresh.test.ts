@@ -27,7 +27,7 @@ import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { WtCombobox } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { applyTokens, startVenueTheme, VENUE_THEME_STORAGE_KEY } from "@waitron/ui";
-import { FIXTURE_ANSWER, FIXTURE_LIGHT_BG } from "@waitron/ui/test/venue-theme-fixture.js";
+import { FIXTURE_ANSWER, FIXTURE_LIGHT_BG, bg } from "@waitron/ui/test/venue-theme-fixture.js";
 
 // Mesa 4 holds party v1, on tab wo-4, in zone z1, whose Lunch menu offers Beer, Steak and Flan.
 
@@ -775,9 +775,6 @@ describe("A841 the till follows the theme in use", () => {
     return new Response(JSON.stringify(themeAnswer));
   });
   const never = () => new Promise<Response>(() => {});
-
-  const bg = (): string =>
-    getComputedStyle(document.documentElement).getPropertyValue("--wt-color-bg").trim();
 
   beforeEach(() => {
     server = draftServer();

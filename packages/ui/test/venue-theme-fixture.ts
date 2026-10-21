@@ -1,16 +1,23 @@
-export const FIXTURE_LIGHT_BG = "#edf6f0";
-export const WAITRON_LIGHT_BG = "#f7f7f8";
-export const FIXTURE_DARK_BG = "#0b110d";
+import { WAITRON_CHOICES, themeSheet } from "@waitron/ui-core/theme";
+import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
+
+const BG = "--wt-color-bg";
+
+export const FIXTURE_THEME = deriveTheme({
+  ...WAITRON_CHOICES,
+  brandColor: "#1e5b3a",
+  background: "tinted",
+});
+export const FIXTURE_LIGHT_BG = FIXTURE_THEME.light[BG]!;
+export const FIXTURE_DARK_BG = FIXTURE_THEME.dark[BG]!;
+export const WAITRON_LIGHT_BG = WAITRON_DEFAULTS.light[BG]!;
+export const WAITRON_DARK_BG = WAITRON_DEFAULTS.dark[BG]!;
 
 export const FIXTURE_ANSWER: { hash: string; css: string; logo: null } = {
   hash: "startup-fixture-hash",
-  css:
-    "@media screen {\n" +
-    `  [data-wt-theme-root] {\n    --wt-color-bg: ${FIXTURE_LIGHT_BG};\n  }\n` +
-    "  @media (prefers-color-scheme: dark) {\n" +
-    `    [data-wt-theme-root]:not([data-theme="light"]) {\n      --wt-color-bg: ${FIXTURE_DARK_BG};\n    }\n` +
-    "  }\n" +
-    `  [data-wt-theme-root][data-theme="dark"] {\n    --wt-color-bg: ${FIXTURE_DARK_BG};\n  }\n` +
-    "}\n",
+  css: themeSheet(FIXTURE_THEME),
   logo: null,
 };
+
+export const bg = (): string =>
+  getComputedStyle(document.documentElement).getPropertyValue(BG).trim();
