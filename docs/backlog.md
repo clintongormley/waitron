@@ -3256,7 +3256,41 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   an open dashboard follows through a passive live read of `custom_themes`, and a signed-in till
   through its `themeHash` once per poll. Slice 4 landed 2026-10-21 (#1945): text painted in the brand colour
   reads `--wt-color-primary-text`, and a root guard (`scripts/primary-coloured-text.test.ts`) refuses
-  `color: var(--wt-color-primary)` outside a list of icons and spinners. Next: slice 5 (the editor).
+  `color: var(--wt-color-primary)` outside a list of icons and spinners. Slice 5 landed: Settings →
+  Appearance shows the theme in use, and a manager edits the brand colour, background and corners in
+  place with a Light and Dark preview, warnings with one-press fixes, Fix all and a Hard to read
+  dialog before saving anyway. Until slice 13, Edit is offered only while one of the venue's own
+  themes is in use, so a venue that has only ever used Waitron's theme cannot reach the editor from
+  any screen (a theme can be put in use only through the management API or a configuration copy).
+  Next: slice 13 (the Themes card and the name dialog, which closes that gap), then 6, 7 and 10.
+
+- **A till on the floor plan with no counter zone misses a theme change (A841 slice 5's review,
+  2026-10-21).** A till learns of a new theme only through the setup revision its 15-second menu
+  check returns, and that check asks about the counter zone plus the zone of a table whose order is
+  on screen (`apps/till/src/till-app.ts:2585-2591`); a till whose profile has no counter zone gets an
+  empty one at sign-in (`:4884-4901`), so on the floor plan it asks about no zone and keeps the old
+  theme until it opens a table, its zones or profile change, or it reloads. Traced by reading, not
+  run. The design says every signed-in till follows within one poll (design section 12). Decide:
+  have the poll return the setup revision without asking about a zone, or accept it and correct the
+  design. The user guide's Appearance page already says what is true.
+
+- **The colour field's custom colour box shows no focus ring while a custom colour is chosen.** The
+  rule `.custom input[type="color"].on { outline: var(--wt-selected-ring) }`
+  (`apps/dashboard/src/widgets/color-field.ts`, from #783) replaces the focus outline, so a keyboard
+  user cannot see focus on that box; A841 slice 5's visual check found focused and unfocused crops
+  identical. Every screen using `colorField` is affected.
+
+- **A841 slice 5 differences from the pictures and tidy-ups (2026-10-21).** Optional, for the owner
+  to judge from `~/waitron-campaign/a841-5-shots/`: at a 1280 px window with the side menu open the
+  form is about 825 px wide, under the 900 px at which the preview sits beside the choices, so it sits
+  below them (pictures 02, 04, 05 show it beside); the warning and fix lines are plain text and a
+  plain button, without the pictures' boxes and colour chips; Waitron's choice sits above the swatches
+  rather than beside Custom; the theme's name in the editing line is not bold; on a phone the
+  preview's sample keeps its side menu beside it while it fits (picture 03 draws it above). Test
+  gaps its reviews left: an unchanged draft off the page following a newer read on re-attach;
+  the colour field's refused chip value, disabled code box while saving and same-row placement; the
+  warning text's colour; the preview's colour-rebuild check (`theme-preview.test.ts`); Bar Lucía and
+  lemon fixtures repeated across test files.
 
 - **Two icons painted in the brand colour sit, in one state each, on a fill no contrast rule checks
   them against (A841 slice 4).** The till's card-waiting spinner on `--wt-color-surface-sunken`
