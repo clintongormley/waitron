@@ -93,7 +93,7 @@ const seated = (id: string, zoneId: string, over: Partial<TableState> = {}): Tab
 const held: TableSignal = { kind: "held", count: 2 };
 
 // Inside comes first, so it is the zone on screen.
-const mount = (tables: TableState[], reducedMotion = true) =>
+const mount = (tables: TableState[], { reducedMotion = true } = {}) =>
   mountWidget<TillFloorScreen>("till-floor-screen", {
     zones,
     tables,
@@ -160,7 +160,7 @@ describe("till-floor-screen: zone tabs", () => {
         seated("t2", "z2", { signals: [{ kind: "bill_requested", requestedAt: inMinutes(-3) }] }),
         seated("t3", "z2", { timingBand: "forgotten" }),
       ],
-      false,
+      { reducedMotion: false },
     );
     host.style.setProperty("--wt-color-tab-danger-tint", "rgb(1, 2, 3)");
     host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
@@ -263,7 +263,9 @@ describe("till-floor-screen: zone tabs", () => {
     ],
     ["step", { signals: [{ kind: "take_order" }] }, null],
   ])("pulses at the state's speed: %s", async (kind, over, speed) => {
-    const { el } = await mount([seated("t1", "z1"), seated("t2", "z2", over)], false);
+    const { el } = await mount([seated("t1", "z1"), seated("t2", "z2", over)], {
+      reducedMotion: false,
+    });
     expect(stateOf(el, "z2")).toBe(kind);
     const pulse = pulseOf(el, "z2");
     if (speed === null) {
@@ -280,7 +282,7 @@ describe("till-floor-screen: zone tabs", () => {
     // Vitest's Chromium runs with --hide-scrollbars, so no case here sees a scrollbar.
     const { el, host } = await mount(
       [seated("t1", "z1"), seated("t2", "z2", { timingBand: "forgotten" })],
-      false,
+      { reducedMotion: false },
     );
     const probe = document.createElement("div");
     probe.style.width = "calc(var(--wt-space-1) * 1.5)";
@@ -487,6 +489,17 @@ describe("till-floor-screen: the zone strip's edge", () => {
       const box = paddingBox(stripOf(el));
       expect(tab.left - reach).toBeGreaterThanOrEqual(box.left);
       expect(tab.right + reach).toBeLessThanOrEqual(box.right);
+    });
+  });
+
+  it("a tap's scroll lands at once, even on a strip that scrolls smoothly", async () => {
+    await onPhone(urgentRight(), async (el) => {
+      await expect.poll(() => edgeOf(el, "end")?.getAttribute("data-zone-state")).toBe("forgotten");
+      const strip = stripOf(el);
+      strip.style.scrollBehavior = "smooth";
+      edgeOf(el, "end")!.click();
+      const tab = tabOf(el, "z5").closest(".zone-tab")!.getBoundingClientRect();
+      expect(tab.right).toBeLessThanOrEqual(paddingBox(strip).right);
     });
   });
 
@@ -697,13 +710,11 @@ describe("till-floor-screen: the zone strip's edge", () => {
           expect(crossing).toBeLessThanOrEqual(0);
           expect(crossing).toBeGreaterThan(miss);
         }
-        // Read at the crossing itself: every later step re-reads the strip on its scroll.
+        // Read at the crossing itself: the next scroll re-reads the strip.
         if (way === "out") await expect.poll(label).toBe("Show Patio");
         else await expect.poll(() => edgeOf(el, "end")).toBeNull();
-        for (let i = 0; i < 10; i++) {
-          strip.scrollLeft += step;
-          await nextFrames();
-        }
+        strip.scrollLeft += 10 * step;
+        await nextFrames();
         if (way === "out") await expect.poll(label).toBe("Show Patio");
         else await expect.poll(() => edgeOf(el, "end")).toBeNull();
       } finally {
@@ -932,6 +943,36 @@ describe("till-floor-screen: the zone strip's edge", () => {
       expect(edgeOf(el, "end")?.getAttribute("aria-label")).toBe(
         "Show Upstairs private dining room and terrace",
       );
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
+
+  it("brings a tab wider than the strip to its start at once, even on a strip that scrolls smoothly", async () => {
+    const wide = [
+      zone("z1", "Inside", 0),
+      zone("z2", "Upstairs private dining room and terrace", 1),
+    ];
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(320, 844);
+    try {
+      const { el, host } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+        zones: wide,
+        tables: [seated("t1", "z1"), seated("t2", "z2", { readyToServe: 2 })],
+        now,
+        reducedMotion: false,
+      });
+      await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
+      const strip = stripOf(el);
+      const tab = () => tabOf(el, "z2").closest(".zone-tab")!.getBoundingClientRect();
+      const box = () => paddingBox(strip);
+      strip.scrollLeft += Math.ceil(tab().left - box().left) + 10;
+      await expect.poll(() => edgeOf(el, "start")).not.toBeNull();
+      strip.style.scrollBehavior = "smooth";
+      edgeOf(el, "start")!.click();
+      const reach = tapProbe(host, "calc(var(--wt-space-1) * 1.5)");
+      expect(tab().left - reach).toBeGreaterThanOrEqual(box().left - 1);
+      expect(tab().left - reach).toBeLessThanOrEqual(box().left + 1);
     } finally {
       await page.viewport(viewport.width, viewport.height);
     }

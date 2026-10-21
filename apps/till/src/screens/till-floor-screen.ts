@@ -161,7 +161,11 @@ function shownPartyName(table: TableState): string | undefined {
   return name === undefined || name === shownUnder(table) ? undefined : name;
 }
 
-const TAB_PULSES: readonly FloorPulse[] = ["forgotten", "overdue", "fire"];
+const PULSE_OF: Partial<Record<MapKind, FloorPulse>> = {
+  forgotten: "forgotten",
+  overdue: "overdue",
+  fire: "fire",
+};
 
 const RING_OF: Partial<Record<TableStateKind, FloorRing>> = {
   forgotten: "forgotten",
@@ -2445,9 +2449,9 @@ export class TillFloorScreen extends LitElement {
       // Centred when the spare room is under a ring's at each end: the scroll lands on whole pixels,
       // so a tab within a pixel of the strip's width lands as one wider than it.
       const inset = spare < 1 ? aim : Math.min(aim, Math.max(spare / 2, spare - ring));
-      strip.scrollLeft += box.left - (left + inset);
+      strip.scrollTo({ left: strip.scrollLeft + box.left - (left + inset), behavior: "instant" });
     } else {
-      tab.scrollIntoView({ inline: "nearest", block: "nearest" });
+      tab.scrollIntoView({ inline: "nearest", block: "nearest", behavior: "instant" });
     }
     // A tab wider than the strip can go from cut at both ends to cut at one with no callback.
     this.#placeTabs();
@@ -2545,7 +2549,7 @@ export class TillFloorScreen extends LitElement {
     filled: string;
   } {
     const moving = !this.#prefersReducedMotion();
-    const pulse = TAB_PULSES.find((kind) => kind === mark?.kind) ?? null;
+    const pulse = (mark === undefined ? undefined : PULSE_OF[mark.kind]) ?? null;
     const filled = mark?.kind === "forgotten" && !moving ? " filled-forgotten" : "";
     return { pulse, moving, filled };
   }
