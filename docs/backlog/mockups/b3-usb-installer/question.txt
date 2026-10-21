@@ -16,9 +16,10 @@ Pictures: 1-unattended-install.png, 2-existing-box.png, 7-till-and-dashboard.png
 (then 3, 6, 8, 9)
 
 Example: Monday 10:00, the deli's new box arrives with no screen. Marta plugs in the cable and the
-stick and presses the power button. At 10:01 the installer has copied itself into memory and
-written the box's setup code onto the stick; from then on the stick may come out (the card gives the
-time). It checks the box has its security chip and Secure Boot switched on. By 10:02 it has the
+stick and presses the power button. At 10:01 the installer has copied itself into memory, checked
+the box has its security chip and Secure Boot switched on and holds no Waitron, and written the
+box's setup code onto the stick; from then on the stick may come out (the card gives the time). By
+10:02 it has the
 internet time and has fetched and checked Waitron 1.4.0; at 10:03 it erases the Windows the box came
 with (60 seconds after the check — nobody sees it). She takes the stick out at 10:05 and the box
 restarts itself at 10:07, seals its disk key into its chip and restarts once more to prove it. At
@@ -26,7 +27,7 @@ restarts itself at 10:07, seals its disk key into its chip and restarts once mor
 WAITRON/codigos-de-configuracion.txt (read on the shop laptop), and sets up the venue. The recovery
 sheet the wizard prints now also carries the disk's recovery key. Friday: a power cut, and someone has put the stick back in. The
 box starts from the stick, sees «Bar Santet», waits 15 seconds, and starts its own disk: one extra
-restart, no erase.
+restart, no erase, and no new code written to the stick.
 
 The calls you might want to overturn (all mine, all in the design):
   - a stick in a Waitron box STARTS the box after 15 seconds rather than stopping (your guard 3,
@@ -50,8 +51,8 @@ The calls you might want to overturn (all mine, all in the design):
 Found on the way: Debian 13 cannot unlock its main disk from the chip out of the box (an open
 Debian bug), so the box uses a different startup tool (dracut). The obvious chip setting would let
 any Debian stick unlock the disk, and systemd's own protections need a kind of signed kernel this box
-cannot use, so Waitron adds a small step of its own, and the first build must prove the result with
-eight experiments, each with a control. One case stays open: the day Debian moves to Microsoft's
+cannot use, so Waitron adds a small step of its own, and the first builds must prove the result with
+nine experiments, with controls where a broken test would look like a pass. One case stays open: the day Debian moves to Microsoft's
 newer certificate, that update waits for a person with the recovery key until the first build
 settles how to take it unattended.
 
@@ -66,11 +67,12 @@ Picture: 11-q2-practise.png (and 10-setup-code.png, lower half)
 Example: the deli gets its box on Monday and wants to practise with its real menu before it starts
 filing with AEAT on the 1st.
 
-  A (recommended) — a stick box offers only Live, restore or spare (like a production box). The deli
-    practises with Prepare on another computer (installed by hand with waitron.sh), then brings its
-    menus and layouts across at Live setup with the existing configuration copy. The box never holds
-    a practice database. This also fixes W60's "production box offers Demo and Prepare, then fails".
-  B — the stick box offers Prepare too, switching itself to pre-production. When the deli is ready it
-    exports its configuration, reinstalls the box from the stick, and brings the menus across at Live
-    setup. Practice happens on the real box and screen, at the cost of one reinstall before going live.
+  A (recommended) — a stick box offers only Live, restore or spare. The deli practises with Prepare
+    on another computer (installed by hand with waitron.sh), then brings its menus and layouts across
+    at Live setup with the existing configuration copy. The box never holds a practice database.
+  B — the stick box offers Prepare too. When the deli is ready it exports its configuration,
+    reinstalls the box from the stick, and brings the menus across at Live setup. Practice happens on
+    the real box and screen, at the cost of one reinstall before going live.
+  (Either way, a box installed by hand and started in production stops offering Demo and Prepare —
+  W60's fix.)
   Stop here — I'll write.

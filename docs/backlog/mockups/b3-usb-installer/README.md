@@ -13,6 +13,6 @@ Redrawn 2026-10-21 for the revision (the owner's five answers and W60), from HTM
 6. `6-stick-and-disk.png` — the stick's WAITRON folder, and the encrypted disk.
 7. `7-till-and-dashboard.png` — «Panel» in the till's menu, «Volver a la caja» in the dashboard.
 8. `8-box-settings.png` — Settings → Este equipo, and maintenance access.
-9. `9-recovery-key.png` — the disk's printed recovery key, and the prompt that asks for it.
-10. `10-setup-code.png` — the setup code: from a phone, on the stick, and a production box's mode screen.
+9. `9-recovery-key.png` — the disk's recovery key as a section of the recovery sheet, and the prompt that asks for it.
+10. `10-setup-code.png` — the setup code: from a phone, on the stick, and a stick box's mode screen.
 11. `11-q2-practise.png` — question 2's two options.

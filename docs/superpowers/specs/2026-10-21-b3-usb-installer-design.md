@@ -181,10 +181,12 @@ stick, so the card names the boot-menu key for the box model Waitron sells (slic
 the install has been checked:
 
 1. the installer starts and copies itself into memory;
-2. it makes the box's **setup code** and writes it onto the stick (§12), then says «Ya puedes quitar
-   el USB» — the one moment the stick may come out, used by guard 2, §5.6 and the card;
-3. it reads the disk (guard 3, §5.2) and checks the box: a security chip switched on (§7.7) and
-   Secure Boot switched on (§15) — a box that fails either is refused here, untouched;
+2. it reads the disk (guard 3, §5.2) and checks the box: one internal disk, a security chip switched
+   on (§7.7) and Secure Boot switched on (§15). A box that fails a check is refused here, untouched;
+   a box that already holds Waitron goes guard 3's way and writes nothing to the stick;
+3. only for a box it is going to install (or one whose reinstall a person has confirmed), it makes
+   the box's **setup code** and writes it onto the stick (§12), then says «Ya puedes quitar el USB»
+   — the one moment the stick may come out, used by guard 2, §5.6 and the card;
 4. it finds the network (§5.3), sets the clock (§5.4), downloads the release and checks it (§5.4);
 5. only then, the 60-second wait (§5.2), the erase and the write (§5.5);
 6. the restart, once the stick is out (guard 2).
@@ -201,13 +203,15 @@ the install has been checked:
 2. **The stick comes out before the box restarts.** The installer runs from memory (§4 item 1).
    When it has finished writing and checking the disk, it restarts into the box only once the stick
    is gone; until then it waits, saying so on the screen and the status page. A stick taken out any
-   time after «Ya puedes quitar el USB» (step 2 above) changes nothing: the install carries on and
+   time after «Ya puedes quitar el USB» (step 3 above) changes nothing: the install carries on and
    restarts by itself when done. A stick taken out before that just stops a start that had not
    touched the disk.
 3. **A stick that finds Waitron on the disk does nothing unless a key is pressed.** The installer
-   recognises the box's own disk by markers set at install and never rewritten afterwards — the
+   recognises the box's own disk by markers set at install and never changed afterwards — the
    partition's type and name, and the encrypted container's "subsystem" field — all readable
-   without the key (P45). **It also recognises every layout an earlier installer wrote.** If it
+   without the key (P45). (Every header update rewrites the "subsystem" bytes with the same value;
+   an interrupted header write is covered by LUKS2's second copy of the header, and slice 2 tests
+   one.) **It also recognises every layout an earlier installer wrote.** If it
    finds one, it shows «Este equipo ya tiene Waitron («Bar Santet»). Se inicia en 15 segundos.
    Pulsa una tecla para reinstalarlo.» on any screen, waits 15 seconds, then **starts the installed
    box**: it sets the firmware's one-time boot choice to the box's own disk (`BootNext`, P47) and
@@ -236,7 +240,8 @@ the install has been checked:
 ### 5.2 A box that holds anything else
 
 A disk the installer **can classify** as holding no Waitron — empty, Windows (BitLocker-encrypted
-Windows included, which identifies itself as such), or another system it recognises — is erased
+Windows included, which the installer is expected to recognise by its on-disk signature — the
+plan's to show), or another system it recognises — is erased
 with no question, because the owner chose a fully unattended install (§18 Q1). **One safety, my
 call:** the erase waits 60 seconds after the release has been downloaded and checked, and a screen,
 if any, shows «Se borrará «Windows» en el disco Samsung SSD 980 (512 GB) en 60 segundos. Pulsa una
@@ -269,7 +274,8 @@ is left exactly as it was.
    fixes in that network's settings (NetworkManager picks some 10.42.x.1 unless told, P51). The
    network **passes nothing on**: a phone on it reaches the installer's page and nothing else — not
    the internet and not a cable's network — because a "shared" network would otherwise route its
-   members onward (P51). The page lists the networks the box can see and asks for the venue's Wi-Fi
+   members onward (P51); the installer builds it without NetworkManager's sharing, or with a firewall
+   rule that forwards nothing (the plan picks). The page lists the networks the box can see and asks for the venue's Wi-Fi
    password — the one secret that crosses the open network, typed once, within radio range, for the
    minute it takes. The installer then closes its network and joins the venue's; if that fails, it
    opens its network again and the page says the password was wrong. (Most Wi-Fi cards cannot offer
@@ -314,8 +320,8 @@ which an 8 GB box has if the disk stays under 2 GiB (§13, §16); slice 2 measur
 ### 5.5 Installing, and the restart
 
 The installer erases the disk, lays out the boot partition and the encrypted container (§6, §7),
-writes the ready-made disk into it with the box's setup code (§12), grows it to fill the disk,
-checks what it wrote, sets the boot order (guard 1), and then waits for the stick to be out
+makes the container fill the disk, writes the ready-made filesystem into it with the box's setup
+code (§12), checks what it wrote, sets the boot order (guard 1), and then waits for the stick to be out
 (guard 2). Picture 4.
 
 ### 5.6 Where the person sees progress
@@ -328,7 +334,7 @@ checks what it wrote, sets the boot order (guard 1), and then waits for the stic
   but the Wi-Fi form, so a stranger on the network who finds it learns only that a box is being
   installed. **My call.**
 - **The printed card**, for a person with neither: plug in, start, take the stick out after the time
-  the card states (measured in slice 2, so that it falls safely after step 2's «Ya puedes quitar el
+  the card states (measured in slice 2, so that it falls safely after step 3's «Ya puedes quitar el
   USB»), and open `waitron.local` from a phone or computer on the same network after the time it
   states.
 
@@ -380,8 +386,8 @@ encrypted part of a disk; **btrfs** is a Linux filesystem that can take instant 
 **The whole venue lives on one encrypted container whose key the box's security chip (a TPM 2.0)
 gives only to the box's own start-up.** A normal start unlocks with no password; the disk taken out,
 or the box started from any other stick — this installer included — shows only scrambled data. A
-**recovery key**, printed at setup and kept with the venue's recovery sheet, opens it when the chip
-will not (§7.5).
+**recovery key**, printed at setup on the venue's recovery sheet, opens it when the chip will not
+(§7.5).
 
 ### 7.1 What the chip checks, and why the obvious setting is not enough
 
@@ -417,16 +423,25 @@ settled by the experiments below and not by reading:
    systemd's own ways of doing this (boot-phase markers in register 11, and measuring the opened
    disk into register 15) run only when the kernel was started as a signed "unified kernel image",
    which this box cannot use (P56, P39). So **a small hook of Waitron's own in the startup image**,
-   straight after its one attempt to unseal the key — whether that attempt worked or not, and
-   before any password prompt — adds a fixed value to an otherwise unused register (with
-   `tpm2_pcrextend`, from `tpm2-tools`, which Debian 13 ships, P32). The key is sealed to that
-   register's value *before* the hook runs, so nothing that runs after it — a prompt, a fake disk,
-   an attacker's program — can unseal the key again on that start. The value sealed to is computed,
-   not read live, at first start (§7.3). Reasoning, for slice 1 to show by experiment (c).
-4. **Register 5 too, the partition table of the disk the box started from** (P37): a stick's
-   partition table differs from the box's, and after first start nothing changes the box's own, so
-   it keeps other sticks out in both the normal seal and the temporary one (§7.4). Reasoning, for
-   slice 1 to test.
+   straight after its one attempt to unseal the key — whether that attempt worked or not — adds a
+   fixed value to an otherwise unused register (register 15, which nothing else writes on this
+   start, P56; with `tpm2_pcrextend`, from `tpm2-tools`, which Debian 13 ships, P32). The key is
+   sealed to that register's value *before* the hook runs, so nothing that runs after it — a
+   prompt, a fake disk, an attacker's program — can unseal the key again on that start. The value
+   sealed to is computed, not read live, at first start (§7.3). Two consequences, both required:
+   - **The chip unlock runs with its own password prompt switched off** (`headless`, P42), because
+     systemd's unlock tries the chip and then asks for a password in one step; the recovery-key
+     prompt (§7.5) is a separate step of Waitron's own, after the hook.
+   - **Every way out of the unlock stage extends the register**, the failure paths included, and the
+     startup image offers no emergency shell: dracut offers one by default (P59), so the box's kernel
+     command line carries `rd.shell=0 rd.emergency=reboot` — which register 8 records, so it cannot be
+     changed without breaking the seal (P36).
+   Reasoning, for slice 1 to show, by experiments (c) and (i).
+4. **Register 5 too, the partition table of the disk the box started from** (P37): an ordinary
+   stick's partition table (a Debian live stick, this installer) differs from the box's, and nothing
+   changes the box's own after install (§5.5), so it keeps ordinary sticks out in both the normal
+   seal and the temporary one (§7.4). It does **not** keep out a stick made by someone who copied the
+   box's partition table onto it — the table is not encrypted. Reasoning, for slice 1 to test.
 5. **The recovery-key prompt is safe only because of item 3.** The box unlocks unattended or stops
    at a recovery-key prompt (§7.5); the prompt is the fallback the fake-disk attack uses, and item 3
    is what leaves it nothing to collect.
@@ -442,17 +457,18 @@ Two Debian facts shape the build, both sourced:
   `systemd-pcrlock`, which predicts registers, is marked experimental in Debian 13 and says nothing
   about Debian's loader (P38).
 
-**Slice 1's acceptance experiments**, each with the result that would fail it and, where a broken
+**The acceptance experiments** (slices 1 and 6), each with the result that would fail it and, where a broken
 probe would look like a pass, a control in the same run:
 
 - **(a)** the box's own restart unlocks with nobody present — run on the second and later restarts,
   not only the first.
 - **(b)** this installer and a Debian 13 live stick both fail to unlock (failing result: either
-  unlocks). **Control:** the box also carries a deliberately weak test seal (register 7 only), and
-  the same command from the same live stick must **succeed** against it; a command that fails
-  against both proves nothing.
+  unlocks). **Control:** for this run only, the box also carries a deliberately weak test seal
+  (register 7 only), and the same command from the same live stick must **succeed** against it; a
+  command that fails against both proves nothing.
 - **(c)** the fake-disk attack of P35 fails against the real seal (failing result: the attacker's
-  program reads the key). **Control:** the same attack succeeds against the weak test seal.
+  program reads the key). **Control:** the same attack, in the same run, succeeds against the weak
+  test seal.
 - **(d)** a kernel update followed by a restart unlocks (§7.4), with registers 8 and 9 recorded
   before and after and required to differ — an "update" that changed neither tests nothing.
 - **(e)** a power cut between installing that update and the planned restart still unlocks.
@@ -465,10 +481,14 @@ probe would look like a pass, a control in the same run:
   recorded. A newer loader can record a stricter revocation level in the firmware (it measures its
   revocation data into register 7, P34), which could change register 7 on later starts or stop an
   older loader starting — an inference, which (h) tests.
+- **(i)** a start with the encrypted container missing opens no console, and the chip refuses an
+  unseal from it (§7.2 item 3).
 
-The weak test seal is removed when slice 1's tests end; it never ships. The CI virtual machine runs
-(a), (b), (d), (f) and (g) on every image change with a virtual TPM; (c), (e) and (h) run on the
-real box in slice 6.
+**The weak test seal exists only during (b) and (c)** and is removed before every other experiment,
+and every experiment that expects an unlock records **which seal opened the disk** and fails if it
+was not the real one — otherwise (a), (d), (e) and (g) would pass with the real seal broken, and (f)
+could never reach its prompt. It never ships. The CI virtual machine runs (a), (b), (d), (f), (g)
+and (i) on every image change with a virtual TPM; (c), (e) and (h) run on the real box in slice 6.
 
 ### 7.3 How a box gets its key
 
@@ -478,15 +498,19 @@ The installer cannot seal the key to the box's own start-up — it is a differen
 1. The installer creates the container with a fresh random key and **one empty passphrase** as its
    only way in, and writes the ready-made disk into it.
 2. On the box's **first start**, before anything else runs, the box opens the container with the
-   empty passphrase and, **in this order**: makes every first-start change that touches a file the
-   boot loader reads (a fresh machine identity, and any rebuild of the startup image it causes);
-   seals a key into its own chip against its own start-up (§7.2); creates the **recovery key**
-   (§7.5); removes the empty passphrase; and **restarts once** to prove the seal opens with nobody
-   present (experiment (a), on every box). A box whose test restart stops at the recovery prompt
-   holds no venue yet, and is simply reinstalled.
+   empty passphrase, seals a key into its own chip against its own start-up (§7.2), creates the
+   **recovery key** (§7.5), and **restarts once** to prove the seal opens with nobody present
+   (experiment (a), on every box). Only when that restart has unlocked **through the chip** — which
+   it records — does it remove the empty passphrase. A seal that fails therefore falls back to the
+   empty passphrase, the box starts, and the failure page below says so; nothing waits at a prompt.
+   **First start changes no file the boot loader reads** — those files are what the seal records
+   (P36), and a change made after reading them would be sealed to the old ones — so the fresh machine
+   identity and anything else first start writes stay out of the startup image; slice 1 checks it by
+   comparing the boot partition before and after first start. **My call.**
 3. **Waitron does not start while an empty passphrase remains.** The first-start service refuses.
    This is the step that makes "no venue data on a disk anyone can open" true, so it is a check, not
-   an order of steps. **Where a person sees it:** the box's screen, and — for a box with no screen —
+   an order of steps. A box in that state holds no venue, and is simply reinstalled. **Where a
+   person sees it:** the box's screen, and — for a box with no screen —
    a fixed page the box's host service (§8) answers at `waitron.local` in that state, naming what
    failed and showing no secret. **My call.**
 
@@ -545,8 +569,11 @@ first start (§7.3).
   first start, which makes the disk key, comes before setup. So the box hands the key, once, to
   Waitron, the sheet gains a section «Clave de recuperación del disco» with the key as text and a QR
   code, and the box's host service deletes its own copy when the wizard's existing "kept"
-  confirmation is given. A setup path that ends without that sheet (the plan lists which, if any)
-  prints the disk key as a page of its own instead. It is never stored in the venue database: the
+  confirmation is given. **Restore and spare probably end without a new sheet** — a restore uses the
+  sheet it already has ("find the recovery sheet whose key name matches that copy",
+  `docs/operations/hour-recovery.md:3-4`) — so on those paths the wizard prints the disk key as a page
+  of its own (the plan confirms which paths). **A later sheet does not carry the disk key** (the box
+  no longer has it), so the section says «Guarda esta hoja aunque otra la sustituya». It is never stored in the venue database: the
   database streams to the owner's bucket once one is set up, and CLAUDE.md §3 keeps anything that
   works as a key out of it ("Anything that works as a live login is stored as a hash"). Until it is
   printed, the host service keeps it readable only by itself. **My call** on the handover.
@@ -558,9 +585,12 @@ first start (§7.3).
   recovery key. **It seals itself to its chip again only if** the kernel, the startup image and the
   loader's configuration match fingerprints the box recorded inside the encrypted disk when it last
   built them itself; otherwise it does not reseal and raises a different alert, «Han cambiado los
-  archivos de arranque». The startup image sits unencrypted and unsigned (§6; "No code signing
-  protects initrd", P58), so someone who swapped it would make the chip refuse, collect the
-  recovery key typed into the swapped image, and — without this check — be trusted from then on.
+  archivos de arranque». That stops the box itself trusting changed start-up files — after an
+  accident, or after someone swapped them and left. It does **not** stop a swapped startup image that
+  has been typed the recovery key: the startup image sits unencrypted and unsigned (§6; "No code
+  signing protects initrd", P58), and once it holds the key it holds the disk. The real defence is a
+  person thinking before typing it, so the prompt says first when the start-up files differ from the
+  box's last record (reasoning; the prompt can only check what it can read before the disk opens).
   **My call.**
 - **A dead box:** the venue's data comes back from its backups onto a new box installed from the
   stick, which starts a new fiscal chain — the owner's chosen posture (§0). The recovery key adds
@@ -584,7 +614,7 @@ every receipt anyway.
 
 ### 7.7 A box with no security chip, or with Secure Boot off
 
-**The installer refuses**, before it erases anything (§5 step 3), and says why on the screen and the
+**The installer refuses**, before it erases anything (§5 step 2), and says why on the screen and the
 status page:
 
 - **No security chip switched on:** «Este equipo no tiene chip de seguridad (TPM) activado. Actívalo
@@ -612,10 +642,12 @@ installer would add, such as the clock service (P23; inference, not built):
   §5.5), loaded into Docker's store during the build; nothing is downloaded on first start. The
   box's `compose.yml` names those tags, never `:main`.
 - **dracut and the tools that unlock the disk from the chip** (§7.2).
-- **A first-start service**, which runs before Waitron on the first start only. In §7.3's order:
-  it makes a fresh machine identity (`/etc/machine-id`, as systemd asks of a generic image, P30 —
-  two boxes from one stick on one switch, A947, must not share one), seals the disk key, removes the
-  empty passphrase and restarts once to prove the seal (§7.3). Then it grows the filesystem, and
+- **A first-start service**, which runs before Waitron on the first start only. It makes a fresh
+  machine identity (`/etc/machine-id`, as systemd asks of a generic image, P30 — two boxes from one
+  stick on one switch, A947, must not share one), kept out of the startup image; seals the disk
+  key, restarts once to prove the seal, and only then removes the empty passphrase (§7.3). Then it
+  grows the filesystem inside the container (the installer already made the container fill the
+  disk, §5.5, so the partition table, which register 5 records, does not change), and
   checks that AppArmor (the Linux security module that confines the print agent) has loaded the
   print agent's profile
   before naming it in `.env` — CLAUDE.md §3's rule ("named through `WAITRON_PRINT_AGENT_APPARMOR`
@@ -833,7 +865,7 @@ the wizard's generic failure" (`docs/backlog.md:715-718`; the refusal is
   stick is for venues, and CLAUDE.md §5 says a pre-production database is never promoted. It does
   **not** start in production: like every blank box it starts unprovisioned and pre-production,
   and reaches production the way any box does today — "production is only ever reached by an owner
-  choosing it in the wizard" (`.github/workflows/image-smoke.yml:190-191`). The stick-installed
+  choosing it in the wizard" (`.github/workflows/image-smoke.yml:191-192`). The stick-installed
   image tells the wizard only which choices to draw (a marker the plan places; the server reads its
   environment from its own process and `trading.env` in the state folder,
   `apps/server/src/box-env.ts:7`, never from compose's `.env`, which passes no `WAITRON_ENV` to the
@@ -851,22 +883,26 @@ first-come claim today (`packages/provisioning/src/first-setup-state.ts:507-515`
 routes are unauthenticated by design (`apps/server/src/setup-api.ts:613`).
 
 - **Every box gets a setup code**: ten digits, **made by the installer** at the start of the install
-  (§5 step 2), written onto the stick and onto the new disk, where the box's host service hands it
+  (§5 step 3), written onto the stick and onto the new disk, where the box's host service hands it
   to Waitron on the first start; the server keeps it only as a hash. **Every request that changes
   anything while the box is not yet set up needs the code** — every `POST /setup-api/…` route
   (among them provision, adopt, the restores, the fiscal test and resetting an incomplete adoption,
   `apps/server/src/setup-api.ts:745`, `:776`, `:951`, `:1040`, `:1103`), the first-setup claim, and
   A917's naming form, which is the setup's first page (§17); so the code is asked on that first
   page. Wrong codes are counted and
-  slowed like a PIN. The code stops working once setup is complete. A failed install leaves a line
-  for a code that never reached a disk; the newest line for a box's serial number is the one that
-  counts. How the dev stack (`wa-wt demo`) and the setup routes' tests supply or skip the code is the
+  slowed like a PIN. The code stops working once setup is complete. A stick put back into a box
+  that already holds Waitron writes no line (§5 step 2); an install that fails after step 3 leaves a
+  line for a code that never reached a disk, and the next install writes a newer one — the newest
+  line for a box's serial number is the one that counts. Slice 2 tests a stick put back into a box
+  installed but not yet set up: the stick's newest line must still open the wizard. Whether the
+  read-only previews (`/setup-api/restore/preview`, `:1223`, and the like) ask for the code too is
+  the plan's to decide. How the dev stack (`wa-wt demo`) and the setup routes' tests supply or skip the code is the
   plan's.
 - **Where the person finds it:**
   - **on the box's own screen**: the wizard there already holds it (§9), so the person at the box
     types nothing;
   - **on the stick**: the installer writes it into `WAITRON/codigos-de-configuracion.txt` with the
-    date, time and the box's serial number, before it says the stick can come out (§5 step 2) — so a box
+    date, time and the box's serial number, before it says the stick can come out (§5 step 3) — so a box
     with no screen is set up by reading the stick on any computer. A stick that installs two boxes
     (A947) holds both codes, each named by its box;
   - **for a box installed by hand**, `waitron.sh` prints it in its closing banner and on the
@@ -888,8 +924,8 @@ new CI job:
 2. **Boots the installer in a virtual machine with Secure Boot on and a virtual TPM, installs the
    new disk onto a blank virtual disk, takes the virtual stick out, and lets it restart**; then
    waits for `/setup-api/status` to answer 200 — the same check the image smoke test makes today
-   (`.github/workflows/image-smoke.yml:180-206`) — and runs §7.2's experiments (a), (b), (d), (f)
-   and (g). It saves a screenshot of the box's screen and fails if the setup wizard is not on it: a box
+   (`.github/workflows/image-smoke.yml:180-206`) — and runs §7.2's experiments (a), (b), (d), (f),
+   (g) and (i). It saves a screenshot of the box's screen and fails if the setup wizard is not on it: a box
    that boots to a blank screen passes every other check (CLAUDE.md §2, "a bundle that renders
    nothing passes anyway"). It also restarts once with the virtual stick left in and checks that
    the box comes back trading (guard 3); boots the installer once with Secure Boot off and once with
@@ -1031,8 +1067,8 @@ file, outside the repository):
 3. **The box's screen:** "boot straight into the dashboard after setup, make it easy to add itself
    as a till device, have a config option to specify that it should boot into the till interface …
    and the till menu should include a link to the dashboard." → §9.
-4. **Encrypt in B3, before go-live**, with the key in the chip and a recovery key kept with the
-   recovery sheet; the maintenance password from the box's own start-up, not from the stick. → §7, §11.
+4. **Encrypt in B3, before go-live**, with the key in the chip and a recovery key on the recovery
+   sheet; the maintenance password from the box's own start-up, not from the stick. → §7, §11.
 5. **Wi-Fi:** wired first, the box's own hotspot as the fallback, open or with one password shared by
    every box: "At that stage we're not protecting anything." → §5.3, §10.
 
@@ -1056,8 +1092,9 @@ file, outside the repository):
 
 1. **The ready-made disk** — `mkosi` build of §6, §7 and §8 in CI on every change to its inputs,
    with dracut, the hook of §7.2 item 3, the first start's sealing and test restart, the recovery
-   key's creation and the name tag (§7.6); booted in a virtual machine with a virtual TPM to
-   `/setup-api/status` 200 and a screenshot. Runs §7.2's experiments (a), (b), (d), (f), (g).
+   key's creation and the name tag's format (§7.6; the host service that writes it is slice 3);
+   booted in a virtual machine with a virtual TPM to `/setup-api/status` 200 and a screenshot. Runs
+   §7.2's experiments (a), (b), (d), (f), (g), (i).
    Measures:
    the compressed size, SQLite on btrfs, a rollback of `@volumes` with `@logs` mounted inside it on
    the encrypted disk, the cost of re-encrypting on first start (§7.3), and a stick-installed box's
@@ -1069,13 +1106,14 @@ file, outside the repository):
    the stick's size.
 3. **The box's screen, host service and network** — `cage` and Chromium (§9), the host service's
    socket (§8), the start-screen setting, «Usar esta pantalla como caja», «Panel» and «Volver a la
-   caja», the traps of §9, the first-start failure page (§7.3), and Settings → Red (§10) — in the
+   caja», the traps of §9, the first-start failure page (§7.3), writing the name tag (§7.6), and
+   Settings → Red (§10) — in the
    go-live minimum because a box installed over a phone's connection has no other way onto the
    venue's network but a cable (§5.3).
 4. **The rest of the box's settings and maintenance access** — §10's other rows and §11.
 5. **Publishing per release** — §13 steps 3–5, after A940's release slices.
 6. **On the real box** — the first install on the chosen model: Secure Boot, the TPM, the boot-menu
-   key, guard 1 and guard 3 on its firmware, the clock, §7.2's experiments (c) and (e), the traps,
+   key, guard 1 and guard 3 on its firmware, the clock, §7.2's experiments (c), (e) and (h), the traps,
    a power cut with the stick put back in.
 7. **The release check** — §14's service, handed to A950.
 8. **Setup on a stick box** (W60) — §12: the setup code on every setup request, A917's naming form
@@ -1112,7 +1150,8 @@ P1–P31 were fetched 2026-10-21 with `curl`; their sources' own words are quote
 `~/waitron-campaign/b3-design/research-external.md` (outside the repository), section numbers given.
 P32–P55 and P58 were fetched for the revision, the same day, the same way; quoted in
 `~/waitron-campaign/b3-design/research-external-2.md`, finding numbers (R…) given. P56 and P57 were
-fetched by the revision's review and are quoted in `~/waitron-campaign/b3-design/review-r1.md`.
+fetched by the revision's review and are quoted in `~/waitron-campaign/b3-design/review-r1.md`; P59
+by its second review, in `review-r2.md`.
 
 | # | Claim | Source (section of the research file) |
 | --- | --- | --- |
@@ -1147,10 +1186,10 @@ fetched by the revision's review and are quoted in `~/waitron-campaign/b3-design
 | P29 | "A restart policy only takes effect after a container starts successfully" | https://docs.docker.com/engine/containers/start-containers-automatically/, fetched 2026-10-21 by the second review |
 | P30 | `/etc/machine-id` "should be either missing or an empty file in the generic file system image" | machine-id(5), freedesktop.org, fetched 2026-10-21 by the second review |
 | P31 | "Live restore allows you to keep containers running across Docker daemon updates, but is only supported when installing patch releases (YY.MM.x), not for major (YY.MM) daemon upgrades." | https://docs.docker.com/engine/daemon/live-restore/, fetched 2026-10-21 by the third review |
-| P32 | Debian 13 has systemd 257.13 and `tpm2-tools` 5.7; its `systemd-cryptenroll --tpm2-pcrs=`: "If not specified, the default is to use PCR 7 only"; systemd 258 changed the default to no registers | packages.debian.org/trixie/systemd and tpm2-tools; manpages.debian.org trixie systemd-cryptenroll(1); systemd NEWS "CHANGES WITH 258" (R1, R2, R5, R7) |
+| P32 | Debian 13 has systemd 257.13 and `tpm2-tools` 5.7, whose file list includes `/usr/bin/tpm2_pcrextend` (checked by the revision's second review); its `systemd-cryptenroll --tpm2-pcrs=`: "If not specified, the default is to use PCR 7 only"; systemd 258 changed the default to no registers | packages.debian.org/trixie/systemd and tpm2-tools; manpages.debian.org trixie systemd-cryptenroll(1); systemd NEWS "CHANGES WITH 258" (R1, R2, R5, R7) |
 | P33 | Register meanings: 4 "Boot loader and additional drivers"; 5 "GPT/Partition table"; 7 "SecureBoot state", which "changes when … firmware certificates (PK, KEK, db, dbx, …) are updated"; 8 GRUB "Commands and kernel command line"; 9 GRUB "All files read (including kernel image)"; 11 "systemd-pcrphase … Boot phase strings" | uapi-group.org Linux TPM PCR Registry (R3) |
 | P34 | Shim: "Any certificate in one of our certificate databases that matches a binary we try to load will be extended into PCR7"; "the Authenticode hash of the binary being loaded will be extended into PCR4" | rhboot/shim README.tpm (R9); EDK2 DxeImageVerificationLib (R10) |
-| P35 | "Only binding to PCRs measured pre-boot (PCRs 0-7) opens a vulnerability from rogue operating systems … The rogue root filesystem … is still able to receive the decryption key"; "the initrd will fall back to a password prompt, if TPM unlocking fails" | ArchWiki systemd-cryptenroll (R11); oddlama.org, 2025-01-16 (R12) |
+| P35 | "Make sure Secure Boot is active and in user mode when binding to PCR 7, otherwise, unauthorized boot devices could unlock the encrypted volume"; "Only binding to PCRs measured pre-boot (PCRs 0-7) opens a vulnerability from rogue operating systems … The rogue root filesystem … is still able to receive the decryption key"; "the initrd will fall back to a password prompt, if TPM unlocking fails" | ArchWiki systemd-cryptenroll (R11); oddlama.org, 2025-01-16 (R12) |
 | P36 | GRUB "will log each command executed and each file loaded into the TPM event log"; commands and kernel command line into 8, files into 9; Debian builds GRUB's `tpm` module into its signed images | Debian 13 grub2 `docs/grub.texi`; `debian/build-efi-images` (R14, R15) |
 | P37 | Firmware measures the GPT of the disk it booted from into register 5 | EDK2 DxeTpm2MeasureBootLib; systemd-pcrlock(8) (R16, R17) |
 | P38 | `systemd-pcrlock`: "this command is experimental for now"; its page does not mention GRUB | manpages.debian.org trixie systemd-pcrlock(8) (R18) |
@@ -1162,15 +1201,16 @@ fetched by the revision's review and are quoted in `~/waitron-campaign/b3-design
 | P44 | `Encrypt=tpm2` formats a new partition as LUKS2; "This option has no effect if the partition already exists"; the empty key "is useful for setting up encrypted partitions during early first boot that receive their user-supplied password only in a later setup step" | repart.d(5), systemd-repart(8), Debian 13 (R28) |
 | P45 | The LUKS2 binary header "contains … basic information (labels)", usable "the same way as a filesystem label"; "An attacker with physical access … can modify … the visible metadata" | LUKS2 On-Disk Format Specification 1.1.4 (R29) |
 | P46 | "Most retail PC motherboards … ship with TPM turned off by default"; the option may be labelled "Intel PTT" or "AMD fTPM" | Microsoft, "Enable TPM 2.0 on your PC" (R30) |
-| P47 | `BootOrder`: "The boot manager tries to boot the first active entry in this list"; `BootNext` "supersedes BootOrder for one boot only, and is deleted by the boot manager after first use" | efibootmgr(8), Debian 13; UEFI 2.10 §3.1.2 via the Wayback Machine (R33, R34) |
+| P47 | `BootOrder`: "The boot manager tries to boot the first active entry in this list"; `BootNext` "supersedes BootOrder for one boot only, and is deleted by the boot manager after first use"; the removable-media default path is used "any time the BootOrder variable does not exist or only points to nonexistent boot options, or if no entry in BootOrder can successfully be executed" | efibootmgr(8), Debian 13; UEFI 2.10 §3.1.2 via the Wayback Machine (R33, R34) |
 | P48 | "Some implementations ignore the boot order altogether"; the removable path `\EFI\boot\bootx64.efi` "All firmware implentations have to use … to be able to run an OS installer" | wiki.debian.org/UEFI (R35); shim README.fallback (R36) |
 | P49 | Chromium `--kiosk`: "In kiosk mode, we always want to be fullscreen"; no infobars in kiosk mode, the restore bubble included; the shortcut allowlist applies with `--force-app-mode`; `--hide-crash-restore-bubble` is checked in shared code | Chromium source, main branch, 2026-10-21 (R37–R39) |
 | P50 | Debian 13: chromium 155, cage 0.2.0; cage "runs a single, maximized application … User interaction and activities outside the scope of the running application are prevented"; `-s` "Allow VT switching"; cage terminates when its application exits (source) | packages.debian.org; cage(1); cage 0.2.0 `cage.c` (R40, R41) |
-| P51 | `nmcli device wifi hotspot`: "If not provided, nmcli will generate a password"; a "shared" network gets 10.42.x.1/24 and a DHCP server | nmcli(1), nm-settings-nmcli(5), Debian 13 (R42a, R42b) |
+| P51 | `nmcli device wifi hotspot`: "If not provided, nmcli will generate a password"; a "shared" network "Provides network access to other computers" and gets 10.42.x.1/24 and a DHCP server | nmcli(1), nm-settings-nmcli(5), Debian 13 (R42a, R42b) |
 | P52 | Android probes `generate_204` and treats other 200–399 answers as a captive portal; Apple sends "a probe when joining your network for the first time"; RFC 8910: captive portals "will still need to implement interception techniques" | AOSP NetworkStack; developer.apple.com; RFC 8910 (R43–R45) |
 | P53 | `Restart=always` restarts "regardless of whether it exited cleanly"; units started "more than burst times within an interval" are not started again | systemd.service(5), systemd.unit(5), Debian 13 (R46) |
 | P54 | Certificate validity "is checked against the current system time"; systemd's clock floor is the highest of its build time, the mtime of `/usr/lib/clock-epoch` and of the last sync | openssl-verification-options(1ssl); systemd(1), systemd-timesyncd.service(8), Debian 13 (R48, R49) |
 | P55 | `avahi-daemon` 0.8-16 is in Debian 13 | packages.debian.org/trixie/avahi-daemon (R47) |
-| P56 | systemd v257's boot-phase services carry `ConditionSecurity=measured-uki` ("Unified Kernel Image with PCR 11 Measurements, as per systemd-stub"); `pcrextend` skips with "Kernel stub did not measure kernel image into PCR 11, skipping userspace measurement, too"; cryptsetup's register-15 measurement returns early without a measured UKI | systemd v257 sources (`units/systemd-pcrphase*.service.in`, `man/systemd.unit.xml:1575-1576`, `src/pcrextend/pcrextend.c:378-385`, `src/cryptsetup/cryptsetup.c:992-998`), fetched 2026-10-21 by the revision's review (`~/waitron-campaign/b3-design/review-r1.md`, H2) |
+| P56 | systemd v257's boot-phase services carry `ConditionSecurity=measured-uki` ("Unified Kernel Image with PCR 11 Measurements, as per systemd-stub"); `pcrextend` skips with "Kernel stub did not measure kernel image into PCR 11, skipping userspace measurement, too"; cryptsetup's register-15 measurement returns early without a measured UKI, and the other units that write register 15 (`systemd-pcrmachine`, `systemd-pcrfs@`, `systemd-pcrfs-root`) carry the same condition (checked by the second review) | systemd v257 sources (`units/systemd-pcrphase*.service.in`, `man/systemd.unit.xml:1575-1576`, `src/pcrextend/pcrextend.c:378-385`, `src/cryptsetup/cryptsetup.c:992-998`), fetched 2026-10-21 by the revision's review (`~/waitron-campaign/b3-design/review-r1.md`, H2) and again by its second (`review-r2.md`) |
 | P57 | LUKS2's label and subsystem fields are 48 bytes: `#define LUKS2_LABEL_L 48` | cryptsetup `lib/luks2/luks2.h:22,88,92`, fetched 2026-10-21 by the revision's review (`review-r1.md`, H5) |
 | P58 | "Firmware's UEFI SecureBoot protects shim, shim's key management protects grub and kernel. No code signing protects initrd." | Lennart Poettering, https://0pointer.net/blog/brave-new-trusted-boot-world.html (R13) |
+| P59 | dracut 106's emergency script: `if getargbool 1 rd.shell || getarg rd.break; then … exec sulogin` — a shell is offered unless `rd.shell=0` | dracut-ng tag 106, `modules.d/98dracut-systemd/dracut-emergency.sh`, fetched 2026-10-21 by the revision's second review (`~/waitron-campaign/b3-design/review-r2.md`, R2-M1) |

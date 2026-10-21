@@ -5442,7 +5442,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   answers, 2026-10-21), and, later, Fully Kiosk resale for dedicated tablets.
   [Detail](backlog/box.md#box-image-constraints-b3)
 
-- **The box the customer buys probably doubles as a till, so the image ships a screen and a browser** — owner, 2026-09-29. A lean, not yet a decision. **Open:** whether the box's own screen enrols as a till like any other device or is treated differently because it is local, and what address it opens the till at. [Detail](backlog/box.md#the-box-the-customer-buys-probably-doubles-as-a-till-so-the-image-ships-a-screen-and-a-browser)
+- **The box the customer buys probably doubles as a till, so the image ships a screen and a browser** — owner, 2026-09-29; decided in B3's answers (2026-10-21): every box carries Chromium under `cage`, no desktop; its screen opens the dashboard after setup and can become a till like any other device ([B3 design §9](superpowers/specs/2026-10-21-b3-usb-installer-design.md)). [Detail](backlog/box.md#the-box-the-customer-buys-probably-doubles-as-a-till-so-the-image-ships-a-screen-and-a-browser)
 
 - **a local maintenance account on each box** — belongs with B3; a discussion record, not an approved spec. Its remote-support half is tracked in Cloud and not approved. [Detail](backlog/box.md#a-local-maintenance-account-on-each-box)
 
