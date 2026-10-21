@@ -4,7 +4,7 @@ process.env.TZ = "Europe/Madrid";
 import { createHash } from "node:crypto";
 import { eq, getTableColumns, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { saleLines, workingOrders, type Database } from "@waitron/db";
+import { saleLines, sales, workingOrders, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
@@ -34,7 +34,7 @@ import "./errors.js";
 
 // A758-4: the words a receipt prints for a full comp are presentation only. The same bill is filed
 // in two fresh databases, once with the shipped receipt words and once with every word replaced by
-// a marker at its source, and the filed record, lines and alta XML are compared.
+// a marker at its source, and the sale header, filed record, lines and alta XML are compared.
 
 type CountryEs = {
   SPAIN: CountryPack;
@@ -99,6 +99,14 @@ const MINTED_ID_COLUMNS = ["id", "sale_id", "parent_line_id"];
 /** Catalogue rows' ids, minted per database like the line ids. */
 const CATALOGUE_ID_COLUMNS = ["product_id", "parent_product_id", "menu_id", "menu_version_id"];
 const LINE_COLUMNS = columnsOf(saleLines, MINTED_ID_COLUMNS);
+/** The sale header's columns but the ids minted per database. */
+const SALE_COLUMNS = columnsOf(sales, [
+  "id",
+  "node_id",
+  "device_id",
+  "series_id",
+  "working_order_id",
+]);
 /** The fiscal record's columns but the ids minted per database, and `creado_en`, the wall-clock
  * time of the insert rather than the fixed clock's. */
 const REGISTRO_COLUMNS = columnsOf(registrosFacturacion, [
@@ -140,8 +148,8 @@ async function adjust(venue: AdjustmentVenue, billId: string, lineNo: number, as
 }
 
 /** One bill: Burger comped, Bottle's whole list price taken off, Bread 50% then €1.25 off, Water
- * paid. `breadAmount` lets a control file a different figure. */
-async function fileFullComps(db: Database, breadAmount = "1.25") {
+ * paid. */
+async function fileFullComps(db: Database) {
   vi.useFakeTimers({ toFake: ["Date"] });
   try {
     const at = (minutesBefore: number) =>
@@ -161,7 +169,7 @@ async function fileFullComps(db: Database, breadAmount = "1.25") {
     at(4);
     await adjust(venue, billId, 3, { action: "discount_percent", percentBp: 5000 });
     at(2);
-    await adjust(venue, billId, 3, { action: "discount_amount", amount: breadAmount });
+    await adjust(venue, billId, 3, { action: "discount_amount", amount: "1.25" });
     at(0);
     const ticket = await payWorkingOrder(
       { db: venue.db, backend: venue.backend, clock: venue.clock },
@@ -176,6 +184,9 @@ async function fileFullComps(db: Database, breadAmount = "1.25") {
         invoiceLocale: "es-ES",
         printer: { paperWidth: "80mm", resolution: "180dpi" },
       }),
+    );
+    const header = db.all<Record<string, unknown>>(
+      sql.raw(`select ${SALE_COLUMNS.join(", ")} from sales`),
     );
     const registros = db.all<Record<string, unknown>>(sql`
       select ${sql.raw(REGISTRO_COLUMNS.join(", "))} from registros_facturacion`);
@@ -200,7 +211,7 @@ async function fileFullComps(db: Database, breadAmount = "1.25") {
     const xml = serializeEnvio(cabecera, [
       { RegistroAlta: fromRegistroRow(decodeRegistroRow(row!)) as RegistroAlta },
     ]);
-    return { registros, lines, xml, printed };
+    return { header, registros, lines, xml, printed };
   } finally {
     vi.useRealTimers();
   }
@@ -225,12 +236,14 @@ beforeAll(async () => {
 }, 120_000);
 
 describe("a full comp's filed record and the receipt's words", () => {
-  it("files the same record, lines and alta XML whatever words the receipt prints", () => {
+  it("files the same sale header, record, lines and alta XML whatever words the receipt prints", () => {
     // The control: the marker reached the printed receipt, and only in the marked run.
     expect(marked.printed.some((line) => line.startsWith("  MARK-"))).toBe(true);
     expect(shipped.printed.some((line) => line.includes("MARK-"))).toBe(false);
 
     expect(shipped.registros).toHaveLength(1);
+    expect(shipped.header).toHaveLength(1);
+    expect(marked.header).toEqual(shipped.header);
     expect(marked.registros).toEqual(shipped.registros);
     expect(marked.lines).toEqual(shipped.lines);
     expect(marked.xml).toBe(shipped.xml);

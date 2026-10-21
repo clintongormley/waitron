@@ -1,8 +1,9 @@
 import { compareDecimal, decimal } from "@waitron/shared";
 
 /**
- * Free, or an amount that left the item at zero from its whole list value. A percentage is never
- * full here: it carries its own percentage, a whole one included.
+ * Free, or an amount that left its subject at zero from its whole list value: an item, or the whole
+ * bill for a bill-wide amount. A percentage is never full here: it carries its own percentage, a
+ * whole one included.
  */
 export function isFullComp(row: {
   action: string;

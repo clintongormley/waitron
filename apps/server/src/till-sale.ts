@@ -263,8 +263,7 @@ export interface TillSaleLine {
 
 /** An amount taken off, printed as its own line: presentation only, nothing is filed from it. */
 export interface ReceiptAdjustment {
-  /** `comp`: a full comp — Free, or an amount that took the whole list value — printed as the
-   *  discount word with 100%. */
+  /** `comp`: a full comp, printed as the discount word with 100%. */
   kind: "comp" | "discount";
   /** Basis points, for a percentage discount only. */
   percentBp?: number;

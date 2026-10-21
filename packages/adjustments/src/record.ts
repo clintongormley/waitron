@@ -195,7 +195,8 @@ export interface BillAdjustment {
   percentBp: number | null;
   reduction: Decimal;
   /**
-   * Free, or an amount that took the item's whole list value: it prints as 100%. A percentage
+   * Free, or an amount that took the whole list value of its item, or of the bill for a bill-wide
+   * amount: it prints as 100%. A percentage
    * carries its own `percentBp`.
    */
   full: boolean;
