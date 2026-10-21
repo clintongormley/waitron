@@ -61,6 +61,121 @@ beforeEach(async () => {
 const read = () => withTransaction(suite.db, (tx) => readVenueDetails(tx, venue.cfg));
 afterEach(() => vi.useRealTimers());
 
+describe("ordinary zone edit revision", () => {
+  it("propagates a formatter runtime fault without changing settings", async () => {
+    const initial = await read();
+    const failure = new Error("formatter unavailable");
+    const formatter = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function () {
+      throw failure;
+    });
+    try {
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          writeVenueDetails(tx, venue.cfg, {
+            expected: initial.details,
+            changes: { timeZone: "UTC" },
+          }),
+        ),
+      ).rejects.toBe(failure);
+    } finally {
+      formatter.mockRestore();
+    }
+    expect((await read()).details.timeZone).toBe("Europe/Madrid");
+    expect((await read()).businessDayClock.revision).toBe(0);
+  });
+  it("advances the absent clock revision once for a real zone change and not for a retry", async () => {
+    const initial = await read();
+    const saved = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, venue.cfg, {
+        expected: initial.details,
+        changes: { timeZone: "UTC" },
+      }),
+    );
+    expect(saved.model.businessDayClock.revision).toBe(1);
+    const retry = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, venue.cfg, {
+        expected: initial.details,
+        changes: { timeZone: "Etc/UTC" },
+      }),
+    );
+    expect(retry.changed).toBe(false);
+    expect(retry.model.businessDayClock.revision).toBe(1);
+    expect(
+      suite.db.all(
+        sql`select revision from location_business_day_settings where location_id = ${venue.cfg.locationId}`,
+      ),
+    ).toEqual([{ revision: 1 }]);
+  });
+  it("increments an existing revision and rolls both zone and revision back on refusal", async () => {
+    await suite.db.execute(
+      sql`insert into location_business_day_settings(location_id, revision) values (${venue.cfg.locationId}, 7)`,
+    );
+    const initial = await read();
+    await expect(
+      withTransaction(suite.db, async (tx) => {
+        const saved = await writeVenueDetails(tx, venue.cfg, {
+          expected: initial.details,
+          changes: { timeZone: "UTC" },
+        });
+        expect(saved.model.businessDayClock.revision).toBe(8);
+        throw new Error("abort zone edit");
+      }),
+    ).rejects.toThrow("abort zone edit");
+    expect((await read()).businessDayClock.revision).toBe(7);
+    expect((await read()).details.timeZone).toBe("Europe/Madrid");
+    const saved = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, venue.cfg, { expected: initial.details, changes: { timeZone: "UTC" } }),
+    );
+    expect(saved.model.businessDayClock.revision).toBe(8);
+  });
+  it("leaves the clock revision absent for an equivalent alias and an unrelated edit", async () => {
+    const initial = await read();
+    const saved = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, venue.cfg, {
+        expected: initial.details,
+        changes: { timeZone: "Europe/Madrid", name: "Updated label" },
+      }),
+    );
+    expect(saved.model.businessDayClock.revision).toBe(0);
+    expect(
+      suite.db.all(
+        sql`select revision from location_business_day_settings where location_id = ${venue.cfg.locationId}`,
+      ),
+    ).toEqual([]);
+  });
+  it("publishes a changed location only after its zone and revision commit", async () => {
+    await installChangeFeed(suite.db, CORE_CHANGE_SOURCES);
+    const initial = await read();
+    const published: unknown[] = [];
+    const unsubscribe = subscribeToChanges((event) =>
+      published.push({
+        event,
+        revision: suite.db.all(
+          sql`select revision from location_business_day_settings where location_id = ${venue.cfg.locationId}`,
+        ),
+        zone: suite.db.all(sql`select time_zone from locations where id = ${venue.cfg.locationId}`),
+      }),
+    );
+    try {
+      await withTransaction(suite.db, async (tx) => {
+        await writeVenueDetails(tx, venue.cfg, {
+          expected: initial.details,
+          changes: { timeZone: "UTC" },
+        });
+        expect(published).toEqual([]);
+      });
+      expect(published.length).toBeGreaterThan(0);
+      for (const snapshot of published)
+        expect(snapshot).toMatchObject({
+          revision: [{ revision: 1 }],
+          zone: [{ time_zone: "UTC" }],
+        });
+    } finally {
+      unsubscribe();
+    }
+  });
+});
+
 async function prepareSale(observeClock?: () => void) {
   const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
   const clock: TrustedClock = {
