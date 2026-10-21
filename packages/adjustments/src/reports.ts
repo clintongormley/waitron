@@ -475,12 +475,13 @@ export async function listAdjustmentEntries(
   tx: Transaction,
   input: AdjustmentReportInput & {
     requester?: AdjustmentRequester;
+    reasonId?: string;
     limit?: number;
     after?: EntryCursor;
   },
 ): Promise<AdjustmentEntryPage> {
   const window = validated(input);
-  const { requester, after, limit = DEFAULT_ENTRY_PAGE_SIZE } = input;
+  const { requester, reasonId, after, limit = DEFAULT_ENTRY_PAGE_SIZE } = input;
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ENTRY_PAGE_SIZE) {
     throw new Error(`adjustments: invalid drill-down page size ${limit}`);
   }
@@ -492,6 +493,7 @@ export async function listAdjustmentEntries(
       eq(adjustments.byGuest, false),
     );
   }
+  if (reasonId !== undefined) conditions.push(eq(adjustments.reasonId, reasonId));
   if (after !== undefined) {
     conditions.push(
       or(

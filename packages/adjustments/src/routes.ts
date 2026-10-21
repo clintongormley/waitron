@@ -150,6 +150,13 @@ function requireRequester(
   return { personId: requireUuidParam(personId, "PersonId").toLowerCase() };
 }
 
+/** Every reason's rows when absent; a reason's id groups its rows even after it is deleted. */
+function requireReasonFilter(reasonId: string | undefined): string | undefined {
+  return reasonId === undefined
+    ? undefined
+    : requireUuidParam(reasonId, "AdjustmentReasonId").toLowerCase();
+}
+
 const PAGE_SIZE = /^[1-9]\d{0,2}$/;
 
 function requirePageSize(value: string | undefined): number | undefined {
@@ -225,12 +232,14 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const range = requireOptionalRange(c.req.query("from"), c.req.query("to"));
         const requester = requireRequester(c.req.query("personId"), c.req.query("guests"));
+        const reasonId = requireReasonFilter(c.req.query("reasonId"));
         const limit = requirePageSize(c.req.query("limit"));
         const after = requireCursor(c.req.query("after"));
         const page = await gatedBy(VIEW_REPORTS, sessionId, async (tx) =>
           listAdjustmentEntries(tx, {
             ...(await reportInput(tx, ctx.cfg.locationId, range)),
             requester,
+            reasonId,
             limit,
             after,
           }),

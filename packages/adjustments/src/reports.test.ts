@@ -194,6 +194,7 @@ function page(
     requester?: { personId: string } | "guests";
     limit?: number;
     after?: EntryCursor;
+    reasonId?: string;
   } = {},
   input = range(),
 ): ReturnType<typeof listAdjustmentEntries> {
@@ -1263,6 +1264,74 @@ describe("the drill-down, a page at a time", () => {
     expect(first.entries).toHaveLength(200);
     expect(first.next).not.toBeNull();
     expect((await page({ after: first.next! })).entries).toHaveLength(1);
+  });
+
+  it("Staff meal lists every staff meal with who gave it and who approved it", async () => {
+    const alex = await person("Alex");
+    const sam = await person("Sam");
+    const mia = await person("Mia");
+    const staffMeal = await seedReason(db);
+    const coldFood = await seedReason(db);
+    const visit = await bill();
+    const meal = (by: string, approvedBy: string, at: string) =>
+      adjust({
+        bill: visit.id,
+        reason: staffMeal,
+        reasonName: "Staff meal",
+        action: "comp",
+        line: { name: "Burger", list: "12.00", creditedTo: by, stage: "served" },
+        before: "12.00",
+        after: "0.00",
+        nominal: "12.00",
+        by,
+        approvedBy,
+        at,
+      });
+    const alexFirst = await meal(alex, mia, "2026-09-15T19:00:00.000Z");
+    const samMeal = await meal(sam, mia, "2026-09-15T19:30:00.000Z");
+    const alexSecond = await meal(alex, sam, "2026-09-15T20:00:00.000Z");
+    await adjust({
+      bill: visit.id,
+      reason: coldFood,
+      reasonName: "Cold food",
+      action: "comp",
+      line: { name: "Soup", list: "6.00", creditedTo: alex, stage: "served" },
+      before: "6.00",
+      after: "0.00",
+      nominal: "6.00",
+      by: alex,
+      approvedBy: mia,
+      at: "2026-09-15T19:45:00.000Z",
+    });
+
+    const all = await page({ reasonId: staffMeal.id });
+    expect(
+      all.entries.map((row) => ({
+        id: row.id,
+        requestedBy: row.requestedBy.name,
+        approvedBy: row.approvedBy?.name,
+      })),
+    ).toEqual([
+      { id: alexSecond, requestedBy: "Alex", approvedBy: "Sam" },
+      { id: samMeal, requestedBy: "Sam", approvedBy: "Mia" },
+      { id: alexFirst, requestedBy: "Alex", approvedBy: "Mia" },
+    ]);
+    expect(all.next).toBeNull();
+
+    const alexs = await page({ reasonId: staffMeal.id, requester: { personId: alex } });
+    expect(alexs.entries.map((row) => row.id)).toEqual([alexSecond, alexFirst]);
+
+    const first = await page({ reasonId: staffMeal.id, limit: 1 });
+    const second = await page({ reasonId: staffMeal.id, limit: 1, after: first.next! });
+    const third = await page({ reasonId: staffMeal.id, limit: 1, after: second.next! });
+    expect([first, second, third].flatMap((p) => p.entries.map((row) => row.id))).toEqual([
+      alexSecond,
+      samMeal,
+      alexFirst,
+    ]);
+    expect(third.next).toBeNull();
+
+    expect(await page({ reasonId: randomUUID() })).toEqual({ entries: [], next: null });
   });
 
   it.each([0, -1, 1.5, 501])("refuses a page size of %s", async (limit) => {
