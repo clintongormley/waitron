@@ -269,6 +269,13 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
      archive already at a destination are untouched — and a run that is still writing a
      database-sized dump to a disk too full for the small heartbeat file is failing already (read,
      not run). Between full and 256 MiB free, where the heartbeat still writes, the guard holds.
+     All of this assumes the two folders share one disk, the box's default (`venue` inside the
+     `state` volume, `deploy/compose.yml:42-45`; `node-entry.ts:497`). When `WAITRON_VENUE_DIR`
+     puts them on different disks (read, not run): a full STATE disk with room on the venue disk
+     leaves the heartbeat writing, so the guard holds and the staging is kept; a full VENUE disk
+     with room on the state disk makes the start delete (it acts on the lower of the two, decision
+     4) while the heartbeat goes stale, so a running server's backup whose own disk had room loses
+     its staging and that run fails — the same cost as above.
    Nothing else: never `venue.lock`, `recovery.lock`, `recovery.json`, the databases,
    `restore-staging` (`restore.ts:85`; a staged restore runs after this step and reads it), a
    configured backup folder, or any file whose name is not listed above. `<logDir>` is
@@ -638,7 +645,7 @@ action with `toContain`, and the new action contains it whole, so it keeps passi
 
 **Interfaces:**
 - Consumes: `diskFullIn`, `sqliteFailureOf`, `MAX_CAUSE_DEPTH` (`@waitron/shared`); Task 1's
-  `lowestFreeBytes` and `Statfs`.
+  `lowestFreeBytes`; the `Statfs` type from `apps/server/src/free-bytes.ts:3`.
 - Produces (decision 6):
   ```ts
   /** Below this, an engine "cannot open" or I/O failure, or ENOSPC, is taken for a full disk (plan F1, F11, F14). */
@@ -729,16 +736,18 @@ action with `toContain`, and the new action contains it whole, so it keeps passi
   1. the argument refusal (unchanged);
   2. `const space = await freeSpaceAtStart({ stateDir: deps.stateDir, venueDir: deps.venueDir, logDir: deps.logDir ?? join(deps.stateDir, "logs"), floor, now, statfs: deps.statfs, readVenueHolder: deps.readVenueHolder ?? readVenueHolder, log: deps.log })`;
   3. `resolveFirstSetupEntry`, `loadBoxEnv`, `transport`, the bootstrap check (unchanged, `:278-303`);
-  4. **new:** `if (space.belowFloor && !(await countWritable(rooted)))`, where `rooted` is `deps`
+  4. **new:** a write-back check (below), where `rooted` is `deps`
      with `stateDir`, `venueDir` and `baseEnv` taken from `admission.roots` as `selected` is built
      (`:320-332`) →
      serve `recoveryApp({ state: fullDiskAtStart(await deps.readRecoveryState(stateDir), now()), uncounted: true, logDir, onRetry: async () => { await persistState(…, cleared); exit(0); }, freeSpace: () => lowestFreeBytes([stateDir, venueDir], deps.statfs) })`
-     through `deps.serveRecovery(app, transport)`, log `("warn", "recovery.serving_disk_full", { freeBytes })`, and return.
-     `countWritable` is `changeState(deps, (current) => current)` (`:123-136`) in a `try`: `true`
+     through `deps.serveRecovery(app, transport)`, log `("warn", "recovery.serving_disk_full", { freeBytes: check.freeBytes })`, and return.
+     `countWritable(rooted)` returns `check: { written: true } | { written: false; freeBytes: number | null }`.
+     It is `changeState(deps, (current) => current)` (`:123-136`) in a `try`: `{ written: true }`
      on success. On failure it logs `("warn", "recovery.state_write_failed", { errorCode: codeOf(error), errno: errnoOf(error) ?? null })`,
      reads `freeBytes = await lowestFreeBytes([stateDir, venueDir], deps.statfs)` again, and
-     returns `false` only when `fullDiskFailure(error, freeBytes)` (decision 6); otherwise it
-     rethrows the error, so the start fails as it does today when its count cannot be written.
+     returns `{ written: false, freeBytes }` only when `fullDiskFailure(error, freeBytes)`
+     (decision 6); otherwise it rethrows the error, so the start fails as it does today when its
+     count cannot be written. The condition reads `if (space.belowFloor && !(check = await countWritable(rooted)).written)`.
      `stateDir`, `venueDir` and `logDir` here are `admission.roots`' (decision 15);
   5. the resolution branch and `runAdmittedEntry` (unchanged here; Task 4b changes its catch).
   The recovery-level page (`:350-370`) also passes `freeSpace` (decision 8).
@@ -761,7 +770,10 @@ action with `toContain`, and the new action contains it whole, so it keeps passi
     `exit` not called; the served app's `GET /` contains `escapeHtml("The box's disk is full, so Waitron cannot save anything.")`,
     the new English sentence, and `Free space on the box&#39;s disk: 0 MB.` (free `10` bytes rounds
     to 0); `GET /recovery-api/status` JSON has `lastErrorCode: "storage.disk_full"` and
-    `level: "recovery"`; the `recovery.serving_disk_full` log line carries `freeBytes: 10`.
+    `level: "recovery"`.
+  - `"logs the free space it read after the write failed"`: the `statfs` stub answers `10` until
+    the failing lock stub has run (the stub sets a flag, then rejects), and `20` after; the
+    `recovery.serving_disk_full` line carries `freeBytes: 20`, not the first step's `10`.
   - `"serves it too when the lock cannot be opened on a nearly full disk"`: free `10`, the lock
     rejects with a real-shaped errcode 14 (`unable to open database file`, F2's HFS+ line) → the page
     is served; and the uncounted status line `Level: recovery. This start was not counted: the disk is full.`
@@ -837,16 +849,24 @@ action with `toContain`, and the new action contains it whole, so it keeps passi
 **Interfaces:**
 - Consumes: Task 3's `startFailureCode`; Task 1's `freeSpaceAtStart` (`force: true`).
 - Produces: in the catch, `const code = await startFailureCode(error, [deps.stateDir, deps.venueDir], deps.statfs)`
-  in place of `classifyBootFailure(error)` (`:441`); when `code === "storage.disk_full"`,
+  in place of `classifyBootFailure(error)` (`:441`); `deps` there is `runAdmittedEntry`'s, so the
+  folders are the resolved ones (decision 15). When `code === "storage.disk_full"`,
   `await freeSpaceAtStart({ …, force: true })` before the state is persisted (decision 7).
   `failureDetail`, the page log line and the installer's channel are unchanged and still come
   first.
-- Produces: `bootThisProcess`'s catch (`:525-528`) logs
-  `await startFailureCode(error, [stateDir, venueDir])` instead of `classifyBootFailure(error)`, so
-  the container's output names the same code the start recorded (the plan review found a 4874
-  failure would print `unknown` there while `recovery.json` said `storage.disk_full`). That block
-  is the process wiring under `v8 ignore` (`:487-490`); the code it logs is `startFailureCode`'s,
-  which Task 3 tests.
+- Produces: the catch keeps the code it recorded beside the error it rethrows, in a module-level
+  `WeakMap<object, string>` (not a property on the error: the error is the caller's object, and a
+  thrown value need not be an object), read through
+  `export function recordedStartFailureCode(error: unknown): string | undefined`.
+- Produces: `bootThisProcess`'s `.catch` (`:525-528`) becomes `async` and logs
+  `recordedStartFailureCode(error) ?? (await startFailureCode(error, [stateDir, venueDir]))` in
+  place of `classifyBootFailure(error)`. So for a failed attempt the container's output names the
+  code `recovery.json` got, without reading free space a second time — after decision 7's deletion
+  a second reading can be above 16 MiB and would name a 4874 failure `unknown` (the claim check of
+  `8609c30d2` found it). For a failure outside an attempt (before the count), nothing was
+  recorded, and `startFailureCode` reads the folders the process was given. That block is the
+  process wiring under `v8 ignore` (`:487-490`); the two functions it calls are tested here and in
+  Task 3.
 
 - [ ] **Step 1: Write the failing tests**, in the new file, `describe("a start that fails on a full disk")`:
   - `"records storage.disk_full for a database the engine cannot open below the floor"`:
@@ -864,12 +884,20 @@ action with `toContain`, and the new action contains it whole, so it keeps passi
   - `"deletes nothing for any other failure"`: `startServer` rejects
     `AppError("migrations.set_missing", …)` with free `100 * 1024 * 1024` → `waitron.log.2` still
     there.
+  - `"hands on the code it recorded, even when deleting freed more than 16 MiB"`: `startServer`
+    rejects with the 4874 shape; a 20 MiB `logs/waitron.log.2`; the `statfs` stub answers `10`
+    while that file exists and `100 * 1024 * 1024` once it is gone. Catch the rejection: the last
+    persisted `lastErrorCode` is `"storage.disk_full"`, and `recordedStartFailureCode(error)`
+    equals it. The control that shows why: `await startFailureCode(error, [stateDir, venueDir], statfs)`
+    at that point returns `"unknown"`. And `recordedStartFailureCode` of an error `runEntry` never
+    recorded (a refused argument) is `undefined`.
 
 - [ ] **Step 2: Run them and watch them fail**
 
   Run: `pnpm --filter @waitron/server exec vitest run src/node-entry.full-disk.test.ts`
   Expected: the first case FAILS with `lastErrorCode` `"unknown"`; the deletion case FAILS (file
-  still there); the two controls PASS.
+  still there); the hand-on case FAILS (`recordedStartFailureCode` is not exported); the two
+  controls PASS.
 
 - [ ] **Step 3: Implement** the catch change.
 
@@ -982,12 +1010,15 @@ action with `toContain`, and the new action contains it whole, so it keeps passi
     `fill(8192)` and once with `fill(16384)` (`it.each`): `stateDir` and `logDir` on
     `mkdtemp(tmpdir())` (room), `venueDir` on the disk holding a venue folder an earlier
     `openVenueDatabase` made and closed; `runEntry` with the real venue lock. It rejects; the
-    persisted `lastErrorCode` is `"storage.disk_full"`. Log the raw error's `code` and `errcode`.
-    On HFS+ F14 measured this exact start rejecting with `ENOSPC` on the lock's holder file at
-    8 KiB and with `errcode 4874` at 16 KiB, both recorded `unknown` today. On Linux the start
-    itself was not run; the engine alone on tmpfs passed the lock and refused the open with 4874 at
-    8 and 16 KiB (F6), and on ext4 opened it at 16 KiB, so the 16 KiB variant holds on the CI
-    tmpfs, not on ext4. Control: `unfill()`, `runEntry` boots.
+    persisted `lastErrorCode` is `"storage.disk_full"`. The case also asserts what the raw
+    rejection was, so it cannot pass through slice 1's path instead of this one's: its cause chain
+    carries `code: "ENOSPC"` or an `errcode` whose primary code (`& 0xff`) is 10 or 14 — and no
+    `errcode` 13. On HFS+ F14 measured this exact start rejecting with `ENOSPC` on the lock's holder
+    file at 8 KiB and with `errcode 4874` at 16 KiB, both recorded `unknown` today. On Linux the
+    start itself was not run: from the engine-only F6 (tmpfs passed the lock and refused the open
+    with 4874 at 8 and 16 KiB; ext4 opened it at 16 KiB), both variants are EXPECTED to reject that
+    way on the CI tmpfs; the first CI run measures it, and a 13 there fails the case rather than
+    passing quietly. Control: `unfill()`, `runEntry` boots.
   - `"a commit on a real full disk is refused whole, and the next one is served once there is room"`
     (slice 1's deferred case, build plan decision 1): `openVenueStore({ directory, venueSchema: {}, nodeSchema: {} })`
     on the disk, a `sale (id integer primary key, body text, pad blob)` table, one committed
@@ -996,12 +1027,11 @@ action with `toContain`, and the new action contains it whole, so it keeps passi
     rejects with `{ code: "storage.disk_full" }`; rows are `["committed before"]`; `unfill()`; the
     next transaction commits. Close the store in `finally`.
 
-- [ ] **Step 2: Watch them fail by deletion.** Run the file (expected PASS, `Tests 6 passed` on
-  macOS). Then: delete Task 4a's at-once branch → the finished-setup case FAILS with the resolution
+- [ ] **Step 2: Watch them fail by deletion.** Run the file (expected PASS, `Tests 7 passed` on
+  macOS: Task 5a's three, the finished-setup case, the refused open's two rows and the commit). Then: delete Task 4a's at-once branch → the finished-setup case FAILS with the resolution
   app (`/setup-api/status` `200`); restore. Replace Task 4b's `startFailureCode(…)` in
   `runAdmittedEntry`'s catch with `classifyBootFailure(error)` → both refused-open cases FAIL with
-  `"unknown"` (F14) or `"provisioning.database_unreachable"`; restore. If both logged `errcode 13`,
-  they test slice 1's path, not this slice's: STOP and report the raw errors. The
+  `"unknown"` (F14) or `"provisioning.database_unreachable"`; restore. The
   commit case needs no deletion: its red run is slice 1's E8 K on `main` before #1936; check that
   its statement line ran before the rejection (the failure is at commit). Record each run in the
   commit message, and restore with `git checkout -- apps/server/src/node-entry.ts`.
@@ -1070,7 +1100,7 @@ action with `toContain`, and the new action contains it whole, so it keeps passi
   ```
 
   After the branch is pushed (by `/finish-branch`), read `test-server-stream`'s log on the current
-  head: the full-disk file must show `6 passed`, not skipped. That run is this slice's Linux
+  head: the full-disk file must show `7 passed`, not skipped. That run is this slice's Linux
   measurement; put its numbers in the pull request.
 
 ### Task 7: Docs, the backlog, and the rule
