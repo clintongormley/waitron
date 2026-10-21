@@ -3258,7 +3258,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   at format 6. Slice 3 landed 2026-10-21 (#1940): the theme in use reaches the screens — the dashboard and
   the till apply the browser's stored copy at start and fetch `/api/theme` without waiting on it;
   an open dashboard follows through a passive live read of `custom_themes`, and a signed-in till
-  through its `themeHash` once per poll. Slice 4 landed 2026-10-21: text painted in the brand colour
+  through its `themeHash` once per poll. Slice 4 landed 2026-10-21 (#1945): text painted in the brand colour
   reads `--wt-color-primary-text`, and a root guard (`scripts/primary-coloured-text.test.ts`) refuses
   `color: var(--wt-color-primary)` outside a list of icons and spinners. Next: slice 5 (the editor).
 
