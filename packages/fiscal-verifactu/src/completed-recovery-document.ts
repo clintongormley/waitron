@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { deployment, locations, readTenant, type Transaction } from "@waitron/db";
 import type { ModuleBackupContribution, ProvisionedNode } from "@waitron/module";
-import { AppError } from "@waitron/shared";
+import { AppError, classifyTimeZone } from "@waitron/shared";
 import { currentSif } from "./registro-sif.js";
 import { readHourHistory } from "./hour-history-reader.js";
 import { projectHourHistory, type HourHistorySource, type HourScope } from "./hour-history.js";
@@ -49,6 +49,7 @@ async function recoveryScope(
     ...(Object.values(evidence) as HourHistorySource[]),
   ];
   if (projectHourHistory({ scope, sources }).contradictions.length > 0) return refuse();
+  const zone = classifyTimeZone(venue.timeZone);
   return {
     document: {
       kind: "waitron-recovery-document",
@@ -58,7 +59,7 @@ async function recoveryScope(
       venueName: venue.name,
       createdAt,
     },
-    timeZone: venue.timeZone,
+    timeZone: zone.kind === "valid" ? zone.timeZone : "UTC",
   };
 }
 
