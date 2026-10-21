@@ -29,3 +29,23 @@ export function sqliteFailureOf(error: unknown): { errcode: number; message: str
   }
   return null;
 }
+
+/** SQLite's `SQLITE_FULL`, as `node:sqlite` puts it on `errcode`. */
+export const DISK_FULL_RESULT_CODE = 13;
+
+/**
+ * Whether any layer of the cause chain is a full disk: the domain code `storage.disk_full` on
+ * `code`, or the engine's {@link DISK_FULL_RESULT_CODE} on `errcode`.
+ */
+export function diskFullIn(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+    if (typeof current !== "object" || current === null) return false;
+    const layer = current as { code?: unknown; errcode?: unknown; cause?: unknown };
+    if (layer.code === "storage.disk_full" || layer.errcode === DISK_FULL_RESULT_CODE) return true;
+    const cause: unknown = layer.cause;
+    if (cause === current) return false;
+    current = cause;
+  }
+  return false;
+}

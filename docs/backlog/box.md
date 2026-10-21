@@ -588,3 +588,20 @@ the preview and staging handlers (`apps/server/src/boot.ts:1073` and `:1109`) an
 own tests. A938 cached only the tests' derivations (`apps/server/src/testing/derived-key-cache.ts`).
 Left open by A938.
 [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration).
+
+## A transaction opened outside the write queue can let a body's writes after a full disk commit
+
+Left open by A798-B slice 1 (#1936). The store's record of a transaction
+the engine ended belongs to the connection pair, not to the body, so an outermost `db.transaction`
+opened outside the write queue clears it, and the body's later writes are kept. What was measured,
+in two orderings, and the grep behind "no product code is known to open one" are in the
+[receipt](../developers/conventions-data.md#a-full-disk-sometimes-ends-the-whole-transaction),
+under "Weaker than the rule".
+
+Not closed in slice 1, because product writes go through `withTransaction`, which runs inside
+`withWriteLock`. Two ways to close it:
+
+- key the record to the body, which needs a token for the body carried through every nested
+  savepoint; or
+- a root guard refusing a bare `.transaction(` on the venue database outside `withWriteLock` in
+  product code.

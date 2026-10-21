@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { DISK_FULL_RESULT_CODE } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 import { UNREACHABLE_RESULT_CODES } from "./boot-failure.js";
 import type { LogLevel, Logger } from "./logger.js";
@@ -53,7 +54,7 @@ describe("MIGRATION_CONSTRAINT_RESULT_CODES", () => {
   });
 
   it("never names a code `boot-failure.ts` classifies", () => {
-    const theirs = new Set(UNREACHABLE_RESULT_CODES);
+    const theirs = new Set([...UNREACHABLE_RESULT_CODES, DISK_FULL_RESULT_CODE]);
     expect(MIGRATION_CONSTRAINT_RESULT_CODES.filter((code) => theirs.has(code))).toEqual([]);
   });
 });

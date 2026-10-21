@@ -181,4 +181,97 @@ describe("createErrorBoundary (the shared error boundary till-api and management
       { level: "error", event: "widget.failed", fields: { errorCode: "unknown" } },
     ]);
   });
+
+  describe("a full disk", () => {
+    const answer = { error: { code: "storage.disk_full", params: {} } };
+
+    async function respond(
+      status: Record<string, ContentfulStatusCode>,
+      cause: unknown,
+      lines: Line[],
+    ): Promise<Response> {
+      const boundary = createErrorBoundary(status, "widget.failed");
+      const app = new Hono();
+      app.get("/write", (c) => {
+        c.set("requestId", "req-disk");
+        return boundary(c, collect(lines), () => Promise.reject(cause));
+      });
+      return app.request("/write");
+    }
+
+    const engineFull = () => Object.assign(new Error("database or disk is full"), { errcode: 13 });
+
+    it("answers storage.disk_full at 507 for the domain error", async () => {
+      const lines: Line[] = [];
+      const res = await respond({}, new AppError("storage.disk_full", {}), lines);
+      expect(res.status).toBe(507);
+      expect(await res.json()).toEqual(answer);
+      expect(lines).toEqual([
+        { level: "error", event: "storage.disk_full", fields: { requestId: "req-disk" } },
+      ]);
+    });
+
+    it("answers the same for the engine's own full-disk error", async () => {
+      const lines: Line[] = [];
+      const res = await respond({}, engineFull(), lines);
+      expect(res.status).toBe(507);
+      expect(await res.json()).toEqual(answer);
+      expect(lines).toEqual([
+        { level: "error", event: "storage.disk_full", fields: { requestId: "req-disk" } },
+      ]);
+    });
+
+    it("answers the same when a wrapper carries it", async () => {
+      const lines: Line[] = [];
+      const res = await respond(
+        {},
+        new Error("Failed to run the query 'x'", {
+          cause: new AppError("storage.disk_full", {}),
+        }),
+        lines,
+      );
+      expect(res.status).toBe(507);
+      expect(await res.json()).toEqual(answer);
+      expect(lines).toEqual([
+        { level: "error", event: "storage.disk_full", fields: { requestId: "req-disk" } },
+      ]);
+    });
+
+    it("uses a route's own status for it when the route names one", async () => {
+      const lines: Line[] = [];
+      const res = await respond({ "storage.disk_full": 503 }, engineFull(), lines);
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual(answer);
+    });
+
+    it("leaves every other failure as it was", async () => {
+      const unreachable: Line[] = [];
+      const cantOpen = await respond(
+        {},
+        Object.assign(new Error("unable to open database file"), { errcode: 14 }),
+        unreachable,
+      );
+      expect(cantOpen.status).toBe(500);
+      expect(await cantOpen.json()).toEqual({ error: { code: "server.internal" } });
+      expect(unreachable).toEqual([
+        {
+          level: "error",
+          event: "widget.failed",
+          fields: { errorCode: "unknown", requestId: "req-disk" },
+        },
+      ]);
+
+      const notFound: Line[] = [];
+      const res = await respond(
+        { "test.not_found": 404 },
+        new AppError("test.not_found", { id: "t1" }),
+        notFound,
+      );
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: { code: "test.not_found", params: { id: "t1" } } });
+      expect(notFound).toEqual([
+        { level: "warn", event: "test.not_found", fields: { id: "t1", requestId: "req-disk" } },
+      ]);
+    });
+  });
 });

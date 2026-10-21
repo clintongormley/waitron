@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { isAppError } from "@waitron/shared";
+import { diskFullIn, isAppError } from "@waitron/shared";
 import { codeOf } from "./error-code.js";
 import type { Logger } from "./logger.js";
 
@@ -13,8 +13,10 @@ declare module "hono" {
 }
 
 /**
- *  - An `AppError` → `{ error: { code, params } }` at the status `status` assigns the code, or 400
- *    when the map omits it, logged at `warn` — a mapped 5xx included. Its log-only `reason`, if
+ *  - A full disk in the cause chain (`diskFullIn`) → `{ error: { code: "storage.disk_full",
+ *    params: {} } }` at the status `status` assigns it, or 507, logged at `error`.
+ *  - Any other `AppError` → `{ error: { code, params } }` at the status `status` assigns the code,
+ *    or 400 when the map omits it, logged at `warn` — a mapped 5xx included. Its log-only `reason`, if
  *    any, goes to the log as `logReason` and never into the answer.
  *  - Anything else → logged at `error` under `tag` with only `codeOf`'s classification (never its
  *    `.message`), and answered with an opaque `server.internal` 500.
@@ -29,6 +31,13 @@ export function createErrorBoundary(
     } catch (cause) {
       // A log field only, never added to the response.
       const requestId = c.get("requestId");
+      if (diskFullIn(cause)) {
+        log("error", "storage.disk_full", { requestId });
+        return c.json(
+          { error: { code: "storage.disk_full", params: {} } },
+          status["storage.disk_full"] ?? 507,
+        );
+      }
       if (isAppError(cause)) {
         const httpStatus = status[cause.code] ?? 400;
         // `logReason`, not `reason`: several codes carry a param named `reason`, which it would hide.

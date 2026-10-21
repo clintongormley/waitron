@@ -117,9 +117,8 @@ const PRINTER_MANAGE_PERMISSION: Permission = "printer.manage";
 const RECENT_JOBS_LIMIT = 100;
 
 /**
- * A code absent from this table answers 400; an error that is not an AppError answers an opaque
- * `server.internal` 500. The agent joins through the device knock and its client reads the HTTP
- * status, not the code, so the knock refusals reuse the `device.*` codes.
+ * A code absent from this table answers 400. The agent joins through the device knock and its
+ * client reads the HTTP status, not the code, so the knock refusals reuse the `device.*` codes.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "agent.unauthorized": 401,

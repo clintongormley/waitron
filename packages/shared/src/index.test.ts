@@ -14,6 +14,8 @@ import {
   deriveDisplayName,
   deviceId,
   deviceOrigin,
+  DISK_FULL_RESULT_CODE,
+  diskFullIn,
   draftLineMergeKey,
   firstCodeInCauseChain,
   foldCache,
@@ -161,6 +163,9 @@ describe("package public surface (./index.js)", () => {
     expect(sqliteFailureOf(wrapped)).toEqual({ errcode: 1, message: "no such table: tenants" });
     const coded = new Error("w", { cause: Object.assign(new Error("d"), { code: "ENOENT" }) });
     expect(firstCodeInCauseChain(coded, (code) => code === "ENOENT")).toBe("ENOENT");
+    const full = new Error("w", { cause: Object.assign(new Error("d"), { errcode: 13 }) });
+    expect(DISK_FULL_RESULT_CODE).toBe(13);
+    expect(diskFullIn(full)).toBe(true);
   });
 
   it("re-exports the profile helpers", () => {

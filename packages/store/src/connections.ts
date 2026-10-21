@@ -6,7 +6,7 @@ import type { DatabaseSync, StatementSync } from "node:sqlite";
  * An `async` body returns at its FIRST `await`, with its remaining work and its throw still ahead
  * of it, so a wrapper that believes the return finishes it commits early and never sees the throw.
  */
-const isPending = (value: unknown): value is PromiseLike<unknown> =>
+export const isPending = (value: unknown): value is PromiseLike<unknown> =>
   typeof (value as PromiseLike<unknown> | undefined)?.then === "function";
 
 /**
@@ -99,6 +99,17 @@ export interface Connections {
   asTransactionBody: <T>(body: () => T) => T;
   /** Which connection a statement issued at this moment belongs on. */
   forStatement: () => DatabaseSync;
+  /** Whether the caller's asynchronous context is one of this pair's running bodies. */
+  insideBody: () => boolean;
+  /**
+   * Records `error` as the failure that ended the writer's open transaction. The FIRST one is kept
+   * until {@link Connections.clearEnded}; while it is, `./node-sqlite-adapter.ts` throws it for a
+   * statement or a `transaction()` issued from inside a body.
+   */
+  noteEnded: (error: unknown) => void;
+  /** The failure {@link Connections.noteEnded} recorded, if any. */
+  endedBy: () => { error: unknown } | undefined;
+  clearEnded: () => void;
   /**
    * Registers `listener` for the commits the store reports; returns the unsubscribe. See
    * `StoreHandle.onCommit` in `./index.ts` for which commits those are. The first listener
@@ -173,28 +184,37 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
   const location = write.location();
   const walPath = location === null ? null : `${location}-wal`;
   let lastWal: WalMark = "unreadable";
+  let ended: { error: unknown } | undefined;
+  const insideBody = () => {
+    const token = context.getStore();
+    return token !== undefined && running.has(token);
+  };
   return {
     write,
     read,
     asTransactionBody: <T>(body: () => T): T => {
       const token = Symbol("transaction body");
       running.add(token);
-      const ended = () => {
+      const finished = () => {
         running.delete(token);
       };
       let result: T;
       try {
         result = context.run(token, body);
       } catch (error) {
-        ended();
+        finished();
         throw error;
       }
-      return settle(result, ended, ended);
+      return settle(result, finished, finished);
     },
-    forStatement: () => {
-      if (running.size === 0) return write;
-      const token = context.getStore();
-      return token !== undefined && running.has(token) ? write : read;
+    forStatement: () => (running.size === 0 || insideBody() ? write : read),
+    insideBody,
+    noteEnded: (error) => {
+      ended ??= { error };
+    },
+    endedBy: () => ended,
+    clearEnded: () => {
+      ended = undefined;
     },
     onCommit: (listener) => {
       if (listeners.size === 0 && walPath !== null) lastWal = walMark(walPath);

@@ -1,11 +1,11 @@
-import { isAppError, sqliteFailureOf } from "@waitron/shared";
+import { diskFullIn, isAppError, sqliteFailureOf } from "@waitron/shared";
 import "./errors.js";
 
 /**
  * Result codes meaning the engine cannot open the venue file at all (SQLITE_CANTOPEN): a list, so
  * adding a code is a named decision rather than a widened pattern.
  *
- * Deliberately NOT here: SQLITE_NOTADB (26), `file is not a database`. Naming a third code is a
+ * Deliberately NOT here: SQLITE_NOTADB (26), `file is not a database`. Naming another code is a
  * product decision needing a registry entry and English and Spanish operator wording, so a corrupted
  * venue file reaches the page as `unknown`.
  */
@@ -27,6 +27,7 @@ const UNREACHABLE = new Set(UNREACHABLE_RESULT_CODES);
  * come from the database.
  */
 export function classifyBootFailure(error: unknown): string {
+  if (diskFullIn(error)) return "storage.disk_full";
   if (isAppError(error)) return error.code;
   const failure = sqliteFailureOf(error);
   if (failure !== null) {

@@ -406,6 +406,7 @@ describe("curated operator text", () => {
     const classified = [
       "provisioning.database_unreachable",
       "provisioning.schema_mismatch",
+      "storage.disk_full",
       "unknown",
     ];
     const persistedByRunEntry = [
@@ -444,6 +445,27 @@ describe("curated operator text", () => {
     );
     expect(spanish).toContain(
       "El equipo no arrancará con esta copia. Antes de nada, pide a quien instaló este equipo que lo revise.",
+    );
+  });
+
+  it("names a full disk in both languages", async () => {
+    const english = await pageFor("storage.disk_full");
+    expect(english).toContain(
+      escapeHtml("The box's disk is full, so Waitron cannot save anything."),
+    );
+    expect(english).toContain(
+      escapeHtml(
+        "Ask whoever installed this box to free some space (old backups, earlier versions of Waitron) or fit a bigger disk. Your sales are not touched.",
+      ),
+    );
+    const spanish = await pageFor("storage.disk_full", undefined, SPANISH);
+    expect(spanish).toContain(
+      escapeHtml("El disco del equipo está lleno, así que Waitron no puede guardar nada."),
+    );
+    expect(spanish).toContain(
+      escapeHtml(
+        "Pide a quien instaló este equipo que libere espacio (copias antiguas, versiones anteriores de Waitron) o ponga un disco mayor. Tus ventas no se tocan.",
+      ),
     );
   });
 

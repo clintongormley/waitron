@@ -4,7 +4,9 @@ import type {
   StatementResultingChanges,
   StatementSync,
 } from "node:sqlite";
-import { type Connections, isReadOnlyRefusal, settle } from "./connections.js";
+import { AppError, diskFullIn } from "@waitron/shared";
+import { type Connections, isPending, isReadOnlyRefusal } from "./connections.js";
+import { asDiskFull } from "./disk-full.js";
 import { createTableRelationsHelpers, extractTablesRelationalConfig } from "drizzle-orm";
 import { BetterSQLiteSession } from "drizzle-orm/better-sqlite3/session";
 import { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core/db";
@@ -29,6 +31,8 @@ type TransactionWrapper<A extends unknown[], R> = ((...args: A) => R) &
  */
 let savepointsTaken = 0;
 const nextSavepoint = () => `wt_sp_${(savepointsTaken += 1)}`;
+
+const ENDED_UNDER_SAVEPOINT = "the engine ended the transaction this savepoint was in";
 
 /**
  * Lets Drizzle's SQLite session drive Node's own SQLite. Drizzle 0.45.2 publishes no driver for
@@ -60,15 +64,41 @@ export function adaptNodeSqlite(connections: Connections) {
         if (asArrays) stmt.setReturnArrays(true);
         return stmt;
       };
+      const bareRollback = /^\s*rollback\s*;?\s*$/i.test(query);
       /**
        * A statement on the writer with no transaction open commits by itself. Whether it changed a
        * row is read off SQLite's own counter, so a read, or DDL, which the counter does not count,
        * tells nobody.
+       *
+       * A bare `rollback` issued outside any body after a statement ended the transaction throws
+       * that statement's failure, not "cannot rollback": drizzle's migrator issues its own `begin`
+       * and `rollback` as ordinary statements and would otherwise hide a full disk behind its
+       * failed rollback (E9 in `docs/developers/conventions-data.md`, "A full disk sometimes ends
+       * the whole transaction"). Clearing the record cannot take it from a running body: while one
+       * runs, a bare `rollback` from outside it goes to the read connection (`forStatement`,
+       * `./connections.ts`), which refuses it with code 1, not the read-only code 8 that `issue`
+       * re-runs on the writer.
        */
       const onWriter = <T>(use: (stmt: StatementSync) => T): T => {
+        const ended = connections.endedBy();
         const write = connections.write;
-        const mark = write.isTransaction ? null : connections.changeMark();
-        const result = use(compile(write));
+        if (ended !== undefined) {
+          if (connections.insideBody()) throw ended.error;
+          if (bareRollback && !write.isTransaction) {
+            connections.clearEnded();
+            throw ended.error;
+          }
+        }
+        const wasOpen = write.isTransaction;
+        const mark = wasOpen ? null : connections.changeMark();
+        let result: T;
+        try {
+          result = use(compile(write));
+        } catch (error) {
+          const mapped = asDiskFull(error) ?? error;
+          if (wasOpen && !write.isTransaction) connections.noteEnded(mapped);
+          throw mapped;
+        }
         if (!write.isTransaction) connections.reportIfChanged(mark);
         return result;
       };
@@ -78,7 +108,7 @@ export function adaptNodeSqlite(connections: Connections) {
         try {
           return use(compile(target));
         } catch (error) {
-          if (!isReadOnlyRefusal(error)) throw error;
+          if (!isReadOnlyRefusal(error)) throw asDiskFull(error) ?? error;
           return onWriter(use);
         }
       };
@@ -105,16 +135,35 @@ export function adaptNodeSqlite(connections: Connections) {
      * With nothing open that is `begin` / `commit` / `rollback`. With a transaction already open it
      * is `savepoint` / `release` / `rollback to`, because SQLite refuses a `begin` inside a
      * transaction. Openness is read from the engine (`DatabaseSync.isTransaction`), never from a
-     * count kept here, so a transaction the engine ended on its own is not one this client still
-     * believes in.
+     * count kept here.
      *
-     * A body that returns a promise finishes when the promise settles, not when it returns
-     * (`settle`, `./connections.ts`). That has to hold at EVERY depth, and Drizzle emits a nested
-     * transaction itself without calling this client — so {@link addExecute} routes that level
-     * back through here. What NOTHING here enforces is the order WITHIN one body: two
-     * transactions opened on this connection concurrently — `Promise.all` over two
-     * `tx.transaction(...)` calls — would finish out of order, and a savepoint released out of
-     * order takes every savepoint after it with it. No guard says so.
+     * **A failed statement sometimes ends the whole transaction inside the engine, and sometimes
+     * backs out only itself.** A full disk did either, depending on the statement (E1, E2, E7 and
+     * E13 in `docs/developers/conventions-data.md`, "A full disk sometimes ends the whole
+     * transaction"); a `RAISE(ROLLBACK)` ends it (E5). Once the engine has ended it, every
+     * statement after that in the same body would run with no transaction open and commit by
+     * itself, and a nested `transaction()` would open a fresh top-level one that commits by itself
+     * (E8). So the failure that ended it is recorded (`Connections.noteEnded`), and from then until
+     * the outermost level finishes, a statement or a `transaction()` from inside a body throws that
+     * failure without running. The record is the connection pair's, not the body's: an outermost
+     * `transaction()` opened outside the queue while a queue body's transaction is ended clears it
+     * early, and the body's later writes can then be kept (`docs/backlog/box.md`, "A transaction
+     * opened outside the write queue can let a body's writes after a full disk commit"). A full
+     * disk that left the transaction open is not recorded: code that catches it may carry on.
+     *
+     * A nested level whose transaction the engine ended throws an error of its own, never the
+     * object its body threw: a caller that tells "my body's failure, already undone" from "the
+     * transaction around me is gone" by comparing the two (`apps/server/src/optional-document.ts`)
+     * would otherwise read the second as the first. The outermost level throws the recorded
+     * failure.
+     *
+     * A body that returns a promise finishes when the promise settles, not when it returns. That
+     * has to hold at EVERY depth, and Drizzle emits a nested transaction itself without calling
+     * this client — so {@link addExecute} routes that level back through here. What NOTHING here
+     * enforces is the order WITHIN one body: two transactions opened on this connection
+     * concurrently — `Promise.all` over two `tx.transaction(...)` calls — would finish out of
+     * order, and a savepoint released out of order takes every savepoint after it with it. No guard
+     * says so.
      *
      * `rollback to` leaves the savepoint on the stack, so it is released on both paths; a caller
      * that retries would otherwise leave one behind per failed attempt.
@@ -126,16 +175,27 @@ export function adaptNodeSqlite(connections: Connections) {
     transaction<A extends unknown[], R>(fn: (...args: A) => R): TransactionWrapper<A, R> {
       const inMode =
         (behaviour: Behaviour) =>
-        (...args: A): R =>
+        (...args: A): R => {
+          const ended = connections.endedBy();
+          if (ended !== undefined && connections.insideBody()) throw ended.error;
           // The marking wraps the WHOLE transaction, `keep`/`undo` included, rather than the body
           // alone: a handler registered on the body's own promise can run between the body
           // settling and this transaction finishing, and must not read the writer's uncommitted
           // rows.
-          connections.asTransactionBody(() => {
+          return connections.asTransactionBody(() => {
             const write = connections.write;
             const savepoint = write.isTransaction ? nextSavepoint() : undefined;
             write.exec(savepoint === undefined ? `begin ${behaviour}` : `savepoint ${savepoint}`);
+            if (savepoint === undefined) connections.clearEnded();
             let mark: number | null = null;
+            const undo = () => {
+              if (!write.isTransaction) return;
+              if (savepoint === undefined) write.exec("rollback");
+              else {
+                write.exec(`rollback to ${savepoint}`);
+                write.exec(`release ${savepoint}`);
+              }
+            };
             /**
              * Finish the transaction — and undo it if FINISHING is what fails. A refused `commit`
              * (a foreign key deferred with `pragma defer_foreign_keys` is checked AT COMMIT) leaves
@@ -146,20 +206,47 @@ export function adaptNodeSqlite(connections: Connections) {
               try {
                 write.exec(savepoint === undefined ? "commit" : `release ${savepoint}`);
               } catch (error) {
-                try {
-                  undo();
-                } catch {
-                  // The refusal above is what the caller needs; this one would hide it.
+                const mapped = asDiskFull(error) ?? error;
+                if (!write.isTransaction) connections.noteEnded(mapped);
+                else {
+                  try {
+                    undo();
+                  } catch {
+                    // The refusal above is what the caller needs; this one would hide it.
+                  }
                 }
-                throw error;
+                throw mapped;
               }
               connections.reportIfChanged(mark);
             };
-            const undo = () => {
-              if (savepoint === undefined) write.exec("rollback");
-              else {
-                write.exec(`rollback to ${savepoint}`);
-                write.exec(`release ${savepoint}`);
+            const failure = (error: unknown): unknown => {
+              if (savepoint === undefined) {
+                return connections.endedBy()?.error ?? asDiskFull(error) ?? error;
+              }
+              if (write.isTransaction) return error;
+              const recorded = connections.endedBy()?.error;
+              return diskFullIn(recorded)
+                ? new AppError("storage.disk_full", {}, { reason: ENDED_UNDER_SAVEPOINT })
+                : new Error(ENDED_UNDER_SAVEPOINT, { cause: recorded ?? error });
+            };
+            const finished = () => {
+              if (savepoint === undefined) connections.clearEnded();
+            };
+            const finish = () => {
+              try {
+                keep();
+              } catch (error) {
+                throw failure(error);
+              } finally {
+                finished();
+              }
+            };
+            const abandon = (error: unknown): never => {
+              try {
+                undo();
+                throw failure(error);
+              } finally {
+                finished();
               }
             };
             let result: R;
@@ -167,11 +254,18 @@ export function adaptNodeSqlite(connections: Connections) {
               if (savepoint === undefined) mark = connections.changeMark();
               result = fn(...args);
             } catch (error) {
-              undo();
-              throw error;
+              return abandon(error);
             }
-            return settle(result, keep, undo);
+            if (!isPending(result)) {
+              finish();
+              return result;
+            }
+            return result.then((value) => {
+              finish();
+              return value;
+            }, abandon) as R;
           });
+        };
       const wrapper = inMode("deferred") as TransactionWrapper<A, R>;
       for (const behaviour of BEHAVIOURS) wrapper[behaviour] = inMode(behaviour);
       return wrapper;
@@ -252,9 +346,9 @@ type Executable = {
  * **A transaction opened ON A TRANSACTION does not go through Drizzle at all**, and that is the
  * point of `openNested`. Drizzle's own nested transaction releases its savepoint the moment the
  * body RETURNS, so an `async` body's earlier writes would be released rather than rolled back when
- * it later throws. Routing that level through the client shim gives one `settle`-aware savepoint
- * discipline at every level. The nested body is handed the object it was called on, which keeps the
- * recursion finite.
+ * it later throws. Routing that level through the client shim gives every level the same savepoint
+ * handling, which finishes an `async` body when its promise settles. The nested body is handed the
+ * object it was called on, which keeps the recursion finite.
  */
 function addExecute<T extends Executable>(target: T, openNested: NestedOpener, nested = false): T {
   const openTransaction = target.transaction.bind(target);

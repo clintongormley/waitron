@@ -120,7 +120,7 @@ come after the list above:
   upgrades and recovery_): upgrade testing with rows the product itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
   installer (B3); what the box does when a part fails but it can still sell (A798-B, the build:
   [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md) revision 6; every owner
-  question answered).
+  question answered; slice 1 of 10 built).
 - **The displays and the printers walked at the real box** (_The till, devices and table service_;
   _Printers, the print agent and receipts_) — till, handheld and KDS through
   [ui-review.md](ui-review.md), and the first physical print since #327.
@@ -5164,11 +5164,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   (`apps/server/src/backup-sweep.ts`), and nothing sweeps the folder at start. Read, not run. Found by
   A798, whose "Liberar espacio" deletes them. [Design §11](superpowers/specs/2026-10-19-a798-degraded-trading-design.md#11-found-while-reading-outside-this-design)
 
-- **CLAUDE.md §3's rule "a statement this engine refuses backs out ITSELF" does not hold for a full
-  disk**: A798's experiments on `node:sqlite` (macOS) ended the whole transaction, and the store's
-  rollback then hid the real error. A798's build slice 1 corrects the rule with the store fix.
-  [Design §2.6](superpowers/specs/2026-10-19-a798-degraded-trading-design.md#26-the-disk)
-
 - **Migrating a box drops the change-feed triggers one statement at a time, outside a
   transaction.** `removeChangeFeed` (`packages/db/src/change-feed.ts`, called first by
   `applyMigrations`) drops each `waitron_change_*` trigger on its own. A product change in
@@ -5344,8 +5339,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **What showing the failed start's reason (#695) left:** [Detail](backlog/box.md#what-showing-the-failed-starts-reason-695-left)
 
 - **A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but
-  it can still sell.** Design revision 6 (2026-10-20); every owner question answered. The build is
-  to be planned as its own item, in the design's §8 slices:
+  it can still sell.** Design revision 6 (2026-10-20); every owner question answered. The build
+  follows the design's §8 slices:
+  [plan](superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md),
   [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md),
   [mock-ups](backlog/mockups/a798-degraded-trading/README.md). The owner's four answers: no reserved
   space on the disk, a warning and an email at 2 GB free; when a printer stops, every till and
@@ -5355,7 +5351,18 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   defaults that answer left open are in §6); and a manager may restart payments only with fresh
   proof from AEAT or two devices that the clock is right, and at most 24 hours behind (question 4,
   2026-10-20). It adds a module seat for staff notices and one
-  migration in the Veri*Factu module's set. Not started.
+  migration in the Veri*Factu module's set. Slice 1 of 10 (a full disk reported as
+  `storage.disk_full`; nothing a body writes through the write queue after one that ended its
+  transaction can commit, except as the entry below says) is #1936. Open asesor questions:
+  [Q51](compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21)
+  and
+  [Q52](compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21).
+
+- **A transaction opened outside the write queue can let a body's writes after a full disk
+  commit.** The store's record of a transaction the engine ended belongs to the connection pair,
+  not the body, so an outside `db.transaction` clears it and the body's later writes are kept.
+  Left open by A798-B slice 1 (#1936); no product code is known to open
+  one. [Detail](backlog/box.md#a-transaction-opened-outside-the-write-queue-can-let-a-bodys-writes-after-a-full-disk-commit)
 
 - **Recovery actions the 2026-09-08 node-containers design handed on** (§9.3, §12) — starting without
   a module that fails at start, undoing the last module change, and a migration that applied only in
