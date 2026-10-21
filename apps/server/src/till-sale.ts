@@ -1250,6 +1250,7 @@ async function payIntegrated(
           })
         : await priceStoredOrderForIssuance(tx, req.id);
     // Before the reader is asked: P3 could never file this sale.
+    deps.backend.assertRecordableAt(deps.clock.now());
     await selectOrderInvoice(tx, deps.backend, cfg, req.id, order.gross.total);
     await readSaleOperationDescription(tx, cfg, { kind: "order", orderId: req.id });
     const wasPlaced = locked?.status === "placed";
