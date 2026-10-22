@@ -437,7 +437,7 @@ describe("recordVoid — atomicity", () => {
   });
 });
 
-describe("recordVoid — no fiscal condition blocks a void", () => {
+describe("recordVoid — stored-predecessor and clock warnings", () => {
   it("completes the void when chain verification fails", async () => {
     // An annulment is a fiscal record like any other, so «NUNCA debe interrumpirse» applies:
     // blocking a void on a chain error would stop staff correcting the very sale concerned.

@@ -218,10 +218,6 @@ async function attemptAppend(
     .set({ secuencia, ultimoRegistroId: inserted.id, ultimaHuella: row.huella })
     .where(eq(cadenas.nodeId, nodeId));
 
-  // Our totals disagreeing with our own VAT lines is a bug in the money while the venue keeps
-  // selling, and any other warning is a record AEAT may flag, so both are raised where a human can
-  // find them rather than left in a log line.
-  //
   // On the caller's transaction: an incident that committed while its sale rolled back would
   // report a failure for a sale that never existed.
   const warnings = issues.filter((issue) => issue.severity === "warning");

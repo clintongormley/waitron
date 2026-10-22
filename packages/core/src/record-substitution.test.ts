@@ -675,9 +675,8 @@ describe("recordSubstitution — numbering", () => {
   });
 });
 
-describe("recordSubstitution — no fiscal condition blocks an F3 (§5)", () => {
+describe("recordSubstitution — stored-predecessor and clock warnings", () => {
   it("completes when chain verification fails, recording an incident on the F3", async () => {
-    // A customer is waiting for a proper invoice; a chain-integrity failure must never block it.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: ticket } = await sellTicket(backend);
     backend.breakIntegrity(nodeId, { code: "predecessor-hash-mismatch", params: { sequence: 1 } });

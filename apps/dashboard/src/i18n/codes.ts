@@ -3,6 +3,10 @@ import { t } from "./t.js";
 
 // Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "fiscal.fingerprint_mismatch": {
+    en: "Fingerprint check failed; ask a manager.",
+    es: "Ha fallado la comprobación de la huella; avisa a un responsable.",
+  },
   "attendance.state_changed": {
     en: "The attendance record changed. Read its latest history before responding.",
     es: "El registro de horas ha cambiado. Consulta el historial actual antes de responder.",

@@ -1354,6 +1354,12 @@ these observations to production. The results do not call for an inline A942 cha
 
 ## 19. Cancellation replay, zero total and wrong fingerprint (added 2026-10-22, A985)
 
+**Policy update, 2026-10-22 (A1003):** the owner chose refusal before the immutable record is
+written. The [implementation plan](../superpowers/plans/2026-10-22-a1003-fingerprint-refusal.md)
+covers the local new-record check, transaction rollback and a separate refusal alert. The
+observations below describe the earlier TEST-service experiment; they do not describe the new
+local refusal policy. Stored-predecessor checks keep their separate report-and-continue policy.
+
 You can inspect the [redacted request records, parsed replies and raw SOAP replies](../superpowers/specs/2026-10-22-aeat-four-behaviours-evidence.json).
 The owner approved [library PR #146](https://github.com/waitron-io/verifactu/pull/146), merged as
 `28a987963a69e3faa08814481b013d2982fa95b0`. Its package and documentation workflows passed on

@@ -58,3 +58,12 @@ Until the first order is sent, no step shows while an order is being taken for t
 A cleared step comes back when the moment it starts from happens again, such as more of a course
 being served. A step that repeats every few minutes after the last order comes back with each
 repeat: **Done** clears the one on show, and another order starts the count again.
+
+## Fingerprint check failed {#fingerprint-check-failed}
+
+If Waitron says the fingerprint check failed, ask a manager to arrange a repair before retrying
+the invoice action. The refused action creates no invoice and does not use its invoice number;
+invoices already stored stay unchanged.
+
+If the card was already charged, do not charge it again. Keep the bill and payment details so the
+manager can recover the payment after the fault is fixed.

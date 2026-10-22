@@ -548,10 +548,8 @@ describe("recordSale — the order of operations", () => {
   });
 });
 
-describe("recordSale — no fiscal condition blocks a sale", () => {
+describe("recordSale — stored-predecessor and clock warnings", () => {
   it("completes the sale when chain verification fails", async () => {
-    // AEAT: «la facturación por este motivo NUNCA debe interrumpirse». This assertion must never
-    // be inverted.
     const backend = new FakeFiscalBackend(suite.db);
     const issue: IntegrityIssue = { code: "chain.verification_failed", params: { sequence: 4 } };
     backend.breakIntegrity(nodeId, issue);
