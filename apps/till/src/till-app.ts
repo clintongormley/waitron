@@ -8251,23 +8251,15 @@ export class TillApp extends LitElement {
     let droppedAProduct = false;
     let extraNotOffered = false;
     let mustChooseAgain = false;
-    // Indexed once rather than scanned per line; the first entry wins under either key.
-    const liveByProduct = new Map<string, TillProduct>();
     const liveByMenuItem = new Map<string, TillProduct>();
     for (const candidate of this.products) {
-      if (!liveByProduct.has(candidate.id)) liveByProduct.set(candidate.id, candidate);
       if (candidate.menuItemId !== undefined && !liveByMenuItem.has(candidate.menuItemId))
         liveByMenuItem.set(candidate.menuItemId, candidate);
     }
     for (const line of order.lines) {
       // The snapshot keeps the order's names and price; the offered lists are today's live offer's,
       // as the till would offer them on that dish now, which is what an edit has to answer against.
-      const live =
-        line.menuItemId === undefined
-          ? line.productId === undefined
-            ? undefined
-            : liveByProduct.get(line.productId)
-          : liveByMenuItem.get(line.menuItemId);
+      const live = line.menuItemId === undefined ? undefined : liveByMenuItem.get(line.menuItemId);
       const stored = line.product;
       const product =
         stored === undefined
@@ -8277,7 +8269,6 @@ export class TillApp extends LitElement {
               ...(live === undefined ? {} : { offeredModifiers: offeredListsOf(live) }),
             };
       if (product === undefined) {
-        // A legacy product-only line no longer resolves; contextual lines carry their own snapshot.
         droppedAProduct = true;
         continue;
       }

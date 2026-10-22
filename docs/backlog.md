@@ -3542,9 +3542,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Next: reproduce through the form whether equivalent tip spellings ask to discard a change.
 
 - **Reopening a held order still removes a sold-out extra on the first edit.** The till now keeps
-  such a line marked "Not offered now"; a line with no stored snapshot whose product the till no
-  longer offers is still dropped with `held.product_gone`, and the first edit of the order removes
-  such an extra.
+  such a line marked "Not offered now", and the first edit of the order removes such an extra.
   [Detail](backlog/till.md#reopening-a-held-order-still-removes-a-sold-out-extra-on-the-first-edit)
 
 - **No kept test pins the refusal of a raise for an Unavailable size or an inactive menu** — left
@@ -3559,11 +3557,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   parked in** (`#onRetrieveOrder`, `apps/till/src/till-app.ts`; `HeldOrder` carries no zone), so it
   can mark lines "Not offered now" when their own zone still offers them. Traced, not run. **Next
   action:** send the order's zone with the retrieved order and read that zone's offer.
-
-- **Two branches still read a held line that names no menu offer**, which only an order parked
-  before B4 should have: `getHeldOrder` (`apps/server/src/working-order.ts`) and the till's retrieve
-  (`liveByProduct` in `#onRetrieveOrder`). **Next action:** delete both, since no
-  backwards-compatibility code is owed before production (CLAUDE.md §3), or say what keeps them.
 
 - **Loose ends left by A491 (#1569).**
   - A till's automatic reload after a box update clears a notice its lock screen was showing, such

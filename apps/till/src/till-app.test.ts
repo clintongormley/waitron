@@ -6804,7 +6804,7 @@ describe("till-app", () => {
         id: "wo-both",
         orderNumber: 12,
         label: null,
-        lines: [answered, { productId: "ghost", quantity: "1.000" }],
+        lines: [answered, { menuItemId: "menu-item-ghost", productId: "ghost", quantity: "1.000" }],
       })
       .mockResolvedValueOnce({
         kitchenNote: {
@@ -7775,8 +7775,8 @@ describe("till-app", () => {
         orderNumber: 5,
         label: null,
         lines: [
-          { productId: "cafe", quantity: "2.000" },
-          { productId: "jamon", quantity: "0.320" },
+          { menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" },
+          { menuItemId: "menu-item-jamon", productId: "jamon", quantity: "0.320" },
         ],
       }),
     });
@@ -7806,8 +7806,8 @@ describe("till-app", () => {
         orderNumber: 5,
         label: "Mesa 4",
         lines: [
-          { productId: "cafe", quantity: "1.000" },
-          { productId: "ghost", quantity: "1.000" }, // deactivated since the order was parked
+          { menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "1.000" },
+          { menuItemId: "menu-item-ghost", productId: "ghost", quantity: "1.000" }, // deactivated since the order was parked
         ],
       }),
     });
@@ -7828,6 +7828,83 @@ describe("till-app", () => {
     const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
     expect(banner.textContent).toContain(t("held.product_gone"));
     expect(counter(el)).not.toBeNull();
+  });
+
+  for (const locale of ["en-GB", "es-ES"])
+    for (const theme of ["light", "dark"] as const)
+      for (const width of [390, 1280])
+        it(`retrieve-order: does not replace a missing menu offer with a live product match, ${locale}, ${theme}, ${width}`, async () => {
+          const size = { width: window.innerWidth, height: window.innerHeight };
+          const previousLocale = currentLocale();
+          await page.viewport(width, 900);
+          try {
+            const { el } = await mountApp(
+              {
+                getTill: vi.fn().mockResolvedValue({ ...till, locale }),
+                retrieveWorkingOrder: vi.fn().mockResolvedValue({
+                  kitchenNote: {
+                    scope: { workingOrderId: "wo-missing-offer" },
+                    note: null,
+                    revision: 0,
+                    ownerRevision: 0,
+                  },
+                  id: "wo-missing-offer",
+                  orderNumber: 5,
+                  label: null,
+                  revision: 0,
+                  lines: [
+                    { menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "1.000" },
+                    { productId: "cafe", quantity: "2.000" },
+                  ],
+                }),
+              },
+              theme,
+            );
+            const c = await toCounter(el);
+            expect(currentLocale()).toBe(locale);
+
+            emit(c, "retrieve-order", { id: "wo-missing-offer" });
+            await flush(el);
+
+            expect(c.store.lines.map((line) => line.quantity)).toEqual(["1"]);
+            expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+              t("held.product_gone"),
+            );
+            await page.screenshot({
+              path: `__screenshots__/a988-held-offer/${locale}-${theme}-${width}.png`,
+            });
+          } finally {
+            setLocale(previousLocale);
+            await page.viewport(size.width, size.height);
+          }
+        });
+
+  it("retrieve-order: drops a line whose product is null beside an offered line", async () => {
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-null" },
+          note: null,
+          revision: 0,
+          ownerRevision: 0,
+        },
+        id: "wo-null",
+        orderNumber: 5,
+        label: null,
+        revision: 0,
+        lines: [
+          { menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "1.000" },
+          { productId: null, quantity: "1.000", makeAt: null, optionSnapshots: [] },
+        ],
+      }),
+    });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-null" });
+    await flush(el);
+    expect(c.store.lines.map((line) => line.quantity)).toEqual(["1"]);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+      t("held.product_gone"),
+    );
   });
 
   it("retrieve-order: refreshes the held-orders list after loading", async () => {

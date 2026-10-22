@@ -4713,9 +4713,7 @@ export interface HeldOrder {
   /** The receipt language staff chose for the order; absent while the location's own applies. */
   receiptLanguage?: string;
   /**
-   * PARENT rows only, each dish's child lines nested as `extras`. A row carries its stored offer and
-   * display snapshot, so retrieval does not depend on the offer still being active; a row with no
-   * stored offer is returned by its product alone.
+   * PARENT rows only, each dish's child lines nested as `extras`.
    */
   lines: {
     /** The dish's frozen options answers: names, no ids. */
@@ -4934,7 +4932,10 @@ async function readBasketOrder(
       .filter((line) => line.parentLineId === null)
       .map((line) => {
         const context = contextByLine.get(line.id);
-        if (context === undefined || line.productId === null) {
+        if (context === undefined) {
+          throw new AppError("order.service_context_missing", { workingOrderId: id });
+        }
+        if (line.productId === null) {
           return {
             productId: line.productId,
             quantity: line.quantity,
