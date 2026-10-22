@@ -1711,6 +1711,51 @@ export interface AlertView {
   deviceName?: string | null;
 }
 
+/** LOCAL copy of the server's `BoxHealth` (`apps/server/src/box-health.ts`). */
+export interface BoxHealth {
+  at: string;
+  sales: { lastAt: string | null };
+  notices: {
+    key: string;
+    code: string;
+    severity: "error" | "warning" | "notice";
+    params: Record<string, unknown>;
+    owner: string;
+  }[];
+  noticesUnavailable: string[];
+  filing: boolean;
+  stream: StreamStatusView;
+  clock: {
+    authority:
+      { state: "unknown" } | { state: "ok" | "warning"; driftSeconds: number; measuredAt: string };
+    sync: { synced: boolean; source: "timedatectl" | "unavailable"; warn: boolean };
+  };
+  printers: { id: string; name: string }[];
+  /** Null when the payments module is off. */
+  readers: { id: string; name: string }[] | null;
+  canFree: boolean;
+  disk: {
+    freeBytes: number | null;
+    totalBytes: number | null;
+    databaseBytes: number | null;
+    backupsBytes: number | null;
+    logBytes: number | null;
+    otherBytes: number | null;
+    stoppedSince: string | null;
+    lowSince: string | null;
+    reclaimable: { bytes: number; backupRunning: boolean };
+  };
+}
+
+/** LOCAL copy of the server's `FreedSpace` (`apps/server/src/free-space-now.ts`). */
+export interface FreedSpaceView {
+  freedBytes: number;
+  deleted: number;
+  failed: number;
+  backupRunning: boolean;
+  freeBytes: number | null;
+}
+
 export interface AlertsResponse {
   visible: boolean;
   alerts: AlertView[];
@@ -4129,6 +4174,14 @@ export class DashboardApi {
       `/management-api/alerts/incidents/${encodeURIComponent(incidentId)}/handled`,
       "POST",
     );
+  }
+
+  getBoxHealth(): Promise<BoxHealth> {
+    return this.#request<BoxHealth>("/api/box/health", "GET");
+  }
+
+  freeBoxSpace(): Promise<FreedSpaceView> {
+    return this.#request<FreedSpaceView>("/api/box/free-space", "POST", {});
   }
 
   exportConfiguration(passphrase: string): Promise<Blob> {

@@ -528,6 +528,9 @@ export const QUERY_DEPENDENCIES = {
   getStreamSettings: ["backup_status"],
   // The answer is built from the box's own files and the process's role, not from any table.
   getCloudStatus: [],
+  // Mostly the box's disk, clock and processes, which no table change reports, so the timer
+  // refreshes it; its sales, printer and reader rows wait for the timer too.
+  getBoxHealth: [],
   listAlerts: ["incidents", "content_suggestion_jobs", "content_suggestions"],
   listHandledAlerts: ["incidents", "persons"],
 } as const;
@@ -586,8 +589,10 @@ export function dashboardQuery<N extends DashboardQueryName>(
         ? 30_000
         : name === "pairingMode" || name === "listDiscoveredPrinters"
           ? 5_000
-          : name === "getEmailInbox" || name === "getBackupStatus" || name === "getStreamSettings"
-            ? 10_000
-            : 60_000,
+          : name === "getBoxHealth"
+            ? 15_000
+            : name === "getEmailInbox" || name === "getBackupStatus" || name === "getStreamSettings"
+              ? 10_000
+              : 60_000,
   };
 }
