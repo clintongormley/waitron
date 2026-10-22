@@ -724,8 +724,10 @@ turn holding the same read answered, and a turn holding only the drain's stateme
 the equipment read, which reads in turns, answers; `GET /api/till`, which opens its own
 `withTransaction` around `readTillSetup`, and the session-checked till reads (`GET
 /api/working-orders` among them) answered `507` with a change waiting — with no change waiting, and
-since slice 6 even with a last-seen stamp due, they answer 200. Which step refused them with a change
-waiting was not isolated. PIN sign-in is refused on a full disk in every case, with no session
+since slice 6 even with a last-seen stamp due, they answer 200. For `GET /api/working-orders`, the 507 came
+from the route's own `withTransaction` (`listHeldOrders`) after `requireSession` had caught its own
+drain's refusal; for `GET /api/till` it was not isolated
+([conventions-data.md](../developers/conventions-data.md#a-read-on-a-full-disk-must-not-fail-on-its-own-housekeeping-write)). PIN sign-in is refused on a full disk in every case, with no session
 written.
 
 ## The Box status page's rows from a module are not in the staff-notice seat

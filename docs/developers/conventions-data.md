@@ -2583,7 +2583,7 @@ a small real filesystem; the cases that now pin them are in
   check before them can, to stamp the last-seen time: `requireDevice`,
   `apps/server/src/device-session.ts`): the equipment is read in one `withWriteLock` turn (`device-api.ts`), and each notice source in a turn
   of its own (`readStaffNoticesInTurns`, `apps/server/src/staff-notices.ts`), with no drain; a
-  source whose turn changes a row (`total_changes()` moved) is failed and rolled back. This is the
+  source whose turn changes a row (`total_changes()` moved) is failed and rolled back. This is a
   stated exception to one `withTransaction` per route. Cost: one lock turn for the equipment and
   one per source on every read.
 
@@ -2601,7 +2601,7 @@ on macOS through `hdiutil` and in CI on a tmpfs, and skip on a Linux machine wit
 - Every other route's own `withTransaction`, read-only or not, while a change waits: its drain is
   refused. M10 measured it with no stamp due and one waiting change: `GET /api/till`, the
   session-checked read and PIN sign-in each answered 507, before and after the stamp change (which
-  step refused was not isolated). That was the plan's prototype. On the shipped code (`983fb3862`),
+  step refused was not isolated). That was the plan's prototype. On the shipped code,
   a real-disk probe on macOS (`hdiutil`) with one waiting change and no stamp due answered 507 for
   both `GET /api/till` and `GET /api/working-orders`. On the second, `requireSession` caught its
   own drain's refusal and its re-check passed, and the 507 came from the route's own

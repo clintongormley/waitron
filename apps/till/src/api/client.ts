@@ -1767,7 +1767,7 @@ export interface RoleEquipment {
   choices: EquipmentItem[];
 }
 
-/** `GET` and `PUT /api/device/equipment` success: always the five roles. */
+/** `PUT /api/device/equipment` success, and the equipment half of the GET's: always the five roles. */
 export interface DeviceEquipment {
   roles: RoleEquipment[];
 }

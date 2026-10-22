@@ -395,8 +395,8 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   app.get("/api/device/equipment", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      // Not `withTransaction`: a read that changes nothing has nothing to drain, and the drain is a
-      // write a full disk refuses.
+      // Not `withTransaction`: its closing change-log drain is a write, which a full disk refuses
+      // even when this read changed nothing.
       const equipment = await deps.db.withWriteLock(() =>
         readDeviceEquipment(deps.db, device.deviceId),
       );
