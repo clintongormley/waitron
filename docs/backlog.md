@@ -6725,6 +6725,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   The audit's remaining Bucket E/F sites and the owner-held core-comment PR are listed in the
   [detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
+- **Setup's receipt-language selection still reads inherited object properties.** Its
+  `venue-screen.ts` lookup needs qualification with a country-pack code such as `constructor`;
+  the review screen now keeps such an unknown code visible.
+  [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
 - **A975. Developer tools and demo scripts to English** (`dev-setup.ts`, the `*-demo.ts` scripts,
   README examples). Low priority; needed before A977 can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 

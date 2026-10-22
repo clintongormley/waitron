@@ -571,6 +571,12 @@ until A977).
   [PR #1986](https://github.com/clintongormley/waitron/pull/1986) awaits the owner to land it.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Developer/demo script names remain A975's. Low priority.
+- **Setup receipt-language selection lookup.** `apps/setup/src/screens/venue-screen.ts` still
+  treats an inherited property such as `constructor` as a language entry. A974's review lookup
+  now accepts only the registry's own keys; its three inherited-name cases failed with blank
+  labels before that guard and passed after it. Qualify the selection path with country-pack
+  choices carrying such a code before changing it. Its reachability through an installed pack
+  has not been established. `git blame` attributes the selection expression to `082553a65`.
 - **A975 — developer tools and demo scripts.** `apps/server/scripts/dev-setup.ts:213–316`, the
   `*-demo.ts` scripts, `cloud-integration-fixture.ts`, `receipt-look.ts`, the README's example values
   (`apps/server/README.md:152–156`). The demo seed itself is A972's. Low priority; A977 cannot scan

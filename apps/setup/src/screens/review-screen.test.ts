@@ -203,6 +203,17 @@ describe("setup-review-screen receipt language labels", () => {
     },
   );
 
+  it.each(["constructor", "toString", "__proto__"])(
+    "keeps an unknown receipt-language code that names an inherited property (%s)",
+    async (code) => {
+      const draft = fullDraft();
+      draft.venue!.location!.invoiceLocales = [code];
+      const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
+      expect(text(el, "[data-test=summary-invoiceLocales]")).toBe(code);
+      expect(draft.venue!.location!.invoiceLocales).toEqual([code]);
+    },
+  );
+
   it("updates a mounted review's language names when the wizard language changes", async () => {
     setLocale("en-GB");
     const draft = fullDraft();
