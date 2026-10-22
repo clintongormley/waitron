@@ -68,7 +68,6 @@ export function startFreeSpaceWatch(deps: {
   let stopped = false;
 
   async function read(): Promise<void> {
-    if (stopped) return;
     try {
       const free = await freeBytes(deps.dir, deps.statfs);
       if (stopped) return;
