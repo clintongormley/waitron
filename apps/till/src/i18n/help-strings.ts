@@ -11,9 +11,9 @@ export const helpEn = {
   "help.counter.park":
     "Saves this order without taking payment and clears the basket for the next customer. The name is optional. Pick the order up again from Parked orders, on this till or any other that serves its zone.",
   "help.counter.parked_orders":
-    "Orders still open and not fully paid, in the zones this device serves. Retrieve puts one in the basket to finish it or take payment. Discard deletes it at once, but not while it holds money from a payment, or while a payment or refund is going through.",
+    "Orders still open and not fully paid, in the zones this device serves. Retrieve puts one in the basket to finish it or take payment. Discard deletes it at once, but not while it holds money from a payment, or while a payment or refund is going through. Each order shows how many items it has, then how many are unsent, held, waiting or ready.",
   "help.counter.waiting_orders":
-    "Counter orders in the zones this device serves that are not finished: sent but not paid, handed over but not paid, or paid with dishes sent to the kitchen but not yet handed over. Pay takes payment; Hand over, where it shows, records that the customer has taken the order.",
+    "Counter orders in the zones this device serves that are not finished: sent but not paid, handed over but not paid, or paid with dishes sent to the kitchen but not yet handed over. Pay takes payment; Hand over, where it shows, records that the customer has taken the order. Each order shows how many items it has, then how many are unsent, held, waiting or ready.",
   "help.counter.guests":
     "Leave it empty for no guests line. With a number, the receipt shows the guests and what each person pays.",
   "help.floor.tables_map":
@@ -37,7 +37,7 @@ export const helpEn = {
   "help.more.equipment":
     "Chooses what this device prints receipts, payment slips and invoices on, which card reader it uses and which cash drawer it opens. Pick each from the list; a printer or card reader can also be scanned by its label.",
   "help.more.transfers":
-    "Asks another department to take over the current tab, and shows the tabs other departments send you to accept or decline. Your department stays responsible for a tab until the other accepts it.",
+    "Asks another department to take over the current tab, and shows the tabs other departments send you to accept or decline. Your department stays responsible for a tab until the other accepts it. A tab your department holds shows the same counts.",
   "help.more.pass":
     "Opens the pass: the open orders, each with its dishes grouped by course, or by group on a table's bill, and which of them are ready.",
   "help.person.fix_hours":
@@ -55,9 +55,9 @@ export const helpEs: Record<HelpKey, string> = {
   "help.counter.park":
     "Guarda este pedido sin cobrarlo y vacía la cesta para el siguiente cliente. El nombre es opcional. Recupéralo desde Pedidos aparcados, en esta caja o en cualquier otra que atienda su zona.",
   "help.counter.parked_orders":
-    "Pedidos todavía abiertos y sin cobrar del todo, de las zonas que atiende este dispositivo. Recuperar lo pone en la cesta para terminarlo o cobrarlo. Descartar lo borra en el acto, pero no si tiene dinero de un pago, ni mientras hay un pago o una devolución en curso.",
+    "Pedidos todavía abiertos y sin cobrar del todo, de las zonas que atiende este dispositivo. Recuperar lo pone en la cesta para terminarlo o cobrarlo. Descartar lo borra en el acto, pero no si tiene dinero de un pago, ni mientras hay un pago o una devolución en curso. Cada pedido muestra cuántos artículos tiene y cuántos están sin enviar, en espera, esperando o listos.",
   "help.counter.waiting_orders":
-    "Pedidos de barra de las zonas que atiende este dispositivo que no están terminados: enviados sin cobrar, entregados sin cobrar, o cobrados con platos enviados a cocina pero sin entregar. Cobrar cobra el pedido; Entregar, donde aparece, anota que el cliente se lo ha llevado.",
+    "Pedidos de barra de las zonas que atiende este dispositivo que no están terminados: enviados sin cobrar, entregados sin cobrar, o cobrados con platos enviados a cocina pero sin entregar. Cobrar cobra el pedido; Entregar, donde aparece, anota que el cliente se lo ha llevado. Cada pedido muestra cuántos artículos tiene y cuántos están sin enviar, en espera, esperando o listos.",
   "help.counter.guests":
     "Déjalo vacío para que no salga la línea de comensales. Con un número, el ticket muestra los comensales y lo que paga cada persona.",
   "help.floor.tables_map":
@@ -81,7 +81,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.more.equipment":
     "Elige dónde imprime este dispositivo los tickets, los justificantes de pago y las facturas, qué lector de tarjetas usa y qué cajón abre. Elige cada uno de la lista; una impresora o un lector de tarjetas también se puede escanear por su etiqueta.",
   "help.more.transfers":
-    "Pide a otro departamento que se haga cargo de la cuenta actual y muestra las cuentas que otros departamentos te envían para aceptarlas o rechazarlas. Tu departamento sigue siendo responsable hasta que el otro la acepte.",
+    "Pide a otro departamento que se haga cargo de la cuenta actual y muestra las cuentas que otros departamentos te envían para aceptarlas o rechazarlas. Tu departamento sigue siendo responsable hasta que el otro la acepte. Una cuenta de tu departamento muestra los mismos recuentos.",
   "help.more.pass":
     "Abre el pase: los pedidos abiertos, cada uno con sus platos agrupados por curso, o por grupo en la cuenta de una mesa, y cuáles están listos.",
   "help.person.fix_hours":

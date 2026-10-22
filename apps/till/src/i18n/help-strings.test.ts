@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { currentLocale, setLocale } from "./t.js";
 import { helpBadgeLabel, helpEn, helpEs, helpText } from "./help-strings.js";
-import { es } from "./strings.js";
+import { en, es } from "./strings.js";
 
 const original = currentLocale();
 afterEach(() => setLocale(original));
@@ -61,5 +61,29 @@ describe("the till's help strings", () => {
 describe("the order screen's help", () => {
   it("the order screen's Send help calls a held group by the same word", () => {
     expect(helpEs["help.order.send"]).toContain(es["table.group_held"].toLowerCase());
+  });
+});
+
+describe("the order lists' help", () => {
+  const states = ["items", "unsent", "held", "waiting", "ready"] as const;
+  for (const [language, help, words] of [
+    ["English", helpEn, en],
+    ["Spanish", helpEs, es],
+  ] as const) {
+    for (const key of ["help.counter.parked_orders", "help.counter.waiting_orders"] as const) {
+      it(`${key} in ${language} names the five counts by their chips' words`, () => {
+        for (const state of states)
+          expect(help[key]).toContain(words[`order_counts.${state}`].replace("{n} ", ""));
+      });
+    }
+  }
+
+  it("help.more.transfers says a held tab shows the same counts", () => {
+    expect(helpEn["help.more.transfers"]).toContain(
+      "A tab your department holds shows the same counts.",
+    );
+    const sentences = (text: string) => text.split(/(?<=\.)\s+/).length;
+    expect(sentences(helpEs["help.more.transfers"])).toBe(sentences(helpEn["help.more.transfers"]));
+    expect(sentences(helpEn["help.more.transfers"])).toBe(3);
   });
 });

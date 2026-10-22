@@ -2410,6 +2410,8 @@ export interface InvoiceDeliveryStatus {
 
 export interface DepartmentTransfer {
   currentDepartmentId?: string;
+  /** Present only where the viewer may see the tab. */
+  counts?: OrderStateCounts;
   id: string;
   tabId: string;
   sourceDepartmentId: string;

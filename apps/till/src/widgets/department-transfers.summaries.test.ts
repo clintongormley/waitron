@@ -4,6 +4,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { TillApi } from "../api/client.js";
 import { TillDepartmentTransfers } from "./department-transfers.js";
+import { en, es } from "../i18n/strings.js";
 
 const incoming = {
   id: "incoming-1",
@@ -146,4 +147,47 @@ for (const locale of ["en-GB", "es-ES"]) {
       });
     }
   }
+}
+
+for (const locale of ["en-GB", "es-ES"]) {
+  it(`shows the item counts on a row that carries them, and none on one that does not, in ${locale}`, async () => {
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      const words = locale === "es-ES" ? es : en;
+      const counted = {
+        ...incoming,
+        counts: { ordered: 5, unsent: 1, held: 0, waiting: 2, ready: 1 },
+      };
+      const api = new TillApi("", async () => new Response("{}"));
+      const { el } = await mountWidget<TillDepartmentTransfers>("till-department-transfers", {
+        api,
+        snapshot: {
+          incoming: [counted],
+          sent: [sent],
+          receivingAllowed: true,
+          notifications: [counted, sent],
+          error: undefined,
+        },
+      });
+      const chips = (selector: string) =>
+        [...el.shadowRoot!.querySelectorAll<HTMLElement>(`${selector} [data-count]`)].map(
+          (chip) => [chip.dataset.count, chip.textContent],
+        );
+      const expected = [
+        ["ordered", words["order_counts.items"].replace("{n}", "5")],
+        ["unsent", words["order_counts.unsent_one"]],
+        ["waiting", words["order_counts.waiting"].replace("{n}", "2")],
+        ["ready", words["order_counts.ready_one"]],
+      ];
+      expect(chips("[data-notification=incoming-1]")).toEqual(expected);
+      expect(el.shadowRoot!.querySelector("[data-notification=sent-1] .counts")).toBeNull();
+      el.open = true;
+      await el.updateComplete;
+      expect(chips("[data-incoming=incoming-1]")).toEqual(expected);
+      expect(el.shadowRoot!.querySelector("[data-sent=sent-1] .counts")).toBeNull();
+    } finally {
+      setLocale(previous);
+    }
+  });
 }

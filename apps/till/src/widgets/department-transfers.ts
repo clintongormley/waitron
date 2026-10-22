@@ -24,6 +24,7 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { trackDialog } from "./track-dialog.js";
+import { orderCountStyles, orderCounts } from "./order-counts.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -46,6 +47,7 @@ export class TillDepartmentTransfers extends LitElement {
 
   static override styles = [
     baseStyles,
+    orderCountStyles,
     css`
       :host {
         display: block;
@@ -475,6 +477,7 @@ export class TillDepartmentTransfers extends LitElement {
           : html`<p>
                 ${t("department_transfer.tab").replace("{number}", String(row.summary.orderNumber))}${label === null ? "" : ` — ${label}`}
               </p>
+              ${row.counts === undefined ? nothing : orderCounts(row.counts)}
               <p>${row.summary.sourceDepartmentName} → ${row.summary.destinationDepartmentName}</p>`
       }
       <time datetime=${row.createdAt}
