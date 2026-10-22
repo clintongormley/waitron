@@ -658,6 +658,20 @@ function tableWriteError(error: unknown): CounterError {
     : { code };
 }
 
+const STEP_DONE_REFUSALS = new Set([
+  "service_step.not_found",
+  "service_zone.not_allowed",
+  "device.forbidden_action",
+]);
+
+/** A refused Done: the table refusals, and the step's and the device's own. */
+function stepDoneError(error: unknown): CounterError {
+  const code = (error as { code?: unknown } | undefined)?.code;
+  return typeof code === "string" && STEP_DONE_REFUSALS.has(code)
+    ? { code }
+    : tableWriteError(error);
+}
+
 function draftRefusalError({ refused, ownerName }: DraftRefused, unsent = false): CounterError {
   if (refused === "draft.taken_over")
     return unsent ? { takenOver: ownerName ?? "", unsent } : { takenOver: ownerName ?? "" };
@@ -15892,6 +15906,17 @@ export class TillApp extends LitElement {
     await this.#refreshFloor();
   }
 
+  async #onServiceStepDone(event: Event): Promise<void> {
+    const { partyId, stepId } = (event as CustomEvent<{ partyId: string; stepId: string }>).detail;
+    this.errorKey = undefined;
+    try {
+      await this.api.markServiceStepDone(partyId, stepId);
+    } catch (error) {
+      this.errorKey = stepDoneError(error);
+    }
+    await this.#refreshFloor();
+  }
+
   #endOperatorSession(): void {
     this.#counterRefreshRequest++;
     this.#basketRefreshing = undefined;
@@ -17449,6 +17474,7 @@ export class TillApp extends LitElement {
         .canExitToCounter=${false}
         .canOpenStation=${this.#allowsDestination("station")}
         .canChangeToday=${this.capabilities.includes("take-orders")}
+        .canMarkSteps=${this.capabilities.includes("take-orders")}
       ></till-floor-screen>`;
     if (tab === "order") return this.#embeddedOrderBody();
     return this.#kitchenBody();
@@ -18003,6 +18029,7 @@ export class TillApp extends LitElement {
         @reprint-bill=${(event: Event) => void this.#onReprintBill(event)}
         @reprint-kitchen-tickets=${(event: Event) => void this.#onReprintKitchenTickets(event)}
         @mark-cleared=${(event: Event) => void this.#onMarkCleared(event)}
+        @service-step-done=${(event: Event) => void this.#onServiceStepDone(event)}
         @pay-tab=${(event: Event) => void this.#onPayTab(event)}
         @pay-presented=${(event: Event) => this.#onPayPresented(event)}
         @bill-pay=${(event: Event) => void this.#onBillPay(event)}

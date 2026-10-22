@@ -80,6 +80,18 @@ describe.each(["light", "dark"] as const)("till-table-status a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it("says the due step's name on the pin, with the bell, and has no violations", async () => {
+    const { el, host } = await mountWidget<TillTableStatus>(
+      "till-table-status",
+      { party, tables: [table({ ...seated, signals: [dueStepSignal("Dessert?")] })] },
+      theme,
+    );
+    const pin = el.shadowRoot!.querySelector<HTMLButtonElement>("[data-status-pin]")!;
+    expect(pin.textContent!.trim()).toBe("Dessert?");
+    expect(pin.querySelector('wt-icon[name="floor-step"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with an overdue pin and its icon", async () => {
     const { el, host } = await mountWidget<TillTableStatus>(
       "till-table-status",

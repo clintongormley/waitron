@@ -3778,6 +3778,16 @@ export class TillApi {
     await this.#request<void>(`/api/tables/${tableId}/cleared`, "POST");
   }
 
+  /** Mark a party's service step done → `POST /api/parties/:partyId/service-steps/:stepId/done`.
+   * Answers the steps it cleared, none when the step was already done; rejects
+   * `service_step.not_found`. */
+  markServiceStepDone(partyId: string, stepId: string): Promise<{ cleared: string[] }> {
+    return this.#request<{ cleared: string[] }>(
+      `/api/parties/${encodeURIComponent(partyId)}/service-steps/${encodeURIComponent(stepId)}/done`,
+      "POST",
+    );
+  }
+
   /** Every bill of a party, merged parties' included → `GET /api/parties/:partyId/bills`. */
   getPartyBills(partyId: string): Promise<PartyBill[]> {
     return this.#request<PartyBill[]>(`/api/parties/${partyId}/bills`, "GET");

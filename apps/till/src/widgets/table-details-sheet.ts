@@ -8,9 +8,11 @@ import { readyText } from "../state/floor-look.js";
 import { seatsFor } from "../state/floor-map.js";
 import { type SheetAction, sheetActions } from "../state/floor-today.js";
 import { reminderDueAt } from "../state/release-reminder.js";
+import { currentStep } from "../state/service-steps.js";
 import { byPrecedence } from "../state/table-precedence.js";
 import { signalOf } from "../state/table-signals.js";
 import { chipState, signalChipStyles, signalChips } from "./signal-chips.js";
+import { stepChip, stepChipStyles } from "./step-chip.js";
 import { trackDialog } from "./track-dialog.js";
 
 export function unsentText({ billNumber, ownerName, lineCount }: UnsentDraft): string {
@@ -59,15 +61,18 @@ const ACTION_LABELS = {
  * Everything the floor knows about one table, in a dialog. It saves nothing.
  *
  * `details-close` (no detail) asks the holder to close it; it is sent on Close, on Escape and after
- * Mark cleared, never when the holder closed it by taking its table away. With `actions`, it
+ * Mark cleared or Done, never when the holder closed it by taking its table away. With `actions`, it
  * offers today's changes for the table: each sends `today-action` `{ action, tableId }`, then
- * `details-close`, except Rotate, which leaves it open to be pressed again.
+ * `details-close`, except Rotate, which leaves it open to be pressed again. With `canMarkSteps`, the
+ * party's due step is drawn whole with Done, which sends `service-step-done`
+ * `{ partyId, stepId, tableId }`, then `details-close`.
  */
 @customElement("till-table-details-sheet")
 export class TillTableDetailsSheet extends LitElement {
   static override styles = [
     baseStyles,
     signalChipStyles,
+    stepChipStyles,
     css`
       .lines {
         display: flex;
@@ -76,6 +81,11 @@ export class TillTableDetailsSheet extends LitElement {
         margin: 0;
         padding: 0;
         list-style: none;
+      }
+
+      .lines + .step,
+      .step + .chips {
+        margin-top: var(--wt-space-2);
       }
 
       .chips {
@@ -124,6 +134,8 @@ export class TillTableDetailsSheet extends LitElement {
   @property({ attribute: false }) tables: readonly TableState[] = [];
   /** False leaves Join with… out. */
   @property({ attribute: false }) offersJoinWith = true;
+  /** The device's profile allows `take-orders`, so the party's due step is offered with Done. */
+  @property({ attribute: false }) canMarkSteps = false;
 
   #emit(type: string, detail?: unknown): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -136,6 +148,11 @@ export class TillTableDetailsSheet extends LitElement {
 
   #markCleared(table: TableState): void {
     this.#emit("mark-cleared", { tableId: table.id });
+    this.#emit("details-close");
+  }
+
+  #stepDone(table: TableState, partyId: string, stepId: string): void {
+    this.#emit("service-step-done", { partyId, stepId, tableId: table.id });
     this.#emit("details-close");
   }
 
@@ -206,11 +223,16 @@ export class TillTableDetailsSheet extends LitElement {
 
   #body(table: TableState): TemplateResult {
     const seats = seatsFor(table);
+    const now = this.now ?? Date.now();
+    const party = table.party;
+    const step = this.canMarkSteps && party !== null ? currentStep(table.signals, now) : null;
     const chips = byPrecedence(
-      signalChips(table.signals, { now: this.now ?? Date.now() }),
+      signalChips(table.signals, { now }).filter(
+        (chip) => step === null || chip.key !== "service-step",
+      ),
       (chip) => chipState(chip, table.signals),
     );
-    const lines = this.#lines(table, chips.length);
+    const lines = this.#lines(table, chips.length + (step === null ? 0 : 1));
     if (seats !== null)
       lines.unshift(
         html`<li data-seats>${countText(seats, "floor.seats", "floor.seats_one")}</li>`,
@@ -228,6 +250,13 @@ export class TillTableDetailsSheet extends LitElement {
           : html`<ul class="lines">
               ${lines}
             </ul>`
+      }
+      ${
+        step === null
+          ? nothing
+          : html`<div class="step">
+              ${stepChip(step, { onDone: () => this.#stepDone(table, party!.id, step.stepId) })}
+            </div>`
       }
       ${chips.length === 0 ? nothing : html`<div class="chips">${renderFloorChips(chips)}</div>`}
       ${this.#todayActions(table)}

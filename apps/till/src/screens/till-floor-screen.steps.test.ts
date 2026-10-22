@@ -207,6 +207,45 @@ describe("till-floor-screen: a table's due service step", () => {
     expect(cardOf(el).querySelector(".card-open")).toBeNull();
   });
 
+  it("shows an unplaced table's step as the plain filled chip on its token, with no Done", async () => {
+    const el = await mount(
+      [
+        seated({ id: "t1", label: "T1", party: null, signals: [], today: today() }),
+        seated({ today: { ...today(), placement: null }, signals: [dueStepSignal("Dessert?")] }),
+      ],
+      { map: true },
+    );
+    const token = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      '[data-tray-table="t9"] wt-table-token',
+    )!;
+    await token.updateComplete;
+    const chip = token.shadowRoot!.querySelector('[data-chip="service-step"]')!;
+    expect(chip.textContent!.trim()).toBe("Dessert?");
+    expect(chip.classList.contains("tone-primary-filled")).toBe(true);
+    expect(token.shadowRoot!.querySelector("[data-step-done]")).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-tray-table="t9"] [data-step-done]')).toBeNull();
+  });
+
+  it.each([true, false])(
+    "hands the table's details canMarkSteps %s, as the cards have it",
+    async (canMarkSteps) => {
+      const el = await mount([seated({ today: today(), signals: [dueStepSignal("Dessert?")] })], {
+        canMarkSteps,
+        map: true,
+      });
+      el.shadowRoot!.querySelector("wt-floor-map")!.dispatchEvent(
+        new CustomEvent("wt-table-details", {
+          detail: { tableId: "t9" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+      const sheet = el.shadowRoot!.querySelector("till-table-details-sheet")!;
+      expect(sheet.canMarkSteps).toBe(canMarkSteps);
+    },
+  );
+
   it("keeps a button card for a table with no step", async () => {
     const el = await mount([seated()]);
     expect(cardOf(el).tagName).toBe("BUTTON");

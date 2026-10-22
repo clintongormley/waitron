@@ -3884,6 +3884,30 @@ describe("TillApi: a seated party", () => {
     });
   });
 
+  it("markServiceStepDone POSTs to the party's step /done route and answers what it cleared", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ cleared: ["s1"] }));
+
+    await expect(new TillApi("", fetchStub).markServiceStepDone("p1", "s1")).resolves.toEqual({
+      cleared: ["s1"],
+    });
+
+    expect(fetchStub).toHaveBeenCalledWith("/api/parties/p1/service-steps/s1/done", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("markServiceStepDone surfaces a deleted step as { code }", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "service_step.not_found" } }, 404));
+
+    await expect(new TillApi("", fetchStub).markServiceStepDone("p1", "s1")).rejects.toMatchObject({
+      code: "service_step.not_found",
+      status: 404,
+    });
+  });
+
   it("getPartyBills GETs the party's bills", async () => {
     const bills = [
       {

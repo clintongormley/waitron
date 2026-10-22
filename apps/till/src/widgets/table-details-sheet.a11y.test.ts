@@ -89,6 +89,21 @@ describe.each(["light", "dark"] as const)("till-table-details-sheet a11y (%s the
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations for a step drawn with Done", async () => {
+    const { el, host } = await mountWidget<TillTableDetailsSheet>(
+      "till-table-details-sheet",
+      {
+        table: everything,
+        heading: "Terraza 4",
+        now: Date.parse("2026-10-10T12:00:00Z"),
+        canMarkSteps: true,
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-step-done]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations for a table shown under today's name", async () => {
     const { el, host } = await mountWidget<TillTableDetailsSheet>(
       "till-table-details-sheet",

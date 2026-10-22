@@ -1128,6 +1128,7 @@ export class TillFloorScreen extends LitElement {
       .savedName=${this.#savedName(table)}
       .now=${this.#drawnAt}
       .actions=${this.canChangeToday}
+      .canMarkSteps=${this.canMarkSteps}
       .tables=${this.tables}
       .offersJoinWith=${this.#offersJoinWith(table)}
       @today-action=${(event: Event) => this.#onTodayAction(event)}
