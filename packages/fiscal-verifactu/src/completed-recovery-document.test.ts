@@ -178,7 +178,7 @@ it("the completed manager sheet uses the saved venue zone rather than the host z
     await task.destroy();
   }
 });
-it("unrelated and duplicate history still give a sheet with no installation code", async () => {
+it("unrelated and duplicate history do not refuse the sheet", async () => {
   const bytes = await render("en", {
     "hour-history": {
       reference: "prepared-hours",

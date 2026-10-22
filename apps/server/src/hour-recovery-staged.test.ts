@@ -27,6 +27,19 @@ import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { recoveryArchiveSourceId } from "./recovery-source.js";
 
+const preview = vi.hoisted(() => ({ seen: [] as string[], fail: false }));
+vi.mock("./recovery-backup-preview.js", async (original) => {
+  const actual = await original<typeof import("./recovery-backup-preview.js")>();
+  const path = await import("node:path");
+  return {
+    ...actual,
+    readRecoveryCopyPreview: async (...args: Parameters<typeof actual.readRecoveryCopyPreview>) => {
+      preview.seen.push(path.basename(path.dirname(args[0].databasePath)));
+      if (preview.fail) throw new Error("thrown partway through a staged request");
+      return actual.readRecoveryCopyPreview(...args);
+    },
+  };
+});
 vi.mock("./restore.js", async (original) => {
   const actual = await original<typeof import("./restore.js")>();
   return { ...actual, validateArtifact: vi.fn(actual.validateArtifact) };
@@ -280,6 +293,22 @@ describe("a staged backup for the restore's clock requests", () => {
       process.off("unhandledRejection", onUnhandled);
     }
     expect(unhandled).toEqual([]);
+  });
+
+  it("removes a request's throwaway copy when the request throws partway", async () => {
+    const h = await stagedHost();
+    const { stagedId } = await h.ok(h.stage());
+    const staged = await readdir(join(h.stagingDir, "staged-recovery"));
+    preview.seen.length = 0;
+    preview.fail = true;
+    try {
+      expect((await h.send(stagedId, { action: "clock-challenge" })).status).toBe(500);
+    } finally {
+      preview.fail = false;
+    }
+    expect(preview.seen).toEqual([expect.stringMatching(/^request-/)]);
+    expect(await readdir(join(h.stagingDir, "staged-recovery"))).toEqual(staged);
+    await h.ok(h.send(stagedId, { action: "clock-challenge" }));
   });
 
   it("clears a leftover staging folder when the box starts", async () => {

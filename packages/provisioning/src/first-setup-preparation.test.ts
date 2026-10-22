@@ -567,18 +567,20 @@ it("refuses a new wait with an expired grant, recording nothing, and takes the n
   vi.advanceTimersByTime(300_001);
   expect(Date.now()).toBeGreaterThan((first.preparation as { targetMs: number }).targetMs);
   await f.compare();
+  const ledger = join(f.root, "state/module-preparation-state.json");
+  const entryKinds = async () =>
+    JSON.parse(await readFile(ledger, "utf8")).revisions.flatMap(
+      (row: { value: { entries: { kind: string }[] } }) =>
+        row.value.entries.map((entry) => entry.kind),
+    );
+  const savedBefore = await entryKinds();
   await expect(f.select(proof)).rejects.toMatchObject({ code: "setup.owner_required" });
   const state = (await f.host.store.read())!;
   expect(state.status).toBe("claimed");
   expect(firstSetupModuleContext(state, MODULE).request).toBeNull();
-  const journal = JSON.parse(
-    await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
-  );
-  expect(
-    journal.revisions.flatMap((row: { value: { entries: { kind: string }[] } }) =>
-      row.value.entries.map((entry) => entry.kind),
-    ),
-  ).not.toContain("intent");
+  const savedAfter = await entryKinds();
+  expect(savedAfter).toHaveLength(savedBefore.length);
+  expect(savedAfter).not.toContain("intent");
   await f.selectPastWaits();
   expect((await f.host.store.read())!.status).toBe("consumption-intent");
 });

@@ -843,7 +843,6 @@ async function bootServer(
 ): Promise<StartedServer> {
   const now = () => new Date();
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
-  await clearStagedRecoveries(join(config.stateDir, RESTORE_STAGING_DIR));
   // Here rather than in `loadConfig`: `health.ts` imports from `config.ts` to build `DUTY_BUDGET_MS`,
   // so `config.ts` importing it back would be a cycle. An idle host sleeps `config.maxTickMs`
   // verbatim, so a ceiling at or past the drain budget would read the drain duty as stale.
@@ -930,6 +929,9 @@ async function bootServer(
   // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself.
   const stampProbe = await openVenueDatabase(config.venueDir);
   try {
+    // Only once this process holds the venue folder: a second process must not delete the running
+    // one's staged copy.
+    await clearStagedRecoveries(join(config.stateDir, RESTORE_STAGING_DIR));
     await reconcileFirstSetupBeforeMode(config, firstSetupHost.store);
     await assertDeploymentMatches(
       stampProbe.venue,

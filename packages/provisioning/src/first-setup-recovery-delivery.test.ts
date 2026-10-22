@@ -269,9 +269,14 @@ it.each([
   },
 );
 
-it.each(["taxpayerName", "venueName", "installationCodes", "nodeKey"] as const)(
-  "rejects a self-consistently rehashed changed %s in retained delivery",
-  async (field) => {
+it.each([
+  ["a changed", "taxpayerName"],
+  ["a changed", "venueName"],
+  ["the retired field", "installationCodes"],
+  ["a changed", "nodeKey"],
+] as const)(
+  "rejects a self-consistently rehashed statement carrying %s %s in retained delivery",
+  async (_, field) => {
     const f = await fixture();
     const statement = {
       ...f.statement,

@@ -521,7 +521,7 @@ it("never counts a browser on the box itself as the promotion's second clock", a
   expect((await compare(() => false)).secondClock).toBe(true);
 });
 
-it("serves clock, sheet-code selection and authenticated promotion through the management routes", async () => {
+it("serves clock, selection and authenticated promotion through the management routes", async () => {
   const s = await service();
   await admit(s);
   const app = new Hono();

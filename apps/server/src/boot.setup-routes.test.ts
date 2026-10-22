@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { spawn } from "node:child_process";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import type { Hono } from "hono";
@@ -830,7 +831,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     }
   }, 60_000);
 
-  it("removes a staged decrypted copy even when the start then fails before migrating", async () => {
+  it("leaves a staged decrypted copy for the next start when this one fails before holding the venue folder", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-staged-early-"));
     const leftover = join(stateDir, "restore-staging", "staged-recovery", "archive-validate-left");
     try {
@@ -853,11 +854,48 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         code: "server.config_invalid",
         params: { variable: "WAITRON_SETUP_APP_DIR" },
       });
-      await expect(readdir(dirname(leftover))).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await readdir(dirname(leftover))).toEqual(["archive-validate-left"]);
     } finally {
       await rm(stateDir, { recursive: true, force: true });
     }
   });
+
+  it("leaves a running process's staged copy alone when a second start is refused the venue folder", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-staged-second-"));
+    const venueDir = join(stateDir, "venue");
+    const staged = join(stateDir, "restore-staging", "staged-recovery", "live-staged-copy");
+    await mkdir(venueDir, { recursive: true });
+    await mkdir(staged, { recursive: true });
+    await writeFile(join(staged, "venue.db"), "decrypted venue in use by the first process");
+    const holder = spawn(
+      process.execPath,
+      [
+        "-e",
+        `const {DatabaseSync}=require("node:sqlite");const c=new DatabaseSync(${JSON.stringify(join(venueDir, "venue.lock"))});c.exec("begin immediate");process.stdout.write("held\\n");setInterval(()=>{},1000);`,
+      ],
+      { stdio: ["ignore", "pipe", "inherit"] },
+    );
+    try {
+      await new Promise<void>((resolve) => holder.stdout!.once("data", () => resolve()));
+      await expect(
+        startServer(
+          {
+            WAITRON_VENUE_DIR: venueDir,
+            WAITRON_STATE_DIR: stateDir,
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_ENV: "preproduction",
+            WAITRON_HTTP_PORT: String(await freePort()),
+            WAITRON_HTTP_LANDING_PORT: "0",
+          },
+          {},
+        ),
+      ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
+      expect(await readdir(dirname(staged))).toEqual(["live-staged-copy"]);
+    } finally {
+      holder.kill("SIGKILL");
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
 
   it("deletes setup validation's plaintext copy after staging a confirmed archive", async () => {
     beforeServerStarts();
