@@ -237,6 +237,16 @@ describe("devSetup against a real venue directory", () => {
     expect(read.records).toEqual([{ issuer: "B00000000", n: read.sales }]);
   });
 
+  it("gives the developer administrator an English display name", async () => {
+    const rows = await readVenue(async (db) => {
+      const result = await db.execute<{ display_name: string }>(
+        sql`select display_name from persons where role = 'admin'`,
+      );
+      return result.rows;
+    });
+    expect(rows).toEqual([{ display_name: "Administrator" }]);
+  });
+
   it("migrates into the venue file the server opens, not somewhere else", async () => {
     const store = await openVenueDatabase(first.env.WAITRON_VENUE_DIR);
     try {
@@ -371,23 +381,7 @@ describe("devSetup against a real venue directory", () => {
     });
     expect(rows).toEqual([
       {
-        label: "Camarero 1",
-        form_factor: "phone-portrait",
-        screen: null,
-        every_station: null,
-        station_names: null,
-        every_zone: null,
-      },
-      {
-        label: "Monitor Pase",
-        form_factor: "kds",
-        screen: "pass_monitor",
-        every_station: 1,
-        station_names: null,
-        every_zone: 1,
-      },
-      {
-        label: "Mostrador",
+        label: "Counter",
         form_factor: "till",
         screen: null,
         every_station: null,
@@ -395,7 +389,15 @@ describe("devSetup against a real venue directory", () => {
         every_zone: null,
       },
       {
-        label: "Pantalla Cocina",
+        label: "Handheld 1",
+        form_factor: "phone-portrait",
+        screen: null,
+        every_station: null,
+        station_names: null,
+        every_zone: null,
+      },
+      {
+        label: "Kitchen screen",
         form_factor: "kds",
         screen: "station",
         every_station: 0,
@@ -403,7 +405,15 @@ describe("devSetup against a real venue directory", () => {
         every_zone: 0,
       },
       {
-        label: "Pantalla Pase",
+        label: "Pass monitor",
+        form_factor: "kds",
+        screen: "pass_monitor",
+        every_station: 1,
+        station_names: null,
+        every_zone: 1,
+      },
+      {
+        label: "Pass screen",
         form_factor: "kds",
         screen: "pass",
         every_station: 0,
@@ -420,9 +430,11 @@ describe("devSetup against a real venue directory", () => {
     });
     const printed = DEMO_DEVICE_LINES.join("\n");
     for (const label of labels) expect(printed).toContain(label);
-    expect(printed).toContain("Pantalla Cocina (station screen)");
-    expect(printed).toContain("Pantalla Pase (pass screen)");
-    expect(printed).toContain("Monitor Pase (pass monitor)");
+    expect(printed).toContain("Counter (till)");
+    expect(printed).toContain("Handheld 1 (handheld)");
+    expect(printed).toContain("Kitchen screen (station screen)");
+    expect(printed).toContain("Pass screen (pass screen)");
+    expect(printed).toContain("Pass monitor (pass monitor)");
     expect(printed).not.toMatch(/watcher/i);
   });
 

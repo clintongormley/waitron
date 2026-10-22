@@ -433,6 +433,10 @@ worktree launcher also start Mailpit. During local development you can inspect i
 directory the server resolves, and `dev:reset` removes that directory so the next run provisions
 from scratch. Nothing in Compose holds venue data, so no `docker compose` command resets anything.
 
+Fresh developer venues use English administrator and device names. Reusing a saved demo keeps its
+recorded names, while the terminal lists the names from the current seed. To rebuild that demo's
+practice data with the current names, run `wa-wt reset demo <worktree-name>`.
+
 For a new production Live venue, the setup wizard asks for the mail server settings and sends a
 test message to your administrator address. Continue becomes available when the server accepts a
 test of the current settings. Final setup seals them in the credential vault.

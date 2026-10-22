@@ -574,9 +574,10 @@ until A977).
   labels before that guard and passed after it. Qualify the selection path with country-pack
   choices carrying such a code before changing it. Its reachability through an installed pack
   has not been established. `git blame` attributes the selection expression to `082553a65`.
-- **A975 — developer tools and demo scripts.** `apps/server/scripts/dev-setup.ts:213–316`, the
-  `*-demo.ts` scripts, `cloud-integration-fixture.ts`, `receipt-look.ts`, the README's example values
-  (`apps/server/README.md:152–156`). The demo seed itself is A972's. Low priority; A977 cannot scan
+- **A975 — developer tools and demo scripts.** The location's operation description and street
+  example in `apps/server/scripts/dev-setup.ts`, the `*-demo.ts` scripts,
+  `cloud-integration-fixture.ts`, `receipt-look.ts`, the README's example values
+  (`apps/server/README.md:204–209`). The demo seed itself is A972's. Low priority; A977 cannot scan
   `apps/*/scripts` until it lands.
 - **A976 — point 7's first step.** The server's test venues default to English, and the tests that
   then read a screen take their text from the strings file. Accent tests, AEAT names and official

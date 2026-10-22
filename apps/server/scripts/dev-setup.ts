@@ -221,7 +221,7 @@ async function provisionVenue(
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin(ADMIN_PIN),
           passwordHash: hashPassword(ADMIN_PASSWORD),
           email: DEMO_ADMIN_EMAIL,
@@ -253,8 +253,8 @@ async function provisionVenue(
 
 /** What `pnpm dev:setup` prints under "Pick a pre-enrolled device"; one entry per enrolled device. */
 export const DEMO_DEVICE_LINES: readonly string[] = [
-  "Mostrador (till) · Camarero 1 (handheld)",
-  "Pantalla Cocina (station screen) · Pantalla Pase (pass screen) · Monitor Pase (pass monitor)",
+  "Counter (till) · Handheld 1 (handheld)",
+  "Kitchen screen (station screen) · Pass screen (pass screen) · Pass monitor (pass monitor)",
 ];
 
 /**
@@ -295,25 +295,25 @@ async function seedDemoDevices(
     throw new Error("dev-setup: no default preparation station for the station screen");
   }
 
-  await enrolDeviceForTest(db, cfg, { name: "Mostrador", profileId: profileFor("till") });
+  await enrolDeviceForTest(db, cfg, { name: "Counter", profileId: profileFor("till") });
   await enrolDeviceForTest(db, cfg, {
-    name: "Camarero 1",
+    name: "Handheld 1",
     profileId: profileFor("phone-portrait"),
   });
 
   await enrolDeviceForTest(db, cfg, {
-    name: "Pantalla Cocina",
+    name: "Kitchen screen",
     profileId: profileFor("kds"),
     stationId: kitchen.id,
   });
   const { kitchen: passKitchen, deli } = seeded.passStationIds;
   await enrolDeviceForTest(db, cfg, {
-    name: "Pantalla Pase",
+    name: "Pass screen",
     profileId: profileFor("kds"),
     kitchenScreen: { kind: "pass", stationIds: [passKitchen, deli], zoneIds: null },
   });
   await enrolDeviceForTest(db, cfg, {
-    name: "Monitor Pase",
+    name: "Pass monitor",
     profileId: profileFor("kds"),
     kitchenScreen: { kind: "pass_monitor", stationIds: null, zoneIds: null },
   });
