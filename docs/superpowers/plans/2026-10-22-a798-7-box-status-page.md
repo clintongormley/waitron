@@ -56,6 +56,13 @@
 > (I2, F1); the Clock row says nothing about internet time when the box cannot tell (I3, F2); the
 > replacement disk-warning test can fail in Spanish (I4); Task 14 runs where its disk has room (F3);
 > every Minor, too-wide and unverified finding is applied in place.
+>
+> **Revision 3 (2026-10-22)** folds in the round-3 check (`…/a798-7-plan-review/round3.md`, 0
+> Critical, 2 Important, 12 Minor), with its experiments under `…/a798-7-plan-review/round3/exp/`:
+> the CLAUDE.md rule names the start's clean-up as its exception (I1); the separator proof now
+> mutates the one path builder both `lstat` and `rm` use (I2); a deletion asked while a backup run
+> holds or waits for the staging turn is skipped, never queued (m1); a survey counts a vanished file
+> as gone (m2); Task 2 is split into 2a and 2b (m11); every other Minor is applied in place.
 
 **Words used in this plan.**
 - The **page** is the new dashboard screen "Box status" / "Estado del equipo" (screen id
@@ -72,8 +79,8 @@
 - A **turn** is one `db.withWriteLock(...)` with no change-log drain, as the equipment read uses
   (`apps/server/src/device-api.ts:398-403`).
 - The **staging turn** is a new in-process lock over backup staging. Every backup run holds it while
-  it uses backup staging; a Liberar deletion takes it, and skips staging only when a backup run holds
-  it. A page refresh never takes it (decision 7).
+  it uses backup staging; a Liberar deletion takes it, and skips staging when a backup run holds it
+  or waits for it. A page refresh never takes it (decision 7).
 
 **Goal:** a manager with `system.manage` opens Settings ("Ajustes") → Box status and sees, in one place, whether
 each part of the box is well — sales, the tax agency, the bucket copy, printers, card readers, the
@@ -156,8 +163,15 @@ venue's admin's.
   link's size is ever counted as freed. **The claim check found one trap** (`claim-check/m4.log`):
   `rm(join(staging, "backup-encrypt-slash") + "/", { recursive: true })`, a link to a folder with a
   trailing separator, deleted the link's TARGET (`venue after trailing-slash rm ENOENT`). `join` never
-  adds a trailing separator; Task 2 must never append one, and its case 7 and proof by deletion pin
-  it.
+  adds a trailing separator. What protects a target is the link check, an `lstat` of the entry's own
+  path; a trailing separator is dangerous because it defeats that check (`lstat("link/")` describes
+  the target). The round-3 check's `sep-probe.log` measured it: with the separator before `rm` alone
+  the target survived (the link check had already skipped the entry); with it in the shared path both
+  `lstat` and `rm` read, `venue.db survives: false`. Task 2a's Step 3 makes one path builder serve
+  both, and Task 2b case 7 and its proof by deletion pin it. The claim check's line about a real
+  folder holding a link ran after its trailing-slash step had already removed `venue/`, so it
+  measured nothing; this plan's own `p4-symlink-rm.log` and the round-3 check's
+  `real-folder-link.log` (with a control that is deleted) are the receipts for that sentence.
 - **M5 — who writes backup staging, and when (read).** `runOnce` is called only by `tick`
   (`apps/server/src/backup-sweep.ts:303-310`; `grep -rn "runOnce(" apps/server/src` outside tests
   finds that one call), and `tick` only by `runBackupSweep` (`:265-301`), which only the backup
@@ -198,7 +212,7 @@ venue's admin's.
 - **M10 — room on the full-disk test file's small disk** (the claim check's `t14-room.log`,
   `m1-m3.clean.log`, macOS 32m HFS+ image): `32,755,712` bytes free on the empty image;
   `18,116,608` free after the file's existing 11 cases, which keep their folders
-  (`apps/server/src/start-full-disk.e2e.test.ts:51-69`, one disk for the whole file); a migrated,
+  (`apps/server/src/start-full-disk.e2e.test.ts:54-60`, `needDisk` at `:63-69`, one disk for the whole file); a migrated,
   provisioned, checkpointed venue folder took `3,576,456` bytes.
 - **M11 — a staging turn shared by surveys keeps a press out** (the round-1 review's
   `r1/turn-contention.mjs`, `r1/turn-contention.log`): a turn written to revision 1's interface, a
@@ -290,7 +304,7 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
    disk's red shows before the clock's (design §4.2, "Two reds at once").
 6. **Liberar deletes exactly the start's forced clean-up set, minus symbolic links.** The set the
    start deletes on a full disk (`freeSpaceAtStart` with `force`, `apps/server/src/start-space.ts:106-144`),
-   read through the same name rules, which Task 2 exports unchanged (`ROTATED_LOG`, `CRASH_REPORT`,
+   read through the same name rules, which Task 2a exports unchanged (`ROTATED_LOG`, `CRASH_REPORT`,
    `STAGED_DUMP`, `start-space.ts:14-18`):
    - in `<stateDir>/backup-staging`: a regular file whose name matches `STAGED_DUMP` (a staged
      dump, `waitron-<stamp>.dump`, or its `.partial`), and a real folder whose name starts
@@ -305,10 +319,11 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
    skips it (`start-space.ts:156-176`); **an entry that is a symbolic link is skipped too**, which
    the start does not do — M4 shows `rm` would remove only the link, but a link's "size" is its own,
    so counting it would claim space that is not freed. Every path is built with `join`, never with a
-   trailing separator (M4's trap). Nothing outside those three folders is ever
+   trailing separator, and the path `lstat` judges is the path `rm` removes (M4's trap). Nothing
+   outside those three folders is ever
    listed; `venue.db`, its `-wal` and `-shm`, `node.db`, `venue.lock`, `recovery.lock`,
    `recovery.json`, Litestream's `.venue.db-litestream/` and `<state>/stream/`, the restore's staging,
-   cloud snapshots, keys and settings match no rule and sit in no folder Liberar lists (Task 2's
+   cloud snapshots, keys and settings match no rule and sit in no folder Liberar lists (Task 2b's
    refusing cases). `config.logDir` and `config.stateDir` are the ones the running server uses
    (`apps/server/src/config.ts:528-532`). A deletion that fails is logged and counted, never thrown;
    one already gone (`ENOENT`) counts as neither deleted nor failed. Not covered: a `local-fs`
@@ -316,14 +331,15 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
    deleted, as the start already deletes it today (`start-space.ts:79-80`; the destination folder is
    free text, `backup-config.ts:149-152, 175-176`) **(read)**; the claim check judged it exotic, and
    so does this plan. A destination folder that is the log folder or `backup-staging` itself keeps its
-   archives (`waitron-<stamp>-<uuid>.backup.enc`, `backup-keys.ts:25-26`, match no rule; Task 2
+   archives (`waitron-<stamp>-<uuid>.backup.enc`, `backup-keys.ts:25-26`, match no rule; Task 2b
    case 14).
 7. **Backup staging is touched only while no backup run is under way in this process.** A new
    in-process staging turn with two kinds of holder (Task 1):
    - **a backup run** holds it from its first step to the end of its own clean-up (`tick` wraps
      `runOnce`, `backup-sweep.ts:303-310`), after any Liberar deletion that holds it;
-   - **a Liberar deletion** takes it at once unless a backup run holds it, and then skips staging and
-     says `backupRunning: true`; it never waits for a run. A run that starts while a deletion holds
+   - **a Liberar deletion** takes it at once unless a backup run holds it or waits for it, and then
+     skips staging and says `backupRunning: true` (a run is under way or about to start); it never
+     waits for a run. A run that starts while a deletion holds
      the turn waits for it (a deletion of at most a few files). A run that was told to stop while it
      waited does nothing once it gets the turn (Task 1 case 7; the round-1 review's M5).
    - **A page refresh never takes it.** The survey measures staging without the turn — a best-effort
@@ -373,8 +389,7 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
 13. **Printers and card readers rows list what is set up; their problems come from the bell.**
     Active, undeleted printers (`printers`, `packages/db/src/schema/printers.ts:36-84`); active,
     undeleted card readers, the demo reader left out as the battery source does
-    (`cardReaders`, `DEMO_READER_ID`, `alert-sources.ts:780-791`; the page also leaves out deleted
-    readers, which that source does not). **The card readers are read only when the payments module
+    (`cardReaders`, `DEMO_READER_ID`, `alert-sources.ts:780-791`). **The card readers are read only when the payments module
     is enabled** — boot's own test for it, `setsToMigrate.some((module) => module.name === "payments")`
     (`boot.ts:1649`) — because without it the table does not exist (M9). With it off, `readers` is
     `null` and the row is left out: the design's rows describe the parts a box has, and a box with card
@@ -391,13 +406,13 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
     controller's `dashboardQuery`, `apps/dashboard/src/api/live-queries.ts:569-591`: first read on
     `api`, later ones on `api.background`, whose GETs are passive). 15 s is the till's equipment-read
     cadence (design §4.2). The bell's alerts are the shared `listAlerts` query (60 s, the default in
-    `live-queries.ts:584-591`), shared by key with the bell (`packages/dashboard-kit/src/live-data.ts:66-110`),
+    `live-queries.ts:584-591`), shared by key with the bell (`packages/dashboard-kit/src/live-data.ts:67-109`),
     so the page adds no alert request while the bell is open. **After a press** the page calls
-    `api.liveData.refresh()` (`live-data.ts:113-118`), which marks every query the open dashboard
+    `api.liveData.refresh()` (`live-data.ts:111-116`), which marks every query the open dashboard
     holds as due and reads each once — this page's two and the shell's bell — because `getBoxHealth`
     has no dependency a change event could reach and `invalidate` matches only dependencies
     (`:131-148`). The bell's `storage.disk_full` comes from `storageAlertSource`, which reads the stop
-    live (`alert-sources.ts:309-342`), so after a press that lifts the stop the alert is gone at that
+    live (`alert-sources.ts:310-342`), so after a press that lifts the stop the alert is gone at that
     read; on a dashboard where nobody pressed, the bell catches up at its next 60 s poll. No push is
     built.
 16. **Where it sits.** Sidebar group Settings ("Ajustes", `nav.group.configuration`,
@@ -430,7 +445,12 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
     `createTtlCache({ ttlMs: 60_000, now })` (`apps/server/src/ttl-cache.ts:10`), as boot already
     caches the backup status (`boot.ts:2141-2145`), so several open tabs polling every 15 s start at
     most one `timedatectl` and one walk a minute. The free space (`statfs`) and the leftovers' figure
-    are read on every call, so the button's figure is current. The round-1 review's M11.
+    are read on every call, so the button's figure is current. The round-1 review's M11. **A press
+    starts a fresh walk:** the usage cache's key carries a generation number that `createSpaceFreer`
+    bumps after each deletion (its `onFreed` callback), so the first read after a press walks again
+    and the disk line no longer counts what was deleted (the round-3 check's m6). `createTtlCache`
+    has no delete (`ttl-cache.ts:10-25`), so each press leaves one small finished entry under its old
+    key in the cache's map.
 
 **The build plan's row 7, corrected.** Its risk triggers say "auth (`system.manage`)". This slice
 also touches **concurrency**: the staging turn is shared by the backup sweep and Liberar, and Liberar
@@ -462,7 +482,7 @@ path stays FULL. It adds no cross-package contract (decision 1), and no fiscal i
   it needs one, STOP and report.
 - **Not edited:** `apps/server/src/box-status.ts`, `disk-full-state.ts`, `free-space-watch.ts`,
   `staff-notices.ts`, `box-staff-notices.ts`, `device-api.ts`, `alerts.ts`, `till-session.ts`, and
-  `start-space.ts` beyond Task 2's `export` keywords (its tests pass unedited). `backup-sweep.ts` and
+  `start-space.ts` beyond Task 2a's `export` keywords (its tests pass unedited). `backup-sweep.ts` and
   `backup-supervisor.ts` change only as Task 1 says.
 - **Module seams:** no file under `apps/server/src` imports `@waitron/fiscal-verifactu`
   (`scripts/module-seams.test.ts`); the read reaches the module only through `deviceNoticeSources`.
@@ -510,15 +530,15 @@ path stays FULL. It adds no cross-package contract (decision 1), and no fiscal i
 
 1. **What Liberar can delete (decision 6).** Only the three folders, only the three name rules, no
    link, nothing younger than a week among crash reports, never `waitron.log` or `waitron.log.1`.
-   Task 2's refusing cases put every file decision 6 names as untouchable where a careless rule would
+   Task 2b's refusing cases put every file decision 6 names as untouchable where a careless rule would
    reach it — including in the log folder when the log folder IS the venue folder or the state folder,
    behind a folder that is itself a link, and a configured backup's archives in the log folder or in
-   backup staging (cases 4–9 and 14) — and check each survives. The survey's figure equals what a deletion frees when nothing changes in
-   between (Task 2 case 10).
+   backup staging (Task 2b) — and check each survives. The survey's figure equals what a deletion frees when nothing changes in
+   between (Task 2a case 10).
 2. **The staging turn (decision 7, concurrency).** A run holds it from before the database copy to
    after its own clean-up; Liberar never deletes or counts staging while a run holds it; a run waits
    for Liberar, never the reverse; a page refresh never takes it, so it never keeps a press out of
-   staging (Task 2 case 15) and never reports a backup that is not running (Task 1 cases 3–5); a
+   staging (Task 2a case 15) and never reports a backup that is not running (Task 1 cases 3–5); a
    failed run releases it, and a run whose sweep was stopped while it waited copies nothing (Task 1
    case 7). **For the Codex run-it
    seat:** start a real `BackupSupervisor` against a `local-fs` destination with a slow `archive`
@@ -537,8 +557,11 @@ path stays FULL. It adds no cross-package contract (decision 1), and no fiscal i
    a rotation between Liberar's listing and its deletion can make it delete a file that was
    `waitron.log.1` when listed and became `.2`. That file is still a rotated log the box no longer
    writes, so this plan accepts it; the current log is never named `waitron.log.<n>`.
-7. **Paths and links.** Every deleted path is built with `join`, never with a trailing separator
-   (M4's trap); Task 2 case 7 and its proof by deletion pin it.
+7. **Paths and links.** What keeps a link's target safe is the link check: an `lstat` of the entry's
+   own path, which skips a link. A trailing separator is dangerous because it defeats that check —
+   `lstat("link/")` describes the target folder — so one path builder makes the path both `lstat`
+   and `rm` use, never with a trailing separator (M4's trap). Task 2b case 7 and its proof by
+   deletion pin it.
 
 ## Review path
 
@@ -575,9 +598,9 @@ smaller filler give back enough first).
     /** A backup run: waits for the holder before it (a deletion or an earlier run), then holds the
      * turn until `work` settles. Runs go in the order they asked. */
     runBackup<T>(work: () => Promise<T>): Promise<T>;
-    /** A Liberar deletion: never waits for a backup run. When a backup run holds the turn, answers
-     * `{ ran: false }` at once; otherwise holds the turn for `work` (after any deletion already
-     * holding it), so no run starts meanwhile. */
+    /** A Liberar deletion: never waits for a backup run. When a backup run holds the turn or is
+     * waiting for it, answers `{ ran: false }` at once, without running `work`; otherwise holds the
+     * turn for `work` (after a deletion already holding it, if any), so no run starts meanwhile. */
     ifNoBackup<T>(work: () => Promise<T>): Promise<{ ran: true; value: T } | { ran: false }>;
     /** True only while a backup run holds the turn — not while one waits. */
     backupRunning(): boolean;
@@ -603,8 +626,12 @@ smaller filler give back enough first).
        is `true`;
     4. while an `ifNoBackup` holds the turn, a `runBackup` waits; while it waits `backupRunning()` is
        `false`; once the deletion settles the run starts and `backupRunning()` is `true`;
-    5. two overlapping `ifNoBackup`s both run (the second after the first), neither answers
-       `ran: false`, and `backupRunning()` stays `false` throughout;
+    5. two overlapping `ifNoBackup`s with no run asked both run (the second after the first), neither
+       answers `ran: false`, and `backupRunning()` stays `false` throughout;
+    5b. "a deletion asked while a run waits is skipped, not queued": deletion D1 holds, a run R asks
+       (it waits), deletion D2 asks → D2 answers `{ ran: false }` at once, its work never run, before
+       D1 is released; then R runs after D1 (the round-3 check's `turn-probe.log` showed revision 2's
+       recipe queueing D2 behind R);
     6. with nobody holding, `ifNoBackup` runs and answers `{ ran: true, value }`.
   - `backup-sweep.test.ts`, one new `describe("the staging turn")`, using the file's existing
     harness for one tick and a stand-in `archive`:
@@ -623,16 +650,19 @@ smaller filler give back enough first).
   `pnpm --filter @waitron/server exec vitest run src/backup-staging-turn.test.ts src/backup-sweep.test.ts src/backup-supervisor.test.ts`.
   Expected: the first file fails to resolve `./backup-staging-turn.js`; cases 7–9 and 11 fail (no
   turn is taken); every existing case passes.
-- [ ] **Step 3: Implement.** One promise chain both kinds join; a flag set while a run's work is
-  running (not while it waits). `ifNoBackup` reads the flag first and answers `ran: false` only when
-  it is set. `tick` keeps its own `catch` around the held work, so a failed run still frees the turn
+- [ ] **Step 3: Implement.** One promise chain both kinds join; a count of runs that hold or wait
+  (incremented when `runBackup` is asked, decremented when its work settles), and a flag set only
+  while a run's work is running, which `backupRunning()` reads. `ifNoBackup` reads the count first
+  and answers `ran: false` when it is above 0; otherwise it joins the chain, behind at most another
+  deletion. `tick` keeps its own `catch` around the held work, so a failed run still frees the turn
   and is still logged `backup.failed`.
 - [ ] **Step 4: Run and watch them pass; typecheck; format.** The Step 2 command → PASS.
   `pnpm --filter @waitron/server typecheck` exits 0. `pnpm exec prettier --check` on the touched files
   exits 0.
 - [ ] **Step 5: Proofs by deletion**, each restored and re-run to PASS before the next: make
   `ifNoBackup` wait for a run → case 3 FAILS; set the flag while a run waits → case 4 FAILS; make a
-  second `ifNoBackup` answer `ran: false` → case 5 FAILS; drop the aborted check → case 7 FAILS; call
+  second `ifNoBackup` answer `ran: false` → case 5 FAILS; let `ifNoBackup` check only the running
+  flag, not the count → case 5b FAILS (D2 runs after R); drop the aborted check → case 7 FAILS; call
   `runOnce` outside `runBackup` in `tick` → case 8 FAILS; drop the release on a throw → case 1 or 9
   FAILS.
 - [ ] **Step 6: Commit.**
@@ -641,7 +671,7 @@ smaller filler give back enough first).
   git commit -s -m "Every backup run holds a turn over backup staging, so nothing else touches its files while it runs"
   ```
 
-### Task 2: Liberar's rules — what may be deleted, and how much it frees
+### Task 2a: Liberar's rules — what may be deleted, and how much it frees
 
 **Files:**
 - Modify: `apps/server/src/start-space.ts` (`export` on `ROTATED_LOG`, `CRASH_REPORT`, `STAGED_DUMP`,
@@ -661,6 +691,8 @@ smaller filler give back enough first).
     remove?: (path: string, options: { recursive: boolean }) => Promise<void>;
     /** Defaults to `node:fs/promises`' `lstat`; tests hold one to overlap a survey with a deletion. */
     lstat?: typeof import("node:fs/promises").lstat;
+    /** Defaults to `node:fs/promises`' `readdir`; tests make a folder vanish. */
+    readdir?: (path: string) => Promise<string[]>;
   }
   /** What a deletion would free now. Takes no turn: staging's size is best-effort while a run may
    * be writing there, and is left out while a backup run holds the turn. */
@@ -680,9 +712,12 @@ smaller filler give back enough first).
   ```
   Both walk the same list (one internal `leftovers(deps)` that answers `{ path, bytes, recursive }[]`
   per folder), so the survey and the deletion cannot drift apart. The survey's `backupRunning` is
-  `staging.backupRunning()`; the deletion's is `true` exactly when `ifNoBackup` answered `ran: false`.
+  `staging.backupRunning()` (a run holds the turn); the deletion's is `true` exactly when
+  `ifNoBackup` answered `ran: false` (a run holds it or waits for it).
 
-- [ ] **Step 1: Write the failing tests** in `free-space-now.test.ts`, each in its own `mkdtemp`
+- [ ] **Step 1: Write the failing tests** in `free-space-now.test.ts` (case numbers are kept from
+  revision 2 across Tasks 2a and 2b; 2b holds 4–9 and 14, and 16 is dropped as the round-3 check's m4
+  found it cannot fail through this file — Task 1 case 5 pins what it meant), each in its own `mkdtemp`
   folder with `stateDir`, `logDir = <stateDir>/logs` and `venueDir = <stateDir>/venue`, a fixed `now`,
   and `createStagingTurn()` unless the case says otherwise. Sizes are written with distinct byte
   counts so a sum shows which files were counted.
@@ -695,31 +730,6 @@ smaller filler give back enough first).
      and `waitron.log.1` remain.
   3. "deletes crash reports only once a week old": two `holder-frozen-*.json` with `utimes` 8 days
      and 6 days before `now` → only the 8-day one counted and deleted.
-  4. **Refusing, the venue folder:** `venue/venue.db`, `venue.db-wal`, `venue.db-shm`, `node.db`,
-     `venue.lock`, `.venue.db-litestream/generations/x` → all survive, survey 0.
-  5. **Refusing, the state folder:** `recovery.lock`, `recovery.json`, `secrets.env`, `modules.json`,
-     `stream/litestream.yml`, `tls/ca.crt`, `cloud-snapshots/staging/venue.db`,
-     `restore-staging/waitron-20261020T000000Z.dump` → all survive.
-  6. **Refusing, look-alikes:** in `backup-staging`, `archive-validate-x/` and `restore-admission-x/`
-     and `waitron-20261020T000000Z.dump.bak` and `notes.txt`; in `logs`, `waitron.log.0`,
-     `waitron.log.1`, `waitron.log.x`, `other.log.3`; in `crash-reports`, an 8-day-old `other.json`
-     → all survive.
-  7. **Refusing, links (M4, and its trailing-separator trap):** a link
-     `backup-staging/backup-encrypt-link` → `venue/` (holding `venue.db`), a link
-     `backup-staging/waitron-20261020T000000Z.dump` → `venue/venue.db`, a link `logs/waitron.log.3` →
-     `venue/venue.db`, and an 8-day-old link `logs/crash-reports/holder-frozen-a.json` →
-     `venue/venue.db` → every link and every target survive (`venue/venue.db` still readable), survey
-     0 for them. A path built with a trailing separator would delete `venue/` through the first link
-     (M4), so this case also fails if the code ever appends one.
-  8. **Refusing, a folder that is a link:** each in its own case — `backup-staging` itself a link to
-     `venue/` holding a file named `waitron-20261020T000000Z.dump`; `logs` a link to `venue/` holding
-     `waitron.log.4`; `logs/crash-reports` a link to `venue/` holding an 8-day-old
-     `holder-frozen-b.json` → nothing in `venue/` is deleted or counted, and each deletion logs one
-     `storage.free_space_skipped` `{ folder }` (`backup-staging`, `logs`, `crash-reports`); the survey
-     logs nothing.
-  9. **Refusing, a log folder that is the venue or state folder:** `logDir = venueDir` holding
-     `venue.db` and `waitron.log.2`; `logDir = stateDir` holding `recovery.json` and `waitron.log.2` →
-     only `waitron.log.2` deleted each time.
   10. "the survey's figure is what the deletion frees": case 1, 2 and 3's files together → survey
       bytes equals deletion `freedBytes`.
   11. "leaves staging alone while a backup run holds the turn": case 1's staging files plus case 2's
@@ -732,17 +742,17 @@ smaller filler give back enough first).
       `storage.free_space_failed` line with `errno: "EACCES"`, `.3` still there.
   13. "a file gone before its deletion is neither deleted nor failed": a `remove` that throws an
       `ENOENT` error → `{ deleted: 0, failed: 0, freedBytes: 0 }`, no log line.
-  14. **Refusing, a configured backup folder inside the log folder or backup staging:** a `local-fs`
-      destination's archive, `waitron-20261020T000000Z-8c1d….backup.enc` (`backupArchiveKey`'s
-      shape, `backup-keys.ts:25-26`), placed (a) in `logs/` and (b) in `backup-staging/` → survives,
-      not counted.
   15. "a press during a refresh still deletes staging leftovers": case 1's staging files; a survey
       whose injected `lstat` is held on its first call; while it is held, a deletion with the real
       `lstat` → `{ freedBytes: 5500, backupRunning: false }`, files gone; then the held survey is
-      released and settles (its figure may be stale; only that it settles is checked).
-  16. "two overlapping surveys both say no backup is running": two surveys started together, one with
-      a held `lstat` → both `backupRunning: false`.
+      released and **resolves** with `typeof bytes === "number"` (its figure may be stale), never
+      rejects.
   17. "missing folders count as nothing": no `backup-staging`, no `logs` → `{ bytes: 0 }`, no log line.
+  18. "a file that vanishes during the survey counts as gone": a survey whose injected `lstat`
+      throws an `ENOENT` error for `waitron.log.2` (and answers the real `lstat` otherwise), beside
+      `waitron.log.3` (400 B) → resolves `{ bytes: 400 }`, no log line, no rejection; the same with
+      `readdir`'s folder gone between the folder's `lstat` and its listing (an injected `readdir`
+      throwing `ENOENT`) → `{ bytes: 0 }`.
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/server exec vitest run src/free-space-now.test.ts src/start-space.test.ts`.
   Expected: the first file fails to resolve `./free-space-now.js`; `start-space.test.ts` passes
@@ -750,24 +760,88 @@ smaller filler give back enough first).
 - [ ] **Step 3: Implement** with `lstat` for every entry (decision 6), `readdir` per folder, sizes of
   a folder's regular files summed with `lstat` and no link followed, deletion order staging → logs
   (highest number first) → crash reports (oldest first), `rm(path, { recursive })` without `force`
-  so a failure is seen, `ENOENT` treated as already gone, `errnoOf` (`apps/server/src/errno.js`)
-  for the log field. The deletion's staging part runs inside `deps.staging.ifNoBackup`; the survey
-  takes no turn. **Build every path with `join(folder, name)` and never append a separator: with
-  one, `rm(link + "/", { recursive: true })` follows a link to a folder and deletes its target
-  (M4's trap).**
+  so a failure is seen, `ENOENT` from `rm` treated as already gone, `errnoOf`
+  (`apps/server/src/errno.js`) for the log field. The survey counts an entry or folder that
+  vanishes during its walk — `ENOENT` from `readdir` or `lstat` — as 0 bytes, never as an error
+  (it takes no turn, so a press can delete under it). The deletion's staging part runs inside
+  `deps.staging.ifNoBackup`; the survey takes no turn. **One path builder,
+  `join(folder, name)`, makes every path, and the path `lstat` judges is the path `rm` removes;
+  never append a separator to it. A trailing separator defeats the link check: `lstat("link/")`
+  describes the folder the link points to, not the link, and `rm("link/", { recursive: true })`
+  then deletes that folder (M4's trap, Task 2b case 7).** Add `readdir` beside `lstat` and `remove`
+  as an injectable dependency, defaulting to `node:fs/promises`.
 - [ ] **Step 4: Run and watch them pass; format.** The Step 2 command → PASS.
   `pnpm exec prettier --check` on the three files exits 0.
 - [ ] **Step 5: Proofs by deletion:** allow `n ≥ 1` in the log rule → case 2 FAILS; drop the
-  week check → case 3 FAILS; follow links (`stat` instead of `lstat`) → case 7 FAILS; append
-  `path.sep` to each staging path before `rm` → case 7 FAILS (the target folder goes); drop the
-  folder-link skip → case 8 FAILS; take staging outside `ifNoBackup` → case 11 FAILS; treat every
-  refusal as already gone → case 12 FAILS; run the survey inside `ifNoBackup` → case 15 or 16 FAILS
-  (with the review's M11 turn) — if the new turn lets it pass, say so and leave the proof out.
+  week check → case 3 FAILS; take staging outside `ifNoBackup` → case 11 FAILS; treat every
+  refusal as already gone → case 12 FAILS; let the survey's `ENOENT` throw → case 18 FAILS; run the
+  survey inside `ifNoBackup` → case 15 FAILS by timing out (the deletion waits while the held survey
+  holds the turn), not by an assertion — say so in the report.
 - [ ] **Step 6: Commit.**
   ```bash
   git add apps/server/src/start-space.ts apps/server/src/free-space-now.ts apps/server/src/free-space-now.test.ts
   git commit -s -m "The box can say how much of its disk it could free, and free only what it can make again"
   ```
+
+### Task 2b: Liberar's refusing cases — what it must never delete
+
+**Files:**
+- Modify (gains cases): `apps/server/src/free-space-now.test.ts`
+- Modify: `apps/server/src/free-space-now.ts` only if a case finds a hole
+
+Every case here is a refusing case; most pass at once against Task 2a's code, and each is made to
+fail by its proof by deletion in Step 3. The folders and helpers are Task 2a's.
+
+- [ ] **Step 1: Write the cases.**
+  4. **Refusing, the venue folder:** `venue/venue.db`, `venue.db-wal`, `venue.db-shm`, `node.db`,
+     `venue.lock`, `.venue.db-litestream/generations/x` → all survive, survey 0.
+  5. **Refusing, the state folder:** `recovery.lock`, `recovery.json`, `secrets.env`, `modules.json`,
+     `stream/litestream.yml`, `tls/ca.crt`, `cloud-snapshots/staging/venue.db`,
+     `restore-staging/waitron-20261020T000000Z.dump`, and a top-level
+     `waitron-20261020T000000Z.dump` in the state folder itself → all survive.
+  6. **Refusing, look-alikes:** in `backup-staging`, `archive-validate-x/` and `restore-admission-x/`
+     and `waitron-20261020T000000Z.dump.bak`, `other.dump` and `notes.txt`; in `logs`, `waitron.log.0`,
+     `waitron.log.1`, `waitron.log.x`, `other.log.3`; in `crash-reports`, an 8-day-old `other.json`
+     → all survive.
+  7. **Refusing, links (M4, and its trailing-separator trap):** a link
+     `backup-staging/backup-encrypt-link` → `venue/` (holding `venue.db`), a link
+     `backup-staging/waitron-20261020T000000Z.dump` → `venue/venue.db`, a link `logs/waitron.log.3` →
+     `venue/venue.db`, and a link `logs/crash-reports/holder-frozen-a.json` → `venue/venue.db`,
+     the link itself aged 8 days with `lutimes` (`utimes` would age the target, and an
+     `lstat`-based age check would then see a new link and keep it whatever the link rule says —
+     the round-3 check's `lutimes-probe.log`) → every link and every target survive
+     (`venue/venue.db` still readable), survey 0 for them. The link rule is what protects each target. If the shared path builder appended a
+     separator, the `lstat` would read `backup-encrypt-link/` — the folder it points to — and the
+     `rm` would delete `venue/` (M4; the round-3 check's `sep-probe.log` printed `venue.db survives:
+     false` that way), so this case fails then.
+  8. **Refusing, a folder that is a link:** each in its own case — `backup-staging` itself a link to
+     `venue/` holding a file named `waitron-20261020T000000Z.dump`; `logs` a link to `venue/` holding
+     `waitron.log.4`; `logs/crash-reports` a link to `venue/` holding an 8-day-old
+     `holder-frozen-b.json` → nothing in `venue/` is deleted or counted, and each deletion logs one
+     `storage.free_space_skipped` `{ folder }` (`backup-staging`, `logs`, `crash-reports`); the survey
+     logs nothing.
+  9. **Refusing, a log folder that is the venue or state folder:** `logDir = venueDir` holding
+     `venue.db` and `waitron.log.2`; `logDir = stateDir` holding `recovery.json` and `waitron.log.2` →
+     only `waitron.log.2` deleted each time.
+  14. **Refusing, a configured backup folder inside the log folder or backup staging:** a `local-fs`
+      destination's archive, `waitron-20261020T000000Z-8c1d….backup.enc` (`backupArchiveKey`'s
+      shape, `backup-keys.ts:25-26`), placed (a) in `logs/` and (b) in `backup-staging/` → survives,
+      not counted.
+- [ ] **Step 2: Run.** `pnpm --filter @waitron/server exec vitest run src/free-space-now.test.ts`.
+  Expected: PASS. A case that fails shows a hole in Task 2a's code: fix it there, and say so in the
+  report.
+- [ ] **Step 3: Proofs by deletion**, each restored and re-run to PASS before the next: follow links
+  (`stat` instead of `lstat`) → case 7 FAILS; make the shared path builder append `path.sep`, so
+  `lstat` and `rm` both read `link/` → case 7 FAILS (the round-3 check's `sep-probe.log`: `venue.db
+  survives: false`); if it does not fail, leave this proof out and say so; drop the folder-link
+  skip → case 8 FAILS; match any `.dump` name in staging → case 6 FAILS; list the state folder
+  instead of `backup-staging` → case 5 FAILS.
+- [ ] **Step 4: Format and commit.**
+  ```bash
+  git add apps/server/src/free-space-now.test.ts
+  git commit -s -m "Liberar's refusing cases: the venue, the state folder, look-alikes, links and configured backups survive"
+  ```
+  (Add `apps/server/src/free-space-now.ts` only if Step 2 changed it.)
 
 ### Task 3: What fills the disk
 
@@ -947,6 +1021,8 @@ smaller filler give back enough first).
     space: Pick<FreeSpaceState, "record">;
     disk: Pick<DiskFullState, "noted" | "full">;
     statfs?: Statfs;
+    /** Called once after each deletion settles, so boot can start a fresh disk usage walk. */
+    onFreed?: () => void;
   }): (personId: string) => Promise<FreedSpace>;
   ```
   Runs `deleteLeftovers`, then `freeBytes(venueDir)`, records it with `space.record(free, now())`,
@@ -962,9 +1038,10 @@ smaller filler give back enough first).
      → one deletion, both answer the same object; a call after it settles runs a new deletion;
   4. one `storage.space_freed` info line with the five fields, `personId` the first caller's;
   5. an unreadable reading (`statfs` throws) → `freeBytes: null`, `space.record(null, …)` called (the
-     state's own rule logs it once), `disk.full()` still called when noted.
+     state's own rule logs it once), `disk.full()` still called when noted;
+  6. `onFreed` is called once per deletion, after it settles, and once for two shared calls.
 - [ ] **Step 2: Run and watch them fail.** `pnpm --filter @waitron/server exec vitest run src/free-space-now.test.ts`.
-  Expected: the new cases fail (`createSpaceFreer` is not exported); Task 2's pass.
+  Expected: the new cases fail (`createSpaceFreer` is not exported); Tasks 2a and 2b's pass.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run and watch them pass; format.**
 - [ ] **Step 5: Proofs by deletion:** drop the shared promise → case 3 FAILS; call `disk.full()`
@@ -1063,11 +1140,11 @@ smaller filler give back enough first).
 - two 60-second caches (decision 22), `const timeHealthCache = createTtlCache<TimeHealth>({ ttlMs: 60_000, now })`
   and `const diskUsageCache = createTtlCache<DiskUsage>({ ttlMs: 60_000, now })`, as boot's
   `backupCache` (`boot.ts:2141-2145`);
-- `readHealth: () => collectBoxHealth(db, { now, notices: { sources: deviceNoticeSources({ disk: diskFull, space: freeSpace }, setsToMigrate), clock: tillClock, filing: filesRecords, log: pageNoticeLog }, stream: () => streamHost.status(), authorityClock: authorityClock.read, timeHealth: () => timeHealthCache.get("sync", () => checkTimeHealth()), disk: diskFull, space: freeSpace, usage: () => diskUsageCache.get("usage", () => readDiskUsage({ venueDir: config.venueDir, logDir: config.logDir, backupDirs: backupSupervisor.current().destinations.flatMap((d) => d.kind === "local-fs" ? [d.dir] : []) })), leftovers: () => surveyLeftovers(leftoverDeps), paymentsEnabled: setsToMigrate.some((module) => module.name === "payments"), canFree: () => !(holders.mode.current === "mirror" || fenced) })`
+- `readHealth: () => collectBoxHealth(db, { now, notices: { sources: deviceNoticeSources({ disk: diskFull, space: freeSpace }, setsToMigrate), clock: tillClock, filing: filesRecords, log: pageNoticeLog }, stream: () => streamHost.status(), authorityClock: authorityClock.read, timeHealth: () => timeHealthCache.get("sync", () => checkTimeHealth()), disk: diskFull, space: freeSpace, usage: () => diskUsageCache.get(`usage:${usageGeneration}`, () => readDiskUsage({ venueDir: config.venueDir, logDir: config.logDir, backupDirs: backupSupervisor.current().destinations.flatMap((d) => d.kind === "local-fs" ? [d.dir] : []) })), free: () => freeBytes(config.venueDir), leftovers: () => surveyLeftovers(leftoverDeps), paymentsEnabled: setsToMigrate.some((module) => module.name === "payments"), canFree: () => !(holders.mode.current === "mirror" || fenced) })`
   — `canFree` reads the read-only gate's own condition (`boot.ts:1522-1527`) per call, so a live
-  promotion lifts it as the gate does; and `free: () => freeBytes(config.venueDir)`, so the free
-  space is read on every call while the folder walk is cached;
-- `freeSpace: createSpaceFreer({ ...leftoverDeps, venueDir: config.venueDir, space: freeSpace, disk: diskFull })`,
+  promotion lifts it as the gate does; `free` reads the free space on every call while the folder
+  walk is cached; `let usageGeneration = 0` is bumped by the freer's `onFreed` (decision 22);
+- `freeSpace: createSpaceFreer({ ...leftoverDeps, venueDir: config.venueDir, space: freeSpace, disk: diskFull, onFreed: () => { usageGeneration += 1; } })`,
   where `leftoverDeps = { logDir: config.logDir, stateDir: config.stateDir, now, staging: stagingTurn, log }`.
   Mounted only where `mountBoxStatusApi` is (setup and adoption-pending starts return before it,
   `boot.ts:1018-1420` **(read)**: setup returns at `:1339`, adoption-pending at `:1400`).
@@ -1086,9 +1163,10 @@ smaller filler give back enough first).
      holder (the way `boot.free-space.test.ts:17-41` keeps the watch's); then, inside
      `holder.supervisorDeps.stagingTurn.runBackup(async () => …)`, a GET answers
      `disk.reclaimable.backupRunning: true`, and after it `false`;
-  5. the slow reads are cached: with `checkTimeHealth` and `readDiskUsage` spied through `vi.mock`,
-     three GETs within a minute call each once; the freed figure (case 2, then 3) still changes
-     between calls.
+  5. the slow reads are cached, on **a fresh server of its own** (its own `startServer`, so cases 1–3
+     have not filled the cache): with `checkTimeHealth` and `readDiskUsage` spied through `vi.mock`,
+     three GETs within a minute call each once; then a POST and one more GET → `readDiskUsage` called
+     a second time (a press starts a fresh walk), `checkTimeHealth` still once.
 - [ ] **Step 2: Run and watch it fail.** `pnpm --filter @waitron/server exec vitest run src/boot.box-health.test.ts`.
   Expected: 404 on the new routes.
 - [ ] **Step 3: Implement the wiring.**
@@ -1096,7 +1174,7 @@ smaller filler give back enough first).
   `pnpm --filter @waitron/server exec vitest run src/boot.free-space.test.ts src/boot.disk-full-wiring.test.ts src/box-status.route.test.ts`
   → PASS unedited.
 - [ ] **Step 5: Proofs by deletion:** pass no `stagingTurn` to the supervisor → case 4 FAILS; drop
-  either cache → case 5 FAILS.
+  either cache → case 5 FAILS; drop the generation from the usage key → case 5 FAILS.
 - [ ] **Step 6: Commit.**
   ```bash
   git add apps/server/src/boot.ts apps/server/src/boot.box-health.test.ts
@@ -1106,7 +1184,7 @@ smaller filler give back enough first).
 ### Task 8: The disk alerts point at the page (declared assertion changes)
 
 **Files:**
-- Modify: `apps/server/src/alert-sources.ts` (`storageAlertSource`, `:309-342`)
+- Modify: `apps/server/src/alert-sources.ts` (`storageAlertSource`, `:310-342`)
 - Modify: `apps/dashboard/src/i18n/alert-messages.ts` (`storage.space_low`, `:112-115`)
 - Modify: `apps/dashboard/src/i18n/strings.ts` (`nav.box_status`: "Box status" / "Estado del
   equipo", beside `nav.diagnostics`, `:973` and `:4123`)
@@ -1124,9 +1202,11 @@ smaller filler give back enough first).
   - `en` and `es` each split into **3** sentences with the deleted test's own splitter,
     `text.split(/(?<=\.)\s+/)` (`alerts.test.ts:290`);
   - `en` ends with the literal `"See what is using it on the Box status page."`;
-  - `es` contains the Spanish sidebar label, read through `t("nav.box_status")` with the language set
-    to `es` and restored afterwards (CLAUDE.md §4) — from `strings.ts`, not from the file under test,
-    so a Spanish sentence that dropped the page's name fails.
+  - `es` contains the Spanish sidebar label, read through `t("nav.box_status", "es-ES")` — `t` takes
+    the language as its second argument (`apps/dashboard/src/i18n/t.test.ts:68`), so the page's
+    language is not changed — from `strings.ts`, not from the file under test, so a Spanish sentence
+    that dropped the page's name fails. The key does not exist until Step 1, so the file does not
+    typecheck in between; Vitest does not typecheck, and Step 2's typecheck covers it.
   The Spanish label is not written as a literal: CLAUDE.md §3 keeps Spanish out of a general app's
   tests ("General code is English only … not in a literal … or test"), and its rule for a test of
   non-English text is to read it from the strings file; this is the runner's ruling 4 met within that
@@ -1513,7 +1593,7 @@ successful read clears only a read's).
 - Modify (gains cases): `apps/server/src/start-full-disk.e2e.test.ts`
 
 **Where it runs, and its room (M10).** The file opens one small disk for all its cases in a
-top-level `beforeAll` (`start-full-disk.e2e.test.ts:50-67`), unfills it after each case, and its
+top-level `beforeAll` (`start-full-disk.e2e.test.ts:54-60`), unfills it after each case, and its
 existing cases keep their folders: after its 11 cases the macOS image had `18,116,608` bytes free,
 against `32,755,712` on the empty image. Case 2 needs a migrated venue (`3,576,456` bytes measured),
 a 1 MiB and a 17 MiB log, about 22 MiB. So:
@@ -1530,7 +1610,10 @@ measured.
   the file's slice 6 cases do, a manager session and a supervisor session, and a Hono app with
   `mountBoxHealthApi` whose `readHealth` and `freeSpace` are built from the real `collectBoxHealth`
   and `createSpaceFreer` over folders on the small disk (`logs` holding a 1 MiB `waitron.log.3`,
-  written before the fill), each folder from `needDisk(ctx).folder(<unique name>)`:
+  written before the fill). The `describe`'s `beforeAll` uses the file's `disk` directly and returns
+  early when it is `undefined` (a hook has no `ctx.skip`, which `needDisk` needs,
+  `start-full-disk.e2e.test.ts:63-69`); each case starts with `needDisk(ctx)`, so it skips or fails
+  as the file's other cases do. Folders come from `disk.folder(<unique name>)`:
   1. "the box health read answers on a full disk with a change waiting, passive and not" — control
      first, with room: both 200 and the non-passive one moves `last_seen_at` (seeded a minute back);
      then a `change_log` row, the disk filled → passive GET 200 and non-passive GET 200,
@@ -1588,12 +1671,18 @@ measured.
 - [ ] **Step 4: The CLAUDE.md §3 rule**, in the data section beside "One process owns a venue folder
   at a time", one to three lines (the round-1 review's M12):
   "**Anything that writes or deletes in `<state>/backup-staging` does it inside the staging turn**
-  (`apps/server/src/backup-staging-turn.ts`): a backup run through `runBackup`, Liberar through
-  `ifNoBackup`; a page's read takes none. Cost: deleting a dump a run reads frees nothing until the
+  (`apps/server/src/backup-staging-turn.ts`), **except the start's clean-up (`freeSpaceAtStart`),
+  which runs before the backup supervisor exists**: a backup run through `runBackup`, Liberar
+  through `ifNoBackup`; a page's read takes none. Cost: deleting a dump a run reads frees nothing until the
   run closes it and can fail the run (A798-B slice 7 plan, M3). Guard:
   `scripts/backup-staging-touchers.test.ts`, weaker than its name — it reads text and never checks
   that a file takes the turn; the turn is in-process only."
-  The receipt goes in conventions-data.md's paragraph from Step 1.
+  The receipt goes in conventions-data.md's paragraph from Step 1, which also names
+  `apps/server/scripts/cloud-backup-fixture.ts`: a development fixture that calls `runOnce` outside
+  any turn on its own scratch root (the round-3 check's I1), outside the guard's `apps/*/src` scan.
+  Check before committing that the guard's allow-list is exactly the rule's: `start-space.ts` (the
+  exception), `backup-supervisor.ts` (runs, through the sweep's `runBackup`) and `free-space-now.ts`
+  (Liberar, through `ifNoBackup`).
 - [ ] **Step 5: Check and commit.** `pnpm exec prettier --file-info docs/developers/conventions-data.md`
   prints `"ignored": true`; `pnpm exec prettier --check CLAUDE.md scripts/backup-staging-touchers.test.ts`
   exits 0. `pnpm exec vitest run scripts/claude-md-pointers.test.ts scripts/backup-staging-touchers.test.ts`
@@ -1697,7 +1786,7 @@ to `~/waitron-campaign-b/a798-7-shots/`. A fix it leads to is committed with the
   `screen`, and Liberar. "reads … plus the printer, reader and disk checks, and the module seat":
   Departure 1, decisions 1, 4, 13. "Its automatic reads are passive": decision 15, Task 11 case 10,
   Task 6 case 4. "Reintentar ahora": 7b (build plan decision 11). "Liberar deletes only what the box
-  can make again … and says how much it can free before it does": decisions 6–8, Tasks 1–2, 11.
+  can make again … and says how much it can free before it does": decisions 6–8, Tasks 1, 2a, 2b and 11.
   "Below the rows the page names what really fills the disk and who can clear it": decision 12,
   Tasks 3 and 9 (`box_status.fillers`).
 - §4.3 the bell's new alerts: `storage.*` existed (slice 5); this slice adds their Go to and the
@@ -1709,7 +1798,7 @@ to `~/waitron-campaign-b/a798-7-shots/`. A fix it leads to is committed with the
 - §4.6 item 6: every clause — crash reports older than a week, rotated logs except the newest,
   backup staging leftovers, the dump first, the figure first, no fold-back of the side file (nothing
   here calls `checkpointTruncate`), never a configured backup, rows or anything fiscal, the fillers
-  line, Docker images left to slice 10 — decisions 6–8 and 12; Task 2's refusing cases.
+  line, Docker images left to slice 10 — decisions 6–8 and 12; Task 2b's refusing cases.
 - §5: decision 1 decides the backlog's open question; no seat change.
 - §6 default 2 (no terminal): every action is on the page. Default 15: decision 16.
 - §7: no table; nothing new is stored.
