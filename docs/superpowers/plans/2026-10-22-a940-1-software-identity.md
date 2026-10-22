@@ -78,14 +78,17 @@
      --detach` of this branch (head `31da3006c`, documentation only over `main` `556c01004`), with
      Tasks 1, 2 and 5 applied as a sketch (the stamp read directly; `SOFTWARE_IDENTITY` pending),
      beside a second throwaway of the same head without it as the control:
-     - The 35 server files of Task 5 Step 5 (every `apps/server/src/*.test.ts` naming
-       `readHourRelease`, the importers of its two helpers, `boot.till-clock`, and the seed golden):
+     - 35 server files: Task 5 Step 5's 34 (every `apps/server/src/*.test.ts` naming
+       `readHourRelease`, the importers of its two helpers, and `boot.till-clock`) plus the seed
+       golden test, run together:
        control 5 files failed, 10 of 616 tests; sketch 5 files failed, 5 of 616 tests. The sketch's
        failures are the seed golden test — its 62 differing lines are all `sistema_informatico`,
        the change Task 6 re-records — and four tests in `first-fiscal-hour-modes`,
        `first-fiscal-launch`, `first-setup-retired-assignments` and `first-setup-unused-pdf` that
        failed by name in the control too (not investigated; they fail without the sketch). The
-       sketch's log holds no `sif.producer_unset` and no `slice` crash.
+       two sides do not fail the same set: the control's other six failing tests, one of its
+       failing files among them, passed in the sketch's run. The sketch's log holds no
+       `sif.producer_unset` and no `slice` crash.
      - The 12 package files naming it: `composition` 9 of 9 and `fiscal-verifactu` 138 of 138 in
        both; `provisioning` control 249 of 250 (`first-setup-command-import`, "the actual relocated
        command resumes a retained import and publishes it once"), sketch the same 249 of 250, the same test failing.
@@ -189,8 +192,9 @@ suite runs, has no such global. `software-identity.ts` reads that global itself,
 besides `hour-release.test.ts` name that function, most to hand the clock code a stamp (`git grep
 -l readHourRelease -- apps packages`), and the fresh review measured what routing through it costs — 10 server
 test files failing, 13 tests on `sif.producer_unset` at `boot.ts:1638` and 2 on a mocked stamp
-with no commit. A refusal keyed on production alone was rejected for the same reason: 31 test files
-set `WAITRON_ENV: "production"` (`git grep -ln 'WAITRON_ENV: "production"'`), and the trading start
+with no commit. A refusal keyed on production alone was rejected for the same reason: 29 test files
+set `WAITRON_ENV: "production"` (`git grep -ln 'WAITRON_ENV: "production"'` prints 31 paths, two of
+them plans), and the trading start
 builds the backend through `makeBackend` in each of them that reaches it. **Weaker than "cannot reach production", said plainly:** an unstamped
 build run with `WAITRON_ENV=production` (source run by hand, or an image built with no build id, which the
 Dockerfile treats as `development`, `deploy/Dockerfile:4,28-29`) is not refused — and it files today's taxpayer values, never placeholder text.
@@ -204,7 +208,7 @@ Weighed and not taken: refusing in the backend's constructor or record builder i
 golden test builds `VerifactuBackend` directly with `deploymentEnvironment: "production"`,
 `write-path.e2e.test.ts:71-76`, and would fail); having the host pass the build fact through
 `FiscalBackendDeps` (a change to the cross-package fiscal contract and every `makeBackend` caller,
-for the same answer the stamp already gives); a production refusal with a test-only way round it in 30-plus files (large,
+for the same answer the stamp already gives); a production refusal with a test-only way round it in those 29 files (large,
 and a test bypass beside a fiscal guard); placeholder text in the records (the readiness risk
 above); a check in the image build (it would stop CI publishing `:main` until the facts arrive).
 
@@ -274,7 +278,9 @@ The module starts with `import "./errors.js";`, as every file that throws a code
     `"0.0.0-dev"`.
   - "reads the bundle's stamp itself": with `vi.stubGlobal("__WAITRON_HOUR_RELEASE__", { sourceCommit:
     <that commit> })`, `vi.resetModules()` and a dynamic `import("./software-identity.js")` (the
-    pattern of `hour-release.test.ts:30-37`), `BUILD_COMMIT` is that commit; with `{}`, with
+    pattern of `hour-release.test.ts:30-37`, with that file's `afterEach` at `:4-9` copied — it
+    calls `vi.unstubAllGlobals()` and `vi.resetModules()`, so a stubbed stamp never reaches the
+    file's other cases), `BUILD_COMMIT` is that commit; with `{}`, with
     `{ sourceCommit: "short" }` and with `null` it is `null` and `softwareVersion()` is
     `"0.0.0-dev"` — a stamp with no usable commit never throws.
   - "is not fooled by a mocked release reader": with `vi.doMock("./hour-release.js", () => ({
@@ -383,10 +389,12 @@ Once the block names the producer, cancellations would go out under the producer
   - In `drain.test.ts`, beside "submits a voided sale's anulación through the same
     accept-and-persist path as an alta" (`drain.test.ts:110-157`, the template), "a cancellation
     goes out under the taxpayer's name when the software names a producer": the same set-up with
-    the filled producer, and the fake AEAT's client (`createFakeAeat`, `aeat.client()`) with its
-    `submit` method wrapped in `vi.spyOn` to capture each call's `Cabecera` — the fake exposes only
-    `client()` and `stored()` (`@waitron/verifactu` 0.2.1 `dist/testing/fake-aeat.d.ts:22,25`), and
-    the client's method is `submit` (`dist/client.d.ts:17`). A cancellation is sent only after its
+    the filled producer. Take **one** client, `const client = aeat.client()`, wrap its `submit`
+    (`@waitron/verifactu` 0.2.1 `dist/client.d.ts:17`) in `vi.spyOn` to capture each call's
+    `Cabecera`, and pass `staticResolver(client)` to the backend and to both drain passes: each
+    `aeat.client()` call builds a new client (`dist/testing/fake-aeat.js:394`), and the template
+    calls it afresh for each pass (`drain.test.ts:128,140,155`), so a spy on another instance
+    records nothing. A cancellation is sent only after its
     original sale has an answer (`drain.ts:601-611`), so run the first pass, then the second at
     `first.nextDueAt`, as the template does; the second pass's captured `Cabecera.ObligadoEmision`
     is `{ NombreRazon: "Waitron SL", NIF: <the SIF's NIF> }`. This is design §8's "Cancellations
@@ -445,10 +453,6 @@ taxpayer.
   `refuseUnsetProducer(deps.environment, published)` and then builds today's backend; the slot's
   `makeBackend: (deps) => makeVerifactuBackend(deps, BUILD_COMMIT !== null)`. Never
   `readHourRelease()` (see "The placeholder").
-- Modify: `apps/server/src/errors.ts` — declare `"sif.producer_unset": { environment: string };`
-  with identical params, as `server.credential_unusable` is declared in both packages
-  (`apps/server/src/errors.ts:134`, `packages/fiscal-verifactu/src/errors.ts:33`), so the recovery
-  page's table, typed by the error-code union (`apps/server/src/recovery-surface.ts:234`), can name it.
 - Modify: `apps/server/src/recovery-surface.ts` — an `OPERATOR_TEXT` entry for `sif.producer_unset`
   beside `deployment.environment_mismatch` (`:316-329`). Today a code with no entry is shown with
   the generic text (`:464-467`). The wording, fixed:
@@ -482,9 +486,12 @@ taxpayer.
   — PASS.
 - [ ] **Step 5: Re-run every test file that names `readHourRelease`**, the two helpers' importers,
   and the boot suite that builds the backend — the files that broke in the fresh review's
-  experiment (check free memory first, `memory_pressure | grep free`):
+  experiment (check free memory first, `memory_pressure | grep free`). Run the block under `bash`,
+  which splits the file lists into separate arguments (the Bash tool's zsh does not split an
+  unquoted variable):
 
   ```bash
+  bash <<'EOF'
   git grep -l readHourRelease -- 'apps/server/src/*.test.ts' | sed 's|apps/server/||' > /tmp/a940-1-server.txt
   git grep -l "staged-hour-restore\|hour-recovery-host" -- 'apps/server/src/*.test.ts' | sed 's|apps/server/||' >> /tmp/a940-1-server.txt
   echo src/boot.till-clock.test.ts >> /tmp/a940-1-server.txt; sort -u -o /tmp/a940-1-server.txt /tmp/a940-1-server.txt
@@ -493,11 +500,14 @@ taxpayer.
     files=$(git grep -l readHourRelease -- "packages/$pkg/src/*.test.ts" | sed "s|packages/$pkg/||")
     (cd packages/$pkg && pnpm exec vitest run $files)
   done
+  EOF
   ```
 
-  Expected: the same counts as the run on `main` before this slice, reported in the commit
-  message with that run as the control (measured for this plan: see item 3 at the top). A file failing here
-  and not on `main` stops the task.
+  That is 34 server files (the seed golden test is Task 6's). Pass condition: **no file fails
+  that does not also fail on `main`** — run the same block on `main` as the control and report
+  both — **and the log holds no `sif.producer_unset` and no `slice` crash**. Counts may differ
+  between the two runs: in this plan's own measurement (item 3 at the top) the control failed
+  tests the sketch passed. A file failing here and not on `main` stops the task.
 - [ ] **Step 6: Commit** — `fiscal: a published production build will not trade until the producer is named`.
 
 ### Task 6: the checks whose expected values the design changes, and the wider runs

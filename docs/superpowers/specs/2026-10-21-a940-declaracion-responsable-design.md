@@ -1060,7 +1060,7 @@ the change, in one transaction as in way A's step 4, and starts trading.
   copies the switch: the manager's passkey, or password plus authenticator code when one is
   enrolled. **It narrows the owner's "or a till's clock":** the till signs staff in by PIN and has
   no passkeys (A947, "Passkeys are bound to that one name, and the till has none";
-  `apps/till/src/api/client.ts:2621`), so on a till a manager would have to type a password, plus
+  `apps/till/src/api/client.ts:2642-2643`), so on a till a manager would have to type a password, plus
   an authenticator code when one is enrolled. Either way the sign-in would be a witness for the
   clock only; the authority for the change stays with the identity-change step (above). The page's
   words below show the proposal («…e inicia sesión como responsable»); without it, that clause

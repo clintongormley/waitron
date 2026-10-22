@@ -298,7 +298,7 @@ Read from the tree on 2026-10-21 (A947's research; every pointer is a file this 
   which the image sets to `waitron.local` and `https://waitron.local` (`deploy/Dockerfile:276-277`).
   Every passkey sign-in requires the person to unlock the key ("user verification",
   `packages/identity/src/passkey.ts:228-231`, checked at `:278-281`). Only the dashboard offers
-  passkeys; the till signs in by PIN (`apps/till/src/api/client.ts:2621`).
+  passkeys; the till signs in by PIN (`apps/till/src/api/client.ts:2642-2643`).
 - **Each box has its own certificate authority, limited to the venue's names.** A box's
   certificate authority may sign only `waitron.local` and `localhost` and private addresses
   (`apps/server/src/self-signed-cert.ts:33-39`, marked critical); each box's certificate names
@@ -1788,7 +1788,7 @@ the code depends.
 | The five-symbol codes of the worked examples (`0CNNW`, `0CZZW`, `0D00B`, `0D00C`, `0CV6R`, `0D0RW`–`0D0RY`); 32⁵ minutes end in October 2089, 32⁴ hours in August 2145; Madrid is UTC+2 that day | the `node -e` script quoted in §6.5, reproducing `hour-identity.ts:6-22`; its hour column matches the real function's output in the probe; `zoneinfo` `Europe/Madrid` | run 2026-10-21 under Node v26.11.1 |
 | The 58 mm line holds the number and a 16-character date in 30 columns; nothing is cut; 80 mm dates are 18–21 characters | `apps/server/src/receipt-document.ts:212-218`; `receipt-dates.ts:2,43-53`; `packages/printing/src/layout.ts:8,128-151,155-160` | read 2026-10-21; date lengths measured with Node 26.11's `Intl` for es, en, ca; the QR code's size not checked |
 | The promote route's fields, break-glass first, `node.promote`, session ended; code asked only when enrolled | `apps/server/src/promote-api.ts:105-113,147-150,169,171`; `packages/identity/src/manager-login.ts:105-107` | read 2026-10-21 |
-| Passkeys: one relying party from config, `waitron.local` in the image; user verification required; the till has PIN sign-in only | `apps/server/src/config.ts:484-492`; `deploy/Dockerfile:276-277`; `packages/identity/src/passkey.ts:228-231,278-281`; `apps/till/src/api/client.ts:2621` | read 2026-10-21 |
+| Passkeys: one relying party from config, `waitron.local` in the image; user verification required; the till has PIN sign-in only | `apps/server/src/config.ts:484-492`; `deploy/Dockerfile:276-277`; `packages/identity/src/passkey.ts:228-231,278-281`; `apps/till/src/api/client.ts:2642-2643` | read 2026-10-21 |
 | Both boxes carry the same `contactUrl`; the router keeps one entry per address | `apps/server/src/boot.ts:1304`; `adopt.ts:89`; `config.ts:549-551`; `apps/till/src/api/server-router.ts:190-191` | read 2026-10-21 |
 | The mDNS responder answers one name, with a 120-second lifetime | `apps/server/src/mdns.ts:45,63-64` | read 2026-10-21 |
 | The authority may sign only `waitron.local`, `localhost` and private addresses; each box's certificate names its IPs | `apps/server/src/self-signed-cert.ts:33-39,176-178`; `box-secrets.ts:57` | read 2026-10-21 |
