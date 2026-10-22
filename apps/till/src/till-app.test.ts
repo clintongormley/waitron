@@ -7243,6 +7243,21 @@ describe("till-app", () => {
     });
   });
 
+  it.each([
+    [{ code: "storage.disk_full", status: 507 }, () => codeMessage("storage.disk_full")],
+    [{ code: "server.internal", status: 500 }, () => t("held.park_error")],
+  ])("park-order refused %o shows that refusal's sentence", async (refused, shown) => {
+    const { el } = await mountApp({ parkOrder: vi.fn().mockRejectedValue(refused) });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+
+    emit(c, "park-order", { label: "Table 4" });
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(shown());
+  });
+
   it("a failed parkOrder keeps the counter and the basket, showing a non-fatal error", async () => {
     const { el } = await mountApp({
       parkOrder: vi.fn().mockRejectedValue({ code: "working_order.rejected" }),
@@ -7896,6 +7911,22 @@ describe("till-app", () => {
     // the recovery refresh runs even though the discard rejected, so the stale row drops off
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
     expect(c.heldOrders).toEqual([]);
+  });
+
+  it.each([
+    [{ code: "storage.disk_full", status: 507 }, () => codeMessage("storage.disk_full")],
+    [{ code: "server.internal", status: 500 }, () => t("held.stale")],
+  ])("discard-order refused %o shows that refusal's sentence", async (refused, shown) => {
+    const { el } = await mountApp({
+      abandonWorkingOrder: vi.fn().mockRejectedValue(refused),
+      listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+    });
+    const c = await toCounter(el);
+
+    emit(c, "discard-order", { id: "wo-1" });
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(shown());
   });
 
   it("discard-order: refused for an order still holding money, says to give it back, and refreshes", async () => {
@@ -10050,6 +10081,131 @@ describe("till-app", () => {
     expect(banner.textContent).toContain(t("sale.refused"));
   });
 
+  describe("a full disk, a card charged but not recorded, and a wrong clock on the counter's pay", () => {
+    const diskFull = { code: "storage.disk_full", status: 507 };
+
+    async function payCash(refusal: object) {
+      const { el } = await mountApp({ recordSale: vi.fn().mockRejectedValue(refusal) });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      return el.shadowRoot!.querySelector('[role="alert"]')!.textContent!;
+    }
+
+    async function payReader(refusal: object) {
+      const { el } = await mountApp({ pay: vi.fn().mockRejectedValue(refusal) });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "1");
+      await el.updateComplete;
+      emit(c, "collect-card", {});
+      await flush(el);
+      return el.shadowRoot!.querySelector('[role="alert"]')!.textContent!;
+    }
+
+    it("a cash sale refused for a full disk says not to take payment", async () => {
+      const text = await payCash(diskFull);
+      expect(text).toContain(t("sale.disk_full"));
+      expect(text).not.toContain(codeMessage("storage.disk_full"));
+    });
+
+    it("a reader card pay refused for a full disk says not to take payment", async () => {
+      const text = await payReader(diskFull);
+      expect(text).toContain(t("sale.disk_full"));
+      expect(text).not.toContain(codeMessage("storage.disk_full"));
+      expect(text).not.toContain(t("sale.disk_full_manual_card"));
+    });
+
+    it("a sale on a terminal the box does not talk to, refused for a full disk, adds the card advice", async () => {
+      const { el } = await mountApp({ recordSale: vi.fn().mockRejectedValue(diskFull) });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "confirm-payment", { method: "card", amount: "5", externalRef: "OP-4417" });
+      await flush(el);
+      const text = el.shadowRoot!.querySelector('[role="alert"]')!.textContent!;
+      expect(text).toContain(t("sale.disk_full_manual_card"));
+      const refused = t("sale.refused");
+      const cardAdvice = refused.slice(refused.lastIndexOf(". ") + 2);
+      expect(cardAdvice.length).toBeGreaterThan(0);
+      expect(t("sale.disk_full_manual_card").endsWith(` ${cardAdvice}`)).toBe(true);
+    });
+
+    it("a card charged but not recorded for a full disk names the disk", async () => {
+      const text = await payReader({
+        code: "sale.charged_not_recorded",
+        workingOrderId: "wo-1",
+        reason: "disk_full",
+        status: 507,
+      });
+      expect(text).toContain(t("sale.charged_disk_full"));
+    });
+
+    it("a card charged but not recorded for another reason does not name the disk", async () => {
+      const text = await payReader({
+        code: "sale.charged_not_recorded",
+        workingOrderId: "wo-1",
+        reason: "something_else",
+        status: 507,
+      });
+      expect(text).toContain(codeMessage("sale.charged_not_recorded"));
+      expect(text).not.toContain(t("sale.charged_disk_full"));
+    });
+
+    it("a wrong clock shows the date the box's clock reads", async () => {
+      expect(currentLocale()).toBe("es-ES");
+      const text = await payReader({
+        code: "clock.unusable",
+        clockAt: "2001-01-01T11:00:00.000Z",
+        offsetMinutes: 60,
+        status: 409,
+      });
+      expect(text).toContain(t("sale.clock_unusable").replace("{date}", "01/01/2001"));
+      expect(text).not.toContain(t("sale.refused"));
+    });
+
+    it.each([
+      [0, "27/10/2024"],
+      [60, "28/10/2024"],
+    ])(
+      "a wrong clock at offset %i shows the date in the reading's own offset (%s)",
+      async (offsetMinutes, date) => {
+        const text = await payCash({
+          code: "clock.unusable",
+          clockAt: "2024-10-27T23:30:00.000Z",
+          offsetMinutes,
+          status: 409,
+        });
+        expect(text).toContain(t("sale.clock_unusable").replace("{date}", date));
+      },
+    );
+
+    it("a wrong clock whose reading does not parse shows the code table's sentence", async () => {
+      const text = await payCash({
+        code: "clock.unusable",
+        clockAt: "not a time",
+        offsetMinutes: 60,
+        status: 409,
+      });
+      expect(text).toContain(codeMessage("clock.unusable"));
+    });
+
+    it("a wrong clock with no clockAt at all shows the code table's sentence", async () => {
+      const text = await payCash({ code: "clock.unusable", offsetMinutes: 60, status: 409 });
+      expect(text).toContain(codeMessage("clock.unusable"));
+    });
+
+    it("a wrong clock without a reading shows the code table's sentence", async () => {
+      const text = await payCash({
+        code: "clock.unusable",
+        clockAt: "2001-01-01T11:00:00.000Z",
+        status: 409,
+      });
+      expect(text).toContain(codeMessage("clock.unusable"));
+    });
+  });
+
   it("still says to retry when the refusal is an ordinary one", async () => {
     // The control in the other direction: without it, wiring every refusal to `sale.refused` would
     // pass the two cases above while telling an operator to stop for a fault a retry would clear.
@@ -11370,6 +11526,26 @@ describe("till-app", () => {
       expect(el.shadowRoot!.textContent).not.toContain("working_order.rejected");
     });
 
+    it.each([
+      [{ code: "storage.disk_full", status: 507 }, () => codeMessage("storage.disk_full")],
+      [{ code: "server.internal", status: 500 }, () => t("place.error")],
+    ])("place-order refused %o shows that refusal's sentence", async (refused, shown) => {
+      const { el } = await mountApp({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        placeOrder: vi.fn().mockRejectedValue(refused),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(currentApi.placeOrder).toHaveBeenCalledOnce();
+      expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(shown());
+    });
+
     it("place: a PERMANENT fiscal refusal surfaces place.refused, which says nothing about money", async () => {
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
@@ -11755,6 +11931,53 @@ describe("till-app", () => {
         ],
       ]);
       expect(ticket(el)!.originalReceiptAvailable).toBe(false);
+    });
+    describe("Find a bill's pay on a full disk and a wrong clock", () => {
+      async function findBillRefused(refusal: object, tender: object) {
+        const { el } = await mountApp({
+          getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+          collectOrder: vi.fn().mockRejectedValue(refusal),
+        });
+        const form = await openCollection(el);
+        emit(form, "find-bill-pay", { workingOrderId: "wo-debt", tender, invoiced: true });
+        await flush(el);
+        await form.updateComplete;
+        return form.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
+          .error;
+      }
+
+      it("a cash payment refused for a full disk says not to take payment", async () => {
+        expect(
+          await findBillRefused(
+            { code: "storage.disk_full", status: 507 },
+            { method: "cash", amount: "30.00" },
+          ),
+        ).toBe(t("sale.disk_full"));
+      });
+
+      it("a payment on a terminal the box does not talk to, refused for a full disk, adds the card advice", async () => {
+        expect(
+          await findBillRefused(
+            { code: "storage.disk_full", status: 507 },
+            { method: "card", amount: "30.00", externalRef: "OP-4417" },
+          ),
+        ).toBe(t("sale.disk_full_manual_card"));
+      });
+
+      it("a payment refused for a wrong clock shows the date the box's clock reads", async () => {
+        expect(currentLocale()).toBe("es-ES");
+        expect(
+          await findBillRefused(
+            {
+              code: "clock.unusable",
+              clockAt: "2001-01-01T11:00:00.000Z",
+              offsetMinutes: 60,
+              status: 409,
+            },
+            { method: "cash", amount: "30.00" },
+          ),
+        ).toBe(t("sale.clock_unusable").replace("{date}", "01/01/2001"));
+      });
     });
     it("A773 Find a bill ignores a collection answer from a replaced API", async () => {
       let answer!: (result: TillSaleResult) => void;
@@ -12429,6 +12652,55 @@ describe("till-app", () => {
       expect(tenderPay(el).stage).toBe("collect"); // still awaiting collection
     });
 
+    describe("collect-order: a full disk and a wrong clock", () => {
+      async function collectRefused(refusal: object, tender: object) {
+        const { el } = await mountApp({
+          zonePolicy: { serviceMode: "ticket_then_pay" },
+          getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+          collectOrder: vi.fn().mockRejectedValue(refusal),
+        });
+        const c = await toCounter(el);
+        c.store.addProduct(cafe, "2");
+        await el.updateComplete;
+        emit(c, "place-order");
+        await flush(el);
+        emit(counter(el)!, "collect-order", tender);
+        await flush(el);
+        return el.shadowRoot!.querySelector('[role="alert"]')!.textContent!;
+      }
+
+      it("a cash collect refused for a full disk says not to take payment", async () => {
+        const text = await collectRefused(
+          { code: "storage.disk_full", status: 507 },
+          { method: "cash", amount: "5" },
+        );
+        expect(text).toContain(t("sale.disk_full"));
+        expect(text).not.toContain(t("sale.disk_full_manual_card"));
+      });
+
+      it("a collect on a terminal the box does not talk to, refused for a full disk, adds the card advice", async () => {
+        const text = await collectRefused(
+          { code: "storage.disk_full", status: 507 },
+          { method: "card", amount: "5", externalRef: "OP-4417" },
+        );
+        expect(text).toContain(t("sale.disk_full_manual_card"));
+      });
+
+      it("a collect refused for a wrong clock shows the date the box's clock reads", async () => {
+        expect(currentLocale()).toBe("es-ES");
+        const text = await collectRefused(
+          {
+            code: "clock.unusable",
+            clockAt: "2001-01-01T11:00:00.000Z",
+            offsetMinutes: 60,
+            status: 409,
+          },
+          { method: "cash", amount: "5" },
+        );
+        expect(text).toContain(t("sale.clock_unusable").replace("{date}", "01/01/2001"));
+      });
+    });
+
     it("collect-order: says the operator may not take payments when refused the payment permission", async () => {
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
@@ -12620,6 +12892,23 @@ describe("till-app", () => {
       // once on entering the counter, once after the advance.
       expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
       expect(stationQueueWidget(el)).toBeNull();
+    });
+
+    it.each([
+      [{ code: "storage.disk_full", status: 507 }, () => codeMessage("storage.disk_full")],
+      [{ code: "server.internal", status: 500 }, () => t("station.advance_error")],
+    ])("advance-ticket-item refused %o shows that refusal's sentence", async (refused, shown) => {
+      const { el } = await mountApp({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        advanceTicketItem: vi.fn().mockRejectedValue(refused),
+      });
+      const c = await toCounter(el);
+
+      emit(c, "advance-ticket-item", { itemId: "ti-1", stationId: "st-1", to: "preparing" });
+      await flush(el);
+
+      expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(shown());
     });
 
     it("a failed advance-ticket-item still refreshes the queue and shows a non-fatal error", async () => {

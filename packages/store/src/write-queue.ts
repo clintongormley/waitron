@@ -1,6 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Connections } from "./connections.js";
-import { asDiskFull } from "./disk-full.js";
 
 /**
  * One write transaction at a time.
@@ -63,7 +62,7 @@ export function createWriteQueue(connections: Connections) {
             connections.write.exec("begin immediate");
           } catch (error) {
             connections.clearEnded();
-            throw asDiskFull(error) ?? error;
+            throw connections.refusal(error);
           }
           connections.clearEnded();
           let result: T;
@@ -81,7 +80,7 @@ export function createWriteQueue(connections: Connections) {
             try {
               connections.write.exec("commit");
             } catch (error) {
-              const mapped = asDiskFull(error) ?? error;
+              const mapped = connections.refusal(error);
               if (!connections.write.isTransaction) connections.noteEnded(mapped);
               throw mapped;
             }
@@ -93,7 +92,7 @@ export function createWriteQueue(connections: Connections) {
                 // The failure that brought us here is the one the caller needs.
               }
             }
-            throw connections.endedBy()?.error ?? asDiskFull(error) ?? error;
+            throw connections.endedBy()?.error ?? connections.refusal(error);
           } finally {
             connections.clearEnded();
           }

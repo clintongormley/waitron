@@ -8,7 +8,9 @@ Record the guest and assign their dishes through the table's
 
 If the till cannot confirm a counter send, retry with the basket unchanged. When the first send
 already reached the server, the retry returns its original result and moves the till on as placed.
-It adds no second kitchen ticket or collection-number slip.
+It adds no second kitchen ticket or collection-number slip. While the box is out of disk space,
+the retry is refused and the till says the order was not saved, even if the first send already
+reached the server.
 
 If you edit the basket after the first send, the till must save those edits before placing it.
 When the order has already been placed, it keeps your edits on screen and shows an error instead

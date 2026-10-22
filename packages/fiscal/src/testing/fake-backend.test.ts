@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, decimal, jobOrigin, nodeId, saleId, seriesId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import type { SaleForFiscalRecord } from "../backend.js";
+import type { FiscalBackend, SaleForFiscalRecord } from "../backend.js";
 import { FakeFiscalBackend } from "./fake-backend.js";
 
 // The fake keys its records on node and ignores the till.
@@ -32,6 +32,15 @@ const suite = useVenueDb({ migrations: [], setup: (db) => FakeFiscalBackend.inst
 beforeEach(async () => {
   await FakeFiscalBackend.truncate(suite.db);
   backend = new FakeFiscalBackend(suite.db);
+});
+
+describe("assertRecordableAt", () => {
+  it("refuses no clock reading, so a test's dates never block a sale", () => {
+    const fake: FiscalBackend = backend;
+    expect(
+      fake.assertRecordableAt({ instant: new Date("2001-01-01T11:00:00Z"), offsetMinutes: 60 }),
+    ).toBeUndefined();
+  });
 });
 
 describe("registration", () => {

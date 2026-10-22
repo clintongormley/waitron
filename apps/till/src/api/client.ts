@@ -3131,7 +3131,9 @@ export class TillApi {
 
   /**
    * Place a working order → `POST /api/working-orders/:id/place` (`open → placed`): freezes its
-   * composition and opens its amendment log. An identical retry returns the saved placed result.
+   * composition and opens its amendment log. An identical retry returns the saved placed result,
+   * except while a full-disk stop holds, when every placement, a retry included, rejects with
+   * `storage.disk_full`.
    * A different placement rejects with `submission.id_reused`; an absent order or one closed
    * without this placement rejects with `working_order.not_open`.
    */

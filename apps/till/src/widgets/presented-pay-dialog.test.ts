@@ -564,6 +564,42 @@ describe("till-presented-pay-dialog: refusals, busy and closing", () => {
     expect(actions(el).error).not.toBe(codeMessage("no.such.code"));
   });
 
+  it.each([
+    [{ code: "storage.disk_full" }, "sale.disk_full"],
+    [{ code: "storage.disk_full", manualCard: true }, "sale.disk_full_manual_card"],
+    [{ code: "sale.charged_not_recorded", reason: "disk_full" }, "sale.charged_disk_full"],
+  ] as const)("words a refusal %o as the till does: %s", async (refusal, key) => {
+    const el = await mount({ refusal });
+    expect(actions(el).error).toBe(t(key));
+  });
+
+  it("words a card charged but not recorded for another reason without naming the disk", async () => {
+    const el = await mount({
+      refusal: { code: "sale.charged_not_recorded", reason: "something_else" },
+    });
+    expect(actions(el).error).toBe(codeMessage("sale.charged_not_recorded"));
+  });
+
+  it("words a wrong clock with the date the box's clock reads", async () => {
+    expect(currentLocale()).toBe("es");
+    const el = await mount({
+      refusal: { code: "clock.unusable", clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: 60 },
+    });
+    expect(actions(el).error).toBe(t("sale.clock_unusable").replace("{date}", "01/01/2001"));
+  });
+
+  it.each([
+    [{ clockAt: "not a time", offsetMinutes: 60 }],
+    [{ clockAt: "2001-01-01T11:00:00.000Z" }],
+    [{ clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: Number.NaN }],
+  ])(
+    "words a wrong clock without a usable reading (%o) in the code's sentence",
+    async (reading) => {
+      const el = await mount({ refusal: { code: "clock.unusable", ...reading } });
+      expect(actions(el).error).toBe(codeMessage("clock.unusable"));
+    },
+  );
+
   it("words a person who may not take payments as the till does", async () => {
     const el = await mount({
       refusal: { code: "authorization.not_permitted", permission: "sale.take_payment" },

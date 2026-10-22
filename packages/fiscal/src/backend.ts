@@ -2,6 +2,7 @@ import "./errors.js";
 import type { Decimal, NodeId, SaleId, SaleOrigin, SeriesId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import type { VatBreakdownLine } from "./vat-breakdown.js";
+import type { TrustedReading } from "./clock.js";
 
 export type { VatBreakdownLine };
 
@@ -188,6 +189,12 @@ export interface FiscalBackend {
   /** The most characters (Unicode code points) a named customer's legal name may have on this
    * regime's record, or `null` when it sets no cap. */
   readonly recipientNameMaxLength: number | null;
+
+  /**
+   * Throws this regime's refusal when a record stamped with `reading` could never be accepted, so a
+   * caller can refuse before money moves. A regime with no such rule returns.
+   */
+  assertRecordableAt(reading: Pick<TrustedReading, "instant" | "offsetMinutes">): void;
 
   registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration>;
 

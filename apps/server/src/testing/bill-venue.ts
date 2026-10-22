@@ -38,6 +38,7 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { CardProviderPool } from "../card-provider-pool.js";
+import type { DiskFullState } from "../disk-full-state.js";
 import { deploymentEnvironment } from "../config.js";
 import { DEVICE_COOKIE } from "../device-session.js";
 import type { Logger } from "../logger.js";
@@ -88,6 +89,13 @@ export interface BillVenue {
   app: Hono;
   /** The same routes, tips on, on another clock. */
   appAt(clock: TrustedClock): Hono;
+  /** The same routes, tips on, with these deps. */
+  appWith(opts: {
+    clock?: TrustedClock;
+    disk?: DiskFullState;
+    log?: Logger;
+    workforceEnabled?: boolean;
+  }): Hono;
   /** The same routes with the venue's tips off. */
   appTipsOff: Hono;
   /** The first till's session and device. */
@@ -264,7 +272,13 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
         : Promise.reject(new AppError("payment.provider_unknown", { providerId })),
     evict: () => {},
   };
-  const mount = (tipsEnabled: boolean, at: TrustedClock = clock): Hono => {
+  const mount = (
+    tipsEnabled: boolean,
+    at: TrustedClock = clock,
+    disk?: DiskFullState,
+    log: Logger = quiet,
+    workforceEnabled?: boolean,
+  ): Hono => {
     const app = new Hono();
     mountTillApi(
       app,
@@ -276,8 +290,10 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
         secureCookies: false,
         venueLocale: LOCALE,
         pool,
+        ...(disk === undefined ? {} : { disk }),
+        ...(workforceEnabled === undefined ? {} : { workforceEnabled }),
       },
-      quiet,
+      log,
     );
     appDatabases.set(app, db);
     return app;
@@ -299,6 +315,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     pool,
     app: mount(true),
     appAt: (at) => mount(true, at),
+    appWith: (opts) => mount(true, opts.clock, opts.disk, opts.log, opts.workforceEnabled),
     appTipsOff: mount(false),
     cookie: await cookieFor(devices[0]!),
     deviceId: devices[0]!.deviceId,

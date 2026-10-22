@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { SessionActivity } from "./session-activity.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { codeMessage } from "./i18n/codes.js";
 import { ServerRouter } from "./api/server-router.js";
 import type { TillClockState } from "./api/client.js";
 import {
@@ -410,4 +411,23 @@ describe("till clocking integration", () => {
     expect(f.el.shadowRoot!.querySelector("till-lock-screen")).toBeNull();
     expect(f.api.getClockState).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    [{ code: "storage.disk_full", status: 507 }, codeMessage("storage.disk_full")],
+    [{ code: "server.internal", status: 500 }, codeMessage("server.internal")],
+    [{ status: 500 }, t("clock.write_error")],
+  ])(
+    "a Clock in refused %o shows that refusal's sentence on the clock page",
+    async (refused, shown) => {
+      const f = await clockApp();
+      f.api.clockIn.mockRejectedValueOnce(refused);
+      await signIn(f.el);
+      await pageButton(f.el, "[data-clock-in]");
+      await vi.waitFor(() =>
+        expect(clockPage(f.el)!.shadowRoot!.querySelector(".message")?.textContent?.trim()).toBe(
+          shown,
+        ),
+      );
+    },
+  );
 });

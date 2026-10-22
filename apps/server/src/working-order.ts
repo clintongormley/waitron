@@ -6545,6 +6545,7 @@ export interface PricedInvoice extends IssueMoment {
 export async function priceForIssuance(
   tx: Transaction,
   clock: TrustedClock,
+  backend: FiscalBackend,
   cfg: TillConfig,
   id: string,
 ): Promise<PricedInvoice> {
@@ -6552,7 +6553,7 @@ export async function priceForIssuance(
   return {
     id,
     identities: order.identities,
-    ...issueMoment(clock, await issuancePass(tx, cfg, id, order)),
+    ...issueMoment(clock, await issuancePass(tx, cfg, id, order), backend),
   };
 }
 

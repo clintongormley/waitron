@@ -403,6 +403,23 @@ describe("refusalOf", () => {
     });
   });
 
+  it("keeps the clock reading and the cause a refusal names, only when each has its own type", () => {
+    expect(
+      refusalOf({
+        code: "clock.unusable",
+        status: 409,
+        clockAt: "2001-01-01T11:00:00.000Z",
+        offsetMinutes: 60,
+      }),
+    ).toEqual({ code: "clock.unusable", clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: 60 });
+    expect(
+      refusalOf({ code: "sale.charged_not_recorded", status: 507, reason: "disk_full" }),
+    ).toEqual({ code: "sale.charged_not_recorded", reason: "disk_full" });
+    expect(
+      refusalOf({ code: "clock.unusable", clockAt: 978346800000, offsetMinutes: "60", reason: 1 }),
+    ).toEqual({ code: "clock.unusable" });
+  });
+
   it("reads a refusal with no code of its own as the server's internal error", () => {
     expect(refusalOf({ status: 500 })).toEqual({ code: "server.internal" });
     expect(refusalOf({ code: 20 })).toEqual({ code: "server.internal" });

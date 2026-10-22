@@ -22,6 +22,7 @@ import {
   compareDecimal,
   decimal,
   decimalToCents,
+  diskFullIn,
   isAppError,
   MONEY_SCALE,
   multiplyDecimal,
@@ -38,6 +39,7 @@ import type { SettleSaleTender } from "@waitron/core";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   associatePaymentWithSale,
+  ChargeNotSavedError,
   findPaymentsByBillPayments,
   MANUAL_PROVIDER,
   recordManualCardPayment,
@@ -101,8 +103,17 @@ import "./errors.js";
 import { raiseDishesNotSent } from "./dish-not-sent-alert.js";
 import { saleLanguageFor } from "./venue-locale.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
+import type { Logger } from "./logger.js";
+import { refuseForDiskStop, type DiskFullState } from "./disk-full-state.js";
 
-export type BillPaymentDeps = TillSaleDeps & { attendance?: AttendanceRecorder };
+export type BillPaymentDeps = TillSaleDeps & {
+  attendance?: AttendanceRecorder;
+  /**
+   * Unset in suites that test no full-disk stop; unset, nothing is refused for a full disk. A live
+   * boot supplies it.
+   */
+  disk?: DiskFullState;
+};
 
 /**
  * Payments taken against a bill before its invoice exists (bill payments design): the balance they
@@ -685,6 +696,7 @@ async function issueWhenFullyPaid(
   const { priced, clock } = issueMoment(
     deps.clock,
     await issuancePass(tx, cfg, workingOrderId, stored),
+    deps.backend,
   );
   const tendersOfBill: SettleSaleTender[] = held
     .filter(({ row }) => row.state === "received")
@@ -1042,7 +1054,8 @@ async function beginBillPayment(
   req: BillPaymentRequest,
   operator: { personId: string; sessionId: string },
   state: "received" | "pending",
-  now: Date,
+  reading: { instant: Date; offsetMinutes: number },
+  refusals: { diskFull: () => boolean; log?: Logger },
   attendance?: AttendanceRecorder,
 ): Promise<{ replay: PaymentRow } | { payment: PaymentRow; total: Decimal }> {
   // Before the replay lookup: a retry the route would now refuse is refused too.
@@ -1075,6 +1088,8 @@ async function beginBillPayment(
   const held = await readPaymentMoney(tx, [workingOrderId]);
   const { request, items } = await allocationRequestFor(tx, workingOrderId, req, held);
   const total = await storedOrderTotal(tx, workingOrderId);
+  backend.assertRecordableAt(reading);
+  if (refusals.diskFull()) refuseForDiskStop(refusals.log, workingOrderId);
   await selectOrderInvoice(tx, backend, cfg, workingOrderId, total);
   await readSaleOperationDescription(tx, cfg, { kind: "order", orderId: workingOrderId });
   const allocation = confirmAllocation(
@@ -1100,7 +1115,7 @@ async function beginBillPayment(
       requestedBy: operator.personId,
       source: cfg.origin.source,
       deviceId: cfg.origin.deviceId,
-      receivedAt: state === "received" ? now.toISOString() : null,
+      receivedAt: state === "received" ? reading.instant.toISOString() : null,
     })
     .returning();
   if (items !== null) {
@@ -1115,7 +1130,7 @@ async function beginBillPayment(
     state === "received" ? "qualified" : "pending",
     {
       locationId: cfg.locationId,
-      at: now.toISOString(),
+      at: reading.instant.toISOString(),
     },
   );
   return { payment: payment!, total };
@@ -1159,8 +1174,12 @@ export async function takeBillPayment(
   req: BillPaymentRequest,
   operator: { personId: string; sessionId: string },
 ): Promise<BillPaymentResult> {
+  // Awaited only while `since()` names a refusal: otherwise the payment enters the write queue in
+  // this turn.
+  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
   return withTransaction(deps.db, async (tx) => {
-    const receivedAt = deps.clock.now().instant;
+    const reading = deps.clock.now();
+    const receivedAt = reading.instant;
     const begun = await beginBillPayment(
       tx,
       deps.backend,
@@ -1169,7 +1188,8 @@ export async function takeBillPayment(
       req,
       operator,
       "received",
-      receivedAt,
+      reading,
+      { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
       deps.attendance,
     );
     if ("replay" in begun) return resultOf(tx, deps, cfg, begun.replay, null);
@@ -1213,6 +1233,47 @@ export function billPaymentIsLive(db: Database, billPaymentId: string): boolean 
   return liveBillPaymentsOf(db).has(billPaymentId);
 }
 
+/**
+ * Runs work that follows a card charged on a connected reader. When `deps` opts in, a full disk
+ * becomes `sale.charged_not_recorded`, so the till can say the card was charged; any other error,
+ * and every error when it does not, passes through unchanged.
+ */
+export async function afterCardCharged<T>(
+  deps: { sayCardChargedOnFullDisk?: boolean; log?: Logger },
+  workingOrderId: string,
+  work: () => Promise<T>,
+): Promise<T> {
+  if (deps.sayCardChargedOnFullDisk !== true) return work();
+  try {
+    return await work();
+  } catch (error) {
+    if (!diskFullIn(error)) throw error;
+    throw chargedNotRecorded(deps.log, workingOrderId);
+  }
+}
+
+/**
+ * What a failed `collect` is answered with. When `deps` opts in, a charge the provider could not
+ * save for a full disk ({@link ChargeNotSavedError}) becomes `sale.charged_not_recorded`; any
+ * other failure, a full disk before the charge among them, passes through unchanged.
+ */
+export function collectFailure(
+  deps: { sayCardChargedOnFullDisk?: boolean; log?: Logger },
+  workingOrderId: string,
+  error: unknown,
+): unknown {
+  if (deps.sayCardChargedOnFullDisk !== true || !(error instanceof ChargeNotSavedError)) {
+    return error;
+  }
+  return chargedNotRecorded(deps.log, workingOrderId);
+}
+
+/** Carries no cause: the error boundary answers `storage.disk_full` for any full disk in the chain. */
+function chargedNotRecorded(log: Logger | undefined, workingOrderId: string): AppError {
+  log?.("error", "sale.charged_not_recorded", { workingOrderId });
+  return new AppError("sale.charged_not_recorded", { workingOrderId, reason: "disk_full" });
+}
+
 /** {@link takeReaderBillPayment}'s deps: the fiscal ones, and the reader's provider. */
 export type ReaderBillPaymentDeps = BillPaymentDeps & {
   provider: PaymentProvider;
@@ -1222,6 +1283,12 @@ export type ReaderBillPaymentDeps = BillPaymentDeps & {
   deviceProfileId?: string;
   /** The chosen reader's `card_readers.id`, passed to `collect`; absent for the simulator. */
   readerId?: string;
+  /**
+   * Set by the till's routes: a full disk after `collect` returned a charge, or on the SumUp or
+   * Stripe terminal adapter's own save of one inside it, answers `sale.charged_not_recorded`, so
+   * staff are told not to charge again. Unset, it answers `storage.disk_full`.
+   */
+  sayCardChargedOnFullDisk?: boolean;
 };
 
 /** Who confirmed a payment's or a refund's outcome by hand, and their note. */
@@ -1338,6 +1405,11 @@ export async function takeReaderBillPayment(
 ): Promise<BillPaymentResult> {
   let release = (): void => {};
   try {
+    // Read before the queue wait; `noted()` then catches a refusal noted while this payment waited.
+    // Awaited only while `since()` names a refusal: otherwise P1 enters the write
+    // queue in this turn.
+    const preRead =
+      deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
     const begun = await withTransaction(deps.db, async (tx) => {
       const started = await beginBillPayment(
         tx,
@@ -1347,7 +1419,8 @@ export async function takeReaderBillPayment(
         req,
         operator,
         "pending",
-        deps.clock.now().instant,
+        deps.clock.now(),
+        { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
         deps.attendance,
       );
       if ("replay" in started) {
@@ -1362,6 +1435,12 @@ export async function takeReaderBillPayment(
     });
     if (begun.kind === "replay") return begun.result;
     const { payment } = begun;
+    if (deps.disk?.noted() === true) {
+      await withTransaction(deps.db, (tx) =>
+        failBillPayment(tx, payment.id, deps.clock.now().instant, undefined, deps.attendance),
+      );
+      refuseForDiskStop(deps.log, workingOrderId);
+    }
 
     let result: PaymentResult;
     try {
@@ -1381,23 +1460,30 @@ export async function takeReaderBillPayment(
           failBillPayment(tx, payment.id, deps.clock.now().instant, undefined, deps.attendance),
         );
       }
-      throw error;
+      throw collectFailure(deps, workingOrderId, error);
     }
 
+    if (result.state === "captured") {
+      // A captured result carries its time (`PaymentResult`, provider.ts).
+      const settledAt = result.settledAt!;
+      // Wrapped outside the transaction: when a full disk ended it or refused its commit,
+      // `withTransaction` throws the store's own error (`failure` in `node-sqlite-adapter.ts`).
+      return await afterCardCharged(deps, workingOrderId, () =>
+        withTransaction(deps.db, async (tx) => {
+          const done = await completeBillPayment(
+            tx,
+            deps,
+            cfg,
+            payment.id,
+            settledAt,
+            undefined,
+            req.guests,
+          );
+          return resultOf(tx, deps, cfg, done.payment, done.invoice, done.total);
+        }),
+      );
+    }
     return await withTransaction(deps.db, async (tx) => {
-      if (result.state === "captured") {
-        // A captured result carries its time (`PaymentResult`, provider.ts).
-        const done = await completeBillPayment(
-          tx,
-          deps,
-          cfg,
-          payment.id,
-          result.settledAt!,
-          undefined,
-          req.guests,
-        );
-        return resultOf(tx, deps, cfg, done.payment, done.invoice, done.total);
-      }
       if (!NOT_CHARGED.has(result.state)) {
         return { ...(await resultOf(tx, deps, cfg, payment, null)), outcome: "timeout" };
       }

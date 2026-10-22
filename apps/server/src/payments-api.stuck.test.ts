@@ -601,6 +601,27 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     expect(await resolutionsFor(paymentId)).toHaveLength(1);
   });
 
+  it("answers a full disk while filing a captured payment as storage.disk_full, not the till's charged-card answer", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const { paymentId } = await strandPayment(v, orderId, {
+      status: "succeeded",
+      amountReceived: 150,
+    });
+    const spy = vi
+      .spyOn(backend, "recordSale")
+      .mockRejectedValueOnce(new AppError("storage.disk_full", {}));
+    try {
+      const res = await send(v, "POST", resolvePath(paymentId));
+
+      expect(res.status).toBe(507);
+      expect(await errorOf(res)).toEqual({ code: "storage.disk_full", params: {} });
+      expect(saleIdsFor(orderId)).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("(b) cancels a PaymentIntent still waiting for a card, fails the row, clears the mark, and the order's next card pay uses a NEW PaymentIntent", async () => {
     const v = await setup();
     const orderId = await openOrder(v);

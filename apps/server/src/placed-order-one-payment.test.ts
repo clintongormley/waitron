@@ -14,6 +14,7 @@ import {
   paymentAttemptIsLive,
   payWorkingOrderIntegratedOrchestration,
 } from "./testing/whole-payment-fixture.js";
+import { createDiskFullState, type DiskFullState } from "./disk-full-state.js";
 import "./errors.js";
 
 let venue: BillVenue;
@@ -248,9 +249,9 @@ describe("a placed order's collect while its card is in flight", () => {
 });
 
 /** A card payment of `id` through the orchestration, with `provider` as its reader. */
-function payWith(provider: FakePaymentProvider, id: string) {
+function payWith(provider: FakePaymentProvider, id: string, disk?: DiskFullState) {
   return payWorkingOrderIntegratedOrchestration(
-    { db: venue.db, backend: venue.backend, clock: venue.clock, provider },
+    { db: venue.db, backend: venue.backend, clock: venue.clock, provider, disk },
     venue.cfg,
     { id, lines: [] },
   );
@@ -521,6 +522,97 @@ describe("where a placed order's card registers itself as in flight", () => {
 
       expect(live).toBe(true);
       expect(paid).toMatchObject({ outcome: "captured" });
+    },
+  );
+
+  it.each(KINDS)(
+    "$label: the same holds with a full-disk state that has nothing noted",
+    async ({ kind }) => {
+      const id = await placed(kind);
+      const disk = createDiskFullState({
+        dir: "/nonexistent",
+        now: () => new Date(),
+        log: () => {},
+        statfs: () => Promise.reject(new Error("nothing noted: free space is not read")),
+      });
+      const reader = new FakePaymentProvider(venue.db);
+      const release = reader.holdNextCollect();
+      let paying: ReturnType<typeof payWith> | undefined;
+      let live: boolean | undefined;
+      try {
+        paying = payWith(reader, id, disk);
+        live = await withTransaction(venue.db, async () => paymentAttemptIsLive(venue.db, id));
+      } finally {
+        release();
+      }
+      const paid = await paying;
+
+      expect(live).toBe(true);
+      expect(paid).toMatchObject({ outcome: "captured" });
+    },
+  );
+});
+
+describe("a placed order's card when a transaction ahead in the write queue notes a full disk", () => {
+  /** A real state with nothing noted; a free-space read would find room and clear any refusal. */
+  const roomyState = (): DiskFullState =>
+    createDiskFullState({
+      dir: "/unused",
+      now: () => new Date(),
+      log: () => {},
+      statfs: () => Promise.resolve({ bavail: Number.MAX_SAFE_INTEGER, frsize: 1 }),
+    });
+
+  /** Holds the write queue until the returned `release`, then runs `inside` in that transaction. */
+  function holdQueue(inside: () => void) {
+    let open!: () => void;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    const held = withTransaction(venue.db, async () => {
+      await gate;
+      inside();
+    });
+    return async () => {
+      open();
+      await held;
+    };
+  }
+
+  const settled = <T>(paying: Promise<T>) =>
+    paying.then(
+      (paid) => ({ paid }),
+      (error: unknown) => ({ error }),
+    );
+
+  it.each(KINDS)(
+    "$label: refuses with storage.disk_full before the reader is asked",
+    async ({ kind }) => {
+      const id = await placed(kind);
+      const disk = roomyState();
+      const before = venue.card.collectCalls.length;
+      const release = holdQueue(() => disk.noteRefused());
+
+      const paying = settled(payWith(venue.card, id, disk));
+      await release();
+
+      expect(await paying).toMatchObject({ error: { code: "storage.disk_full" } });
+      expect(venue.card.collectCalls.length).toBe(before);
+      expect(paymentsOf(id)).toEqual([]);
+    },
+  );
+
+  it.each(KINDS)(
+    "$label: asks the reader when the transaction ahead notes nothing",
+    async ({ kind }) => {
+      const id = await placed(kind);
+      const disk = roomyState();
+      const before = venue.card.collectCalls.length;
+      const release = holdQueue(() => {});
+
+      const paying = settled(payWith(venue.card, id, disk));
+      await release();
+
+      expect(await paying).toMatchObject({ paid: { outcome: "captured" } });
+      expect(venue.card.collectCalls.length).toBe(before + 1);
     },
   );
 });

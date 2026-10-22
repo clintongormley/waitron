@@ -72,13 +72,21 @@ import {
   finishIntegratedAttendance,
   pendingIntegratedAttendanceKey,
 } from "./attendance-integrated.js";
-type TillSaleDeps = BaseTillSaleDeps & { attendance?: AttendanceRecorder };
+type TillSaleDeps = BaseTillSaleDeps & {
+  attendance?: AttendanceRecorder;
+  /**
+   * Unset in suites that test no full-disk stop; unset, nothing is refused for a full disk. A live
+   * boot supplies it.
+   */
+  disk?: DiskFullState;
+};
 import { issuancePass } from "./issuance-pass.js";
+import { refuseForDiskStop, type DiskFullState } from "./disk-full-state.js";
 import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js";
 import { issueMoment } from "./issue-moment.js";
 import { cashChange, ZERO } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
-import { refuseBillWithPayments } from "./bill-payments.js";
+import { afterCardCharged, collectFailure, refuseBillWithPayments } from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
@@ -602,6 +610,13 @@ export type IntegratedPayDeps = TillSaleDeps & {
   readerId?: string;
   /** The device profile the route checked the request under, passed to `provider.collect`. */
   deviceProfileId?: string;
+  /**
+   * Set by the till's routes: a full disk after a card was charged — after `collect` returned a
+   * charge, while filing a charge an earlier attempt captured, or on the SumUp or Stripe terminal
+   * adapter's own save of the charge inside `collect` — answers `sale.charged_not_recorded`, so
+   * staff are told not to charge again. Unset, it answers `storage.disk_full`.
+   */
+  sayCardChargedOnFullDisk?: boolean;
 };
 
 /**
@@ -646,6 +661,9 @@ async function runPayWorkingOrder(
   operatorId: string | undefined,
   admit: WriteAdmission,
 ): Promise<TillSaleResult> {
+  // Awaited only while `since()` names a refusal: otherwise the sale enters the write queue in this
+  // turn.
+  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
   try {
     return await withTransaction(deps.db, async (tx) => {
       await admit(tx);
@@ -663,6 +681,7 @@ async function runPayWorkingOrder(
       if (locked?.status === "settled") {
         return readSettledTicket(deps.backend, tx, cfg, req.id);
       }
+      if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
 
       const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
 
@@ -936,6 +955,7 @@ async function fileImmediateSale(
   const { priced, clock } = issueMoment(
     deps.clock,
     await issuancePass(tx, cfg, workingOrderId, order),
+    deps.backend,
   );
   // Before the owes-nothing check, so a malformed cash amount is refused whatever is owed.
   const settled = tender === null ? null : { ...tender, ...settlementFor(tender, priced.total) };
@@ -1112,6 +1132,11 @@ async function payIntegrated(
   admit: WriteAdmission,
   onLive: (entry: string) => void,
 ): Promise<IntegratedPayOutcome> {
+  const refuseForStop = (): never => refuseForDiskStop(deps.log, req.id);
+  // Read before the queue wait; `noted()` then catches a refusal noted while this pay waited.
+  // Awaited only while `since()` names a refusal: otherwise P1 enters the write queue in this turn.
+  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
+  const stopped = () => preRead || (deps.disk?.noted() ?? false);
   // ---- P1 (tx A) ----
   const prepared = await withTransaction(deps.db, async (tx) => {
     await admit(tx);
@@ -1179,6 +1204,7 @@ async function payIntegrated(
       await assertBillHasNoUnsent(tx, req.id);
 
       if (outstanding !== undefined) {
+        if (stopped()) refuseForStop();
         if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
           // Called only to refuse a malformed tip when tips are on; none is charged on a bill that
           // owes nothing.
@@ -1235,9 +1261,11 @@ async function payIntegrated(
           })
         : await priceStoredOrderForIssuance(tx, req.id);
     // Before the reader is asked: P3 could never file this sale.
+    deps.backend.assertRecordableAt(deps.clock.now());
     await selectOrderInvoice(tx, deps.backend, cfg, req.id, order.gross.total);
     await readSaleOperationDescription(tx, cfg, { kind: "order", orderId: req.id });
     const wasPlaced = locked?.status === "placed";
+    if (stopped()) refuseForStop();
     if (compareDecimal(order.gross.total, ZERO) === 0) {
       // Nothing to charge, so the reader is not asked and no tip is taken; called only to refuse a
       // malformed tip when tips are on. A placed order's dishes were sent when it was placed, and a
@@ -1302,16 +1330,15 @@ async function payIntegrated(
   }
   // P2 is skipped entirely: the card was already charged.
   if (prepared.kind === "recover") {
-    return finalizeRecovery(deps, cfg, req, prepared.captured, operatorId, prepared.attendanceKey);
+    const { captured, attendanceKey } = prepared;
+    return afterCardCharged(deps, req.id, () =>
+      finalizeRecovery(deps, cfg, req, captured, operatorId, attendanceKey),
+    );
   }
   if (prepared.kind === "recover-settle") {
-    return finalizeSettleRecovery(
-      deps,
-      cfg,
-      req,
-      prepared.captured,
-      prepared.outstanding,
-      prepared.attendanceKey,
+    const { captured, outstanding, attendanceKey } = prepared;
+    return afterCardCharged(deps, req.id, () =>
+      finalizeSettleRecovery(deps, cfg, req, captured, outstanding, attendanceKey),
     );
   }
 
@@ -1321,6 +1348,13 @@ async function payIntegrated(
     prepared.kind === "settle" ? prepared.outstanding.amountDue : prepared.gross.total;
   // Only a collect of an open order marked it; a settle is of a placed order.
   const attemptAt = prepared.kind === "collect" ? prepared.attemptAt : null;
+  if (deps.disk?.noted() === true) {
+    await withTransaction(deps.db, (tx) =>
+      finishIntegratedAttendance(tx, deps.attendance, prepared.attendanceKey, "refused"),
+    );
+    await releasePaymentAttempt(deps, req.id, attemptAt);
+    refuseForStop();
+  }
   let result: PaymentResult;
   try {
     result = await deps.provider.collect({
@@ -1336,7 +1370,7 @@ async function payIntegrated(
     });
   } catch (error) {
     await releasePaymentAttempt(deps, req.id, attemptAt);
-    throw error;
+    throw collectFailure(deps, req.id, error);
   }
   if (result.state !== "captured" && result.state !== "accepted_offline") {
     if (result.state === "failed" || result.state === "network_unavailable") {
@@ -1352,30 +1386,28 @@ async function payIntegrated(
 
   // ---- P3 (tx B) ----
   if (prepared.kind === "settle") {
+    const { outstanding, attendanceKey } = prepared;
     return {
       outcome: "captured",
-      ticket: await finalizeSettle(
-        deps,
-        cfg,
-        req,
-        prepared.outstanding,
-        tip,
-        result,
-        prepared.attendanceKey,
+      ticket: await afterCardCharged(deps, req.id, () =>
+        finalizeSettle(deps, cfg, req, outstanding, tip, result, attendanceKey),
       ),
     };
   }
-  const ticket = await finalizeCapture(
-    deps,
-    cfg,
-    req,
-    prepared.gross,
-    prepared.identities,
-    tip,
-    result,
-    operatorId,
-    prepared.wasPlaced,
-    prepared.attendanceKey,
+  const { gross, identities, wasPlaced, attendanceKey } = prepared;
+  const ticket = await afterCardCharged(deps, req.id, () =>
+    finalizeCapture(
+      deps,
+      cfg,
+      req,
+      gross,
+      identities,
+      tip,
+      result,
+      operatorId,
+      wasPlaced,
+      attendanceKey,
+    ),
   );
   return { outcome: "captured", ticket };
 }
@@ -1551,7 +1583,7 @@ async function finalizeCapture(
         .from(workingOrders)
         .where(eq(workingOrders.id, req.id));
       if (locked?.status === "settled") return readSettledTicket(deps.backend, tx, cfg, req.id);
-      const { priced, clock } = issueMoment(deps.clock, grossInP1);
+      const { priced, clock } = issueMoment(deps.clock, grossInP1, deps.backend);
       const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
       const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
         log: deps.log,
@@ -1691,7 +1723,11 @@ async function finalizeRecovery(
     }
 
     const order = await priceStoredOrderForIssuance(tx, req.id, { refuseUnsentUnavailable: false });
-    const { priced, clock } = issueMoment(deps.clock, await issuancePass(tx, cfg, req.id, order));
+    const { priced, clock } = issueMoment(
+      deps.clock,
+      await issuancePass(tx, cfg, req.id, order),
+      deps.backend,
+    );
     const capturedAmount = decimal(captured.amount);
 
     if (compareDecimal(capturedAmount, priced.total) < 0) {
@@ -2062,6 +2098,9 @@ async function runCollectOrder(
   operatorId: string | undefined,
   admit: WriteAdmission,
 ): Promise<TillSaleResult> {
+  // Awaited only while `since()` names a refusal: otherwise the collect enters the write queue in
+  // this turn.
+  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
   return withTransaction(deps.db, async (tx) => {
     await admit(tx);
     const [locked] = await tx
@@ -2076,6 +2115,7 @@ async function runCollectOrder(
     if (locked?.status === "settled") {
       return readSettledTicket(deps.backend, tx, cfg, req.id);
     }
+    if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
 
     const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
 

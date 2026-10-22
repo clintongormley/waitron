@@ -10,6 +10,7 @@ import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
+import { createDiskFullState, type DiskFullState } from "./disk-full-state.js";
 import {
   payWorkingOrderIntegrated,
   payWorkingOrderIntegratedOrchestration,
@@ -376,6 +377,50 @@ describe("integrated whole-order attendance", () => {
     );
     expect(await operations()).toEqual([]);
     expect(await suite.db.select().from(attendanceDayWork)).toEqual([]);
+  });
+
+  it("keeps no attendance row when a placed, invoiced bill is refused for a full disk", async () => {
+    const req = await bill(true);
+    at();
+    const disk = createDiskFullState({
+      dir: "/unused",
+      now: () => new Date(),
+      log: () => {},
+      statfs: () => Promise.resolve({ bavail: 0, frsize: 1 }),
+    });
+    disk.noteRefused();
+    await expect(
+      payWorkingOrderIntegrated({ ...deps(), disk }, v.cfg, req, collector),
+    ).rejects.toMatchObject({ code: "storage.disk_full" });
+    expect(provider.collectCalls).toHaveLength(0);
+    expect(await operations()).toEqual([]);
+  });
+
+  it("finishes the attendance as refused when a full disk is noted just before the reader", async () => {
+    at();
+    let calls = 0;
+    const disk: DiskFullState = {
+      noteRefused: () => {},
+      noted: () => ++calls >= 2,
+      since: () => null,
+      full: () => Promise.resolve(false),
+    };
+    await expect(
+      payWorkingOrderIntegrated({ ...deps(), disk }, v.cfg, request(), collector),
+    ).rejects.toMatchObject({ code: "storage.disk_full" });
+    expect(provider.collectCalls).toHaveLength(0);
+    expect(await operations()).toEqual([
+      { sequence: 1, key: expect.any(String), ...evidence("refused") },
+    ]);
+  });
+
+  it("keeps no attendance row when a walk-up card sale is refused under a clock in 2001", async () => {
+    at("2001-01-01T11:00:00.000Z");
+    await expect(
+      payWorkingOrderIntegrated(deps(), v.cfg, request(), collector),
+    ).rejects.toMatchObject({ code: "clock.unusable" });
+    expect(provider.collectCalls).toHaveLength(0);
+    expect(await operations()).toEqual([]);
   });
 
   describe("workforce never migrated", () => {

@@ -28,6 +28,8 @@ export class NoneBackend implements FiscalBackend {
   readonly simplifiedInvoiceLimit = null;
   readonly recipientNameMaxLength = null;
 
+  assertRecordableAt(): void {}
+
   registerNode(_tx: Transaction, nodeId: NodeId): Promise<NodeRegistration> {
     return Promise.resolve({
       backend: "none",

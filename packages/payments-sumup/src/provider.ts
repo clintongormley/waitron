@@ -23,6 +23,7 @@ import {
   insertAttempting,
   listAttempting,
   refundLookupOf,
+  saveCharge,
   stampAttemptingRef,
 } from "@waitron/payments";
 import type { SumUpClient, SumUpTransaction } from "./client.js";
@@ -221,16 +222,19 @@ export class SumUpCloudProvider implements PaymentProvider {
       return this.pendingResult(paymentRef, params.amount);
     }
     const card = outcome.kind === "captured" ? outcome.card : undefined;
-    const row = await this.inTransaction((tx) =>
+    const row =
       outcome.kind === "captured"
-        ? captureAttempting(tx, {
-            ...key,
-            settledAt: outcome.settledAt,
-            externalRef: outcome.transactionId,
-            card,
-          })
-        : failAttempting(tx, key),
-    );
+        ? await saveCharge(() =>
+            this.inTransaction((tx) =>
+              captureAttempting(tx, {
+                ...key,
+                settledAt: outcome.settledAt,
+                externalRef: outcome.transactionId,
+                card,
+              }),
+            ),
+          )
+        : await this.inTransaction((tx) => failAttempting(tx, key));
     return {
       provider: SUMUP_PROVIDER,
       paymentRef,

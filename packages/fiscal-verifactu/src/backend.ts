@@ -38,6 +38,7 @@ import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { verifyChain } from "./verify.js";
+import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
 import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
 
 /** `FiscalRecordRef.backend`/`NodeRegistration.backend` — the regime-neutral interface's own
@@ -177,6 +178,10 @@ export class VerifactuBackend implements FiscalBackend {
     this.environment = options.environment ?? "production";
     this.deploymentEnvironment = options.deploymentEnvironment;
     this.systemInfo = { ...DEFAULT_SYSTEM_INFO, ...options.systemInfo };
+  }
+
+  assertRecordableAt(reading: { instant: Date; offsetMinutes: number }): void {
+    refuseBeforeFirstIssueDate(reading);
   }
 
   /**

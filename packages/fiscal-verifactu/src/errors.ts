@@ -347,5 +347,13 @@ declare module "@waitron/shared" {
 
     /** `installCertificate`: a malformed request body. Names the field, never its value. */
     "fiscal.certificate_request_invalid": { field: string };
+
+    /**
+     * `refuseBeforeFirstIssueDate` (./first-issue-date.ts): the box's clock reads a date before
+     * 28-10-2024, the earliest FechaExpedicionFactura `@waitron/verifactu` accepts (its
+     * `FECHA_EXPEDICION_BEFORE_MINIMUM`). `clockAt` is the reading's instant, ISO 8601, and
+     * `offsetMinutes` its offset, in which the date was judged.
+     */
+    "clock.unusable": { clockAt: string; offsetMinutes: number };
   }
 }

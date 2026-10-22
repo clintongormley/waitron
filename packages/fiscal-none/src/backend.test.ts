@@ -48,6 +48,15 @@ describe("NoneBackend records nothing", () => {
     expect(make().recipientNameMaxLength).toBeNull();
   });
 
+  it("refuses no clock: a venue with no regime has no first date", () => {
+    expect(
+      make().assertRecordableAt({
+        instant: new Date("2001-01-01T11:00:00Z"),
+        offsetMinutes: 60,
+      }),
+    ).toBeUndefined();
+  });
+
   it("recordSale writes nothing and returns a recorded ref carrying the sale's own instants", async () => {
     const sale = sampleSale();
     const ref = await make().recordSale(tx, sale);

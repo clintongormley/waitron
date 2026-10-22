@@ -2402,6 +2402,131 @@ itself and keeps nothing.
   `test/` or `src/testing/` folder — weaker than "none in product code": a receiver with another
   name is not matched. The backlog holds the ways to close it.
 
+### A full disk stops the till's writes
+
+Since A798-B slice 3 (#1950), one save refused for a full disk, or a start with less than 16 MiB free, stops every write the
+till app and the kitchen screens send, except a short open list (below), until the venue folder
+has 16 MiB free again. The owner chose this on 2026-10-21, following the design's §4.6 item 5:
+every sale, order, kitchen send and clock-in is refused, even one whose own save would still fit. The decisions behind it are numbered in the
+[slice 3 plan](../superpowers/plans/2026-10-21-a798-3-refuse-before-reader.md#decisions-this-plan-makes-that-the-spec-does-not).
+
+**How the box knows.**
+
+- Each of the venue folder's two database files tells its `onDiskFull` listeners when the engine
+  refuses a statement, a write lock's `begin`, a `commit` or a `release` with result code 13
+  ("database or disk is full"), before it throws `storage.disk_full` (`packages/store/src/index.ts`, the `onDiskFull` doc; the
+  call is `Connections.refusal` in `connections.ts`). An error the store had already turned into
+  `storage.disk_full` is not reported again. A full disk the engine reports another way (14, 4874,
+  `ENOSPC`; see [A full disk is not one error code](#a-full-disk-is-not-one-error-code)) is not
+  reported and does not start the stop.
+- Boot keeps one `DiskFullState` (`apps/server/src/disk-full-state.ts`) for the venue folder, listens
+  to both files, and reads the folder's free space once at start: under 16 MiB (`FULL_DISK_BYTES`,
+  `apps/server/src/boot-failure.ts`) the stop starts on; a reading the filesystem cannot give leaves
+  it off and logs `storage.start_space_unread` (`boot.ts`, after the long-lived open).
+- While the stop is on, a write the gate sees, each of the four sale routes and each card-reader
+  payment reads the folder's free space before its first transaction. At 16 MiB or more the stop is
+  forgotten and the write goes on; under it, or unreadable, the stop holds. A reading does not clear
+  the stop when another refusal was noted while it was in flight, even one noted after a faster
+  reading had already cleared it. With the stop off, nothing is read: each of those checks awaits
+  `full()` only while `since()` names a refusal, because the extra await would let another write's
+  transaction get into the write queue ahead of a payment's first transaction (#1950;
+  the in-flight cases in `placed-order-one-payment.test.ts` and `bill-payments.in-flight.test.ts`).
+
+**What is refused, and where.**
+
+- One gate per mount, `mountGatedWhileDiskFull` (`apps/server/src/disk-full-gate.ts`), on the three
+  mounts the till and the kitchen screens write through: `mountTillApi`, `mountDeviceApi` and
+  `mountScheduleApi`. It is put on the parent app route by route, for each `POST`, `PUT`, `PATCH`
+  and `DELETE` under `/api/` that the mount registers, never as a `use`: in Hono 4.13.13 an
+  `app.use` reaches every matching route registered after it, and a sub-app's middleware is copied into the
+  parent as a catch-all that reaches every later route too, so either would refuse the dashboard's
+  `/api/backup/*` and `/api/box/*` (the plan's M7 probes). A new write route on those mounts is
+  refused by construction; only an open one is named. The gate answers
+  507 `storage.disk_full` itself, before the route authenticates, and logs
+  `storage.disk_full_stop_refused` with the route.
+- Open on the till mount (`TILL_OPEN_WHILE_DISK_FULL`, `apps/server/src/till-api.ts`): sign-in,
+  sign-out and the session's language, because a refused sign-out keeps someone signed in on a
+  shared till and a refused sign-in keeps the next shift out; the four sale routes, refused inside instead (below); eight POSTs that save nothing
+  of their own — the three checks for dishes whose kitchen station is closed or switched off
+  (`/api/dead-ends/*`), four previews, and the practice card simulator's
+  cancel, `POST /api/demo-reader/cancel`, registered only with that simulator, which refused would
+  leave a practice payment waiting at the reader. A refused send-preview would turn into the till's
+  generic table error and the round would never be sent, so the kitchen send itself is what is
+  refused. Open on the device mount (`DEVICE_OPEN_WHILE_DISK_FULL`, `device-api.ts`): the device's
+  own joining, zones, equipment, active profile and battery. The schedule mount opens nothing. Each
+  open route still fails by itself, `storage.disk_full`, if its own save does not fit. Opening or
+  closing a kitchen station for the day (`station-today-api.ts`, mounted inside `mountTillApi`) is
+  refused.
+- The four sale routes — `POST /api/sales`, `POST /api/pay`, `POST /api/working-orders/:id/collect`
+  and `POST /api/working-orders/:id/payments` — refuse a new sale inside their first transaction,
+  after their replay checks, so a resend of a sale or payment already recorded is still answered
+  with what was recorded (`till-sale.ts`'s `runPayWorkingOrder` and `runCollectOrder`,
+  `bill-payments.ts`'s `beginBillPayment`). On `POST /api/pay`, Pay again on a card already charged
+  files the sale without asking the reader.
+- A card-reader payment checks the stop three times: the free-space read before its first
+  transaction; inside it, refused when that read said full or a refusal has been noted since; and
+  after it commits, just before the reader is asked, refused when a refusal has been noted, undoing
+  the first transaction's marks (`payIntegrated` in `till-sale.ts`; `takeReaderBillPayment` in
+  `bill-payments.ts`). Writes take turns in the write queue, so a payment that read "not full" can
+  wait behind another till's write that then fails.
+- A card charged on a connected reader whose sale then fails for a full disk answers
+  `507 sale.charged_not_recorded { workingOrderId, reason: "disk_full" }`, so the till can say not
+  to charge again (`afterCardCharged`, `bill-payments.ts`). Only the till's two card routes ask for
+  it (`sayCardChargedOnFullDisk`, set in `till-api.ts`'s `POST /api/pay` and
+  `bill-payments-api.ts`); every other caller, the dashboard's stuck-payment resolve route among
+  them, still answers `storage.disk_full`. The same answer covers a charge whose capture the
+  provider could not save: SumUp's and Stripe's `collect` throw `ChargeNotSavedError`
+  (`packages/payments/src/charge-not-saved.ts`) when the processor reported the card charged and
+  that save failed for a full disk, and the two routes translate only that error
+  (`collectFailure`, `bill-payments.ts`). Its cause is the full disk, so every other caller still
+  answers `storage.disk_full`. The provider's row stays `attempting`, for its pending pass to
+  capture. A full disk on any other save inside `collect` still answers `storage.disk_full`; for the
+  attempt's own first row, `card-charged-not-recorded.test.ts` pins it.
+- Not gated: every route outside those three mounts, among them every dashboard route, the print
+  agent's routes (`print-api.ts`), the provider webhook and node enrolment; and the background
+  duties. Their writes that do not fit fail by themselves and note the stop.
+
+**The clock refusal beside it.** A sale under a clock reading before 28-10-2024 is refused
+`clock.unusable { clockAt, offsetMinutes }`, thrown by the Veri\*Factu module through the fiscal
+seat's `FiscalBackend.assertRecordableAt` (`packages/fiscal/src/backend.ts`). The server calls it at
+the issue reading, `issueMoment` (`apps/server/src/issue-moment.ts`), whose clock every
+`recordSale` call in `apps/server/src`, outside its tests and `src/testing/`, takes; before the
+reader for a new sale (`payIntegrated`); and on every bill payment, cash included
+(`beginBillPayment`).
+
+**Weaker than the rule.**
+
+- Of the engine's refusals, only result code 13 notes the stop (`asDiskFull`,
+  `packages/store/src/disk-full.ts`, called from `Connections.refusal`); one reported as 14, 4874 or
+  `ENOSPC` leaves it off.
+- SumUp saves the checkout's `client_transaction_id` after the checkout reaches the reader (T1.5,
+  `packages/payments-sumup/src/provider.ts`); a full disk there answers `storage.disk_full` although
+  the reader may still take the card. No test pins that answer. The on-device Stripe adapter and the simulator save a charge with no `ChargeNotSavedError`,
+  so a full disk on that save answers `storage.disk_full` too.
+- `apps/server/src/boot.disk-full-wiring.test.ts` checks the arguments boot hands the state, the
+  watch and the mounts, not a real full disk on a box.
+- The window cases in `till-pay.disk-full.test.ts`, `bill-payments.refuse-before-reader.test.ts`
+  and `till-sales.disk-full.test.ts` drive the stop by hand — a queued body that calls
+  `noteRefused()`, or a scripted state whose `noted()` turns true on a given call — not by a second
+  till whose save fails.
+- The sweeps in `till-api.disk-full-gate.test.ts`, `device-api.test.ts` and `schedule-api.test.ts`
+  send every write route of a mount built with test deps, so a route registered only in a
+  configuration they do not build is never sent by them. The demo reader's cancel is one; its
+  staying open is pinned by its own case in `till-api.fiscal-sale-paths.test.ts`. They also pick
+  routes by the gate's own verbs and `/api/` filter, so a route the gate's selection misses is
+  missed by the sweeps too.
+- A resend of a write the gate refuses — a write route of the three mounts that their open lists do
+  not name — is refused like a new one (the plan's decision 26). Since #1949 that
+  includes a counter Send pressed again after a lost reply: while the stop holds it is answered
+  `storage.disk_full` and the till says the order was not saved, even when the first Send placed it.
+- The gate refuses by verb, so a write inside a `GET` still runs, as with the read-only gate
+  (`read-only-gate.ts`).
+- The free-space reading counts bytes (`bavail` times `frsize`, `free-bytes.ts`), not inodes. A
+  full-disk refusal on a disk with bytes free but no inodes left is noted, then cleared by the next
+  free-space reading; the write that took it goes on, and fails by itself only if its own save
+  cannot be written.
+  Reasoned from the code, not run.
+
 ### A full disk is not one error code
 
 Slice 1 knows a full disk by result code 13, "database or disk is full". At start that is often

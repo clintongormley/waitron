@@ -751,6 +751,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That request isn't valid",
     es: "Esa solicitud no es válida",
   },
+  "storage.disk_full": {
+    en: "Not saved: the box is out of disk space. Tell a manager.",
+    es: "No se ha guardado: el equipo no tiene espacio en disco. Avisa al encargado.",
+  },
+  "sale.charged_not_recorded": {
+    en: "Card charged, but the sale is not recorded. Do not charge again; tell a manager.",
+    es: "Cobrado con tarjeta, pero la venta no se ha registrado. No vuelvas a cobrar; avisa al encargado.",
+  },
+  "clock.unusable": {
+    en: "Sale not recorded: the box's clock is wrong. Tell a manager. If you already charged a card on the terminal, refund it there.",
+    es: "Venta no registrada: la hora del equipo es incorrecta. Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+  },
   "server.internal": {
     en: "Something went wrong, try again",
     es: "Algo salió mal, inténtalo de nuevo",

@@ -2,7 +2,7 @@ import { refuseRecalledWrite } from "./draft-source.js";
 import { currentZoneDevice } from "./device-zones.js";
 import type { LiveEvents } from "./live-api.js";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
-import type { Hono } from "hono";
+import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
@@ -72,6 +72,7 @@ import { moveDishesToStation, type StationMoveRequest } from "./station-move.js"
 import { madeHereAnswer, sendingCfg } from "./made-here.js";
 import { requestCfg } from "./request-config.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
+import type { DiskFullState } from "./disk-full-state.js";
 import {
   collectOrder,
   payWorkingOrderIntegrated,
@@ -250,6 +251,7 @@ import { resolveLoginLocale } from "./login-locale.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
+import { mountGatedWhileDiskFull } from "./disk-full-gate.js";
 import {
   checkZones,
   gateZones,
@@ -278,6 +280,12 @@ export interface TillApiDeps {
    * Optional only for suites that never reach the reader-pay path; a live boot always supplies it.
    */
   pool?: CardProviderPool;
+  /**
+   * Read by the full-disk gate, the reader payments and, through the deps they pass, the cash and
+   * manual-card sale, collect and bill-payment routes. Unset, nothing is refused for a full disk; a live boot always
+   * supplies it.
+   */
+  disk?: DiskFullState;
   /**
    * Optional only for suites that never reach the reader-pay path; a live boot always supplies it.
    */
@@ -422,6 +430,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "session.required": 401,
   "locale.unsupported": 400,
   "sale.empty_basket": 400,
+  "sale.charged_not_recorded": 507,
   "product.variant_required": 400,
   // A line never sent whose product sold out, refused at send and at pay.
   "product.unavailable": 409,
@@ -439,6 +448,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   // The fiscal filing refuses the record: not a malformed request, and permanent for the same
   // basket, so 409 rather than 400 or 500.
   "fiscal.record_invalid": 409,
+  "clock.unusable": 409,
   "fiscal.foreign_recipient_unsupported": 409,
   // Adding a line refuses a classification snapshot the catalogue's data cannot make valid:
   // permanent until the catalogue is fixed, and not the till's fault.
@@ -1211,8 +1221,33 @@ async function movingRooms<T extends object>(
   return moved.size === 0 ? result : { ...result, zoneRevisions: Object.fromEntries(moved) };
 }
 
+/** Open while a full-disk stop holds; each still fails by itself if its own save does not fit. */
+const TILL_OPEN_WHILE_DISK_FULL: ReadonlySet<string> = new Set([
+  // A refused sign-out keeps someone signed in on a shared till; a refused sign-in, the next shift out.
+  "POST /api/session",
+  "DELETE /api/session",
+  "PUT /api/session/locale",
+  // Refused inside, after their replay checks, the one place a resend is told from a new sale.
+  "POST /api/sales",
+  "POST /api/pay",
+  "POST /api/working-orders/:id/collect",
+  "POST /api/working-orders/:id/payments",
+  // Save nothing of their own; a refused send-preview would hide the kitchen send's own refusal.
+  "POST /api/dead-ends/sale",
+  "POST /api/dead-ends/draft",
+  "POST /api/dead-ends/order",
+  "POST /api/working-orders/:id/payments/preview",
+  "POST /api/working-orders/:id/adjustments/preview",
+  "POST /api/parties/:id/allergy/send-preview",
+  "POST /api/bills/:id/move/allergy-preview",
+  // Registered only for the practice card simulator; refusing it would leave a practice payment
+  // waiting at the reader.
+  "POST /api/demo-reader/cancel",
+]);
+
 /** Mount the till routes with the shared error boundary. */
-export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
+export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
+  const app = new Hono();
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
   const catchUpFloor = (tx: Transaction) =>
     ensureToday(tx, deps.cfg, deps.tableRemovals ?? [], deps.clock.now().instant);
@@ -1722,7 +1757,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       );
       const saleCfg = sendingCfg(cfg, c, session.device);
       const result = await recordTillSale(
-        { db: deps.db, backend: deps.backend, clock: deps.clock, log, attendance: deps.attendance },
+        {
+          db: deps.db,
+          backend: deps.backend,
+          clock: deps.clock,
+          log,
+          attendance: deps.attendance,
+          disk: deps.disk,
+        },
         saleCfg,
         { ...body, zoneId, guests },
         { personId, sessionId: session.sessionId },
@@ -1786,6 +1828,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           deviceProfileId: device.deviceProfileId,
           log,
           attendance: deps.attendance,
+          disk: deps.disk,
+          sayCardChargedOnFullDisk: true,
         },
         saleCfg,
         { ...body, zoneId, guests },
@@ -2610,7 +2654,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const guests = readGuestsChoice(body.guests);
       assertTakesTender(session.device, tillTenderKind(body.tender));
       const result = await collectOrder(
-        { db: deps.db, backend: deps.backend, clock: deps.clock, log, attendance: deps.attendance },
+        {
+          db: deps.db,
+          backend: deps.backend,
+          clock: deps.clock,
+          log,
+          attendance: deps.attendance,
+          disk: deps.disk,
+        },
         cfg,
         {
           id,
@@ -4135,4 +4186,5 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       return c.json(result);
     }),
   );
+  mountGatedWhileDiskFull(root, app, { disk: deps.disk, log, open: TILL_OPEN_WHILE_DISK_FULL });
 }

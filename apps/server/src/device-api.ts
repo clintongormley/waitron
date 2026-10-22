@@ -2,7 +2,7 @@
 import "./errors.js";
 import { currentZoneDevice } from "./device-zones.js";
 import type { DeviceZoneSelectionInput } from "@waitron/module";
-import type { Context, Hono } from "hono";
+import { Hono, type Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { AppError, compareStationNames } from "@waitron/shared";
@@ -88,6 +88,8 @@ import { mountDeviceLevers, requireKitchenDisplay } from "./device-levers.js";
 import { STATUS as TILL_STATUS, stationMoveRequest } from "./till-api.js";
 import { moveDishesToStation } from "./station-move.js";
 import { listStationsToday } from "./kitchen.js";
+import { mountGatedWhileDiskFull } from "./disk-full-gate.js";
+import type { DiskFullState } from "./disk-full-state.js";
 
 /**
  * `cfg` is the FULL `TillConfig` because the verbs this surface calls are typed on it; the routes
@@ -119,6 +121,8 @@ export interface DeviceApiDeps {
   tenantDomain?: string;
   /** The battery route's clock; tests inject one to step past the one-minute limit. */
   now?: () => Date;
+  /** While the full-disk stop holds (`DiskFullState.full()`), every `/api/` write here but the device's own housekeeping answers 507. */
+  disk?: DiskFullState;
 }
 
 const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
@@ -183,12 +187,22 @@ export const LEVER_STATUS: Record<string, ContentfulStatusCode> = {
 
 const run = createErrorBoundary(STATUS, "device.failed");
 
+/** The device's own housekeeping: none is a sale, an order, a kitchen send or a clock-in. */
+const DEVICE_OPEN_WHILE_DISK_FULL: ReadonlySet<string> = new Set([
+  "POST /api/device/join",
+  "PUT /api/device/zones",
+  "PUT /api/device/equipment",
+  "POST /api/device/active-profile",
+  "PUT /api/device/battery",
+]);
+
 /**
  * Joining is UNAUTHENTICATED; outside devMode, approval is an ADMIN act on another surface
  * (`join-api.ts`), never anything a device can do for itself. The token leaves ONLY in the cookie,
  * never the body.
  */
-export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): void {
+export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): void {
+  const app = new Hono();
   // Built ONCE here, so it is one bucket for the whole mounted API.
   const enrolLimiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
 
@@ -867,6 +881,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       ),
     );
   }
+  mountGatedWhileDiskFull(root, app, { disk: deps.disk, log, open: DEVICE_OPEN_WHILE_DISK_FULL });
 }
 
 const EQUIPMENT_ROLES: readonly EquipmentRole[] = [

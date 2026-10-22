@@ -11,7 +11,7 @@ import {
   payments,
   recordResolution,
 } from "@waitron/payments";
-import { decimal } from "@waitron/shared";
+import { AppError, decimal } from "@waitron/shared";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
@@ -121,6 +121,23 @@ describe("automatic card capture recovery", () => {
     expect(await recoverAutomaticCardPayments(deps)).toEqual({ filed: 1, errors: [] });
     expect(await suite.db.select().from(sales)).toHaveLength(2);
     expect(deps.collect).not.toHaveBeenCalled();
+  });
+
+  it("reports a full disk as a full disk, not as a card charged and unrecorded", async () => {
+    const venue = await provisionBillVenue(suite.db);
+    const { id } = await retained(venue);
+    const deps = recoveryDeps(venue);
+    vi.spyOn(venue.backend, "recordSale").mockRejectedValueOnce(
+      new AppError("storage.disk_full", {}),
+    );
+
+    const answer = await recoverAutomaticCardPayments(deps);
+
+    expect(answer.filed).toBe(0);
+    expect(answer.errors).toEqual([
+      { paymentId: expect.any(String), error: "AppError: storage.disk_full" },
+    ]);
+    expect(await statusOf(venue, id)).toBe("open");
   });
 
   it("rechecks a capture after obtaining the provider", async () => {

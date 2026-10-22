@@ -115,7 +115,7 @@ export async function recordUnpaidDeparture(
 
   const invoices = [];
   for (const bill of toInvoice) {
-    invoices.push(await priceForIssuance(tx, deps.clock, cfg, bill.workingOrderId));
+    invoices.push(await priceForIssuance(tx, deps.clock, deps.backend, cfg, bill.workingOrderId));
   }
   const due = new Map<string, Decimal>([
     ...[...invoiced].map(([id, sale]) => [id, sale.amountDue] as const),

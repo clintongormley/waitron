@@ -649,6 +649,26 @@ Not closed in slice 1, because product writes go through `withTransaction`, whic
 - a root guard refusing a bare `.transaction(` on the venue database outside `withWriteLock` in
   product code.
 
+## Till surfaces that still show their own message for a full disk, and the station screen's silence
+
+Left open by A798-B slice 3 (#1950), for slice 6. Since slice 3, once a save has
+failed for a full disk, or the box started with less than 16 MiB free, every till write except the open ones answers `507 storage.disk_full` until
+the venue folder has 16 MiB free
+([conventions-data.md](../developers/conventions-data.md#a-full-disk-stops-the-tills-writes)). The
+surfaces slice 3's plan named (its decision 12) show a full-disk sentence for it ("Not saved: the box is out of disk space…", or for a sale "Sale not recorded: the box is out of disk space…"). The others
+still show their own fallback, and now meet it whenever the stop holds, not only when a save does
+not fit:
+
+- the draft save's refusals (`DraftRefused` in `apps/till/src/state/draft-sync.ts`, and the
+  handlers that read them);
+- the unpaid departure (`#onDepartureContinue` in `apps/till/src/till-app.ts`);
+- any other till write surface decision 12 does not name.
+
+The station screen shows nothing for a refused bump, on a kitchen display and on a till's own
+Station tab (`apps/till/src/till-app.ts` renders the same `till-station-screen`): `#advance` in
+`apps/till/src/screens/till-station-screen.ts` swallows every refusal but a changed screen and
+reloads the queue. Under the stop its tickets do not move and nothing says why.
+
 ## A box whose first setup was retired into a new workspace keeps that workspace's backup staging through the clean-up before the count
 
 When a first-setup resolution chose a new workspace (`binding` not null), the clean-up that

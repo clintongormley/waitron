@@ -10,7 +10,8 @@ junto con su trabajo.
 Si el terminal no puede confirmar un envío de mostrador, reinténtalo sin cambiar la cesta. Si el
 primer envío ya llegó al servidor, el reintento devuelve su resultado original y el terminal
 continúa con el pedido enviado. No añade otra comanda de cocina ni otro resguardo con el número
-de recogida.
+de recogida. Si el equipo no tiene espacio en disco, el reintento se rechaza y el terminal dice
+que no se ha guardado, aunque el primer envío ya llegara al servidor.
 
 Si cambias la cesta después del primer envío, el terminal debe guardar esos cambios antes de
 enviarla. Si el pedido ya está enviado, conserva tus cambios en pantalla y muestra un error en

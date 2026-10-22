@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { grossBasketWithOptions, type PriceableProduct } from "@waitron/catalogue";
 import type { TrustedClock, TrustedTimeAnchor } from "@waitron/fiscal";
+import { AppError } from "@waitron/shared";
 import { issueMoment } from "./issue-moment.js";
 
 // A release that ships a reduced rate of 11% from 1 January 2027, the shipped table otherwise.
@@ -63,12 +64,14 @@ function movingClock(start: string, offsetMinutes: number, tickMs: number) {
   return { clock, now, anchor, current };
 }
 
+const anyReading = { assertRecordableAt: () => {} };
+
 describe("issueMoment", () => {
   it("rates the lines on the local date of one reading, and pins the returned clock to it", () => {
     // 23:59:59.999 on 31 December in Madrid; every later reading is New Year's Day.
     const { clock, now } = movingClock("2026-12-31T22:59:59.999Z", 60, 1);
 
-    const issue = issueMoment(clock, gross());
+    const issue = issueMoment(clock, gross(), anyReading);
 
     expect(issue.priced.vatBreakdown).toEqual([{ rate: "10.00", base: "2.27", tax: "0.23" }]);
     expect(issue.priced.total).toBe("2.50");
@@ -83,13 +86,13 @@ describe("issueMoment", () => {
     const east = movingClock("2026-12-31T23:30:00.000Z", 60, 0);
     const utc = movingClock("2026-12-31T23:30:00.000Z", 0, 0);
 
-    expect(issueMoment(east.clock, gross()).priced.lines[0]!.vatRate).toBe("11.00");
-    expect(issueMoment(utc.clock, gross()).priced.lines[0]!.vatRate).toBe("10.00");
+    expect(issueMoment(east.clock, gross(), anyReading).priced.lines[0]!.vatRate).toBe("11.00");
+    expect(issueMoment(utc.clock, gross(), anyReading).priced.lines[0]!.vatRate).toBe("10.00");
   });
 
   it("passes anchoring through to the clock it was given", () => {
     const { clock, anchor, current } = movingClock("2026-12-31T12:00:00.000Z", 60, 0);
-    const issue = issueMoment(clock, gross());
+    const issue = issueMoment(clock, gross(), anyReading);
     const trusted = {
       instant: new Date("2026-12-31T12:00:05.000Z"),
       offsetMinutes: 60,
@@ -99,5 +102,32 @@ describe("issueMoment", () => {
     expect(issue.clock.anchor(trusted)).toBe(current);
     expect(anchor).toHaveBeenCalledWith(trusted);
     expect(issue.clock.currentAnchor()).toBe(current);
+  });
+
+  it("asks the regime about the one reading it rates at", () => {
+    const { clock: moving } = movingClock("2026-12-31T12:00:00.000Z", 60, 0);
+    const reading = moving.now();
+    const now = vi.fn(() => reading);
+    const clock: TrustedClock = { ...moving, now };
+    const asked: unknown[] = [];
+
+    issueMoment(clock, gross(), { assertRecordableAt: (r) => void asked.push(r) });
+
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toBe(reading);
+    expect(now).toHaveBeenCalledTimes(1);
+  });
+
+  it("rates nothing when the regime refuses the reading", () => {
+    const { clock } = movingClock("2001-01-01T11:00:00.000Z", 60, 0);
+    const refusal = new AppError("clock.unusable", { clockAt: "x", offsetMinutes: 0 });
+
+    expect(() =>
+      issueMoment(clock, gross(), {
+        assertRecordableAt: () => {
+          throw refusal;
+        },
+      }),
+    ).toThrow(refusal);
   });
 });

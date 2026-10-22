@@ -1970,6 +1970,19 @@ describe("till-app: a bill payment's refusals and retries", () => {
     expect(dialog(el)!.shadowRoot!.querySelector('input[name="line"][value="1"]')).toBeNull();
   });
 
+  it("a cash contribution refused for a full disk says not to take payment", async () => {
+    const takeBillPayment = vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 });
+    const { el } = await mountApp({ takeBillPayment });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.disk_full"));
+  });
+
   it("says the operator may not take payments when the server refuses them the payment permission", async () => {
     const takeBillPayment = vi.fn().mockRejectedValue({
       code: "authorization.not_permitted",
@@ -4731,6 +4744,29 @@ describe("till-app: a bill payment on the card reader", () => {
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
     expect(sent()[0]!.entry).toBe("manual");
+  });
+
+  it("a contribution on a terminal the box does not talk to, refused for a full disk, adds the card advice", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        capabilities: ["print-receipt"] as CapabilityFlag[],
+        cardProvider: "stripe_terminal",
+        activeReaders: readers,
+        defaultReaderId: readers[0]!.id,
+      }),
+      previewBillPayment: vi.fn().mockResolvedValue(cardPreview),
+      takeBillPayment: vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 }),
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    expect(sent()[0]!.entry).toBe("manual");
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.disk_full_manual_card"));
   });
 
   /** A handheld whose profile declares the integrated reader, taking a card on the second reader. */
