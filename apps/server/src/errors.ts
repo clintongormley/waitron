@@ -1322,9 +1322,6 @@ declare module "@waitron/shared" {
      * (`alert-sources.ts`) or more. `minutes` is that wait, whole. Built as data by the backups
      * alert source, never thrown. */
     "backup.stream_behind": { minutes: number };
-    /** The box's disk has less than `SPACE_LOW_BYTES` (`free-space-watch.ts`) free. `freeBytes` is
-     * the latest reading. Built as data by the box alert source, never thrown. */
-    "storage.space_low": { freeBytes: number };
     /** The bucket copy stopped Litestream at the side-file limit. Built as data by the backups alert
      * source, never thrown. */
     "backup.stream_paused": Record<string, never>;
@@ -1348,6 +1345,10 @@ declare module "@waitron/shared" {
     /** This node's last attempt to rewrite its sealed state row failed, so the row a rebuild reads
      * is out of date or missing. Built as data by the sealed-state alert source, never thrown. */
     "backup.sealed_state_failed": Record<string, never>;
+    /** The box's disk fell below `SPACE_LOW_BYTES` (`free-space-watch.ts`) free and no reading
+     * since has reached `SPACE_OK_BYTES`. `freeBytes` is the latest reading. Built as data by the
+     * box alert source, never thrown. */
+    "storage.space_low": { freeBytes: number };
     /** A restored box's first start (a certificate for this machine, the next membership term)
      * failed, so the box sells but does not copy to the bucket. Built as data by
      * `firstStartAlertSource`, never thrown. */

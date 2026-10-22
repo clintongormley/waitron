@@ -1,6 +1,7 @@
-import { codeOf, type Logger } from "@waitron/server-kit";
+import { codeOf } from "@waitron/server-kit";
 import type { DiskFullState } from "./disk-full-state.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
+import type { Logger } from "./logger.js";
 import { unrefTimer, type Timer } from "./unref-timer.js";
 
 /** Below this the box warns that its disk is running out (design §4.6 item 4). */
@@ -9,16 +10,14 @@ export const SPACE_LOW_BYTES = 2 * 1024 ** 3;
 export const SPACE_OK_BYTES = 2.5 * 1024 ** 3;
 export const FREE_SPACE_CHECK_MS = 60_000;
 
-export interface FreeSpaceReading {
-  /** The latest reading the filesystem could give; null until one. */
-  readonly freeBytes: number | null;
-  readonly readAt: Date | null;
-  /** When the warning now on came on; null while it is off. */
-  readonly lowSince: Date | null;
-}
+/** `freeBytes` is the latest reading the filesystem could give; `lowSince` is when the warning now on
+ * came on, null while it is off. Before the first reading all three are null. */
+export type FreeSpaceReading =
+  | { readonly freeBytes: null; readonly readAt: null; readonly lowSince: null }
+  | { readonly freeBytes: number; readonly readAt: Date; readonly lowSince: Date | null };
 
 export interface FreeSpaceState {
-  /** `free` is `freeBytes`' answer: null where the filesystem cannot say, which changes nothing. */
+  /** `free` is `freeBytes`' answer: null where the filesystem cannot say. */
   record(free: number | null, at: Date): void;
   current(): FreeSpaceReading;
 }

@@ -2511,8 +2511,8 @@ reader for a new sale (`payIntegrated`); and on every bill payment, cash include
   `packages/payments-sumup/src/provider.ts`); a full disk there answers `storage.disk_full` although
   the reader may still take the card. No test pins that answer. The on-device Stripe adapter and the simulator save a charge with no `ChargeNotSavedError`,
   so a full disk on that save answers `storage.disk_full` too.
-- `apps/server/src/boot.disk-full-wiring.test.ts` checks the arguments boot hands the state, the
-  watch and the mounts, not a real full disk on a box.
+- `apps/server/src/boot.disk-full-wiring.test.ts` checks the arguments boot hands the state,
+  `watchForDiskFull` and the mounts, not a real full disk on a box.
 - The window cases in `till-pay.disk-full.test.ts`, `bill-payments.refuse-before-reader.test.ts`
   and `till-sales.disk-full.test.ts` drive the stop by hand — a queued body that calls
   `noteRefused()`, or a scripted state whose `noted()` turns true on a given call — not by a second
