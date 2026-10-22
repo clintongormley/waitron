@@ -342,6 +342,26 @@ describe("finishing paid food service", () => {
     expect(JSON.stringify(after.commands)).not.toContain(`"${PINS.manager}"`);
   });
 
+  it("records no refund approver whose PIN was never checked", async () => {
+    const p = await fixture();
+    const body = await confirm(p);
+    const answer = await post(
+      p,
+      {
+        ...body,
+        approver: { personId: venue.staffId, pin: "9999" },
+        cancellations: body.cancellations.map((item) => ({ ...item, refundHandoff: true })),
+      },
+      venue.cookie.manager,
+    );
+    expect(answer.status, JSON.stringify(answer.body)).toBe(200);
+    const rows = (await snapshot(p)).adjustments.filter(
+      (row) => row.workingOrderId === p.billId && row.action === "cancel",
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(row).toMatchObject({ refundHandoff: true, approvedBy: null });
+  });
+
   it("answers a link for each handed-off dish and none for the others", async () => {
     const p = await fixture();
     const confirmed = await confirm(p);

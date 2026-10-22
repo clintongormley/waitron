@@ -194,22 +194,28 @@ export function mountLineCancelApi(
             const current = await admittedSession(tx, deps, session);
             const cfg = sendingCfg(requestCfg(deps.cfg, current), c, current.device);
             await checkZones(tx, deps.cfg, current, [{ partyId }]);
-            if (ask.refundHandoff === true)
-              await authorize(
-                tx,
-                {
-                  sessionId: session.sessionId,
-                  permission: "sale.refund",
-                  override: withCheck(ask.approver, checked),
-                },
-                attempts,
-              );
+            const refund =
+              ask.refundHandoff === true
+                ? await authorize(
+                    tx,
+                    {
+                      sessionId: session.sessionId,
+                      permission: "sale.refund",
+                      override: withCheck(ask.approver, checked),
+                    },
+                    attempts,
+                  )
+                : undefined;
             const applied = await cancelItem(
               tx,
               cfg,
               partyId,
               lineId,
-              { ...ask, approver: withCheck(ask.approver, checked) },
+              {
+                ...ask,
+                approver: withCheck(ask.approver, checked),
+                refundApprovedBy: refund?.viaOverride === true ? refund.authorizedBy : null,
+              },
               session.personId,
               deps.attendance === undefined
                 ? undefined

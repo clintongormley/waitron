@@ -2895,22 +2895,24 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           const current = { ...session, device };
           await catchUpFloor(tx);
           await checkZones(tx, deps.cfg, current, [{ partyId }]);
-          if (refundHandoff)
-            await authorize(
-              tx,
-              {
-                sessionId: session.sessionId,
-                permission: "sale.refund",
-                override: withCheck(approver, checked),
-              },
-              attempts,
-            );
+          const refund = refundHandoff
+            ? await authorize(
+                tx,
+                {
+                  sessionId: session.sessionId,
+                  permission: "sale.refund",
+                  override: withCheck(approver, checked),
+                },
+                attempts,
+              )
+            : undefined;
           return finishPartyService(
             tx,
             sendingCfg(requestCfg(deps.cfg, current), c, device),
             {
               ...resolution,
               approver: withCheck(approver, checked),
+              refundApprovedBy: refund?.viaOverride === true ? refund.authorizedBy : null,
               partyId,
               expectedPartyRevision,
               operatorId: personId,

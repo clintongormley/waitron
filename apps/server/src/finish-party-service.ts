@@ -50,6 +50,7 @@ export type FinishPartyArgs = Parameters<typeof finishTable>[1] & {
   submissionId?: string;
   cancellations?: FinishCancellation[];
   approver?: CancelItemAsk["approver"];
+  refundApprovedBy?: CancelItemAsk["refundApprovedBy"];
 };
 
 export type FinishPartyAnswer = { state: "closed"; refundLinks?: RefundLink[] };
@@ -73,6 +74,7 @@ export async function finishPartyService(
     {
       ...args,
       approver: undefined,
+      refundApprovedBy: undefined,
       approverId: args.approver?.personId,
       cancellations:
         args.cancellations === undefined
@@ -183,6 +185,7 @@ async function finish(
           .update(JSON.stringify([args.submissionId, dish.lineId]))
           .digest("hex"),
         approver: args.approver,
+        refundApprovedBy: args.refundApprovedBy,
       },
       args.operatorId,
       attendance,

@@ -229,8 +229,26 @@ describe("the public cancellation read and command", () => {
       revision: party!.revision,
       refundLinks: [{ lineId: p.parent.id, adjustmentId: row!.id }],
     });
+    expect(row!.approvedBy).toBeNull();
     expect((await post(p, body, venue.cookie.manager)).json).toEqual(answer.json);
     expect(await cancelRows(p)).toHaveLength(1);
+  });
+
+  it("records no approver whose PIN was never checked on a handed-off cancel", async () => {
+    const p = await paidFixture();
+    const answer = await post(
+      p,
+      await bodyFor(p, {
+        outcome: "keep_charge",
+        refundHandoff: true,
+        approver: { personId: venue.staffId, pin: "9999" },
+      }),
+      venue.cookie.manager,
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await cancelRows(p)).toEqual([
+      { id: expect.any(String), approvedBy: null, refundHandoff: true },
+    ]);
   });
 
   it("records the refund approver on a handed-off cancel", async () => {

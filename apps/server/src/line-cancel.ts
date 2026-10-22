@@ -60,6 +60,8 @@ export interface CancelItemAsk {
   reasonId?: string;
   note?: string;
   approver?: AdjustmentArgs["approver"];
+  /** The person whose PIN `authorize` checked for `sale.refund`, or null when no PIN was checked. */
+  refundApprovedBy?: string | null;
 }
 
 export interface RefundLink {
@@ -359,7 +361,7 @@ export async function cancelItem(
           reduction: decimal("0"),
           nominalValue: coveredValue(true),
           requestedBy: operatorId,
-          approvedBy: refundHandoff ? (ask.approver?.personId ?? null) : null,
+          approvedBy: refundHandoff ? (ask.refundApprovedBy ?? null) : null,
           note: ask.note ?? null,
           chargeKept: true,
           preparationStarted: started,
