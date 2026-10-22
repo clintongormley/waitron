@@ -219,6 +219,38 @@ it("when the internet's clock disagrees the terminal explains and cancels withou
   );
 });
 
+function withSeat(
+  runtime: ReturnType<typeof createFirstSetupRuntime>,
+  change: (seat: InitialSetupContribution) => Partial<InitialSetupContribution>,
+) {
+  return {
+    ...runtime,
+    modules: runtime.modules.map((module) => {
+      if (module.name !== MODULE) return module;
+      const seat = module.provisioning!.initialSetup!;
+      return {
+        ...module,
+        provisioning: { ...module.provisioning, initialSetup: { ...seat, ...change(seat) } },
+      };
+    }),
+  };
+}
+
+it("a module's question reaches the operator's terminal and the typed answer reaches the module", async () => {
+  const f = await fixture("synthetic answer");
+  const heard: string[] = [];
+  const runtime = withSeat(f.runtime, (seat) => ({
+    async command(context, actions) {
+      heard.push(await actions.prompt("Synthetic question? "));
+      return seat.command!(context, actions);
+    },
+  }));
+  const result = await prepareFirstSetupCommand(runtime, f.owner, f.io);
+  expect(result.status).toBe("waiting");
+  expect(f.prompts[0]).toBe("Synthetic question? ");
+  expect(heard).toEqual(["synthetic answer"]);
+});
+
 it("rejects a wrong password before persisting a selected hour", async () => {
   const f = await fixture("no", "wrong-synthetic-password");
   await expect(prepareFirstSetupCommand(f.runtime, f.owner, f.io)).rejects.toMatchObject({
@@ -715,6 +747,53 @@ it("an explicit command resume refreshes clocks and records the recovered owner 
   await expect(f.runtime.owner.authorize(f.prepared.owner)).rejects.toMatchObject({
     code: "setup.owner_required",
   });
+});
+
+it("an explicit resume relays a module's question and refuses a new selection, writing nothing", async () => {
+  const f = await resumptionFixture();
+  const before = (await f.runtime.store.read())!;
+  const journal = await readFile(join(f.root, "state/module-preparation-state.json"));
+  const asked: string[] = [];
+  const io = {
+    ...f.io,
+    prompt: async (question: string) => {
+      asked.push(question);
+      return "synthetic answer";
+    },
+  };
+  const heard: string[] = [];
+  let refusal: unknown;
+  const runtime = withSeat(f.runtime, () => ({
+    async commandResume(_context, actions) {
+      heard.push(await actions.prompt("Synthetic question? "));
+      refusal = await actions.select({ choice: "another" }).then(
+        () => "selected",
+        (error: unknown) => error,
+      );
+      return { status: "cancelled" };
+    },
+  }));
+  expect(await resumeFirstSetupCommand(runtime, f.owner, io)).toEqual({ status: "cancelled" });
+  expect(asked).toEqual(["Synthetic question? "]);
+  expect(heard).toEqual(["synthetic answer"]);
+  expect(refusal).toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await f.runtime.store.read()).toEqual(before);
+  expect(await readFile(join(f.root, "state/module-preparation-state.json"))).toEqual(journal);
+});
+
+it("a resume naming a module with no retained input is refused before it spends the password grant", async () => {
+  const f = await resumptionFixture();
+  const before = (await f.runtime.store.read())!;
+  const journal = await readFile(join(f.root, "state/module-preparation-state.json"));
+  const proof = await f.runtime.owner.reconfirm(f.owner, PASSWORD, "block-use");
+  await expect(f.runtime.preparation.resume(f.owner, "catalogue", proof)).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+  await expect(
+    f.runtime.owner.checkReconfirmation(f.owner, proof, "block-use"),
+  ).resolves.toBeUndefined();
+  expect(await f.runtime.store.read()).toEqual(before);
+  expect(await readFile(join(f.root, "state/module-preparation-state.json"))).toEqual(journal);
 });
 
 it("a claimed owner cannot use the explicit recovered-owner resume", async () => {

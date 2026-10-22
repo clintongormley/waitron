@@ -483,3 +483,37 @@ it("a module cannot read setup facts or enter preparation during host initializa
   expect(configured).toBe(true);
   expect((await f.host.store.read())!.revision).toBe(1);
 });
+
+it("hands a module the public evidence its host was given, for the binding the module names", async () => {
+  const f = await fixture();
+  let bound!: ModuleOperationHost;
+  const modules = f.args.modules.map((module) => {
+    if (module.name !== MODULE) return module;
+    const seat = module.provisioning!.initialSetup!;
+    return {
+      ...module,
+      provisioning: {
+        ...module.provisioning!,
+        initialSetup: {
+          ...seat,
+          configure(host: ModuleOperationHost) {
+            bound = host;
+            return seat.configure!(host);
+          },
+        },
+      },
+    };
+  });
+  const evidence = { trust: "synthetic trust", current: "synthetic current" };
+  const asked: OperationBinding[] = [];
+  createFirstSetupModuleHost({
+    ...f.args,
+    modules,
+    readPublicEvidence: async (binding) => {
+      asked.push(binding);
+      return evidence;
+    },
+  });
+  expect(await bound.readPublicEvidence(f.context.binding)).toBe(evidence);
+  expect(asked).toEqual([f.context.binding]);
+});
