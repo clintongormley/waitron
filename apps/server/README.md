@@ -175,9 +175,11 @@ seed for that node, the fiscal one registering it as a Veri\*Factu SIF, in one t
 writes the stamp" above for why that file was removed).
 
 On the A679 candidate, set `WAITRON_STATE_DIR` and choose an absolute `--recovery-pdf`
-destination outside state and venue storage. The command owns the setup attempt, asks about
-clocks and recent taxpayer-wide setups, and requires password and kept-PDF confirmation.
-`--yes` does not answer those questions, and a supplied JSON allocation is not Live authority.
+destination outside state and venue storage. The command owns the setup attempt and compares the box's
+clock with the internet's; it asks nothing about the clock or recent setups, and when the name
+must wait it prints the time to run it again and stops. It requires password and kept-PDF
+confirmation; `--yes` does not answer the retention question, and a supplied JSON allocation is
+not Live authority.
 Follow the [current setup procedure](../../docs/operations/first-live-fiscal-setup.md).
 
 It runs **against a directory something has already migrated**, and stamps that directory itself

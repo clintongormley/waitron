@@ -209,7 +209,7 @@ rewritten, and carries a dated pointer here.
 >   with a name per minute. So this revision adds a floor: the clock rule above, and, for a setup or
 >   a restore — the two that cannot see every name already used — a wait of 90 to 150 seconds before
 >   the name is taken, checked by a sweep of clock errors; a till, phone or internet clock more than
->   15 seconds wrong can still lead to a repeat, and that is disclosed. **That the new rules refuse is not proven yet**: the proof is slice 4a's
+>   15 seconds wrong can still lead to a repeat, and that is disclosed. **That the new rules refuse is not proven yet** _(2026-10-22: slice 4a added that test, `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`.)_: the proof is slice 4a's
 >   committed test, and slice 4a takes the code off the sheet and the form only if that test passes
 >   in the same pull request.
 > - **Things found against B3, the USB installer design, and A993.** B3 runs a first setup on the
@@ -1383,7 +1383,7 @@ the same minute, neither knowing of the other (§6.5).
 **What the run proves, and what it does not — the owner's condition is not met yet.** Proven on
 today's code: the five checks above that refused, and that with the code requirement removed a
 confirmed or shared wrong clock, a stale sheet, a restore in the same hour as an unseen name, or an
-earlier confirmed fast clock (F1, then F2) reuses or undercuts a name. **Not proven, because it is not built: that the new rules refuse.** That proof is slice 4a's
+earlier confirmed fast clock (F1, then F2) reuses or undercuts a name. **Not proven, because it is not built: that the new rules refuse.** _(2026-10-22: slice 4a added that test, `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`.)_ That proof is slice 4a's
 committed test, `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, run against
 the minute code: B2, S, D4 and B4 (its browser sample arriving from the loopback source address and,
 in a second case, from one of the box's own interface addresses) must refuse; F1's fast box must be
@@ -1833,7 +1833,7 @@ calls marked **my call** are the ones to look at:
 
 And the owner's "prove it" condition is **not yet met**: §6.7's run shows today's name-picking code fails;
 the proof that the new rules refuse is slice 4a's committed test, on which slice 4a's removal of
-the code depends.
+the code depends. _(2026-10-22: slice 4a added that test, `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`.)_
 
 ## 13. What this design does not settle, for the builder
 

@@ -3472,6 +3472,18 @@ public production preparation API does not fall back to signed paper, Cloud rece
 emergency identities from environment files. Follow
 [recovering a box](../operations/hour-recovery.md).
 
+The one allocation outside the clock rule is the preproduction throwaway
+(`packages/fiscal-verifactu/src/hour-throwaway-allocation.ts`). Demo and Preparation setups take
+it, as does a Live setup through the setup page on a development box (`throwawayMarker`,
+`apps/server/src/setup-api.ts`), and so does the readiness sample
+(`packages/provisioning/src/fiscal-readiness-runner.ts`). It names from the box's clock with no
+second clock and no history check, and is refused outside preproduction
+(`packages/fiscal-verifactu/src/hour-throwaway-allocation.test.ts`).
+
+`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts` is weaker than its name: it
+has restore cases and one promotion, no setup or re-registration case, and a reference clock more
+than 15 seconds wrong can still repeat a name (its ±45.5 s control).
+
 Cold restore checks the key saved in the selected backup; live takeover checks the live
 verifier. Keep older named paper keys while their backups remain. The archive password is
 separate. Name selection does not discover names made after the backup or by a box this one

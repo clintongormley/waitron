@@ -1,6 +1,7 @@
 // The owner's condition for taking the installation code off the recovery sheet and the restore
-// form (design §6.7): a restore from an old backup never reuses a name it cannot see. A failing row
-// selects a code at or below the unseen name, or (F1) takes a minute ahead of the true time; a
+// form (design §6.7): a restore from an old backup never reuses a name it cannot see, within the
+// clock errors these rows test; the ±45.5 s control shows a name repeated just past them. A failing
+// row selects a code at or below the unseen name, or (F1) takes a minute ahead of the true time; a
 // passing row is refused, or selects a later code.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {

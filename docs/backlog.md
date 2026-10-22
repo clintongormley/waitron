@@ -557,7 +557,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **Rename the `hour-*` names to minute names** — left by A947 slice 4a, which made every
   installation code a UTC minute but kept the `packages/fiscal-verifactu/src/hour-*.ts` file names,
-  their identifiers and the `source: "hour"` label the allocations carry. Before go-live it needs
+  their identifiers, the `source: "hour"` label the allocations carry, and test titles that still
+  say "hour" for what is now a minute (for example "same-hour code", "burns the entire hour"). Before go-live it needs
   no compatibility code: until then any installation may be reset (CLAUDE.md §3).
 
 - **Should `packages/fiscal-verifactu` have a mutation floor?** It has no Stryker config, so the

@@ -24,7 +24,7 @@ the second clock"). The box's clock must be within 30 seconds of every
 other clock it reads, ahead or behind, and there is no confirmation to get past it
 (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a name needs a second clock within 30
 seconds of the box"). There is no "last hour" question: the page has no such field
-(`packages/fiscal-verifactu/src/setup/first-hour.ts`; no test pins its absence). Before you
+(`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "asks no last-hour question and offers no clock confirmation"). Before you
 press **Make the series**, the page explains nothing and retries nothing
 (`first-hour.browser.test.ts`, "a preview refused for %s on load shows the readings with no
 failure and no explanation").

@@ -169,7 +169,7 @@ CI scope and results; the unfiltered `main` merge checks the combined tree when 
 For the A679 candidate, follow [first Live setup](../operations/first-live-fiscal-setup.md)
 and [recovering a box](../operations/hour-recovery.md). Use an isolated production-shaped
 host when the managed development stack enables dev mode. The owner's 19 October viewing
-approval covers the generated recovery sheet; automated download/entry checks and final branch
+approval covered the recovery sheet as generated then, which still carried the installation code; automated download/entry checks and final branch
 review remain distinct evidence. No physical-paper acceptance exercise remains under the
 approved hour-code design.
 
@@ -328,7 +328,7 @@ name only) and after a 90 to 150 second wait
 readings lies in (90 000, 150 000]"). The terminal asks no recent-setup question
 (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal asks nothing, prints
 why it waits and until when, and keeps the wait"), and neither does the setup page, which has no
-such field (`packages/fiscal-verifactu/src/setup/first-hour.ts`; no test pins its absence).
+such field (`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "asks no last-hour question and offers no clock confirmation").
 Signed allocation files do not replace that flow.
 
 Production and preproduction remain separate databases. A disposable preproduction allocation
