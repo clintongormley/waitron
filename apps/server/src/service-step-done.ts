@@ -10,11 +10,11 @@ import "./errors.js";
 
 /**
  * Records Done for a live step and for every live step of its department due no later, the ones
- * it was hiding, at one time. `dueAt` is when the till showed the step as due, and binds the Done
- * to that occurrence: a Done for an occurrence already cleared, or that would change nothing,
- * writes nothing, so a second tap, or a second till's, is harmless. Tables of one department
- * share their steps, so one table's list names each once. The table the step was found on is held
- * to the profile's zones, as the party is by the route.
+ * it was hiding, at one time. `dueAt` is when the till showed the step as due: a Done for that
+ * occurrence once it is cleared, or one that would change nothing, writes nothing, so a second
+ * tap, or a second till's, is harmless. Tables of one department share their steps, so one
+ * table's list names each once. The table the step was found on is held to the profile's zones,
+ * as the party is by the route.
  */
 export async function markServiceStepDone(
   tx: Transaction,
