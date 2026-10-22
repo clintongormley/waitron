@@ -408,9 +408,13 @@ describe("boxStatusRows", () => {
       quietHealth({ disk: { ...health.disk, databaseBytes: null, otherBytes: null } }),
       [],
     );
+    expect(row(rows, "disk").details[0]).toMatch(/^Backups on this box /);
     expect(row(rows, "disk").details).toEqual([
       [
-        fill("box_status.disk.backups", { size: formatBytes(300_000_000, "en") }),
+        fill("box_status.disk.backups", { size: formatBytes(300_000_000, "en") }).replace(
+          /^b/,
+          "B",
+        ),
         fill("box_status.disk.logs", { size: formatBytes(40_000_000, "en") }),
       ].join(" · "),
     ]);
@@ -483,6 +487,27 @@ describe("boxStatusRows", () => {
     expect(silent).not.toContain(t("box_status.clock.synced"));
     expect(silent).not.toContain(t("box_status.clock.not_synced"));
     expect(silent).toHaveLength(1);
+  });
+
+  it("turns the Clock amber with the bell's drift sentence when its own read says the clock is off", () => {
+    const { rows } = boxStatusRows(
+      quietHealth({
+        clock: {
+          authority: { state: "warning", driftSeconds: -3600, measuredAt: MEASURED },
+          sync: { synced: false, source: "unavailable", warn: false },
+        },
+      }),
+      [],
+    );
+    expect(row(rows, "clock")).toMatchObject({
+      state: "attention",
+      line: alertMessage("fiscal.clock_drift", { seconds: 3600 }, "en"),
+      details: [
+        fill("box_status.clock.compared", { time: formatIsoMinute(MEASURED), seconds: "3600" }),
+      ],
+      alerts: [],
+    });
+    expect(row(rows, "clock").line).not.toBe(t("box_status.clock.ok"));
   });
 
   it("turns Card readers amber on a battery alert, with its sentence", () => {

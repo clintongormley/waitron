@@ -6400,7 +6400,7 @@ export const es: Record<StringKey, string> = {
   "box_status.no_problems": "Sin problemas",
   "box_status.clock.ok": "Correcto",
   "box_status.clock.unknown": "Aún no se ha comparado con Hacienda",
-  "box_status.clock.compared": "Comparado con Hacienda a las {time} · diferencia {seconds} s",
+  "box_status.clock.compared": "Comparado con Hacienda el {time} · diferencia {seconds} s",
   "box_status.clock.synced": "Se pone en hora por internet",
   "box_status.clock.not_synced": "No se pone en hora por internet",
   "box_status.disk.free": "Quedan {free} libres de {total}",

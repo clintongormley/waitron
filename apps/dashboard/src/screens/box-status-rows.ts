@@ -95,7 +95,7 @@ export function boxStatusRows(
     const state: PartState =
       stopped.length > 0
         ? "stopped"
-        : notices.length > 0 || rowAlerts.length > 0
+        : notices.length > 0 || rowAlerts.length > 0 || clockOff(id, health)
           ? "attention"
           : "ok";
     return {
@@ -108,6 +108,11 @@ export function boxStatusRows(
     };
   });
   return { rows, other, checksUnavailable: health.noticesUnavailable.length > 0 };
+}
+
+/** The box's own read can see drift before the bell's slower alert read carries it. */
+function clockOff(id: PartId, health: BoxHealth): boolean {
+  return id === "clock" && health.clock.authority.state === "warning";
 }
 
 function lineOf(
@@ -146,10 +151,17 @@ function factLine(id: PartId, health: BoxHealth, notices: readonly Notice[]): st
       return health.readers!.length === 0
         ? t("box_status.readers.none")
         : t("box_status.no_problems");
-    case "clock":
-      return health.clock.authority.state === "unknown"
-        ? t("box_status.clock.unknown")
+    case "clock": {
+      const authority = health.clock.authority;
+      if (authority.state === "unknown") return t("box_status.clock.unknown");
+      return authority.state === "warning"
+        ? alertMessage(
+            "fiscal.clock_drift",
+            { seconds: Math.abs(authority.driftSeconds) },
+            currentLocale(),
+          )
         : t("box_status.clock.ok");
+    }
     default:
       return diskLine(health.disk);
   }
@@ -247,5 +259,7 @@ function diskDetails(disk: BoxHealth["disk"]): string[] {
   const parts = sizes.flatMap(([key, bytes]) =>
     bytes === null ? [] : [fill(key, { size: formatBytes(bytes, locale) })],
   );
-  return parts.length === 0 ? [] : [parts.join(" · ")];
+  if (parts.length === 0) return [];
+  const line = parts.join(" · ");
+  return [line.charAt(0).toLocaleUpperCase(locale) + line.slice(1)];
 }
