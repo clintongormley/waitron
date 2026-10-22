@@ -104,7 +104,6 @@ describe("drain — happy path", () => {
   });
 });
 
-/** Seeds a taxpayer and a manager, then records one sale and voids it through `@waitron/core`. */
 async function sellAndVoid(options: {
   resolveClient: DrainDeps["resolveClient"];
   nif?: string;

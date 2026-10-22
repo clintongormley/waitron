@@ -459,6 +459,18 @@ describe("complete captured fiscal chains", () => {
     expect(await verify()).toBe(false);
   });
 
+  it("rejects a record issued under another taxpayer's NIF even with consistent hashes", async () => {
+    await capture();
+    for (const side of ["before", "after"] as const) {
+      damage(
+        side,
+        "update registros_facturacion set id_emisor_factura = '00000000T' where secuencia = 1",
+      );
+      rehash(side);
+    }
+    expect(await verify()).toBe(false);
+  });
+
   it("rejects a cross-registration predecessor even with consistent hashes", async () => {
     await capture();
     for (const side of ["before", "after"] as const) {

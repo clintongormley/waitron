@@ -104,6 +104,7 @@ async function walk(query: BackupQuery): Promise<boolean> {
       const sif = identities.get(row.sif_id);
       if (
         sif === undefined ||
+        // The software block may name the producer; the issuer's NIF is what binds a record to its taxpayer.
         row.id_emisor_factura !== sif.nif ||
         row.sistema_informatico.IdSistemaInformatico !== sif.id_sistema_informatico ||
         row.sistema_informatico.NumeroInstalacion !== sif.numero_instalacion
