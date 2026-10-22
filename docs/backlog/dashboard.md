@@ -79,11 +79,20 @@ change what deleting a person does.
 
 **A1002, design proposed 2026-10-22; owner approval, plan and build remain open.** The
 [custom-role design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md) proposes explicit
-privilege grants and four editable default roles, with no runtime seniority ladder. The owner's
-single `person.admin` decision is settled: it covers other people's sign-in details and who holds
-privileges, including when granted to a custom role. The design's remaining choices start with
-how a genuinely new privilege obtains its first holder without letting an actor grant a privilege
-they lack; the recommendation is reset-and-reprovision while pre-live, awaiting the owner.
+privilege grants with no runtime seniority ladder. The owner's 2026-10-22 ~08:40 answer settles
+new privileges: built-in Admin always holds every privilege, including future additions. Custom
+roles hold exactly their selected grants; nobody grants what they lack; each action checks
+privileges, never role names. The single `person.admin` decision is settled: it covers other
+people's sign-in details and who holds privileges, including when granted to a custom role.
+
+Review the proposed Admin protection first: rename allowed with an immutable preset key and complete
+grants, no deletion/conversion/narrowing, and at least one active human holder with usable dashboard
+authentication. A custom `person.admin` holder cannot replace this future-grant anchor. Staff,
+Supervisor and Manager remain editable/deletable defaults. These protection choices qualify the
+earlier four-editable-default proposal and await approval; the owner has settled the full-grants
+rule, not this mechanism. Publish only this first protection question with its example. Catalogue,
+attendance, context policies, ordinary-role deletion, names and mirrors follow one at a time in §11.
+Approving protection alone does not approve the complete design or authorize implementation.
 
 The design traces remaining role-name checks in staff, attendance, mirrors, provisioning and
 recovery, plus device admission, adjustment policies, imports and dashboard role lists. These are
@@ -91,8 +100,12 @@ source-reading receipts at the design's named commit, not runtime verification. 
 roles, approve and complete the permission review below, including coordination with A980's
 separate privilege for another person's personal-data request. Proposed sale-permission merges
 need separate fiscal authorization; retaining the existing identifiers is an explicit alternative.
-The design also proposes deletion with explicit reassignment, live revocation and a shared last
-administrator check that requires usable dashboard authentication. None is implemented here.
+The design also proposes ordinary-role deletion with explicit reassignment, live revocation and a
+serialized final-state check retaining a usable active protected Admin holder. Catalogue reconciliation
+would materialize Admin's complete declared grants before requests, leave custom roles unchanged and
+fail closed on incomplete installation. Imports would preserve one target protected Admin and its
+usable human, map canonical references explicitly, keep imported holders suspended and check whole
+current target grants on reactivation. None is implemented or runtime-verified here.
 
 ## A keydown guard that cancels Escape while a save runs did not keep one dialog open
 
@@ -376,6 +389,9 @@ administrator check that requires usable dashboard authentication. None is imple
 [design's permission inventory](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md#2-one-permission-review-before-role-storage)
 lists current default grants and proposed merges, retirements and new privileges. It is awaiting
 owner approval; the review and its implementation are still open and precede editable roles.
+**2026-10-22 update:** Admin's every-current-and-future-privilege rule is settled; ordinary roles'
+default sets and catalogue merges remain proposals. See §3 and §11 of the design for proposed
+catalogue reconciliation and the first Admin protection question, followed by the queued choices.
 A980's personal-data privilege is one coordinated entry, not a second export permission invented
 independently by either lane. The dated discussion below remains the background for that review.
 
@@ -414,7 +430,10 @@ independently by either lane. The dated discussion below remains the background 
 
 ## Roles are something an admin can add and edit; the four built-ins are only defaults
 
-The owner decided this on 2026-09-12 and restated it on 2026-09-28. **A1002's
+The owner decided this on 2026-09-12 and restated it on 2026-09-28. **2026-10-22 dated qualification:**
+the later answer gives built-in Admin every current and future privilege. A1002 recommends protecting
+that role while permitting rename, and retaining a usable active human holder; those protection
+choices await approval. The other three presets remain editable/deletable defaults. **A1002's
 [proposed design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md) is awaiting full
 owner approval.** Its source audit distinguishes the adjustments screen's hardcoded display order
 from the server's role-membership policy. It proposes live role IDs and explicit privilege checks,

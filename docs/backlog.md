@@ -4671,11 +4671,15 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   `venue.configure` (owner, 2026-10-16, A755).
   [Detail](backlog/dashboard.md#review-every-permission-fewer-coarser-and-consistently-named)
 
-- **A1002: roles an admin can add and edit; the four built-ins are only defaults.** The
+- **A1002: custom roles and a built-in Admin that holds every privilege.** The
   [proposed design](superpowers/specs/2026-10-22-a1002-custom-roles-design.md) is awaiting owner
-  approval; no plan or build yet. The single `person.admin` privilege is settled. New-permission
-  bootstrapping, the permission review's merges/default grants, attendance self-approval, contextual
-  role policies, deletion and mirror visibility remain proposed. Complete the approved permission
+  approval; no plan or build yet. Settled 2026-10-22 ~08:40: built-in Admin always holds every
+  privilege, future additions included; custom roles keep selected grants, nobody grants what they
+  lack, and each action checks privileges. The single `person.admin` is settled too. First review
+  the proposed Admin protection: rename allowed, immutable key/full grants, undeletable, with a
+  usable active human holder retained. Approval of that policy alone does not approve the complete
+  design. Catalogue/default grants for other roles, attendance, policies, ordinary-role deletion,
+  names and mirrors stay queued one at a time. Complete the approved permission
   review before editable-role storage. [Remaining work](backlog/dashboard.md#roles-the-admin-can-edit-a7).
   [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
 
