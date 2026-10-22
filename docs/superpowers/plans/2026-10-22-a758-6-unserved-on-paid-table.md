@@ -217,7 +217,8 @@ The build goes straight on with each default. The owner is away and may override
     chosen payment cannot return it all, the amount is what it can, and the line "€2.00 left to
     refund from another payment" («Quedan 2,00 € por devolver de otro pago») shows under it, then
     the till line of Decision 11 when no other payment of the bill can be refunded on this device.
-    Nothing chains a second refund automatically; a second refund from the receipt is not linked.
+    The line is the dishes' total less the amount in the window, so it follows the waiter's edits
+    and is hidden while that amount is refused. Nothing chains a second refund automatically; a second refund from the receipt is not linked.
     A waiter who raises the amount above the filled total makes an ordinary, unlinked refund
     (Decision 3): the dish's report entry then shows no "Refunded".
 17. **The server does not trust the till alone for a linked refund's amount** (the coordinator's

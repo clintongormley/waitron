@@ -152,9 +152,10 @@ export class TillTenderRefundDialog extends LitElement {
       ? this.target
       : row.appliedRemaining;
   }
-  #left(row: RefundableTender): string | null {
-    if (this.target === "") return null;
-    const left = subtractDecimal(decimal(this.target), decimal(row.appliedRemaining));
+  #left(): string | null {
+    const amount = tenderRefundAmount(this.draft.appliedAmount);
+    if (this.target === "" || amount === null || this.#errors().has("appliedAmount")) return null;
+    const left = subtractDecimal(decimal(this.target), decimal(amount));
     return compareDecimal(left, decimal("0")) > 0 ? left : null;
   }
   #choice(row: RefundableTender): Draft {
@@ -375,7 +376,7 @@ export class TillTenderRefundDialog extends LitElement {
     ></wt-input>`;
   }
   #leftLines(row: RefundableTender | undefined) {
-    const left = row ? this.#left(row) : null;
+    const left = row ? this.#left() : null;
     if (left === null) return nothing;
     return html`<p data-left>
         ${t("tender_refund.left").replace("{amount}", () => this.#money(left))}

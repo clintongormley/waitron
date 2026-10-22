@@ -87,7 +87,8 @@ devolver, el PIN también se pide la próxima vez. Una tarjeta registrada desde 
 siempre pide el PIN, porque allí confirma que la devolución en el datáfono se ha hecho.
 
 Cuando el pago elegido tiene menos que el total de los platos, el importe es lo que tiene, y una
-línea como **Quedan 2,00 € por devolver de otro pago** indica lo que falta. Para devolver el resto, elige
+línea como **Quedan 2,00 € por devolver de otro pago** indica lo que falta. Cuenta desde el
+importe de la ventana, así que también aparece, o sube, si bajas el importe. Para devolver el resto, elige
 otra vez **Devolver un pago** y escoge otro pago. Esa ventana no viene rellenada: escribe tú el
 importe y el motivo. Si no puedes hacer devoluciones, pide el PIN, y las entradas de esos platos en
 el informe no muestran esa parte. Si ese pago no se puede devolver en este dispositivo, la ventana te indica que lo

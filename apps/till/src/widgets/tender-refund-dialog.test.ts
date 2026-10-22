@@ -660,6 +660,45 @@ it("fills in what one payment can return and says what is left", async () => {
   );
 });
 
+it("says what is left from the amount being refunded, not from the payment's balance", async () => {
+  const el = await mount({
+    tenders: [{ ...cash, appliedRemaining: "6.00", tipRemaining: "0.00" }],
+    target: "10.00",
+    startReasonId: "return",
+  });
+  const asks = collect<TenderRefundAsk>(el, "tender-refund-submit");
+  expect(root(el).querySelector("[data-left]")!.textContent!.trim()).toBe(
+    "€4.00 left to refund from another payment",
+  );
+  await fill(el, "appliedAmount", "2");
+  expect(root(el).querySelector("[data-left]")!.textContent!.trim()).toBe(
+    "€8.00 left to refund from another payment",
+  );
+  await click(el);
+  expect(asks.map((ask) => ask.appliedAmount)).toEqual(["2.00"]);
+});
+
+it("says what is left once the amount is lowered on a payment that could return it all", async () => {
+  const el = await mount({ tenders: [{ ...cash, appliedRemaining: "62.00" }], target: "5.50" });
+  expect(root(el).querySelector("[data-left]")).toBeNull();
+  await fill(el, "appliedAmount", "3");
+  expect(root(el).querySelector("[data-left]")!.textContent!.trim()).toBe(
+    "€2.50 left to refund from another payment",
+  );
+});
+
+it.each(["", "abc", "0", "6.01"])(
+  "says nothing about what is left while the amount %s is refused",
+  async (value) => {
+    const el = await mount({
+      tenders: [{ ...cash, appliedRemaining: "6.00", tipRemaining: "0.00" }],
+      target: "10.00",
+    });
+    await fill(el, "appliedAmount", value);
+    expect(root(el).querySelector("[data-left]")).toBeNull();
+  },
+);
+
 it("says nothing is left when one payment returns exactly the dishes' total", async () => {
   const el = await mount({ tenders: [{ ...cash, appliedRemaining: "5.50" }], target: "5.50" });
   expect(root(el).querySelector("[data-left]")).toBeNull();
