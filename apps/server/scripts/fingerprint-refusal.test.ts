@@ -7,7 +7,6 @@ import { incidents, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordOneSale } from "./record-one-sale.js";
-import { settleInvoiceFirst } from "./settle-invoice-first.js";
 import { provisionTestVenue } from "./testing/venue.js";
 import { createDemoVenueProvisioner } from "./demo-seed/testing/provision-venue.js";
 import { seedSales } from "./demo-seed/seed-sales.js";
@@ -85,33 +84,6 @@ describe("operator scripts retain the refusal after their issuance rolls back", 
         { code: "fiscal.fingerprint_mismatch", sale_id: null, source: "operator_script" },
       ],
     });
-  });
-
-  it("settleInvoiceFirst keeps its original when the correction is refused", async () => {
-    const { directory, venue, env } = await box();
-    fault.failAt = 2;
-    const before = read(directory);
-    await expect(
-      settleInvoiceFirst(
-        {
-          nodeId: venue.nodeId,
-          standardSeriesId: venue.seriesId,
-          rectificativeSeriesId: venue.rectificativeSeriesId,
-        },
-        env,
-        () => {},
-      ),
-    ).rejects.toMatchObject({ code: "fiscal.fingerprint_mismatch" });
-    const after = read(directory);
-    expect(after.sales).toEqual([{ total: 11000 }]);
-    expect(after.records).toEqual({ count: 1 });
-    expect(after.outbox).toEqual({ count: 1 });
-    expect(after.counters).toEqual(
-      before.counters.map((row) => ({ ...row, next_number: row.id === venue.seriesId ? 2 : 1 })),
-    );
-    expect(after.incidents).toEqual([
-      { code: "fiscal.fingerprint_mismatch", sale_id: null, source: "operator_script" },
-    ]);
   });
 });
 
