@@ -1,6 +1,6 @@
 import type { Stats } from "node:fs";
 import * as fs from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { BACKUP_ENCRYPT_DIR_PREFIX } from "./backup-keys.js";
 import type { StagingTurn } from "./backup-staging-turn.js";
 import { errnoOf } from "./errno.js";
@@ -92,7 +92,8 @@ export async function deleteLeftovers(deps: LeftoverDeps): Promise<LeftoverRemov
 
 function walkFor(deps: LeftoverDeps, report: boolean): Walk {
   return {
-    deps,
+    // A trailing separator would make `lstat` describe a linked folder's target, not the link.
+    deps: { ...deps, logDir: resolve(deps.logDir), stateDir: resolve(deps.stateDir) },
     lstat: deps.lstat ?? fs.lstat,
     readdir: deps.readdir ?? ((path) => fs.readdir(path)),
     report,

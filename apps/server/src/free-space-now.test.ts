@@ -1,8 +1,20 @@
 import { existsSync } from "node:fs";
-import { lstat, mkdir, mkdtemp, readdir, rm, utimes, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  lutimes,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { backupArchiveKey } from "./backup-keys.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import { deleteLeftovers, surveyLeftovers, type LeftoverDeps } from "./free-space-now.js";
 import type { Logger } from "./logger.js";
@@ -74,6 +86,23 @@ async function crashFiles(): Promise<{ old: string; recent: string }> {
   await file(recent, 70, 6 * DAY_MS);
   return { old, recent };
 }
+
+async function present(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function expectAllPresent(paths: string[]): Promise<void> {
+  const missing: string[] = [];
+  for (const path of paths) if (!(await present(path))) missing.push(path);
+  expect(missing).toEqual([]);
+}
+
+const NOTHING = { freedBytes: 0, deleted: 0, failed: 0, backupRunning: false };
 
 function errnoError(code: string): Error {
   return Object.assign(new Error(code), { code });
@@ -216,7 +245,7 @@ describe("surveyLeftovers and deleteLeftovers", () => {
     expect(lines).toEqual([]);
   });
 
-  it("18. a file that vanishes during the survey counts as gone", async () => {
+  it("18. a file or folder that vanishes during a walk counts as gone, silently", async () => {
     const vanished = join(logDir, "waitron.log.2");
     await file(vanished, 300);
     await file(join(logDir, "waitron.log.3"), 400);
@@ -224,39 +253,50 @@ describe("surveyLeftovers and deleteLeftovers", () => {
       if (path === vanished) throw errnoError("ENOENT");
       return lstat(path);
     }) as typeof lstat;
-    expect(await surveyLeftovers(deps({ lstat: vanishingLstat }))).toMatchObject({ bytes: 400 });
-
     const goneFolder: LeftoverDeps["readdir"] = async (path) => {
       if (path === logDir) throw errnoError("ENOENT");
       return readdir(path);
     };
+    expect(await surveyLeftovers(deps({ lstat: vanishingLstat }))).toMatchObject({ bytes: 400 });
     expect(await surveyLeftovers(deps({ readdir: goneFolder }))).toMatchObject({ bytes: 0 });
+
+    expect(await deleteLeftovers(deps({ readdir: goneFolder }))).toEqual(NOTHING);
+    expect(await deleteLeftovers(deps({ lstat: vanishingLstat }))).toEqual({
+      ...NOTHING,
+      freedBytes: 400,
+      deleted: 1,
+    });
     expect(lines).toEqual([]);
+    expect(existsSync(vanished)).toBe(true);
   });
 
   it("19. a folder that cannot be listed is logged by the deletion, not by the survey", async () => {
     await file(join(logDir, "waitron.log.2"), 300);
-    await file(join(stagingDir, "backup-encrypt-abc", "artifact"), 2000);
+    const encrypt = join(stagingDir, "backup-encrypt-abc");
+    await file(join(encrypt, "artifact"), 2000);
     const refusing: LeftoverDeps["readdir"] = async (path) => {
-      if (path === logDir || path === join(stagingDir, "backup-encrypt-abc")) {
-        throw errnoError("EACCES");
-      }
+      if (path === logDir || path === encrypt) throw errnoError("EACCES");
       return readdir(path);
+    };
+    // A folder that refuses its listing refuses `rm -r` too.
+    const remove: LeftoverDeps["remove"] = async (path, options) => {
+      if (path === encrypt) throw errnoError("EACCES");
+      await rm(path, options);
     };
     expect(await surveyLeftovers(deps({ readdir: refusing }))).toMatchObject({ bytes: 0 });
     expect(lines).toEqual([]);
-    expect(await deleteLeftovers(deps({ readdir: refusing }))).toMatchObject({
-      freedBytes: 0,
-      deleted: 1,
-      failed: 0,
+    expect(await deleteLeftovers(deps({ readdir: refusing, remove }))).toEqual({
+      ...NOTHING,
+      failed: 1,
     });
     const failure = {
       level: "warn",
       event: "storage.free_space_failed",
       fields: { errno: "EACCES" },
     };
-    expect(lines).toEqual([failure, failure]);
+    expect(lines).toEqual([failure, failure, failure]);
     expect(existsSync(join(logDir, "waitron.log.2"))).toBe(true);
+    expect(existsSync(join(encrypt, "artifact"))).toBe(true);
   });
 
   it("20. an encrypt folder's nested files are counted", async () => {
@@ -264,5 +304,246 @@ describe("surveyLeftovers and deleteLeftovers", () => {
     await file(join(stagingDir, "backup-encrypt-abc", "artifact"), 800);
     expect((await surveyLeftovers(deps())).bytes).toBe(2000);
     expect(await deleteLeftovers(deps())).toMatchObject({ freedBytes: 2000, deleted: 1 });
+  });
+  it("21. an encrypt folder is sized by its regular files alone", async () => {
+    const encrypt = join(stagingDir, "backup-encrypt-abc");
+    const venueDb = join(stateDir, "venue", "venue.db");
+    await file(venueDb, 5000);
+    await file(join(encrypt, "artifact"), 800);
+    const gone = join(encrypt, "gone");
+    await file(gone, 900);
+    await symlink(join(stateDir, "venue"), join(encrypt, "to-venue"));
+    await symlink(venueDb, join(encrypt, "to-db"));
+    await symlink(stagingDir, join(encrypt, "to-parent"));
+    const vanishingLstat = (async (path: string) => {
+      if (path === gone) throw errnoError("ENOENT");
+      return lstat(path);
+    }) as typeof lstat;
+    expect((await surveyLeftovers(deps({ lstat: vanishingLstat }))).bytes).toBe(800);
+    expect(await deleteLeftovers(deps({ lstat: vanishingLstat }))).toEqual({
+      ...NOTHING,
+      freedBytes: 800,
+      deleted: 1,
+    });
+    expect(existsSync(encrypt)).toBe(false);
+    expect((await readFile(venueDb)).length).toBe(5000);
+    expect(lines).toEqual([]);
+  });
+
+  it("22. a staging entry that vanishes is skipped, silently", async () => {
+    const vanished = join(stagingDir, DUMP);
+    await file(vanished, 3000);
+    await file(join(stagingDir, `${DUMP}.partial`), 500);
+    const vanishingLstat = (async (path: string) => {
+      if (path === vanished) throw errnoError("ENOENT");
+      return lstat(path);
+    }) as typeof lstat;
+    expect((await surveyLeftovers(deps({ lstat: vanishingLstat }))).bytes).toBe(500);
+    expect(await deleteLeftovers(deps({ lstat: vanishingLstat }))).toEqual({
+      ...NOTHING,
+      freedBytes: 500,
+      deleted: 1,
+    });
+    expect(lines).toEqual([]);
+  });
+
+  it("23. a refusal with no error code is logged with a null errno", async () => {
+    await file(join(logDir, "waitron.log.2"), 300);
+    const remove: LeftoverDeps["remove"] = async () => {
+      throw new Error("refused");
+    };
+    expect(await deleteLeftovers(deps({ remove }))).toEqual({ ...NOTHING, failed: 1 });
+    expect(lines).toEqual([
+      { level: "warn", event: "storage.free_space_failed", fields: { errno: null } },
+    ]);
+  });
+
+  it("24. deletes staging first, then logs highest first, then crash reports oldest first", async () => {
+    const dump = join(stagingDir, DUMP);
+    await file(dump, 10);
+    for (const n of [3, 2, 5]) await file(join(logDir, `waitron.log.${n}`), 10);
+    const crashDir = join(logDir, "crash-reports");
+    await file(join(crashDir, "holder-frozen-newer.json"), 10, 8 * DAY_MS);
+    await file(join(crashDir, "holder-frozen-older.json"), 10, 9 * DAY_MS);
+    await file(join(crashDir, "holder-frozen-oldest.json"), 10, 10 * DAY_MS);
+    const order: string[] = [];
+    const remove: LeftoverDeps["remove"] = async (path, options) => {
+      order.push(path);
+      await rm(path, options);
+    };
+    await deleteLeftovers(deps({ remove }));
+    expect(order).toEqual([
+      dump,
+      join(logDir, "waitron.log.5"),
+      join(logDir, "waitron.log.3"),
+      join(logDir, "waitron.log.2"),
+      join(crashDir, "holder-frozen-oldest.json"),
+      join(crashDir, "holder-frozen-older.json"),
+      join(crashDir, "holder-frozen-newer.json"),
+    ]);
+  });
+});
+
+describe("what the deletion must never delete", () => {
+  const venueDir = () => join(stateDir, "venue");
+
+  it("4. the venue folder survives", async () => {
+    const paths = [
+      "venue.db",
+      "venue.db-wal",
+      "venue.db-shm",
+      "node.db",
+      "venue.lock",
+      join(".venue.db-litestream", "generations", "x"),
+    ].map((name) => join(venueDir(), name));
+    for (const path of paths) await file(path, 100);
+    expect(await surveyLeftovers(deps())).toEqual({ bytes: 0, backupRunning: false });
+    expect(await deleteLeftovers(deps())).toEqual(NOTHING);
+    await expectAllPresent(paths);
+  });
+
+  it("5. the state folder survives", async () => {
+    const paths = [
+      "recovery.lock",
+      "recovery.json",
+      "secrets.env",
+      "modules.json",
+      join("stream", "litestream.yml"),
+      join("tls", "ca.crt"),
+      join("cloud-snapshots", "staging", "venue.db"),
+      join("restore-staging", DUMP),
+      DUMP,
+    ].map((name) => join(stateDir, name));
+    for (const path of paths) await file(path, 100);
+    expect(await surveyLeftovers(deps())).toEqual({ bytes: 0, backupRunning: false });
+    expect(await deleteLeftovers(deps())).toEqual(NOTHING);
+    await expectAllPresent(paths);
+  });
+
+  it("6. look-alike names survive", async () => {
+    const paths = [
+      join(stagingDir, "archive-validate-x", "artifact"),
+      join(stagingDir, "restore-admission-x", "artifact"),
+      join(stagingDir, `${DUMP}.bak`),
+      join(stagingDir, "other.dump"),
+      join(stagingDir, "notes.txt"),
+      join(logDir, "waitron.log.0"),
+      join(logDir, "waitron.log.1"),
+      join(logDir, "waitron.log.x"),
+      join(logDir, "other.log.3"),
+    ];
+    for (const path of paths) await file(path, 100);
+    const otherReport = join(logDir, "crash-reports", "other.json");
+    await file(otherReport, 100, 8 * DAY_MS);
+    expect(await surveyLeftovers(deps())).toEqual({ bytes: 0, backupRunning: false });
+    expect(await deleteLeftovers(deps())).toEqual(NOTHING);
+    await expectAllPresent([...paths, otherReport]);
+  });
+
+  it("7. a link is never followed, whatever its name", async () => {
+    const venueDb = join(venueDir(), "venue.db");
+    await file(venueDb, 5000);
+    const links = [
+      join(stagingDir, "backup-encrypt-link"),
+      join(stagingDir, DUMP),
+      join(logDir, "waitron.log.3"),
+      join(logDir, "crash-reports", "holder-frozen-a.json"),
+    ];
+    for (const link of links) await mkdir(dirname(link), { recursive: true });
+    await symlink(venueDir(), links[0]!);
+    for (const link of links.slice(1)) await symlink(venueDb, link);
+    // `utimes` would age the target, and a new-looking link would be kept by age alone.
+    const aged = new Date(NOW.getTime() - 8 * DAY_MS);
+    await lutimes(links[3]!, aged, aged);
+
+    expect(await surveyLeftovers(deps())).toEqual({ bytes: 0, backupRunning: false });
+    expect(await deleteLeftovers(deps())).toEqual(NOTHING);
+    await expectAllPresent(links);
+    expect((await readFile(venueDb)).length).toBe(5000);
+  });
+
+  describe("8. a folder that is a link is skipped and logged", () => {
+    it("backup staging", async () => {
+      await file(join(venueDir(), DUMP), 100);
+      await symlink(venueDir(), stagingDir);
+      expect((await surveyLeftovers(deps())).bytes).toBe(0);
+      expect(lines).toEqual([]);
+      expect(await deleteLeftovers(deps())).toEqual(NOTHING);
+      expect(lines).toEqual([
+        {
+          level: "warn",
+          event: "storage.free_space_skipped",
+          fields: { folder: "backup-staging" },
+        },
+      ]);
+      await expectAllPresent([join(venueDir(), DUMP)]);
+    });
+
+    it("the log folder", async () => {
+      await file(join(venueDir(), "waitron.log.4"), 100);
+      await symlink(venueDir(), logDir);
+      expect((await surveyLeftovers(deps())).bytes).toBe(0);
+      expect(lines).toEqual([]);
+      expect(await deleteLeftovers(deps())).toEqual(NOTHING);
+      expect(lines).toEqual([
+        { level: "warn", event: "storage.free_space_skipped", fields: { folder: "logs" } },
+      ]);
+      await expectAllPresent([join(venueDir(), "waitron.log.4")]);
+    });
+
+    it("the log folder, configured with a trailing separator", async () => {
+      await file(join(venueDir(), "waitron.log.4"), 100);
+      await symlink(venueDir(), logDir);
+      const trailing = deps({ logDir: logDir + sep });
+      expect((await surveyLeftovers(trailing)).bytes).toBe(0);
+      expect(await deleteLeftovers(trailing)).toEqual(NOTHING);
+      expect(lines).toEqual([
+        { level: "warn", event: "storage.free_space_skipped", fields: { folder: "logs" } },
+      ]);
+      await expectAllPresent([join(venueDir(), "waitron.log.4")]);
+    });
+
+    it("the crash-report folder", async () => {
+      const report = join(venueDir(), "holder-frozen-b.json");
+      await file(report, 100, 8 * DAY_MS);
+      await mkdir(logDir, { recursive: true });
+      await symlink(venueDir(), join(logDir, "crash-reports"));
+      expect((await surveyLeftovers(deps())).bytes).toBe(0);
+      expect(lines).toEqual([]);
+      expect(await deleteLeftovers(deps())).toEqual(NOTHING);
+      expect(lines).toEqual([
+        { level: "warn", event: "storage.free_space_skipped", fields: { folder: "crash-reports" } },
+      ]);
+      await expectAllPresent([report]);
+    });
+  });
+
+  it("9. a log folder that is the venue or state folder loses only its rotated logs", async () => {
+    for (const [dir, kept] of [
+      [venueDir(), "venue.db"],
+      [stateDir, "recovery.json"],
+    ] as const) {
+      await file(join(dir, kept), 100);
+      await file(join(dir, "waitron.log.2"), 300);
+      expect(await deleteLeftovers(deps({ logDir: dir }))).toEqual({
+        ...NOTHING,
+        freedBytes: 300,
+        deleted: 1,
+      });
+      await expectAllPresent([join(dir, kept)]);
+      expect(await present(join(dir, "waitron.log.2"))).toBe(false);
+    }
+  });
+
+  it("14. a configured backup folder's archive survives in the log folder or staging", async () => {
+    const archive = backupArchiveKey(
+      new Date("2026-10-20T00:00:00Z"),
+      "8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+    );
+    const paths = [join(logDir, archive), join(stagingDir, archive)];
+    for (const path of paths) await file(path, 100);
+    expect(await surveyLeftovers(deps())).toEqual({ bytes: 0, backupRunning: false });
+    expect(await deleteLeftovers(deps())).toEqual(NOTHING);
+    await expectAllPresent(paths);
   });
 });
