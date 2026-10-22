@@ -3,7 +3,8 @@ import { eq } from "drizzle-orm";
 import { deployment, invoiceSeries, stampDeployment, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
-import { locationId } from "@waitron/shared";
+import { recordSale } from "@waitron/core";
+import { locationId, seriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
 import { withHourAdmission } from "./allocation-envelope.js";
@@ -12,6 +13,8 @@ import { FISCAL_OPERATIONS } from "./index.js";
 import { projectHourHistory } from "./hour-history.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { registroSif } from "./schema/sif.js";
+import { VerifactuBackend } from "./backend.js";
+import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
@@ -261,4 +264,39 @@ it("consults an exact committed re-registration without changing counters or evi
     params: { reason: "event_mismatch" },
   });
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(before.allocations);
+});
+
+it("gives a restore the backup's newest fiscal record time as its floor", async () => {
+  await seed();
+  const clock = {
+    ...steadyClock,
+    now: () => ({ ...steadyClock.now(), instant: new Date("2026-10-22T20:15:00Z") }),
+  };
+  const backend = new VerifactuBackend({
+    deploymentEnvironment: "preproduction",
+    clock,
+    db: suite.db,
+    resolveClient: staticResolver(fakeClient),
+  });
+  const [standard] = await suite.db
+    .select()
+    .from(invoiceSeries)
+    .where(eq(invoiceSeries.code, "a/b_.--0CNNW"));
+  await withTransaction(suite.db, (tx) =>
+    recordSale(
+      tx,
+      backend,
+      saleInput({ nodeId: node.nodeId, seriesId: seriesId(standard!.id), clock }),
+    ),
+  );
+  const facts = await read();
+  expect(
+    projectHourHistory({
+      scope: { taxpayerNif: "89890001K", environment: "preproduction" },
+      sources: facts.history,
+    }),
+  ).toMatchObject({
+    recordedTimeFloorMs: Date.parse("2026-10-22T20:15:00Z"),
+    contradictions: [],
+  });
 });

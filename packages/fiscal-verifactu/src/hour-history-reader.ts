@@ -102,11 +102,6 @@ export async function readHourHistory(
       establishedAt: fiscalReservations.establishedAt,
     })
     .from(fiscalReservations);
-  const [newest] = await tx
-    .select({
-      generatedAt: sql<string | null>`max(${registrosFacturacion.fechaHoraHusoGenRegistro})`,
-    })
-    .from(registrosFacturacion);
   let complete =
     series.length + sifs.length + allocations.length + reservations.length === 0 ||
     (tenant !== null && environment !== null);
@@ -207,8 +202,25 @@ export async function readHourHistory(
       recordedAtMs: time(row.establishedAt),
     });
   }
+  return { reference: "venue", complete, records };
+}
+
+// No index covers this column, so this reads every fiscal record: keep it off any path a trading box runs.
+export async function readNewestRecordTime(tx: Transaction): Promise<number | null> {
+  const [newest] = await tx
+    .select({
+      generatedAt: sql<string | null>`max(${registrosFacturacion.fechaHoraHusoGenRegistro})`,
+    })
+    .from(registrosFacturacion);
   const generatedAt = newest?.generatedAt ?? null;
-  return generatedAt === null
-    ? { reference: "venue", complete, records }
-    : { reference: "venue", complete, records, timeFloorMs: Date.parse(generatedAt) };
+  return generatedAt === null ? null : Date.parse(generatedAt);
+}
+
+export async function readHourHistoryWithRecordFloor(
+  tx: Transaction,
+  environment: DeploymentEnvironment | null,
+): Promise<HourHistorySource> {
+  const source = await readHourHistory(tx, environment);
+  const timeFloorMs = await readNewestRecordTime(tx);
+  return timeFloorMs === null ? source : { ...source, timeFloorMs };
 }

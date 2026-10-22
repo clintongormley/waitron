@@ -1,7 +1,7 @@
 import { readDeploymentEnvironment, readTenant, withTransaction } from "@waitron/db";
 import type { ModuleOperationPreparation } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { readHourHistory } from "./hour-history-reader.js";
+import { readHourHistory, readHourHistoryWithRecordFloor } from "./hour-history-reader.js";
 import { liveSeriesBases } from "./reserved-series.js";
 import { readModuleAllocationSeries } from "./allocation-operation.js";
 import { assertFiscalRestoreCommitted } from "./restore-committed.js";
@@ -61,7 +61,10 @@ export const readHourRecoveryState: NonNullable<
     const bases = dormant?.bases ?? (await liveSeriesBases(tx, node));
     if (dormant === undefined) await readModuleAllocationSeries(tx, node, bases);
     assertHourSeriesConfiguration(bases);
-    const history = await readHourHistory(tx, environment);
+    const history =
+      binding.action === "restore"
+        ? await readHourHistoryWithRecordFloor(tx, environment)
+        : await readHourHistory(tx, environment);
     const committed = history.records.some(
       (row) =>
         typeof row === "object" &&
