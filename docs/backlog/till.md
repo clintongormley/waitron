@@ -1427,8 +1427,12 @@ Reason filter on the list; A952–A959 are what it left open. **A758-4 built the
 ([plan](../superpowers/plans/2026-10-21-a758-4-full-comp-receipt.md)): a full comp — Free, or an
 amount that took the whole list price — prints «Descuento 100%» in each language's own discount
 word, and the «Invitación» receipt label is gone; a test shows the filed record is unchanged;
-A911, A960 and A961 are what it left open. A758-5 and the §3.8 and "collect it at the
-counter" slices follow. The §3.8 slice also makes the
+A911, A960 and A961 are what it left open. **A758-5 built the till's words**
+([plan](../superpowers/plans/2026-10-22-a758-5-comp-window-words.md)): a counter order's dishes
+offer one Comp… that opens the Comp window, as a table's do; "Comp the bill" offers Free beside %
+and €; no till word says "Give away" or «Invitar»; A1007 is what it left open; [pictures as
+built](mockups/a758-adjustment-reasons/built/). The §3.8 and "collect it at the counter" slices
+follow. The §3.8 slice also makes the
 report's entries read "Void, charged" («Cancelado, cobrado», design §3.6) for a cancel that kept
 the charge, deferred from A758-3; most such rows are already told apart without a migration,
 because A773-1 writes a still-charge cancel with before = after = the dish's charge and nothing off

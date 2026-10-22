@@ -2253,8 +2253,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   ([plan](superpowers/plans/2026-10-21-a758-4-full-comp-receipt.md)): a full comp — Free, or an
   amount that took the whole list price — prints «Descuento 100%» in each language's own discount
   word, and the «Invitación» receipt label is gone; a test shows the filed record is unchanged;
-  A911, A960 and A961 are what it left open. Left: A758-5 (the till's Comp words), and the §3.8
-  and "collect it at the counter" slices. The §3.8 slice also makes the report's entries read
+  A911, A960 and A961 are what it left open. **A758-5 built the till's words**
+  ([plan](superpowers/plans/2026-10-22-a758-5-comp-window-words.md)): a counter order's dishes offer
+  one Comp… that opens the Comp window, as a table's do; "Comp the bill" offers Free beside % and €;
+  no till word says "Give away" or «Invitar»; A1007 is what it left open. Left: the §3.8 slice and
+  the "collect it at the counter" slice. The §3.8 slice also makes the report's entries read
   "Void, charged" («Cancelado, cobrado», design §3.6) for a cancel that kept the charge, deferred from
   A758-3; most such rows are already told apart without a migration, because A773-1 writes a
   still-charge cancel with before = after = the dish's charge and nothing off
@@ -2262,13 +2265,30 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   still-charge cancel of a dish already comped to €0.00, which needs the slice's stored flag.
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),
   [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
-  [mockups](backlog/mockups/a758-adjustment-reasons/)
+  [mockups](backlog/mockups/a758-adjustment-reasons/),
+  [pictures as built](backlog/mockups/a758-adjustment-reasons/built/)
 
 - **A923. The voids and comps list is a plain table (left open by A758-2).** It has no column
   chooser, Filters or remembered view, and its own CSS keeps the row menu on a phone's screen,
   because the shared reorder helper (`ReorderController`) cannot reach `wt-data-table`'s rows. The other way is to teach
   `wt-data-table` to reorder rows (a `packages/ui` change), giving every reorderable list one
   table. Owner to choose.
+
+- **A1007. The till's adjustment window keeps a give-away and a line discount nothing opens (left
+  open by A758-5).** Since A758-5 a dish or extra is comped only through the Comp window
+  (`combined`), on the table and at the counter; the window's separate `kind: "comp"` mode and its
+  line `kind: "discount"` mode remain, with their titles (`adjust.comp_title`,
+  `adjust.comp_extra_title`, `adjust.discount_title`, `adjust.discount_extra_title`,
+  `adjust.do_comp`) and most of `adjustment-dialog.test.ts`; and `till-app-adjustments.test.ts`
+  drives the table's comps through that separate mode (`requestAdjustment` emits no `combined`,
+  `apps/till/src/till-app-adjustments.test.ts:356`) though the table screen sends `combined: true`
+  (`apps/till/src/screens/till-table-order-screen.ts:2652`) — both since A773-1. Retire the two
+  modes, make `kind: "comp"` mean the Comp window, and move those app tests onto it. The
+  one-or-all choice (`#quantityChoice`, `apps/till/src/widgets/adjustment-dialog.ts:880`) and
+  `adjust.quantity_one`, `adjust.quantity_all` and `adjust.quantity_shown` are not theirs alone:
+  the cancel mode, which stays, uses them (a cancel offer of several whole units draws the choice,
+  `apps/till/src/screens/till-table-order-screen.a11y.test.ts:375-389`), so they stay unless the
+  cancel moves too.
 
 - **A924. Void and Comp lozenges are neutral, not red and green as picture 01 draws (left open by
   A758-2).** `wt-lozenge` takes only a hex colour and a screen may not write one, so the word
