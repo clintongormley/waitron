@@ -27,9 +27,8 @@ const clock = {
     upperMs: instant,
   })),
   unavailable: [],
+  secondClock: true,
   disagreement: false,
-  requiresConfirmation: false,
-  boundaryWait: false,
   releaseBlocked: false,
   rangeBlocked: false,
 };
@@ -66,6 +65,7 @@ async function mounted(kind: "archive" | "bucket" | "cloud") {
       if (proposal.action === "clock-challenge")
         return Response.json({ id: "challenge", boxInstantMs: instant, expiresInMs: 5000 });
       if (proposal.action === "compare-clocks") return Response.json({ id: "comparison", clock });
+      if (proposal.action === "preview") return Response.json({ status: "preview" });
       if (proposal.action === "select")
         return Response.json({
           status: "selected",
@@ -114,12 +114,8 @@ async function fill(entry: LitElement) {
     input.value = value!;
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   }
-  for (const name of ["recovery-old-box-stopped", "recovery-sole-operation", "taxpayer-hour-no"]) {
-    const field = entry.shadowRoot!.querySelector<HTMLInputElement>(
-      name.startsWith("taxpayer-hour-")
-        ? `[name="taxpayer-hour"][value="${name.slice(14)}"]`
-        : `[name="${name}"]`,
-    )!;
+  for (const name of ["recovery-old-box-stopped", "recovery-sole-operation"]) {
+    const field = entry.shadowRoot!.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
     field.checked = true;
     field.dispatchEvent(new Event("change"));
   }
@@ -135,6 +131,15 @@ async function fill(entry: LitElement) {
   entry.shadowRoot!.querySelector<HTMLElement>("[data-test=compare]")!.click();
   await vi.waitFor(() =>
     expect(entry.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
+  );
+  await vi.waitFor(() =>
+    expect(
+      (
+        entry.shadowRoot!.querySelector("[data-test=select]") as HTMLElement & {
+          disabled: boolean;
+        }
+      ).disabled,
+    ).toBe(false),
   );
   entry.shadowRoot!.querySelector<HTMLElement>("[data-test=select]")!.click();
 }
@@ -160,7 +165,14 @@ it.each(["archive", "bucket", "cloud"] as const)(
       sourceId: "archive-digest",
       targetNodeId: "node-1",
     });
-    expect(requests).toHaveLength(3);
+    expect(requests.map((r) => (r.preparation.proposal as { action: string }).action)).toEqual([
+      "clock-challenge",
+      "compare-clocks",
+      "preview",
+      "clock-challenge",
+      "compare-clocks",
+      "select",
+    ]);
     for (const request of requests) {
       expect(request.preparation).toMatchObject({
         binding: credentials.recoveryOperation.binding,
