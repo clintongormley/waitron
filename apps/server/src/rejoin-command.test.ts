@@ -1,8 +1,9 @@
 import { mkdtempSync } from "node:fs";
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
+import { loadKeyRing } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
 import {
   openVenueDatabase,
@@ -15,6 +16,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { describe, expect, it, vi } from "vitest";
 import type { RejoinDeps, RejoinResult } from "./rejoin.js";
 import { runRejoin } from "./rejoin-command.js";
+import { completeRebuild, REBUILD_MARKER } from "./rebuild-first-start.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 // Named explicitly rather than left to the `<stateDir>/venue` default, so a case that asserts on
@@ -364,66 +366,100 @@ describe("waitron-rejoin rejoin", () => {
 });
 
 describe("waitron-rejoin rejoin — default wiring", () => {
-  it("with nothing injected, wipes a fenced node's real venue, re-migrates it and logs the acknowledged loss", async () => {
-    const stateDir = await mkdtemp(join(tmpdir(), "rejoin-defaults-"));
-    const venueDir = join(stateDir, "venue");
-    try {
-      await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
-      const seeded = await openVenueDatabase(venueDir);
-      await writeNodeMembership(
-        seeded.venue,
-        signedMembershipDoc(3, {
-          signerNodeId: "carrier-node",
-          nodes: [
-            { nodeId: "carrier-node", contactUrl: "https://carrier", standing: "serving-primary" },
-            { nodeId: NODE, contactUrl: "https://this", standing: "sell-only" },
-          ],
-        }),
-      );
-      await seeded.close();
-      await writeFile(join(stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=old\n");
-
-      const out: string[] = [];
-      const code = await runRejoin({
-        argv: ["rejoin", "--accept-loss"],
-        env: { ...base, WAITRON_STATE_DIR: stateDir, WAITRON_VENUE_DIR: venueDir },
-        out: (line) => out.push(line),
-      });
-
-      expect(code).toBe(0);
-      // The logger ends each line with a newline; `out` is line-oriented, so it is trimmed off.
-      expect(out.filter((line) => line.endsWith("\n"))).toEqual([]);
-      expect(out.map((line) => (line.startsWith("{") ? JSON.parse(line) : line))).toEqual([
-        {
-          carrierNodeId: "carrier-node",
-          at: expect.any(String),
-          level: "warn",
-          event: "rejoin.accept_loss",
-        },
-        {
-          carrierNodeId: "carrier-node",
-          at: expect.any(String),
-          level: "info",
-          event: "rejoin.wiped",
-        },
-        `wiped ${venueDir}; next boot is setup mode — re-adopt from carrier-node`,
-      ]);
-      // The wipe took the held chart with it, and the re-migrate rebuilt the schema.
-      const reopened = await openVenueDatabase(venueDir);
+  it.each([undefined, "archive", "stream"] as const)(
+    "with nothing injected, wipes a fenced node's real venue, re-migrates it and logs the acknowledged loss (restore source: %s)",
+    async (source) => {
+      const stateDir = await mkdtemp(join(tmpdir(), "rejoin-defaults-"));
+      const venueDir = join(stateDir, "venue");
       try {
-        expect(await readNodeMembership(reopened.venue)).toBeNull();
-        const persons = await reopened.venue.execute<{ n: number }>(
-          sql`select cast(count(*) as int) as n from sqlite_master where type = 'table' and name = 'persons'`,
+        await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
+        const seeded = await openVenueDatabase(venueDir);
+        await writeNodeMembership(
+          seeded.venue,
+          signedMembershipDoc(3, {
+            signerNodeId: "carrier-node",
+            nodes: [
+              {
+                nodeId: "carrier-node",
+                contactUrl: "https://carrier",
+                standing: "serving-primary",
+              },
+              { nodeId: NODE, contactUrl: "https://this", standing: "sell-only" },
+            ],
+          }),
         );
-        expect(persons.rows[0]!.n).toBe(1);
+        await seeded.close();
+        await writeFile(join(stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=old\n");
+        if (source !== undefined) {
+          await writeFile(join(stateDir, REBUILD_MARKER), JSON.stringify({ version: 1, source }));
+        }
+
+        const out: string[] = [];
+        const code = await runRejoin({
+          argv: ["rejoin", "--accept-loss"],
+          env: { ...base, WAITRON_STATE_DIR: stateDir, WAITRON_VENUE_DIR: venueDir },
+          out: (line) => out.push(line),
+        });
+
+        expect(code).toBe(0);
+        // The logger ends each line with a newline; `out` is line-oriented, so it is trimmed off.
+        expect(out.filter((line) => line.endsWith("\n"))).toEqual([]);
+        expect(out.map((line) => (line.startsWith("{") ? JSON.parse(line) : line))).toEqual([
+          {
+            carrierNodeId: "carrier-node",
+            at: expect.any(String),
+            level: "warn",
+            event: "rejoin.accept_loss",
+          },
+          {
+            carrierNodeId: "carrier-node",
+            at: expect.any(String),
+            level: "info",
+            event: "rejoin.wiped",
+          },
+          `wiped ${venueDir}; next boot is setup mode — re-adopt from carrier-node`,
+        ]);
+        // The wipe took the held chart with it, and the re-migrate rebuilt the schema.
+        const reopened = await openVenueDatabase(venueDir);
+        try {
+          expect(await readNodeMembership(reopened.venue)).toBeNull();
+          await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({
+            code: "ENOENT",
+          });
+          const firstStartEvents: string[] = [];
+          expect(
+            await completeRebuild({
+              stateDir,
+              db: reopened.venue,
+              ring: loadKeyRing({
+                WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+                WAITRON_CREDENTIALS_KEY_VERSION: "1",
+              }),
+              nodeId: NODE,
+              contactUrl: "https://rejoined.example",
+              hostnames: ["rejoined.example"],
+              listIpv4: () => [],
+              now: () => new Date("2026-10-22T10:00:00Z"),
+              log: (_level, event) => firstStartEvents.push(event),
+            }),
+          ).toBe(false);
+          expect(firstStartEvents).toEqual([]);
+          expect(await readNodeMembership(reopened.venue)).toBeNull();
+          await expect(stat(join(stateDir, "tls"))).rejects.toMatchObject({ code: "ENOENT" });
+
+          const persons = await reopened.venue.execute<{ n: number }>(
+            sql`select cast(count(*) as int) as n from sqlite_master where type = 'table' and name = 'persons'`,
+          );
+          expect(persons.rows[0]!.n).toBe(1);
+        } finally {
+          await reopened.close();
+        }
+        await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
       } finally {
-        await reopened.close();
+        await rm(stateDir, { recursive: true, force: true });
       }
-      await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
-    } finally {
-      await rm(stateDir, { recursive: true, force: true });
-    }
-  });
+    },
+  );
 
   it("with the real orchestrator, refuses an unfenced node by code and leaves its venue in place", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "rejoin-defaults-"));
@@ -431,6 +467,8 @@ describe("waitron-rejoin rejoin — default wiring", () => {
     try {
       await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
 
+      const marker = JSON.stringify({ version: 1, source: "archive" });
+      await writeFile(join(stateDir, REBUILD_MARKER), marker);
       const out: string[] = [];
       const code = await runRejoin({
         argv: ["rejoin"],
@@ -440,6 +478,7 @@ describe("waitron-rejoin rejoin — default wiring", () => {
 
       expect(code).toBe(1);
       expect(out).toEqual(["rejoin failed: rejoin.not_fenced"]);
+      expect(await readFile(join(stateDir, REBUILD_MARKER), "utf8")).toBe(marker);
       await expect(stat(join(venueDir, "venue.db"))).resolves.toBeDefined();
     } finally {
       await rm(stateDir, { recursive: true, force: true });

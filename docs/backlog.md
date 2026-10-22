@@ -6084,7 +6084,6 @@ the tree. What remains, largest first:
     [Detail](backlog/replication-cloud.md#a-restored-box-whose-cloud-peer-does-not-answer-during-its-first-start-signs-the-next-term-and-removes-the-marker)
   - The pointer's term is taken without checking its signature, as the supervisor already does, so
     whoever can write the bucket can push a restored box's term up (never down).
-  - A marker left on a fenced box survives `waitron-rejoin`: A836 below.
   - A sell-only local secondary that is not fenced runs the first start and signs the next term.
   - The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the
     restored copy holds.
@@ -6099,13 +6098,6 @@ the tree. What remains, largest first:
   - A mirror that deferred its first start and is then promoted without a restart
     (`promoteMirrorToPrimary`) keeps the bucket copy held, reading off with the reason
     `first_start_pending` and raising no alert, until the box next starts. From reading, not a run.
-
-- **A836. `waitron-rejoin` clears a restore marker left on a fenced box (owner, 2026-10-17).**
-  Today the rejoin wipes the database and removes only `trading.env` from the state folder
-  (`apps/server/src/rejoin-command.ts`), so the restored first start runs whenever that box next
-  starts trading unfenced and not as a mirror. Make the rejoin clear the marker too. Done when a
-  test shows a rejoined box does not run the restored first start. Left open by SQLite slice 2
-  Task 9a (#630).
 
 - **If a later slice moves `local` tables into `node.db`** (slice 2's design reserved it for slice
   5), that slice decides again how the drain crosses the two files: SQLite refuses a trigger body
