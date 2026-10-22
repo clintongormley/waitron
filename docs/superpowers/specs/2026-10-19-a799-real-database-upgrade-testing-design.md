@@ -1,3 +1,24 @@
+## 2026-10-22 current approval: complete design accepted for planning only
+
+You approved the complete A799 design for preparing its implementation plan on
+22 October 2026 at approximately 17:25. The owner answer, “Yes to both”, was
+relayed by the supervising watcher to Lane F's questions for A799 and A951.
+A–F remain agreed within their precise scopes.
+
+The [implementation plan](../plans/2026-10-22-a799-real-upgrade-testing.md)
+is the next review artifact. The complete plan still needs your approval before
+any separately authorised build. Publishing this documentation grants no authority
+to implement, capture a venue, run an image, migrate, reset A760's venues, upload a
+bundle, change fiscal code or enable F1. The required qualifying capture, issued
+F1 preservation and distinct pending-migration upgrade remain unproved.
+
+This approval record takes precedence over the unanswered complete-design
+question below. Every earlier byte is retained as history; historical pending
+questions and alternatives are not reopened. No runtime result or private-download
+qualification is added by this documentation.
+
+---
+
 ## 2026-10-22 CURRENT precedence addendum: F answered; complete design for planning review
 
 You need an upgrade check that keeps yesterday's records exact without silently dropping

@@ -590,6 +590,19 @@ moves the database into place, so a full disk at that move leaves the old databa
 active identity file; found by the finish-branch review's run-it seat with an injected ENOSPC,
 and it predates A538-5 too (`placeValidated`, `setAsideExistingIdentity`).
 
+## 2026-10-22 current A799 approval: design agreed for plan preparation
+
+**A799 planning milestone, 22 October 2026:** you approved the complete design
+for preparing the [implementation plan](../superpowers/plans/2026-10-22-a799-real-upgrade-testing.md)
+only (owner answer relayed at approximately 17:25). The plan is a separate approval
+artifact. Build, historical capture, image execution, migration, A760 reset, upload
+and F1 enablement remain outside that planning authority. Keep A799 open until the
+plan's preservation, issued-F1 and real pending-migration checks have run. The dated
+proposal below remains historical.
+
+This addendum takes precedence over the earlier A799 approval questions below.
+Earlier content is retained unchanged as history.
+
 ## 2026-10-22 CURRENT A799 addendum: F answered; complete design for planning review
 
 This addendum takes precedence over the previous CURRENT A799 addendum and historical
