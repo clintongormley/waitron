@@ -7215,18 +7215,17 @@ _Formerly entries spread across the old sections._
 
 - **A664 — archive or delete a venue's old data once it no longer has to be kept.** Revised
   proposal adopted for specialist review (owner, 2026-10-17); relevant adviser agreement,
-  build and verification remain open. You will send Q48; six years remains the discussion
-  baseline. [Detail and audit](backlog/data-protection.md#a664--archive-or-delete-a-venues-old-data-once-it-no-longer-has-to-be-kept)
+  build and verification remain open.
+  [Detail and audit](backlog/data-protection.md#a664--archive-or-delete-a-venues-old-data-once-it-no-longer-has-to-be-kept)
 
 - **libvips is LGPL-3.0-or-later** and ships in the box image with its notices and a written
   source offer in `/app/third-party/` (`deploy/third-party/`). The legal advisor is asked to
-  confirm it (`docs/compliance/action-plan.md`, 2026-09-23). Left open by photos shrunk
-  on upload (#543).
+  confirm it (`docs/compliance/action-plan.md`, 2026-09-23).
+  [Detail](backlog/data-protection.md#libvips-is-lgpl-30-or-later)
 
 - **cairo, built into that libvips, is listed under the Mozilla Public License, and `/app/third-party/`
-  carries neither its licence text nor a source offer for it** — found by A775 (#1760, 2026-10-16).
-  The legal advisor is asked (`docs/compliance/action-plan.md`, 2026-10-16). **Next action:** add
-  the licence text and source notice the answer calls for.
+  carries neither its licence text nor a source offer for it**.
+  **Next action:** add the licence text and source notice the answer calls for.
   [Detail](backlog/data-protection.md#cairo-built-into-that-libvips-is-listed-under-the-mozilla-public-license-and-appthird-party-carries-neither-its-licence-text-nor-a-source-offer-for-it)
 
 ### Later and parked

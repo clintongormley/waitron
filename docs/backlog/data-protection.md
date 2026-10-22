@@ -12,8 +12,6 @@ compliance”. This file holds their full text.
   [unchanged primary-source register](../compliance/research/2026-10-16-a664-retention.md),
   [historical inventory with dated current delta](../superpowers/specs/2026-10-16-a664-retention-table-inventory.md)
   and [complete current field audit](../superpowers/specs/2026-10-16-a664-personal-data-audit.md).
-  The original 208-table count describes source `1b93d2b93`, not today’s schema. The dated revision
-  enumerates 211 application tables and 1,654 columns, including three A669 allergy tables.
   This is static schema review, not runtime inspection or proof of actual data prevalence.
 
   **Owner-adopted proposal for specialist review:** keep live undeleted business/evidence on
@@ -39,10 +37,17 @@ compliance”. This file holds their full text.
   proposals subject to specialist agreement. The [dated Q48 revision](../compliance/asesor-questions.md#q48-a664-retention-and-evidence-process-added-2026-10-16)
   supersedes the initial short live-allergy expiry premise and separates fiscal, labour and privacy
   decisions. You will send Q48; no enquiry was sent by this campaign. **All product code, including
-  reporting, waits for relevant G1–G3 design agreement; G4/G5 remain in force.** No implementation,
-  product test, deletion or migration ran. The existing finished print-job month choice remains
-  subject to audit/replay dependencies. A664 stays open for adviser agreement, build and verification;
-  the wider privacy programme remains open under “The advisor gap”.
+  reporting, waits for relevant G1–G3 design agreement; G4/G5 remain in force.** The existing
+  finished print-job month choice remains subject to audit/replay dependencies. A664 stays open
+  for adviser agreement, build and verification; the wider privacy programme remains open under
+  “The advisor gap”.
+
+## libvips is LGPL-3.0-or-later
+
+- **libvips is LGPL-3.0-or-later** and ships in the box image with its notices and a written
+  source offer in `/app/third-party/` (`deploy/third-party/`). The legal advisor is asked to
+  confirm it (`docs/compliance/action-plan.md`, 2026-09-23). Left open by photos shrunk
+  on upload (#543).
 
 ## cairo, built into that libvips, is listed under the Mozilla Public License, and `/app/third-party/` carries neither its licence text nor a source offer for it
 
@@ -53,8 +58,7 @@ compliance”. This file holds their full text.
   (`deploy/Dockerfile`). cairo's own `COPYING` offers LGPL 2.1 or MPL 1.1. `deploy/third-party/` covers
   only the LGPL-3.0 libraries: it holds neither the MPL 1.1 nor the LGPL 2.1 text (the Debian base
   image's `/usr/share/common-licenses/` has both, unreferenced), and its source offer does not name
-  cairo. The gap predates this bump: 1.3.3 already listed cairo under the MPL, and
-  `deploy/third-party/README.md` has never mentioned the MPL (`git log -S'MPL'` finds nothing).
+  cairo.
   The legal advisor is asked (`docs/compliance/action-plan.md`, 2026-10-16). **Next action:** add
   the licence text and source notice the answer calls for.
 
