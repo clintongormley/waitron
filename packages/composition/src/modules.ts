@@ -39,6 +39,7 @@ import {
   assertFiscalRestoreCommitted,
   FISCAL_SLOT,
   FISCAL_VOCABULARY,
+  FISCAL_STAFF_NOTICES,
 } from "@waitron/fiscal-verifactu";
 import {
   BOOKINGS_CLASSIFICATION,
@@ -300,6 +301,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       assertRestoreCommitted: assertFiscalRestoreCommitted,
     },
     alerts: FISCAL_ALERTS,
+    staffNotices: FISCAL_STAFF_NOTICES,
     configurationTransfer: { kind: "none" },
   },
   {
