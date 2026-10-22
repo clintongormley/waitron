@@ -365,7 +365,7 @@ it("offers Void… on a paid bill's unserved slice only", async () => {
     return { currentOrders: orders, bills: [bill("settled")], draftStore: store };
   };
   const served = await openLine("served", paid());
-  if (q(served, "[data-sent-line-dialog] wt-row-actions") !== null) await openMore(served);
+  expect(q(served, "[data-sent-line-dialog] wt-row-actions")).toBeNull();
   expect(q(served, "[data-sent-line-dialog]").hasAttribute("open")).toBe(true);
   expect(q(served, "[data-sent-line-void]")).toBeNull();
   cleanupWidgets();
@@ -382,6 +382,21 @@ it("offers Void… on a paid bill's unserved slice only", async () => {
   await userEvent.click(q(el, "[data-sent-line-void]"));
   expect(cancellations.map((event) => event.detail)).toEqual([{ lineId: "l-croq" }]);
 });
+
+it.each(["row", "bills"] as const)(
+  "offers no Void… on a served dish when only the %s read says the bill is paid",
+  async (source) => {
+    const orders = structuredClone(current());
+    if (source === "row") orders.groups[0]!.rows[0]!.billStatus = "settled";
+    const el = await openLine("served", {
+      currentOrders: orders,
+      bills: [bill(source === "bills" ? "settled" : "open")],
+    });
+    expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(true);
+    expect(q(el, "[data-sent-line-dialog] wt-row-actions")).toBeNull();
+    expect(q(el, "[data-sent-line-void]")).toBeNull();
+  },
+);
 
 it.each(["owner", "loading", "sending", "abandoned", "row-abandoned", "cancelled"] as const)(
   "Void is absent for %s, without hiding the recorded information",
