@@ -1,3 +1,31 @@
+# 2026-10-22: routing design approved for planning; plan awaiting agreement
+
+The owner approved the complete consolidated **A–M / Q1–Q6 routing design, including its
+builder calls**, for implementation planning at about 12:00 on 2026-10-22. Authority: Lane F's
+`questions.md`, “OWNER ANSWER — A790: the complete document/printer routing design is
+APPROVED for implementation planning”. That answer supersedes the design-approval question
+and unapproved-design statements in the preserved text below within this exact scope.
+
+Read the [implementation plan](../plans/2026-10-22-a790-document-printer-routing.md) for the
+proposed storage, request recovery, selection-save contract, task boundaries and checks.
+Publication records the plan for review. It grants no build or migration authority; the complete
+plan needs agreement before execution. Source readings and planned checks are not runtime,
+physical-paper or legal evidence.
+
+A739 remains separate. Its [current owner-directed flow](2026-10-22-a739-owner-payment-and-receipt-flow.md)
+asks Receipt / Full invoice / None immediately after settlement or a settling edit. Only card
+has the pre-payment slip checkbox; the owner chose **no cash slips** at about 11:55. The
+reader-paper display, pending recovery proposal and complete integration agreement remain
+with A739. Historical A/B timing and pre-payment final-document staging below do not choose
+the current integration. A790 routing of an existing full invoice changes no recorded invoice
+identity; replacing an issued simplified invoice remains the separate A556 fiscal dependency.
+Public F1/F3 stays gated. No payment, drawer, fiscal writer or printer operation ran in this
+planning milestone.
+
+Every byte of the previous design follows unchanged. The earlier boards remain historical
+static design aids under this precedence; they are not newly rendered product evidence.
+
+---
 # 2026-10-22 addendum: A739's owner-directed final screen
 
 The owner's ~09:05 [A739 flow](2026-10-22-a739-owner-payment-and-receipt-flow.md) answers

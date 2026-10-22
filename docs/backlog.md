@@ -3725,23 +3725,20 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
     sends the same request.
 
 - **A790. Choose a document and its permitted printer.**
-  [Current design](superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
-  and [M boards](backlog/mockups/a790-document-and-printer-choice/revision-m-agreed/README.md).
-  **A–M agreed only in their precise scopes; full routing-design approval for planning is next.**
-  **M, owner 2026-10-19 ~21:20: UPDATE EQUIPMENT TOO.** Phone/till Invoice selection saves
-  the same Equipment Invoice setting when selected, confirmed on successful save rather than
-  print acceptance. Future Invoice forms use it while eligible; Receipt and dashboard memory
-  stay separate. The design proposes save identity/revisions, late-answer recovery and management
-  printing without device pickup for review. A796 already covers device Receipt takeover.
-  Preserve fixed print intent, sale-location/permission checks, original/copy and the common F1
-  guard; public F1 stays closed. No product code or migration built.
-  [A739 owner-flow revision](superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
-  now answers timing A and, at ~11:55, no cash slips; the card-checkbox reader-paper display,
-  no-answer policy and integration remain scoped there. Its postsettlement Print/Email form
-  preserves A790's answered settings.
-  Next: owner approves the complete routing description and builder calls, or requests changes;
-  then write the concrete plan. Dependent build waits the accepted A739 contract.
-
+  The owner approved the complete A–M / Q1–Q6 routing design and its builder calls for
+  implementation planning on 2026-10-22 at about 12:00. The
+  [implementation plan](superpowers/plans/2026-10-22-a790-document-printer-routing.md) is
+  published for agreement; implementation remains open. It specifies proposed durable print
+  and Invoice-setting request identities, local storage, retention, migration boundaries and
+  independently checked tasks. No source, test, schema or runtime change is built.
+  Preserve the same Equipment Invoice setting on successful selection, separate Receipt
+  behavior and dashboard memory, fixed print intent, sale-location/permission checks and the
+  shared original/copy guard. Public F1/F3 remains closed. Dependent build waits for the
+  accepted A739 contract and released overlapping paths. A739's current flow is after
+  settlement with no cash slips; its remaining decisions stay separate.
+  [Detail](backlog/printers.md#a790-document-and-printer-routing-plan) ·
+  [Design](superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md) ·
+  [Historical M boards](backlog/mockups/a790-document-and-printer-choice/revision-m-agreed/README.md).
 - **Loose ends left by A661 (#1745).**
   - The till's payment-time options and a staged A4 choice resolve the device's invoice printer
     without the sale's location. Both call `resolveInvoicePrinter` with no `at`

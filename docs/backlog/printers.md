@@ -3,6 +3,28 @@
 The open entries are listed in [the backlog](../backlog.md), under "Printers, the print agent and receipts". This file holds
 their full text.
 
+## A790: document and printer routing plan
+
+The complete A–M / Q1–Q6 routing design, including its builder calls, was approved for
+implementation planning on 2026-10-22 at about 12:00. The
+[implementation plan](../superpowers/plans/2026-10-22-a790-document-printer-routing.md)
+now proposes the concrete persistence and recovery contract and divides the work into tasks.
+Review and agree the complete plan before execution. This milestone builds no product behavior
+or migration and proves no runtime, legal or physical-paper outcome.
+
+Keep device Invoice selection in the same Equipment Invoice setting, Receipt holding under
+A796 and the dashboard's separate browser memory. Every accepted print keeps its fixed intent;
+original/copy and active-delivery checks cover both renderings of the recorded full invoice.
+The print queue's separate Resend policy remains an open owner decision under A661, outside
+A790. This plan does not claim profile-wide enforcement on that recovery route.
+
+The current A739 flow asks for the final document after settlement or a settling edit; only
+card offers a slip checkbox and cash never prints a slip. Its remaining reader-paper display,
+pending recovery and complete integration agreement stay with A739. Execute dependent tasks
+only after that contract and the overlapping paths are released. Full invoice replacement
+for an already-issued simplified sale remains A556's separate fiscal work, with public F1/F3
+gated. The [design's dated precedence](../superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
+preserves all earlier proposals and static boards as history.
 ## Show a failed automatic invoice copy to staff
 
 Found in A366 slice 7 Part A's two run-it reviews. The plan keeps optional document failures
