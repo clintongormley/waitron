@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   billPayments,
@@ -21,7 +21,12 @@ import {
 } from "@waitron/db";
 import { adjustments } from "@waitron/adjustments";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
-import { listDepartments, setProfileServiceAccess } from "@waitron/venue-service";
+import {
+  deviceProfileServiceAccess,
+  deviceProfileZones,
+  listDepartments,
+  setProfileServiceAccess,
+} from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
@@ -38,6 +43,7 @@ import {
   type ExpoOrder,
 } from "./working-order.js";
 import { partyFamily, readFamilyBills, setPartyGuests } from "./parties.js";
+import { printedLines } from "./testing/decode-ticket.js";
 import { createZone } from "./testing/service-zone.js";
 import { combineParties } from "./testing/table-action-fixture.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
@@ -208,6 +214,21 @@ async function snapshot(t: Table) {
   };
 }
 
+/** Print job ids are random, so the jobs since a point are told by rowid. */
+function lastJobRow() {
+  return (
+    venue.db.all<{ row: number | null }>(sql`select max(rowid) as row from print_jobs`)[0]!.row ?? 0
+  );
+}
+
+function jobsAfter(row: number) {
+  return venue.db
+    .all<{ payload: Uint8Array }>(
+      sql`select payload from print_jobs where rowid > ${row} order by rowid`,
+    )
+    .map((job) => printedLines(job.payload));
+}
+
 async function billRow(billId: string) {
   const [bill] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
   return bill!;
@@ -255,10 +276,18 @@ describe("finishing a table by sending the food still to come to the counter", (
 
   it("fires a held dish on the way", async () => {
     const t = await table([{ name: "Burger", quantity: "2" }], "hold", [], ["24.00"]);
+    await venue.db
+      .update(orderGroups)
+      .set({ holdPrintedAt: new Date().toISOString() })
+      .where(eq(orderGroups.partyId, t.partyId));
     const body = await collect(t.partyId, await bodyFor(t));
+    const lastJob = lastJobRow();
 
     expect(await post(t.partyId, body)).toEqual({ status: 200, body: { state: "closed" } });
 
+    const fired = jobsAfter(lastJob).filter((lines) => lines[0] === "*** FIRE ***");
+    expect(fired).toHaveLength(1);
+    expect(fired[0]!.join("\n")).toContain("2.000 x BURG");
     const after = await snapshot(t);
     expect(after.bills[0]!.partyId).toBeNull();
     expect(after.tickets.length).toBeGreaterThan(0);
@@ -282,6 +311,11 @@ describe("finishing a table by sending the food still to come to the counter", (
 
     expect((await billRow(t.billIds[0]!)).partyId).toBeNull();
     expect((await billRow(t.billIds[1]!)).partyId).toBe(t.partyId);
+    const waiting = (await listCounterWaiting({ db: venue.db }, venue.cfg)).map(
+      (order) => order.id,
+    );
+    expect(waiting).toContain(t.billIds[0]);
+    expect(waiting).not.toContain(t.billIds[1]);
   });
 
   it("moves a merged-in party's paid bill", async () => {
@@ -325,6 +359,31 @@ describe("finishing a table by sending the food still to come to the counter", (
 
     expect(answer.status).toBe(409);
     expect(answer.body).toMatchObject({ error: { code: "party.unserved_dishes" } });
+    const dishes = (answer.body as { error: { params: { dishes: { billId: string }[] } } }).error
+      .params.dishes;
+    expect(dishes.map((dish) => dish.billId)).toEqual([t.billIds[0]]);
+    expect(await snapshot(t)).toEqual(before);
+  });
+
+  it("refuses a collection when no dish is left to serve, listing none", async () => {
+    const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
+    await serveAll(t, t.billIds[0]!);
+    const body = {
+      ...(await bodyFor(t)),
+      collect: {
+        bills: [
+          { billId: t.billIds[0]!, expectedBillRevision: (await billRow(t.billIds[0]!)).revision },
+        ],
+      },
+    };
+    const before = await snapshot(t);
+
+    const answer = await post(t.partyId, body);
+
+    expect(answer.status).toBe(409);
+    expect(answer.body).toMatchObject({
+      error: { code: "party.unserved_dishes", params: { dishes: [] } },
+    });
     expect(await snapshot(t)).toEqual(before);
   });
 
@@ -491,26 +550,47 @@ describe("finishing a table by sending the food still to come to the counter", (
   });
 });
 
-/** Runs `fn` while the till's profile may work only in `zones` (or anywhere, for null). */
+/**
+ * Runs `fn` while the till's profile may work only in `zones` (or anywhere, for null), then puts
+ * back the access it had before.
+ */
 async function withZones<T>(zones: string[] | null, fn: () => Promise<T>): Promise<T> {
   const [device] = await venue.db.select().from(devices).where(eq(devices.id, venue.deviceId));
   const profileId = device!.deviceProfileId;
   const [department] = await listDepartments(venue.db, venue.cfg);
-  const open = { departmentId: null, allowedZoneIds: null, startingZoneId: null };
+  const [access] = await venue.db
+    .select()
+    .from(deviceProfileServiceAccess)
+    .where(eq(deviceProfileServiceAccess.deviceProfileId, profileId));
+  const prior =
+    access === undefined
+      ? { departmentId: null, allowedZoneIds: null, startingZoneId: null }
+      : {
+          departmentId: access.departmentId,
+          allowedZoneIds: access.everyZone
+            ? null
+            : (
+                await venue.db
+                  .select({ zoneId: deviceProfileZones.zoneId })
+                  .from(deviceProfileZones)
+                  .where(eq(deviceProfileZones.deviceProfileId, profileId))
+              ).map((row) => row.zoneId),
+          startingZoneId: access.startingZoneId,
+        };
   await inTx(venue, (tx) =>
     setProfileServiceAccess(
       tx,
       venue.cfg,
       profileId,
       zones === null
-        ? open
+        ? { departmentId: null, allowedZoneIds: null, startingZoneId: null }
         : { departmentId: department!.id, allowedZoneIds: zones, startingZoneId: zones[0]! },
     ),
   );
   try {
     return await fn();
   } finally {
-    await inTx(venue, (tx) => setProfileServiceAccess(tx, venue.cfg, profileId, open));
+    await inTx(venue, (tx) => setProfileServiceAccess(tx, venue.cfg, profileId, prior));
   }
 }
 
@@ -581,7 +661,7 @@ async function get(path: string) {
 }
 
 /** Where a waiting order shows: the pass, its monitor, the station, Waiting orders and Find a bill. */
-async function whereItShows(billId: string, itemId: string) {
+async function whereItShows(billId: string, itemId: string, label: string) {
   const boards = await inTx(venue, async (tx) => ({
     screen: passItems(
       (await listPassScreen(tx, venue.cfg, venue.cfg.origin.deviceId, EVERY)).orders,
@@ -595,7 +675,8 @@ async function whereItShows(billId: string, itemId: string) {
   }));
   const waiting = await get("/api/orders/counter-waiting");
   expect(waiting.status).toBe(200);
-  const bills = await get("/api/bills?state=paid-not-handed-over");
+  // Searched by its label, so other tests' bills in this shared database cannot push it off page 1.
+  const bills = await get(`/api/bills?state=paid-not-handed-over&q=${encodeURIComponent(label)}`);
   expect(bills.status).toBe(200);
   return {
     ...boards,
@@ -624,7 +705,7 @@ describe("a bill sent to the counter waits there until handed over", () => {
     const body = await collect(t.partyId, await bodyFor(t));
     expect(await post(t.partyId, body)).toEqual({ status: 200, body: { state: "closed" } });
 
-    const shown = await whereItShows(billId, item!.id);
+    const shown = await whereItShows(billId, item!.id, label!);
     expect(shown.screen).toHaveLength(1);
     expect(shown.monitor).toHaveLength(1);
     expect(shown.station).toHaveLength(1);
@@ -647,7 +728,7 @@ describe("a bill sent to the counter waits there until handed over", () => {
     });
     expect(handOver.status, await handOver.clone().text()).toBe(200);
 
-    expect(await whereItShows(billId, item!.id)).toEqual({
+    expect(await whereItShows(billId, item!.id, label!)).toEqual({
       screen: [],
       monitor: [],
       station: [],
@@ -708,7 +789,7 @@ describe("sending a paid bill to the counter changes nothing filed", () => {
   });
 });
 
-/** Pays `billId` as a full invoice, as the receipt guest tests file one: no till route does. */
+/** Pays `billId` as a full invoice, as the receipt guest tests file one. */
 async function payAsFullInvoice(billId: string, cents: number) {
   await inTx(venue, async (tx) => {
     await tx.update(tenants).set({ taxpayerDomicile: "Carrer 1, 08001 Barcelona" });

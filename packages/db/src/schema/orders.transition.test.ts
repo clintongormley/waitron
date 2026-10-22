@@ -750,7 +750,9 @@ describe("working_orders state machine (enforce_transition)", () => {
     const branch = text.slice(start, next === -1 ? undefined : next);
     expect(columns).toContain("revision");
     for (const column of columns.filter((c) => c !== "party_id")) {
-      expect(branch, column).toMatch(new RegExp(`new\\.("?)${column}\\1 IS old\\.\\1${column}\\1`));
+      expect(branch, column).toMatch(
+        new RegExp(`new\\.("?)${column}\\1 IS old\\.\\1${column}\\1(?!\\w)`),
+      );
     }
   });
 

@@ -640,7 +640,7 @@ it("shows the collection as the request in flight, not the main action", async (
   el.busy = true;
   await el.updateComplete;
   expect(collectButton(el)!.loading).toBe(true);
-  expect(button(el).loading).toBe(false);
+  expect(state(button(el))).toEqual({ loading: false, variant: "secondary", disabled: true });
 });
 it("shows the main action as the request in flight after a cancel", async () => {
   const el = await mount({ defaultReasonId: "house" });

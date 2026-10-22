@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  orderDraftRecalledLines,
+  orderDrafts,
   orderGroupEvents,
   orderGroups,
   parties,
@@ -194,6 +196,36 @@ describe("releaseHeldWorkOf", () => {
 
     expect((await topLines([p.billId])).map((line) => line.groupId)).toEqual([null]);
     expect((await groupsOf(p.partyId)).map((group) => group.state)).toEqual(["removed"]);
+  });
+
+  it("keeps a held group, and its line on another bill, that still holds a recalled dish", async () => {
+    const p = await billWith(venue, [{ name: "Burger", quantity: "2" }], { release: "hold" });
+    const split = await inTx(venue, async (tx) =>
+      splitBill(tx, venue.cfg, p.billId, [{ lineNo: 1, quantity: "1" }], {
+        operatorId: venue.staffId,
+        partyId: p.partyId,
+        expectedPartyRevision: await partyRevision(p.partyId),
+        expectedEdit: await readBillEditState(tx, p.billId),
+      }),
+    );
+    await pay(p.billId, "12.00");
+    await cancelKeepingCharge(p.partyId, p.billId);
+    const [recalled] = await topLines([split.billId]);
+    const [draft] = await venue.db
+      .insert(orderDrafts)
+      .values({ partyId: p.partyId, billId: split.billId, ownerId: venue.staffId, revision: 1 })
+      .returning();
+    await venue.db
+      .insert(orderDraftRecalledLines)
+      .values({ draftId: draft!.id, sourceLineId: recalled!.id, position: 1 });
+
+    await release(p.partyId, [p.billId]);
+
+    expect((await topLines([p.billId])).map((line) => line.groupId)).toEqual([null]);
+    expect((await topLines([split.billId])).map((line) => line.groupId)).toEqual([
+      recalled!.groupId,
+    ]);
+    expect((await groupsOf(p.partyId)).map((group) => group.state)).toEqual(["held"]);
   });
 
   it("leaves a fired group alone", async () => {
@@ -436,6 +468,26 @@ describe("moveSettledBillToCounter", () => {
     expect(text).toContain("1.000 x BURG");
     expect(text).not.toContain("CHULETA");
     expect(text).not.toContain("ENSAL");
+    expect(await noticesOn(p.billId)).toEqual([
+      { stationId: venue.stationId, kind: "moved", lineName: "BURG", movedTo: null },
+    ]);
+  });
+
+  it("tells the kitchen about a partly served dish", async () => {
+    const p = await billWith(venue, [{ name: "Burger", quantity: "2" }], { release: "fire" });
+    await venue.db
+      .update(workingOrderLines)
+      .set({ servedQuantity: 1000 })
+      .where(eq(workingOrderLines.id, await lineIdOf(venue, p.billId, 1)));
+    await pay(p.billId, "24.00");
+    const before = lastJobRow();
+
+    await toCounter(p);
+
+    const jobs = jobsByPrinterAfter(before);
+    expect(jobs.map((job) => job.printerId)).toEqual([venue.printerId]);
+    expect(jobs[0]!.lines[0]).toBe("*** MOVIDO ***");
+    expect(jobs[0]!.lines.join("\n")).toContain("2.000 x BURG");
     expect(await noticesOn(p.billId)).toEqual([
       { stationId: venue.stationId, kind: "moved", lineName: "BURG", movedTo: null },
     ]);

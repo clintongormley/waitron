@@ -685,7 +685,10 @@ export async function moveGroupsToParty(
   }
 }
 
-/** A group's dishes with a quantity left uncancelled, in the order {@link releaseGroup} fires them. */
+/**
+ * A group's dishes with a quantity left uncancelled, less any recalled dish, in the order
+ * {@link releaseGroup} fires them.
+ */
 async function activeGroupLines(tx: Transaction, groupId: string) {
   const lines = await tx
     .select({
@@ -748,7 +751,8 @@ export async function releaseHeldWorkOf(
       : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() };
   const routing = routingOnce(tx, cfg, new Date());
   for (const group of held) {
-    if ((await activeGroupLines(tx, group.id)).length > 0) {
+    const active = await activeGroupLines(tx, group.id);
+    if (active.length > 0) {
       await releaseGroup(
         tx,
         cfg,
@@ -758,13 +762,21 @@ export async function releaseHeldWorkOf(
         {},
         routing,
         recorded,
+        active,
       );
       continue;
     }
+    // Only these bills' lines: a recalled dish on another bill keeps the group held to rejoin it.
     const lines = await tx
       .select({ id: workingOrderLines.id })
       .from(workingOrderLines)
-      .where(and(eq(workingOrderLines.groupId, group.id), isNull(workingOrderLines.parentLineId)));
+      .where(
+        and(
+          eq(workingOrderLines.groupId, group.id),
+          isNull(workingOrderLines.parentLineId),
+          inArray(workingOrderLines.workingOrderId, [...billIds]),
+        ),
+      );
     await clearGroups(
       tx,
       lines.map((line) => line.id),
@@ -787,8 +799,9 @@ async function releaseGroup(
   detail: Record<string, unknown>,
   routing = routingOnce(tx, cfg, new Date()),
   attendance?: { recorder: AttendanceRecorder; at: string },
+  active?: Awaited<ReturnType<typeof activeGroupLines>>,
 ): Promise<void> {
-  const active = await activeGroupLines(tx, groupId);
+  active ??= await activeGroupLines(tx, groupId);
   if (active.length === 0) throw new AppError("management.request_invalid", { field: "groupId" });
   await assertPartyAllergyAnswered(tx, partyId);
   const byOrder = new Map<string, string[]>();
