@@ -431,7 +431,6 @@ describe("a PIN-approved linked refund cannot exceed its cancels", () => {
     const paid = await pay(b, tipped ? "12.00" : "37.00");
     if (tipped)
       await inTx(venue, async (tx) => {
-        // A till takes a tip only on a connected card; a tip on this cash tender stands in for it.
         const triggers = tx.all<{ name: string; sql: string }>(
           sql`select name, sql from sqlite_master where type = 'trigger' and tbl_name = 'tenders'`,
         );

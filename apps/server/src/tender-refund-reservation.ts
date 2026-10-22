@@ -217,7 +217,6 @@ export async function reserveTenderRefund(
     cancellationIds === undefined
       ? undefined
       : await allocateToCancels(tx, saleId, cancellationIds, appliedAmount);
-  // A PIN given for the cancels' refund buys their value only; the refund permission covers any.
   if (
     allocation !== undefined &&
     actor.viaOverride === true &&
