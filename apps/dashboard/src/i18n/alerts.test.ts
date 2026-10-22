@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { alertMessage, hasAlertMessage } from "./alerts.js";
 import { ALERT_MESSAGES, ALERT_WORDS } from "./alert-messages.js";
+import { t } from "./t.js";
 
 it("registers the dashboard's alert wording on import", () => {
   expect(hasAlertMessage("payment.offline_forward_declined")).toBe(true);
@@ -271,7 +272,7 @@ it("names only registered word lists in its word-list slots", () => {
 
 it("words the box's disk alerts, writing the free space in each language", () => {
   expect(alertMessage("storage.space_low", { freeBytes: 1_800_000_000 }, "en")).toBe(
-    "The box has 1.8 GB of disk space left. Everything still works, but if it fills up nothing can be saved.",
+    "The box has 1.8 GB of disk space left. Everything still works, but if it fills up nothing can be saved. See what is using it on the Box status page.",
   );
   const es = alertMessage("storage.space_low", { freeBytes: 1_800_000_000 }, "es");
   expect(es).toBe(ALERT_MESSAGES["storage.space_low"]!.es.replace("{freeBytes:bytes}", "1,8 GB"));
@@ -284,11 +285,13 @@ it("words the box's disk alerts, writing the free space in each language", () =>
   expect(hasAlertMessage("storage.disk_full")).toBe(true);
 });
 
-it("keeps the disk warning to two sentences while there is no Box status page", () => {
+it("points the disk warning at the Box status page, in three sentences, in both languages", () => {
   const { en, es } = ALERT_MESSAGES["storage.space_low"]!;
   for (const text of [en, es]) {
-    expect(text.split(/(?<=\.)\s+/).length).toBe(2);
+    expect(text.split(/(?<=\.)\s+/).length).toBe(3);
   }
+  expect(en.endsWith("See what is using it on the Box status page.")).toBe(true);
+  expect(es).toContain(t("nav.box_status", "es-ES"));
 });
 
 describe("a backup that stopped before reaching any destination", () => {
