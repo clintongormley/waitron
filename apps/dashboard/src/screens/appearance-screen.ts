@@ -125,8 +125,7 @@ export class AppearanceScreen extends LitElement {
                 .api=${this.api}
                 .list=${this.list}
                 .canEdit=${this.canEdit}
-                @look-saved=${(event: CustomEvent<ThemeView>) =>
-                  this.#changed({ kind: "saved", theme: event.detail })}
+                @themes-changed=${(event: CustomEvent<ThemesChanged>) => this.#changed(event.detail)}
               ></dashboard-look-card>
               <dashboard-themes-card
                 .api=${this.api}

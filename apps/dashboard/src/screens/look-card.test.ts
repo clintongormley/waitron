@@ -62,7 +62,7 @@ afterEach(() => {
 });
 
 describe("the read-only Look card", () => {
-  it("shows Waitron's theme in use, with no Edit even to an editor", async () => {
+  it("shows Waitron's theme in use, with Edit for an editor", async () => {
     setLocale("en-GB");
     const el = await mount({ themes: [lucia], inUse: null }, true);
     const card = q(el, "section.settings-card")!;
@@ -74,8 +74,12 @@ describe("the read-only Look card", () => {
     expect(row(el, "corners")).toBe("Standard");
     expect(row(el, "hand")).toBe("None");
     expect(text(q(el, "[data-test=look-note]"))).toBe(t("appearance.note"));
-    expect(q(el, "[data-test=edit]")).toBeNull();
+    expect(text(q(el, "[data-test=edit]"))).toBe(t("action.edit"));
     expect(q(el, "[data-test=saved-warning]")).toBeNull();
+    cleanupWidgets();
+    const reader = await mount({ themes: [lucia], inUse: null }, false);
+    expect(row(reader, "theme")).toBe("Waitron");
+    expect(q(reader, "[data-test=edit]")).toBeNull();
   });
 
   it("labels the rows in order: theme, brand, background, corners, colours set by hand", async () => {
@@ -287,7 +291,7 @@ describe("editing the Look card in place", () => {
     setLocale("en-GB");
     const { el, saveTheme } = await mountEditing(inUse(lucia));
     const heard = vi.fn();
-    el.addEventListener("look-saved", (event) => heard((event as CustomEvent).detail));
+    el.addEventListener("themes-changed", (event) => heard((event as CustomEvent).detail.theme));
     await chooseSegment(el, "background", "Neutral");
     await userEvent.click(button(el, "save"));
     await expect
@@ -897,7 +901,7 @@ describe("a save answer that arrives after the card was taken out and put back",
         }),
     );
     const heard = vi.fn();
-    opened.el.addEventListener("look-saved", heard);
+    opened.el.addEventListener("themes-changed", heard);
     await chooseSegment(opened.el, "corners", "Square");
     await userEvent.click(button(opened.el, "save"));
     await expect.poll(() => opened.saveTheme.mock.calls.length).toBe(1);

@@ -127,7 +127,11 @@ it("takes a saved theme into the card at once, and a read sent before the save d
   api.liveData.invalidate([{ type: "custom_themes" }]);
   await expect.poll(() => fetchImpl.mock.calls.length).toBe(2);
   card(el)!.dispatchEvent(
-    new CustomEvent("look-saved", { detail: BLUE, bubbles: true, composed: true }),
+    new CustomEvent("themes-changed", {
+      detail: { kind: "saved", theme: BLUE },
+      bubbles: true,
+      composed: true,
+    }),
   );
   await flush(el);
   expect(brand(el)).toBe("Custom · #2a4b8d");

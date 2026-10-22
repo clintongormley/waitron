@@ -50,8 +50,11 @@ import {
 } from "../widgets/look-draft.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
 import "../widgets/hard-to-read-dialog.js";
+import "../widgets/theme-name-dialog.js";
+import type { ThemeNameDialog } from "../widgets/theme-name-dialog.js";
 import "../widgets/theme-preview.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import type { ThemeEdit, ThemesChanged } from "./themes-card.js";
 import {
   brandFixLabel,
   brandFixedText,
@@ -63,6 +66,8 @@ import {
 } from "../widgets/theme-words.js";
 
 const PRIMARY = "--wt-color-primary";
+
+type Editing = { id: string; name: string } | { id: null; from: "in-use" | "new" };
 
 function chip(colour: string): TemplateResult {
   return html`<span class="chip" aria-hidden="true" style="background:${colour}"></span>`;
@@ -205,7 +210,7 @@ export class LookCard extends LitElement {
   @state() private actionError = "";
   @state() private submitting = false;
   @state() private asking = false;
-  #editing?: { id: string; name: string };
+  #editing?: Editing;
   #expected?: LookDraft;
   #derived?: DerivedTheme;
   #derivedFrom?: ThemeChoices;
@@ -240,19 +245,55 @@ export class LookCard extends LitElement {
       this.#derived = deriveTheme(choices);
     }
   }
-  #begin(view: ThemeView): void {
-    this.#editing = { id: view.id, name: view.name };
-    this.#expected = openDraft(view.choices);
+  edit(target: ThemeEdit): void {
+    if ("kind" in target) {
+      this.#begin({ id: null, from: "new" }, null);
+      return;
+    }
+    const view = this.list?.themes.find((theme) => theme.id === target.id);
+    if (view) this.#begin({ id: view.id, name: view.name }, view.choices);
+  }
+  #begin(editing: Editing, choices: ThemeChoices | null): void {
+    this.#nameDialog()?.dismiss();
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#editing = editing;
+    this.#expected = openDraft(choices);
     this.draft = this.#expected;
     this.submitted = false;
     this.refusedCode = "";
     this.actionError = "";
+    this.asking = false;
     this.#registerDraft();
+    this.#announce(editing.id);
+  }
+  #announce(id: string | null): void {
+    this.dispatchEvent(
+      new CustomEvent<{ id: string | null }>("look-editing", {
+        detail: { id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+  #changed(detail: ThemesChanged): void {
+    this.dispatchEvent(
+      new CustomEvent<ThemesChanged>("themes-changed", { detail, bubbles: true, composed: true }),
+    );
+  }
+  #nameDialog(): ThemeNameDialog | null {
+    return this.shadowRoot?.querySelector("dashboard-theme-name-dialog") ?? null;
+  }
+  /** Whether the editor's theme is the one every screen shows, by the latest read. */
+  #inUse(editing: Editing): boolean {
+    const inUse = this.list?.inUse;
+    return editing.id === null ? editing.from === "in-use" && inUse === null : inUse === editing.id;
   }
   #adopt(): void {
     const editing = this.#editing;
     const expected = this.#expected;
-    if (!this.draft || !editing || !expected || !sameDraft(this.draft, expected)) return;
+    if (!this.draft || !editing || editing.id === null || !expected) return;
+    if (!sameDraft(this.draft, expected)) return;
     const view = this.list?.themes.find((theme) => theme.id === editing.id);
     if (!view) return;
     const next = openDraft(view.choices);
@@ -278,6 +319,8 @@ export class LookCard extends LitElement {
     scope.commit(this.#expected);
   }
   #cancel(): void {
+    const wasEditing = this.#editing !== undefined;
+    this.#nameDialog()?.dismiss();
     this.#scope?.dispose();
     this.#scope = undefined;
     this.draft = undefined;
@@ -287,6 +330,7 @@ export class LookCard extends LitElement {
     this.refusedCode = "";
     this.actionError = "";
     this.asking = false;
+    if (wasEditing) this.#announce(null);
   }
   #requestCancel(): void {
     if (this.submitting) return;
@@ -401,6 +445,10 @@ export class LookCard extends LitElement {
     const editing = this.#editing;
     this.asking = false;
     if (this.submitting || !draft || !editing) return;
+    if (editing.id === null) {
+      this.#askName(draft, editing);
+      return;
+    }
     const generation = this.#generation;
     const scope = this.#scope;
     this.submitting = true;
@@ -408,9 +456,7 @@ export class LookCard extends LitElement {
       const answer = await this.api.saveTheme(editing.id, normaliseChoices(draft.choices));
       if (generation !== this.#generation) return;
       if (this.list?.inUse === editing.id) this.#repaint();
-      this.dispatchEvent(
-        new CustomEvent("look-saved", { detail: answer, bubbles: true, composed: true }),
-      );
+      this.#changed({ kind: "saved", theme: answer });
       if (scope === this.#scope) this.#cancel();
     } catch (error) {
       if (generation !== this.#generation || scope !== this.#scope) return;
@@ -424,6 +470,31 @@ export class LookCard extends LitElement {
     } finally {
       if (generation === this.#generation) this.submitting = false;
     }
+  }
+  #askName(draft: LookDraft, editing: Editing): void {
+    const choices = normaliseChoices(draft.choices);
+    const scope = this.#scope;
+    this.#nameDialog()?.show({
+      kind: "first-save",
+      name: "",
+      inUse: this.#inUse(editing),
+      warningLines: deriveTheme(draft.choices).warnings.map((warning) =>
+        saveDialogLine(warning, draft.choices),
+      ),
+      submit: async ({ name, inUse }) => {
+        const generation = this.#generation;
+        this.submitting = true;
+        try {
+          const created = await this.api.createTheme({ name, theme: choices, inUse });
+          if (generation !== this.#generation) return;
+          if (inUse) this.#repaint();
+          this.#changed({ kind: "created", theme: created, inUse });
+          if (scope === this.#scope) this.#cancel();
+        } finally {
+          if (generation === this.#generation) this.submitting = false;
+        }
+      },
+    });
   }
   async #focusInvalid(): Promise<void> {
     await this.updateComplete;
@@ -446,8 +517,8 @@ export class LookCard extends LitElement {
   }
   #form(draft: LookDraft): TemplateResult {
     const editing = this.#editing!;
-    const inUse = this.list?.inUse === editing.id;
-    const name = this.list?.themes.find((theme) => theme.id === editing.id)?.name ?? editing.name;
+    const inUse = this.#inUse(editing);
+    const name = this.#name(editing);
     const badCode = this.submitted && codeInvalid(draft);
     const codeError = badCode ? t("appearance.bad_code") : this.refusedCode;
     const saveAction = saveActionState(this.#scope);
@@ -548,14 +619,29 @@ export class LookCard extends LitElement {
       ${this.#dialog(draft)}`;
   }
 
+  #name(editing: Editing): string {
+    if (editing.id === null) {
+      return editing.from === "in-use" ? BUILT_IN_THEME_NAME : t("appearance.new_theme");
+    }
+    return this.list?.themes.find((theme) => theme.id === editing.id)?.name ?? editing.name;
+  }
+  #heading(editing: Editing): string {
+    if (this.#inUse(editing)) return t("appearance.look");
+    if (editing.id === null) return t("appearance.new_theme");
+    return fill("appearance.edit_theme_heading", { name: this.#name(editing) });
+  }
+
   override render() {
     const list = this.list;
     if (list === undefined) return nothing;
+    return html`${this.#card(list)}<dashboard-theme-name-dialog></dashboard-theme-name-dialog>`;
+  }
+  #card(list: ThemeList): TemplateResult {
     const draft = this.draft;
     if (draft) {
       return settingsCard({
         id: "look-card",
-        heading: t("appearance.look"),
+        heading: this.#heading(this.#editing!),
         editing: true,
         action: nothing,
         body: this.#form(draft),
@@ -569,12 +655,16 @@ export class LookCard extends LitElement {
       id: "look-card",
       heading: t("appearance.look"),
       editing: false,
-      action:
-        view && this.canEdit
-          ? html`<wt-button data-test="edit" @click=${() => this.#begin(view)}
-              >${t("action.edit")}</wt-button
-            >`
-          : nothing,
+      action: this.canEdit
+        ? html`<wt-button
+            data-test="edit"
+            @click=${() =>
+              view
+                ? this.#begin({ id: view.id, name: view.name }, view.choices)
+                : this.#begin({ id: null, from: "in-use" }, WAITRON_CHOICES)}
+            >${t("action.edit")}</wt-button
+          >`
+        : nothing,
       body: html`${settingsRows([
           {
             label: t("appearance.theme_in_use"),
