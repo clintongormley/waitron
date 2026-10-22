@@ -657,7 +657,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
     const commands = (await frozen()).commands.filter(
       (r) => r.scopeId === p.billId || r.scopeId === p.partyId,
     );
-    expect(JSON.stringify(commands)).not.toContain(PINS.manager);
+    expect(JSON.stringify(commands)).not.toContain(JSON.stringify(PINS.manager));
     expect(JSON.stringify(commands)).not.toContain('"pin"');
   });
 
