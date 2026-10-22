@@ -5995,12 +5995,6 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
-- **Finished-party merge test refuses its bill-edit expectations.** Main CI
-  [39858805414](https://github.com/clintongormley/waitron/actions/runs/39858805414)
-  failed `zone-access.finished-party.test.ts`'s emptied-bill merge case; the focused suite also
-  failed locally. Diagnose the pair's order without weakening its assertions or the parser.
-  [Receipt and next check](backlog/ci.md#finished-party-merge-test-refuses-its-bill-edit-expectations)
-
 - **The UI showcase overflows a phone and inherits black text in its dark panel.** At a
   390 px viewport, the panels in `packages/ui/index.html` measured 572 px wide before and after
   A974's wording cleanup; unstyled dark-panel text resolved to black on `rgb(16, 18, 22)`.
