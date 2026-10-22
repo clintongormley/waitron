@@ -154,7 +154,7 @@ afterEach(() => {
   setLocale("en");
 });
 
-describe("till-table-order-screen: giving away and discounting a dish", () => {
+describe("till-table-order-screen: comping a dish", () => {
   it("offers one Comp on each sent dish and names its priced extras inside the combined target", async () => {
     const el = await mountScreen();
     const asked = capture(el);
@@ -430,8 +430,8 @@ describe("till-table-order-screen: a dish split by a give-away", () => {
   });
 });
 
-describe("till-table-order-screen: discounting the whole bill", () => {
-  it("asks the app to discount the bill on screen, naming it and its total", async () => {
+describe("till-table-order-screen: comping the whole bill", () => {
+  it("asks the app to comp the bill on screen, naming it and its total", async () => {
     const el = await mountScreen();
     const asked = capture(el);
     const button = el.shadowRoot!.querySelector<HTMLElement>("[data-discount-bill]")!;
@@ -453,7 +453,7 @@ describe("till-table-order-screen: discounting the whole bill", () => {
     ]);
   });
 
-  it("offers no bill discount on an empty bill", async () => {
+  it("offers no Comp the bill on an empty bill", async () => {
     const el = await mountScreen({ lines: [] });
     expect(el.shadowRoot!.querySelector("[data-discount-bill]")).toBeNull();
   });

@@ -25,7 +25,7 @@ import type {
   ZoneOfferCatalogue,
 } from "./api/client.js";
 
-// Comp, Discount and Cancel on a stored counter order, through the app: the dialog is the
+// Comp…, Comp the bill and Cancel on a stored counter order, through the app: the dialog is the
 // table's, and after an answer the basket is loaded again from the server (B11c).
 
 const formFactor: FormFactor = "till";
@@ -896,7 +896,7 @@ describe("till-app: counter station choice", () => {
   });
 });
 
-describe("till-app: giving away a dish on a stored counter order", () => {
+describe("till-app: comping a stored counter order", () => {
   it.each([false, true])(
     "identifies a counter Hold as having no table editor, changed lines=%s",
     async (changed) => {

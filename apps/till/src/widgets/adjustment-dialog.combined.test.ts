@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { setLocale, t } from "../i18n/t.js";
+import { setLocale } from "../i18n/t.js";
 import type { AdjustmentChoice, AdjustTarget, TillAdjustmentDialog } from "./adjustment-dialog.js";
 import type { AdjustmentReason } from "../api/client.js";
 import "./adjustment-dialog.js";
@@ -306,7 +306,7 @@ it("asks for approval when the server needs a PIN", async () => {
     lines: [],
   };
   await el.updateComplete;
-  expect(q(el, "[data-adjust-confirm]").textContent!.trim()).toBe(t("adjust.ask_approval"));
+  expect(q(el, "[data-adjust-confirm]").textContent!.trim()).toBe("Ask for approval");
 });
 
 it("confirms the same choice when its object keys are in a different order", async () => {

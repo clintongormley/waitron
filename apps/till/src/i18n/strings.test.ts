@@ -229,9 +229,9 @@ describe("a service step's Done", () => {
 });
 
 describe("the till's comp words follow the Comp window's (design D10)", () => {
-  // Weaker than its name: it reads only the keys starting comp. or adjust., and table.discount_bill,
-  // of the catalogue in strings.ts, so a till string inviting someone to an account is not refused;
-  // codes.ts's messages are pinned in codes.test.ts.
+  // Weaker than its name: its word checks read only the keys starting comp. or adjust., and
+  // table.discount_bill, of the catalogue in strings.ts, so a till string inviting someone to an
+  // account is not refused; codes.ts is not read.
   const compKeys = (strings: Record<string, string>) =>
     Object.entries(strings).filter(
       ([key]) =>
@@ -254,9 +254,15 @@ describe("the till's comp words follow the Comp window's (design D10)", () => {
     const word = strings["comp.title"].replace(/…$/, "");
     expect(strings["table.discount_bill"].startsWith(word)).toBe(true);
     expect(strings["adjust.discount_bill_title"].startsWith(word)).toBe(true);
-    expect(Object.keys(en)).not.toContain("adjust.kind");
-    expect(Object.keys(en)).not.toContain("adjust.kind_percent");
-    expect(Object.keys(en)).not.toContain("adjust.kind_amount");
+  });
+
+  it.each([
+    ["en", en],
+    ["es", es],
+  ])("has no Discount by choice left (%s)", (_, strings) => {
+    for (const key of ["adjust.kind", "adjust.kind_percent", "adjust.kind_amount"]) {
+      expect(Object.keys(strings)).not.toContain(key);
+    }
   });
 
   it.each([

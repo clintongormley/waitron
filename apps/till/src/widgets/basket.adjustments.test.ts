@@ -10,8 +10,8 @@ import type { StoredLines, TillBasket } from "./basket.js";
 import type { TabLine, TillProduct } from "../api/client.js";
 import type { AdjustDetail } from "../screens/till-table-order-screen.js";
 
-// A stored counter order in the basket offers Cancel and Comp on its dishes and Discount the bill,
-// from the server's own listing of its lines (B11c).
+// A stored counter order in the basket offers Cancel and Comp… on its dishes and extras, and Comp the
+// bill, from the server's own listing of its lines (B11c).
 
 const product = (id: string, name: string, unitPrice: string): TillProduct => ({
   id,
@@ -538,7 +538,7 @@ describe("till-basket: a stored counter order", () => {
     expect(heard[0]!.combined).toBe(true);
   });
 
-  it("discounts the whole order as the server listed it", async () => {
+  it("comps the whole order as the server listed it", async () => {
     const el = await mount(storedOrder());
     const heard = adjustments(el);
 
