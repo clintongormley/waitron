@@ -566,8 +566,7 @@ until A977).
 - **A974 — remaining Bucket E and F sites.** Comments still need English in
   `apps/server/src/working-order.ts`, `apps/dashboard/src/api/client.ts`, and the till's
   `screens/till-ticket-view.ts`, `widgets/tender-pay.ts` and `widgets/station-queue.ts`.
-  Also open: identifiers and file names from the audit, setup's
-  `apps/setup/src/receipt-languages.ts` labels (which disagree with the venue screen), and the
+  Also open: identifiers and file names from the audit and the
   `WAITRON_CERT_CHECK_NOMBRE` example in `apps/server/README.md`. The separate core-comment
   [PR #1986](https://github.com/clintongormley/waitron/pull/1986) awaits the owner to land it.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.

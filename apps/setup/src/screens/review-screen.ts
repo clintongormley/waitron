@@ -180,7 +180,7 @@ export class SetupReviewScreen extends LitElement {
           html`
             ${this.#row("review.location", location?.name, "summary-location")}
             ${this.#row("review.address", [location?.addressLine1, location?.addressLine2, location?.postalCode, location?.city, location?.province].filter(Boolean).join(", ") || "—", "summary-address")}
-            ${this.#row("review.invoice_locales", location?.invoiceLocales?.map((locale) => RECEIPT_LANGUAGES[locale]?.nativeName ?? locale).join(", "), "summary-invoiceLocales")}
+            ${this.#row("review.invoice_locales", location?.invoiceLocales?.map((locale) => (RECEIPT_LANGUAGES[locale] === undefined ? locale : t(RECEIPT_LANGUAGES[locale].selectionLabel))).join(", "), "summary-invoiceLocales")}
             ${this.#row("review.day_cutover", location?.dayCutover, "summary-dayCutover")}
           `,
         )}
