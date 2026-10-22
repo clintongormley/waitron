@@ -1,6 +1,6 @@
-# Staff
+# Users
 
-Use **Staff** to keep your team's details up to date. Only an admin can manage another
+Use **Users** to keep your team's details up to date. Only an admin can manage another
 person's sign-in, so managing contact details cannot give someone access to that account.
 
 ## Names and contact details {#staff-details}

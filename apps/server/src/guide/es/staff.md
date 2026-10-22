@@ -1,6 +1,6 @@
-# Personal
+# Usuarios
 
-Usa **Personal** para mantener al día los datos del equipo. Solo un administrador puede gestionar
+Usa **Usuarios** para mantener al día los datos del equipo. Solo un administrador puede gestionar
 el acceso de otra persona, para que editar sus datos de contacto no permita entrar en su cuenta.
 
 ## Nombres y datos de contacto {#staff-details}
