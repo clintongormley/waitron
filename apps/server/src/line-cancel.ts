@@ -236,7 +236,8 @@ export async function cancelItem(
             operatorId,
             submissionId: ask.submissionId,
             approver: ask.approver,
-            preparationStarted: true,
+            preparationStarted: ask.preparationStarted,
+            recordedPreparationStarted: true,
           },
           policy.venueLocale,
           policy.attempts,
@@ -313,10 +314,7 @@ export async function cancelItem(
             .select({ id: sales.id })
             .from(sales)
             .where(eq(sales.workingOrderId, bill!.id));
-          const value =
-            sale === undefined
-              ? undefined
-              : await cancellationRefundValue(tx, bill!.id, sale.id, lineId);
+          const value = await cancellationRefundValue(tx, bill!.id, sale!.id, lineId);
           if (value !== undefined)
             refundValue = cancelRefundShare(
               value,

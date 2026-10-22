@@ -1242,6 +1242,35 @@ describe("What a cancel records for refunds", () => {
     },
   );
 
+  it("records a don't-charge cancel as started without marking the unstarted dish's void notice started", async () => {
+    const order = await fixture();
+    await startExtra(order);
+    await cancel(order, {
+      ...(await askFor(order, "remove_charge")),
+      reasonId: venue.reasonId.houseVoid,
+      approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+    });
+    const stations = [order.parent.id, order.extra!.id].map(
+      (lineId) => order.tickets.find((row) => row.workingOrderLineId === lineId)!.stationId,
+    );
+    expect(stations[0]).not.toBe(stations[1]);
+    const notices = await inTx(venue, async (tx) => [
+      ...(await listStationNotices(tx, venue.cfg, stations[0]!)),
+      ...(await listStationNotices(tx, venue.cfg, stations[1]!)),
+    ]);
+    expect(
+      notices
+        .filter((row) => row.workingOrderId === order.billId)
+        .map((row) => [row.kind, row.lineName, row.quantity, row.wasStarted]),
+    ).toEqual([
+      ["void", "PIZZA", "2.000", false],
+      ["void", expect.stringContaining("ACEIT"), "4.000", true],
+    ]);
+    expect(await cancels(order)).toEqual([
+      { chargeKept: false, preparationStarted: true, refundHandoff: false, refundValue: null },
+    ]);
+  });
+
   it("a still-charge cancel of a dish comped to €0.00 is charge kept and a don't-charge one is not", async () => {
     const kept = await fixture();
     await adjust(kept, { action: "comp" });
