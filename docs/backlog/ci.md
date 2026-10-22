@@ -690,3 +690,19 @@ This is another receipt for the existing A738 follow-up in the root backlog. Par
 action after removing its file argument and retain the no-build/pull/up assertions, including a
 path containing `up`. A1003 leaves the guard unchanged. A later passing gate qualifies that run;
 it does not repair this path-dependent guard.
+
+## Finished-party merge test refuses its bill-edit expectations
+
+Main CI [39858805414](https://github.com/clintongormley/waitron/actions/runs/39858805414)
+at `53ce1696e725d23fd1dec604374af0760d99e79a` failed server shard 10 in
+`zone-access.finished-party.test.ts`'s "leaves out a bill emptied by a merge" case:
+`management.request_invalid` from `parseBillEditExpecteds` at `bill-editing.ts:128`, through
+`mergeBills`. The shard reported one failed and 1,548 passed tests. On 2026-10-22,
+`pnpm --filter @waitron/server exec vitest run src/zone-access.finished-party.test.ts` on A974's
+comments-only candidate reproduced one failed and seven passed tests.
+
+The case builds `expectedEdits` in bill-operation order; `parseBillEditExpecteds` requires
+ascending bill IDs. Random UUID ordering is a suspected trigger, not yet checked with controlled
+IDs. Run both ID orders before correcting the fixture, preserving every assertion and the
+production parser's contract. The test entered main in A758-6, commit `9f4632719`; coordinate
+with that item's lane. A974 records the failure without changing the test or production code.

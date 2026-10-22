@@ -47,7 +47,7 @@ import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 /**
  * For `cash`, `amount` is the FULL operator-entered tendered amount, never the total — the
  * server records the fiscal tender at the total and returns the change. `card` is a manual
- * bank-terminal (datáfono) charge: `amount` is the sale total, and `externalRef` is the terminal's
+ * bank-terminal charge: `amount` is the sale total, and `externalRef` is the terminal's
  * optional operation number.
  */
 export type ConfirmPaymentDetail = (
@@ -79,7 +79,7 @@ export interface CollectCardDetail extends ReceiptGuestsDetail {
   readerId?: string;
 }
 
-/** `"none"` keeps the Card button on the manual (datáfono) path; every other value emits
+/** `"none"` keeps the Card button on the manual path; every other value emits
  * `collect-card`. */
 export type CardProvider =
   "none" | "stripe_terminal" | "stripe_on_device" | "sumup_cloud" | "simulator";

@@ -139,7 +139,6 @@ function adjustmentRow(
   </li>`;
 }
 
-/** The fecha de expedición (art. 7.1.b). */
 function issueDate(iso: string, locale: string, offsetMinutes?: number): string {
   const instant = new Date(iso);
   const date =

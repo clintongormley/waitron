@@ -6067,6 +6067,12 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **Finished-party merge test refuses its bill-edit expectations.** Main CI
+  [39858805414](https://github.com/clintongormley/waitron/actions/runs/39858805414)
+  failed `zone-access.finished-party.test.ts`'s emptied-bill merge case; the focused suite also
+  failed locally. Diagnose the pair's order without weakening its assertions or the parser.
+  [Receipt and next check](backlog/ci.md#finished-party-merge-test-refuses-its-bill-edit-expectations)
+
 - **The UI showcase overflows a phone and inherits black text in its dark panel.** At a
   390 px viewport, the panels in `packages/ui/index.html` measured 572 px wide before and after
   A974's wording cleanup; unstyled dark-panel text resolved to black on `rgb(16, 18, 22)`.
@@ -6672,7 +6678,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   moves into `country-es`, plus region demos ("catalán demo in Catalunya"). After A918. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A974. Remaining comments and identifiers in general code to English.**
-  The audit's remaining Bucket E/F sites and the owner-held core-comment PR are listed in the
+  The remaining CSS-comment/naming sites and the owner-held core-comment PR are listed in the
   [detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
 - **Setup's receipt-language selection still reads inherited object properties.** Its
