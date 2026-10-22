@@ -1337,9 +1337,9 @@ the owner asked for:
 - **Late orders pulse.** Decide which of warm, overdue and forgotten pulse; the same pulse as A738's
   Waiting tab; a colour change instead under reduced motion.
 - **Item counts by state in the order lists.** Built by A757 slice 6
-  (`docs/superpowers/plans/2026-10-21-a757-6-item-counts-by-state.md`): Parked orders, Waiting and
-  Transfers rows (these for the department holding the tab) show how many items an order holds, then how many are unsent, held, waiting and
-  ready (`readOrderStateCounts`, `apps/server/src/order-state-counts.ts`; chips in
+  (`docs/superpowers/plans/2026-10-21-a757-6-item-counts-by-state.md`): Parked orders and Waiting
+  rows, and Transfers rows for the department holding the tab, show how many items an order holds,
+  then how many are unsent, held, waiting and ready (`readOrderStateCounts`, `apps/server/src/order-state-counts.ts`; chips in
   `apps/till/src/widgets/order-counts.ts`).
 
 ## A893. Owner review of every table state and its look, after A757 lands
