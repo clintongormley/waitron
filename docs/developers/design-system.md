@@ -4047,10 +4047,16 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   then Save as new theme… and Cancel as `secondary`, then Save. Use Waitron's look sits outside
   the `wt-form-actions`, beside it in one wrapping row, so on a narrow card it takes a line of its
   own above the others and no button breaks its label. In English, Save as new theme… and Cancel
-  share the next line from a 358 px card, as mock-up 03 draws; in the 310 px card of a 390 px
-  window they need 264 px of the 260 it gives, so Cancel joins Save on the last line. The row
-  takes the full width while it shows a message, as the Add printer dialog's address check does
-  (Forms, above). This departs from the rule that Cancel takes the `cancel` slot.
+  share the next line from a 358 px card, as mock-up 03 draws. Below a 300 px form (a 350 px
+  card) the buttons' side padding is `--wt-space-2` rather than `--wt-space-4`: with the wider
+  padding the Spanish Save as new theme… broke its label on CI in the 310 px card of a 390 px
+  window, and broke it the same way on macOS with DejaVu Sans Bold loaded into the test (in
+  `mcr.microsoft.com/playwright:v1.63.0-noble` with DejaVu installed, Chromium draws `system-ui`
+  in it). Measured 2026-10-22 under DejaVu Sans Bold, that button is now 241 px of the 252 its
+  line gives, and a font 5.7% larger breaks it. On macOS's font, in that card, English keeps
+  mock-up 03's rows and in Spanish Cancel joins Save on the last line. The row takes the full
+  width while it shows a message, as the Add printer dialog's address check does (Forms, above).
+  This departs from the rule that Cancel takes the `cancel` slot.
 - **The preview's Light and Dark panels are painted from the draft inside the card and nowhere
   else** (`apps/dashboard/src/widgets/theme-preview.ts`). Each panel is a theme root inside the
   preview's shadow root, painted by a constructed sheet adopted into that shadow root only. The draft

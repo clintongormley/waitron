@@ -207,6 +207,12 @@ export class LookCard extends LitElement {
       .buttons > wt-form-actions.with-message {
         flex-basis: 100%;
       }
+      /* Room on a phone for fonts wider than macOS's system font, such as Linux's DejaVu Sans. */
+      @container (width < 300px) {
+        .buttons wt-button::part(button) {
+          padding-inline: var(--wt-space-2);
+        }
+      }
       @container (min-width: 900px) {
         .editor {
           grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
