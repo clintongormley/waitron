@@ -6053,13 +6053,6 @@ the tree. What remains, largest first:
   (`Operation too slow`) means a transfer stall; a step timeout says only that the attempt ran
   out of time, not in which phase.
 
-- **The deployment-status guard mistakes `up` inside a temporary path for a compose action.**
-  `scripts/waitron-sh.test.mjs:508` tests raw log text with `compose .*up`; an A738 hook failed
-  on `waitron-sh-bupOFl` while every logged compose action was `ps`. Setting an owned temporary
-  directory containing `up` reproduced the same assertion failure. Normalize the compose-file
-  path before checking the action, and add that path case while retaining the no-build/pull/up
-  assertions. The guard and deploy script are unchanged by A738; this remains open.
-
 - **Profile provisioning's busiest shard after the A679 split.** All six shards and merged
   coverage pass in run `39380412391`, but shard 1 takes 297 s in Vitest and 330 s overall.
   Find the slow files or setup cost before changing its distribution; keep every check and
