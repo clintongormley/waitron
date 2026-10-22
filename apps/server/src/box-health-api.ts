@@ -21,7 +21,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
 };
 
-/** On a full disk the transaction's last-seen stamp or change-log drain is refused, so the same
+/** When a full disk refuses the transaction (its last-seen stamp or its change-log drain), the same
  * checks run again as reads only: this page is how a manager frees the disk. */
 async function authorizeSystemManager(db: Database, c: Context): Promise<string> {
   const sessionId = requireManagementSession(c);

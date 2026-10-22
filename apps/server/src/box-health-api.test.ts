@@ -107,7 +107,8 @@ async function lastSeen(person: Person): Promise<string> {
   return row!.lastSeenAt;
 }
 
-/** A disk so full that the first write of every write turn is refused before it runs. */
+/** A full disk modelled as a write lock that refuses every turn, reads included, before anything in
+ * it runs. */
 function lockRefusingDb(error: Error): Database {
   return new Proxy(suite.db, {
     get(target, prop) {
