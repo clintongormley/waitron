@@ -98,6 +98,7 @@ export class TillFinishTableDialog extends LitElement {
   @state() private attempted = false;
   @state() private active = true;
   @state() private sending = false;
+  @state() private sentCollect = false;
   #key?: string;
   #baseline?: Draft;
   #scope?: DraftScope<Draft>;
@@ -118,6 +119,9 @@ export class TillFinishTableDialog extends LitElement {
   }
   #busy(): boolean {
     return this.busy || this.sending;
+  }
+  #collecting(): boolean {
+    return this.#busy() && (this.sending ? this.sentCollect : this.collectPending);
   }
   #currentKey(): string {
     return JSON.stringify([this.dishes, this.refunds]);
@@ -256,6 +260,7 @@ export class TillFinishTableDialog extends LitElement {
       return;
     }
     this.sending = true;
+    this.sentCollect = false;
     this.dispatchEvent(
       new CustomEvent<FinishTableChoice>("finish-table-choice", {
         detail: {
@@ -289,6 +294,7 @@ export class TillFinishTableDialog extends LitElement {
       return;
     }
     this.sending = true;
+    this.sentCollect = true;
     this.dispatchEvent(
       new CustomEvent("finish-table-collect", { detail: {}, bubbles: true, composed: true }),
     );
@@ -315,6 +321,8 @@ export class TillFinishTableDialog extends LitElement {
     const invalidPreparation =
       this.attempted && this.draft.choices.some((choice) => choice.preparationStarted === null);
     const disabled = this.#busy() || this.reasonsLoading || this.collectPending || !this.#valid();
+    const collecting = this.#collecting();
+    const cancelling = this.#busy() && !collecting;
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
@@ -449,9 +457,9 @@ export class TillFinishTableDialog extends LitElement {
           >
           <wt-button
             data-confirm
-            variant=${disabled && !this.#busy() ? "secondary" : "danger"}
+            variant=${disabled && !cancelling ? "secondary" : "danger"}
             .disabled=${disabled}
-            .loading=${this.#busy()}
+            .loading=${cancelling}
             @click=${() => void this.#confirm()}
             >${
               compareDecimal(decimal(total), decimal("0")) > 0
@@ -468,6 +476,7 @@ export class TillFinishTableDialog extends LitElement {
                 data-collect
                 variant="secondary"
                 .disabled=${this.#busy() || (this.confirmationLocked && !this.collectPending)}
+                .loading=${collecting}
                 @click=${() => this.#collect()}
                 >${t("finish_table.collect")}</wt-button
               >`

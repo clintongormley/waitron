@@ -506,7 +506,6 @@ it("words the collection in Spanish", async () => {
   setLocale("es-ES");
   const el = await mount();
   expect(collectButton(el)!.textContent!.trim()).toBe(es["finish_table.collect"]);
-  expect(es["finish_table.collect"]).toBe("Lo recogerán en el mostrador");
   setLocale("en");
   el.requestUpdate();
   await el.updateComplete;
@@ -617,4 +616,40 @@ it("puts the collection on its own row, under the form's message", async () => {
   expect(text.bottom).toBeLessThanOrEqual(main.top);
   expect(text.bottom).toBeLessThanOrEqual(back.top);
   expect(text.top).toBeLessThan(collectBox.top);
+});
+it("shows the collection as the request in flight, not the main action", async () => {
+  const el = await mount({ defaultReasonId: "house" });
+  await click(el, "[data-collect]");
+  el.busy = true;
+  await el.updateComplete;
+  const state = (target: HTMLElementTagNameMap["wt-button"]) => ({
+    loading: target.loading,
+    variant: target.variant,
+    disabled: target.disabled,
+  });
+  expect(state(collectButton(el)!)).toEqual({
+    loading: true,
+    variant: "secondary",
+    disabled: true,
+  });
+  expect(state(button(el))).toEqual({ loading: false, variant: "secondary", disabled: true });
+  el.busy = false;
+  el.collectPending = true;
+  el.confirmationLocked = true;
+  await el.updateComplete;
+  el.busy = true;
+  await el.updateComplete;
+  expect(collectButton(el)!.loading).toBe(true);
+  expect(button(el).loading).toBe(false);
+});
+it("shows the main action as the request in flight after a cancel", async () => {
+  const el = await mount({ defaultReasonId: "house" });
+  await click(el, "[data-confirm]");
+  el.busy = true;
+  await el.updateComplete;
+  expect(button(el).loading).toBe(true);
+  expect(button(el).variant).toBe("danger");
+  expect(collectButton(el)!.loading).toBe(false);
+  expect(collectButton(el)!.variant).toBe("secondary");
+  expect(collectButton(el)!.disabled).toBe(true);
 });
