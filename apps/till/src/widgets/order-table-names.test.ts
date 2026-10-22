@@ -72,6 +72,7 @@ describe("A765 visible order table names", () => {
           canHandOver: true,
           serviceMode: "ticket_then_pay",
           movableDishes: [],
+          counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
         },
       ],
     });
@@ -179,6 +180,7 @@ describe.each(["en-GB", "es-ES"])("A765 native table names %s", (locale) => {
                 canHandOver: true,
                 serviceMode: "ticket_then_pay",
                 movableDishes: [],
+                counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
               },
             ],
           },

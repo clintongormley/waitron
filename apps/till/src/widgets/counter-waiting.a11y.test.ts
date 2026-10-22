@@ -17,6 +17,7 @@ const sent: CounterWaitingOrder = {
   canHandOver: true,
   serviceMode: "ticket_then_pay",
   movableDishes: [],
+  counts: { ordered: 10, unsent: 1, held: 2, waiting: 3, ready: 4 },
 };
 
 const orders: CounterWaitingOrder[] = [
@@ -49,6 +50,7 @@ describe.each(["light", "dark"] as const)("till-counter-waiting a11y (%s theme)"
       theme,
     );
     expect(el.shadowRoot!.querySelectorAll("[data-waiting-state]")).toHaveLength(3);
+    expect(el.shadowRoot!.querySelectorAll("[data-count]")).toHaveLength(15);
     await expectNoA11yViolations(host);
   });
 

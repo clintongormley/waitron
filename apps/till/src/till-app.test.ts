@@ -17841,6 +17841,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     settledAt: null,
     collectedAt: null,
     total: "3.00",
+    counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
     canHandOver: true,
     serviceMode: "ticket_then_pay",
     movableDishes: [],

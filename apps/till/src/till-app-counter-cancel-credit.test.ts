@@ -68,6 +68,7 @@ const notInvoiced: CounterWaitingOrder = {
   settledAt: null,
   collectedAt: null,
   total: "7.50",
+  counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
   canHandOver: true,
   serviceMode: "ticket_then_pay",
   movableDishes: [],

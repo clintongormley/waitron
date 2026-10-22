@@ -38,6 +38,7 @@ const waiting: CounterWaitingOrder = {
   label: "Luis",
   status: "placed",
   total: "18.50",
+  counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
   openedAt: "2026-10-19T10:00:00.000Z",
   settledAt: null,
   collectedAt: null,
