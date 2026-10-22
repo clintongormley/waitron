@@ -75,13 +75,16 @@ const TROUBLED = health({
   canFree: false,
 });
 
-function stubApi(answer: BoxHealth | Error, alerts: AlertView[] = []): DashboardApi {
+function stubApi(answer: BoxHealth | Error, alerts: AlertView[] | Error = []): DashboardApi {
   return {
     getBoxHealth:
       answer instanceof Error
         ? vi.fn().mockRejectedValue({ code: "server.internal" })
         : vi.fn().mockResolvedValue(answer),
-    listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts }),
+    listAlerts:
+      alerts instanceof Error
+        ? vi.fn().mockRejectedValue({ code: "storage.disk_full" })
+        : vi.fn().mockResolvedValue({ visible: true, alerts }),
     freeBoxSpace: vi.fn(),
     liveData: new LiveData(),
   } as unknown as DashboardApi;
@@ -104,6 +107,7 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
       () => stubApi(TROUBLED, PRINTER_ALERTS),
     ],
     ["a failed read", () => stubApi(new Error("read"))],
+    ["a failed alert read", () => stubApi(TROUBLED, new Error("alerts"))],
   ];
   it.each(cases)("renders accessibly with %s", async (_name, api) => {
     const { el, host } = await mountWidget<BoxStatusScreen>(

@@ -127,6 +127,8 @@ export class BoxStatusScreen extends LitElement {
   @state() private actionError: string | null = null;
   @state() private freeing = false;
   @state() private freedBytes: number | null = null;
+  /** After a press the figure on the button is stale until the box is read again. */
+  @state() private awaitingFigure = false;
 
   // One controller per read: a controller's error callback does not say which query failed.
   readonly #healthQueries = new DashboardQueries(
@@ -145,6 +147,7 @@ export class BoxStatusScreen extends LitElement {
     void this.#healthQueries
       .watch("getBoxHealth", [], (health) => {
         this.health = health;
+        this.awaitingFigure = false;
         this.#readSucceeded("getBoxHealth");
       })
       .catch(() => undefined);
@@ -170,7 +173,12 @@ export class BoxStatusScreen extends LitElement {
 
   #canFree(): boolean {
     const health = this.health;
-    return health !== null && health.canFree && health.disk.reclaimable.bytes >= LEAST_TO_FREE;
+    return (
+      health !== null &&
+      !this.awaitingFigure &&
+      health.canFree &&
+      health.disk.reclaimable.bytes >= LEAST_TO_FREE
+    );
   }
 
   async #free(): Promise<void> {
@@ -181,6 +189,7 @@ export class BoxStatusScreen extends LitElement {
     try {
       const freed = await this.api.freeBoxSpace();
       this.freedBytes = freed.freedBytes;
+      this.awaitingFigure = true;
       // No change event reaches the box's read, so every open read, the bell's too, is read again.
       this.api.liveData.refresh();
     } catch (error) {
@@ -283,8 +292,13 @@ export class BoxStatusScreen extends LitElement {
 
   #renderBody(): TemplateResult | typeof nothing {
     const health = this.health;
-    if (health === null || this.alerts === null) return nothing;
-    const { rows, other, checksUnavailable } = boxStatusRows(health, this.alerts);
+    const alertsFailed = this.failingReads.has("listAlerts");
+    // A pending alert read ends in an answer or a failure (it has a time limit); until then the
+    // rows wait rather than look clear. A failed one must not hide the box's own read: on a full
+    // disk the alert read is refused while this one answers.
+    if (health === null || (this.alerts === null && !alertsFailed)) return nothing;
+    const alerts = this.alerts;
+    const { rows, other, checksUnavailable } = boxStatusRows(health, alerts ?? []);
     return html`
       <p class="legend" data-test="legend">
         ${fill("box_status.legend", { time: formatIsoMinute(health.at) })}
@@ -307,7 +321,14 @@ export class BoxStatusScreen extends LitElement {
           : nothing
       }
       ${
-        other === 0
+        alertsFailed
+          ? html`<p class="note" data-test="alerts-unavailable">
+              ${t("box_status.alerts_unavailable")}
+            </p>`
+          : nothing
+      }
+      ${
+        alerts === null || other === 0
           ? nothing
           : html`<p class="other" data-test="other">
               ${
@@ -331,8 +352,14 @@ export class BoxStatusScreen extends LitElement {
   #renderError(): TemplateResult | typeof nothing {
     // A read's failure never replaces the press's refusal.
     if (this.actionError !== null)
-      return html`<p class="error" role="alert">${codeMessage(this.actionError)}</p>`;
-    if (this.failingReads.size > 0)
+      return html`<p class="error" role="alert">
+        ${
+          this.actionError === "node.read_only"
+            ? t("box_status.free_read_only")
+            : codeMessage(this.actionError)
+        }
+      </p>`;
+    if (this.failingReads.has("getBoxHealth"))
       return html`<p class="error" role="alert">${t("box_status.read_error")}</p>`;
     return nothing;
   }

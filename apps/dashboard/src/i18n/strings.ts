@@ -3189,6 +3189,8 @@ export const en = {
   "box_status.other_alerts": "{count} other alerts",
   "box_status.other_alerts_one": "1 other alert",
   "box_status.read_error": "The box's status could not be read.",
+  "box_status.alerts_unavailable":
+    "The alerts could not be read, so a part may look fine when it is not.",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -6427,6 +6429,8 @@ export const es: Record<StringKey, string> = {
   "box_status.other_alerts": "{count} avisos más",
   "box_status.other_alerts_one": "1 aviso más",
   "box_status.read_error": "No se ha podido leer el estado del equipo.",
+  "box_status.alerts_unavailable":
+    "No se han podido leer los avisos, así que una parte puede parecer bien aunque no lo esté.",
 };
 
 export const catalogues: Record<string, Partial<Record<StringKey, string>>> = {

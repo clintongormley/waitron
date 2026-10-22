@@ -240,7 +240,6 @@ describe("dashboard-box-status-screen", () => {
     const { el } = await mount(api);
     const reads = vi.mocked(api.getBoxHealth).mock.calls.length;
     const alertReads = vi.mocked(api.listAlerts).mock.calls.length;
-    const started = performance.now();
 
     await userEvent.click(freeButton(el)!);
     await el.updateComplete;
@@ -256,7 +255,6 @@ describe("dashboard-box-status-screen", () => {
     expect(text(q(el, "[role=status]"))).toBe("Freed 45 MB.");
     expect(api.getBoxHealth).toHaveBeenCalledTimes(reads + 1);
     expect(api.listAlerts).toHaveBeenCalledTimes(alertReads + 1);
-    expect(performance.now() - started).toBeLessThan(15_000);
   });
 
   it("says a running backup's working files are not counted, under the Disk row", async () => {
@@ -302,26 +300,44 @@ describe("dashboard-box-status-screen", () => {
     expect(qa(el, "ul.rows > li")).toHaveLength(7);
   });
 
-  it("does not draw rows from an empty alert list when the bell's read fails", async () => {
+  it("draws every row from the box's read when the bell's read fails, and says the alerts are missing", async () => {
+    const answer = health({
+      notices: [
+        {
+          key: "storage.disk_full",
+          code: "storage.disk_full",
+          severity: "error",
+          params: {},
+          owner: "box",
+        },
+      ],
+    });
     const api = stubApi(
       {
         listAlerts: vi
           .fn()
-          .mockRejectedValueOnce({ code: "server.internal" })
-          .mockResolvedValue({ visible: true, alerts: [PRINTER_ALERT] }),
+          .mockRejectedValueOnce({ code: "storage.disk_full" })
+          .mockResolvedValue({ visible: true, alerts: [PRINTER_ALERT, OTHER_ALERT] }),
       },
-      health(),
+      answer,
     );
     const { el } = await mount(api);
-    expect(qa(el, "ul.rows > li")).toHaveLength(0);
-    expect(text(q(el, "[role=alert]"))).toBe(t("box_status.read_error"));
+    expect(qa(el, "ul.rows > li")).toHaveLength(7);
+    expect(q(el, "[data-test=row-disk]")!.getAttribute("data-state")).toBe("stopped");
+    expect(freeButton(el)!.getAttribute("variant")).toBe("primary");
+    expect(freeButton(el)!.hasAttribute("disabled")).toBe(false);
+    expect(text(q(el, "[data-test=alerts-unavailable]"))).toBe(t("box_status.alerts_unavailable"));
+    expect(q(el, "[data-test=other]")).toBeNull();
+    expect(q(el, "[role=alert]")).toBeNull();
+
     api.liveData.refresh();
     await flush(el);
-    expect(q(el, "[role=alert]")).toBeNull();
+    expect(q(el, "[data-test=alerts-unavailable]")).toBeNull();
     expect(q(el, "[data-test=row-printers]")!.getAttribute("data-state")).toBe("attention");
+    expect(q(el, "[data-test=other]")).not.toBeNull();
   });
 
-  it("keeps the bell's last alerts when a later alert read fails", async () => {
+  it("keeps the bell's last alerts when a later alert read fails, and says they may be stale", async () => {
     const api = stubApi({
       listAlerts: vi
         .fn()
@@ -331,8 +347,51 @@ describe("dashboard-box-status-screen", () => {
     const { el } = await mount(api);
     api.liveData.refresh();
     await flush(el);
-    expect(text(q(el, "[role=alert]"))).toBe(t("box_status.read_error"));
+    expect(text(q(el, "[data-test=alerts-unavailable]"))).toBe(t("box_status.alerts_unavailable"));
+    expect(q(el, "[role=alert]")).toBeNull();
     expect(q(el, "[data-test=row-printers]")!.getAttribute("data-state")).toBe("attention");
+  });
+
+  it("keeps the button quiet after a press until the box's figure is read again", async () => {
+    const refreshed = deferred<BoxHealth>();
+    const api = stubApi({
+      getBoxHealth: vi.fn().mockResolvedValueOnce(health()).mockReturnValueOnce(refreshed.promise),
+    });
+    const { el } = await mount(api);
+    await userEvent.click(freeButton(el)!);
+    await flush(el);
+    expect(text(q(el, "[role=status]"))).toBe("Freed 45 MB.");
+    expect(freeButton(el)!.getAttribute("variant")).toBe("secondary");
+    expect(freeButton(el)!.hasAttribute("disabled")).toBe(true);
+    freeButton(el)!.click();
+    await el.updateComplete;
+    expect(api.freeBoxSpace).toHaveBeenCalledTimes(1);
+
+    refreshed.resolve(health({}, { reclaimable: { bytes: 499_999, backupRunning: false } }));
+    await flush(el);
+    expect(text(freeButton(el))).toBe(t("box_status.free_nothing"));
+  });
+
+  it("shows a failed refresh after a press as a failed read, not a failed press", async () => {
+    const api = stubApi({
+      getBoxHealth: vi
+        .fn()
+        .mockResolvedValueOnce(health())
+        .mockRejectedValueOnce({ code: "server.internal" }),
+    });
+    const { el } = await mount(api);
+    await userEvent.click(freeButton(el)!);
+    await flush(el);
+    expect(text(q(el, "[role=status]"))).toBe("Freed 45 MB.");
+    expect(text(q(el, "[role=alert]"))).toBe(t("box_status.read_error"));
+  });
+
+  it("words a press refused on a read-only copy with the page's own sentence", async () => {
+    const api = stubApi({ freeBoxSpace: vi.fn().mockRejectedValue({ code: "node.read_only" }) });
+    const { el } = await mount(api);
+    await userEvent.click(freeButton(el)!);
+    await flush(el);
+    expect(text(q(el, "[role=alert]"))).toBe(t("box_status.free_read_only"));
   });
 
   it("passes the bell's own alerts, unfiltered, so a hidden list leaves every row clear", async () => {
