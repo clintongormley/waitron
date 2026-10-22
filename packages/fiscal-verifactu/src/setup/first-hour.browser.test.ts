@@ -12,10 +12,9 @@ const clock = {
     lowerMs: instant,
     upperMs: instant,
   })),
-  unavailable: [],
+  unavailable: [] as { source: string; result: "unavailable"; reason: string }[],
+  secondClock: true,
   disagreement: false,
-  requiresConfirmation: false,
-  boundaryWait: false,
   releaseBlocked: false,
   rangeBlocked: false,
 };
@@ -82,8 +81,9 @@ afterEach(() => {
 });
 async function mount(
   options: {
-    decision?: typeof clock;
+    decision?: typeof clock | (() => typeof clock);
     select?: () => Promise<unknown>;
+    preview?: unknown;
     prepare?: (proposal: unknown) => Promise<unknown>;
     request?: typeof context;
   } = {},
@@ -94,9 +94,15 @@ async function mount(
     if (options.prepare) return options.prepare(proposal);
     const action = (proposal as { action: string }).action;
     if (action === "clock-challenge") return { id: "challenge" };
-    if (action === "compare-clocks") return { id: "comparison", clock: options.decision ?? clock };
-    if (action === "confirm-clock") return clock;
-    if (action === "selection") return { status: "preview", identity: "0CSQW", answer: "no" };
+    if (action === "compare-clocks") {
+      const count = calls.filter(
+        (c) => (c.value as { action?: string })?.action === "compare-clocks",
+      ).length;
+      const decision =
+        typeof options.decision === "function" ? options.decision() : (options.decision ?? clock);
+      return { id: `comparison-${count}`, clock: decision };
+    }
+    if (action === "selection") return options.preview ?? { status: "preview", identity: "0CSQW" };
     throw new Error("unexpected action");
   };
   const api = {
@@ -147,20 +153,37 @@ async function mount(
 }
 const button = (el: LitElement, name: string) =>
   el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test="${name}"]`)!;
-async function ready(el: LitElement, answer = "no") {
+async function ready(el: LitElement) {
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
   );
-  for (const query of [
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(
     'input[name="setup-details-confirmed"]',
-    `input[name="taxpayer-hour"][value="${answer}"]`,
-  ]) {
-    const input = el.shadowRoot!.querySelector<HTMLInputElement>(query)!;
-    expect(input).not.toBeNull();
-    await userEvent.click(input);
-  }
+  )!;
+  expect(input).not.toBeNull();
+  await userEvent.click(input);
   await el.updateComplete;
 }
+const text = (el: LitElement) => el.shadowRoot!.textContent!.replace(/\s+/g, " ");
+const remaining = (el: LitElement) =>
+  el.shadowRoot!.querySelector("[data-test=remaining]")?.textContent?.trim();
+const actionsOf = (calls: { action: string; value?: unknown }[]) =>
+  calls.map((c) => (c.action === "prepare" ? (c.value as { action: string }).action : c.action));
+const WHY_WAIT = "Waiting to confirm the time, so no invoice series is ever repeated.";
+const NOTHING_TO_DO = "Nothing to do; keep this page open.";
+const WHY_SECOND =
+  "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's.";
+const ON_BOX = "This screen is on the box itself, so it does not count.";
+const SETUP_DO =
+  "Connect the box to the internet, or open this page on a phone or till on the venue's network and enter the setup password.";
+const SETUP_ENDS =
+  "It carries on by itself once the box reaches the internet, or on the phone if you carry on there.";
+const WHY_REFUSED = "No series is made without a confirmed time, so none is ever repeated.";
+const DIFFER = "This box's time and this device's differ by more than 30 seconds.";
+const DIFFER_DO =
+  "Try from another phone or till. If they still differ, the box's time may be wrong: ask for help.";
+const fakeClock = () =>
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
 it("automatically compares clocks and shows combined country, place, zone and local time before selection", async () => {
   const { el, calls } = await mount();
   await ready(el);
@@ -199,12 +222,13 @@ it("shows Canary local time rather than the browser or Madrid zone", async () =>
   expect(el.shadowRoot!.textContent).toContain("13:30");
   expect(el.shadowRoot!.textContent).not.toContain("14:30");
 });
-it("requires the scope confirmation and taxpayer-wide answer then imports only selected server input", async () => {
+it("requires the scope confirmation then imports only selected server input", async () => {
   const { el, calls } = await mount();
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
   );
   expect(button(el, "select").disabled).toBe(true);
+  expect(el.shadowRoot!.querySelector('input[name="taxpayer-hour"]')).toBeNull();
   await ready(el);
   await userEvent.click(button(el, "select"));
   await vi.waitFor(() =>
@@ -213,54 +237,29 @@ it("requires the scope confirmation and taxpayer-wide answer then imports only s
     ]),
   );
   expect(calls.filter((c) => c.action === "candidates")).toEqual([
-    { action: "candidates", value: { answer: "no" } },
+    { action: "candidates", value: { comparisonId: "comparison-2" } },
   ]);
   for (const code of ["A-0CSQW", "FF-0CSQW", "R-0CSQW"])
     expect(el.shadowRoot!.textContent).toContain(code);
   expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull();
 });
-it.each(["yes", "unknown"])(
-  "keeps the server wait for %s and never imports or locally completes it",
-  async (answer) => {
-    const { el, calls } = await mount({
-      select: async () => ({
-        status: "waiting",
-        targetMs: instant + 1800000,
-        remainingMs: 1800000,
-      }),
-    });
-    await ready(el, answer);
-    await userEvent.click(button(el, "select"));
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-test=hour-wait]")).not.toBeNull(),
-    );
-    expect(calls.some((c) => c.action === "input")).toBe(false);
-    expect(el.shadowRoot!.textContent).toContain("15:00");
-    expect(el.shadowRoot!.textContent).toContain("30:00");
-    expect(el.shadowRoot!.textContent).toContain("one at a time");
-  },
-);
-it("requires fresh displayed-clock acceptance on disagreement", async () => {
+it("keeps the server wait and never imports or locally completes it", async () => {
   const { el, calls } = await mount({
-    decision: { ...clock, disagreement: true, requiresConfirmation: true },
+    select: async () => ({
+      status: "waiting",
+      targetMs: instant + 1800000,
+      remainingMs: 1800000,
+    }),
   });
   await ready(el);
-  expect(button(el, "select").disabled).toBe(true);
-  await userEvent.click(
-    el.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-clock-confirmed"]')!,
-  );
   await userEvent.click(button(el, "select"));
-  await vi.waitFor(() => expect(calls.some((c) => c.action === "input")).toBe(true));
-  const confirmation = calls.findIndex(
-    (c) => (c.value as { action?: string })?.action === "confirm-clock",
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=hour-wait]")).not.toBeNull(),
   );
-  expect(calls[confirmation]).toEqual({
-    action: "prepare",
-    value: { action: "confirm-clock", comparisonId: "comparison" },
-  });
-  expect(confirmation).toBeLessThan(calls.findIndex((c) => c.action === "candidates"));
+  expect(calls.some((c) => c.action === "input")).toBe(false);
+  expect(text(el)).toContain("30:00");
 });
-it.each(["releaseBlocked", "rangeBlocked", "boundaryWait"] as const)(
+it.each(["releaseBlocked", "rangeBlocked"] as const)(
   "keeps %s selection blocked",
   async (reason) => {
     const { el, calls } = await mount({ decision: { ...clock, [reason]: true } });
@@ -269,6 +268,210 @@ it.each(["releaseBlocked", "rangeBlocked", "boundaryWait"] as const)(
     expect(calls.some((c) => c.action === "candidates")).toBe(false);
   },
 );
+it("explains a waiting setup with a countdown that goes back to the server at zero", async () => {
+  const answers: unknown[] = [
+    { status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 },
+    selected,
+  ];
+  const { el, calls } = await mount({ select: async () => answers.shift() });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(remaining(el)).toBeDefined());
+    vi.advanceTimersByTime(0);
+    await el.updateComplete;
+    expect(text(el)).toContain(WHY_WAIT);
+    expect(text(el)).toContain(NOTHING_TO_DO);
+    expect(text(el)).toContain("Continues in 1:24");
+    const timer = el.shadowRoot!.querySelector("[data-test=remaining]")!;
+    expect(timer.closest("[role=timer]")).not.toBeNull();
+    vi.advanceTimersByTime(1_000);
+    await el.updateComplete;
+    expect(remaining(el)).toBe("1:23");
+    vi.advanceTimersByTime(83_000);
+    await vi.waitFor(() => expect(calls.filter((c) => c.action === "candidates")).toHaveLength(2));
+    const sequence = actionsOf(calls);
+    const first = sequence.indexOf("candidates"),
+      second = sequence.lastIndexOf("candidates");
+    expect(sequence.slice(first + 1, second)).toEqual(["clock-challenge", "compare-clocks"]);
+    expect(calls.filter((c) => c.action === "candidates").map((c) => c.value)).toEqual([
+      { comparisonId: "comparison-2" },
+      { comparisonId: "comparison-3" },
+    ]);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
+    );
+    expect(calls.filter((c) => c.action === "input")).toEqual([
+      { action: "input", value: selected.input },
+    ]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("a countdown reaching zero imports nothing the server did not select", async () => {
+  const answers: unknown[] = [
+    { status: "waiting", targetMs: instant + 1_000, remainingMs: 1_000 },
+    { status: "waiting", targetMs: instant + 31_000, remainingMs: 30_000 },
+  ];
+  const { el, calls } = await mount({ select: async () => answers.shift() });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(remaining(el)).toBe("0:01"));
+    vi.advanceTimersByTime(1_000);
+    await vi.waitFor(() => expect(calls.filter((c) => c.action === "candidates")).toHaveLength(2));
+    await vi.waitFor(() => expect(remaining(el)).toBeDefined());
+    vi.advanceTimersByTime(0);
+    await el.updateComplete;
+    expect(remaining(el)).toBe("0:30");
+    expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).toBeNull();
+    expect(calls.filter((c) => c.action === "input")).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("a reload during a wait shows the server's time left", async () => {
+  fakeClock();
+  try {
+    const { el, calls } = await mount({
+      preview: { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 },
+    });
+    await vi.waitFor(() => expect(remaining(el)).toBeDefined());
+    vi.advanceTimersByTime(0);
+    await el.updateComplete;
+    expect(remaining(el)).toBe("1:01");
+    expect(text(el)).toContain(WHY_WAIT);
+    expect(actionsOf(calls)).toEqual(["clock-challenge", "compare-clocks", "selection"]);
+    expect(calls.some((c) => c.action === "candidates")).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("shows no countdown before a press when no wait is recorded", async () => {
+  const { el, calls } = await mount();
+  await vi.waitFor(() =>
+    expect(actionsOf(calls)).toEqual(["clock-challenge", "compare-clocks", "selection"]),
+  );
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=hour-wait]")).toBeNull();
+});
+it("with no second clock it explains itself and carries on when the internet arrives", async () => {
+  let decision = {
+    ...clock,
+    usable: clock.usable.filter((r) => r.source === "box"),
+    unavailable: [
+      { source: "browser", result: "unavailable" as const, reason: "same_machine" },
+      { source: "internet", result: "unavailable" as const, reason: "offline" },
+    ],
+    secondClock: false,
+  };
+  const { el, calls } = await mount({ decision: () => decision });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(text(el)).toContain(SETUP_DO));
+    expect(text(el)).toContain(WHY_SECOND);
+    expect(text(el)).toContain(ON_BOX);
+    expect(text(el)).toContain(SETUP_ENDS);
+    expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
+    expect(calls.some((c) => c.action === "candidates")).toBe(false);
+    decision = { ...clock };
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() => expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("a phone with no second clock does not say it is the box", async () => {
+  const decision = {
+    ...clock,
+    usable: clock.usable.filter((r) => r.source === "box"),
+    unavailable: [
+      { source: "browser", result: "unavailable" as const, reason: "challenge" },
+      { source: "internet", result: "unavailable" as const, reason: "offline" },
+    ],
+    secondClock: false,
+  };
+  const { el } = await mount({ decision });
+  await ready(el);
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() => expect(text(el)).toContain(SETUP_DO));
+  expect(text(el)).toContain(WHY_SECOND);
+  expect(text(el)).not.toContain(ON_BOX);
+});
+it("a clock refusal shows both readings and no countdown, and waits for Check again", async () => {
+  const decision = {
+    ...clock,
+    usable: [
+      { source: "box", lowerMs: instant, upperMs: instant },
+      { source: "browser", lowerMs: instant + 45_000, upperMs: instant + 45_000 },
+    ],
+    unavailable: [{ source: "internet", result: "unavailable" as const, reason: "offline" }],
+    disagreement: true,
+  };
+  const { el, calls } = await mount({ decision });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
+    expect(text(el)).toContain(WHY_REFUSED);
+    expect(text(el)).toContain(DIFFER_DO);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("wt-disclosure")?.open,
+    ).toBe(true);
+    expect(text(el)).toContain(new Date(instant).toISOString());
+    expect(text(el)).toContain(new Date(instant + 45_000).toISOString());
+    expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
+    expect(calls.some((c) => c.action === "candidates")).toBe(false);
+    const before = calls.length;
+    vi.advanceTimersByTime(60_000);
+    await el.updateComplete;
+    expect(calls).toHaveLength(before);
+    expect(button(el, "compare").textContent?.trim()).toBe("Check again");
+    await userEvent.click(button(el, "compare"));
+    await vi.waitFor(() => expect(calls.length).toBeGreaterThan(before));
+    expect(actionsOf(calls.slice(before))).toEqual(
+      expect.arrayContaining(["clock-challenge", "compare-clocks"]),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("a later minute in use names its time and does not count down", async () => {
+  const allowedFromMs = Date.parse("2026-10-18T20:04:00Z");
+  const { el, calls } = await mount({
+    select: async () => {
+      throw {
+        code: "sif.allocation_invalid",
+        params: { reason: "minute_not_later", allowedFromMs },
+      };
+    },
+  });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() =>
+      expect(text(el)).toContain(
+        "The series cannot be made yet: a later minute is already in use. You can carry on from 22:04.",
+      ),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
+    vi.advanceTimersByTime(60_000);
+    await el.updateComplete;
+    expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("ignores a late selection after the public context is replaced", async () => {
   let release!: (value: unknown) => void;
   const { el, calls, parent } = await mount({
@@ -438,25 +641,6 @@ it("continues a frozen hour through its public request without selecting another
   expect(calls.filter((c) => c.action === "request")).toHaveLength(1);
   expect(calls.filter((c) => c.action === "candidates")).toEqual([]);
 });
-it("a displayed countdown reaching zero never imports an hour without the server", async () => {
-  const { el, calls } = await mount({
-    select: async () => ({ status: "waiting", targetMs: instant + 1800000, remainingMs: 1000 }),
-  });
-  await ready(el, "unknown");
-  await userEvent.click(button(el, "select"));
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("[data-test=remaining]")?.textContent).toContain("0:01"),
-  );
-  await vi.waitFor(
-    () =>
-      expect(el.shadowRoot!.querySelector("[data-test=remaining]")?.textContent).toContain("0:00"),
-    { timeout: 3000 },
-  );
-  expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).toBeNull();
-  expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1);
-  expect(calls.filter((c) => c.action === "input")).toEqual([]);
-});
-
 it.each([null, [], { id: 1 }])(
   "refuses malformed challenge %j before comparison or hour selection",
   async (challenge) => {
@@ -528,7 +712,7 @@ it("shows a server wait requiring fresh clocks without inventing a numeric count
   const { el, calls } = await mount({
     select: async () => ({ status: "waiting", targetMs: instant + 1800000, remainingMs: null }),
   });
-  await ready(el, "unknown");
+  await ready(el);
   await userEvent.click(button(el, "select"));
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[data-test=hour-wait]")).not.toBeNull(),
@@ -601,7 +785,7 @@ it.each(["clock-challenge", "compare-clocks"])(
   },
 );
 
-it("does not select after a clock confirmation resolves on a disconnected screen", async () => {
+it("does not ask for the name after a press's comparison resolves on a disconnected screen", async () => {
   let release!: () => void, entered!: () => void;
   const started = new Promise<void>((resolve) => {
     entered = resolve;
@@ -609,21 +793,20 @@ it("does not select after a clock confirmation resolves on a disconnected screen
   const pending = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const decision = { ...clock, disagreement: true, requiresConfirmation: true };
+  let compared = 0;
   const { el, host, calls } = await mount({
     prepare: async (proposal) => {
       const action = (proposal as { action: string }).action;
       if (action === "clock-challenge") return { id: "challenge" };
-      if (action === "compare-clocks") return { id: "comparison", clock: decision };
-      entered();
-      await pending;
-      return decision;
+      if (action === "selection") return { status: "preview" };
+      if (++compared === 2) {
+        entered();
+        await pending;
+      }
+      return { id: "comparison", clock };
     },
   });
   await ready(el);
-  await userEvent.click(
-    el.shadowRoot!.querySelector<HTMLInputElement>('[name="setup-clock-confirmed"]')!,
-  );
   await userEvent.click(button(el, "select"));
   await started;
   host.remove();

@@ -12,7 +12,10 @@ export function formatRemaining(ms: number): string {
 }
 
 /** Counts the server's time left down on this page's own timer; the server decides at zero. */
-export function createWaitCountdown(host: ReactiveControllerHost, onZero: () => void): WaitCountdown {
+export function createWaitCountdown(
+  host: ReactiveControllerHost,
+  onZero: () => void,
+): WaitCountdown {
   let timer: ReturnType<typeof setInterval> | undefined;
   let remainingMs: number | undefined;
   const stop = () => {

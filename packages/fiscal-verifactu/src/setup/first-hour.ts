@@ -11,14 +11,15 @@ import type { HourClockDecision } from "../hour-clock.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import { createWaitCountdown, formatRemaining } from "./wait-countdown.js";
 
-type Answer = "no" | "yes" | "unknown";
 interface Draft {
   reviewed: boolean;
-  confirmed: boolean;
   recoveryRevision: number;
-  answer?: Answer;
 }
+type Problem =
+  { kind: "second-clock" } | { kind: "disagreement" } | { kind: "later"; allowedFromMs?: number };
+const SECOND_CLOCK_POLL_MS = 15_000;
 interface Context {
   status: string;
   environment: "production" | "preproduction";
@@ -34,7 +35,7 @@ interface Context {
 }
 interface Comparison {
   id: string;
-  clock: HourClockDecision & { requiresConfirmation?: boolean; boundaryWait?: boolean };
+  clock: HourClockDecision;
 }
 type Result =
   | { status: "waiting"; targetMs: number; remainingMs: number | null }
@@ -45,7 +46,7 @@ type Result =
         allocation: { installationIdentity: string; series: { code: string; purpose: string }[] };
       };
     };
-const empty = (): Draft => ({ reviewed: false, confirmed: false, recoveryRevision: 0 });
+const empty = (): Draft => ({ reviewed: false, recoveryRevision: 0 });
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 @customElement("vf-first-setup-hour")
@@ -107,27 +108,19 @@ export class FirstSetupHour extends LitElement {
   @state() private kept = false;
   #delivery?: ReturnType<typeof createRecoveryDelivery<void>>;
   #reference?: InitialSetupRecoveryReference;
-  @state() private remainingMs?: number;
-  #waitStarted = 0;
-  #waitTimer?: ReturnType<typeof setInterval>;
+  @state() private problem?: Problem;
+  #countdown = createWaitCountdown(this, () => void this.#select(true));
+  #poll?: ReturnType<typeof setInterval>;
   #stopWait(): void {
-    if (this.#waitTimer) clearInterval(this.#waitTimer);
-    this.#waitTimer = undefined;
-    this.remainingMs = undefined;
+    this.#countdown.stop();
+    if (this.#poll !== undefined) clearInterval(this.#poll);
+    this.#poll = undefined;
   }
-  #startWait(): void {
-    this.#stopWait();
-    if (this.result?.status !== "waiting" || this.result.remainingMs === null) return;
-    const duration = this.result.remainingMs;
-    this.#waitStarted = performance.now();
-    this.remainingMs = duration;
-    this.#waitTimer = setInterval(() => {
-      this.remainingMs = Math.max(0, duration - Math.max(0, performance.now() - this.#waitStarted));
-      if (this.remainingMs === 0 && this.#waitTimer) {
-        clearInterval(this.#waitTimer);
-        this.#waitTimer = undefined;
-      }
-    }, 250);
+  #waitForSecondClock(): void {
+    this.problem = { kind: "second-clock" };
+    this.#poll ??= setInterval(() => {
+      if (!this.busy) void this.#select(true);
+    }, SECOND_CLOCK_POLL_MS);
   }
   #generation = 0;
   #scope?: DraftScope<Draft>;
@@ -145,11 +138,7 @@ export class FirstSetupHour extends LitElement {
             : undefined,
         current: () => this.draft,
         snapshot: (v) => ({ ...v }),
-        equal: (a, b) =>
-          a.reviewed === b.reviewed &&
-          a.confirmed === b.confirmed &&
-          a.answer === b.answer &&
-          a.recoveryRevision === b.recoveryRevision,
+        equal: (a, b) => a.reviewed === b.reviewed && a.recoveryRevision === b.recoveryRevision,
         restore: () => this.#clear(),
       }).scope;
       this.#scope.commit(empty());
@@ -183,6 +172,7 @@ export class FirstSetupHour extends LitElement {
     this.draft = empty();
     this.comparison = undefined;
     this.result = undefined;
+    this.problem = undefined;
     this.#stopWait();
     this.error = false;
     this.#changed();
@@ -196,28 +186,50 @@ export class FirstSetupHour extends LitElement {
     this.busy = false;
     this.draft = { ...this.draft, ...change };
     this.result = undefined;
+    this.problem = undefined;
     this.#stopWait();
     this.error = false;
     this.#changed();
   }
   get #canSelect(): boolean {
     const clock = this.comparison?.clock;
-    const box = clock?.usable.find((r) => r.source === "box");
-    const accepted =
-      clock?.disagreement &&
-      this.draft.confirmed &&
-      box !== undefined &&
-      Math.floor(box.lowerMs / 3600000) === Math.floor(box.upperMs / 3600000);
-    return Boolean(
-      this.draft.reviewed &&
-      (this.context.status === "consumption-intent" ||
-        (this.context.status === "claimed" && this.draft.answer)) &&
-      clock &&
-      !clock.releaseBlocked &&
-      !clock.rangeBlocked &&
-      (!clock.boundaryWait || accepted) &&
-      (!clock.requiresConfirmation || this.draft.confirmed),
+    return Boolean(this.draft.reviewed && clock && !clock.releaseBlocked && !clock.rangeBlocked);
+  }
+  async #readClocks(
+    api: InitialSetupActions,
+    current: () => boolean,
+  ): Promise<Comparison | undefined> {
+    const challenge = await api.preparation!({ action: "clock-challenge" });
+    if (!current()) return undefined;
+    if (!record(challenge) || typeof challenge.id !== "string")
+      throw new Error("invalid challenge");
+    const compared = await api.preparation!({
+      action: "compare-clocks",
+      browser: { challengeId: challenge.id, instantMs: Date.now() },
+    });
+    if (
+      !record(compared) ||
+      typeof compared.id !== "string" ||
+      !record(compared.clock) ||
+      !Array.isArray(compared.clock.usable) ||
+      !Array.isArray(compared.clock.unavailable)
+    )
+      throw new Error("invalid comparison");
+    return compared as unknown as Comparison;
+  }
+  #validWait(result: Record<string, unknown>): boolean {
+    return (
+      Number.isSafeInteger(result.targetMs) &&
+      (result.remainingMs === null ||
+        (typeof result.remainingMs === "number" &&
+          Number.isFinite(result.remainingMs) &&
+          result.remainingMs >= 0))
     );
+  }
+  #showWait(result: Result): void {
+    this.result = result;
+    if (result.status === "waiting" && result.remainingMs !== null)
+      this.#countdown.start(result.remainingMs);
   }
   async #compare(): Promise<void> {
     if (!this.api?.preparation || this.busy) return;
@@ -233,36 +245,34 @@ export class FirstSetupHour extends LitElement {
     this.error = false;
     this.comparison = undefined;
     this.result = undefined;
+    this.problem = undefined;
     this.#stopWait();
-    this.draft = { ...this.draft, reviewed: false, confirmed: false };
+    this.draft = { ...this.draft, reviewed: false };
     this.#changed();
     try {
-      const challenge = await api.preparation!({ action: "clock-challenge" });
-      if (!current()) return;
-      if (!record(challenge) || typeof challenge.id !== "string")
-        throw new Error("invalid challenge");
-      const compared = await api.preparation!({
-        action: "compare-clocks",
-        browser: { challengeId: challenge.id, instantMs: Date.now() },
-      });
+      const comparison = await this.#readClocks(api, current);
+      if (!comparison || !current()) return;
+      this.comparison = comparison;
+      if (context.status !== "claimed") return;
+      const preview = await api.preparation!({ action: "selection" });
       if (!current()) return;
       if (
-        !record(compared) ||
-        typeof compared.id !== "string" ||
-        !record(compared.clock) ||
-        !Array.isArray(compared.clock.usable) ||
-        !Array.isArray(compared.clock.unavailable)
+        record(preview) &&
+        preview.status === "waiting" &&
+        this.#validWait(preview) &&
+        typeof preview.remainingMs === "number" &&
+        preview.remainingMs > 0
       )
-        throw new Error("invalid comparison");
-      this.comparison = compared as unknown as Comparison;
+        this.#showWait(preview as unknown as Result);
     } catch {
       if (current()) this.error = true;
     } finally {
       if (current()) this.busy = false;
     }
   }
-  async #select(): Promise<void> {
-    if (this.busy || !this.#canSelect || this.result?.status === "selected") return;
+  async #select(automatic = false): Promise<void> {
+    if (this.busy || this.result?.status === "selected") return;
+    if (!automatic && !this.#canSelect) return;
     const generation = ++this.#generation,
       api = this.api,
       context = this.context;
@@ -273,28 +283,26 @@ export class FirstSetupHour extends LitElement {
       context === this.context;
     this.busy = true;
     this.error = false;
+    this.problem = undefined;
+    this.result = undefined;
+    this.#stopWait();
     try {
-      if (this.comparison!.clock.requiresConfirmation) {
-        await api.preparation!({ action: "confirm-clock", comparisonId: this.comparison!.id });
-        if (!current()) return;
-      }
-      const result =
-        this.context.status === "claimed"
-          ? await api.candidates({ answer: this.draft.answer })
-          : await api.request();
+      let result: unknown;
+      if (context.status === "claimed") {
+        const comparison = await this.#readClocks(api, current);
+        if (!comparison || !current()) return;
+        this.comparison = comparison;
+        if (!comparison.clock.secondClock) return this.#waitForSecondClock();
+        if (comparison.clock.disagreement) {
+          this.problem = { kind: "disagreement" };
+          return;
+        }
+        result = await api.candidates({ comparisonId: comparison.id });
+      } else result = await api.request();
       if (!current()) return;
       if (!record(result)) throw new Error("invalid selection");
       if (result.status === "waiting") {
-        if (
-          !Number.isSafeInteger(result.targetMs) ||
-          !(
-            result.remainingMs === null ||
-            (typeof result.remainingMs === "number" &&
-              Number.isFinite(result.remainingMs) &&
-              result.remainingMs >= 0)
-          )
-        )
-          throw new Error("invalid wait");
+        if (!this.#validWait(result)) throw new Error("invalid wait");
       } else if (result.status === "selected") {
         if (
           result.kind !== "waitron-hour-setup" ||
@@ -309,10 +317,22 @@ export class FirstSetupHour extends LitElement {
         await api.importInput(result.input);
         if (!current()) return;
       } else throw new Error("invalid selection");
-      this.result = result as unknown as Result;
-      this.#startWait();
-    } catch {
-      if (current()) this.error = true;
+      this.#showWait(result as unknown as Result);
+    } catch (error) {
+      if (!current()) return;
+      const { code, params } = (error ?? {}) as { code?: unknown; params?: unknown };
+      const reason =
+        code === "sif.allocation_invalid" && record(params) ? params.reason : undefined;
+      if (reason === "second_clock_missing") this.#waitForSecondClock();
+      else if (reason === "clock_disagreement") this.problem = { kind: "disagreement" };
+      else if (reason === "minute_not_later" && record(params))
+        this.problem = {
+          kind: "later",
+          ...(Number.isSafeInteger(params.allowedFromMs)
+            ? { allowedFromMs: params.allowedFromMs as number }
+            : {}),
+        };
+      else this.error = true;
     } finally {
       if (current()) this.busy = false;
     }
@@ -426,6 +446,54 @@ export class FirstSetupHour extends LitElement {
       if (this.isConnected && generation === this.#generation) this.busy = false;
     }
   }
+  #explain(
+    t: {
+      whySecondClock: string;
+      onBox: string;
+      secondClockDo: string;
+      secondClockEnds: string;
+      whyRefused: string;
+      differ: string;
+      differDo: string;
+      later: string;
+      laterFrom: (time: string) => string;
+    },
+    clock: HourClockDecision | undefined,
+  ) {
+    const problem = this.problem;
+    if (problem?.kind === "second-clock")
+      return html`<section data-test="clock-wait">
+        <p role="status">${t.whySecondClock}</p>
+        ${
+          clock?.unavailable.some((r) => r.source === "browser" && r.reason === "same_machine")
+            ? html`<p>${t.onBox}</p>`
+            : nothing
+        }
+        <p>${t.secondClockDo}</p>
+        <p>${t.secondClockEnds}</p>
+      </section>`;
+    if (problem?.kind === "disagreement")
+      return html`<section data-test="clock-refused">
+        <p role="status">${t.whyRefused}</p>
+        <p>${t.differ}</p>
+        <p>${t.differDo}</p>
+      </section>`;
+    if (problem?.kind === "later") {
+      const time =
+        problem.allowedFromMs === undefined
+          ? undefined
+          : new Intl.DateTimeFormat(this.locale === "en" ? "en-GB" : "es-ES", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hourCycle: "h23",
+              timeZone: this.context.venue.location.timeZone,
+            }).format(problem.allowedFromMs);
+      return html`<p role="status" data-test="minute-not-later">
+        ${t.later}${time === undefined ? nothing : html` ${t.laterFrom(time)}`}
+      </p>`;
+    }
+    return nothing;
+  }
   override render() {
     const en = this.locale === "en";
     const t = en
@@ -440,28 +508,32 @@ export class FirstSetupHour extends LitElement {
           now: "Box time",
           taxId: "Taxpayer NIF",
           review: "The country, place, time zone and displayed time are correct.",
-          question: "Has anyone set up a Waitron box for this business in the last hour?",
-          wider:
-            "Include every venue using this taxpayer’s NIF, interrupted setups and recoveries. Arrange them one at a time.",
-          no: "No",
-          yes: "Yes",
-          unknown: "I don’t know",
-          compare: "Check clocks again",
-          select: "Select hour",
+          compare: "Check again",
+          select: "Make the series",
           readings: "Clock comparison",
           agreed: "Clocks agree.",
           box: "Box",
           browser: "Browser",
           internet: "Internet",
           unavailable: "Unavailable",
-          confirm: "The box’s displayed date and time are correct.",
-          warning:
-            "The clocks disagree, or no independent comparison is available. A wrong time can reuse names or date invoices incorrectly.",
           blocked: "Box time precedes this Waitron release.",
           range: "This date is outside the supported hour range.",
-          boundary: "The readings cross a UTC hour. Check again after the changeover.",
-          waiting: "Wait until",
-          remaining: "Remaining",
+          whyWait: "Waiting to confirm the time, so no invoice series is ever repeated.",
+          nothingToDo: "Nothing to do; keep this page open.",
+          continuesIn: "Continues in",
+          whySecondClock:
+            "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's.",
+          onBox: "This screen is on the box itself, so it does not count.",
+          secondClockDo:
+            "Connect the box to the internet, or open this page on a phone or till on the venue's network and enter the setup password.",
+          secondClockEnds:
+            "It carries on by itself once the box reaches the internet, or on the phone if you carry on there.",
+          whyRefused: "No series is made without a confirmed time, so none is ever repeated.",
+          differ: "This box's time and this device's differ by more than 30 seconds.",
+          differDo:
+            "Try from another phone or till. If they still differ, the box's time may be wrong: ask for help.",
+          later: "The series cannot be made yet: a later minute is already in use.",
+          laterFrom: (time: string) => `You can carry on from ${time}.`,
           chosen: "Selected hour code",
           failed: "Could not complete this step. Check again.",
           next: "Keep your recovery PDF.",
@@ -484,28 +556,34 @@ export class FirstSetupHour extends LitElement {
           now: "Hora de la caja",
           taxId: "NIF del contribuyente",
           review: "El país, lugar, zona horaria y hora mostrada son correctos.",
-          question: "¿Alguien ha configurado una caja Waitron para este negocio en la última hora?",
-          wider:
-            "Incluye todos los locales con este NIF, configuraciones interrumpidas y recuperaciones. Hazlas de una en una.",
-          no: "No",
-          yes: "Sí",
-          unknown: "No lo sé",
-          compare: "Volver a comprobar relojes",
-          select: "Seleccionar hora",
+          compare: "Comprobar otra vez",
+          select: "Crear las series",
           readings: "Comparación de relojes",
           agreed: "Los relojes coinciden.",
           box: "Caja",
           browser: "Navegador",
           internet: "Internet",
           unavailable: "No disponible",
-          confirm: "La fecha y hora mostradas por la caja son correctas.",
-          warning:
-            "Los relojes no coinciden o no hay una comparación independiente. Una hora incorrecta puede repetir nombres o fechar mal las facturas.",
           blocked: "La hora de la caja es anterior a esta versión de Waitron.",
           range: "Esta fecha está fuera del rango de horas admitido.",
-          boundary: "Las lecturas abarcan dos horas UTC. Comprueba de nuevo tras el cambio.",
-          waiting: "Espera hasta",
-          remaining: "Queda",
+          whyWait: "Esperamos a confirmar la hora para que ninguna serie de facturas se repita.",
+          nothingToDo: "No hace falta hacer nada; deja esta página abierta.",
+          continuesIn: "Sigue en",
+          whySecondClock:
+            "Para que ninguna serie de facturas se repita, la hora del equipo se compara con la de otro aparato o con internet.",
+          onBox: "Esta pantalla está en el propio equipo y no cuenta.",
+          secondClockDo:
+            "Conecta el equipo a internet, o abre esta página desde un móvil o una caja del local y escribe la contraseña de la configuración.",
+          secondClockEnds:
+            "Sigue sola cuando el equipo tenga internet, o en el móvil si sigues allí.",
+          whyRefused: "Sin una hora confirmada no se crean series, para que ninguna se repita.",
+          differ:
+            "La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos).",
+          differDo:
+            "Prueba desde otro móvil o caja. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.",
+          later:
+            "Todavía no se puede crear las series: ya se usó un minuto posterior a la hora de este equipo.",
+          laterFrom: (time: string) => `Podrás seguir a partir de las ${time}.`,
           chosen: "Código de hora seleccionado",
           failed: "No se pudo completar este paso. Comprueba de nuevo.",
           next: "Guarda el PDF de recuperación.",
@@ -552,16 +630,11 @@ export class FirstSetupHour extends LitElement {
           @change=${(e: Event) => this.#edit({ reviewed: (e.currentTarget as HTMLInputElement).checked })}
         />${t.review} *</label
       >
-      <fieldset ?disabled=${locked}>
-        <legend>${t.question} *</legend>
-        <p>${t.wider}</p>
-        ${(["no", "yes", "unknown"] as const).map((answer) => html`<label><input name="taxpayer-hour" type="radio" value=${answer} required .checked=${this.draft.answer === answer} @change=${() => this.#edit({ answer })} />${t[answer]}</label>`)}
-      </fieldset>
       ${
         clock
           ? html`<section data-test="clock-readings" aria-label=${t.readings}>
-              ${!clock.requiresConfirmation ? html`<p>${t.agreed}</p>` : nothing}
-              <wt-disclosure heading=${t.readings} .open=${clock.requiresConfirmation}>
+              ${clock.secondClock && !clock.disagreement ? html`<p>${t.agreed}</p>` : nothing}
+              <wt-disclosure heading=${t.readings} .open=${clock.disagreement}>
                 <dl>
                   ${clock.usable.map(
                     (r) =>
@@ -577,31 +650,27 @@ export class FirstSetupHour extends LitElement {
                   )}
                 </dl>
               </wt-disclosure>
-              ${clock.releaseBlocked ? html`<p role="status">${t.blocked}</p>` : nothing}${clock.rangeBlocked ? html`<p role="status">${t.range}</p>` : nothing}${clock.boundaryWait ? html`<p role="status">${t.boundary}</p>` : nothing}
-              ${
-                clock.requiresConfirmation
-                  ? html`<p role="status">${t.warning}</p>
-                      <label
-                        ><input
-                          name="setup-clock-confirmed"
-                          type="checkbox"
-                          required
-                          .checked=${this.draft.confirmed}
-                          ?disabled=${locked}
-                          @change=${(e: Event) => this.#edit({ confirmed: (e.currentTarget as HTMLInputElement).checked })}
-                        />${t.confirm} *</label
-                      >`
-                  : nothing
-              }
+              ${clock.releaseBlocked ? html`<p role="status">${t.blocked}</p>` : nothing}${clock.rangeBlocked ? html`<p role="status">${t.range}</p>` : nothing}
             </section>`
           : nothing
       }
+      ${this.#explain(t, clock)}
       ${
         this.result?.status === "waiting"
-          ? html`<p role="status" data-test="hour-wait">
-              ${t.waiting} ${format(this.result.targetMs)}
-              (${new Date(this.result.targetMs).toISOString()})${this.remainingMs === undefined ? nothing : html`<br />${t.remaining}: <span data-test="remaining">${Math.floor(Math.ceil(this.remainingMs / 1000) / 60)}:${String(Math.ceil(this.remainingMs / 1000) % 60).padStart(2, "0")}</span>`}
-            </p>`
+          ? html`<section data-test="hour-wait">
+              <p role="status">${t.whyWait}</p>
+              <p>${t.nothingToDo}</p>
+              ${
+                this.#countdown.remainingMs === undefined
+                  ? nothing
+                  : html`<p>
+                      ${t.continuesIn}
+                      <span role="timer" data-test="remaining"
+                        >${formatRemaining(this.#countdown.remainingMs)}</span
+                      >
+                    </p>`
+              }
+            </section>`
           : this.result?.status === "selected"
             ? html`<section data-test="selected-hour">
                 <p role="status">${t.chosen}: <strong>${this.result.identity}</strong></p>

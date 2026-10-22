@@ -24,8 +24,7 @@ for (const theme of ["light", "dark"] as const)
           host.style.cssText =
             "background:var(--wt-color-surface-raised);color:var(--wt-color-text);font-family:var(--wt-font-family);padding:var(--wt-space-4)";
           const instant = Date.parse("2026-10-18T12:30:00Z");
-          let warning = false,
-            waiting = false;
+          let mode: "review" | "refused" | "second-clock" | "waiting" | "later" | "pdf" = "review";
           const parent = FISCAL_SETUP.create({
             locale,
             request: {
@@ -55,23 +54,36 @@ for (const theme of ["light", "dark"] as const)
                   clock: {
                     usable: [
                       { source: "box", lowerMs: instant, upperMs: instant },
-                      {
-                        source: "browser",
-                        lowerMs: instant + (warning ? 180000 : 0),
-                        upperMs: instant + (warning ? 180000 : 0),
-                      },
+                      ...(mode === "second-clock"
+                        ? []
+                        : [
+                            {
+                              source: "browser",
+                              lowerMs: instant + (mode === "refused" ? 180000 : 0),
+                              upperMs: instant + (mode === "refused" ? 180000 : 0),
+                            },
+                          ]),
                     ],
-                    unavailable: [{ source: "internet", result: "unavailable", reason: "tls" }],
-                    requiresConfirmation: warning,
-                    disagreement: warning,
-                    boundaryWait: false,
+                    unavailable: [
+                      { source: "internet", result: "unavailable", reason: "tls" },
+                      ...(mode === "second-clock"
+                        ? [{ source: "browser", result: "unavailable", reason: "same_machine" }]
+                        : []),
+                    ],
+                    secondClock: mode !== "second-clock",
+                    disagreement: mode === "refused",
                     rangeBlocked: false,
                     releaseBlocked: false,
                   },
                 };
               },
               async candidates() {
-                return waiting
+                if (mode === "later")
+                  throw {
+                    code: "sif.allocation_invalid",
+                    params: { reason: "minute_not_later", allowedFromMs: instant + 240000 },
+                  };
+                return mode === "waiting"
                   ? { status: "waiting", targetMs: instant + 1800000, remainingMs: 1800000 }
                   : {
                       kind: "waitron-hour-setup",
@@ -125,39 +137,27 @@ for (const theme of ["light", "dark"] as const)
                 'input[name="setup-details-confirmed"]',
               )!,
             );
-            const answer = el.shadowRoot!.querySelector<HTMLInputElement>(
-              'input[name="taxpayer-hour"][value="no"]',
-            )!;
-            if (!answer.checked) await userEvent.click(answer);
           };
+          const marker = {
+            refused: "clock-refused",
+            "second-clock": "clock-wait",
+            waiting: "remaining",
+            later: "minute-not-later",
+            pdf: "prepare-pdf",
+          } as const;
           await vi.waitFor(() =>
             expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
           );
-          for (const state of ["review", "warning", "waiting", "pdf"] as const) {
-            if (state === "warning") {
-              warning = true;
-              await click("compare");
-              await vi.waitFor(() =>
-                expect(
-                  el.shadowRoot!.querySelector('[name="setup-clock-confirmed"]'),
-                ).not.toBeNull(),
-              );
-            }
-            if (state === "waiting") {
-              warning = false;
-              waiting = true;
-              await click("compare");
-              await vi.waitFor(() =>
-                expect(el.shadowRoot!.querySelector('[name="setup-clock-confirmed"]')).toBeNull(),
-              );
-              await checked();
-              await click("select");
-              await vi.waitFor(() =>
-                expect(el.shadowRoot!.querySelector("[data-test=hour-wait]")).not.toBeNull(),
-              );
-            }
-            if (state === "pdf") {
-              waiting = false;
+          for (const state of [
+            "review",
+            "refused",
+            "second-clock",
+            "waiting",
+            "later",
+            "pdf",
+          ] as const) {
+            mode = state;
+            if (state !== "review") {
               await click("compare");
               await vi.waitFor(() =>
                 expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
@@ -165,8 +165,10 @@ for (const theme of ["light", "dark"] as const)
               await checked();
               await click("select");
               await vi.waitFor(() =>
-                expect(el.shadowRoot!.querySelector("[data-test=prepare-pdf]")).not.toBeNull(),
+                expect(el.shadowRoot!.querySelector(`[data-test=${marker[state]}]`)).not.toBeNull(),
               );
+            }
+            if (state === "pdf") {
               await click("prepare-pdf");
               await vi.waitFor(() =>
                 expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
@@ -174,10 +176,7 @@ for (const theme of ["light", "dark"] as const)
             }
             expect((await axe.run(host)).violations).toEqual([]);
             expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
-            if (
-              import.meta.env["VITE_FIRST_HOUR_LOOK"] === "1" &&
-              (state === "warning" || state === "pdf")
-            )
+            if (import.meta.env["VITE_FIRST_HOUR_LOOK"] === "1" && state !== "review")
               await page.screenshot({
                 path: `__screenshots__/first-hour-look/${theme}-${locale}-${width}-${state}.png`,
                 element: host,

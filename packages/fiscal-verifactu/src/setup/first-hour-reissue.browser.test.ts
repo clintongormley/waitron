@@ -68,9 +68,8 @@ async function mount(stage = async () => old, reissue = async () => replacement)
             upperMs: instant,
           })),
           unavailable: [],
+          secondClock: true,
           disagreement: false,
-          requiresConfirmation: false,
-          boundaryWait: false,
           releaseBlocked: false,
           rangeBlocked: false,
         },
@@ -123,9 +122,6 @@ async function mount(stage = async () => old, reissue = async () => replacement)
   await userEvent.click(
     el.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-details-confirmed"]')!,
   );
-  await userEvent.click(
-    el.shadowRoot!.querySelector<HTMLInputElement>('input[name="taxpayer-hour"][value="no"]')!,
-  );
   await userEvent.click(control(el, "select"));
   await expect.poll(() => el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull();
   return { el, parent, calls, api };
@@ -158,7 +154,7 @@ it("offers explicit replacement after raw-key loss and delivers the new real PDF
   expect(decoded.document).not.toHaveProperty("installationCodes");
   expect(calls.filter((c) => c.action === "reissue")).toHaveLength(1);
   expect(calls.filter((c) => c.action === "select")).toEqual([
-    { action: "select", value: { answer: "no" } },
+    { action: "select", value: { comparisonId: "comparison" } },
   ]);
   expect(calls.filter((c) => c.action === "input")).toEqual([{ action: "input", value: input }]);
   expect(calls.filter((c) => c.action === "keep")).toEqual([]);
