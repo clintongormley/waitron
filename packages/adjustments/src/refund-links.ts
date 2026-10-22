@@ -1,6 +1,11 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { decimalToCents, rawCentsToDecimal, type Decimal } from "@waitron/shared";
+import {
+  decimalToCents,
+  rawCentsToDecimal,
+  rawThousandthsToDecimal,
+  type Decimal,
+} from "@waitron/shared";
 import type { AdjustmentAction } from "./policy.js";
 import { adjustmentRefunds } from "./schema/refund-links.js";
 
@@ -19,12 +24,12 @@ export async function linkRefundToCancels(
   );
 }
 
-/** A cancel as a refund sees it. `quantity` is in thousandths. */
+/** A cancel as a refund sees it. */
 export interface CancelForRefund {
   id: string;
   workingOrderId: string;
   lineId: string | null;
-  quantity: number | null;
+  quantity: Decimal | null;
   action: AdjustmentAction;
   chargeKept: boolean;
   refundHandoff: boolean;
@@ -43,14 +48,15 @@ export async function readCancelsForRefund(
     id: string;
     workingOrderId: string;
     lineId: string | null;
-    quantity: number | null;
+    quantity: string | null;
     action: AdjustmentAction;
     chargeKept: number;
     refundHandoff: number;
     refundValue: string | null;
     linked: string;
   }>(sql`
-    select a.id, a.working_order_id as workingOrderId, a.line_id as lineId, a.quantity,
+    select a.id, a.working_order_id as workingOrderId, a.line_id as lineId,
+      cast(a.quantity as text) as quantity,
       a.action, a.charge_kept as chargeKept, a.refund_handoff as refundHandoff,
       cast(a.refund_value as text) as refundValue,
       cast(coalesce((
@@ -63,6 +69,7 @@ export async function readCancelsForRefund(
     order by a.created_at, a.id`);
   return found.rows.map((row) => ({
     ...row,
+    quantity: row.quantity === null ? null : rawThousandthsToDecimal(row.quantity),
     chargeKept: row.chargeKept === 1,
     refundHandoff: row.refundHandoff === 1,
     refundValue: row.refundValue === null ? null : rawCentsToDecimal(row.refundValue),

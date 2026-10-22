@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   captureError,
+  checkFailed,
   CORE_MIGRATIONS,
   engineErrorMessage,
   isRefusal,
@@ -37,12 +38,13 @@ beforeEach(() => {
 const WAITER = "11111111-1111-4111-8111-111111111111";
 const AT = "2026-10-22T12:00:00.000Z";
 
-/** A charge-kept cancel of `quantity` of a €10.00 dish, handed to a refund worth `refundValue`. */
+/** A cancel of `quantity` of a €10.00 dish, handed to a refund worth `refundValue`. */
 function cancel(
   workingOrderId: string,
   reason: AdjustmentReason,
   refundValue: string | null,
   quantity = "1",
+  chargeKept = true,
 ) {
   return withTransaction(db, (tx) =>
     recordAdjustment(tx, {
@@ -66,7 +68,7 @@ function cancel(
       requestedBy: WAITER,
       approvedBy: null,
       note: null,
-      chargeKept: true,
+      chargeKept,
       preparationStarted: false,
       refundHandoff: refundValue !== null,
       refundValue: refundValue === null ? null : decimal(refundValue),
@@ -134,17 +136,39 @@ describe("the link from a refund to its cancels", () => {
     const completed = await refund("completed", 2);
     await link(completed, [{ adjustmentId: first, amount: "1.00" }]);
     expect(linkedOf(await read([first, second]))).toEqual({ [first]: "1.00", [second]: "0.00" });
+
+    const another = await refund("pending", 3);
+    await link(another, [{ adjustmentId: first, amount: "0.50" }]);
+    expect(linkedOf(await read([first, second]))).toEqual({ [first]: "1.50", [second]: "0.00" });
+  });
+
+  it("linking no cancels writes nothing", async () => {
+    const refundId = await refund("completed", 1);
+    await link(refundId, []);
+    const rows = await db.execute<{ n: number }>(sql`select count(*) as n from adjustment_refunds`);
+    expect(rows.rows).toEqual([{ n: 0 }]);
+  });
+
+  it("refuses a link of nothing", async () => {
+    const order = await seedWorkingOrder(db);
+    const reason = await seedVoidReason(db);
+    const cancelId = await cancel(order, reason, "3.00");
+    const refundId = await refund("completed", 1);
+    const zero = await captureError(() =>
+      link(refundId, [{ adjustmentId: cancelId, amount: "0.00" }]),
+    );
+    expect(checkFailed(zero, "adjustment_refunds_amount_ck")).toBe(true);
   });
 
   it("reads each cancel's stored refund value", async () => {
     const order = await seedWorkingOrder(db);
     const reason = await seedVoidReason(db);
     const handed = await cancel(order, reason, "3.33", "1");
-    const kept = await cancel(order, reason, null, "2");
+    const kept = await cancel(order, reason, null, "2", false);
     const rows = await read([handed, kept]);
     expect(rows.find((r) => r.id === handed)).toMatchObject({
       workingOrderId: order,
-      quantity: 1000,
+      quantity: "1.000",
       action: "cancel",
       chargeKept: true,
       refundHandoff: true,
@@ -152,11 +176,31 @@ describe("the link from a refund to its cancels", () => {
     });
     expect(rows.find((r) => r.id === kept)).toMatchObject({
       workingOrderId: order,
-      quantity: 2000,
+      quantity: "2.000",
+      chargeKept: false,
       refundHandoff: false,
       refundValue: null,
     });
     expect(rows.map((r) => typeof r.lineId)).toEqual(["string", "string"]);
+
+    const billDiscount = await withTransaction(db, (tx) =>
+      recordAdjustment(tx, {
+        workingOrderId: order,
+        line: null,
+        quantity: null,
+        reason: { id: reason.id, name: reason.name, policy: policySnapshotOf(reason) },
+        action: "discount_amount",
+        percentBp: null,
+        beforeAmount: decimal("20.00"),
+        afterAmount: decimal("15.00"),
+        reduction: decimal("5.00"),
+        nominalValue: decimal("5.00"),
+        requestedBy: WAITER,
+        approvedBy: null,
+        note: null,
+      }),
+    );
+    expect(await read([billDiscount])).toMatchObject([{ lineId: null, quantity: null }]);
     expect(await read([randomUUID()])).toEqual([]);
   });
 
