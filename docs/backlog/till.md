@@ -1447,11 +1447,12 @@ offer one Comp… that opens the Comp window; "Comp the bill" offers Free beside
 and €; no till word says "Give away" or «Invitar»; A1007 is what it left open; [pictures as
 built](mockups/a758-adjustment-reasons/built/). **A758-6 built the paid-table slice**
 ([plan](../superpowers/plans/2026-10-22-a758-6-unserved-on-paid-table.md)): Finish table's reason
-starts on Not served; Cancel item… offers a paid line's unserved quantity; the refund opens filled
-in with the Void reasons drop-down and the dishes, without asking the PIN again; Give back a
-payment takes the same drop-down; no cash switch; the report says Void, charged, whether
-preparation had started and what was refunded; a finished table is checked against its bills'
-zones. A cancel now stores whether it kept its charge, so the report's "Void, charged"
+starts on Not served; Void… opens the Cancel item window for a paid line's unserved quantity; the
+refund opens filled in with the Void reasons drop-down and the dishes, without asking the PIN again
+while it stays within the dishes' total with no tip (not for a card keyed on a separate terminal);
+Give back a payment takes the same drop-down; no cash switch; the report says Void, charged,
+whether preparation had started and what was refunded; a finished table is checked against its
+bills' zones. A cancel now stores whether it kept its charge, so the report's "Void, charged"
 («Cancelado, cobrado», design §3.6) reads right even for a dish already comped to €0.00. A1020 and
 A1021 are what it left open. Left: "They'll collect it at the counter". The notes below are the
 review as written before the
@@ -2703,7 +2704,8 @@ Left open by A758-6. Each works as built, with the default named; the owner may 
    (`tender.refund_exceeds_cancelled`).
 4. **A refund raised above the filled-in total is an ordinary refund**: it asks for a PIN and the
    dish's report entry shows no "Refunded", though money did go back for the dish (D19 and §3.6
-   show such money linked to the cancel).
+   show such money linked to the cancel), and so is the rest refunded from a second payment
+   (Decision 16).
 5. **New words, ours:** "Refund pending €x" («Devolución pendiente …») and "This refund is more
    than the cancelled dishes' value." («Esta devolución supera el valor de los platos
    cancelados.»), which names no amount where the plan's wording did.
@@ -2725,3 +2727,12 @@ Left open by A758-6. Each works as built, with the default named; the owner may 
     so a reason that needs a note (such as Other) asks for the note again.
 12. **With two receipts, closing the first refund without sending it drops the carried PIN for
     both**, so the second asks for the PIN.
+13. **The refund dialogs keep Refund enabled before a reason is chosen** and explain on press,
+    while Cancel item and Finish table grey their action out.
+14. **Finish table is simpler than picture 06**: no table and payment line, no amount or status
+    per dish.
+15. **The Spanish Refund tick reads «Devolución»**, where the picture said «Devolver».
+16. **Cancel item on a partly served line does not say one was served.**
+17. **The reason drop-down shows a search box** even with the five starter Void reasons.
+18. **The report's "Refunded €5.50" cell repeats its column heading.**
+19. **On a phone, the report's new columns sit mid-scroll.**

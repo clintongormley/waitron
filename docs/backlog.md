@@ -2222,11 +2222,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   one Comp… that opens the Comp window; "Comp the bill" offers Free beside % and €;
   no till word says "Give away" or «Invitar»; A1007 is what it left open. **A758-6 built the
   paid-table slice** ([plan](superpowers/plans/2026-10-22-a758-6-unserved-on-paid-table.md)): Finish
-  table's reason starts on Not served; Cancel item… offers a paid line's unserved quantity; the
-  refund opens filled in with the Void reasons drop-down and the dishes, without asking the PIN
-  again; Give back a payment takes the same drop-down; no cash switch; the report says Void,
-  charged, whether preparation had started and what was refunded; a finished table is checked
-  against its bills' zones. A cancel now stores whether it kept its charge, so the report's "Void,
+  table's reason starts on Not served; Void… opens the Cancel item window for a paid line's
+  unserved quantity; the refund opens filled in with the Void reasons drop-down and the dishes,
+  without asking the PIN again while it stays within the dishes' total with no tip (not for a card
+  keyed on a separate terminal); Give back a payment takes the same drop-down; no cash switch; the
+  report says Void, charged, whether preparation had started and what was refunded; a finished
+  table is checked against its bills' zones. A cancel now stores whether it kept its charge, so the report's "Void,
   charged" («Cancelado, cobrado», design §3.6) reads right even for a dish already comped to
   €0.00. A1020 and A1021 are what it left open. Left: "They'll collect it at the counter".
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),

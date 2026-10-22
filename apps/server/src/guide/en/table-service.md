@@ -30,7 +30,7 @@ the failure; close it and open it again before choosing a payment.
 ## Cancel a dish on a paid bill {#cancel-paid-dish}
 
 When a table has paid for a dish that is not coming, cancel it so the kitchen stops making it and
-the guest can have the money back. Among the table's sent dishes, choose **Void…** beside the dish.
+the guest can have the money back. Among the table's sent dishes, choose **Void…** from the dish's **More** menu.
 On a paid bill, it is offered only for what has not been served yet.
 
 The **Cancel item** window says **This bill is paid**. Choose **How many**, up to the number not
@@ -86,8 +86,10 @@ time. A card keyed on a separate terminal always asks for the PIN, because there
 the terminal refund was done.
 
 When the chosen payment holds less than the dishes' total, the amount is what it holds, and a line
-such as **€2.00 left to refund from another payment** says what remains. Refund the rest from
-another payment. If that payment cannot be refunded on this device, the window tells
+such as **€2.00 left to refund from another payment** says what remains. To refund the rest, choose
+**Refund a payment** again and pick another payment. That window is not filled in: enter the amount
+and reason yourself. If you cannot give refunds, it asks for the PIN, and the dishes' entries in the
+report do not show that part. If that payment cannot be refunded on this device, the window tells
 you to refund it at a till.
 
 ## Refund a card payment on a separate terminal {#separate-terminal}
