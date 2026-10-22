@@ -1819,8 +1819,6 @@ describe("the apt_get wrapper inside waitron.sh", () => {
   });
 });
 
-// Deliberately the LAST case in the file. Run first, it pays the cold-stub first-execution cost, which
-// can cross its 700ms budget whether the stub sleeps or not. By here the stubs are warm.
 describe("waitron.sh when a run does not finish", () => {
   it("names the command, the signal and the recorded calls", () => {
     // 2s, not longer: `spawnSync` signals only `bash`, so the stub's `sleep` is reparented and
@@ -1828,7 +1826,8 @@ describe("waitron.sh when a run does not finish", () => {
     const sb = sandbox({ hang: "2" });
     let caught;
     try {
-      run(sb, ["install"], {}, { timeoutMs: 700 });
+      // Start after self refresh; this case records a timeout while Docker is hanging.
+      run(sb, ["install"], { WAITRON_SH_REFRESHED: "1" }, { timeoutMs: 700 });
     } catch (error) {
       caught = error;
     }

@@ -43,6 +43,76 @@ from its merge base with `origin/main`. Package tests and coverage run in CI; th
 local because they check the machinery that decides what runs. CI also runs mutation testing and
 `bundle-smoke`.
 
+### Root workers start from available headroom
+
+Several root suites can exhaust processor time while the machine still has plenty of memory.
+Locally, the root configuration now reads the host at startup through
+`scripts/root-test-budget.mjs`. Its worker limit is the smaller of one quarter of estimated unused
+processor capacity and one worker per GiB from Node's `freemem()`, rounded down, with one worker
+as the minimum. The processor estimate is `availableParallelism() - loadavg()[0]`, using the
+operating system's one-minute load average. An 18-processor host at load 10 with 16 GiB free gets
+two workers; the same host at load zero gets four. With 2.5 GiB free on an otherwise idle
+64-processor host, the limit is two.
+
+The clean paired reproduction used 34 Vitest workers. Snapshots captured 72 runnable processes
+and a peak sum of resident sizes of 10,218 MiB, at different times. The quarter-capacity allowance is a conservative scheduling choice: workers share the
+remaining capacity with their children and newly starting work. It is an estimate, not a
+reservation; other processes can consume the same headroom later.
+Node's `freemem()` is also more conservative than macOS's `memory_pressure` reading when the
+latter counts reclaimable memory. The review measured 12.35 GiB from Node while
+`memory_pressure` reported 66% free on this 64 GiB Mac.
+
+Use the normal `pnpm vitest run --coverage`; the root configuration supplies the local limit.
+With the `CI` flag set, it leaves Vitest's existing worker default in place. Package configurations
+are unchanged, and an explicit Vitest worker option or `VITEST_MAX_WORKERS` still overrides the
+root configuration. Existing timeouts and coverage thresholds remain unchanged.
+
+A994 measurements on 2026-10-22, Node v26.11.1 and Vitest 4.1.11, from separate installed
+worktrees with separate coverage directories:
+
+| Concurrent root coverage commands | Workers per command | Result |
+| --- | ---: | --- |
+| Two, unchanged configuration, no tracing preload | 17 | 17 failed cases each, including bundle-parent and source-scan deadlines; 353.57/353.81 s |
+| Two, explicit worker control | 4 | All 7,956 cases and coverage thresholds passed in each; 167.82/168.16 s |
+| Three normal commands, final implementation | 1 | All 7,967 cases and coverage thresholds passed in each; 368.37/373.65/372.39 s |
+
+Explicit worker-override probes also timed out. One forced four workers per root while its
+start snapshot already showed load 55.37 on 18 processors, which would select one worker under
+the normal configuration. Those probes bypassed the estimator and do not verify its normal
+behaviour or establish what an idle host can handle.
+
+The unchanged colour-guard files took 228.55/225.49 seconds in the first row. An isolated scan
+spent 1.74 seconds in tests without coverage and 5.74 seconds with coverage. The isolated coverage
+command failed the global bar because other root scripts were unexercised; it is a timing probe,
+not a passing coverage gate. The clean paired reproduction excludes an earlier tracing preload,
+which itself broke the `comments-only` fixture with a deliberately invalid package file.
+Commands, JSON reports, CPU profiles and process snapshots are retained in lane G's
+`receipts/a994-20261022-022554/`.
+
+A concurrent control also exposed a separate fixture problem: the installer's 700 ms timeout
+diagnostic could expire during self refresh, before its intended hanging Docker call. The fixture
+now passes the existing `WAITRON_SH_REFRESHED=1` flag, as the suite's already-refreshed case does.
+A cold focused run failed the original `/docker/` assertion with only `mktemp` and `cp` recorded;
+with that flag it passed all existing assertions. Its 700 ms deadline is unchanged. Self-refresh
+checks remain in their own cases. The timeout-budget scanner generates an additional case for
+the new budget test file, which accounts for one extra case beyond the new file's ten cases.
+
+The plain-bundle fixtures used to invoke the CLI from the repository's `scripts/` directory.
+That CLI derives its source root from its own location, so changing its working directory to a
+small fixture still built the complete backup-qualification model on every call. Child tracing
+identified that 60-second child inside a 20-second parent. The plain fixtures now copy the same
+four CLI modules that the release-stamp fixture copies into its own Git-less folder. Their sharp,
+CommonJS and licence assertions remain, and the loaded first fixture now also asserts null build
+identity. That new assertion failed with the original repository CLI and passed with the isolated
+CLI. The dedicated real-source tests in `scripts/backup-verification-runtime.test.mjs` still run the
+repository CLI and assert its runtime and hour-release identity; those checks are unchanged.
+
+The helper returns the copied CLI's canonical path. On this Mac, passing the temporary path
+through its `/var/folders` spelling returned success without producing a bundle, because the CLI's
+entry predicate compares the argument URL with the module's resolved URL. Using the matching
+`/private/var/folders` spelling executed it. A994 canonicalizes its test path and leaves the
+production predicate unchanged.
+
 ### Why the sign-off check leaves out main's commits, and why only a refreshed main
 
 An existing remote ref makes the hook use its remote tip as the range base. After a rebase onto
