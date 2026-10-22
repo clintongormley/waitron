@@ -292,7 +292,8 @@ It comes after the Demo bar (A246, W36) and A238, whose device and profile model
   served over HTTPS. Two gaps remain: the signal is trustworthy only while the server answers the
   probe with 404, which the box's `mountSpa` does; and no test covers the HTTPS default, because a
   browser test page cannot be served over HTTPS. **Next action:** during the on-device trust rows
-  above, click past the certificate warning on one device and confirm the page appears.
+  above, click past the certificate warning on one device and confirm the page appears in the
+  browser's preferred supported language, falling back to English when none is supported.
 
 ## A fresh Demo venue opens its dashboard on a red tax-filing alert
 
