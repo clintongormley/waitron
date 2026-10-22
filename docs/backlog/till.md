@@ -1291,7 +1291,9 @@ changes and the Spanish word for held dishes, landed (plan
 `docs/backlog/mockups/a757-table-states/4b-owner-changes.png` and `4b-owner-changes-dark.png`;
 pictures as built in `docs/backlog/mockups/a757-table-states/built-4b/`); slice 5, the whole-table
 map and the zone tabs, landed (plan `docs/superpowers/plans/2026-10-20-a757-5-map-zone-tabs.md`;
-pictures as built in `docs/backlog/mockups/a757-table-states/built-5/`).
+pictures as built in `docs/backlog/mockups/a757-table-states/built-5/`); slice 6, item counts by
+state in the order lists, landed (plan `docs/superpowers/plans/2026-10-21-a757-6-item-counts-by-state.md`;
+pictures as built in `docs/backlog/mockups/a757-table-states/built-6/`).
 
 Venue settings' Tables tab (`apps/dashboard/src/screens/service-status-screen.ts`) held two things:
 
@@ -1338,7 +1340,8 @@ the owner asked for:
   Waiting tab; a colour change instead under reduced motion.
 - **Item counts by state in the order lists.** Built by A757 slice 6
   (`docs/superpowers/plans/2026-10-21-a757-6-item-counts-by-state.md`): Parked orders and Waiting
-  rows, and Transfers rows for the department holding the tab, show how many items an order holds,
+  rows, and Transfers rows, for the desk a tab is offered to and for the department holding it
+  while the tab is in a zone the viewing device's profile serves or in none, show how many items an order holds,
   then how many are unsent, held, waiting and ready (`readOrderStateCounts`, `apps/server/src/order-state-counts.ts`; chips in
   `apps/till/src/widgets/order-counts.ts`).
 

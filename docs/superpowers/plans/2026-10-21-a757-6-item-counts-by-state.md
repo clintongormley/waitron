@@ -619,7 +619,9 @@ row (`apps/till/test/find-bill-fixtures.ts:15`, `find-bill-client.test.ts:127`) 
   tiene y cuántos están sin enviar, en espera, esperando o listos.»); `help.more.transfers` — "A tab
   your department holds shows the same counts." («Una cuenta de tu departamento muestra los mismos
   recuentos.»). Shortest wording whose meaning can be inferred (owner); the help-strings tests
-  (`apps/till/src/i18n/help-strings.test.ts:39-62`) must still pass.
+  (`apps/till/src/i18n/help-strings.test.ts:39-62`) must still pass. **2026-10-22:** the
+  finish-branch review replaced the `help.more.transfers` sentence, which had nothing for "the same
+  counts" to refer to; the shipped wording is `help.more.transfers` in `apps/till/src/i18n/help-strings.ts`.
 - Modify: `apps/till/src/widgets/department-transfers.summaries.test.ts`.
 
 - [ ] **Step 1: Write the failing tests:** an incoming row with `counts` shows its chips; a sent

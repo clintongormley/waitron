@@ -2195,6 +2195,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   bill's lines (`apps/server/src/find-bill-bills.ts:44`), so for one bill it can disagree with the
   Parked orders row, which counts items.
 
+- **A997. An open order's item counts change when its dish's unit is changed (left open by A757
+  slice 6).** A line freezes its unit's decimal places (`unit_precision`) but not whether the unit
+  is a measure or a scale's, so `readOrderStateCounts` (`apps/server/src/order-state-counts.ts`)
+  reads those from the product's current unit. Measured 2026-10-22 with a case added for the run to
+  `apps/server/src/order-state-counts.test.ts` and not kept: a parked 330 ml dish read `ordered: 1`
+  before `assignProductUnit` moved its product to a whole-portion unit and `ordered: 330` after. The
+  plan's owner point 15 names this default. The fix freezes that choice on the line, which takes a
+  migration.
+
 - **A900. A757 slice 7's open questions, built with defaults (left open by slice 7, 2026-10-19).**
   For the owner, a candidate question to batch: the words the pictures do not draw — the fifth
   start's label ("Repeats after the last order" / "Se repite tras el último pedido"), the Spanish
