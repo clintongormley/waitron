@@ -2640,10 +2640,13 @@ change waiting", "free-space deletion frees a rotated log on a full disk, and th
 "a supervisor is refused on a full disk". The fallback's own refusals (a supervisor, an ended,
 expired or suspended session) are pinned by the "on a full disk" half of the `describe.each` in
 `box-health-api.test.ts`, through a stand-in that refuses every write turn. On the real disk a
-supervisor is refused before the fallback: replacing the fallback with a rethrow left "a supervisor
-is refused on a full disk" passing, while the manager's case failed 507 (Task 15's review, macOS
-`hdiutil` image). The refusal seems to come at commit, after the permission check has already
-thrown (inferred, not isolated).
+supervisor is refused before the fallback. Measured 2026-10-22 on macOS with the harness's `hdiutil`
+image: with `box-health-api.ts`'s fallback `return (await check(db, false)).authorizedBy;` replaced
+by `throw error;`, `WAITRON_REQUIRE_FULL_DISK=1 pnpm exec vitest run
+src/start-full-disk.e2e.test.ts -t 'a supervisor is refused on a full disk'` in `apps/server` still
+printed `1 passed`, while the same run with `-t 'the box health read answers on a full disk'`
+failed `expected 507 to be 200`. The refusal seems to come at commit, after the permission check
+has already thrown (inferred, not isolated).
 
 **Still refused.**
 
