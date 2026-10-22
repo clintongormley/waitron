@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "lit";
 import { applyTokens } from "@waitron/ui";
@@ -19,6 +19,7 @@ afterEach(() => {
 describe("certificate trust instructions", () => {
   it.each([
     { languages: ["es-MX", "en"], locale: "es-ES", strings: es },
+    { languages: ["ES-mx", "en"], locale: "es-ES", strings: es },
     { languages: ["en-US", "es"], locale: "en-GB", strings: en },
     { languages: ["fr-FR", "es"], locale: "es-ES", strings: es },
     { languages: ["fr-FR"], locale: "en-GB", strings: en },
@@ -33,9 +34,16 @@ describe("certificate trust instructions", () => {
   });
 
   it("uses browser preferences and the current hostname by default", () => {
-    render(trustInstructions(), host);
-    expect(host.querySelector("a")?.href).toBe(`http://${location.hostname}/`);
-    expect(host.querySelector("h1")?.textContent).toBeTruthy();
+    const languages = vi.spyOn(navigator, "languages", "get").mockReturnValue(["es-MX", "en-US"]);
+    try {
+      render(trustInstructions(), host);
+      expect(host.querySelector("a")?.href).toBe(`http://${location.hostname}/`);
+      expect(host.querySelector("h1")?.textContent).toBeTruthy();
+      expect(host.querySelector("h1")?.textContent).toBe(es["trust.title"]);
+      expect(host.querySelector("main")?.lang).toBe("es-ES");
+    } finally {
+      languages.mockRestore();
+    }
   });
 
   it.each(["light", "dark"] as const)(

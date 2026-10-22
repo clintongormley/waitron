@@ -3,8 +3,8 @@
 ## Trust the box before opening the till {#certificate-trust}
 
 If the till asks you to install the box's certificate, choose **Open the setup page for
-instructions**. Install the certificate on this device, then reopen the till. This page follows
-your browser's preferred supported language, with English as the fallback.
+instructions**. Install the certificate on this device, then reopen the till. The certificate-trust
+page follows your browser's preferred supported language, with English as the fallback.
 
 ## Refund all or part of a payment {#refund-payment}
 

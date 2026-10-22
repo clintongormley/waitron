@@ -723,7 +723,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **The till's "This device hasn't trusted the till yet" page has never been seen on a real
   device.** **Next action:** during the on-device trust rows above, click past the certificate
-  warning on one device and confirm the page appears.
+  warning on one device and confirm the page appears in the browser's preferred supported
+  language, falling back to English when none is supported.
   [Detail](backlog/setup.md#the-tills-this-device-hasnt-trusted-the-till-yet-page-has-never-been-seen-on-a-real-device)
 
 - **`pnpm dev:reset` deletes the venue folder before it refuses `WAITRON_ENV=production`.**

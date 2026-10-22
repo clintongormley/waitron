@@ -4,8 +4,8 @@
 
 Si la caja te pide instalar el certificado del servidor, elige **Abre la página de configuración
 para ver las instrucciones**. Instala el certificado en este dispositivo y vuelve a abrir la caja.
-Esta página usa el idioma compatible preferido de tu navegador; si no encuentra ninguno, usa el
-inglés.
+La página para confiar en el certificado usa el idioma compatible preferido de tu navegador; si
+no encuentra ninguno, usa el inglés.
 
 ## Devolver un pago entero o una parte {#refund-payment}
 
