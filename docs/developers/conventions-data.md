@@ -2539,9 +2539,10 @@ reader for a new sale (`payIntegrated`); and on every bill payment, cash include
 
 Since A798-B slice 6, reads that used to answer 507 `storage.disk_full` on a full disk once a
 last-seen stamp was due now answer: the equipment read (`GET /api/device/equipment`, which carries
-the till's staff notices, and answers with a change waiting too), `GET /api/till` and the other
-device-checked reads, and every non-passive session-checked read. Each had failed on a write it
-makes for itself, not on the work it was asked for. The measurements are the slice plan's M2, M6 and M10
+the till's staff notices, and answers with a change waiting too), and — when the route's own work
+writes nothing and no change waits — `GET /api/till`, the other device-checked reads and every
+non-passive session-checked read. Each had failed on a write it makes for itself, not on the work
+it was asked for. The measurements are the slice plan's M2, M6 and M10
 ([plan](../superpowers/plans/2026-10-22-a798-6-device-strip.md#measured-for-this-plan)), taken on
 a small real filesystem; the cases that now pin them are in
 `apps/server/src/start-full-disk.e2e.test.ts`.
@@ -2553,7 +2554,7 @@ a small real filesystem; the cases that now pin them are in
   full disk with a stamp due, the equipment read answered 507, and again on the next read (M6);
   `GET /api/till`, a session-checked read (`GET /api/working-orders`) and PIN sign-in all answered
   507 (M10). With no stamp due, the first two answered 200. Passive session checks skip the stamp,
-  and were never affected.
+  and were never affected by it.
 - **The change-log drain.** `withTransaction` (`packages/db/src/tenancy.ts`) ends every body with
   `drainChangeLog`, which deletes the waiting `change_log` rows. When a change is waiting — a
   write made outside `withTransaction` leaves one, as the deployment-mode, singleton-role and
@@ -2578,7 +2579,7 @@ a small real filesystem; the cases that now pin them are in
   in `apps/server/src/device-session.test.ts`, and the cases from "a stamp refused for a full disk
   still answers the session" to "with room, a stamp due is saved" in
   `apps/server/src/till-api.test.ts`, through a stand-in database that refuses the stamp.
-- **The equipment read reads in turns.** It is the one route that opens no `withTransaction`: the
+- **The equipment read reads in turns.** It opens no `withTransaction`: the
   equipment is read in one `withWriteLock` turn (`device-api.ts`), and each notice source in a turn
   of its own (`readStaffNoticesInTurns`, `apps/server/src/staff-notices.ts`), with no drain; a
   source whose turn changes a row (`total_changes()` moved) is failed and rolled back. This is the
@@ -2599,9 +2600,14 @@ on macOS through `hdiutil` and in CI on a tmpfs, and skip on a Linux machine wit
 - Every other route's own `withTransaction`, read-only or not, while a change waits: its drain is
   refused. M10 measured it with no stamp due and one waiting change: `GET /api/till`, the
   session-checked read and PIN sign-in each answered 507, before and after the stamp change (which
-  step refused was not isolated). That was the plan's prototype; the shipped `requireSession` also
-  gives way when its own drain is refused, so a session-checked read is then refused by its route's
-  own `withTransaction`, if it opens one — reasoned from the code, not run.
+  step refused was not isolated). That was the plan's prototype. On the shipped code (`983fb3862`),
+  a real-disk probe on macOS (`hdiutil`) with one waiting change and no stamp due answered 507 for
+  both `GET /api/till` and `GET /api/working-orders`. On the second, `requireSession` caught its
+  own drain's refusal and its re-check passed, and the 507 came from the route's own
+  `withTransaction` (`listHeldOrders`, `apps/server/src/working-order.ts`). `GET /api/till` takes
+  no session check and opens its own `withTransaction` around `readTillSetup` (`till-api.ts`), the
+  likely source of its 507 — read, not isolated. The control, with no waiting change, answered 200
+  for both.
 - PIN sign-in, from its own session write: a refused sign-in writes no session.
 - While the disk is full, no device's last-seen time moves, so anything that reads it as a sign of
   life sees the device go quiet.

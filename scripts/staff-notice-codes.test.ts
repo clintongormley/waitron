@@ -1,11 +1,12 @@
 // Reads source TEXT, which makes it weaker than its name: only a double-quoted `code: "..."` literal
 // with one or more dots in the files listed below is found, so a code assembled at runtime, spelled
-// with another quote, or sent from a source in another file escapes this scan. It checks the till's
-// strings, not that the till's wording function maps the code to them.
+// with another quote, or sent from a source in another file escapes this scan.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { staffNoticeText } from "../apps/till/src/i18n/staff-notices.js";
 import { en, es } from "../apps/till/src/i18n/strings.js";
+import { currentLocale, setLocale } from "../apps/till/src/i18n/t.js";
 
 const root = join(import.meta.dirname, "..");
 
@@ -35,7 +36,30 @@ function withoutWords(codes: readonly string[]): string[] {
   return codes.filter((code) => !(worded(en, code) && worded(es, code)));
 }
 
-describe("staff-notice codes have till words", () => {
+const LOCALES = ["en", "es"] as const;
+
+/** Codes `staffNoticeText` draws as unknown in either language, given params a count can show. */
+function wordedAsUnknown(codes: readonly string[]): string[] {
+  const before = currentLocale();
+  try {
+    return codes.filter((code) =>
+      LOCALES.some((locale) => {
+        setLocale(locale);
+        const unknown = staffNoticeText({ code: "", params: {} }).main;
+        return staffNoticeText({ code, params: { count: 2, held: 0 } }).main === unknown;
+      }),
+    );
+  } finally {
+    setLocale(before);
+  }
+}
+
+const NOT_A_CODE = "staff_notice_guard.never_a_code";
+
+describe("staff-notice codes are worded by the till", () => {
+  const startLocale = currentLocale();
+  afterEach(() => setLocale(startLocale));
+
   it("finds the notice codes it is meant to guard", () => {
     expect(noticeCodes()).toEqual(
       expect.arrayContaining([
@@ -51,8 +75,19 @@ describe("staff-notice codes have till words", () => {
     expect(withoutWords(noticeCodes())).toEqual([]);
   });
 
-  it("names only the codes without words, and refuses blank words", () => {
-    expect(withoutWords(["storage.disk_full", "zz.probe"])).toEqual(["zz.probe"]);
-    expect(worded({ "staff_notice.zz.blank": " " }, "zz.blank")).toBe(false);
+  it("the till words every notice code, in English and Spanish, as more than 'needs attention'", () => {
+    expect(wordedAsUnknown(noticeCodes())).toEqual([]);
+  });
+
+  it("names only the codes that are not worded, and refuses blank words", () => {
+    expect(withoutWords(["storage.disk_full", NOT_A_CODE])).toEqual([NOT_A_CODE]);
+    expect(wordedAsUnknown(["storage.disk_full", NOT_A_CODE])).toEqual([NOT_A_CODE]);
+    expect(worded({ [`staff_notice.${NOT_A_CODE}`]: " " }, NOT_A_CODE)).toBe(false);
+  });
+
+  it("puts the till's language back", () => {
+    setLocale("en-GB");
+    wordedAsUnknown(noticeCodes());
+    expect(currentLocale()).toBe("en-GB");
   });
 });

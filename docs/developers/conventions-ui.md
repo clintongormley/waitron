@@ -1597,17 +1597,19 @@ open till keeps", and `apps/till/src/state/staff-notices.test.ts`.
 
 **A notice code's words.** The till words a notice by its `code` (`staffNoticeText`,
 `apps/till/src/i18n/staff-notices.ts`) from `staff_notice.<code>` in
-`apps/till/src/i18n/strings.ts`, in English and Spanish; a code it has no words for is drawn as
-"The box needs attention · Tell a manager", in its own tone. `scripts/staff-notice-codes.test.ts`
-holds every code a source sends to those words, and is weaker than its name:
+`apps/till/src/i18n/strings.ts`, in English and Spanish. It words only the codes it names, so a
+code it does not name is drawn as "The box needs attention · Tell a manager", in its own tone,
+whatever the strings file holds. `scripts/staff-notice-codes.test.ts` requires, for every code a
+source sends, words in both languages in the strings file and a wording from `staffNoticeText` in
+both languages other than that one. It is weaker than its name:
 
 - It reads text: only a double-quoted `code: "…"` literal is found, so a code built at runtime or
   spelled with another quote escapes it.
 - It reads only the files it lists (`apps/server/src/box-staff-notices.ts` and
   `packages/fiscal-verifactu/src/staff-notices.ts`); a source in another file, such as a new
   module's, is seen by nothing until that file is added to the list.
-- It checks the strings file, not `staffNoticeText`: a code with words but no branch there is still
-  drawn as unknown.
+- It asks `staffNoticeText` with one set of params (a count of 2, none held), so a branch that
+  words some params as unknown is checked only for those.
 
 **The handheld's pay sheet.** Opening the sheet on a handheld reads the phone's equipment again,
 for an open bill and for a presented one; while the sheet shows a card payment of its own that the

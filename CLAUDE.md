@@ -325,10 +325,11 @@ called weaker than its name, the topic file lists what it does not see.
 - **A value the till takes from its start read either refreshes through `setupRevision` or is
   listed as fixed until reload**, with why, in [conventions-ui.md](docs/developers/conventions-ui.md).
   Cost: courses stayed missing from an open table until a reload (A768). Nothing guards it.
-- **A staff-notice code needs till words in English and Spanish** (`staff_notice.<code>` in
-  `apps/till/src/i18n/strings.ts`); a code without them is drawn as "The box needs attention".
-  Guard: `scripts/staff-notice-codes.test.ts`, weaker than its name — it reads `code: "…"` literals
-  in the files it lists. See [conventions-ui.md](docs/developers/conventions-ui.md).
+- **Every staff-notice code a source sends is worded by the till's `staffNoticeText`**
+  (`apps/till/src/i18n/staff-notices.ts`, from `staff_notice.<code>` in English and Spanish); a
+  code it does not name is drawn as "The box needs attention". Guard:
+  `scripts/staff-notice-codes.test.ts`, weaker than its name — it reads `code: "…"` literals as
+  text, in source files it lists by hand. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A background API client does not make POST requests passive.** Only GETs are marked passive;
   automatic pairing renewal uses its own authenticated route.
 - **Dashboard subscription names travel with their server sources.** A rejected subscription closes
