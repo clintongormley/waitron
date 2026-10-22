@@ -168,7 +168,7 @@ it("the venue command imports selected module input but cannot skip unfinished p
   expect(await runCli(f.args, f.deps)).toBe(1);
   const state = await f.runtime.store.read();
   expect(state).toMatchObject({ status: "consumption-intent", consumptionIntent: true });
-  expect(state!.inputs[MODULE]).toMatchObject({ allocation: { installationIdentity: "06RB" } });
+  expect(state!.inputs[MODULE]).toMatchObject({ allocation: { installationIdentity: "0CNNW" } });
   expect(f.output, JSON.stringify(f.output)).toContain("setup.not_ready {}");
   expect(await readTenantIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
@@ -523,7 +523,7 @@ it("the venue command activates its kept hour and completes checked publication"
   const series = await venue.db
     .select({ code: invoiceSeries.code, nextNumber: invoiceSeries.nextNumber })
     .from(invoiceSeries);
-  expect(series.map((row) => row.code).sort()).toEqual(["A-06RB", "FF-06RB", "R-06RB"]);
+  expect(series.map((row) => row.code).sort()).toEqual(["A-0CNNW", "FF-0CNNW", "R-0CNNW"]);
   expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
   expect(f.output).toContain(`node:     ${state.frozen.nodeId}`);
   expect(await readDeploymentEnvironment(venue.db)).toBe("preproduction");
@@ -937,7 +937,7 @@ it("the production venue command checks accepted readiness and seals its exact p
   expect(state.status).toBe("complete");
   expect(await readDeploymentEnvironment(venue.db)).toBe("production");
   const series = await venue.db.select().from(invoiceSeries);
-  expect(series.map((row) => row.code).sort()).toEqual(["A-06RB", "FF-06RB", "R-06RB"]);
+  expect(series.map((row) => row.code).sort()).toEqual(["A-0CNNW", "FF-0CNNW", "R-0CNNW"]);
   expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
   const { loadKeyRing, tryGetCredential } = await import("@waitron/credentials");
   const { withTransaction } = await import("@waitron/db");
@@ -1159,7 +1159,7 @@ it("a refusal after stamping retains that environment and can retry the original
     (await venue.db.select({ code: invoiceSeries.code }).from(invoiceSeries))
       .map((row) => row.code)
       .sort(),
-  ).toEqual(["A-06RB", "FF-06RB", "R-06RB"]);
+  ).toEqual(["A-0CNNW", "FF-0CNNW", "R-0CNNW"]);
 });
 
 async function commandReadinessFixture(answer = "yes") {

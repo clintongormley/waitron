@@ -176,14 +176,14 @@ it("reads back a completed activation after a lost response and offers no second
   const publicRequest = {
     kind: "waitron-hour-setup",
     status: "selected",
-    identity: "06TH",
+    identity: "0CRHE",
     input: {
       allocation: {
-        installationIdentity: "06TH",
+        installationIdentity: "0CRHE",
         series: [
-          { code: "A-06TH", purpose: "standard" },
-          { code: "FF-06TH", purpose: "full" },
-          { code: "R-06TH", purpose: "rectificative" },
+          { code: "A-0CRHE", purpose: "standard" },
+          { code: "FF-0CRHE", purpose: "full" },
+          { code: "R-0CRHE", purpose: "rectificative" },
         ],
       },
     },

@@ -39,7 +39,7 @@ async function mount(waiting = false, intercept?: (path: string) => Promise<Resp
         return Response.json({
           attemptId: initial.attemptId,
           modules: [
-            { module: "fiscal-verifactu", request: { status: "selected", identity: "06TH" } },
+            { module: "fiscal-verifactu", request: { status: "selected", identity: "0CRHE" } },
           ],
         });
       return undefined;

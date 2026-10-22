@@ -178,14 +178,14 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     await readFile(join(stateDir, "module-preparation-state.json"), "utf8"),
   );
   expect(journal.revisions.at(-1).value.entries).toMatchObject([
-    { kind: "intent", identity: "06SV" },
-    { kind: "resume", identity: "06SV" },
+    { kind: "intent", identity: "0CRFW" },
+    { kind: "resume", identity: "0CRFW" },
   ]);
   const stored = await openVenueDatabase(target);
   try {
     expect(await readDeploymentEnvironment(stored.venue)).toBe("preproduction");
     const series = await stored.venue.select().from(invoiceSeries);
-    expect(series.map((row) => row.code).sort()).toEqual(["A-06SV", "FF-06SV", "R-06SV"]);
+    expect(series.map((row) => row.code).sort()).toEqual(["A-0CRFW", "FF-0CRFW", "R-0CRFW"]);
     expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
   } finally {
     await stored.close();

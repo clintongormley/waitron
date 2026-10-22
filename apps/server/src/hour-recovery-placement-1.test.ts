@@ -116,18 +116,18 @@ describe("selected-hour admission before archive placement", () => {
             .filter((row) => row.retiredAt !== null)
             .map(({ code, nextNumber }) => ({ code, nextNumber })),
         ).toEqual([
-          { code: "A-06RB", nextNumber: 123 },
-          { code: "FF-06RB", nextNumber: 123 },
-          { code: "R-06RB", nextNumber: 123 },
+          { code: "A-0CNNW", nextNumber: 123 },
+          { code: "FF-0CNNW", nextNumber: 123 },
+          { code: "R-0CNNW", nextNumber: 123 },
         ]);
         expect(
           rows
             .filter((row) => row.retiredAt === null)
             .map(({ code, nextNumber }) => ({ code, nextNumber })),
         ).toEqual([
-          { code: "A-06RC", nextNumber: 1 },
-          { code: "FF-06RC", nextNumber: 1 },
-          { code: "R-06RC", nextNumber: 1 },
+          { code: "A-0CNQR", nextNumber: 1 },
+          { code: "FF-0CNQR", nextNumber: 1 },
+          { code: "R-0CNQR", nextNumber: 1 },
         ]);
         expect(await result.venue.select().from(fiscalAllocations)).toHaveLength(2);
       } finally {
@@ -157,9 +157,9 @@ describe("selected-hour admission before archive placement", () => {
           .filter((row) => row.retiredAt === null)
           .map(({ code, nextNumber }) => ({ code, nextNumber })),
       ).toEqual([
-        { code: "A-06RC", nextNumber: 1 },
-        { code: "FF-06RC", nextNumber: 1 },
-        { code: "R-06RC", nextNumber: 1 },
+        { code: "A-0CNQR", nextNumber: 1 },
+        { code: "FF-0CNQR", nextNumber: 1 },
+        { code: "R-0CNQR", nextNumber: 1 },
       ]);
       expect(await placed.venue.select().from(fiscalAllocations)).toHaveLength(2);
     } finally {
@@ -180,7 +180,7 @@ describe("selected-hour admission before archive placement", () => {
       await placed.venue
         .update(invoiceSeries)
         .set({ nextNumber: 124 })
-        .where(eq(invoiceSeries.code, "A-06RC"));
+        .where(eq(invoiceSeries.code, "A-0CNQR"));
       before = await placed.venue.select().from(invoiceSeries);
     } finally {
       await placed.close();
@@ -241,7 +241,7 @@ describe("selected-hour admission before archive placement", () => {
       const [standard] = await suite.db
         .select()
         .from(invoiceSeries)
-        .where(eq(invoiceSeries.code, "A-06RB"));
+        .where(eq(invoiceSeries.code, "A-0CNNW"));
       const first = await sell(suite.db, standard!.id);
       const submitted = await drain(
         {
@@ -265,8 +265,8 @@ describe("selected-hour admission before archive placement", () => {
       });
       const before = await snapshot(suite.db);
       expect(before.records.map((row) => row.num_serie_factura)).toEqual([
-        "A-06RB/123",
-        "A-06RB/124",
+        "A-0CNNW/123",
+        "A-0CNNW/124",
       ]);
       expect(before.records[1]?.anterior_huella).toBe(before.records[0]?.huella);
       expect(
@@ -386,14 +386,14 @@ describe("selected-hour admission before archive placement", () => {
             .filter((row) => row.retiredAt === null)
             .map(({ code, nextNumber }) => ({ code, nextNumber })),
         ).toEqual([
-          { code: "A-06RC", nextNumber: 1 },
-          { code: "FF-06RC", nextNumber: 1 },
-          { code: "R-06RC", nextNumber: 1 },
+          { code: "A-0CNQR", nextNumber: 1 },
+          { code: "FF-0CNQR", nextNumber: 1 },
+          { code: "R-0CNQR", nextNumber: 1 },
         ]);
         await expect(sell(placed.venue, standard!.id)).rejects.toMatchObject({
           code: "sale.series_retired",
         });
-        const fresh = series.find((row) => row.code === "A-06RC")!;
+        const fresh = series.find((row) => row.code === "A-0CNQR")!;
         const resumed = await sell(placed.venue, fresh.id);
         const afterSale = await snapshot(placed.venue);
         expect(afterSale.sales.filter((row) => row.id !== resumed.saleId)).toEqual(before.sales);
@@ -418,7 +418,7 @@ describe("selected-hour admission before archive placement", () => {
           ),
         ).toEqual(before.submissions);
         expect(afterSale.records.find((row) => row.sale_id === resumed.saleId)).toMatchObject({
-          num_serie_factura: "A-06RC/1",
+          num_serie_factura: "A-0CNQR/1",
           primer_registro: 1,
           anterior_huella: null,
         });
@@ -496,9 +496,9 @@ describe("selected-hour admission before archive placement", () => {
           .filter((row) => row.retiredAt === null)
           .map(({ code, nextNumber }) => ({ code, nextNumber })),
       ).toEqual([
-        { code: "A-06RC", nextNumber: 1 },
-        { code: "FF-06RC", nextNumber: 1 },
-        { code: "R-06RC", nextNumber: 1 },
+        { code: "A-0CNQR", nextNumber: 1 },
+        { code: "FF-0CNQR", nextNumber: 1 },
+        { code: "R-0CNQR", nextNumber: 1 },
       ]);
     } finally {
       await restored.close();
@@ -531,9 +531,9 @@ describe("selected-hour admission before archive placement", () => {
     try {
       const rows = await restored.venue.select().from(invoiceSeries);
       expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-        "A-06RC",
-        "FF-06RC",
-        "R-06RC",
+        "A-0CNQR",
+        "FF-0CNQR",
+        "R-0CNQR",
       ]);
       expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
         123, 123, 123,
@@ -569,9 +569,9 @@ describe("selected-hour admission before archive placement", () => {
     try {
       const rows = await restored.venue.select().from(invoiceSeries);
       expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-        "A-06RD",
-        "FF-06RD",
-        "R-06RD",
+        "A-0CNSM",
+        "FF-0CNSM",
+        "R-0CNSM",
       ]);
       expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
         123, 123, 123,
@@ -685,9 +685,9 @@ describe("selected-hour admission before archive placement", () => {
       expect(await recordedRecoveryRows(placed.venue)).toEqual(history);
       const rows = await placed.venue.select().from(invoiceSeries);
       expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-        "A-06RC",
-        "FF-06RC",
-        "R-06RC",
+        "A-0CNQR",
+        "FF-0CNQR",
+        "R-0CNQR",
       ]);
       expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
         125, 123, 123,
@@ -859,9 +859,9 @@ describe("selected-hour admission before archive placement", () => {
             .filter((row) => row.retiredAt === null)
             .map((row) => ({ code: row.code, nextNumber: row.nextNumber })),
         ).toEqual([
-          { code: "A-06RB", nextNumber: 123 },
-          { code: "FF-06RB", nextNumber: 123 },
-          { code: "R-06RB", nextNumber: 123 },
+          { code: "A-0CNNW", nextNumber: 123 },
+          { code: "FF-0CNNW", nextNumber: 123 },
+          { code: "R-0CNNW", nextNumber: 123 },
         ]);
         expect(allocations).toHaveLength(1);
       } finally {
@@ -890,16 +890,16 @@ describe("selected-hour admission before archive placement", () => {
     const history = await readModulePreparationHistory(f.roots, binding.module);
     await expect(
       f.invoke(
-        { action: "select", answer: "no", installationCodes: ["06RB"] },
+        { action: "select", answer: "no", installationCodes: ["0CNNW"] },
         { nodeRecoverySecret: "wrong" },
       ),
     ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
     expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(history);
     expect(
-      await f.invoke({ action: "select", answer: "no", installationCodes: ["06RB"] }),
+      await f.invoke({ action: "select", answer: "no", installationCodes: ["0CNNW"] }),
     ).toMatchObject({
       status: "selected",
-      identity: "06RD",
+      identity: "0CNSM",
     });
   });
 
@@ -909,11 +909,11 @@ describe("selected-hour admission before archive placement", () => {
     const selected = await f.invoke({
       action: "select",
       answer: "no",
-      installationCodes: ["06RB"],
+      installationCodes: ["0CNNW"],
     });
     const restarted = createInteractiveRecoveryPreparation(f.options);
     await expect(
-      f.invoke({ action: "select", answer: "no", installationCodes: ["06RB"] }, {}, restarted),
+      f.invoke({ action: "select", answer: "no", installationCodes: ["0CNNW"] }, {}, restarted),
     ).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "clock_stale" },
@@ -928,7 +928,7 @@ describe("selected-hour admission before archive placement", () => {
     );
     expect(
       await f.invoke(
-        { action: "select", answer: "no", installationCodes: ["06RB"] },
+        { action: "select", answer: "no", installationCodes: ["0CNNW"] },
         {},
         restarted,
       ),

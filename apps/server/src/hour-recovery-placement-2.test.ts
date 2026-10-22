@@ -207,9 +207,9 @@ describe("selected-hour admission before archive placement", () => {
           .filter((row) => row.retiredAt === null)
           .map(({ code, nextNumber }) => ({ code, nextNumber })),
       ).toEqual([
-        { code: "A-06RC", nextNumber: 1 },
-        { code: "FF-06RC", nextNumber: 1 },
-        { code: "R-06RC", nextNumber: 1 },
+        { code: "A-0CNQR", nextNumber: 1 },
+        { code: "FF-0CNQR", nextNumber: 1 },
+        { code: "R-0CNQR", nextNumber: 1 },
       ]);
       expect(await placed.venue.select().from(fiscalAllocations)).toHaveLength(2);
     } finally {
@@ -276,7 +276,7 @@ describe("selected-hour admission before archive placement", () => {
         (await restored.venue.select().from(invoiceSeries))
           .filter((row) => row.retiredAt === null)
           .map((row) => row.code),
-      ).toEqual(["A-06RC", "FF-06RC", "R-06RC"]);
+      ).toEqual(["A-0CNQR", "FF-0CNQR", "R-0CNQR"]);
       expect(await restored.venue.select().from(fiscalAllocations)).toHaveLength(2);
     } finally {
       await restored.close();
@@ -343,9 +343,9 @@ describe("selected-hour admission before archive placement", () => {
       try {
         const rows = await restored.venue.select().from(invoiceSeries);
         expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-          "A-06RC",
-          "FF-06RC",
-          "R-06RC",
+          "A-0CNQR",
+          "FF-0CNQR",
+          "R-0CNQR",
         ]);
         expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
           123, 123, 123,
@@ -526,7 +526,7 @@ describe("selected-hour admission before archive placement", () => {
           (await restored.venue.select().from(invoiceSeries))
             .filter((row) => row.retiredAt === null)
             .map((row) => row.code),
-        ).toEqual(["A-06RC", "FF-06RC", "R-06RC"]);
+        ).toEqual(["A-0CNQR", "FF-0CNQR", "R-0CNQR"]);
         await restored.venue.update(invoiceSeries).set({ nextNumber: 917 });
         rows = await restored.venue.select().from(invoiceSeries);
         allocations = await restored.venue.select().from(fiscalAllocations);
@@ -557,23 +557,23 @@ describe("selected-hour admission before archive placement", () => {
     await f.compare();
     expect(await f.invoke({ action: "preview" })).toMatchObject({
       status: "preview",
-      identity: "06RD",
+      identity: "0CNSM",
     });
     const selected = (await f.invoke({
       action: "select",
       answer: "no",
-      installationCodes: ["06RB"],
+      installationCodes: ["0CNNW"],
     })) as { input: unknown };
     expect(selected).toMatchObject({
       status: "selected",
-      identity: "06RD",
+      identity: "0CNSM",
       input: {
         allocation: {
-          installationIdentity: "06RD",
+          installationIdentity: "0CNSM",
           series: [
-            { code: "A-06RD", purpose: "standard" },
-            { code: "FF-06RD", purpose: "full" },
-            { code: "R-06RD", purpose: "rectificative" },
+            { code: "A-0CNSM", purpose: "standard" },
+            { code: "FF-0CNSM", purpose: "full" },
+            { code: "R-0CNSM", purpose: "rectificative" },
           ],
         },
       },
@@ -598,9 +598,9 @@ describe("selected-hour admission before archive placement", () => {
     try {
       const result = await restored.venue.select().from(invoiceSeries);
       expect(result.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-        "A-06RD",
-        "FF-06RD",
-        "R-06RD",
+        "A-0CNSM",
+        "FF-0CNSM",
+        "R-0CNSM",
       ]);
       expect(result.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
         123, 123, 123,
@@ -623,7 +623,7 @@ describe("selected-hour admission before archive placement", () => {
       if (fault === "parallel") changed.context.soleRecovery = false;
       const history = await readModulePreparationHistory(f.roots, binding.module);
       await expect(
-        f.invoke({ action: "select", answer: "no", installationCodes: ["06RB"] }, changed),
+        f.invoke({ action: "select", answer: "no", installationCodes: ["0CNNW"] }, changed),
       ).rejects.toMatchObject({
         code: "module.operation_invalid",
       });
@@ -785,10 +785,10 @@ describe("selected-hour admission before archive placement", () => {
         action: "compare-clocks",
         browser: { challengeId: challenge.id, instantMs: Date.now() },
       });
-      const selected = await send({ action: "select", answer: "no", installationCodes: ["06RB"] });
+      const selected = await send({ action: "select", answer: "no", installationCodes: ["0CNNW"] });
       expect(selected).toMatchObject({
         status: "selected",
-        identity: kind === "bucket" ? "06RE" : "06RD",
+        identity: kind === "bucket" ? "0CNVG" : "0CNSM",
         binding: request.binding,
       });
       expect(await suite.db.select().from(invoiceSeries)).toEqual(rows);

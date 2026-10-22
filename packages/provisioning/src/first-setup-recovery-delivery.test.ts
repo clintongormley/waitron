@@ -80,7 +80,7 @@ async function fixture() {
   );
   const statement = {
     kind: "waitron-recovery-document",
-    installationCodes: ["06RB"],
+    installationCodes: ["0CNNW"],
     version: 1,
     scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "preproduction" },
     taxpayerName: request.legalName,
@@ -278,7 +278,7 @@ it.each(["taxpayerName", "venueName", "installationCodes", "nodeKey"] as const)(
       ...f.statement,
       [field]:
         field === "installationCodes"
-          ? ["06RC"]
+          ? ["0CNPG"]
           : field === "nodeKey"
             ? { ...f.statement.nodeKey, name: "other-key" }
             : "Other venue",

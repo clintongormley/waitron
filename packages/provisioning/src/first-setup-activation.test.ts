@@ -179,9 +179,9 @@ it("commits a real prepared hour only after kept consent and publishes its check
     await venue.db.execute("select code, next_number from invoice_series order by code"),
   ).toMatchObject({
     rows: [
-      { code: "A-06RB", next_number: 1 },
-      { code: "FF-06RB", next_number: 1 },
-      { code: "R-06RB", next_number: 1 },
+      { code: "A-0CNNW", next_number: 1 },
+      { code: "FF-0CNNW", next_number: 1 },
+      { code: "R-0CNNW", next_number: 1 },
     ],
   });
 });

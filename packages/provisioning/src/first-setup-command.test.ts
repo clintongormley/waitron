@@ -94,22 +94,22 @@ it("prepares a real owned hour from terminal answers without activating a venue"
   expect(state.frozen.modules.find((entry) => entry.module === MODULE)!.request).toMatchObject({
     kind: "waitron-hour-setup",
     status: "selected",
-    identity: "06RB",
+    identity: "0CNNW",
   });
   expect(state.inputs[MODULE]).toMatchObject({
     allocation: {
-      installationIdentity: "06RB",
+      installationIdentity: "0CNNW",
       series: [
-        { code: "A-06RB", purpose: "standard" },
-        { code: "FF-06RB", purpose: "full" },
-        { code: "R-06RB", purpose: "rectificative" },
+        { code: "A-0CNNW", purpose: "standard" },
+        { code: "FF-0CNNW", purpose: "full" },
+        { code: "R-0CNNW", purpose: "rectificative" },
       ],
     },
   });
   const journal = JSON.parse(
     await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
   );
-  expect(journal.revisions.at(-1).value.entries[0].identity).toBe("06RB");
+  expect(journal.revisions.at(-1).value.entries[0].identity).toBe("0CNNW");
   expect(await venue.db.execute("select count(*) as count from registro_sif")).toMatchObject({
     rows: [{ count: 0 }],
   });
@@ -156,7 +156,7 @@ it("requires an explicit check of the displayed clock when internet comparison i
   const result = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
   expect(result.status).toBe("ready");
   expect(result.state.inputs[MODULE]).toMatchObject({
-    allocation: { installationIdentity: "06RB" },
+    allocation: { installationIdentity: "0CNNW" },
   });
   expect(f.output.join("\n")).toContain("2026-10-16T11:40:00.000Z");
   expect(f.output.join("\n")).toContain("internet: unavailable");
@@ -196,7 +196,7 @@ it("accepts the explicitly entered taxpayer answer independent of whitespace or 
   const result = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
   expect(result.status).toBe("ready");
   expect(result.state.inputs[MODULE]).toMatchObject({
-    allocation: { installationIdentity: "06RB" },
+    allocation: { installationIdentity: "0CNNW" },
   });
 });
 
@@ -235,7 +235,7 @@ it("imports an already selected request without selecting another hour", async (
   );
   expect(result.status).toBe("ready");
   expect(result.state.inputs[MODULE]).toMatchObject({
-    allocation: { installationIdentity: "06RB" },
+    allocation: { installationIdentity: "0CNNW" },
   });
   expect(f.prompts).toEqual([]);
   expect(await readFile(join(f.root, "state/module-preparation-state.json"))).toEqual(before);
@@ -484,7 +484,7 @@ async function recoveryDeliveryFixture() {
   );
   const statement = {
     kind: "waitron-recovery-document",
-    installationCodes: ["06RB"],
+    installationCodes: ["0CNNW"],
     version: 1,
     scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "preproduction" },
     taxpayerName: request.legalName,
@@ -645,7 +645,7 @@ it("an explicit command resume refreshes clocks and records the recovered owner 
   );
   expect(journal.revisions.at(-1).value.entries.at(-1)).toMatchObject({
     kind: "resume",
-    identity: "06RB",
+    identity: "0CNNW",
   });
   await expect(f.runtime.owner.authorize(f.prepared.owner)).rejects.toMatchObject({
     code: "setup.owner_required",

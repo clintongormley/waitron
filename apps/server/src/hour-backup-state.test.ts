@@ -57,7 +57,7 @@ const intent = {
   ],
   contextKey: "PRIVATE-CONTEXT",
   answer: "no",
-  identity: "06RC",
+  identity: "0CNPH",
   issuedAt: "2026-10-16T12:01:00.000Z",
   references: [],
   secret: "RAW-KEY-MUST-NOT-TRAVEL",
@@ -74,7 +74,7 @@ const expected = {
       kind: "intent",
       softwareId: "different-id",
       nodeId: "old-node",
-      identity: "06RC",
+      identity: "0CNPH",
       recordedAtMs: 1792152060000,
     },
   ],
@@ -156,14 +156,14 @@ it("combines the restored floor with new lower intents instead of overwriting it
   const low = {
     ...intent,
     binding: { ...binding, eventId: "lower" },
-    identity: "06RB",
+    identity: "0CNNW",
     issuedAt: "2026-10-16T11:40:00.000Z",
   };
   await journal([{ binding: low.binding, value: { version: 1, entries: [low] } }]);
   expect(evidence(await collectSealedEntries({ ...deps(), manifest }))).toMatchObject({
     records: [
       expected.records[0],
-      { reference: "intent/fiscal-verifactu/lower", identity: "06RB" },
+      { reference: "intent/fiscal-verifactu/lower", identity: "0CNNW" },
     ],
   });
 });
@@ -212,7 +212,7 @@ it("captures the original anchor journal and restored floor after workspace reti
     ...expected.records[0],
     reference: "intent/fiscal-verifactu/retired-higher",
     nodeId: "retired-peer",
-    identity: "06RD",
+    identity: "0CNRE",
     recordedAtMs: 1792155720000,
   };
   await writeFile(publicPath, JSON.stringify({ ...expected, records: [higher] }));

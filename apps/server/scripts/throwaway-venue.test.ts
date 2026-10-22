@@ -62,15 +62,15 @@ describe("applyDevelopmentVenue", () => {
       { WAITRON_ENV: "dev" },
     );
     expect(suite.db.all(sql`select numero_instalacion, node_id from registro_sif`)).toEqual([
-      { numero_instalacion: "06RB", node_id: venue.nodeId },
+      { numero_instalacion: "0CNNW", node_id: venue.nodeId },
     ]);
     expect(suite.db.all(sql`select taxpayer_nif, environment from fiscal_allocations`)).toEqual([
       { taxpayer_nif: identity.taxId, environment: "preproduction" },
     ]);
     expect(suite.db.all(sql`select code, purpose from invoice_series order by code`)).toEqual([
-      { code: "A-06RB", purpose: "standard" },
-      { code: "FF-06RB", purpose: "full" },
-      { code: "R-06RB", purpose: "rectificative" },
+      { code: "A-0CNNW", purpose: "standard" },
+      { code: "FF-0CNNW", purpose: "full" },
+      { code: "R-0CNNW", purpose: "rectificative" },
     ]);
     expect(suite.db.all(sql`select tax_id, legal_name from tenants`)).toEqual([
       { tax_id: identity.taxId, legal_name: identity.legalName },

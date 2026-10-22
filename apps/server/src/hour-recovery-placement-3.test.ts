@@ -232,12 +232,12 @@ describe("selected-hour admission before archive placement", () => {
       const selected = (await newer.prepare({
         action: "select",
         answer: "no",
-        installationCodes: ["06RB"],
+        installationCodes: ["0CNNW"],
       })) as {
         identity: string;
         input: unknown;
       };
-      expect(selected.identity).toBe("06RD");
+      expect(selected.identity).toBe("0CNSM");
       await runRestoreHooks({
         db: suite.db,
         node,
@@ -400,9 +400,9 @@ describe("selected-hour admission before archive placement", () => {
           .filter((row) => row.retiredAt === null)
           .map(({ code, nextNumber }) => ({ code, nextNumber })),
       ).toEqual([
-        { code: "A-06RC", nextNumber: 1 },
-        { code: "FF-06RC", nextNumber: 1 },
-        { code: "R-06RC", nextNumber: 1 },
+        { code: "A-0CNQR", nextNumber: 1 },
+        { code: "FF-0CNQR", nextNumber: 1 },
+        { code: "R-0CNQR", nextNumber: 1 },
       ]);
       expect(
         before.series.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber),
@@ -612,9 +612,9 @@ describe("selected-hour admission before archive placement", () => {
     try {
       const rows = await restored.venue.select().from(invoiceSeries);
       expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-        "A-06RC",
-        "FF-06RC",
-        "R-06RC",
+        "A-0CNQR",
+        "FF-0CNQR",
+        "R-0CNQR",
       ]);
       expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
         123, 123, 123,
@@ -672,9 +672,9 @@ describe("selected-hour admission before archive placement", () => {
       expect(await recordedRecoveryRows(placed.venue)).toEqual(history);
       const rows = await placed.venue.select().from(invoiceSeries);
       expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-        "A-06RD",
-        "FF-06RD",
-        "R-06RD",
+        "A-0CNSM",
+        "FF-0CNSM",
+        "R-0CNSM",
       ]);
       expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
         125, 123, 123,
@@ -710,9 +710,9 @@ describe("selected-hour admission before archive placement", () => {
       expect(await recordedRecoveryRows(placed.venue)).toEqual(history);
       const restored = await placed.venue.select().from(invoiceSeries);
       expect(restored.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-        "A-06RC",
-        "FF-06RC",
-        "R-06RC",
+        "A-0CNQR",
+        "FF-0CNQR",
+        "R-0CNQR",
       ]);
       expect(restored.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual(
         [125, 123, 123],
@@ -807,10 +807,10 @@ describe("selected-hour admission before archive placement", () => {
         browser: { challengeId: challenge.id, instantMs: Date.now() },
       });
       expect(
-        await post({ action: "select", answer: "no", installationCodes: ["06RB"] }),
+        await post({ action: "select", answer: "no", installationCodes: ["0CNNW"] }),
       ).toMatchObject({
         status: "selected",
-        identity: "06RD",
+        identity: "0CNSM",
         binding: preparation.binding,
       });
       expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
@@ -855,7 +855,7 @@ describe("selected-hour admission before archive placement", () => {
       await copy.discard();
     }
     await expect(
-      f.invoke({ action: "select", answer: "no", installationCodes: ["06RB"] }),
+      f.invoke({ action: "select", answer: "no", installationCodes: ["0CNNW"] }),
     ).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "clock_stale" },

@@ -343,7 +343,7 @@ it("activates the current hour through production composition without signed-fil
     const selected = (await operations.recovery!(operation, {
       action: "select",
       answer: "no",
-      installationCodes: ["06RA"],
+      installationCodes: ["0CNM0"],
     })) as { status: string; input: unknown };
     expect(selected.status).toBe("selected");
     expect(history).toHaveLength(1);
@@ -352,11 +352,11 @@ it("activates the current hour through production composition without signed-fil
       withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, node, prepared)),
     );
     expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
-      { code: "A-06RB", purpose: "standard" },
-      { code: "FF-06RB", purpose: "full" },
-      { code: "R-06RB", purpose: "rectificative" },
+      { code: "A-0CNNW", purpose: "standard" },
+      { code: "FF-0CNNW", purpose: "full" },
+      { code: "R-0CNNW", purpose: "rectificative" },
     ]);
-    expect(await fixtureSifIdentities(suite.db)).toEqual([{ identity: "06RB" }]);
+    expect(await fixtureSifIdentities(suite.db)).toEqual([{ identity: "0CNNW" }]);
     expect(
       (
         await suite.db.select({ allocation: fiscalAllocations.allocation }).from(fiscalAllocations)
@@ -370,6 +370,6 @@ it("activates the current hour through production composition without signed-fil
       params: { reason: "event_mismatch" },
     });
     expect(history).toEqual(selectedHistory);
-    expect(await fixtureSifIdentities(suite.db)).toEqual([{ identity: "06RB" }]);
+    expect(await fixtureSifIdentities(suite.db)).toEqual([{ identity: "0CNNW" }]);
   });
 });

@@ -286,9 +286,9 @@ it.each(["key", "manager"])(
     const selected = (await s.prepare(binding, auth, context, {
       action: "select",
       answer: "no",
-      installationCodes: ["06RB"],
+      installationCodes: ["0CNNW"],
     })) as { input: unknown };
-    expect(selected).toMatchObject({ status: "selected", identity: "06RC", bases });
+    expect(selected).toMatchObject({ status: "selected", identity: "0CNQR", bases });
     expect(await rows()).toEqual(before);
     expect(await promote(s, selected.input, auth)).toMatchObject({ alreadyPrimary: false });
     const after = await rows();
@@ -299,7 +299,7 @@ it.each(["key", "manager"])(
       after.series
         .filter((row) => row.nodeId === standby.nodeId)
         .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber })),
-    ).toEqual(bases.map((base) => ({ ...base, code: `${base.code}-06RC`, nextNumber: 1 })));
+    ).toEqual(bases.map((base) => ({ ...base, code: `${base.code}-0CNQR`, nextNumber: 1 })));
     expect(await readDeploymentMode(suite.db, standby.nodeId)).toBe("primary");
     expect(await readSingletonRole(suite.db, standby.nodeId)).toBe("primary");
     expect(await promote(s, selected.input, auth)).toMatchObject({ alreadyPrimary: true });
@@ -319,7 +319,7 @@ it("requires the sheet's newer code even when it is missing from the database", 
     s.prepare(binding, { breakGlass: key.secret }, context, {
       action: "select",
       answer: "no",
-      installationCodes: ["06rc"],
+      installationCodes: ["0cnqr"],
     }),
   ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "hour_not_later" } });
   expect(await rows()).toEqual(before);
@@ -329,9 +329,9 @@ it("requires the sheet's newer code even when it is missing from the database", 
     await s.prepare(binding, { breakGlass: key.secret }, context, {
       action: "select",
       answer: "no",
-      installationCodes: ["06rc"],
+      installationCodes: ["0cnqr"],
     }),
-  ).toMatchObject({ identity: "06RD", reportedIdentities: ["06RC"] });
+  ).toMatchObject({ identity: "0CNRC", reportedIdentities: ["0CNQR"] });
 });
 
 it.each(["key", "isolation", "parallel", "source", "node"])(
@@ -379,7 +379,7 @@ it("retains the selected hour across restart but discards transient comparison a
   const selected = (await first.prepare(binding, { breakGlass: key.secret }, context, {
     action: "select",
     answer: "no",
-    installationCodes: ["06RB"],
+    installationCodes: ["0CNNW"],
   })) as { input: unknown };
   const next = await service();
   await expect(promote(next, selected.input)).rejects.toMatchObject({
@@ -392,7 +392,7 @@ it("retains the selected hour across restart but discards transient comparison a
     await next.prepare(binding, { breakGlass: key.secret }, context, {
       action: "select",
       answer: "no",
-      installationCodes: ["06RB"],
+      installationCodes: ["0CNNW"],
     }),
   ).toEqual(selected);
   await promote(next, selected.input);
@@ -404,7 +404,7 @@ it.each(["standard", "full", "rectificative"])(
   async (purpose) => {
     await suite.db.insert(invoiceSeries).values({
       nodeId: primary.nodeId,
-      code: "a/B_1.2-3-06RB",
+      code: "a/B_1.2-3-0CNNW",
       purpose,
     });
     const s = await service();
@@ -482,9 +482,9 @@ it("serves clock, sheet-code selection and authenticated promotion through the m
     });
     const selected = await send("/preparation", {
       ...body,
-      proposal: { action: "select", answer: "no", installationCodes: ["06RB"] },
+      proposal: { action: "select", answer: "no", installationCodes: ["0CNNW"] },
     });
-    expect(selected).toMatchObject({ status: "selected", identity: "06RC" });
+    expect(selected).toMatchObject({ status: "selected", identity: "0CNQR" });
     const plain = await app.request("http://box.test/management-api/promote", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -532,9 +532,9 @@ it("re-registers through provisionNode with the matching key and frozen hour", a
   const selected = (await s.prepare(recovery, auth, context, {
     action: "select",
     answer: "no",
-    installationCodes: ["06RB"],
+    installationCodes: ["0CNNW"],
   })) as { input: unknown };
-  expect(selected).toMatchObject({ identity: "06RC" });
+  expect(selected).toMatchObject({ identity: "0CNQR" });
   const before = await rows();
   await s.withOperation({ binding: recovery, input: selected.input }, auth, context, (modules) =>
     provisionNode(
@@ -551,7 +551,7 @@ it("re-registers through provisionNode with the matching key and frozen hour", a
     after.series.filter((row) => row.retiredAt !== null).map(({ nextNumber }) => nextNumber),
   ).toEqual(before.series.map(() => 123));
   expect(after.series.filter((row) => row.retiredAt === null).map(({ code }) => code)).toEqual(
-    bases.map((base) => `${base.code}-06RC`),
+    bases.map((base) => `${base.code}-0CNQR`),
   );
   await s.withOperation({ binding: recovery, input: selected.input }, auth, context, (modules) =>
     provisionNode(
@@ -598,9 +598,9 @@ async function selectedRegistrationCommand(derived = false) {
   const selected = (await s.prepare(recovery, auth, context, {
     action: "select",
     answer: "no",
-    installationCodes: ["06RB"],
+    installationCodes: ["0CNNW"],
   })) as { input: unknown };
-  expect(selected).toMatchObject({ identity: "06RC" });
+  expect(selected).toMatchObject({ identity: "0CNQR" });
   const file = join(root, "operation.json");
   await writeFile(file, JSON.stringify({ binding: recovery, input: selected.input }));
   await suite.db.archiveTo(join(venueDir, "venue.db"));
@@ -631,7 +631,7 @@ it.each([false, true])(
     }));
     await expect(registerTill(primary.nodeId, env, context)).resolves.toContainEqual({
       module: "fiscal-verifactu",
-      report: expect.stringContaining("installation 06RC"),
+      report: expect.stringContaining("installation 0CNQR"),
     });
     const store = await openVenueDatabase(venueDir);
     let after;
@@ -645,9 +645,9 @@ it.each([false, true])(
           .filter((row) => row.retiredAt === null)
           .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber })),
       ).toEqual([
-        { code: "A-06RC", purpose: "standard", nextNumber: 1 },
-        { code: "FF-06RC", purpose: "full", nextNumber: 1 },
-        { code: "R-06RC", purpose: "rectificative", nextNumber: 1 },
+        { code: "A-0CNQR", purpose: "standard", nextNumber: 1 },
+        { code: "FF-0CNQR", purpose: "full", nextNumber: 1 },
+        { code: "R-0CNQR", purpose: "rectificative", nextNumber: 1 },
       ]);
       await store.venue
         .update(invoiceSeries)
@@ -659,7 +659,7 @@ it.each([false, true])(
         allocations: await store.venue.select().from(fiscalAllocations),
       };
       expect(after.sif.filter((row) => row.revocadoEn === null)).toEqual([
-        expect.objectContaining({ numeroInstalacion: "06RC" }),
+        expect.objectContaining({ numeroInstalacion: "0CNQR" }),
       ]);
       expect(after.allocations).toHaveLength(2);
     } finally {
@@ -672,7 +672,7 @@ it.each([false, true])(
       ),
     ).resolves.toContainEqual({
       module: "fiscal-verifactu",
-      report: expect.stringContaining("installation 06RC"),
+      report: expect.stringContaining("installation 0CNQR"),
     });
     const replay = await openVenueDatabase(venueDir);
     try {
@@ -745,7 +745,7 @@ syncBuiltinESMExports();
     env: environment,
   });
   expect(first.stdout).toMatch(
-    /^fiscal-verifactu: .*\(installation 06RC\); series A-06RC, FF-06RC, R-06RC$/m,
+    /^fiscal-verifactu: .*\(installation 0CNQR\); series A-0CNQR, FF-0CNQR, R-0CNQR$/m,
   );
   expect(first.stdout + first.stderr).not.toContain(recoveryKey.secret);
   const store = await openVenueDatabase(venueDir);
@@ -758,7 +758,7 @@ syncBuiltinESMExports();
   try {
     const current = await snapshot(store.venue);
     expect(current.sif.filter((row) => row.revocadoEn === null)).toEqual([
-      expect.objectContaining({ numeroInstalacion: "06RC" }),
+      expect.objectContaining({ numeroInstalacion: "0CNQR" }),
     ]);
     expect(current.allocations).toHaveLength(2);
     expect(
@@ -769,9 +769,9 @@ syncBuiltinESMExports();
         .filter((row) => row.retiredAt === null)
         .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber })),
     ).toEqual([
-      { code: "A-06RC", purpose: "standard", nextNumber: 1 },
-      { code: "FF-06RC", purpose: "full", nextNumber: 1 },
-      { code: "R-06RC", purpose: "rectificative", nextNumber: 1 },
+      { code: "A-0CNQR", purpose: "standard", nextNumber: 1 },
+      { code: "FF-0CNQR", purpose: "full", nextNumber: 1 },
+      { code: "R-0CNQR", purpose: "rectificative", nextNumber: 1 },
     ]);
     await store.venue
       .update(invoiceSeries)
@@ -786,7 +786,7 @@ syncBuiltinESMExports();
     env: environment,
   });
   expect(second.stdout).toMatch(
-    /^fiscal-verifactu: .*\(installation 06RC\); series A-06RC, FF-06RC, R-06RC$/m,
+    /^fiscal-verifactu: .*\(installation 0CNQR\); series A-0CNQR, FF-0CNQR, R-0CNQR$/m,
   );
   expect(second.stdout + second.stderr).not.toContain(recoveryKey.secret);
   const replay = await openVenueDatabase(venueDir);
@@ -923,7 +923,7 @@ it("invalidates an earlier comparison when the named recovery key changes", asyn
     s.prepare(binding, { breakGlass: key.secret }, context, {
       action: "select",
       answer: "no",
-      installationCodes: ["06RB"],
+      installationCodes: ["0CNNW"],
     }),
   ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "clock_stale" } });
   await compare(s);
@@ -931,9 +931,9 @@ it("invalidates an earlier comparison when the named recovery key changes", asyn
     await s.prepare(binding, { breakGlass: key.secret }, context, {
       action: "select",
       answer: "no",
-      installationCodes: ["06RB"],
+      installationCodes: ["0CNNW"],
     }),
-  ).toMatchObject({ identity: "06RC" });
+  ).toMatchObject({ identity: "0CNQR" });
 });
 
 it("the real mirror boot serves preparation over verified HTTPS and promotes the dormant node once", async () => {
@@ -1007,9 +1007,9 @@ it("the real mirror boot serves preparation over verified HTTPS and promotes the
     });
     const selected = await send("/preparation", {
       ...body,
-      proposal: { action: "select", answer: "no", installationCodes: ["06RB"] },
+      proposal: { action: "select", answer: "no", installationCodes: ["0CNNW"] },
     });
-    expect(selected).toMatchObject({ identity: "06RC" });
+    expect(selected).toMatchObject({ identity: "0CNQR" });
     expect(
       await send("", { ...body, moduleOperation: { binding, input: selected.input } }),
     ).toMatchObject({ alreadyPrimary: false, restarting: true });
@@ -1033,9 +1033,9 @@ it.each(["key", "manager"])(
     const selected = (await s.prepare(binding, auth, context, {
       action: "select",
       answer: "no",
-      installationCodes: ["06RB"],
+      installationCodes: ["0CNNW"],
     })) as { input: unknown };
-    expect(selected).toMatchObject({ identity: "06RC" });
+    expect(selected).toMatchObject({ identity: "0CNQR" });
     await writeMirrorConfig(suite.db, standby.nodeId, {
       relayUrl: "https://127.0.0.1:1/",
       boxHostname: "box.test",
@@ -1135,7 +1135,7 @@ it.each(["key", "manager"])(
       expect(before.allocations).toHaveLength(2);
       expect(before.series.filter((row) => row.nodeId === standby.nodeId)).toEqual(
         expect.arrayContaining(
-          ["A-06RC", "FF-06RC", "R-06RC"].map((code) =>
+          ["A-0CNQR", "FF-0CNQR", "R-0CNQR"].map((code) =>
             expect.objectContaining({ code, nextNumber: 47 }),
           ),
         ),
@@ -1215,14 +1215,14 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
       nodeId: primary.nodeId,
       nif: "89890001K",
       idSistemaInformatico: "W1",
-      numeroInstalacion: "06RB",
+      numeroInstalacion: "0CNNW",
     }),
   );
   await spare.db.insert(invoiceSeries).values(
     bases.map((base) => ({
       ...base,
       nodeId: primary.nodeId,
-      code: `${base.code}-06RB`,
+      code: `${base.code}-0CNNW`,
       nextNumber: 123,
     })),
   );
@@ -1294,7 +1294,7 @@ it.each(["identity", "allocation-id", "bases", "purpose", "approval", "binding"]
     const selected = (await s.prepare(binding, { breakGlass: key.secret }, context, {
       action: "select",
       answer: "no",
-      installationCodes: ["06RB"],
+      installationCodes: ["0CNNW"],
     })) as {
       input: {
         allocation: {
@@ -1306,7 +1306,7 @@ it.each(["identity", "allocation-id", "bases", "purpose", "approval", "binding"]
       };
     };
     const input = structuredClone(selected.input);
-    if (fault === "identity") input.allocation.installationIdentity = "06RD";
+    if (fault === "identity") input.allocation.installationIdentity = "0CNSM";
     if (fault === "allocation-id") input.allocation.allocationId = "changed-allocation";
     if (fault === "bases") input.allocation.series.pop();
     if (fault === "purpose") input.allocation.series[0]!.purpose = "full";

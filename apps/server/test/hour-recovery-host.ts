@@ -296,7 +296,7 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
   const outcome = (await service.prepare({
     action: "select",
     answer: "no",
-    installationCodes: ["06RB"],
+    installationCodes: ["0CNNW"],
   })) as {
     input: unknown;
   };
@@ -406,7 +406,7 @@ export async function bucketCommand() {
   const outcome = (await service.prepare({
     action: "select",
     answer: "no",
-    installationCodes: ["06RB"],
+    installationCodes: ["0CNNW"],
   })) as {
     input: unknown;
   };
@@ -530,7 +530,7 @@ export async function recoveryInvoices() {
   const [standard] = await suite.db
     .select()
     .from(invoiceSeries)
-    .where(eq(invoiceSeries.code, "A-06RB"));
+    .where(eq(invoiceSeries.code, "A-0CNNW"));
   const sell = () =>
     withTransaction(suite.db, (tx) =>
       recordSale(
@@ -565,7 +565,7 @@ export async function recoveryInvoices() {
   ).toBe(1);
   await sell();
   const rows = await recordedRecoveryRows(suite.db);
-  expect(rows.records.map((row) => row.num_serie_factura)).toEqual(["A-06RB/123", "A-06RB/124"]);
+  expect(rows.records.map((row) => row.num_serie_factura)).toEqual(["A-0CNNW/123", "A-0CNNW/124"]);
   expect(rows.submissions.find((row) => row.registro_id === rows.records[0]?.id)).toMatchObject({
     estado: "aceptado",
     intentos: 1,

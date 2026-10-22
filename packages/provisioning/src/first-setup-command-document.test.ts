@@ -111,7 +111,7 @@ it("saves the real module PDF privately and grants activation only for its exact
     inputDigest: firstFiscalPublicDigest(before!.inputs[MODULE]),
     statement: {
       kind: "waitron-recovery-document",
-      installationCodes: ["06RB"],
+      installationCodes: ["0CNNW"],
       version: 1,
       scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "preproduction" },
       taxpayerName: request.legalName,

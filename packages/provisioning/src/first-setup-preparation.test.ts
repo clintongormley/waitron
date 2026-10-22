@@ -134,14 +134,14 @@ it("freezes a password-confirmed real hour request and imports only its matching
   expect(context.request).toMatchObject({
     kind: "waitron-hour-setup",
     status: "selected",
-    identity: "06RB",
+    identity: "0CNNW",
     input: {
       allocation: {
-        installationIdentity: "06RB",
+        installationIdentity: "0CNNW",
         series: [
-          { code: "A-06RB", purpose: "standard" },
-          { code: "FF-06RB", purpose: "full" },
-          { code: "R-06RB", purpose: "rectificative" },
+          { code: "A-0CNNW", purpose: "standard" },
+          { code: "FF-0CNNW", purpose: "full" },
+          { code: "R-0CNNW", purpose: "rectificative" },
         ],
       },
     },
@@ -153,7 +153,7 @@ it("freezes a password-confirmed real hour request and imports only its matching
   const journal = JSON.parse(
     await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
   );
-  expect(journal.revisions[0].value.entries[0].identity).toBe("06RB");
+  expect(journal.revisions[0].value.entries[0].identity).toBe("0CNNW");
   expect(journal.revisions[0].binding).toEqual(context.binding);
   expect(
     initialSetupFor(f.host.modules, MODULE)!.inspect(
@@ -218,13 +218,13 @@ it("binds preparation to the current owner capability and revision", async () =>
   ).rejects.toMatchObject({ code: "setup.owner_required" });
   await expect(
     f.host.preparation.prepare(f.owner, MODULE, { action: "selection" }),
-  ).resolves.toMatchObject({ status: "selected", identity: "06RB" });
+  ).resolves.toMatchObject({ status: "selected", identity: "0CNNW" });
 });
 
 it("refuses uploaded activation material before any owned request exists", async () => {
   const f = await fixture();
   await expect(
-    f.host.preparation.import(f.owner, MODULE, { allocation: { installationIdentity: "06RB" } }),
+    f.host.preparation.import(f.owner, MODULE, { allocation: { installationIdentity: "0CNNW" } }),
   ).rejects.toMatchObject({ code: "sif.allocation_invalid" });
   expect((await f.host.store.read())!.inputs).toEqual({});
   expect((await f.host.store.read())!.status).toBe("claimed");

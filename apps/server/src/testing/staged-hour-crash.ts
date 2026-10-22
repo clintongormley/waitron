@@ -202,7 +202,7 @@ export async function stagedHourCrash(db: Database, kind: "archive" | "stream", 
     const outcome = (await service.prepare({
       action: "select",
       answer: "no",
-      installationCodes: ["06RB"],
+      installationCodes: ["0CNNW"],
     })) as { input: unknown };
     const common = {
       environment: "preproduction" as const,
@@ -231,7 +231,7 @@ export async function stagedHourCrash(db: Database, kind: "archive" | "stream", 
         action: "compare-clocks",
         browser: { challengeId: challenge.id, instantMs: Date.now() },
       });
-      return next.prepare({ action: "select", answer: "no", installationCodes: ["06RB"] });
+      return next.prepare({ action: "select", answer: "no", installationCodes: ["0CNNW"] });
     };
     const journalPath = join(roots.stateDir, "module-preparation-state.json");
     const journal = () => readFileSync(journalPath, "utf8");
@@ -278,7 +278,7 @@ export async function stagedHourCrash(db: Database, kind: "archive" | "stream", 
       const outcome = (await fresh.prepare({
         action: "select",
         answer: "no",
-        installationCodes: ["06RB", "06RC"],
+        installationCodes: ["0CNNW", "0CNQR"],
       })) as { input: unknown };
       const freshCommon = {
         ...common,

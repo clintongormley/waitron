@@ -189,9 +189,9 @@ it.each([false, true])(
           .from(invoiceSeries)
       ).sort((a, b) => a.code.localeCompare(b.code)),
     ).toEqual([
-      { code: "A-06RB", nextNumber: 1 },
-      { code: "FF-06RB", nextNumber: 1 },
-      { code: "R-06RB", nextNumber: 1 },
+      { code: "A-0CNNW", nextNumber: 1 },
+      { code: "FF-0CNNW", nextNumber: 1 },
+      { code: "R-0CNNW", nextNumber: 1 },
     ]);
     expect(result.nodeId).not.toBe(f.seeded.nodeId);
     expect((await target.db.execute("select id from nodes")).rows).toEqual([{ id: result.nodeId }]);
@@ -498,9 +498,9 @@ Object.defineProperty(performance, "now", { value: () => 0 });
         .prepare("select code, next_number as nextNumber from invoice_series order by code")
         .all(),
     ).toEqual([
-      { code: "A-06SV", nextNumber: 1 },
-      { code: "FF-06SV", nextNumber: 1 },
-      { code: "R-06SV", nextNumber: 1 },
+      { code: "A-0CRFW", nextNumber: 1 },
+      { code: "FF-0CRFW", nextNumber: 1 },
+      { code: "R-0CRFW", nextNumber: 1 },
     ]);
   } finally {
     disk.close();

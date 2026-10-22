@@ -60,7 +60,7 @@ async function mounted(kind: "archive" | "bucket" | "cloud") {
         return Response.json({
           status: "selected",
           binding: body.preparation.binding,
-          identity: "06TH",
+          identity: "0CRHE",
           input: { server: "selected-input" },
         });
     }
@@ -109,7 +109,7 @@ async function fill(entry: LitElement) {
   )!;
   await codes.updateComplete;
   const codeInput = codes.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  codeInput.value = "06RB";
+  codeInput.value = "0CNNW";
   codeInput.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   for (const name of ["recovery-old-box-stopped", "recovery-sole-operation", "taxpayer-hour-no"]) {
     const field = entry.shadowRoot!.querySelector<HTMLInputElement>(

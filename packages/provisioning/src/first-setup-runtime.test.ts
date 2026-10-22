@@ -111,7 +111,7 @@ it("includes a revoked identity on another node in the actual local history", as
       nodeId: TENANT_A.nodeId,
       nif: "89890001K",
       idSistemaInformatico: "OTHER",
-      numeroInstalacion: "06RC",
+      numeroInstalacion: "0CNPH",
       registradoEn: new Date("2026-10-16T12:01:00Z"),
       revocadoEn: new Date("2026-10-16T12:02:00Z"),
     });
@@ -123,7 +123,7 @@ it("includes a revoked identity on another node in the actual local history", as
     complete: true,
     records: [
       expect.objectContaining({
-        identity: "06RC",
+        identity: "0CNPH",
         nodeId: TENANT_A.nodeId,
         softwareId: "OTHER",
         environment: "preproduction",
@@ -235,16 +235,16 @@ it.each(["production", "preproduction"] as const)(
     const selection = await selectThroughHost(f);
     expect(selection).toMatchObject({
       status: "selected",
-      identity: "06RB",
+      identity: "0CNNW",
       scope: { taxpayerNif: request.taxId, environment },
       input: {
         allocation: {
           environment,
-          installationIdentity: "06RB",
+          installationIdentity: "0CNNW",
           series: [
-            { code: "A-06RB", purpose: "standard" },
-            { code: "FF-06RB", purpose: "full" },
-            { code: "R-06RB", purpose: "rectificative" },
+            { code: "A-0CNNW", purpose: "standard" },
+            { code: "FF-0CNNW", purpose: "full" },
+            { code: "R-0CNNW", purpose: "rectificative" },
           ],
         },
       },
@@ -260,7 +260,7 @@ it("the hosted selector refuses an older hour than another node's revoked real i
       nodeId: TENANT_A.nodeId,
       nif: request.taxId,
       idSistemaInformatico: "OTHER",
-      numeroInstalacion: "06RC",
+      numeroInstalacion: "0CNPH",
       registradoEn: new Date("2026-10-16T12:01:00Z"),
       revocadoEn: new Date("2026-10-16T12:02:00Z"),
     });
@@ -280,12 +280,12 @@ it("an imported setup retains its fresh host identity and exact configured base 
     binding: f.context.binding,
     input: {
       allocation: {
-        installationIdentity: "06RB",
+        installationIdentity: "0CNNW",
         environment: "production",
         series: [
-          { code: "FF-06RB", purpose: "full" },
-          { code: "R-06RB", purpose: "rectificative" },
-          { code: "a/B_1.2-3-06RB", purpose: "standard" },
+          { code: "FF-0CNNW", purpose: "full" },
+          { code: "R-0CNNW", purpose: "rectificative" },
+          { code: "a/B_1.2-3-0CNNW", purpose: "standard" },
         ],
       },
     },
@@ -305,7 +305,7 @@ it("the hosted selector refuses an occupied inventory with no deployment stamp",
       nodeId: TENANT_A.nodeId,
       nif: request.taxId,
       idSistemaInformatico: "OTHER",
-      numeroInstalacion: "06RA",
+      numeroInstalacion: "0CNM0",
     });
   });
   const f = await fixture();
@@ -409,9 +409,9 @@ it("a clock provider cannot replace the host's scope or bases", async () => {
         taxpayerNif: request.taxId,
         environment: "preproduction",
         series: [
-          { code: "A-06RB", purpose: "standard" },
-          { code: "FF-06RB", purpose: "full" },
-          { code: "R-06RB", purpose: "rectificative" },
+          { code: "A-0CNNW", purpose: "standard" },
+          { code: "FF-0CNNW", purpose: "full" },
+          { code: "R-0CNNW", purpose: "rectificative" },
         ],
       },
     },

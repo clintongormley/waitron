@@ -326,7 +326,7 @@ Object.defineProperty(performance, "now", { value: () => 0 });
       expect(await readDeploymentEnvironment(stored.venue)).toBe("preproduction");
       const { invoiceSeries } = await import("@waitron/db");
       const series = await stored.venue.select().from(invoiceSeries);
-      expect(series.map((row) => row.code).sort()).toEqual(["A-06SV", "FF-06SV", "R-06SV"]);
+      expect(series.map((row) => row.code).sort()).toEqual(["A-0CRFW", "FF-0CRFW", "R-0CRFW"]);
       expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
       if (interrupted) expect(series).toEqual(countersBefore);
       const identity = await stored.venue.execute<{ public_key: string }>(
@@ -529,7 +529,7 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     const { invoiceSeries, sales, withTransaction } = await import("@waitron/db");
     expect(await stored.venue.select().from(sales)).toEqual([]);
     const series = await stored.venue.select().from(invoiceSeries);
-    expect(series.map((row) => row.code).sort()).toEqual(["A-06SV", "FF-06SV", "R-06SV"]);
+    expect(series.map((row) => row.code).sort()).toEqual(["A-0CRFW", "FF-0CRFW", "R-0CRFW"]);
     expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
     const { loadKeyRing, tryGetCredential } = await import("@waitron/credentials");
     const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64") });
