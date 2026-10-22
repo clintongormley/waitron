@@ -133,6 +133,7 @@ async function lastOrderAt(v: PartyVenue, partyId: string): Promise<number> {
         ),
       ),
   );
+  if (rows.length === 0) throw new Error(`no submitted or joined order for party ${partyId}`);
   return Math.max(...rows.map((row) => Date.parse(row.at)));
 }
 

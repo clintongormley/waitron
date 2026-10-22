@@ -136,6 +136,7 @@ describe("deleting a course with service steps", () => {
         .insert(parties)
         .values({ openedBy: "sender" })
         .returning({ id: parties.id });
+      expect(party).toBeDefined();
       await tx.insert(serviceStepCompletions).values(
         stepIds.map((stepId) => ({
           partyId: party!.id,

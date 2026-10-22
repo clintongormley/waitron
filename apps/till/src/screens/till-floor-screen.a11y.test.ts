@@ -501,6 +501,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     );
     expect(list.el.shadowRoot!.querySelectorAll("[data-chip]").length).toBeGreaterThan(5);
     expect(list.el.shadowRoot!.querySelector("[data-open-station]")).not.toBeNull();
+    expect(list.el.shadowRoot!.querySelector(".step-card [data-step-done]")).not.toBeNull();
     await expectNoA11yViolations(list.host);
   });
 

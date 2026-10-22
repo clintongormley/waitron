@@ -152,7 +152,7 @@ describe("till-floor-screen: the signals at a table", () => {
     expect(chips(card(el, "t2"))).toEqual(["Bar: 1 ready", "Kitchen: 2 ready"]);
   });
 
-  it("says take the order for a party with nothing ordered or drafted", async () => {
+  it("draws a due Take order step as a chip with its stored name", async () => {
     const el = await mountFloor([table({ signals: [dueStepSignal("Take order")] })]);
     expect(chips(card(el, "t2"))).toEqual(["Take order"]);
   });

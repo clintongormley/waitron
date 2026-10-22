@@ -83,11 +83,6 @@ export class TillTableDetailsSheet extends LitElement {
         list-style: none;
       }
 
-      .lines + .step,
-      .step + .chips {
-        margin-top: var(--wt-space-2);
-      }
-
       .chips {
         display: flex;
         flex-wrap: wrap;
@@ -98,7 +93,9 @@ export class TillTableDetailsSheet extends LitElement {
         overflow-wrap: anywhere;
       }
 
-      .lines + .chips {
+      .lines + .chips,
+      .lines + .step,
+      .step + .chips {
         margin-top: var(--wt-space-2);
       }
 

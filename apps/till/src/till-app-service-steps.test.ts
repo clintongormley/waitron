@@ -64,16 +64,22 @@ function seated(signals: TableState["signals"]): TableState {
   };
 }
 
-/** The floor holds the step until Done has been sent, then reads without it. */
-function floorUntilDone(markServiceStepDone: ReturnType<typeof vi.fn>) {
-  return vi.fn(async () =>
-    markServiceStepDone.mock.calls.length === 0
-      ? [seated([dueStepSignal("Dessert?")])]
-      : [seated([])],
-  );
+/** The floor holds the step until Done has been sent, then reads without it, or fails to read. */
+function floorUntilDone(
+  markServiceStepDone: ReturnType<typeof vi.fn>,
+  readFailsAfterDone: boolean,
+) {
+  return vi.fn(async () => {
+    if (markServiceStepDone.mock.calls.length === 0) return [seated([dueStepSignal("Dessert?")])];
+    if (readFailsAfterDone) throw { code: "server.internal" };
+    return [seated([])];
+  });
 }
 
-async function mount(markServiceStepDone: ReturnType<typeof vi.fn>) {
+async function mount(
+  markServiceStepDone: ReturnType<typeof vi.fn>,
+  options: { capabilities?: string[]; readFailsAfterDone?: boolean } = {},
+) {
   setLocale("en-GB");
   const api = {
     getLocales: vi
@@ -94,7 +100,7 @@ async function mount(markServiceStepDone: ReturnType<typeof vi.fn>) {
       cardProvider: "none",
       tipsEnabled: false,
       formFactor: "till",
-      capabilities: ["take-orders"],
+      capabilities: options.capabilities ?? ["take-orders"],
       inactivityTimeoutSeconds: null,
       nodeId: "node",
       servers: [],
@@ -116,7 +122,7 @@ async function mount(markServiceStepDone: ReturnType<typeof vi.fn>) {
     getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
     listSentDepartmentTransfers: vi.fn().mockResolvedValue({ requests: [] }),
     listZones: vi.fn().mockResolvedValue([room]),
-    getTablesState: floorUntilDone(markServiceStepDone),
+    getTablesState: floorUntilDone(markServiceStepDone, options.readFailsAfterDone ?? false),
     markServiceStepDone,
     logout: vi.fn().mockResolvedValue(undefined),
     putLocale: vi.fn().mockResolvedValue(undefined),
@@ -131,8 +137,10 @@ async function mount(markServiceStepDone: ReturnType<typeof vi.fn>) {
     }),
   );
   const floor = () => el.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
+  const ready =
+    options.capabilities === undefined ? "[data-step-done]" : '[data-chip="service-step"]';
   await vi.waitFor(() =>
-    expect(floor()?.shadowRoot?.querySelector('[data-table="t9"] [data-step-done]')).toBeTruthy(),
+    expect(floor()?.shadowRoot?.querySelector(`[data-table="t9"] ${ready}`)).toBeTruthy(),
   );
   return { el, floor: floor()!, api };
 }
@@ -175,6 +183,16 @@ it("says a deleted step no longer exists, and still reads the floor", async () =
 
 it.each([
   ["a closed party", { code: "party.not_open" }, () => codeMessage("party.not_open")],
+  [
+    "a zone the device does not serve",
+    { code: "service_zone.not_allowed" },
+    () => codeMessage("service_zone.not_allowed"),
+  ],
+  [
+    "a device whose profile does not allow it",
+    { code: "device.forbidden_action" },
+    () => codeMessage("device.forbidden_action"),
+  ],
   ["a failure with no code", new Error("offline"), () => t("table.error")],
 ])("says why Done was refused for %s, and still reads the floor", async (_name, refusal, said) => {
   const markServiceStepDone = vi.fn().mockRejectedValue(refusal);
@@ -187,4 +205,25 @@ it.each([
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector(".error")?.textContent).toContain(said()),
   );
+});
+
+it("shows no error when Done succeeds and the floor read after it fails", async () => {
+  const markServiceStepDone = vi.fn().mockResolvedValue({ cleared: ["step-Dessert?"] });
+  const { el, floor, api } = await mount(markServiceStepDone, { readFailsAfterDone: true });
+  const reads = api.getTablesState.mock.calls.length;
+
+  await userEvent.click(done(floor)!);
+
+  expect(markServiceStepDone).toHaveBeenCalledOnce();
+  await vi.waitFor(() => expect(api.getTablesState.mock.calls.length).toBe(reads + 1));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(el.shadowRoot!.querySelector(".error")).toBeNull();
+});
+
+it("shows the plain step chip and no Done on a device that cannot take orders", async () => {
+  const { floor } = await mount(vi.fn(), { capabilities: [] });
+  expect(
+    floor.shadowRoot!.querySelector('[data-table="t9"] [data-chip="service-step"]'),
+  ).not.toBeNull();
+  expect(done(floor)).toBeNull();
 });

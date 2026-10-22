@@ -70,6 +70,7 @@ it("a configuration import over a venue whose closed party has a completed step 
     modules: ALL_MODULES,
     beforeCommit: async (tx, installed) => {
       const [step] = await tx.select({ id: serviceSteps.id }).from(serviceSteps).limit(1);
+      expect(step).toBeDefined();
       const [party] = await tx
         .insert(parties)
         .values({

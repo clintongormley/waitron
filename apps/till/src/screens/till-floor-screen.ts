@@ -573,9 +573,10 @@ export class TillFloorScreen extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
 
-      /* Positioned after the cover, so Done paints above it and takes its own clicks. */
+      /* Above the cover, so Done takes its own clicks. */
       .step-card .step-done {
         position: relative;
+        z-index: 1;
       }
 
       .card.state-free {
@@ -2728,6 +2729,12 @@ export class TillFloorScreen extends LitElement {
     else this.#markMoved(table);
   }
 
+  /** What {@link #cardName} reads aloud. */
+  #spokenName(table: TableState): string {
+    const shown = shownUnder(table);
+    return shown === table.label ? shown : `${shown} ${table.label}`;
+  }
+
   /** Today's name, with the saved name small after it when they differ. */
   #cardName(table: TableState): TemplateResult {
     const shown = shownUnder(table);
@@ -2767,7 +2774,7 @@ export class TillFloorScreen extends LitElement {
           type="button"
           class="card-open"
           data-card-open
-          aria-label=${`${shownUnder(table)}, ${mapLook([table], this.#drawnAt).description}`}
+          aria-label=${`${this.#spokenName(table)}, ${mapLook([table], this.#drawnAt).description}`}
         ></button>
         ${this.#cardBody(table, ring, moving, top)}
       </div>`;

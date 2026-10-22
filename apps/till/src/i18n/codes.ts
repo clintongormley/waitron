@@ -274,10 +274,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table no longer exists",
     es: "Esa mesa ya no existe",
   },
-  "service_step.not_found": {
-    en: "This step no longer exists.",
-    es: "Este paso ya no existe.",
-  },
   "table.inactive": {
     en: "That table is no longer in use. Choose another table",
     es: "Esa mesa ya no está en uso. Elige otra mesa",
@@ -285,6 +281,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "table.already_in_party": {
     en: "Those guests already have that table. Choose another table",
     es: "Esa mesa ya es de estos clientes. Elige otra mesa",
+  },
+  "service_step.not_found": {
+    en: "This step no longer exists",
+    es: "Este paso ya no existe",
   },
   "party.main_bill_stays": {
     en: "This is the table's main bill, and the table has other unpaid bills. Move the other bills first, or merge them into this one",

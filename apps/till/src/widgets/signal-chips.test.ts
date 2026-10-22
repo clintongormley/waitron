@@ -20,17 +20,6 @@ describe("signalChips", () => {
     ).toEqual([]);
   });
 
-  it("gives no chip for a service step yet", () => {
-    expect(
-      signalChips([
-        {
-          kind: "service_step",
-          steps: [{ stepId: "s1", name: "Dessert?", dueAt: "2026-09-30T20:00:00.000Z" }],
-        },
-      ]),
-    ).toEqual([]);
-  });
-
   it("gives no chip for held dishes, which the floor draws with their countdown", () => {
     expect(signalChips([{ kind: "held", count: 2 }])).toEqual([]);
   });

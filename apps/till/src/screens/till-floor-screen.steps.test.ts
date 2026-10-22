@@ -133,6 +133,16 @@ describe("till-floor-screen: a table's due service step", () => {
     expect(card.querySelectorAll("button button")).toHaveLength(0);
   });
 
+  it("names a renamed table's cover by today's name and its saved name, as a plain card reads", async () => {
+    const table = seated({
+      today: { ...today(), placement: null, name: "Window" },
+      signals: [dueStepSignal("Dessert?")],
+    });
+    const el = await mount([table]);
+    const cover = cardOf(el).querySelector<HTMLButtonElement>("button.card-open")!;
+    expect(cover.getAttribute("aria-label")).toBe("Window T9, Seated, Dessert?");
+  });
+
   it("opens the table from a click on the box and on the cover", async () => {
     const el = await mount([seated({ signals: [dueStepSignal("Dessert?")] })]);
     const opened = record(el, "open-table");

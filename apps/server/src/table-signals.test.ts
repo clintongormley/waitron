@@ -269,7 +269,7 @@ describe("the floor's attention signals", () => {
   it("puts a due step first among a table's signals", async () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
-    const [setUp, bread] = await setSteps(v, await departmentOf(v, v.tables.zoneId), [
+    const [takeOrder, bread] = await setSteps(v, await departmentOf(v, v.tables.zoneId), [
       TAKE_ORDER,
       { name: "Bread?", start: "after_previous", courseId: null, minutes: 0 },
     ]);
@@ -279,7 +279,7 @@ describe("the floor's attention signals", () => {
     await makeReady(v, tabId, "Caña");
     const doneAt = new Date().toISOString();
     await inTx(v, (tx) =>
-      recordStepCompletions(tx, [{ partyId, stepId: setUp!, doneAt, doneBy: OPERATOR }]),
+      recordStepCompletions(tx, [{ partyId, stepId: takeOrder!, doneAt, doneBy: OPERATOR }]),
     );
 
     expect((await floorRow(v, mesa2)).signals).toEqual([

@@ -2,7 +2,7 @@
  * One thing on a table that wants attention (service spec §1). Several coexist on one table. The
  * party's bills and their dishes' kitchen state are read over its FAMILY — the party and every party
  * merged into it — while its drafts, held groups and bill request are its own. Every table the party
- * sits at carries its signals; `needs_clearing` is the table's own.
+ * sits at carries its signals; `service_step` and `needs_clearing` are the table's own.
  */
 export type TableSignal =
   /** The table's department's steps that have a trigger and are not cleared, soonest due first. */
