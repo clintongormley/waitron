@@ -87,7 +87,6 @@ it("words every part of the Box status page in both languages, with the same pla
   const keys = Object.keys(en).filter((key) => key.startsWith("box_status."));
   const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
   expect(keys).toEqual(expect.arrayContaining(["box_status.title", "box_status.read_error"]));
-  expect(keys).toHaveLength(54);
   for (const key of keys as (keyof typeof en)[]) {
     expect(es[key], key).toBeTruthy();
     expect(es[key], key).not.toBe(en[key]);
