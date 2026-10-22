@@ -1,5 +1,6 @@
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import type { TillSentOrders } from "./widgets/sent-orders.js";
+import type { FinishTableResolution } from "./api/finish-table-types.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import { openDraftLine } from "./screens/till-table-order-screen.test-helpers.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
@@ -10941,9 +10942,9 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       expect(dialog!.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
       expect(dialog!.refundAtTill).toBe(kind === "none");
       await choose(el);
-      expect(vi.mocked(api.finishTable).mock.calls[1]![3]!.cancellations[0]).not.toHaveProperty(
-        "refundHandoff",
-      );
+      expect(
+        (vi.mocked(api.finishTable).mock.calls[1]![3] as FinishTableResolution).cancellations[0],
+      ).not.toHaveProperty("refundHandoff");
       expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
     },
   );
@@ -11783,7 +11784,9 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       expect(finishDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
       if (missing !== "quantity") expect(api.getRefundableTenders).not.toHaveBeenCalled();
       await choose(el);
-      expect(vi.mocked(api.finishTable).mock.calls[1]![3]!.cancellations).toEqual([
+      expect(
+        (vi.mocked(api.finishTable).mock.calls[1]![3] as FinishTableResolution).cancellations,
+      ).toEqual([
         {
           lineId: "line-1",
           quantity: "1.000",

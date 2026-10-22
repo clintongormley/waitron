@@ -54,6 +54,8 @@ type Dialog = LitElement & {
   defaultReasonId: string;
   reasonsLoading: boolean;
   busy: boolean;
+  confirmationLocked: boolean;
+  collectPending: boolean;
   refusal: string;
 };
 beforeEach(() => setLocale("en"));
@@ -88,6 +90,13 @@ async function reason(el: Dialog, id = "house") {
       }),
     );
   await el.updateComplete;
+}
+const collectButton = (el: Dialog) =>
+  root(el).querySelector<HTMLElementTagNameMap["wt-button"]>("wt-button[data-collect]");
+function collections(el: Dialog) {
+  const calls: unknown[] = [];
+  el.addEventListener("finish-table-collect", (event) => calls.push((event as CustomEvent).detail));
+  return calls;
 }
 function collect(el: Dialog) {
   const calls: unknown[] = [];
@@ -126,15 +135,21 @@ it("states a known preparation as a statement, not the question with a colon", a
     es["finish_table.preparation_known"].replace("{answer}", es["cancel_item.yes"]),
   );
 });
-it("offers no counter collection: Back and the main action are its only buttons", async () => {
+it("offers the counter collection under Back and the main action", async () => {
   for (const refundAtTill of [false, true]) {
     const el = await mount({ refundAtTill });
     await reason(el);
     expect(
       [...root(el).querySelectorAll("wt-button")].map((row) =>
-        row.hasAttribute("data-close") ? "back" : row.hasAttribute("data-confirm") ? "main" : "?",
+        row.hasAttribute("data-close")
+          ? "back"
+          : row.hasAttribute("data-confirm")
+            ? "main"
+            : row.hasAttribute("data-collect")
+              ? "collect"
+              : "?",
       ),
-    ).toEqual(["back", "main"]);
+    ).toEqual(["back", "main", "collect"]);
     cleanupWidgets();
   }
 });
@@ -472,4 +487,134 @@ it("locks the unanswered fields while keeping the same confirmation available fo
   expect(calls[0]).toMatchObject({
     cancellations: [expect.objectContaining({ refundHandoff: true }), expect.any(Object)],
   });
+});
+
+it("emits a collection with no reason chosen and no answer given", async () => {
+  const el = await mount({ dishes: [dish("flan", "fired")], reasons: [house] });
+  expect(root(el).querySelector<HTMLInputElement>('input[value="no"]')!.checked).toBe(false);
+  expect(root(el).querySelector("wt-combobox")!.value).toBe("");
+  const choices = collect(el);
+  const collected = collections(el);
+  let composed = false;
+  document.body.addEventListener("finish-table-collect", () => (composed = true), { once: true });
+  await click(el, "[data-collect]");
+  expect(collected).toEqual([{}]);
+  expect(composed).toBe(true);
+  expect(choices).toEqual([]);
+});
+it("words the collection in Spanish", async () => {
+  setLocale("es-ES");
+  const el = await mount();
+  expect(collectButton(el)!.textContent!.trim()).toBe(es["finish_table.collect"]);
+  expect(es["finish_table.collect"]).toBe("Lo recogerán en el mostrador");
+  setLocale("en");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(collectButton(el)!.textContent!.trim()).toBe("They'll collect it at the counter");
+});
+it("keeps the collection single while sending, and blocks it from a closed or detached dialog", async () => {
+  const el = await mount();
+  const collected = collections(el);
+  await click(el, "[data-collect]");
+  expect(collected).toHaveLength(1);
+  expect(collectButton(el)!.disabled).toBe(true);
+  expect(button(el).disabled).toBe(true);
+  collectButton(el)!.click();
+  expect(collected).toHaveLength(1);
+  el.busy = true;
+  await el.updateComplete;
+  el.busy = false;
+  await el.updateComplete;
+  expect(collectButton(el)!.disabled).toBe(false);
+  el.remove();
+  collectButton(el)!.click();
+  expect(collected).toHaveLength(1);
+  document.body.appendChild(el);
+  await el.updateComplete;
+  const closed = new Promise<void>((resolve) =>
+    el.addEventListener("finish-table-close", () => resolve(), { once: true }),
+  );
+  await click(el, "[data-close]");
+  await closed;
+  await expect.poll(() => root(el).querySelector("wt-dialog")!.open).toBe(false);
+  collectButton(el)!.click();
+  expect(collected).toHaveLength(1);
+  el.remove();
+});
+it("ignores a collection click that arrives before a changed observation is drawn", async () => {
+  const el = await mount();
+  const collected = collections(el);
+  el.dishes = [{ ...dish("flan"), billRevision: 9 }];
+  collectButton(el)!.click();
+  await el.updateComplete;
+  expect(collected).toEqual([]);
+  await click(el, "[data-collect]");
+  expect(collected).toHaveLength(1);
+});
+it("while an unconfirmed collection waits, only the collection can resend", async () => {
+  const el = await mount({ defaultReasonId: "house" });
+  expect(button(el).disabled).toBe(false);
+  el.collectPending = true;
+  el.confirmationLocked = true;
+  await el.updateComplete;
+  expect(button(el).disabled).toBe(true);
+  expect(collectButton(el)!.disabled).toBe(false);
+  const choices = collect(el);
+  const collected = collections(el);
+  button(el).click();
+  await click(el, "[data-collect]");
+  expect(choices).toEqual([]);
+  expect(collected).toHaveLength(1);
+});
+it("while an unconfirmed cancel waits, the collection cannot send", async () => {
+  const el = await mount({ defaultReasonId: "house" });
+  el.confirmationLocked = true;
+  await el.updateComplete;
+  expect(collectButton(el)!.disabled).toBe(true);
+  expect(button(el).disabled).toBe(false);
+  const collected = collections(el);
+  collectButton(el)!.click();
+  await el.updateComplete;
+  expect(collected).toEqual([]);
+});
+it("offers no collection when no dish has a kitchen ticket", async () => {
+  const noTicket = (lineId: string): UnservedDish => {
+    const base = dish(lineId);
+    return {
+      ...base,
+      context: {
+        ...base.context,
+        components: base.context.components.map((item) => ({ ...item, id: null })),
+      },
+    };
+  };
+  const el = await mount({ dishes: [noTicket("flan"), noTicket("croquetas")] });
+  expect(collectButton(el)).toBeNull();
+  el.dishes = [noTicket("flan"), dish("croquetas")];
+  await el.updateComplete;
+  expect(collectButton(el)).not.toBeNull();
+});
+it("puts the collection on its own row, under the form's message", async () => {
+  const el = await mount({ defaultReasonId: "house" });
+  el.refusal = "Try again";
+  await el.updateComplete;
+  const actions = root(el).querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  const box = (selector: string) =>
+    root(el).querySelector<HTMLElement>(selector)!.getBoundingClientRect();
+  const main = box("[data-confirm]");
+  const back = box("[data-close]");
+  const collectBox = box("[data-collect]");
+  expect(collectBox.top).toBeGreaterThanOrEqual(main.bottom);
+  expect(collectBox.width).toBeGreaterThan(main.width);
+  expect(Math.round(collectBox.left)).toBe(Math.round(back.left));
+  expect(Math.round(collectBox.right)).toBe(Math.round(main.right));
+  const message = [...actions.shadowRoot!.querySelectorAll<HTMLElement>("*")].find(
+    (node) => node.children.length === 0 && node.textContent?.trim() === "Try again",
+  )!;
+  expect(message).toBeDefined();
+  const text = message.getBoundingClientRect();
+  expect(text.bottom).toBeLessThanOrEqual(main.top);
+  expect(text.bottom).toBeLessThanOrEqual(back.top);
+  expect(text.top).toBeLessThan(collectBox.top);
 });

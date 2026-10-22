@@ -227,3 +227,18 @@ it("a start reason deleted while another becomes the start reason takes the new 
   expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("other");
   expect(unload()).toBe(false);
 });
+it("a changed draft then a collection opens no leave prompt: the dialog emits and the app closes it", async () => {
+  const { app, form } = await mount();
+  await answer(form);
+  expect(unload()).toBe(true);
+  let collections = 0;
+  form.addEventListener("finish-table-collect", () => collections++);
+  await userEvent.click(
+    page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!),
+  );
+  await app.updateComplete;
+  expect(collections).toBe(1);
+  expect(app.closes).toBe(0);
+  const q = app.shadowRoot!.querySelector("wt-unsaved-changes");
+  expect(q?.open ?? false).toBe(false);
+});

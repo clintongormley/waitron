@@ -26,6 +26,11 @@ export interface FinishTableResolution {
   approver?: CancelItemRequest["approver"];
 }
 
+export interface FinishTableCollect {
+  submissionId: string;
+  collect: { bills: { billId: string; expectedBillRevision: number }[] };
+}
+
 export interface FinishTableAnswer {
   state: "closed";
   refundLinks?: RefundLink[];
