@@ -112,3 +112,9 @@ Una vez enviados a preparar, puedes avanzar los platos hasta Listo en su estaci�
 Confirma las instrucciones de alergia en la ventana de alergias de la mesa antes de pedir la
 preparación. En una estación o en el pase, lee la copia que acompaña a cada plato. Las pantallas de cocina
 no abren el editor de alergias de la mesa. En la estación, confirma las correcciones.
+
+## Eliminar una estación de preparación {#delete-prep-station}
+
+Elige **Eliminar** en el menú de la estación. La ventana muestra **Comprobando qué cambia…**
+mientras consulta las consecuencias. Revisa **Trabajo que finaliza** y **Configuración que se
+elimina** cuando aparezcan esas secciones, y decide si quieres eliminar la estación.

@@ -615,7 +615,7 @@ describe("the staff roles page", () => {
       "Removes 3 painted staffing blocks.",
       "Removes it from 1 person: Ana.",
     ]);
-    expect(dialogText()).toContain("Settings removed");
+    expect(dialogText()).toContain("Settings that are removed");
     expect(dialogText()).toContain("This cannot be undone.");
     expect(confirmDelete().variant).toBe("danger");
     expect(confirmDelete().disabled).toBe(false);
@@ -721,7 +721,7 @@ describe("the staff roles page", () => {
     );
     await choose("delete-role-r");
     expect(deleteDialog()!.loading).toBe(true);
-    expect(dialogText()).toContain("Checking what deleting this staff role would change…");
+    expect(dialogText()).toContain("Checking what changes…");
     expect(confirmDelete().disabled).toBe(true);
     answer(impactOf(runner));
     await settle();

@@ -57,6 +57,7 @@ describe("the user guides", () => {
         "reprints",
         "service-lifetime",
         "request-cooking",
+        "delete-prep-station",
       ]);
     },
   );
@@ -133,6 +134,7 @@ it.each(GUIDE_LANGUAGES)(
       "staff-details",
       "account-access",
       "own-account",
+      "delete-staff-role",
     ]);
   },
 );

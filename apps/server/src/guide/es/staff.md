@@ -20,3 +20,9 @@ nueva invitación. Los gerentes no ven estas acciones.
 
 Abre **Tu perfil** desde el menú de cuenta para cambiar tus propios datos de acceso. Puedes
 seguir gestionando tu correo, contraseña, PIN, llaves de acceso y verificación en dos pasos.
+
+## Eliminar un rol de personal {#delete-staff-role}
+
+En la lista de roles de personal, elige **Eliminar** en el menú del rol. La ventana muestra
+**Comprobando qué cambia…** mientras consulta las consecuencias. Revisa **Trabajo que finaliza**
+y **Configuración que se elimina** cuando aparezcan esas secciones antes de confirmar la eliminación.

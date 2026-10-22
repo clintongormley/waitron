@@ -20,3 +20,9 @@ Managers do not see these actions.
 
 Open **Your profile** from the account menu to change your own sign-in details. Your own email,
 password, PIN, passkeys and two-factor settings remain yours to manage.
+
+## Delete a staff role {#delete-staff-role}
+
+In the staff roles list, choose **Delete** from the role's row menu. The window shows
+**Checking what changes…** while it reads the impact. Review **Work that ends** and
+**Settings that are removed** when those sections appear before confirming the deletion.
