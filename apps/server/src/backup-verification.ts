@@ -13,7 +13,12 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
-import { openBackupQuery, type BackupQuery } from "@waitron/store";
+import {
+  openBackupQuery,
+  withVerificationVenueCopy,
+  VerificationVenueCopyCleanupError,
+  type BackupQuery,
+} from "@waitron/store";
 import { placeBackupData } from "./backup-data-placement.js";
 import {
   BackupVerificationArchiveError,
@@ -105,6 +110,8 @@ async function emptyOwner(
 }
 function classify(error: unknown): Verdict {
   if (error instanceof Refusal) return error.verdict;
+  if (error instanceof VerificationVenueCopyCleanupError)
+    return { status: "unavailable", reason: "cleanup_uncertain" };
   if (error instanceof BackupVerificationArchiveError)
     return { status: error.status, reason: error.reason };
   if (error instanceof BackupVerificationUnsupported)
@@ -208,7 +215,6 @@ export async function verifyBackupArtifact(
       refuse("invalid", "archive_digest_mismatch");
     await boundary();
     const stateDir = join(scratch, "state");
-    const venueDir = join(scratch, "venue");
     const validated = await validateBackupArtifactFile({
       artifactPath: sealed,
       recoveryKey: delivered.secret,
@@ -265,66 +271,76 @@ export async function verifyBackupArtifact(
     // Placement moves its input; the query-only original must keep its own path and inode.
     await copyFile(validated.databasePath, placementPath, constants.COPYFILE_EXCL);
     await boundary();
-    await placeBackupData(
-      { ...validated, databasePath: placementPath },
-      {
-        venueDir,
-        stateDir,
-        modules: deps.modules,
-        migrationsRoot: deps.migrationsRoot,
-        log: () => {},
-      },
-    );
-    await boundary();
-    const placedPath = join(venueDir, "venue.db");
-    if (!integrity(placedPath)) refuse("invalid", "sqlite_integrity");
-    const placementKeys = await verifyBackupKeyPlacement(validated.secretEntries, stateDir);
-    if (placementKeys !== "passed")
-      refuse(
-        placementKeys,
-        placementKeys === "unsupported" ? "target_incompatible" : "secret_unavailable",
+    results = await withVerificationVenueCopy(scratch, async (venueDir) => {
+      await placeBackupData(
+        { ...validated, databasePath: placementPath },
+        {
+          venueDir,
+          stateDir,
+          modules: deps.modules,
+          migrationsRoot: deps.migrationsRoot,
+          log: () => {},
+        },
       );
-    const after = await openBackupQuery(placedPath);
-    close.push(after.close);
-    const completed: BackupVerificationResult["modules"][number][] = [];
-    for (const { module, verification } of inventory) {
       await boundary();
-      const sourceSchema = Object.hasOwn(request.archive.modules, module.name)
-        ? request.archive.modules[module.name]!
-        : null;
-      const notApplicable = sourceSchema === null || sourceSchema === 0;
-      let raw;
-      if (notApplicable) {
-        if (!(await emptyOwner(after.query, verification)))
-          refuse("unsupported", "target_incompatible");
-        raw = { status: "passed", checks: [{ code: "not_applicable", status: "passed" }] };
-      } else {
-        const allowed = new Set(verification.entries.map((e) => e.name));
-        raw = await verification.verifyRestoredData({
-          before: before.query,
-          after: after.query,
-          entries: Object.freeze({
-            read: async (name: string) => {
-              if (!allowed.has(name)) throw new BackupVerificationUnsupported("semantics_missing");
-              const entry = validated.secretEntries.find((e) => e.name === name);
-              return entry === undefined ? null : new Uint8Array(entry.bytes);
-            },
-          }),
-          source: Object.freeze({
-            ...node,
-            environment: request.archive.environment,
-            createdAt: request.capturedAt,
-          }),
-          sourceSchema,
-          targetSchema: target.modules.find((m) => m.name === module.name)!.schema,
-          signal: deps.signal,
-        });
+      const placedPath = join(venueDir, "venue.db");
+      if (!integrity(placedPath)) refuse("invalid", "sqlite_integrity");
+      const placementKeys = await verifyBackupKeyPlacement(validated.secretEntries, stateDir);
+      if (placementKeys !== "passed")
+        refuse(
+          placementKeys,
+          placementKeys === "unsupported" ? "target_incompatible" : "secret_unavailable",
+        );
+      const after = await openBackupQuery(placedPath);
+      try {
+        const completed: BackupVerificationResult["modules"][number][] = [];
+        for (const { module, verification } of inventory) {
+          await boundary();
+          const sourceSchema = Object.hasOwn(request.archive.modules, module.name)
+            ? request.archive.modules[module.name]!
+            : null;
+          const notApplicable = sourceSchema === null || sourceSchema === 0;
+          let raw;
+          if (notApplicable) {
+            if (!(await emptyOwner(after.query, verification)))
+              refuse("unsupported", "target_incompatible");
+            raw = { status: "passed", checks: [{ code: "not_applicable", status: "passed" }] };
+          } else {
+            const allowed = new Set(verification.entries.map((e) => e.name));
+            raw = await verification.verifyRestoredData({
+              before: before.query,
+              after: after.query,
+              entries: Object.freeze({
+                read: async (name: string) => {
+                  if (!allowed.has(name))
+                    throw new BackupVerificationUnsupported("semantics_missing");
+                  const entry = validated.secretEntries.find((e) => e.name === name);
+                  return entry === undefined ? null : new Uint8Array(entry.bytes);
+                },
+              }),
+              source: Object.freeze({
+                ...node,
+                environment: request.archive.environment,
+                createdAt: request.capturedAt,
+              }),
+              sourceSchema,
+              targetSchema: target.modules.find((m) => m.name === module.name)!.schema,
+              signal: deps.signal,
+            });
+          }
+          const result = validateBackupModuleResult(raw, verification, notApplicable);
+          completed.push({ name: module.name, semanticsVersion: verification.version, ...result });
+        }
+        await boundary();
+        return completed.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+      } finally {
+        try {
+          await after.close();
+        } catch {
+          cleanupFailed = true;
+        }
       }
-      const result = validateBackupModuleResult(raw, verification, notApplicable);
-      completed.push({ name: module.name, semanticsVersion: verification.version, ...result });
-    }
-    await boundary();
-    results = completed.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    });
     const status =
       (["unsupported", "needs_authority", "invalid"] as const).find((s) =>
         results.some((m) => m.status === s),

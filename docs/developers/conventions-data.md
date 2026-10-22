@@ -2628,6 +2628,14 @@ the server opens with `exclusive: false` and takes no lock. A command that chang
 `lockVenueDatabase` before its first change. The restart reset of in-flight AEAT submissions
 (`apps/server/src/restart-reset.ts`) relies on one server process per folder.
 
+**Verification-copy exception (2026-10-22, A1004).** `withVerificationVenueCopy` creates a fresh
+scratch child and limits the watchdog exception to opens of that exact canonical directory in
+its active asynchronous callback. Those opens still take `venue.lock`. An ordinary caller sharing
+the directory starts monitoring before receiving its share; monitoring remains until the last
+share closes. The callback must close its handles before returning, when the helper removes the
+copy. See [backup verification](#backup-data-verification-has-a-separate-authority-boundary) for
+the caller's process deadline.
+
 **Litestream is a second process on `venue.db`, and it takes no lock.** While a primary streams its
 copy to the owner's bucket, the server runs Litestream as its own child process
 (`packages/stream/src/supervisor.ts`), and Litestream reads and writes `venue.db` without
@@ -3597,6 +3605,13 @@ versioned archive key, an owned private scratch parent and cancellation signal. 
 measures the ciphertext it consumes, authenticates the archive, migrates a separate private copy,
 and checks every declared owner through query-only handles. A passing result requires its owned
 handles to close and scratch to be removed; uncertain cleanup returns `unavailable`.
+You can run this entry with worker threads denied. Placement and migrations write only a fresh
+verification copy; module checks read it through query-only handles. That copy keeps its exclusive
+venue lock without creating a holder heartbeat or watchdog thread. Normal server and restore opens
+retain monitoring. Keep an independent deadline on the verifier process: its cooperative checks
+cannot interrupt a synchronous SQLite statement. Removing a copy or closing its query handle
+unsuccessfully returns `unavailable` with `cleanup_uncertain`.
+
 `activation: "not_attempted"` is part of every admitted result; a passing check grants no recovery
 allocation or trading authority.
 

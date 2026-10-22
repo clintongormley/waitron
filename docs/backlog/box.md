@@ -416,6 +416,11 @@ A987's design does not change the route
 
 ## Decisions and deliberate limits
 
+- **Cloud verification keeps worker threads denied (owner, 2026-10-22, A1004).** Only the fresh
+  disposable venue copy omits its watchdog; it still takes the venue lock. Ordinary server and
+  restore opens retain monitoring. Cloud must pin the implementing release and requalify its
+  genuine capture/verification flow before snapshots become available.
+
 - **A counter Send pressed again during a full-disk stop is refused like any write (A798-B slice 3,
   #1950; owner 2026-10-22: choice (a)).** The gate refuses the resend before `placeOrder` can answer
   it with the first placement (`TILL_OPEN_WHILE_DISK_FULL`, `apps/server/src/till-api.ts`), so the

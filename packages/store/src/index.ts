@@ -311,3 +311,8 @@ export async function openVenueStore<
     },
   };
 }
+
+export {
+  withVerificationVenueCopy,
+  VerificationVenueCopyCleanupError,
+} from "./verification-venue-copy.js";
