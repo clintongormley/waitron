@@ -3869,6 +3869,228 @@ describe("till-app: service cancellation consent", () => {
       expect(sent).not.toHaveProperty("cancellationIds");
     });
 
+    describe("a carried approval", () => {
+      const marta = [{ personId: "m-1", displayName: "Marta" }];
+      const refundPrompt = (el: TillApp) =>
+        el.shadowRoot!.querySelector(
+          "till-supervisor-override-dialog[data-tender-refund-approval]",
+        );
+      const pinMethods = (more: Record<string, unknown> = {}) =>
+        linkedMethods({
+          cancelItem: vi
+            .fn()
+            .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+            .mockResolvedValue({
+              revision: 4,
+              refundLinks: [{ lineId: "line-1", adjustmentId: cancelId }],
+            }),
+          listRefundAuthorizers: vi.fn().mockResolvedValue(marta),
+          ...more,
+        });
+      async function cancelWithPin(el: TillApp, read: CancellationRead = thirds()) {
+        await openCancel(el);
+        emit(cancelDialog(el)!, "cancel-item-choice", {
+          lineId: "line-1",
+          quantity: "1",
+          outcome: "refund",
+          consent: read,
+          reasonId: "r-unserved",
+        });
+        await flush(el);
+        await expect.poll(() => approval(el)).not.toBeNull();
+        await pinPad(el, "7777");
+        await expect.poll(() => refundForm(el)?.reasons ?? null).not.toBeNull();
+        await refundForm(el)!.updateComplete;
+        expect(vi.mocked(api.cancelItem).mock.calls[1]![2]).toMatchObject({
+          approver: { personId: "m-1", pin: "7777" },
+        });
+      }
+      const sent = () => vi.mocked(api.refundTransaction).mock.calls.map((call) => call[1]);
+
+      it("sends the cancel's approver once and never stores it", async () => {
+        let answer!: (view: typeof refunded) => void;
+        const refundTransaction = vi.fn(
+          () =>
+            new Promise<typeof refunded>((resolve) => {
+              answer = resolve;
+            }),
+        );
+        const { el } = await mountApp(pinMethods({ refundTransaction }));
+        await openMesa4(el);
+        await cancelWithPin(el);
+        await sendRefund(el);
+        expect(sent()).toEqual([
+          expect.objectContaining({
+            appliedAmount: "3.34",
+            tipAmount: "0.00",
+            cancellationIds: [cancelId],
+            override: { personId: "m-1", pin: "7777" },
+          }),
+        ]);
+        expect(refundPrompt(el)).toBeNull();
+        expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
+        expect(
+          Object.keys(localStorage).some((key) => key.startsWith("waitron.tender-refund:")),
+        ).toBe(true);
+        for (const storage of [localStorage, sessionStorage])
+          for (const key of Object.keys(storage)) {
+            expect(key).not.toContain("7777");
+            expect(storage.getItem(key)).not.toContain("7777");
+          }
+        answer({ ...refunded, appliedAmount: "3.34" });
+        await expect.poll(() => refundForm(el)).toBeNull();
+        expect(refundTransaction).toHaveBeenCalledOnce();
+      });
+
+      it("opens the PIN prompt and sends no PIN when the amount is raised by €0.01", async () => {
+        const { el } = await mountApp(
+          pinMethods({
+            refundTransaction: vi
+              .fn()
+              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+              .mockResolvedValue(refunded),
+          }),
+        );
+        await openMesa4(el);
+        await cancelWithPin(el);
+        await sendRefund(el, { appliedAmount: "3.35" });
+        await expect.poll(() => refundPrompt(el)).not.toBeNull();
+        expect(sent()[0]).not.toHaveProperty("override");
+        expect(sent()[0]).not.toHaveProperty("cancellationIds");
+        await pinPad(el, "1234");
+        await expect.poll(() => sent()).toHaveLength(2);
+        expect(sent()[1]).toMatchObject({
+          appliedAmount: "3.35",
+          override: { personId: "m-1", pin: "1234" },
+        });
+      });
+
+      it("opens the PIN prompt and sends no PIN when a tip is added", async () => {
+        const whole = { ...consent("settled"), saleId: "own-sale" };
+        const { el } = await mountApp(
+          pinMethods({
+            getCancellation: vi.fn().mockResolvedValue(whole),
+            refundTransaction: vi
+              .fn()
+              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+              .mockResolvedValue(refunded),
+          }),
+        );
+        await openMesa4(el);
+        await cancelWithPin(el, whole);
+        expect(refundForm(el)!.target).toBe("30.00");
+        await sendRefund(el, { tipAmount: "2.00" });
+        await expect.poll(() => refundPrompt(el)).not.toBeNull();
+        expect(sent()[0]).toMatchObject({ appliedAmount: "30.00", tipAmount: "2.00" });
+        expect(sent()[0]).not.toHaveProperty("override");
+        await pinPad(el, "1234");
+        await expect.poll(() => sent()).toHaveLength(2);
+        expect(sent()[1]).toMatchObject({ override: { personId: "m-1", pin: "1234" } });
+      });
+
+      it("opens the PIN prompt on a carried pin.invalid", async () => {
+        const { el } = await mountApp(
+          pinMethods({
+            refundTransaction: vi
+              .fn()
+              .mockRejectedValueOnce({ code: "pin.invalid" })
+              .mockResolvedValue(refunded),
+          }),
+        );
+        await openMesa4(el);
+        await cancelWithPin(el);
+        await sendRefund(el);
+        expect(sent()[0]).toMatchObject({ override: { personId: "m-1", pin: "7777" } });
+        await expect.poll(() => refundPrompt(el)).not.toBeNull();
+        await pinPad(el, "1234");
+        await expect.poll(() => sent()).toHaveLength(2);
+        expect(sent()[1]).toMatchObject({
+          appliedAmount: "3.34",
+          cancellationIds: [cancelId],
+          override: { personId: "m-1", pin: "1234" },
+        });
+      });
+
+      it("asks again for a second refund of the same sale", async () => {
+        const { el } = await mountApp(
+          pinMethods({
+            refundTransaction: vi
+              .fn()
+              .mockResolvedValueOnce({ ...refunded, appliedAmount: "3.00" })
+              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+              .mockResolvedValue(refunded),
+          }),
+        );
+        await openMesa4(el);
+        await cancelWithPin(el);
+        await sendRefund(el, { appliedAmount: "3.00" });
+        expect(sent()[0]).toMatchObject({ override: { personId: "m-1", pin: "7777" } });
+        await expect.poll(() => refundForm(el)).toBeNull();
+        emit(ticket(el)!, "tender-refund-open");
+        await flush(el);
+        await expect.poll(() => refundForm(el)?.reasons ?? null).not.toBeNull();
+        await sendRefund(el, { appliedAmount: "0.34", tipAmount: "0.00", reason: "r-unserved" });
+        await expect.poll(() => refundPrompt(el)).not.toBeNull();
+        expect(sent()[1]).not.toHaveProperty("override");
+      });
+
+      it("never carries a PIN to a card keyed on a separate terminal", async () => {
+        const keyed = { ...cash, method: "card", manual: true, last4: "4401" };
+        const { el } = await mountApp(
+          pinMethods({
+            getTill: vi.fn().mockResolvedValue({
+              ...till,
+              capabilities: [...till.capabilities, "take-cash", "hand-keyed-card-payment"],
+            }),
+            getRefundableTenders: vi.fn().mockResolvedValue([keyed]),
+          }),
+        );
+        await openMesa4(el);
+        await cancelWithPin(el);
+        emit(refundForm(el)!.shadowRoot!.querySelector('[name="manualConfirmed"]')!, "wt-change", {
+          checked: true,
+        });
+        await sendRefund(el);
+        await expect.poll(() => refundPrompt(el)).not.toBeNull();
+        expect(api.refundTransaction).not.toHaveBeenCalled();
+        await pinPad(el, "1234");
+        await expect.poll(() => sent()).toHaveLength(1);
+        expect(sent()[0]).toMatchObject({ override: { personId: "m-1", pin: "1234" } });
+      });
+
+      it("drops it when the refund closes", async () => {
+        const { el } = await mountApp(
+          pinMethods({
+            refundTransaction: vi
+              .fn()
+              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+              .mockResolvedValue(refunded),
+          }),
+        );
+        await openMesa4(el);
+        await cancelWithPin(el);
+        emit(refundForm(el)!, "tender-refund-close");
+        await flush(el);
+        expect(refundForm(el)).toBeNull();
+        emit(ticket(el)!, "tender-refund-open");
+        await flush(el);
+        await expect.poll(() => refundForm(el)?.reasons ?? null).not.toBeNull();
+        await sendRefund(el, { appliedAmount: "3.34", tipAmount: "0.00", reason: "r-unserved" });
+        await expect.poll(() => refundPrompt(el)).not.toBeNull();
+        expect(sent()[0]).not.toHaveProperty("override");
+      });
+
+      it("drops it on sign-out", async () => {
+        const { el } = await mountApp(pinMethods());
+        await openMesa4(el);
+        await cancelWithPin(el);
+        emit(ticket(el)!, "logout");
+        await flush(el);
+        expect(refundForm(el)).toBeNull();
+        expect(api.refundTransaction).not.toHaveBeenCalled();
+      });
+    });
+
     it("offers Refund only when this paid dish maps to a filed sale", async () => {
       const methods = paidMethods();
       const { el } = await mountApp(methods);
