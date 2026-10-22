@@ -1,6 +1,7 @@
 import { ALL_MODULES } from "@waitron/composition";
 import type { ClassifiedTable } from "@waitron/sync-enrolment";
 import { selectVenueService } from "@waitron/module";
+import type { OwnedStaffNoticeSource } from "./staff-notices.js";
 import type {
   AlertEventClaim,
   AlertSource,
@@ -51,4 +52,14 @@ export const ALL_ALERT_CLAIMS: readonly AlertEventClaim[] = ALL_MODULES.flatMap(
  * module's tables are not migrated. */
 export function enabledAlertSources(modules: readonly WaitronModule[]): readonly AlertSource[] {
   return modules.flatMap((m) => m.alerts?.sources ?? []);
+}
+
+/** Every staff-notice check of the modules given, named by its module. The caller passes the
+ * enabled set: a disabled module's tables are not migrated. */
+export function enabledStaffNoticeSources(
+  modules: readonly WaitronModule[],
+): readonly OwnedStaffNoticeSource[] {
+  return modules.flatMap((m) =>
+    (m.staffNotices ?? []).map((source) => ({ owner: m.name, source })),
+  );
 }
