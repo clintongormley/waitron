@@ -222,6 +222,7 @@ import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { readUnsentDrafts } from "./order-drafts.js";
 import { readBillSignals, readPartySignals, tableSignals } from "./table-signals.js";
 import type { SeatedPartyFacts } from "./table-signals.js";
+import { readTableSteps, stepSignal } from "./service-step-signals.js";
 import type { UnsentDraft } from "./order-drafts.js";
 import {
   correctHoldTickets,
@@ -8229,7 +8230,17 @@ export async function listTablesWithState(
   ]);
   // Not the `now` parameter, which is the VENUE clock the annotators take and a caller may supply.
   const nowMs = Date.now();
-  const partySignals = await readPartySignals(tx, [...new Set(seated.values())], facts, nowMs);
+  const seatedParties = [...new Set(seated.values())];
+  const partySignals = await readPartySignals(tx, seatedParties, facts, nowMs);
+  const tableSteps = await readTableSteps(
+    tx,
+    seatedParties.map((party) => ({
+      partyId: party.id,
+      openedAt: facts.get(party.id)!.openedAt,
+      tableIds: party.tableIds,
+    })),
+    nowMs,
+  );
 
   const states = result.rows.map((r) => {
     const hasOpenTab = Number(r.open_bills) > 0;
@@ -8268,6 +8279,7 @@ export async function listTablesWithState(
         : {}),
       signals: tableSignals(
         party === undefined ? undefined : partySignals.get(party.id),
+        stepSignal(tableSteps.get(r.id)),
         r.needs_clearing_since,
       ),
       ...(hasOpenTab
@@ -8424,6 +8436,7 @@ async function readSeatedParties(
       name: parties.name,
       mainBillId: parties.mainBillId,
       billRequestedAt: parties.billRequestedAt,
+      openedAt: parties.openedAt,
     })
     .from(partyTables)
     .innerJoin(parties, eq(parties.id, partyTables.partyId))
@@ -8448,7 +8461,11 @@ async function readSeatedParties(
       continue;
     }
     const own = bills.get(member.partyId)!;
-    facts.set(member.partyId, { bills: own, billRequestedAt: member.billRequestedAt });
+    facts.set(member.partyId, {
+      bills: own,
+      billRequestedAt: member.billRequestedAt,
+      openedAt: member.openedAt,
+    });
     partyOf.set(member.partyId, {
       id: member.partyId,
       kitchenNote: {

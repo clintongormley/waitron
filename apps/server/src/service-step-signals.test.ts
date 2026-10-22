@@ -53,13 +53,6 @@ const OPENED = "2020-01-01T20:30:00.000Z";
 const NOW = Date.parse("2099-01-01T00:00:00.000Z");
 const MINUTE = 60_000;
 
-/** A party venue holding no service step until a test gives its departments some. */
-async function venue(): Promise<PartyVenue> {
-  const v = await setupPartyVenue(suite.db);
-  await inTx(v, (tx) => tx.delete(serviceSteps));
-  return v;
-}
-
 async function tablesDepartment(v: PartyVenue): Promise<string> {
   return departmentOf(v, v.tables.zoneId);
 }
@@ -188,7 +181,7 @@ const seated = (name: string, minutes = 0) =>
 
 describe("readTableSteps", () => {
   it("a seated party's step is due at its seating", async () => {
-    const v = await venue();
+    const v = await setupPartyVenue(suite.db);
     const department = await tablesDepartment(v);
     const ids = await setSteps(v, department, [seated("Set up"), seated("Water?", 5)]);
     const tableId = await v.table("Mesa 1");
@@ -227,7 +220,7 @@ describe("readTableSteps", () => {
   });
 
   it("a course served reads the family's dishes of that course", async () => {
-    const v = await venue();
+    const v = await setupPartyVenue(suite.db);
     const mains = await inTx(v, (tx) =>
       createCourse(tx, v.cfg, { name: "Mains", heldUntilFired: false }),
     );
@@ -252,7 +245,7 @@ describe("readTableSteps", () => {
   });
 
   it("a recalled dish and an abandoned bill's dishes are left out", async () => {
-    const v = await venue();
+    const v = await setupPartyVenue(suite.db);
     const mains = await inTx(v, (tx) =>
       createCourse(tx, v.cfg, { name: "Mains", heldUntilFired: false }),
     );
@@ -291,7 +284,7 @@ describe("readTableSteps", () => {
   });
 
   it("everything served is triggered once the last dish is served", async () => {
-    const v = await venue();
+    const v = await setupPartyVenue(suite.db);
     const [anything] = await setSteps(v, await tablesDepartment(v), [
       { name: "Anything else?", start: "all_served", courseId: null, minutes: 10 },
     ]);
@@ -320,7 +313,7 @@ describe("readTableSteps", () => {
   });
 
   it("the first order sent through placeGroups clears a step triggered before it", async () => {
-    const v = await venue();
+    const v = await setupPartyVenue(suite.db);
     const [setUp] = await setSteps(v, await tablesDepartment(v), [seated("Set up")]);
     const tableId = await v.table("Mesa 1");
     const { partyId } = await seat(v, tableId);
@@ -333,7 +326,7 @@ describe("readTableSteps", () => {
   });
 
   it("every N minutes since the last order counts from that order", async () => {
-    const v = await venue();
+    const v = await setupPartyVenue(suite.db);
     const [drinks] = await setSteps(v, await tablesDepartment(v), [
       { name: "Drinks?", start: "since_last_order", courseId: null, minutes: 20 },
     ]);
@@ -359,7 +352,7 @@ describe("readTableSteps", () => {
   });
 
   it("after the step before is triggered by a recorded Done", async () => {
-    const v = await venue();
+    const v = await setupPartyVenue(suite.db);
     const [setUp, takeOrder] = await setSteps(v, await tablesDepartment(v), [
       seated("Set up"),
       { name: "Take order", start: "after_previous", courseId: null, minutes: 2 },
@@ -385,7 +378,7 @@ describe("readTableSteps", () => {
   });
 
   it("before the first order no step shows while the party has an open draft", async () => {
-    const v = await venue();
+    const v = await setupPartyVenue(suite.db);
     const [setUp] = await setSteps(v, await tablesDepartment(v), [seated("Set up")]);
     const tableId = await v.table("Mesa 1");
     const { partyId, tabId } = await seat(v, tableId);
@@ -397,7 +390,7 @@ describe("readTableSteps", () => {
   });
 
   it("each table reads its own zone's department", async () => {
-    const v = await venue();
+    const v = await setupPartyVenue(suite.db);
     const [setUp] = await setSteps(v, await tablesDepartment(v), [seated("Set up")]);
     const terrace = await inTx(v, async (tx) => {
       const department = await createDepartment(tx, v.cfg, { name: "Terrace service" });
@@ -433,7 +426,7 @@ describe("readTableSteps", () => {
   });
 
   it("a table whose zone has no department shows no step", async () => {
-    const v = await venue();
+    const v = await setupPartyVenue(suite.db);
     const [setUp] = await setSteps(v, await tablesDepartment(v), [seated("Set up")]);
     const outside = await inTx(v, async (tx) => {
       const [zone] = await tx
@@ -457,7 +450,7 @@ describe("readTableSteps", () => {
   });
 
   it("a new venue's starter steps reach the floor", async () => {
-    const v = await venue();
+    const v = await setupPartyVenue(suite.db);
     const department = await tablesDepartment(v);
     await inTx(v, (tx) => addStarterServiceSteps(tx, v.cfg, department));
     const [first] = await inTx(v, (tx) =>
@@ -483,7 +476,7 @@ describe("readTableSteps", () => {
   });
 
   it("a party at two tables of one department gets the same steps on both", async () => {
-    const v = await venue();
+    const v = await setupPartyVenue(suite.db);
     const department = await tablesDepartment(v);
     const [setUp] = await setSteps(v, department, [seated("Set up")]);
     const mesa1 = await v.table("Mesa 1");
@@ -511,7 +504,7 @@ describe("readTableSteps", () => {
   });
 
   it("a party merged into another brings its orders and dishes", async () => {
-    const v = await venue();
+    const v = await setupPartyVenue(suite.db);
     const [setUp, drinks, anything] = await setSteps(v, await tablesDepartment(v), [
       seated("Set up"),
       { name: "Drinks?", start: "since_last_order", courseId: null, minutes: 20 },
@@ -559,7 +552,7 @@ describe("readTableSteps", () => {
   });
 
   it("reads every fact once, whatever the number of parties", async () => {
-    const v = await venue();
+    const v = await setupPartyVenue(suite.db);
     const mains = await inTx(v, (tx) =>
       createCourse(tx, v.cfg, { name: "Mains", heldUntilFired: false }),
     );
