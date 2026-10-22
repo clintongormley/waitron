@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import type { AdjustmentReason } from "../api/client.js";
 import type { UnservedDish } from "../api/finish-table-types.js";
+import { es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./finish-table-dialog.js";
@@ -121,7 +122,9 @@ it("states a known preparation as a statement, not the question with a colon", a
   setLocale("es-ES");
   el.requestUpdate();
   await el.updateComplete;
-  expect(line("croquetas")).toBe("En preparación: Sí");
+  expect(line("croquetas")).toBe(
+    es["finish_table.preparation_known"].replace("{answer}", es["cancel_item.yes"]),
+  );
 });
 it("offers no counter collection: Back and the main action are its only buttons", async () => {
   for (const refundAtTill of [false, true]) {

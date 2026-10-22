@@ -113,7 +113,10 @@ function tallyCell(tally: AdjustmentTally): string {
   return tally.count === 0 ? count(0) : `${count(tally.count)} · ${money(tally.reduction)}`;
 }
 
-/** What was done, as staff name it: "Void", or "Comp" and how much (design §3.6). */
+/**
+ * What was done, as staff name it: "Void", "Void, charged" for a cancel that kept its charge, or
+ * "Comp" and how much (design §3.6).
+ */
 function entryWords(entry: AdjustmentEntry, locale: string): string {
   if (entry.action === "cancel")
     return t(

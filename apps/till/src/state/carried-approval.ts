@@ -3,8 +3,10 @@ export interface CarriedApprover {
   pin: string;
 }
 
-/** A manager's PIN given once for the refunds of one or more sales. It lives in memory only and is
- * handed out at most once per sale. */
+/**
+ * The PIN of someone who may give refunds, given once for the refunds of one or more sales. It
+ * lives in memory only and is handed out at most once per sale.
+ */
 export class CarriedApproval {
   #approver: CarriedApprover | null;
   readonly #waiting: Set<string>;

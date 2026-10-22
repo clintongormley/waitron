@@ -511,8 +511,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Es más de lo que se puede devolver de este pago. La propina solo se devuelve con todo lo que queda del pago",
   },
   "tender.refund_exceeds_cancelled": {
-    en: "This refund is more than the cancelled dishes' value.",
-    es: "Esta devolución supera el valor de los platos cancelados.",
+    en: "This refund is more than the cancelled dishes' value",
+    es: "Esta devolución supera el valor de los platos cancelados",
   },
   "tender.refund_unavailable": {
     en: "This payment cannot be refunded here. Reload the transaction and check its payments",

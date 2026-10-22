@@ -17,10 +17,10 @@ it.each([
 
 it("words a refund above its cancelled dishes", () => {
   expect(codeMessage("tender.refund_exceeds_cancelled", "en")).toBe(
-    "This refund is more than the cancelled dishes' value.",
+    "This refund is more than the cancelled dishes' value",
   );
   expect(codeMessage("tender.refund_exceeds_cancelled", "es")).toBe(
-    "Esta devolución supera el valor de los platos cancelados.",
+    "Esta devolución supera el valor de los platos cancelados",
   );
 });
 

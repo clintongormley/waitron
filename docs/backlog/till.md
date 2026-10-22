@@ -2707,8 +2707,8 @@ Left open by A758-6. Each works as built, with the default named; the owner may 
    show such money linked to the cancel), and so is the rest refunded from a second payment
    (Decision 16).
 5. **New words, ours:** "Refund pending €x" («Devolución pendiente …») and "This refund is more
-   than the cancelled dishes' value." («Esta devolución supera el valor de los platos
-   cancelados.»), which names no amount where the plan's wording did.
+   than the cancelled dishes' value" («Esta devolución supera el valor de los platos
+   cancelados»), which names no amount where the plan's wording did.
 6. **A still-charged cancelled dish is counted once in the person's sales**, where it used to be
    counted twice. It still counts as one cancel and still adds its menu price to "List value of
    cancelled items".

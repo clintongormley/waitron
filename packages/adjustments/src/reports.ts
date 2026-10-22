@@ -115,7 +115,10 @@ export interface AdjustmentEntry {
   byGuest: boolean;
   /** A cancel that left the dish on the bill, still charged. */
   chargeKept: boolean;
-  /** Whether the kitchen had started the dish when it was cancelled; null when nobody knew. */
+  /**
+   * Whether the kitchen had started the dish when it was cancelled; null where the cancel did not
+   * record it.
+   */
   preparationStarted: boolean | null;
   /** The refunds linked to this cancel, oldest first; a failed refund is left out. */
   refunded: { amount: Decimal; state: "pending" | "completed" }[];
