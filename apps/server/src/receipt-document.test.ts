@@ -1087,7 +1087,7 @@ describe("the header rows: order, number and date (A754)", () => {
     };
 
     it("prints a four-digit counter and the numeric date on one line on 58 mm", () => {
-      const date = receiptDateTimeNumeric(ISSUED, "es-ES", 120);
+      const date = receiptDateTimeNumeric(ISSUED, "es-ES");
       expect(printedHeader("58mm", "A-0CZZW/9999")).toEqual([
         "Mesa 6               Pedido 41",
         `A-0CZZW/9999  ${date}`,
@@ -1095,7 +1095,7 @@ describe("the header rows: order, number and date (A754)", () => {
     });
 
     it("moves the date to its own right-aligned line on 58 mm at five digits, cutting nothing", () => {
-      const date = receiptDateTimeNumeric(ISSUED, "es-ES", 120);
+      const date = receiptDateTimeNumeric(ISSUED, "es-ES");
       expect(printedHeader("58mm", "A-0CZZW/10000")).toEqual([
         "Mesa 6               Pedido 41",
         "A-0CZZW/10000",
@@ -1105,10 +1105,10 @@ describe("the header rows: order, number and date (A754)", () => {
 
     it("fits a ten-digit counter beside the longest Spanish date on 80 mm", () => {
       const september = "2026-09-28T20:34:00.000Z";
-      const date = receiptDateTime(september, "es-ES", 120);
+      const date = receiptDateTime(september, "es-ES");
       for (let month = 0; month < 12; month++) {
         const other = new Date(Date.UTC(2026, month, 28, 20, 34)).toISOString();
-        expect(date.length).toBeGreaterThanOrEqual(receiptDateTime(other, "es-ES", 120).length);
+        expect(date.length).toBeGreaterThanOrEqual(receiptDateTime(other, "es-ES").length);
       }
       expect(printedHeader("80mm", "A-0CZZW/9999999999", september)).toEqual([
         "Mesa 6                           Pedido 41",
