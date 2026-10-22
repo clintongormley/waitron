@@ -1,9 +1,9 @@
-import { and, eq } from "drizzle-orm";
-import { diningTables } from "@waitron/db";
+import { and, eq, inArray, ne } from "drizzle-orm";
+import { diningTables, workingOrders } from "@waitron/db";
 import type { Database, SQL, Transaction } from "@waitron/db";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
-import { partyZone } from "./parties.js";
+import { partyFamily, partyStateAndZone } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
 
 /** What a till request acts on, by where its service zone is read from. */
@@ -13,17 +13,17 @@ export type ZoneSubject =
 /** The zones the session's profile may work in, or null when it has no department restriction. */
 export type ZoneScope = ReadonlySet<string> | null;
 
-async function subjectZone(
+async function subjectZones(
   tx: Transaction,
   cfg: TillConfig,
   subject: ZoneSubject,
-): Promise<string | null> {
-  if ("zoneId" in subject) return subject.zoneId.toLowerCase();
+): Promise<(string | null)[]> {
+  if ("zoneId" in subject) return [subject.zoneId.toLowerCase()];
   if ("orderId" in subject) {
     const id = subject.orderId.toLowerCase();
-    return (await VENUE_SERVICE.findOrderZones(tx, cfg, [id])).get(id) ?? null;
+    return [(await VENUE_SERVICE.findOrderZones(tx, cfg, [id])).get(id) ?? null];
   }
-  if ("partyId" in subject) return partyZone(tx, cfg, subject.partyId.toLowerCase());
+  if ("partyId" in subject) return partySubjectZones(tx, cfg, subject.partyId.toLowerCase());
   const [table] = await tx
     .select({ zoneId: diningTables.zoneId })
     .from(diningTables)
@@ -33,7 +33,32 @@ async function subjectZone(
         eq(diningTables.locationId, cfg.locationId),
       ),
     );
-  return table?.zoneId ?? null;
+  return [table?.zoneId ?? null];
+}
+
+/** A closed party holds no table, and a dish of any bill of its family can still be read through it. */
+async function partySubjectZones(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+): Promise<(string | null)[]> {
+  const party = await partyStateAndZone(tx, partyId);
+  if (party?.state !== "closed") return [party?.zoneId ?? null];
+  const bills = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(
+      and(
+        inArray(workingOrders.partyId, await partyFamily(tx, partyId)),
+        ne(workingOrders.status, "abandoned"),
+      ),
+    );
+  const zones = await VENUE_SERVICE.findOrderZones(
+    tx,
+    cfg,
+    bills.map((bill) => bill.id),
+  );
+  return [...zones.values()];
 }
 
 /**
@@ -48,12 +73,11 @@ export async function assertSubjectZones(
 ): Promise<void> {
   const scope = await readZoneScope(tx, cfg, profileId);
   if (scope === null) return;
-  for (const subject of subjects) {
-    const zoneId = await subjectZone(tx, cfg, subject);
-    // venue-service raises the refusal: it re-reads the profile's zones and refuses this one.
-    if (zoneId !== null && !scope.has(zoneId))
-      await VENUE_SERVICE.assertProfileZone(tx, cfg, profileId, zoneId);
-  }
+  for (const subject of subjects)
+    for (const zoneId of await subjectZones(tx, cfg, subject))
+      // venue-service raises the refusal: it re-reads the profile's zones and refuses this one.
+      if (zoneId !== null && !scope.has(zoneId))
+        await VENUE_SERVICE.assertProfileZone(tx, cfg, profileId, zoneId);
 }
 
 /** {@link assertSubjectZones} for the session's profile, first thing in the route's own transaction. */

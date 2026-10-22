@@ -113,9 +113,17 @@ function tallyCell(tally: AdjustmentTally): string {
   return tally.count === 0 ? count(0) : `${count(tally.count)} · ${money(tally.reduction)}`;
 }
 
-/** What was done, as staff name it: "Void", or "Comp" and how much (design §3.6). */
+/**
+ * What was done, as staff name it: "Void", "Void, charged" for a cancel that kept its charge, or
+ * "Comp" and how much (design §3.6).
+ */
 function entryWords(entry: AdjustmentEntry, locale: string): string {
-  if (entry.action === "cancel") return t("adjustment_report.entries.void");
+  if (entry.action === "cancel")
+    return t(
+      entry.chargeKept
+        ? "adjustment_report.entries.void_charged"
+        : "adjustment_report.entries.void",
+    );
   const amount = isFullComp(entry)
     ? percentFormat(locale).format(1)
     : entry.percentBp !== null
@@ -706,6 +714,21 @@ export class AdjustmentReportScreen extends LitElement {
         cell: (entry) => stageName(entry.stageGroup),
       },
       {
+        key: "preparation",
+        label: t("adjustment_report.entries.preparation"),
+        choosable: "shown",
+        sortValue: (entry) =>
+          entry.preparationStarted === null ? null : Number(entry.preparationStarted),
+        cell: (entry) =>
+          entry.preparationStarted === null
+            ? NONE
+            : t(
+                entry.preparationStarted
+                  ? "adjustment_report.entries.yes"
+                  : "adjustment_report.entries.no",
+              ),
+      },
+      {
         key: "reason",
         label: t("adjustment_report.column.reason"),
         choosable: "shown",
@@ -748,6 +771,35 @@ export class AdjustmentReportScreen extends LitElement {
         choosable: "shown",
         sortValue: (entry) => Number(entry.nominalValue),
         cell: (entry) => amount(entry.nominalValue),
+      },
+      {
+        key: "refunded",
+        label: t("adjustment_report.entries.refunded"),
+        align: "end",
+        choosable: "shown",
+        sortValue: (entry) =>
+          entry.refunded.length === 0
+            ? null
+            : Number(
+                entry.refunded.reduce(
+                  (sum, each) => addDecimal(sum, decimal(each.amount)),
+                  decimal("0"),
+                ),
+              ),
+        cell: (entry) =>
+          entry.refunded.length === 0
+            ? NONE
+            : entry.refunded.map(
+                (each) =>
+                  html`<div part="amount">
+                    ${tf(
+                      each.state === "completed"
+                        ? "adjustment_report.entries.refunded_amount"
+                        : "adjustment_report.entries.refund_pending",
+                      { amount: money(each.amount) },
+                    )}
+                  </div>`,
+              ),
       },
       {
         key: "requestedBy",

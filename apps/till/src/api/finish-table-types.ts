@@ -1,4 +1,4 @@
-import type { CancelItemRequest, CancellationContext } from "./line-cancel-types.js";
+import type { CancelItemRequest, CancellationContext, RefundLink } from "./line-cancel-types.js";
 
 export interface UnservedDish {
   billId: string;
@@ -24,4 +24,9 @@ export interface FinishTableResolution {
   submissionId: string;
   cancellations: FinishCancellation[];
   approver?: CancelItemRequest["approver"];
+}
+
+export interface FinishTableAnswer {
+  state: "closed";
+  refundLinks?: RefundLink[];
 }

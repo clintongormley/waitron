@@ -45,13 +45,16 @@ function compReason(
   };
 }
 
+/** The starter Void reason Finish table's reason starts on, matched by its English name. */
+export const NOT_SERVED_REASON = "Not served";
+
 /** Design §4. "Other" asks for a note: a venue always keeps a Void reason that does
  * (D27). */
 const STARTERS: readonly Starter[] = [
   voidReason("Entry error"),
   voidReason("Item not available"),
   voidReason("Customer changed mind"),
-  voidReason("Not served"),
+  voidReason(NOT_SERVED_REASON),
   voidReason("Other", true),
   compReason("Complaint", SUPERVISOR_UP, SUPERVISOR_UP),
   compReason("On the house", MANAGER_UP, MANAGER_UP),

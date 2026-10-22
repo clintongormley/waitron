@@ -1,6 +1,6 @@
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { adjustments, createAdjustmentReason, deleteAdjustmentReason } from "@waitron/adjustments";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
@@ -29,6 +29,9 @@ import { advanceTicketItem, markServed } from "./working-order.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { recallToDraft } from "./draft-recall.js";
+import { splitBill } from "./bill-actions.js";
+import { cancellationRefundValue } from "./cancellation-refund-value.js";
+import { cancelRefundShare } from "@waitron/shared";
 import {
   billWith,
   inTx,
@@ -1131,5 +1134,286 @@ describe("Cancel item service command", () => {
     expect(JSON.stringify(commands)).not.toContain(`"${PINS.manager}"`);
     const ids = after.lines.map((row) => row.id);
     expect(ids).toEqual([order.parent.id, order.extra!.id]);
+  });
+});
+
+describe("What a cancel records for refunds", () => {
+  async function pay(billId: string, amount: string) {
+    await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
+      id: billId,
+      tender: { method: "cash", amount },
+      lines: [],
+    });
+  }
+  async function adjust(order: Fixture, args: { action: "comp" }) {
+    const ask = await askFor(order);
+    await inTx(venue, (tx) =>
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        {
+          expectedEdit: ask.expectedEdit,
+          orderId: order.billId,
+          expectedRevision: ask.expectedBillRevision,
+          lineId: order.parent.id,
+          reasonId: venue.reasonId.house,
+          action: args.action,
+          note: null,
+          operatorId: venue.staffId,
+          submissionId: randomUUID(),
+        },
+        venue.cfg.locale,
+      ),
+    );
+  }
+  async function cancels(order: Fixture) {
+    return (await snapshot(order)).adjustments
+      .filter((row) => row.action === "cancel")
+      .map((row) => ({
+        chargeKept: row.chargeKept,
+        preparationStarted: row.preparationStarted,
+        refundHandoff: row.refundHandoff,
+        refundValue: row.refundValue,
+      }));
+  }
+  async function filedValue(order: Fixture) {
+    return inTx(venue, async (tx) => {
+      const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, order.billId));
+      return cancellationRefundValue(tx, order.billId, sale!.id, order.parent.id);
+    });
+  }
+  it("records a still-charge cancel of a started dish as charge kept and started", async () => {
+    const order = await fixture();
+    await startExtra(order);
+    await cancel(order, await askFor(order));
+    expect(await cancels(order)).toEqual([
+      { chargeKept: true, preparationStarted: true, refundHandoff: false, refundValue: null },
+    ]);
+  });
+
+  it("does not record a refund handoff on a bill that is not paid", async () => {
+    const order = await fixture();
+    await startExtra(order);
+    await cancel(order, { ...(await askFor(order)), refundHandoff: true });
+    expect(await cancels(order)).toEqual([
+      { chargeKept: true, preparationStarted: true, refundHandoff: false, refundValue: null },
+    ]);
+  });
+
+  it("answers no refund link and records no approver for a Refund tick on a bill that is not paid", async () => {
+    const order = await fixture();
+    await startExtra(order);
+    const answer = await cancel(order, {
+      ...(await askFor(order)),
+      refundHandoff: true,
+      approver: { personId: venue.managerId, pin: PINS.manager },
+    });
+    const { party, adjustments: rows } = await snapshot(order);
+    expect(answer).toEqual({ revision: party[0]!.revision });
+    expect(
+      rows.map((row) => ({ approvedBy: row.approvedBy, refundHandoff: row.refundHandoff })),
+    ).toEqual([{ approvedBy: null, refundHandoff: false }]);
+  });
+
+  it("records a paid-bill cancel answered No as not started, and its Refund tick", async () => {
+    const order = await fixture();
+    await pay(order.billId, "36.00");
+    await cancel(order, {
+      ...(await askFor(order)),
+      preparationStarted: false,
+      refundHandoff: true,
+    });
+    expect(await cancels(order)).toEqual([
+      { chargeKept: true, preparationStarted: false, refundHandoff: true, refundValue: 2400 },
+    ]);
+  });
+
+  it("records a held dish on a paid bill as not started", async () => {
+    const order = await fixture("hold");
+    await pay(order.billId, "36.00");
+    await cancel(order, await askFor(order));
+    expect(await cancels(order)).toEqual([
+      { chargeKept: true, preparationStarted: false, refundHandoff: false, refundValue: null },
+    ]);
+  });
+
+  it.each([
+    ["the waiter's Yes", true],
+    ["a started extra", undefined],
+  ])(
+    "records a don't-charge cancel of a started dish as started, charge not kept (%s)",
+    async (_, answer) => {
+      const order = await fixture();
+      if (answer === undefined) await startExtra(order);
+      await cancel(order, {
+        ...(await askFor(order, "remove_charge")),
+        ...(answer === undefined ? {} : { preparationStarted: answer }),
+        reasonId: venue.reasonId.houseVoid,
+        approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+      });
+      expect(await cancels(order)).toEqual([
+        { chargeKept: false, preparationStarted: true, refundHandoff: false, refundValue: null },
+      ]);
+    },
+  );
+
+  it("records a don't-charge cancel as started without marking the unstarted dish's void notice started", async () => {
+    const order = await fixture();
+    await startExtra(order);
+    await cancel(order, {
+      ...(await askFor(order, "remove_charge")),
+      reasonId: venue.reasonId.houseVoid,
+      approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+    });
+    const stations = [order.parent.id, order.extra!.id].map(
+      (lineId) => order.tickets.find((row) => row.workingOrderLineId === lineId)!.stationId,
+    );
+    expect(stations[0]).not.toBe(stations[1]);
+    const notices = await inTx(venue, async (tx) => [
+      ...(await listStationNotices(tx, venue.cfg, stations[0]!)),
+      ...(await listStationNotices(tx, venue.cfg, stations[1]!)),
+    ]);
+    expect(
+      notices
+        .filter((row) => row.workingOrderId === order.billId)
+        .map((row) => [row.kind, row.lineName, row.quantity, row.wasStarted]),
+    ).toEqual([
+      ["void", "PIZZA", "2.000", false],
+      ["void", expect.stringContaining("ACEIT"), "4.000", true],
+    ]);
+    expect(await cancels(order)).toEqual([
+      { chargeKept: false, preparationStarted: true, refundHandoff: false, refundValue: null },
+    ]);
+  });
+
+  it("a still-charge cancel of a dish comped to €0.00 is charge kept and a don't-charge one is not", async () => {
+    const kept = await fixture();
+    await adjust(kept, { action: "comp" });
+    await startExtra(kept);
+    await cancel(kept, await askFor(kept, "keep_charge", "1"));
+    const dropped = await fixture();
+    await adjust(dropped, { action: "comp" });
+    await startExtra(dropped);
+    await cancel(dropped, {
+      ...(await askFor(dropped, "remove_charge", "1")),
+      reasonId: venue.reasonId.houseVoid,
+      approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+    });
+    for (const order of [kept, dropped])
+      expect((await snapshot(order)).lines[0]).toMatchObject({ lineTotal: 0 });
+    expect(await cancels(kept)).toMatchObject([{ chargeKept: true, preparationStarted: true }]);
+    expect(await cancels(dropped)).toMatchObject([{ chargeKept: false, preparationStarted: true }]);
+  });
+
+  it("stores the amount the till showed as the refund cap", async () => {
+    const order = await fixture("fire", "Burger", "3");
+    await pay(order.billId, "36.00");
+    const value = await filedValue(order);
+    expect(value).toEqual({ quantity: "3.000", gross: "36.00" });
+    const shown = [];
+    for (let round = 0; round < 2; round++) {
+      const ask = { ...(await askFor(order, "keep_charge", "1")), refundHandoff: true };
+      const before = ask.expectedContext.components.find(
+        (row) => row.lineId === order.parent.id,
+      )!.cancelledQuantity;
+      shown.push(cancelRefundShare(value!, before, "1"));
+      await cancel(order, ask);
+    }
+    expect(shown).toEqual(["12.00", "12.00"]);
+    expect((await cancels(order)).map((row) => row.refundValue)).toEqual([1200, 1200]);
+  });
+
+  it("leaves out a don't-charge cancel made before payment", async () => {
+    const order = await fixture("fire", "Burger", "7");
+    await cancel(order, await askFor(order, "remove_charge", "1"));
+    await pay(order.billId, "72.00");
+    const value = await filedValue(order);
+    expect(value).toEqual({ quantity: "6.000", gross: "72.00" });
+    const ask = { ...(await askFor(order, "keep_charge", "1")), refundHandoff: true };
+    const before = ask.expectedContext.components.find(
+      (row) => row.lineId === order.parent.id,
+    )!.cancelledQuantity;
+    expect(before).toBe("0.000");
+    await cancel(order, ask);
+    expect(await cancels(order)).toMatchObject([{ refundHandoff: true, refundValue: 1200 }]);
+    expect(cancelRefundShare(value!, before, "1")).toBe("12.00");
+  });
+
+  it("reads a split's moved cancellation", async () => {
+    const order = await fixture("fire", "Burger", "4");
+    await cancel(order, {
+      ...(await askFor(order, "keep_charge", "1")),
+      preparationStarted: true,
+    });
+    const newBillId = await inTx(venue, async (tx) => {
+      const [party] = await tx.select().from(parties).where(eq(parties.id, order.partyId));
+      const split = await splitBill(
+        tx,
+        venue.cfg,
+        order.billId,
+        [{ lineNo: order.parent.lineNo, quantity: "2" }],
+        {
+          partyId: order.partyId,
+          expectedPartyRevision: party!.revision,
+          operatorId: venue.staffId,
+          expectedEdit: await readBillEditState(tx, order.billId),
+        },
+      );
+      return split.billId;
+    });
+    const [line] = await inTx(venue, (tx) =>
+      tx.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, newBillId)),
+    );
+    const moved: Fixture = { ...order, billId: newBillId, parent: line! };
+    await pay(newBillId, "24.00");
+    const value = await filedValue(moved);
+    expect(value).toEqual({ quantity: "2.000", gross: "24.00" });
+    const ask = { ...(await askFor(moved, "keep_charge", "1")), refundHandoff: true };
+    const before = ask.expectedContext.components.find(
+      (row) => row.lineId === line!.id,
+    )!.cancelledQuantity;
+    expect(before).toBe("1.000");
+    await cancel(moved, ask);
+    expect(await cancels(moved)).toMatchObject([{ refundHandoff: true, refundValue: 1200 }]);
+    expect(cancelRefundShare(value!, before, "1")).toBe("12.00");
+  });
+
+  it("stores no refund cap when the filed sale no longer matches the bill", async () => {
+    const order = await fixture();
+    await pay(order.billId, "36.00");
+    await inTx(venue, async (tx) => {
+      // The stored copy drifting from the filed sale stands in for any line the sale cannot value.
+      const name = "working_order_lines_require_open_parent_update";
+      const [trigger] = tx.all<{ sql: string }>(
+        sql`select sql from sqlite_master where type = 'trigger' and name = ${name}`,
+      );
+      tx.run(sql.raw(`drop trigger ${name}`));
+      await tx
+        .update(workingOrderLines)
+        .set({ quantity: 5000 })
+        .where(eq(workingOrderLines.id, order.extra!.id));
+      tx.run(sql.raw(trigger!.sql));
+    });
+    expect(await filedValue(order)).toBeUndefined();
+    await cancel(order, { ...(await askFor(order, "keep_charge", "1")), refundHandoff: true });
+    expect(await cancels(order)).toEqual([
+      { chargeKept: true, preparationStarted: false, refundHandoff: true, refundValue: null },
+    ]);
+  });
+
+  it("refuses a Refund tick on a settled bill that has no filed sale", async () => {
+    const order = await fixture();
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: "2026-10-22T12:00:00.000Z" })
+        .where(eq(workingOrders.id, order.billId)),
+    );
+    const ask = { ...(await askFor(order, "keep_charge", "1")), refundHandoff: true };
+    await expect(cancel(order, ask)).rejects.toMatchObject({
+      code: "working_order.not_found",
+      params: { workingOrderId: order.billId },
+    });
+    expect(await cancels(order)).toEqual([]);
   });
 });

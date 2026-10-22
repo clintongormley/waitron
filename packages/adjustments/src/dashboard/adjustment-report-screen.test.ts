@@ -4,8 +4,8 @@ import { formatMoney } from "@waitron/shared";
 import { applyTokens } from "@waitron/ui";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import type { AdjustmentsApi } from "./client.js";
-import { ADJUSTMENTS_STRINGS, kindTotalName, t, tf } from "./strings.js";
+import type { AdjustmentEntry, AdjustmentsApi } from "./client.js";
+import { ADJUSTMENTS_STRINGS, kindTotalName, t, tf, type StringKey } from "./strings.js";
 import type { AdjustmentReportScreen } from "./adjustment-report-screen.js";
 import "./adjustment-report-screen.js";
 import {
@@ -1236,6 +1236,114 @@ describe("more of a long list", () => {
   });
 });
 
+describe("a cancel's charge, preparation and refunds", () => {
+  /** The lines of one row's cell under a heading, each `div` apart. */
+  function lines(table: HTMLElement, key: string, heading: string): string[] {
+    const root = table.shadowRoot!;
+    const index = [...root.querySelectorAll("thead th")].findIndex((th) => text(th) === heading);
+    expect(index, heading).toBeGreaterThanOrEqual(0);
+    const cell = root.querySelectorAll(`tr[data-row-key="${key}"] td`)[index]!;
+    const divs = [...cell.querySelectorAll("div")];
+    return divs.length === 0 ? [text(cell)] : divs.map((div) => text(div));
+  }
+
+  async function listed(entries: AdjustmentEntry[]): Promise<HTMLElement> {
+    const el = await mount(fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage(entries)) }));
+    part(el, "show-all")!.click();
+    await settle(el);
+    return part(el, "entries")!;
+  }
+
+  function cancels(): AdjustmentEntry[] {
+    const [steak, burger] = alexEntries();
+    return [
+      { ...steak!, chargeKept: true, preparationStarted: true },
+      { ...burger!, chargeKept: false, preparationStarted: false },
+      { ...steak!, id: "e9", chargeKept: true, preparationStarted: null },
+    ];
+  }
+
+  it("words a charge-kept cancel Void, charged, and one that does not charge Void", async () => {
+    const table = await listed(cancels());
+    expect(row(table, "e3").Action).toBe("Void, charged");
+    expect(row(table, "e2").Action).toBe("Void");
+  });
+
+  it("words a charge-kept cancel in Spanish", async () => {
+    setLocale("es-ES");
+    const table = await listed(cancels());
+    const action = (key: string) => Object.values(row(table, key))[1];
+    expect(action("e3")).toBe(ADJUSTMENTS_STRINGS.es["adjustment_report.entries.void_charged"]);
+    expect(action("e2")).toBe(ADJUSTMENTS_STRINGS.es["adjustment_report.entries.void"]);
+  });
+
+  it("shows whether preparation had started", async () => {
+    const table = await listed(cancels());
+    expect(row(table, "e3")["Preparation started"]).toBe("Yes");
+    expect(row(table, "e2")["Preparation started"]).toBe("No");
+    expect(row(table, "e9")["Preparation started"]).toBe("—");
+  });
+
+  it("shows whether preparation had started in Spanish", async () => {
+    setLocale("es-ES");
+    const es = ADJUSTMENTS_STRINGS.es;
+    const table = await listed(cancels());
+    expect(row(table, "e3")[es["adjustment_report.entries.preparation"]]).toBe(
+      es["adjustment_report.entries.yes"],
+    );
+    expect(row(table, "e2")[es["adjustment_report.entries.preparation"]]).toBe(
+      es["adjustment_report.entries.no"],
+    );
+  });
+
+  it("shows what was refunded for a cancel, completed and pending in one cell, oldest first", async () => {
+    const [charged, , none] = cancels();
+    const table = await listed([
+      {
+        ...charged!,
+        refunded: [
+          { amount: "5.50", state: "completed" },
+          { amount: "2.00", state: "pending" },
+        ],
+      },
+      // A failed refund reaches the screen as no refund at all.
+      { ...none!, refunded: [] },
+    ]);
+    expect(lines(table, "e3", "Refunded")).toEqual(["Refunded €5.50", "Refund pending €2.00"]);
+    expect(lines(table, "e9", "Refunded")).toEqual(["—"]);
+  });
+
+  it("shows what was refunded in Spanish", async () => {
+    setLocale("es-ES");
+    const es = ADJUSTMENTS_STRINGS.es;
+    const [charged] = cancels();
+    const table = await listed([
+      {
+        ...charged!,
+        refunded: [
+          { amount: "5.50", state: "completed" },
+          { amount: "2.00", state: "pending" },
+        ],
+      },
+    ]);
+    const words = (key: StringKey, amount: string) =>
+      tf(key, { amount: formatMoney(amount, "es") }, "es").replace(/\s+/g, " ");
+    expect(lines(table, "e3", es["adjustment_report.entries.refunded"])).toEqual([
+      words("adjustment_report.entries.refunded_amount", "5.50"),
+      words("adjustment_report.entries.refund_pending", "2.00"),
+    ]);
+  });
+
+  it("offers Preparation started and Refunded in the chooser, shown at first", async () => {
+    const table = (await listed(cancels())) as HTMLElement & {
+      columns: { key: string; choosable?: string }[];
+    };
+    const choosable = Object.fromEntries(table.columns.map((c) => [c.key, c.choosable]));
+    expect(choosable.preparation).toBe("shown");
+    expect(choosable.refunded).toBe("shown");
+  });
+});
+
 describe("sorting and columns", () => {
   const keys = (table: HTMLElement) => rows(table).map((each) => each.key);
   async function sortBy(el: AdjustmentReportScreen, test: string, key: string): Promise<void> {
@@ -1282,9 +1390,27 @@ describe("sorting and columns", () => {
   });
 
   it("sorts the listed adjustments by each column", async () => {
-    const el = await mount(
-      fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([...alexEntries(), samEntry()])) }),
-    );
+    const [steak, burger, comp] = alexEntries();
+    const entries: AdjustmentEntry[] = [
+      {
+        ...steak!,
+        chargeKept: true,
+        preparationStarted: true,
+        refunded: [
+          { amount: "1.00", state: "completed" },
+          { amount: "6.00", state: "pending" },
+        ],
+      },
+      {
+        ...burger!,
+        chargeKept: true,
+        preparationStarted: false,
+        refunded: [{ amount: "5.50", state: "completed" }],
+      },
+      comp!,
+      samEntry(),
+    ];
+    const el = await mount(fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage(entries)) }));
     part(el, "show-all")!.click();
     await settle(el);
     const orders: [string, string[]][] = [
@@ -1294,6 +1420,8 @@ describe("sorting and columns", () => {
       ["reduction", ["e2", "e4", "e1", "e3"]],
       ["listValue", ["e2", "e1", "e4", "e3"]],
       ["order", ["e2", "e1", "e3", "e4"]],
+      ["preparation", ["e2", "e3", "e1", "e4"]],
+      ["refunded", ["e2", "e3", "e1", "e4"]],
     ];
     for (const [key, order] of orders) {
       await sortBy(el, "entries", key);

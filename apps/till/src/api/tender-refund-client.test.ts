@@ -54,7 +54,6 @@ describe("settled tender refund client", () => {
       appliedAmount: "12.50",
       tipAmount: "1.00",
       reason: "Guest returned",
-      cashConfirmed: true,
       manualConfirmed: false,
       override: { personId: "manager", pin: "0123" },
     };

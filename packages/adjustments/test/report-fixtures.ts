@@ -170,6 +170,9 @@ export function alexEntries(): AdjustmentEntry[] {
     approvedBy: null,
     creditedTo: alex,
     byGuest: false,
+    chargeKept: false,
+    preparationStarted: null,
+    refunded: [],
     quantity: "1.000",
   };
   return [
@@ -254,6 +257,9 @@ export function samEntry(): AdjustmentEntry {
     approvedBy: null,
     creditedTo: null,
     byGuest: false,
+    chargeKept: false,
+    preparationStarted: null,
+    refunded: [],
     workingOrderId: "w3",
     orderNumber: 43,
   };

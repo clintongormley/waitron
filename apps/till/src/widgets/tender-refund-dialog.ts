@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
+import { compareDecimal, decimal, formatMoney, subtractDecimal } from "@waitron/shared";
 import {
   baseStyles,
   draftScopeFor,
@@ -18,7 +18,9 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { trackDialog } from "./track-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import type { AdjustmentReason } from "../api/client.js";
 import type { RefundableTender, TenderRefundView } from "../api/tender-refund-types.js";
+import { reasonPicker, voidReasons } from "./reason-picker.js";
 import {
   tenderRefundAmount,
   type SavedTenderRefund,
@@ -30,17 +32,17 @@ type Draft = {
   tenderId: string;
   appliedAmount: string;
   tipAmount: string;
-  reason: string;
-  cashConfirmed: boolean;
+  reasonId: string;
+  note: string;
   manualConfirmed: boolean;
 };
-type Field = "appliedAmount" | "tipAmount" | "reason" | "confirmation";
+type Field = "appliedAmount" | "tipAmount" | "reason" | "note" | "confirmation";
 const blank = (): Draft => ({
   tenderId: "",
   appliedAmount: "",
   tipAmount: "",
-  reason: "",
-  cashConfirmed: false,
+  reasonId: "",
+  note: "",
   manualConfirmed: false,
 });
 const supported = (row: RefundableTender) => row.method === "cash" || row.method === "card";
@@ -98,6 +100,12 @@ export class TillTenderRefundDialog extends LitElement {
   @property({ attribute: false }) result: TenderRefundView | null = null;
   @property({ attribute: false }) refusal: DialogRefusal | null = null;
   @property({ type: Boolean }) busy = false;
+  @property({ attribute: false }) reasons: AdjustmentReason[] | null = null;
+  @property({ type: Boolean }) reasonsLoading = false;
+  @property() startReasonId = "";
+  @property() dishes = "";
+  @property() target = "";
+  @property({ type: Boolean }) refundAtTill = false;
   @state() private draft: Draft = blank();
   @state() private active = true;
   @state() private attempted = false;
@@ -130,13 +138,34 @@ export class TillTenderRefundDialog extends LitElement {
   #selected(): RefundableTender | undefined {
     return this.tenders.find((row) => row.tenderId === this.draft.tenderId && available(row));
   }
+  #reason(): AdjustmentReason | undefined {
+    return voidReasons(this.reasons).find((reason) => reason.id === this.draft.reasonId);
+  }
+  #startReason(): string {
+    return voidReasons(this.reasons).some((reason) => reason.id === this.startReasonId)
+      ? this.startReasonId
+      : "";
+  }
+  #filled(row: RefundableTender): string {
+    if (this.target === "") return row.appliedRemaining;
+    return compareDecimal(decimal(this.target), decimal(row.appliedRemaining)) < 0
+      ? this.target
+      : row.appliedRemaining;
+  }
+  #left(): string | null {
+    const amount = tenderRefundAmount(this.draft.appliedAmount);
+    if (this.target === "" || amount === null || this.#errors().has("appliedAmount")) return null;
+    const left = subtractDecimal(decimal(this.target), decimal(amount));
+    return compareDecimal(left, decimal("0")) > 0 ? left : null;
+  }
   #choice(row: RefundableTender): Draft {
     return {
       ...blank(),
       tenderId: row.tenderId,
-      appliedAmount: row.appliedRemaining,
-      tipAmount: row.tipRemaining,
-      reason: this.draft.reason,
+      appliedAmount: this.#filled(row),
+      tipAmount: this.target === "" ? row.tipRemaining : "0.00",
+      reasonId: this.draft.reasonId,
+      note: this.draft.note,
     };
   }
   override willUpdate(changed: PropertyValues<this>): void {
@@ -147,17 +176,20 @@ export class TillTenderRefundDialog extends LitElement {
     if (changed.has("busy") && !this.busy) this.sending = false;
     if (!this.#initialized) {
       const eligible = this.tenders.filter(available);
-      this.draft = eligible.length === 1 ? this.#choice(eligible[0]!) : blank();
+      this.draft = {
+        ...(eligible.length === 1 ? this.#choice(eligible[0]!) : blank()),
+        reasonId: this.#startReason(),
+      };
       this.#initialized = true;
       this.#baseline = { ...this.draft };
-    }
+    } else if (changed.has("reasons") && !this.#locked()) this.#reasonsArrived();
     if (changed.has("attempt") && this.attempt !== null) {
       this.draft = {
         tenderId: this.attempt.request.tenderId,
         appliedAmount: this.attempt.request.appliedAmount,
         tipAmount: this.attempt.request.tipAmount,
-        reason: this.attempt.request.reason,
-        cashConfirmed: this.attempt.request.cashConfirmed === true,
+        reasonId: "",
+        note: "",
         manualConfirmed: this.attempt.request.manualConfirmed === true,
       };
       this.#baseline = { ...this.draft };
@@ -178,12 +210,24 @@ export class TillTenderRefundDialog extends LitElement {
     this.#leave = coordinator;
     scope.commit(this.#baseline!);
   }
+  #reasonsArrived(): void {
+    if (this.draft.reasonId === "" && this.#baseline?.reasonId === "") {
+      const start = this.#startReason();
+      if (start === "") return;
+      this.draft = { ...this.draft, reasonId: start };
+      this.#baseline = { ...this.#baseline, reasonId: start };
+      this.#scope?.commit(this.#baseline);
+    } else if (this.reasons !== null && this.draft.reasonId !== "" && !this.#reason()) {
+      this.draft = { ...this.draft, reasonId: "", note: "" };
+      this.#scope?.changed();
+    }
+  }
   #comparable(value: Draft): Draft {
     return {
       ...value,
       appliedAmount: tenderRefundAmount(value.appliedAmount) ?? value.appliedAmount,
       tipAmount: tenderRefundAmount(value.tipAmount) ?? value.tipAmount,
-      reason: value.reason.trim(),
+      note: value.note.trim(),
     };
   }
   #set(change: Partial<Draft>): void {
@@ -194,7 +238,9 @@ export class TillTenderRefundDialog extends LitElement {
     if (
       field !== null &&
       (field in change ||
-        (field === "confirmation" && ("cashConfirmed" in change || "manualConfirmed" in change)))
+        (field === "confirmation" && "manualConfirmed" in change) ||
+        (field === "reason" && "reasonId" in change) ||
+        (field === "note" && "reasonId" in change))
     )
       this.shownRefusal = null;
   }
@@ -222,22 +268,29 @@ export class TillTenderRefundDialog extends LitElement {
       )
         errors.set("tipAmount", t("tender_refund.tip_requires_all"));
     }
-    if (this.draft.reason.trim() === "") errors.set("reason", t("bill_refund.reason_invalid"));
-    else if (this.draft.reason.length > REASON_MAX)
+    const reason = this.#reason();
+    if (!reason) errors.set("reason", t("adjust.reason_required"));
+    else if (!reason.noteRequired && reason.name.length > REASON_MAX)
       errors.set("reason", t("bill_refund.reason_long"));
-    if (
-      (row.method === "cash" && !this.draft.cashConfirmed) ||
-      (row.manual && !this.draft.manualConfirmed)
-    )
+    else if (reason.noteRequired && this.draft.note.trim() === "")
+      errors.set("note", t("adjust.note_required"));
+    else if (reason.noteRequired && this.draft.note.trim().length > REASON_MAX)
+      errors.set("note", t("bill_refund.reason_long"));
+    if (row.manual && !this.draft.manualConfirmed)
       errors.set("confirmation", t("tender_refund.confirm_required"));
     return errors;
   }
   #refusalField(): Field | null {
-    if (this.shownRefusal?.code === "tender.refund_exceeds_payment") return "appliedAmount";
+    if (
+      this.shownRefusal?.code === "tender.refund_exceeds_payment" ||
+      this.shownRefusal?.code === "tender.refund_exceeds_cancelled"
+    )
+      return "appliedAmount";
     const field = this.shownRefusal?.field;
     if (this.shownRefusal?.code !== "management.request_invalid") return null;
-    if (field === "appliedAmount" || field === "tipAmount" || field === "reason") return field;
-    return field === "cashConfirmed" || field === "manualConfirmed" ? "confirmation" : null;
+    if (field === "appliedAmount" || field === "tipAmount") return field;
+    if (field === "reason") return this.#reason()?.noteRequired ? "note" : "reason";
+    return field === "manualConfirmed" ? "confirmation" : null;
   }
   #refusalText(): string {
     if (this.shownRefusal === null) return "";
@@ -259,7 +312,15 @@ export class TillTenderRefundDialog extends LitElement {
       return;
     }
     this.sending = true;
-    const ask: TenderRefundAsk = this.#comparable(this.draft);
+    const draft = this.#comparable(this.draft);
+    const reason = this.#reason()!;
+    const ask: TenderRefundAsk = {
+      tenderId: draft.tenderId,
+      appliedAmount: draft.appliedAmount,
+      tipAmount: draft.tipAmount,
+      reason: reason.noteRequired ? draft.note : reason.name,
+      manualConfirmed: draft.manualConfirmed,
+    };
     this.#emit("tender-refund-submit", ask);
   }
   #recoverable(): boolean {
@@ -298,7 +359,7 @@ export class TillTenderRefundDialog extends LitElement {
       >${t("action.cancel")}</wt-button
     >`;
   }
-  #input(name: "appliedAmount" | "tipAmount" | "reason", label: string, error: string) {
+  #input(name: "appliedAmount" | "tipAmount", label: string, error: string) {
     return html`<wt-input
       name=${name}
       autocomplete="off"
@@ -307,27 +368,56 @@ export class TillTenderRefundDialog extends LitElement {
       .required=${true}
       .disabled=${this.#busy() || this.#locked()}
       .error=${error}
-      .decimalLocale=${name === "reason" ? "" : currentLocale()}
+      .decimalLocale=${currentLocale()}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
         this.#set({ [name]: event.detail.value });
       }}
-      @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-submit]"))}
     ></wt-input>`;
   }
+  #leftLines(row: RefundableTender | undefined) {
+    const left = row ? this.#left() : null;
+    if (left === null) return nothing;
+    return html`<p data-left>
+        ${t("tender_refund.left").replace("{amount}", () => this.#money(left))}
+      </p>
+      ${this.refundAtTill ? html`<p data-refund-at-till>${t("cancel_item.refund_at_till")}</p>` : nothing}`;
+  }
+  #reasonBlock(errors: Map<Field, string>) {
+    if (this.#locked())
+      return this.attempt
+        ? html`<p data-saved-reason>
+            ${t("adjust.reason_shown").replace("{reason}", () => this.attempt!.request.reason)}
+          </p>`
+        : nothing;
+    return reasonPicker({
+      reasons: this.reasons,
+      reasonsLoading: this.reasonsLoading,
+      reasonId: this.draft.reasonId,
+      note: this.draft.note,
+      disabled: this.#busy(),
+      reasonError: errors.get("reason") ?? "",
+      noteError: errors.get("note") ?? "",
+      onReason: (reasonId) => this.#set({ reasonId, note: "" }),
+      onNote: (note) => this.#set({ note }),
+      onRetry: () => {
+        if (this.isConnected && this.active && !this.#busy()) this.#emit("tender-refund-reasons");
+      },
+      under: this.dishes === "" ? nothing : html`<p class="muted" data-dishes>${this.dishes}</p>`,
+    });
+  }
   #confirm(row: RefundableTender, error: string) {
-    if (row.method !== "cash" && !row.manual) return nothing;
-    const name = row.method === "cash" ? "cashConfirmed" : "manualConfirmed";
-    return html`${row.manual ? html`<p data-manual-instruction>${t("tender_refund.manual_instruction")}</p>` : nothing}
+    if (!row.manual) return nothing;
+    return html`<p data-manual-instruction>${t("tender_refund.manual_instruction")}</p>
       <wt-switch
-        name=${name}
-        .label=${`${t(name === "cashConfirmed" ? "tender_refund.cash_confirm" : "tender_refund.manual_confirm")} *`}
+        name="manualConfirmed"
+        .label=${`${t("tender_refund.manual_confirm")} *`}
         .description=${error}
-        .checked=${this.draft[name]}
+        .checked=${this.draft.manualConfirmed}
         .disabled=${this.#busy() || this.#locked()}
         @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
           event.stopPropagation();
-          this.#set({ [name]: event.detail.checked });
+          this.#set({ manualConfirmed: event.detail.checked });
         }}
       ></wt-switch
       >${error ? html`<p class="error" data-confirm-error role="alert">${error}</p>` : nothing}`;
@@ -407,8 +497,9 @@ export class TillTenderRefundDialog extends LitElement {
           : selected || this.attempt
             ? html`
                 ${this.#input("appliedAmount", t("tender_refund.applied"), errors.get("appliedAmount") ?? "")}
+                ${locked ? nothing : this.#leftLines(selected)}
                 ${this.#input("tipAmount", t("tender_refund.tip"), errors.get("tipAmount") ?? "")}
-                ${this.#input("reason", t("bill_refund.reason"), errors.get("reason") ?? "")}
+                ${this.#reasonBlock(errors)}
                 ${selected ? this.#confirm(selected, errors.get("confirmation") ?? "") : nothing}
               `
             : nothing
@@ -437,7 +528,7 @@ export class TillTenderRefundDialog extends LitElement {
                 >`
             : !locked
               ? html`<wt-button
-                  .variant=${selected ? "primary" : "secondary"}
+                  .variant=${selected && this.#reason() && !this.reasonsLoading ? "primary" : "secondary"}
                   data-submit
                   .loading=${this.#busy()}
                   .disabled=${this.#busy() || !selected || own.size > 0}
@@ -457,7 +548,10 @@ export class TillTenderRefundDialog extends LitElement {
       .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => this.#closed(event)}
     >
-      <div class="body">
+      <div
+        class="body"
+        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-submit]"))}
+      >
         <p>${this.invoiceNumber}</p>
         <p class="muted" data-invoice-unchanged>${t("tender_refund.invoice_unchanged")}</p>
         ${this.#body()}

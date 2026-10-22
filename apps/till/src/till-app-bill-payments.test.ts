@@ -45,6 +45,7 @@ import { userEvent } from "vitest/browser";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
   adjustmentStubs,
+  cancelReason,
   cancelThroughDialog,
   cleanupWidgets,
   expectNoA11yViolations,
@@ -5183,6 +5184,10 @@ describe("till-app: giving back a bill payment", () => {
     balance: balanceOf({ payments: [{ ...payment, refunds: [refund] }] }),
   });
   const manager = [{ personId: "m-1", displayName: "Marta" }];
+  const chargedTwice = { ...cancelReason, id: "Charged twice", name: "Charged twice" };
+  const refundReasons = () => ({
+    listAdjustmentReasons: vi.fn().mockResolvedValue([cancelReason, chargedTwice]),
+  });
 
   const refundDialog = (el: TillApp) =>
     el.shadowRoot!.querySelector<TillBillRefundDialog>("till-bill-refund-dialog");
@@ -5218,6 +5223,7 @@ describe("till-app: giving back a bill payment", () => {
       getPartyBills: vi.fn().mockResolvedValue([partly]),
       getBillBalance: vi.fn().mockResolvedValue(holding(payment)),
       listRefundAuthorizers: vi.fn().mockResolvedValue(manager),
+      ...refundReasons(),
       ...overrides,
     });
     await signInAndAskRefund(el, payment, reason);
@@ -5232,9 +5238,20 @@ describe("till-app: giving back a bill payment", () => {
     await openTable(el);
     await openDialog(el, "rest");
     await press(el, `[data-payment-refund="${payment.id}"]`);
-    const input = inRefund(el, 'wt-input[name="reason"]')!.shadowRoot!.querySelector("input")!;
-    input.value = reason;
-    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    const combo = inRefund(
+      el,
+      'wt-combobox[name="reason"]',
+    ) as HTMLElementTagNameMap["wt-combobox"];
+    await expect
+      .poll(() => combo.options.find((option) => option.label === reason)?.value)
+      .toBeDefined();
+    combo.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: combo.options.find((option) => option.label === reason)!.value },
+        bubbles: true,
+        composed: true,
+      }),
+    );
     await flush(el);
     inRefund(el, "[data-refund-continue]")!.click();
     await flush(el);
@@ -5604,6 +5621,44 @@ describe("till-app: giving back a bill payment", () => {
     expect(inRefund(el, "wt-form-actions")!.error).toBe(t("bill_refund.approvers_failed"));
   });
 
+  it("offers the Void reasons read for Give back, and reads them again after a failed read", async () => {
+    const charged = { ...cancelReason, id: "r-charged", name: "Charged twice" };
+    const listAdjustmentReasons = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue([charged]);
+    const refundBillPayment = vi.fn().mockResolvedValue(givenBack(cashPaid, refundOf()));
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([partly]),
+      getBillBalance: vi.fn().mockResolvedValue(holding(cashPaid)),
+      listAdjustmentReasons,
+      refundBillPayment,
+    });
+    await openTable(el);
+    await openDialog(el, "rest");
+    await press(el, `[data-payment-refund="${cashPaid.id}"]`);
+    await expect.poll(() => refundDialog(el)!.reasons).toBeNull();
+    await expect.poll(() => refundDialog(el)!.reasonsLoading).toBe(false);
+
+    inRefund(el, "[data-reasons-retry]")!.click();
+    await flush(el);
+    await expect.poll(() => refundDialog(el)!.reasons).toEqual([charged]);
+    expect(listAdjustmentReasons).toHaveBeenCalledTimes(2);
+    expect(inRefund(el, "[data-reasons-retry]")).toBeNull();
+
+    inRefund(el, "wt-combobox[name=reason]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "r-charged" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    inRefund(el, "[data-refund-continue]")!.click();
+    await flush(el);
+    expect(refunds().map(({ request }) => request.reason)).toEqual(["Charged twice"]);
+  });
+
   it("puts a refusal of the reason under the reason", async () => {
     const el = await askRefund(
       {
@@ -5616,7 +5671,7 @@ describe("till-app: giving back a bill payment", () => {
       cashPaid,
     );
 
-    expect(inRefund(el, 'wt-input[name="reason"]')!.error).toBe(
+    expect(inRefund(el, 'wt-combobox[name="reason"]')!.error).toBe(
       codeMessage("management.request_invalid"),
     );
   });
@@ -5830,6 +5885,7 @@ describe("till-app: giving back a bill payment", () => {
       getPartyBills: vi.fn().mockResolvedValue([partly]),
       getBillBalance: vi.fn().mockResolvedValue(holding(cashPaid)),
       listRefundAuthorizers: vi.fn().mockResolvedValue(manager),
+      ...refundReasons(),
       refundBillPayment: vi.fn(() => new Promise(() => {})),
     });
     const { el } = await mountWidget<TillApp>("till-app", {

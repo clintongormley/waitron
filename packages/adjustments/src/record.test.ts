@@ -172,9 +172,48 @@ describe("recordAdjustment", () => {
       note: "Cold",
       stage: "fired",
       byGuest: false,
+      chargeKept: false,
+      preparationStarted: null,
+      refundHandoff: false,
+      refundValue: null,
       createdAt: row!.createdAt,
     });
     expect(Number.isNaN(Date.parse(row!.createdAt))).toBe(false);
+  });
+
+  it("records a charge-kept cancel with whether preparation had started and whether it was handed to a refund", async () => {
+    const order = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const id = await record(
+      comp(order, reason, {
+        action: "cancel",
+        chargeKept: true,
+        preparationStarted: false,
+        refundHandoff: true,
+        refundValue: decimal("1.67"),
+      }),
+    );
+    const [row] = await db.select().from(adjustments).where(eq(adjustments.id, id));
+    expect(row).toMatchObject({
+      action: "cancel",
+      chargeKept: true,
+      preparationStarted: false,
+      refundHandoff: true,
+      refundValue: 167,
+    });
+  });
+
+  it("defaults the flags for a comp", async () => {
+    const order = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const id = await record(comp(order, reason));
+    const [row] = await db.select().from(adjustments).where(eq(adjustments.id, id));
+    expect(row).toMatchObject({
+      chargeKept: false,
+      preparationStarted: null,
+      refundHandoff: false,
+      refundValue: null,
+    });
   });
 
   it("stores a bill-level discount with no line, no stage and no quantity", async () => {

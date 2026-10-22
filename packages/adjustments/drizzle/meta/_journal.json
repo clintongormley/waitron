@@ -50,6 +50,20 @@
       "when": 1792465997738,
       "tag": "0006_happy_karma",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1792669821644,
+      "tag": "0007_elite_master_mold",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792670711550,
+      "tag": "0008_harsh_kulan_gath",
+      "breakpoints": true
     }
   ]
 }

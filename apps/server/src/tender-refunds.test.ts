@@ -237,7 +237,6 @@ function request(t: Target, patch: Partial<TenderRefundRequest> = {}): TenderRef
     appliedAmount: "2.00",
     tipAmount: "0.00",
     reason: "Goodwill",
-    cashConfirmed: true,
     ...patch,
   };
 }
@@ -369,13 +368,18 @@ describe("settled-tender refund command local transaction", () => {
     ]);
     expect(await store.db.select().from(attendanceOperationFacts)).toMatchObject([{ personId }]);
   });
-  it("does not return cash without confirmation", async () => {
+  it("returns cash with no confirmation and opens the drawer as before", async () => {
     const t = await target();
-    await expect(run(t, request(t, { cashConfirmed: false }))).rejects.toMatchObject({
-      code: "management.request_invalid",
-      params: { field: "cashConfirmed" },
-    });
-    await noEffects();
+    const req = request(t);
+    expect(req).not.toHaveProperty("cashConfirmed");
+    const result = await run(t, req);
+    expect(result).toMatchObject({ state: "completed", appliedAmount: "2.00" });
+    expect(await store.db.select().from(drawerOpens)).toMatchObject([
+      { tenderRefundId: result.id, saleId: t.saleId, printerId: drawerId },
+    ]);
+    expect(await store.db.select().from(printJobs)).toMatchObject([
+      { kind: "drawer", printerId: drawerId },
+    ]);
   });
   it.each(["permission", "session", "device", "cash-policy"] as const)(
     "does not complete cash after %s is revoked",

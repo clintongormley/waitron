@@ -46,6 +46,7 @@ export const en = {
   "allergy.stale": "The table changed. Review the latest allergy information before trying again.",
 
   "finish_table.unserved": "{n} dishes not served",
+  "finish_table.preparation_known": "Preparation started: {answer}",
   "cancel_item.title": "Cancel item",
   "cancel_item.preparation": "Has preparation started?",
   "cancel_item.yes": "Yes",
@@ -104,7 +105,6 @@ export const en = {
   "tender_refund.amount_invalid":
     "Enter an amount from zero to {amount}; the total returned must be above zero.",
   "tender_refund.tip_requires_all": "Return a tip only with all the remaining payment amount.",
-  "tender_refund.cash_confirm": "I have handed this money back to the customer",
   "tender_refund.manual_confirm": "I have returned this money on the original card terminal",
   "tender_refund.confirm_required": "Confirm that the money has been returned.",
   "tender_refund.manual_instruction":
@@ -117,6 +117,7 @@ export const en = {
   "tender_refund.pending_payment": "Check pending refund",
   "tender_refund.storage":
     "The refund request could not be saved or read on this device. Ask a manager to check its outcome before starting another refund.",
+  "tender_refund.left": "{amount} left to refund from another payment",
 
   "kitchen_note.changed": "Kitchen note changed",
   "kitchen_note.removed": "Kitchen note removed",
@@ -1591,8 +1592,6 @@ export const en = {
     "This payment was for particular items, so it is refunded in full: {amount}. Those items can then be paid for again.",
   "bill_refund.amount": "Amount to refund",
   "bill_refund.amount_invalid": "Enter an amount above zero and no more than {amount}",
-  "bill_refund.reason": "Reason",
-  "bill_refund.reason_invalid": "Say why this is refunded",
   "bill_refund.reason_long": "Keep the reason to 500 characters or fewer",
   "bill_refund.continue": "Refund {amount}",
   "bill_refund.approval_next":
@@ -1792,6 +1791,7 @@ export const es: Record<StringKey, string> = {
   "allergy.stale": "La mesa ha cambiado. Revisa la información de alergias antes de reintentar.",
 
   "finish_table.unserved": "{n} platos sin servir",
+  "finish_table.preparation_known": "En preparación: {answer}",
   "cancel_item.title": "Cancelar plato",
   "cancel_item.preparation": "En preparación",
   "cancel_item.yes": "Sí",
@@ -1850,7 +1850,6 @@ export const es: Record<StringKey, string> = {
     "Introduce un importe entre cero y {amount}; el total devuelto debe ser mayor que cero.",
   "tender_refund.tip_requires_all":
     "Devuelve una propina solo junto con todo el importe restante del pago.",
-  "tender_refund.cash_confirm": "He entregado este dinero al cliente",
   "tender_refund.manual_confirm": "He devuelto este dinero en el terminal de tarjeta original",
   "tender_refund.confirm_required": "Confirma que has devuelto el dinero.",
   "tender_refund.manual_instruction":
@@ -1864,6 +1863,7 @@ export const es: Record<StringKey, string> = {
   "tender_refund.pending_payment": "Consultar devolución pendiente",
   "tender_refund.storage":
     "No se ha podido guardar o leer la solicitud de devolución en este dispositivo. Pide a un responsable que compruebe el resultado antes de iniciar otra devolución.",
+  "tender_refund.left": "Quedan {amount} por devolver de otro pago",
 
   "kitchen_note.changed": "Nota para cocina cambiada",
   "kitchen_note.removed": "Nota para cocina eliminada",
@@ -3301,8 +3301,6 @@ export const es: Record<StringKey, string> = {
     "Este pago era de artículos concretos, así que se devuelve entero: {amount}. Después esos artículos se pueden volver a cobrar.",
   "bill_refund.amount": "Importe a devolver",
   "bill_refund.amount_invalid": "Introduce un importe mayor que cero y de {amount} como mucho",
-  "bill_refund.reason": "Motivo",
-  "bill_refund.reason_invalid": "Indica por qué se devuelve",
   "bill_refund.reason_long": "Usa 500 caracteres como mucho para el motivo",
   "bill_refund.continue": "Devolver {amount}",
   "bill_refund.approval_next":

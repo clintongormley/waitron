@@ -4,7 +4,7 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import type { BillPaymentView } from "../api/client.js";
+import type { AdjustmentReason, BillPaymentView } from "../api/client.js";
 import type { RefundAsk } from "../state/bill-payment.js";
 import "./bill-refund-dialog.js";
 import type { TillBillRefundDialog } from "./bill-refund-dialog.js";
@@ -26,6 +26,20 @@ const payment: BillPaymentView = {
   lines: [],
   refunds: [],
 };
+const reasons = ["Charged twice", "Too much", "Other"].map(
+  (name) =>
+    ({
+      id: name,
+      name,
+      kind: "void",
+      actions: ["cancel"],
+      noteRequired: name === "Other",
+      maxPercentBp: null,
+      maxAmount: null,
+      applyRoles: [],
+      approverRoles: [],
+    }) as AdjustmentReason,
+);
 class RefundLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   suggested: string | null = null;
@@ -35,6 +49,7 @@ class RefundLeaveApp extends LitElement {
     return html`<till-bill-refund-dialog
         .payment=${payment}
         .suggested=${this.suggested}
+        .reasons=${reasons}
         @bill-refund-close=${() => this.closes++}
         @bill-refund-continue=${(event: CustomEvent<RefundAsk>) => this.submitted.push(event.detail)}
       ></till-bill-refund-dialog
@@ -61,6 +76,14 @@ async function fill(form: TillBillRefundDialog, name: string, value: string) {
   await form.updateComplete;
   return input;
 }
+async function choose(form: TillBillRefundDialog, id: string) {
+  form
+    .shadowRoot!.querySelector("wt-combobox[name=reason]")!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: id }, bubbles: true, composed: true }),
+    );
+  await form.updateComplete;
+}
 async function part(form: TillBillRefundDialog, value = "part") {
   form.shadowRoot!.querySelector<HTMLInputElement>(`input[value=${value}]`)!.click();
   await form.updateComplete;
@@ -85,7 +108,8 @@ for (const action of ["Cancel", "Escape"]) {
     const { app, form } = await mount();
     await part(form);
     await fill(form, "amount", "12.50");
-    const input = await fill(form, "reason", "  Charged twice  ");
+    await choose(form, "Other");
+    const input = await fill(form, "note", "  Charged twice  ");
     if (action === "Cancel") cancel(form);
     else await userEvent.keyboard("{Escape}");
     const q = await question(app);
@@ -105,19 +129,21 @@ for (const action of ["Cancel", "Escape"]) {
     await expect.poll(() => app.closes).toBe(1);
     await form.updateComplete;
     expect(form.shadowRoot!.querySelector("[name=amount]")).toBeNull();
-    expect(input.value).toBe("");
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=reason]")!.value,
+    ).toBe("");
     expect(app.submitted).toEqual([]);
     expect(unload()).toBe(false);
   });
 }
 it("an untouched or reverted refund closes directly", async () => {
   const { app, form } = await mount();
-  await fill(form, "reason", "Too much");
+  await choose(form, "Too much");
   expect(unload()).toBe(true);
   await part(form);
   await fill(form, "amount", "10.00");
   await part(form, "whole");
-  await fill(form, "reason", "   ");
+  await choose(form, "");
   expect(unload()).toBe(false);
   cancel(form);
   await expect.poll(() => app.closes).toBe(1);
@@ -138,13 +164,13 @@ it("invalid refund input remains protected and submission keeps the exact reques
   const { app, form } = await mount();
   await part(form);
   await fill(form, "amount", "invalid");
-  await fill(form, "reason", "Too much");
+  await choose(form, "Too much");
   form.shadowRoot!.querySelector<HTMLElement>("[data-refund-continue]")!.click();
   await form.updateComplete;
   expect(app.submitted).toEqual([]);
   expect(unload()).toBe(true);
   await fill(form, "amount", "12.50");
-  await fill(form, "reason", "  Charged twice  ");
+  await choose(form, "Charged twice");
   form.shadowRoot!.querySelector<HTMLElement>("[data-refund-continue]")!.click();
   expect(app.submitted).toEqual([
     { appliedAmount: "12.50", tipAmount: "0.00", reason: "Charged twice" },
@@ -158,7 +184,7 @@ it("invalid refund input remains protected and submission keeps the exact reques
 });
 it("busy refund entry cannot dismiss, resubmit or ask on Escape", async () => {
   const { app, form } = await mount();
-  await fill(form, "reason", "Too much");
+  await choose(form, "Too much");
   form.busy = true;
   await form.updateComplete;
   await form.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
@@ -171,7 +197,7 @@ it("busy refund entry cannot dismiss, resubmit or ask on Escape", async () => {
 });
 it("disconnect aborts a refund question and reconnect retains the original baseline", async () => {
   const { app, form } = await mount();
-  await fill(form, "reason", "Too much");
+  await choose(form, "Too much");
   cancel(form);
   const q = await question(app);
   expect(q.open).toBe(true);
@@ -201,7 +227,8 @@ it("an untouched refund closes without a question or request and ignores delayed
 });
 it("departed refund controls cannot submit, dismiss or edit the retained draft", async () => {
   const { app, form } = await mount();
-  const input = await fill(form, "reason", "Charged twice");
+  await choose(form, "Other");
+  const input = await fill(form, "note", "Charged twice");
   const submit = form.shadowRoot!.querySelector<HTMLElement>("[data-refund-continue]")!;
   form.remove();
   submit.click();
@@ -217,7 +244,7 @@ it("departed refund controls cannot submit, dismiss or edit the retained draft",
 });
 it("successful refund close invalidates an outstanding Discard before host teardown", async () => {
   const { app, form } = await mount();
-  await fill(form, "reason", "Charged twice");
+  await choose(form, "Charged twice");
   cancel(form);
   const q = await question(app);
   expect(q.open).toBe(true);
@@ -233,7 +260,7 @@ it("successful refund close invalidates an outstanding Discard before host teard
 });
 it("terminal confirmation keeps the reason protected until actual acceptance", async () => {
   const { app, form } = await mount();
-  await fill(form, "reason", "Charged twice");
+  await choose(form, "Charged twice");
   form.terminal = true;
   await form.updateComplete;
   form.shadowRoot!.querySelector<HTMLElement>("[data-refund-terminal-done]")!.click();

@@ -168,7 +168,6 @@ function request(tenderId: string, patch: Partial<TenderRefundRequest> = {}): Te
     appliedAmount: "2.00",
     tipAmount: "0.00",
     reason: "Goodwill",
-    cashConfirmed: true,
     ...patch,
   };
 }
@@ -274,7 +273,6 @@ describe("settled-tender reservation inside the caller's transaction", () => {
     { appliedAmount: "3.00" },
     { tipAmount: "1.00" },
     { reason: "Different" },
-    { cashConfirmed: false },
     { manualConfirmed: true },
   ])("refuses reused submission identity with changed request %j", async (patch) => {
     const target = await paid();
@@ -390,7 +388,6 @@ describe("settled-tender reservation inside the caller's transaction", () => {
     ["reason", "x".repeat(501)],
     ["submissionId", "same"],
     ["tenderId", "missing"],
-    ["cashConfirmed", null],
     ["manualConfirmed", "true"],
   ])("refuses malformed %s before writing", async (field, value) => {
     const target = await paid();
@@ -425,19 +422,14 @@ describe("settled-tender reservation inside the caller's transaction", () => {
     });
   });
 
-  it.each([false, undefined])(
-    "requires explicit cash handover confirmation (%s)",
-    async (cashConfirmed) => {
-      const target = await paid();
-      await expect(
-        reserve(target.saleId, request(target.tenderId, { cashConfirmed })),
-      ).rejects.toMatchObject({
-        code: "management.request_invalid",
-        params: { field: "cashConfirmed" },
-      });
-      expect(await rows()).toEqual([]);
-    },
-  );
+  it("reserves a cash refund with no confirmation", async () => {
+    const target = await paid();
+    const req = request(target.tenderId);
+    expect(req).not.toHaveProperty("cashConfirmed");
+    const result = await reserve(target.saleId, req);
+    expect(result.replayed).toBe(false);
+    expect(await rows()).toHaveLength(1);
+  });
 
   it.each(["unpaid", "voided", "unsupported", "wrong-tender"])(
     "refuses %s sales/tenders",

@@ -2,6 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans. Implement inline, task by task. Read superpowers:test-driven-development before writing any implementation or test code. Do not dispatch implementation or review subagents for individual tasks.
 
+> **2026-10-22 A758-6 update:** `cashConfirmed` is gone from the refund request; cancel results now
+> carry `refundLinks`, and refunds link to cancels through `adjustment_refunds`.
+
 **Goal:** Correct a selected part of a settled simplified invoice and cover its exact VAT-inclusive reduction with explicitly linked earlier refunds or new refunds, recovering the same correction after interruptions.
 
 **Architecture:** Keep `recordCorrection` as the sole corrective writer. Add frozen allocation facts and durable operation recovery in core, regime-owned admission reads in the fiscal backend, and server coordination over the existing refund reservation/resolver machinery. The till, A758, reporting and corrective paper consume that one operation.

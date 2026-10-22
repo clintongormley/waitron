@@ -65,7 +65,9 @@ import { offerProducts } from "./testing/zone-offers.js";
  * Route-to-zone map. Every till route, with where the zone it acts in is read from and the case that
  * fails when its gate is removed. "body" is a zone the request names; "order" is the zone recorded
  * on the working order (a bill, a sale's order and an order's lines are all working orders); "party"
- * is the zone of the party's first table (`partyZone`, which also prices the party's rounds); "table"
+ * is the zone of the party's first table (`partyZone`, which also prices the party's rounds), and for
+ * a closed party every zone of its family's non-abandoned bills (`partySubjectZones`,
+ * `zone-access.ts`; case file `zone-access.finished-party.test.ts`); "table"
  * is the table's own zone. A subject that names nothing, or sits in no zone, is left to the route.
  *
  * | Route                                                   | Zone from              | Case that fails without the gate                     |

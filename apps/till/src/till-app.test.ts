@@ -51,6 +51,7 @@ import type { TillStationQueue } from "./widgets/station-queue.js";
 import type { TillCounterWaiting } from "./widgets/counter-waiting.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
+  AdjustmentReason,
   CounterWaitingOrder,
   DeadEndAnswer,
   DevDeviceList,
@@ -23912,8 +23913,22 @@ describe("A737 post-invoice refund integration", () => {
     appliedAmount: "3.00",
     tipAmount: "0.00",
     reason: "Customer request",
-    cashConfirmed: true,
   };
+  const voidReason = (id: string, name: string): AdjustmentReason => ({
+    id,
+    name,
+    kind: "void",
+    actions: ["cancel"],
+    noteRequired: false,
+    maxPercentBp: null,
+    maxAmount: null,
+    applyRoles: [],
+    approverRoles: [],
+  });
+  const refundReasons = [
+    voidReason("r-request", "Customer request"),
+    voidReason("r-return", "Return"),
+  ];
   const dialog = (el: TillApp) =>
     el.shadowRoot!.querySelector<TillTenderRefundDialog>("till-tender-refund-dialog");
   const approval = (el: TillApp) =>
@@ -23946,6 +23961,7 @@ describe("A737 post-invoice refund integration", () => {
       listRefundAuthorizers: vi
         .fn()
         .mockResolvedValue([{ personId: "manager", displayName: "Marta" }]),
+      listAdjustmentReasons: vi.fn().mockResolvedValue(refundReasons),
       ...overrides,
     });
     const el = mounted.el;
@@ -23963,15 +23979,14 @@ describe("A737 post-invoice refund integration", () => {
     const action = ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-tender-refund]");
     expect(action, "the paid receipt offers Refund").not.toBeNull();
     await userEvent.click(page.elementLocator(action!));
-    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    await vi.waitFor(() => expect(dialog(el)?.reasons ?? null).not.toBeNull());
     await dialog(el)!.updateComplete;
     return dialog(el)!;
   }
   async function submit(el: TillApp) {
     const form = dialog(el)!;
-    const reason = form.shadowRoot!.querySelector<WtInput>('[name="reason"]')!;
-    emit(reason, "wt-change", { value: "Customer request" });
-    emit(form.shadowRoot!.querySelector('[name="cashConfirmed"]')!, "wt-change", { checked: true });
+    const reason = form.shadowRoot!.querySelector('[name="reason"]')!;
+    emit(reason, "wt-change", { value: "r-request" });
     await form.updateComplete;
     await userEvent.click(
       page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!),
@@ -24179,7 +24194,7 @@ describe("A737 post-invoice refund integration", () => {
     await openRefund(el);
     const form = dialog(el)!;
     emit(form.shadowRoot!.querySelector('[name="reason"]')!, "wt-change", {
-      value: "Customer request",
+      value: "r-request",
     });
     emit(form.shadowRoot!.querySelector('[name="manualConfirmed"]')!, "wt-change", {
       checked: true,
@@ -24485,7 +24500,7 @@ describe("A737 post-invoice refund integration", () => {
     await openRefund(first.el);
     const form = dialog(first.el)!;
     emit(form.shadowRoot!.querySelector('[name="reason"]')!, "wt-change", {
-      value: "Customer request",
+      value: "r-request",
     });
     emit(form.shadowRoot!.querySelector('[name="manualConfirmed"]')!, "wt-change", {
       checked: true,
@@ -24630,7 +24645,7 @@ describe("A737 post-invoice refund integration", () => {
       refundTransaction,
     });
     const form = await openRefund(el);
-    emit(form.shadowRoot!.querySelector('[name="reason"]')!, "wt-change", { value: "Return" });
+    emit(form.shadowRoot!.querySelector('[name="reason"]')!, "wt-change", { value: "r-return" });
     emit(form.shadowRoot!.querySelector('[name="manualConfirmed"]')!, "wt-change", {
       checked: true,
     });

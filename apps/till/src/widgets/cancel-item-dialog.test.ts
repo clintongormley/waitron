@@ -598,13 +598,51 @@ it("asks preparation before defaulting a fired paid dish's Refund tick", async (
   await click(el, 'input[name="preparation"][value="yes"]');
   expect(root(el).querySelector<HTMLInputElement>('input[name="refund"]')!.checked).toBe(false);
 });
-it("offers no paid cancellation for a served dish", async () => {
+it("offers the unserved 2 of a partly served paid line", async () => {
   const consent = read("settled", "started");
   consent.context.components[0]!.servedQuantity = "1.000";
   const el = await mount({ consent, refundAvailable: true });
   expect(choices(el)).toEqual([]);
+  expect(root(el).querySelector('input[name="refund"]')).not.toBeNull();
+  const stepper = root(el).querySelector("wt-number-stepper")!;
+  expect(stepper.max).toBe(2);
+  expect(stepper.value).toBe("2");
+  await pickReason(el);
+  expect(button(el).disabled).toBe(false);
+  const calls = collect(el);
+  await click(el);
+  expect(calls).toEqual([
+    { lineId: "dish-1", quantity: "2", outcome: "keep_charge", reasonId: "house", consent },
+  ]);
+});
+it("offers no paid cancellation for a wholly served dish", async () => {
+  const consent = read("settled", "started");
+  consent.context.components[0]!.servedQuantity = "3.000";
+  const el = await mount({ consent, refundAvailable: true });
+  expect(choices(el)).toEqual([]);
   expect(root(el).querySelector('input[name="refund"]')).toBeNull();
   expect(button(el).disabled).toBe(true);
+});
+it("offers a paid line's unserved quantity", async () => {
+  const consent = {
+    ...read("settled", "started"),
+    saleId: "sale",
+    refundValue: { quantity: "3.000", gross: "10.00" },
+  };
+  consent.context.components[0]!.servedQuantity = "1.000";
+  const el = await mount({ consent, refundAvailable: true });
+  const stepper = root(el).querySelector("wt-number-stepper")!;
+  expect(stepper.max).toBe(2);
+  expect(stepper.value).toBe("2");
+  await click(el, 'input[name="refund"]');
+  expect(root(el).querySelector<HTMLInputElement>('input[name="refund"]')!.checked).toBe(true);
+  expect(button(el).textContent?.trim()).toBe("Cancel and refund €6.67");
+  await pickReason(el);
+  const calls = collect(el);
+  await click(el);
+  expect(calls).toEqual([
+    { lineId: "dish-1", quantity: "2", outcome: "refund", reasonId: "house", consent },
+  ]);
 });
 it("does not offer a paid Refund tick without a filed value", async () => {
   const missing = read("settled");

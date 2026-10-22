@@ -356,6 +356,48 @@ it("Void on an actually served dish still opens consent for its original parent"
   expect(cancellations.map((event) => event.detail)).toEqual([{ lineId: "l-croq" }]);
 });
 
+it("offers Void… on a paid bill's unserved slice only", async () => {
+  const paid = () => {
+    const orders = structuredClone(current());
+    orders.groups[0]!.rows[0]!.billStatus = "settled";
+    const store = new DraftStore();
+    store.billStatus = "settled";
+    return { currentOrders: orders, bills: [bill("settled")], draftStore: store };
+  };
+  const served = await openLine("served", paid());
+  expect(q(served, "[data-sent-line-dialog] wt-row-actions")).toBeNull();
+  expect(q(served, "[data-sent-line-dialog]").hasAttribute("open")).toBe(true);
+  expect(q(served, "[data-sent-line-void]")).toBeNull();
+  cleanupWidgets();
+
+  const { el } = await mount({ ...paid(), groups, now });
+  el.style.width = "1280px";
+  await resized(el);
+  const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+  await panel.updateComplete;
+  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="l-croq"]')!);
+  await el.updateComplete;
+  const cancellations = capture(el, "cancel-item");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-void]"));
+  expect(cancellations.map((event) => event.detail)).toEqual([{ lineId: "l-croq" }]);
+});
+
+it.each(["row", "bills"] as const)(
+  "offers no Void… on a served dish when only the %s read says the bill is paid",
+  async (source) => {
+    const orders = structuredClone(current());
+    if (source === "row") orders.groups[0]!.rows[0]!.billStatus = "settled";
+    const el = await openLine("served", {
+      currentOrders: orders,
+      bills: [bill(source === "bills" ? "settled" : "open")],
+    });
+    expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(true);
+    expect(q(el, "[data-sent-line-dialog] wt-row-actions")).toBeNull();
+    expect(q(el, "[data-sent-line-void]")).toBeNull();
+  },
+);
+
 it.each(["owner", "loading", "sending", "abandoned", "row-abandoned", "cancelled"] as const)(
   "Void is absent for %s, without hiding the recorded information",
   async (blocked) => {

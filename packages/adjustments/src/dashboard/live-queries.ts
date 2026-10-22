@@ -13,6 +13,8 @@ export const QUERY_DEPENDENCIES = {
   ],
   entries: [
     "adjustments",
+    "adjustment_refunds",
+    "tender_refunds",
     "working_orders",
     "persons",
     "locations",

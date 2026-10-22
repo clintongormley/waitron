@@ -235,6 +235,10 @@ describe("the adjustments table", () => {
       note: 0,
       stage: 0,
       by_guest: 1,
+      charge_kept: 1,
+      preparation_started: 0,
+      refund_handoff: 1,
+      refund_value: 0,
       created_at: 1,
     });
   });

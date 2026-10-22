@@ -100,6 +100,12 @@ export interface AdjustmentEntry {
   approvedBy: PersonRef | null;
   creditedTo: PersonRef | null;
   byGuest: boolean;
+  /** A cancel that left the dish on the bill. */
+  chargeKept: boolean;
+  /** Null where the cancel did not record it. */
+  preparationStarted: boolean | null;
+  /** The refunds linked to a cancel, oldest first; a failed refund is not listed. */
+  refunded: { amount: string; state: "pending" | "completed" }[];
   workingOrderId: string;
   orderNumber: number;
 }

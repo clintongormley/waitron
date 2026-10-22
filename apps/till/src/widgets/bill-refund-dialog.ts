@@ -17,7 +17,8 @@ import "@waitron/ui/src/components/wt-input.js";
 import { trackDialog } from "./track-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { BillPaymentView } from "../api/client.js";
+import type { AdjustmentReason, BillPaymentView } from "../api/client.js";
+import { reasonPicker, voidReasons } from "./reason-picker.js";
 import {
   REASON_MAX,
   moneyPlus,
@@ -27,14 +28,15 @@ import {
   type RefundAsk,
 } from "../state/bill-payment.js";
 
-type Field = "amount" | "reason";
-type RefundDraft = { howMuch: "whole" | "part"; amount: string; reason: string };
+type Field = "amount" | "reason" | "note";
+type RefundDraft = { howMuch: "whole" | "part"; amount: string; reasonId: string; note: string };
 
 /**
  * Gives back one payment of a bill: the whole of what is left of it, its tip included, or part of
  * it without the tip; a payment for particular items only whole. It asks why. It holds no request
- * of its own: `bill-refund-continue` carries the ask, which the app sends in the operator's name,
- * or with a supervisor's or manager's PIN when they may not give refunds.
+ * of its own: `bill-refund-continue` carries the ask, which the app sends in the operator's name, or
+ * with a supervisor's or manager's PIN when they may not give refunds; `bill-refund-reasons` asks the
+ * app to read the reasons again.
  * For a card keyed on a separate terminal the app sets {@link terminal} first, and the dialog asks
  * staff to give it back on that terminal and confirm, sending the same ask confirmed, which always
  * takes one PIN.
@@ -125,10 +127,13 @@ export class TillBillRefundDialog extends LitElement {
   /** An amount offered as the part to give back, when this payment can give that part: the
    * dialog opens on it. */
   @property() suggested: string | null = null;
+  @property({ attribute: false }) reasons: AdjustmentReason[] | null = null;
+  @property({ type: Boolean }) reasonsLoading = false;
 
   @state() private howMuch: "whole" | "part" = "whole";
   @state() private typedAmountValue = "";
-  @state() private reason = "";
+  @state() private reasonId = "";
+  @state() private note = "";
   @state() private attempted = false;
   /** The refusal still shown: it goes when the field it names changes, or at the next request. */
   @state() private shownRefusal: DialogRefusal | null = null;
@@ -155,7 +160,12 @@ export class TillBillRefundDialog extends LitElement {
   }
 
   #draft(): RefundDraft {
-    return { howMuch: this.howMuch, amount: this.typedAmountValue, reason: this.reason };
+    return {
+      howMuch: this.howMuch,
+      amount: this.typedAmountValue,
+      reasonId: this.reasonId,
+      note: this.note,
+    };
   }
 
   #comparable(value: RefundDraft): string {
@@ -168,7 +178,8 @@ export class TillBillRefundDialog extends LitElement {
           ? { invalid: value.amount }
           : toScale(decimal(amount), MONEY_SCALE)
         : null,
-      reason: value.reason.trim(),
+      reasonId: value.reasonId,
+      note: value.note.trim(),
     });
   }
 
@@ -204,7 +215,8 @@ export class TillBillRefundDialog extends LitElement {
       this.#paymentId = this.payment.id;
       this.howMuch = "whole";
       this.typedAmountValue = "";
-      this.reason = "";
+      this.reasonId = "";
+      this.note = "";
       this.active = true;
     }
     if (changed.has("refusal")) this.shownRefusal = this.refusal;
@@ -224,7 +236,8 @@ export class TillBillRefundDialog extends LitElement {
       restore: (value) => {
         this.howMuch = value.howMuch;
         this.typedAmountValue = value.amount;
-        this.reason = value.reason;
+        this.reasonId = value.reasonId;
+        this.note = value.note;
       },
     });
     this.#scope?.commit(this.#baseline);
@@ -272,9 +285,14 @@ export class TillBillRefundDialog extends LitElement {
     return toScale(amount, MONEY_SCALE);
   }
 
+  #reason(): AdjustmentReason | undefined {
+    return voidReasons(this.reasons).find((reason) => reason.id === this.reasonId);
+  }
+
   #ask(): RefundAsk {
     const left = this.#left();
-    const reason = this.reason.trim();
+    const chosen = this.#reason();
+    const reason = chosen?.noteRequired ? this.note.trim() : (chosen?.name ?? "");
     return this.#part()
       ? { appliedAmount: this.#partAmount()!, tipAmount: "0.00", reason }
       : { appliedAmount: left.applied, tipAmount: left.tip, reason };
@@ -289,9 +307,14 @@ export class TillBillRefundDialog extends LitElement {
           this.#money(this.#left().applied),
         ),
       );
-    const reason = this.reason.trim();
-    if (reason === "") errors.set("reason", t("bill_refund.reason_invalid"));
-    else if (reason.length > REASON_MAX) errors.set("reason", t("bill_refund.reason_long"));
+    const reason = this.#reason();
+    if (!reason) errors.set("reason", t("adjust.reason_required"));
+    else if (!reason.noteRequired && reason.name.length > REASON_MAX)
+      errors.set("reason", t("bill_refund.reason_long"));
+    else if (reason.noteRequired && this.note.trim() === "")
+      errors.set("note", t("adjust.note_required"));
+    else if (reason.noteRequired && this.note.trim().length > REASON_MAX)
+      errors.set("note", t("bill_refund.reason_long"));
     return errors;
   }
 
@@ -299,7 +322,8 @@ export class TillBillRefundDialog extends LitElement {
     const refusal = this.shownRefusal;
     if (refusal === null) return null;
     const invalid = refusal.code === "management.request_invalid";
-    if (invalid && refusal.field === "reason") return "reason";
+    if (invalid && refusal.field === "reason")
+      return this.#reason()?.noteRequired ? "note" : "reason";
     // With the whole payment given back there is no amount field to put it under.
     const aboutAmount =
       refusal.code === "bill.refund_exceeds_payment" ||
@@ -328,9 +352,10 @@ export class TillBillRefundDialog extends LitElement {
     return parts.join(" ");
   }
 
-  #changed(field: Field): void {
+  #changed(...fields: Field[]): void {
     this.#scope?.changed();
-    if (this.#refusalField() === field) this.shownRefusal = null;
+    const shown = this.#refusalField();
+    if (shown !== null && fields.includes(shown)) this.shownRefusal = null;
   }
 
   #emit(type: string, detail: unknown = {}): void {
@@ -367,7 +392,7 @@ export class TillBillRefundDialog extends LitElement {
       .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => this.#closed(event)}
     >
-      <div class="body">
+      <div class="body" @keydown=${(event: KeyboardEvent) => this.#enter(event)}>
         ${this.#summary(this.payment)} ${this.terminal ? this.#terminalStep() : this.#form()}
       </div>
     </wt-dialog>`;
@@ -409,29 +434,36 @@ export class TillBillRefundDialog extends LitElement {
     const left = this.#left();
     const giving = this.#part() ? this.#partAmount() : left.total;
     return html`${this.#howMuch(left, errors.get("amount"))}
-      <wt-input
-        name="reason"
-        autocomplete="off"
-        .disabled=${this.busy}
-        .label=${t("bill_refund.reason")}
-        .value=${live(this.reason)}
-        .required=${true}
-        .error=${errors.get("reason") ?? ""}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
+      ${reasonPicker({
+        reasons: this.reasons,
+        reasonsLoading: this.reasonsLoading,
+        reasonId: this.reasonId,
+        note: this.note,
+        disabled: this.busy,
+        reasonError: errors.get("reason") ?? "",
+        noteError: errors.get("note") ?? "",
+        onReason: (reasonId) => {
           if (!this.isConnected || !this.active || this.busy) return;
-          this.reason = event.detail.value;
-          this.#changed("reason");
-        }}
-        @keydown=${(event: KeyboardEvent) => this.#enter(event)}
-      ></wt-input>
+          this.reasonId = reasonId;
+          this.note = "";
+          this.#changed("reason", "note");
+        },
+        onNote: (note) => {
+          if (!this.isConnected || !this.active || this.busy) return;
+          this.note = note;
+          this.#changed("note");
+        },
+        onRetry: () => {
+          if (this.isConnected && this.active && !this.busy) this.#emit("bill-refund-reasons");
+        },
+      })}
       <p class="muted" data-refund-next>
         ${t(this.payment.entry === "manual" ? "bill_refund.terminal_next" : "bill_refund.approval_next")}
       </p>
       <wt-form-actions .error=${this.#bottomMessage(errors)}>
         ${this.#cancelButton()}
         <wt-button
-          variant="primary"
+          variant=${this.#reason() && !this.reasonsLoading ? "primary" : "secondary"}
           data-refund-continue
           .loading=${this.busy}
           .disabled=${this.busy || own.size > 0}
@@ -503,7 +535,6 @@ export class TillBillRefundDialog extends LitElement {
                 this.typedAmountValue = event.detail.value;
                 this.#changed("amount");
               }}
-              @keydown=${(event: KeyboardEvent) => this.#enter(event)}
             ></wt-input>`
           : nothing
       }`;

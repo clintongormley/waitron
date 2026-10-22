@@ -8,8 +8,9 @@ export interface TenderRefundRequest {
   appliedAmount: string;
   tipAmount: string;
   reason: string;
-  cashConfirmed?: boolean;
   manualConfirmed?: boolean;
+  /** The cancels this refund pays back, in the order their dishes are shown. */
+  cancellationIds?: string[];
   override?: Override;
 }
 

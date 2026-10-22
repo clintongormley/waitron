@@ -42,8 +42,14 @@ function normalized(ask: TenderRefundAsk): TenderRefundAsk {
   if (typeof ask.tenderId !== "string" || ask.tenderId === "") return fail("invalid");
   if (typeof ask.reason !== "string" || ask.reason.trim() === "" || ask.reason.length > REASON_MAX)
     return fail("invalid");
-  for (const field of ["cashConfirmed", "manualConfirmed"] as const)
-    if (ask[field] !== undefined && typeof ask[field] !== "boolean") return fail("invalid");
+  if (ask.manualConfirmed !== undefined && typeof ask.manualConfirmed !== "boolean")
+    return fail("invalid");
+  const ids = ask.cancellationIds;
+  if (
+    ids !== undefined &&
+    (!Array.isArray(ids) || ids.some((id) => typeof id !== "string" || id === ""))
+  )
+    return fail("invalid");
   const appliedAmount = tenderRefundAmount(ask.appliedAmount) ?? fail("invalid");
   const tipAmount = tenderRefundAmount(ask.tipAmount) ?? fail("invalid");
   const total = moneyPlus(appliedAmount, tipAmount);
@@ -57,13 +63,14 @@ function normalized(ask: TenderRefundAsk): TenderRefundAsk {
     appliedAmount,
     tipAmount,
     reason: ask.reason.trim(),
-    cashConfirmed: ask.cashConfirmed === true,
     manualConfirmed: ask.manualConfirmed === true,
+    ...(ids === undefined || ids.length === 0 ? {} : { cancellationIds: [...ids] }),
   };
 }
 
 function fingerprint(ask: TenderRefundAsk): string {
-  return JSON.stringify(normalized(ask));
+  const body = normalized(ask);
+  return JSON.stringify({ ...body, cancellationIds: [...(body.cancellationIds ?? [])].sort() });
 }
 
 /** Unknown outcomes keep the original request; a PIN exists only on the outgoing call. */
@@ -209,7 +216,8 @@ export class TenderRefundSession {
       this.#refused.delete(id);
       // A later refusal cannot establish what an earlier unknown call returned.
       if (knownRefused) {
-        if (code === "tender.refund_exceeds_payment") this.attempts.refused(this.scope, sent);
+        if (code === "tender.refund_exceeds_payment" || code === "tender.refund_exceeds_cancelled")
+          this.attempts.refused(this.scope, sent);
         else if (
           code === "authorization.not_permitted" ||
           code === "tender.manual_refund_pin_required" ||

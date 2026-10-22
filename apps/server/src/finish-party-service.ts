@@ -10,7 +10,7 @@ import {
   type CancellationContext,
 } from "./line-cancel-context.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
-import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
+import { cancelItem, type CancelItemAsk, type RefundLink } from "./line-cancel.js";
 import type { TillConfig } from "./till-config.js";
 import { invalid } from "./bill-allocation.js";
 import type { OrderAttendance } from "./working-order.js";
@@ -50,14 +50,17 @@ export type FinishPartyArgs = Parameters<typeof finishTable>[1] & {
   submissionId?: string;
   cancellations?: FinishCancellation[];
   approver?: CancelItemAsk["approver"];
+  refundApprovedBy?: CancelItemAsk["refundApprovedBy"];
 };
+
+export type FinishPartyAnswer = { state: "closed"; refundLinks?: RefundLink[] };
 
 export async function finishPartyService(
   tx: Transaction,
   cfg: TillConfig,
   args: FinishPartyArgs,
   attendance?: OrderAttendance,
-): Promise<{ state: "closed" }> {
+): Promise<FinishPartyAnswer> {
   const run = () => finish(tx, cfg, args, attendance);
   if (args.submissionId === undefined) {
     if (args.cancellations !== undefined) throw invalid("submissionId");
@@ -71,6 +74,7 @@ export async function finishPartyService(
     {
       ...args,
       approver: undefined,
+      refundApprovedBy: undefined,
       approverId: args.approver?.personId,
       cancellations:
         args.cancellations === undefined
@@ -92,7 +96,7 @@ async function finish(
   cfg: TillConfig,
   args: FinishPartyArgs,
   attendance?: OrderAttendance,
-): Promise<{ state: "closed" }> {
+): Promise<FinishPartyAnswer> {
   await requireOpenParty(tx, args.partyId);
   const revision = await partyRevision(tx, args.partyId);
   if (revision !== args.expectedPartyRevision)
@@ -156,6 +160,7 @@ async function finish(
     )
       throw refused();
   }
+  const refundLinks: RefundLink[] = [];
   for (const dish of dishes) {
     const item = requested.find((item) => item.lineId === dish.lineId)!;
     if (
@@ -165,7 +170,7 @@ async function finish(
     )
       throw invalid("preparationStarted");
     const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, dish.billId));
-    await cancelItem(
+    const answer = await cancelItem(
       tx,
       cfg,
       args.partyId,
@@ -180,16 +185,19 @@ async function finish(
           .update(JSON.stringify([args.submissionId, dish.lineId]))
           .digest("hex"),
         approver: args.approver,
+        refundApprovedBy: args.refundApprovedBy,
       },
       args.operatorId,
       attendance,
     );
+    refundLinks.push(...(answer.refundLinks ?? []));
   }
-  return finishTable(
+  const closed = await finishTable(
     tx,
     { ...args, expectedPartyRevision: await partyRevision(tx, args.partyId) },
     attendance === undefined
       ? undefined
       : { recorder: attendance.recorder, locationId: cfg.locationId },
   );
+  return refundLinks.length === 0 ? closed : { ...closed, refundLinks };
 }

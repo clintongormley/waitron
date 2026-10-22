@@ -1163,6 +1163,7 @@ describe("what the till reads", () => {
       maxAmount: "30.00",
       applyRoles: ["supervisor", "manager", "admin"],
       approverRoles: ["manager", "admin"],
+      startsFinishTable: false,
     });
 
     await inTx(venue, (tx) =>

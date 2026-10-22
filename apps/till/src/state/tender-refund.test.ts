@@ -9,7 +9,6 @@ const ask = {
   appliedAmount: "12.50",
   tipAmount: "0.00",
   reason: "Courtesy return",
-  cashConfirmed: true,
 };
 const reply = (over: Partial<TenderRefundView> = {}): TenderRefundView => ({
   id: "refund-1",
@@ -90,29 +89,24 @@ it("uses status and same-attempt retry after the refund id is known, releasing o
   expect(next.request.submissionId).not.toBe(originalId);
 });
 
-it.each([
-  "appliedAmount",
-  "tipAmount",
-  "reason",
-  "tenderId",
-  "cashConfirmed",
-  "manualConfirmed",
-] as const)("locks changes to %s until the original request has a terminal result", (field) => {
-  const store = new TenderRefundAttempts();
-  const sent = store.prepare(scope, "sale-1", ask);
-  const changes = {
-    appliedAmount: "11.00",
-    tipAmount: "1.00",
-    reason: "Other",
-    tenderId: "tender-2",
-    cashConfirmed: false,
-    manualConfirmed: true,
-  };
-  expect(() => store.prepare(scope, "sale-1", { ...ask, [field]: changes[field] })).toThrow(
-    "locked",
-  );
-  expect(store.read(scope, "sale-1")).toEqual(sent);
-});
+it.each(["appliedAmount", "tipAmount", "reason", "tenderId", "manualConfirmed"] as const)(
+  "locks changes to %s until the original request has a terminal result",
+  (field) => {
+    const store = new TenderRefundAttempts();
+    const sent = store.prepare(scope, "sale-1", ask);
+    const changes = {
+      appliedAmount: "11.00",
+      tipAmount: "1.00",
+      reason: "Other",
+      tenderId: "tender-2",
+      manualConfirmed: true,
+    };
+    expect(() => store.prepare(scope, "sale-1", { ...ask, [field]: changes[field] })).toThrow(
+      "locked",
+    );
+    expect(store.read(scope, "sale-1")).toEqual(sent);
+  },
+);
 
 it("keeps normalized equivalents and ignores property order and transient authorization", () => {
   const store = new TenderRefundAttempts();
@@ -123,13 +117,11 @@ it("keeps normalized equivalents and ignores property order and transient author
     appliedAmount: "00012.50",
     tipAmount: "0",
     tenderId: "tender-1",
-    cashConfirmed: true,
     manualConfirmed: false,
   });
   expect(two).toEqual(one);
   expect(Object.keys(one.request).sort()).toEqual([
     "appliedAmount",
-    "cashConfirmed",
     "manualConfirmed",
     "reason",
     "submissionId",
@@ -293,7 +285,6 @@ it.each([
   { reason: " " },
   { reason: "x".repeat(501) },
   { tenderId: "" },
-  { cashConfirmed: "true" },
   { manualConfirmed: null },
 ])("refuses malformed request %j without retaining or sending it", async (change) => {
   const api = { refundTransaction: vi.fn(), getTenderRefund: vi.fn(), retryTenderRefund: vi.fn() };
@@ -303,6 +294,21 @@ it.each([
   );
   expect(session.read("sale-1")).toBeNull();
   expect(api.refundTransaction).not.toHaveBeenCalled();
+});
+
+it("an older saved attempt holding cashConfirmed drops it and is not locked", () => {
+  const store = new TenderRefundAttempts();
+  const sent = store.prepare(scope, "sale-1", ask);
+  const key = localStorage.key(0)!;
+  const saved = JSON.parse(localStorage.getItem(key)!) as { request: Record<string, unknown> };
+  localStorage.setItem(
+    key,
+    JSON.stringify({ ...saved, request: { ...saved.request, cashConfirmed: true } }),
+  );
+  expect(localStorage.getItem(key)).toContain('"cashConfirmed":true');
+  const read = store.read(scope, "sale-1")!;
+  expect(read.request).not.toHaveProperty("cashConfirmed");
+  expect(store.prepare(scope, "sale-1", ask).request.submissionId).toBe(sent.request.submissionId);
 });
 
 it.each(["completed", "failed"] as const)(
@@ -422,6 +428,29 @@ it.each([false, true])(
     expect(api.refundTransaction.mock.calls.at(-1)![1].submissionId).not.toBe(firstId);
   },
 );
+it("clears the saved attempt when the refund exceeds the cancelled dishes", async () => {
+  const api = {
+    refundTransaction: vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockRejectedValueOnce({ code: "tender.refund_exceeds_cancelled" }),
+    getTenderRefund: vi.fn(),
+    retryTenderRefund: vi.fn(),
+  };
+  const session = new TenderRefundSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toMatchObject({
+    code: "authorization.not_permitted",
+  });
+  await expect(session.retry("sale-1", { personId: "manager", pin: "0123" })).rejects.toMatchObject(
+    { code: "tender.refund_exceeds_cancelled" },
+  );
+  const firstId = api.refundTransaction.mock.calls[0]![1].submissionId;
+  expect(session.read("sale-1")).toBeNull();
+  api.refundTransaction.mockResolvedValueOnce(reply({ appliedAmount: "1.00", state: "completed" }));
+  await session.submit("sale-1", { ...ask, appliedAmount: "1.00" });
+  expect(api.refundTransaction.mock.calls.at(-1)![1]).toMatchObject({ appliedAmount: "1.00" });
+  expect(api.refundTransaction.mock.calls.at(-1)![1].submissionId).not.toBe(firstId);
+});
 it.each([false, true])(
   "retains an earlier unknown request through an amount refusal, reload=%s",
   async (reload) => {
@@ -526,3 +555,46 @@ it.each([false, true])(
     }
   },
 );
+
+it("keeps the cancellation ids in the order sent in the saved attempt, and in any order for its lock", () => {
+  const store = new TenderRefundAttempts();
+  const a = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const b = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const sent = store.prepare(scope, "sale-1", { ...ask, cancellationIds: [b, a] });
+  expect(sent.request.cancellationIds).toEqual([b, a]);
+  expect(store.read(scope, "sale-1")!.request.cancellationIds).toEqual([b, a]);
+  expect(store.prepare(scope, "sale-1", { ...ask, cancellationIds: [a, b] })).toEqual(sent);
+  expect(() => store.prepare(scope, "sale-1", { ...ask, cancellationIds: [a] })).toThrow("locked");
+  expect(() => store.prepare(scope, "sale-1", ask)).toThrow("locked");
+});
+
+it("saves no cancellation ids when none are named", () => {
+  const store = new TenderRefundAttempts();
+  expect(
+    store.prepare(scope, "sale-1", { ...ask, cancellationIds: [] }).request,
+  ).not.toHaveProperty("cancellationIds");
+  expect(store.prepare(scope, "sale-2", ask).request).not.toHaveProperty("cancellationIds");
+});
+
+it("resends the saved request with its cancellation ids after a lost answer", async () => {
+  const ids = ["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"];
+  const sent: TenderRefundRequest[] = [];
+  const api = {
+    refundTransaction: vi.fn(async (_sale: string, request: TenderRefundRequest) => {
+      sent.push(structuredClone(request));
+      if (sent.length === 1) throw new TypeError("Failed to fetch");
+      return reply();
+    }),
+    getTenderRefund: vi.fn(async () => reply()),
+    retryTenderRefund: vi.fn(async () => reply()),
+  };
+  const session = new TenderRefundSession(scope, api);
+  await expect(session.submit("sale-1", { ...ask, cancellationIds: ids })).rejects.toThrow(
+    "Failed to fetch",
+  );
+  await new TenderRefundSession(scope, api).retry("sale-1");
+  expect(sent).toHaveLength(2);
+  expect(sent[1]!.submissionId).toBe(sent[0]!.submissionId);
+  expect(sent[0]!.cancellationIds).toEqual(ids);
+  expect(sent[1]!.cancellationIds).toEqual(ids);
+});

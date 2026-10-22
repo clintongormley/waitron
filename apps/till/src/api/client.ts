@@ -6,9 +6,9 @@ import type {
   KitchenAllergyBlock,
   PartyAllergyRead,
 } from "@waitron/module";
-import type { FinishTableResolution } from "./finish-table-types.js";
+import type { FinishTableAnswer, FinishTableResolution } from "./finish-table-types.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
-import type { CancellationRead, CancelItemRequest } from "./line-cancel-types.js";
+import type { CancelItemAnswer, CancellationRead, CancelItemRequest } from "./line-cancel-types.js";
 export type {
   CancellationContext,
   CancellationRead,
@@ -917,6 +917,7 @@ export interface AdjustmentReason {
   applyRoles: PersonRole[];
   /** Who may approve it for someone else. */
   approverRoles: PersonRole[];
+  startsFinishTable?: boolean;
 }
 
 /** Whose PIN an adjustment needs: holders of the reason's approver roles, holders of the roles that
@@ -3631,7 +3632,7 @@ export class TillApi {
     expectedEdits: BillEditExpected[],
     resolution?: FinishTableResolution,
     options: ReadOptions = {},
-  ): Promise<{ state: "closed" }> {
+  ): Promise<FinishTableAnswer> {
     return this.#request(
       `/api/parties/${partyId}/finish`,
       "POST",
@@ -4235,7 +4236,7 @@ export class TillApi {
     lineId: string,
     command: CancelItemRequest,
     options: ReadOptions = {},
-  ): Promise<{ revision: number }> {
+  ): Promise<CancelItemAnswer> {
     return this.#request(
       `/api/parties/${partyId}/lines/${lineId}/cancel-item`,
       "POST",

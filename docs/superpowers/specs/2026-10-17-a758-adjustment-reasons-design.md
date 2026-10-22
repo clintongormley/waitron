@@ -1,5 +1,9 @@
 # A758 — Voids and comps: the rules, the owner's answers, and a page of their own
 
+> **2026-10-22 A758-6 update:** §3.8 item 5 (Table finished) is not built — since A773-2 (#1944) a
+> finished party's food leaves the pass; see the plan's Decision 1. Other departures as built:
+> `docs/backlog/till.md` A1020.
+
 > **2026-10-20 A802 update:** the [partial paid-invoice correction proposal](2026-10-20-a802-partial-paid-invoice-correction-design.md)
 > is ready for owner review. References below to A802 as still queued describe the earlier state.
 > Its new policies are proposals; they do not amend this approved design before owner approval.

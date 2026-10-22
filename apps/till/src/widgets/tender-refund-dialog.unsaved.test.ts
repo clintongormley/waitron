@@ -1,14 +1,36 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
+import { property } from "lit/decorators.js";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { TenderRefundAsk, SavedTenderRefund } from "../state/tender-refund.js";
+import type { AdjustmentReason } from "../api/client.js";
 import "./tender-refund-dialog.js";
 import type { TillTenderRefundDialog } from "./tender-refund-dialog.js";
 
+const voidReason = (id: string, name: string, noteRequired = false) =>
+  ({
+    id,
+    name,
+    kind: "void",
+    actions: ["cancel"],
+    noteRequired,
+    maxPercentBp: null,
+    maxAmount: null,
+    applyRoles: [],
+    approverRoles: [],
+  }) as AdjustmentReason;
+const REASONS = [
+  voidReason("return", "Return"),
+  voidReason("courtesy", "Courtesy return"),
+  voidReason("other", "Other", true),
+];
+
 class TenderRefundLeaveApp extends LitElement {
+  @property({ attribute: false }) reasons: AdjustmentReason[] | null = REASONS;
+  @property() startReasonId = "";
   readonly leave = new LeaveController(this);
   closes = 0;
   asks: TenderRefundAsk[] = [];
@@ -18,6 +40,8 @@ class TenderRefundLeaveApp extends LitElement {
         .invoiceNumber=${"F/12"}
         .tenders=${[{ tenderId: "t1", method: "card", last4: "0099", appliedRemaining: "40.00", tipRemaining: "5.00", manual: false, pendingRefundId: null }]}
         .attempt=${this.attempt}
+        .reasons=${this.reasons}
+        .startReasonId=${this.startReasonId}
         @tender-refund-close=${() => this.closes++}
         @tender-refund-submit=${(e: CustomEvent<TenderRefundAsk>) => this.asks.push(e.detail)}
       ></till-tender-refund-dialog
@@ -27,9 +51,13 @@ class TenderRefundLeaveApp extends LitElement {
 customElements.define("tender-refund-leave-test-app", TenderRefundLeaveApp);
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
-async function mount(attempt: SavedTenderRefund | null = null) {
+async function mount(
+  attempt: SavedTenderRefund | null = null,
+  over: Partial<TenderRefundLeaveApp> = {},
+) {
   const { el: app } = await mountWidget<TenderRefundLeaveApp>("tender-refund-leave-test-app", {
     attempt,
+    ...over,
   });
   const form = app.shadowRoot!.querySelector("till-tender-refund-dialog")!;
   await form.updateComplete;
@@ -45,6 +73,14 @@ async function fill(form: TillTenderRefundDialog, name: string, value: string) {
   await userEvent.fill(page.elementLocator(input), value);
   await form.updateComplete;
   return input;
+}
+const combo = (form: TillTenderRefundDialog) =>
+  form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox[name=reason]")!;
+async function choose(form: TillTenderRefundDialog, id: string) {
+  combo(form).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: id }, bubbles: true, composed: true }),
+  );
+  await form.updateComplete;
 }
 const cancel = (form: TillTenderRefundDialog) =>
   form.shadowRoot!.querySelector<HTMLElement>("[data-close]")!.click();
@@ -65,7 +101,7 @@ for (const action of ["Cancel", "Escape"] as const) {
     const { app, form } = await mount();
     await fill(form, "appliedAmount", "12.50");
     await fill(form, "tipAmount", "0");
-    const reason = await fill(form, "reason", "Courtesy return");
+    await choose(form, "courtesy");
     expect(unload()).toBe(true);
     if (action === "Cancel") cancel(form);
     else await userEvent.keyboard("{Escape}");
@@ -75,7 +111,7 @@ for (const action of ["Cancel", "Escape"] as const) {
     expect(app.closes).toBe(0);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
     await expect.poll(() => q.open).toBe(false);
-    expect(reason.value).toBe("Courtesy return");
+    expect(combo(form).value).toBe("courtesy");
     expect(
       form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=appliedAmount]")!
         .value,
@@ -94,10 +130,10 @@ for (const action of ["Cancel", "Escape"] as const) {
 }
 
 it("an unchanged or numerically equivalent draft closes without a discard question", async () => {
-  const { app, form } = await mount();
+  const { app, form } = await mount(null, { startReasonId: "other" });
   await fill(form, "appliedAmount", "040.0");
   await fill(form, "tipAmount", "5");
-  await fill(form, "reason", "  ");
+  await fill(form, "note", "  ");
   expect(unload()).toBe(false);
   const closed = new Promise<void>((resolve) =>
     form.addEventListener("tender-refund-close", () => resolve(), { once: true }),
@@ -134,7 +170,7 @@ it("a restored unanswered request is the baseline and can close while the journa
 
 it("disconnect aborts a pending question; reconnect retains the original baseline and draft", async () => {
   const { app, form } = await mount();
-  await fill(form, "reason", "Saved return");
+  await choose(form, "return");
   cancel(form);
   const q = await question(app);
   expect(q.open).toBe(true);
@@ -143,16 +179,14 @@ it("disconnect aborts a pending question; reconnect retains the original baselin
   expect(unload()).toBe(false);
   app.shadowRoot!.append(form);
   await form.updateComplete;
-  expect(
-    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=reason]")!.value,
-  ).toBe("Saved return");
+  expect(combo(form).value).toBe("return");
   expect(unload()).toBe(true);
   expect(app.asks).toEqual([]);
 });
 
 it("closeSaved commits before leaving and invalidates an older unsaved question", async () => {
   const { app, form } = await mount();
-  await fill(form, "reason", "Return");
+  await choose(form, "return");
   cancel(form);
   const q = await question(app);
   expect(q.open).toBe(true);
@@ -164,7 +198,7 @@ it("closeSaved commits before leaving and invalidates an older unsaved question"
 
 it("busy Cancel and Escape cannot discard or send the staged request", async () => {
   const { app, form } = await mount();
-  await fill(form, "reason", "Return");
+  await choose(form, "return");
   form.busy = true;
   await form.updateComplete;
   cancel(form);
@@ -173,4 +207,36 @@ it("busy Cancel and Escape cannot discard or send the staged request", async () 
   expect(app.closes).toBe(0);
   expect(app.asks).toEqual([]);
   expect(unload()).toBe(true);
+});
+
+it("changing the reason or Other's note marks the draft changed", async () => {
+  const { form } = await mount(null, { startReasonId: "return" });
+  expect(unload()).toBe(false);
+  await choose(form, "courtesy");
+  expect(unload()).toBe(true);
+  await choose(form, "return");
+  expect(unload()).toBe(false);
+  await choose(form, "other");
+  expect(unload()).toBe(true);
+  cleanupWidgets();
+  const { form: other } = await mount(null, { startReasonId: "other" });
+  expect(unload()).toBe(false);
+  await fill(other, "note", "Wrong table");
+  expect(unload()).toBe(true);
+});
+
+it("a start reason delivered after the dialog opens is not an unsaved change", async () => {
+  const { app, form } = await mount(null, { reasons: null, startReasonId: "courtesy" });
+  expect(unload()).toBe(false);
+  app.reasons = REASONS;
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(combo(form).value).toBe("courtesy");
+  expect(unload()).toBe(false);
+  const closed = new Promise<void>((resolve) =>
+    form.addEventListener("tender-refund-close", () => resolve(), { once: true }),
+  );
+  cancel(form);
+  await closed;
+  expect((await question(app)).open).toBe(false);
 });

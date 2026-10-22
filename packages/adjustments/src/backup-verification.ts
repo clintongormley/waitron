@@ -7,7 +7,13 @@ import { ADJUSTMENTS_CLASSIFICATION } from "./classification.js";
 import * as schema from "./schema/index.js";
 
 const tables = ADJUSTMENTS_CLASSIFICATION.map((c) => c.table);
-const immutableTables = ["adjustments"];
+const immutableTables = ["adjustments", "adjustment_refunds"];
+const addedAdjustmentColumns: Readonly<Record<string, BackupValue>> = {
+  charge_kept: 0n,
+  preparation_started: null,
+  refund_handoff: 0n,
+  refund_value: null,
+};
 export const ADJUSTMENTS_BACKUP_VERIFICATION: BackupVerificationContribution = {
   version: 1,
   publicEvidenceDigest: null,
@@ -30,7 +36,7 @@ export const ADJUSTMENTS_BACKUP_VERIFICATION: BackupVerificationContribution = {
       policies: tables.map((table) => ({
         table,
         immutable: immutableTables.includes(table),
-        addedColumns: {},
+        addedColumns: table === "adjustments" ? addedAdjustmentColumns : {},
       })),
     });
     const sourceValid = await referencesValid(context.before);

@@ -87,6 +87,27 @@ describe.each(["light", "dark"] as const)("adjustment report accessibility (%s)"
     await expectNoA11yViolations(host);
   });
 
+  test("a list of cancels with their charge, preparation and refunds", async () => {
+    const [steak, burger] = alexEntries();
+    const entries = [
+      {
+        ...steak!,
+        chargeKept: true,
+        preparationStarted: true,
+        refunded: [
+          { amount: "5.50", state: "completed" as const },
+          { amount: "2.00", state: "pending" as const },
+        ],
+      },
+      { ...burger!, preparationStarted: false },
+    ];
+    const el = await screen(theme, { listEntries: vi.fn().mockResolvedValue(onePage(entries)) });
+    await openAlex(el);
+    const table = el.shadowRoot!.querySelector('[data-test="entries"]')!;
+    expect(table.shadowRoot!.textContent).toContain("Refund pending");
+    await expectNoA11yViolations(host);
+  });
+
   test("a list with more to show, whose next page could not be loaded", async () => {
     const listEntries = vi.fn((_from: string, _to: string, _of: unknown, page?: object) =>
       page === undefined

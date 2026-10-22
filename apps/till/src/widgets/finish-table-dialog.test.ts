@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import type { AdjustmentReason } from "../api/client.js";
 import type { UnservedDish } from "../api/finish-table-types.js";
+import { es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./finish-table-dialog.js";
@@ -111,6 +112,31 @@ it("lists the entire unserved set with known preparation and waits for a reason"
   expect(button(el).disabled).toBe(true);
   expect(button(el).variant).toBe("secondary");
   expect(dialogOpenUnder(el)).toBe(true);
+});
+it("states a known preparation as a statement, not the question with a colon", async () => {
+  const el = await mount();
+  const line = (lineId: string) =>
+    root(el).querySelector(`[data-dish="${lineId}"] [data-preparation]`)!.textContent!.trim();
+  expect(line("croquetas")).toBe("Preparation started: Yes");
+  expect(line("flan")).toBe("Preparation started: No");
+  setLocale("es-ES");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(line("croquetas")).toBe(
+    es["finish_table.preparation_known"].replace("{answer}", es["cancel_item.yes"]),
+  );
+});
+it("offers no counter collection: Back and the main action are its only buttons", async () => {
+  for (const refundAtTill of [false, true]) {
+    const el = await mount({ refundAtTill });
+    await reason(el);
+    expect(
+      [...root(el).querySelectorAll("wt-button")].map((row) =>
+        row.hasAttribute("data-close") ? "back" : row.hasAttribute("data-confirm") ? "main" : "?",
+      ),
+    ).toEqual(["back", "main"]);
+    cleanupWidgets();
+  }
 });
 it("confirms all dishes with exact observed contexts and one reason without returning money itself", async () => {
   const el = await mount();
@@ -222,6 +248,27 @@ it("uses only an explicitly identified offered default reason", async () => {
   await el.updateComplete;
   expect(root(el).querySelector("wt-combobox")!.value).toBe("");
   expect(button(el).disabled).toBe(true);
+});
+it("takes the start reason once reasons arrive after it opened, and keeps a reason chosen since", async () => {
+  const el = await mount({ reasons: null });
+  expect(root(el).querySelector("wt-combobox")!.value).toBe("");
+  el.reasons = [house, other];
+  el.defaultReasonId = "house";
+  await el.updateComplete;
+  expect(root(el).querySelector("wt-combobox")!.value).toBe("house");
+  expect(button(el).disabled).toBe(false);
+  await reason(el, "other");
+  el.reasons = [house, other];
+  await el.updateComplete;
+  expect(root(el).querySelector("wt-combobox")!.value).toBe("other");
+});
+it("keeps a reason chosen before the start reason arrives", async () => {
+  const el = await mount();
+  await reason(el, "other");
+  el.reasons = [house, other];
+  el.defaultReasonId = "house";
+  await el.updateComplete;
+  expect(root(el).querySelector("wt-combobox")!.value).toBe("other");
 });
 it("requires Other's note, marks a synthetic invalid submission, and sends the trimmed note", async () => {
   const el = await mount();

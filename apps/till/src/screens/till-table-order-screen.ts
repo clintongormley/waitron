@@ -2607,6 +2607,10 @@ export class TillTableOrderScreen extends LitElement {
     const bill = this.bills.find((bill) => bill.workingOrderId === slice.row.workingOrderId);
     return (
       slice.kind !== "cancelled_charged" &&
+      !(
+        slice.kind === "served" &&
+        (slice.row.billStatus === "settled" || bill?.status === "settled")
+      ) &&
       slice.row.billStatus !== "abandoned" &&
       bill?.status !== "abandoned" &&
       !locked &&

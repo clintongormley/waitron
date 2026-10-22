@@ -115,7 +115,10 @@ export interface AdjustmentAsk {
 
 export interface AdjustmentArgs extends AdjustmentAsk {
   submissionId: string;
+  /** The waiter's answer; true marks every void notice of the family started. */
   preparationStarted?: boolean;
+  /** What a cancel row records as started; unlike `preparationStarted`, it touches no notice. */
+  recordedPreparationStarted?: boolean;
   /**
    * Someone the plan's approval admits ({@link approves}). `checked` is `checkPin`'s result on this
    * person and PIN, taken before the transaction opened.
@@ -959,6 +962,7 @@ export async function applyAdjustment(
         requestedBy: args.operatorId,
         approvedBy: approved,
         note: args.note,
+        preparationStarted: args.recordedPreparationStarted ?? null,
       });
       const revision = await readOrderRevision(tx, args.orderId);
       if (attendance !== undefined) {

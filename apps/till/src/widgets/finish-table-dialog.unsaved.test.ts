@@ -171,3 +171,59 @@ it("required reason notes are staged and returning to the opened note clears the
   await form.updateComplete;
   expect(unload()).toBe(false);
 });
+it("a start reason that arrives after it opened is not an unsaved change", async () => {
+  const reasons = new FinishLeaveApp().reasons;
+  const { el: app } = await mountWidget<FinishLeaveApp>("finish-leave-test-app", {
+    reasons: null as unknown as AdjustmentReason[],
+  });
+  const form = app.shadowRoot!.querySelector("till-finish-table-dialog")!;
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("");
+  app.reasons = reasons;
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("house");
+  expect(unload()).toBe(false);
+});
+it("a start reason deleted while it is open is not an unsaved change", async () => {
+  const { app, form } = await mount();
+  expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("house");
+  app.reasons = [{ ...app.reasons[0]!, id: "other", name: "Other" }];
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("");
+  expect(unload()).toBe(false);
+});
+it("a chosen reason deleted while it is open stays an unsaved change", async () => {
+  const { app, form } = await mount();
+  const [house] = app.reasons;
+  app.reasons = [house!, { ...house!, id: "other", name: "Other" }];
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  form
+    .shadowRoot!.querySelector("wt-combobox")!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "other" }, bubbles: true, composed: true }),
+    );
+  await form.updateComplete;
+  app.reasons = [house!];
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("");
+  expect(unload()).toBe(true);
+});
+it("a start reason deleted while another becomes the start reason takes the new one", async () => {
+  const { app, form } = await mount();
+  expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("house");
+  app.reasons = [{ ...app.reasons[0]!, id: "other", name: "Other" }];
+  form.defaultReasonId = "other";
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("other");
+  expect(unload()).toBe(false);
+});

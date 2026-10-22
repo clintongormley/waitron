@@ -3,6 +3,7 @@ import {
   lineServiceCancellations,
   nowIso,
   orderGroups,
+  sales,
   ticketItems,
   workingOrderLines,
   workingOrders,
@@ -10,6 +11,7 @@ import {
 } from "@waitron/db";
 import {
   AppError,
+  cancelRefundShare,
   centsToDecimal,
   decimal,
   divideDecimal,
@@ -23,6 +25,7 @@ import { findAdjustmentReason, policySnapshotOf, recordAdjustment } from "@waitr
 import { staffPresentationName } from "@waitron/catalogue";
 import type { CancellationContext } from "./line-cancel-context.js";
 import { requireCancellationContext } from "./line-cancel-context.js";
+import { cancellationRefundValue } from "./cancellation-refund-value.js";
 import type { TillConfig } from "./till-config.js";
 import { applyAdjustment, reasonNameIn, type AdjustmentArgs } from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
@@ -57,7 +60,17 @@ export interface CancelItemAsk {
   reasonId?: string;
   note?: string;
   approver?: AdjustmentArgs["approver"];
+  /** The person whose PIN `authorize` checked for `sale.refund`, or null when no PIN was checked.
+   * Recorded only when the refund handoff stands (ticked, on a settled bill); otherwise ignored. */
+  refundApprovedBy?: string | null;
 }
+
+export interface RefundLink {
+  lineId: string;
+  adjustmentId: string;
+}
+
+export type CancelItemAnswer = { revision: number; refundLinks?: RefundLink[] };
 
 export async function cancelItem(
   tx: Transaction,
@@ -72,7 +85,7 @@ export async function cancelItem(
     attempts?: PinAttempts;
     completeAdjustment?: (billId: string) => Promise<void>;
   } = { venueLocale: cfg.locale },
-): Promise<{ revision: number }> {
+): Promise<CancelItemAnswer> {
   if (ask.outcome !== "remove_charge" && ask.outcome !== "keep_charge") throw invalid("outcome");
   if (ask.preparationStarted !== undefined && typeof ask.preparationStarted !== "boolean")
     throw invalid("preparationStarted");
@@ -234,6 +247,7 @@ export async function cancelItem(
             submissionId: ask.submissionId,
             approver: ask.approver,
             preparationStarted: ask.preparationStarted,
+            recordedPreparationStarted: true,
           },
           policy.venueLocale,
           policy.attempts,
@@ -303,7 +317,24 @@ export async function cancelItem(
             }),
           );
         const amount = coveredValue(false);
-        await recordAdjustment(tx, {
+        const refundHandoff = ask.refundHandoff === true && context.billStatus === "settled";
+        let refundValue = null;
+        if (refundHandoff) {
+          const [sale] = await tx
+            .select({ id: sales.id })
+            .from(sales)
+            .where(eq(sales.workingOrderId, bill!.id));
+          if (sale === undefined)
+            throw new AppError("working_order.not_found", { workingOrderId: bill!.id });
+          const value = await cancellationRefundValue(tx, bill!.id, sale.id, lineId);
+          if (value !== undefined)
+            refundValue = cancelRefundShare(
+              value,
+              context.components.find((row) => row.lineId === lineId)!.cancelledQuantity,
+              ask.quantity,
+            );
+        }
+        const adjustmentId = await recordAdjustment(tx, {
           workingOrderId: bill!.id,
           line: {
             id: lineId,
@@ -333,8 +364,12 @@ export async function cancelItem(
           reduction: decimal("0"),
           nominalValue: coveredValue(true),
           requestedBy: operatorId,
-          approvedBy: null,
+          approvedBy: refundHandoff ? (ask.refundApprovedBy ?? null) : null,
           note: ask.note ?? null,
+          chargeKept: true,
+          preparationStarted: started,
+          refundHandoff,
+          refundValue,
         });
         const corrections = [];
         for (const { row, remaining } of family) {
@@ -412,6 +447,11 @@ export async function cancelItem(
           [bill!.id],
           `party:${partyId}:${ask.submissionId}`,
         );
+        if (refundHandoff)
+          return {
+            revision: await partyRevision(tx, partyId),
+            refundLinks: [{ lineId, adjustmentId }],
+          };
       }
       return { revision: await partyRevision(tx, partyId) };
     },
