@@ -11,6 +11,7 @@ import { planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../modules.js";
 import { provisionVenue, type ProvisionDeps, type ProvisionRequest } from "../provision.js";
 import { writeAllocationInput } from "./allocation-input.js";
+import { createHourTestClock, selectPastWaits, type HourTestClock } from "./hour-test-clock.js";
 
 export async function initialSetupInput(
   directory: string,
@@ -56,7 +57,11 @@ export async function initialSetupInput(
   };
 }
 
-export async function provisionAllocatedTestVenue(deps: ProvisionDeps, request: ProvisionRequest) {
+export async function provisionAllocatedTestVenue(
+  deps: ProvisionDeps,
+  request: ProvisionRequest,
+  clock: HourTestClock = createHourTestClock(Date.parse("2026-10-16T11:40:00Z")),
+) {
   const modules = enabledModules(ALL_MODULES, deps.moduleConfig);
   if (
     !modules.some((module) => module.name === "fiscal-verifactu") ||
@@ -74,11 +79,10 @@ export async function provisionAllocatedTestVenue(deps: ProvisionDeps, request: 
     sourceId: randomUUID(),
     targetNodeId,
   } as const;
-  const now = Date.parse("2026-10-16T11:40:00Z");
   let selected: unknown = null;
   const history: unknown[] = [];
   const preparation = createHourPreparation({
-    monotonicNow: () => 0,
+    monotonicNow: () => clock.monotonic(),
     withState: async (_binding, run) =>
       run({
         get value() {
@@ -102,20 +106,22 @@ export async function provisionAllocatedTestVenue(deps: ProvisionDeps, request: 
         ["box", "browser"].map((source) => ({
           source: source as "box" | "browser",
           result: "usable",
-          instantMs: now,
+          instantMs: clock.wall(),
           uncertaintyMs: 0,
-          wallStartedMs: now,
-          wallFinishedMs: now,
-          monotonicStartedMs: 0,
-          monotonicFinishedMs: 0,
+          wallStartedMs: clock.wall(),
+          wallFinishedMs: clock.wall(),
+          monotonicStartedMs: clock.monotonic(),
+          monotonicFinishedMs: clock.monotonic(),
         })),
         Date.parse("2026-10-15T00:00:00Z"),
       ),
       history: [{ reference: "synthetic-empty-venue", complete: true, records: [] }],
     }),
   });
-  const held = await withOperationAuthority(binding, administratorId, (authority) =>
-    preparation.select({ binding, authority, answer: "no", comparisonId: "comparison" }),
+  const held = await selectPastWaits(clock, () =>
+    withOperationAuthority(binding, administratorId, (authority) =>
+      preparation.select({ binding, authority, answer: "no", comparisonId: "comparison" }),
+    ),
   );
   if (held.status !== "selected") throw new Error("synthetic hour was not selected");
   return provisionVenue(

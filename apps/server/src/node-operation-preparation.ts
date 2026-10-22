@@ -14,6 +14,7 @@ import {
   configureModuleOperations,
   readOperationAuthority,
   withPreparedModuleOperations,
+  type ModuleOperationHost,
   type ModuleOperations,
   type OperationAuthority,
   type OperationBinding,
@@ -49,6 +50,7 @@ export function createNodeOperationPreparation(options: {
   credentialKeyRing?: TotpKeyRing;
   coordinator: FirstSetupCoordinator;
   environment: Readonly<Record<string, string | undefined>>;
+  testClock?: ModuleOperationHost["testClock"];
 }) {
   const node = Object.freeze({ ...options.node });
   const scopes = new AsyncLocalStorage<{
@@ -109,7 +111,7 @@ export function createNodeOperationPreparation(options: {
   });
   const modules = configureModuleOperations(
     options.modules,
-    createModuleOperationHost(options.environment, scoped),
+    createModuleOperationHost(options.environment, { ...scoped, testClock: options.testClock }),
   );
   const invoke = async <T>(
     supplied: OperationBinding,

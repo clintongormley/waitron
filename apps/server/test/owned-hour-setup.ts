@@ -3,6 +3,7 @@ import { expect } from "vitest";
 import type { InitialVenueInput, VenueRequest } from "@waitron/provisioning";
 import type { PublicFirstSetupState } from "../src/first-setup-owner.js";
 import { firstFiscalPublicDigest } from "../src/first-fiscal-delivery.js";
+import { selectPastWaits, type HourTestClock } from "../src/testing/hour-test-clock.js";
 
 export async function ownedHourSetup(
   transport: typeof fetch,
@@ -10,6 +11,8 @@ export async function ownedHourSetup(
   venue: unknown,
   password: string,
   claim: { configurationImport: true; newTaxpayer: boolean } | undefined = undefined,
+  /** The server's `testClock`, so a wait can be moved past; the browser reads it too. */
+  clock?: HourTestClock,
 ) {
   let owner: { state: PublicFirstSetupState; capability: string } | undefined;
   const headers = () => ({
@@ -33,7 +36,7 @@ export async function ownedHourSetup(
       state?: PublicFirstSetupState;
       capability?: string;
       reconfirmation: string;
-      preparation: { id: string };
+      preparation: { id: string; status?: string; targetMs?: number };
       modules: {
         module: string;
         request: {
@@ -55,19 +58,27 @@ export async function ownedHourSetup(
     ...claim,
   });
   const module = "fiscal-verifactu";
-  const challenge = await send("preparation", { module, proposal: { action: "clock-challenge" } });
-  await send("preparation", {
-    module,
-    proposal: {
-      action: "compare-clocks",
-      browser: { challengeId: challenge.preparation.id, instantMs: Date.now() },
-    },
-  });
-  const grant = await send("reconfirm", { password, purpose: "block-use" });
-  await send("candidates", {
-    module,
-    proposal: { answer: "no" },
-    reconfirmation: grant.reconfirmation,
+  await selectPastWaits(clock, async () => {
+    const challenge = await send("preparation", {
+      module,
+      proposal: { action: "clock-challenge" },
+    });
+    const compared = await send("preparation", {
+      module,
+      proposal: {
+        action: "compare-clocks",
+        browser: {
+          challengeId: challenge.preparation.id,
+          instantMs: clock?.wall() ?? Date.now(),
+        },
+      },
+    });
+    const grant = await send("reconfirm", { password, purpose: "block-use" });
+    return send("candidates", {
+      module,
+      proposal: { answer: "no", comparisonId: compared.preparation.id },
+      reconfirmation: grant.reconfirmation,
+    });
   });
   const prepared = (await send("request")).modules.find((entry) => entry.module === module)!.request
     .input;

@@ -60,6 +60,12 @@ import { generateNodeKeyPair } from "@waitron/membership";
 import { encodeRecoveryKit, signPointer, writePointer } from "@waitron/stream";
 import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
 import { sealNodeState, writeSealedStateRow } from "../src/sealed-state.js";
+import {
+  createFakeTimersHourClock,
+  recoverySelectPastWaits,
+  selectPastWaits,
+  type HourTestClock,
+} from "../src/testing/hour-test-clock.js";
 
 const mocked = vi.hoisted(() => ({ internet: vi.fn() }));
 export const external: { internet: Mock } = mocked;
@@ -86,6 +92,11 @@ export const bases = [
 export const scope = { taxpayerNif: "89890001K", environment: "preproduction" as const };
 export let root: string;
 export let key: { secret: string; name: string };
+/** Over the suite's fake timers; reset before each test. */
+export let clock: HourTestClock;
+/** Defaults to a browser on another device; a case about the box's own screen sets it. */
+export const seams: { requestFromBox: () => boolean } = { requestFromBox: () => false };
+const client = () => ({ onBox: seams.requestFromBox() });
 let value: unknown;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "hour-recovery-host-"));
@@ -93,6 +104,8 @@ beforeEach(async () => {
   await mkdir(join(root, "venue"));
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
+  clock = createFakeTimersHourClock();
+  seams.requestFromBox = () => false;
   external.internet.mockImplementation(async () => ({
     source: "internet",
     result: "unavailable",
@@ -114,7 +127,7 @@ beforeEach(async () => {
           value = next;
         },
       }),
-    monotonicNow: () => 0,
+    monotonicNow: () => clock.monotonic(),
     read: async () => ({
       scope,
       bases,
@@ -125,22 +138,22 @@ beforeEach(async () => {
           {
             source: "box",
             result: "usable",
-            instantMs: Date.now(),
+            instantMs: clock.wall(),
             uncertaintyMs: 0,
-            wallStartedMs: Date.now(),
-            wallFinishedMs: Date.now(),
-            monotonicStartedMs: 0,
-            monotonicFinishedMs: 0,
+            wallStartedMs: clock.wall(),
+            wallFinishedMs: clock.wall(),
+            monotonicStartedMs: clock.monotonic(),
+            monotonicFinishedMs: clock.monotonic(),
           },
           {
             source: "browser",
             result: "usable",
-            instantMs: Date.now(),
+            instantMs: clock.wall(),
             uncertaintyMs: 0,
-            wallStartedMs: Date.now(),
-            wallFinishedMs: Date.now(),
-            monotonicStartedMs: 0,
-            monotonicFinishedMs: 0,
+            wallStartedMs: clock.wall(),
+            wallFinishedMs: clock.wall(),
+            monotonicStartedMs: clock.monotonic(),
+            monotonicFinishedMs: clock.monotonic(),
           },
         ],
         Date.parse("2026-10-15T00:00:00Z"),
@@ -148,19 +161,21 @@ beforeEach(async () => {
     }),
   });
   await withOperationAuthority(first, "administrator", async (authority) => {
-    const selected = await setup.select({
-      binding: first,
-      authority,
-      answer: "no",
-      comparisonId: "comparison",
-    });
+    const selected = await selectPastWaits(clock, () =>
+      setup.select({
+        binding: first,
+        authority,
+        answer: "no",
+        comparisonId: "comparison",
+      }),
+    );
     if (selected.status !== "selected") throw new Error("initial selection");
     await setup.prepare({ binding: first, authority, input: selected.input }, (prepared) =>
       withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, node, prepared)),
     );
   });
   await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
-  vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
+  clock.set(Date.parse("2026-10-16T12:40:00Z"));
 });
 afterEach(async () => {
   vi.useRealTimers();
@@ -213,12 +228,12 @@ export async function host() {
     (secret === key.secret
       ? service
       : createSelectedRecoveryPreparation({ ...options, secret })
-    ).prepare(proposal, { onBox: true });
+    ).prepare(proposal, client());
   const compare = async () => {
     const challenge = (await prepare({ action: "clock-challenge" })) as { id: string };
     return prepare({
       action: "compare-clocks",
-      browser: { challengeId: challenge.id, instantMs: Date.now() },
+      browser: { challengeId: challenge.id, instantMs: clock.wall() },
     });
   };
   return { configured, facts, prepare, compare, roots, service, selected, options };
@@ -293,23 +308,11 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
     readIsolation: async () => isolation,
   };
   const service = createSelectedRecoveryPreparation(options);
-  const challenge = (await service.prepare({ action: "clock-challenge" }, { onBox: true })) as {
-    id: string;
-  };
-  await service.prepare(
-    {
-      action: "compare-clocks",
-      browser: { challengeId: challenge.id, instantMs: Date.now() },
-    },
-    { onBox: true },
-  );
-  const outcome = (await service.prepare(
-    {
-      action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
-    },
-    { onBox: true },
+  const outcome = (await recoverySelectPastWaits(
+    clock,
+    service,
+    { answer: "no", installationCodes: ["0CNNW"] },
+    client(),
   )) as {
     input: unknown;
   };
@@ -405,29 +408,17 @@ export async function bucketCommand() {
     sourceId: selected.activationSourceId!,
     eventId: "bucket-entry",
   };
-  vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
+  clock.set(Date.parse("2026-10-16T13:40:00Z"));
   const service = createSelectedRecoveryPreparation({
     ...f.options,
     binding: operationBinding,
     selected,
   });
-  const challenge = (await service.prepare({ action: "clock-challenge" }, { onBox: true })) as {
-    id: string;
-  };
-  await service.prepare(
-    {
-      action: "compare-clocks",
-      browser: { challengeId: challenge.id, instantMs: Date.now() },
-    },
-    { onBox: true },
-  );
-  const outcome = (await service.prepare(
-    {
-      action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
-    },
-    { onBox: true },
+  const outcome = (await recoverySelectPastWaits(
+    clock,
+    service,
+    { answer: "no", installationCodes: ["0CNNW"] },
+    client(),
   )) as {
     input: unknown;
   };
@@ -502,6 +493,7 @@ export function restoreApp(deps: Partial<SetupDeps> = {}) {
         assertOtherAllowed: async () => {},
       },
       requestRestart() {},
+      requestFromBox: () => seams.requestFromBox(),
       ...deps,
     },
     () => {},
@@ -691,7 +683,7 @@ export async function managedHttp(f: Awaited<ReturnType<typeof archiveHost>>) {
 
 export async function interactiveHost() {
   const f = await archiveHost();
-  vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
+  clock.set(Date.parse("2026-10-16T13:40:00Z"));
   const coordinator = createFirstSetupCoordinator();
   const options = { ...f.roots, coordinator, modules: ALL_MODULES, migrationsRoot: null };
   const session = createInteractiveRecoveryPreparation(options);
@@ -718,7 +710,7 @@ export async function interactiveHost() {
           f.options.selected.sourceId,
           { ...request, ...override, proposal },
           hold,
-          { onBox: true },
+          client(),
         ),
       );
     } finally {
@@ -728,7 +720,7 @@ export async function interactiveHost() {
   const compare = async (override: Partial<typeof request> = {}) => {
     const challenge = (await invoke({ action: "clock-challenge" }, override)) as { id: string };
     return invoke(
-      { action: "compare-clocks", browser: { challengeId: challenge.id, instantMs: Date.now() } },
+      { action: "compare-clocks", browser: { challengeId: challenge.id, instantMs: clock.wall() } },
       override,
     );
   };

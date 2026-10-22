@@ -11,7 +11,7 @@ import {
 } from "@waitron/identity";
 import { bookings } from "@waitron/bookings";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { randomUUID, X509Certificate } from "node:crypto";
+import { randomBytes, randomUUID, X509Certificate } from "node:crypto";
 import { createServer } from "node:net";
 import {
   chmod,
@@ -1727,6 +1727,156 @@ describe("startServer, against a migrated venue directory", () => {
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);
+
+  describe("a server started with no seams", () => {
+    type Answer = {
+      state?: { attemptId: string; revision: number; ownerGeneration: number };
+      capability?: string;
+      reconfirmation: string;
+      preparation: {
+        id: string;
+        status?: string;
+        remainingMs: number;
+        clock: { secondClock: boolean; unavailable: unknown[] };
+      };
+    };
+    type Send = (path: string, payload?: unknown) => Promise<Answer>;
+    async function noSeamsSetup(
+      internet: "usable" | "unavailable",
+      body: (send: Send) => Promise<void>,
+    ) {
+      const port = await freePort();
+      const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-no-seams-state-"));
+      const venue = await freshVenue();
+      const release = await import("@waitron/fiscal-verifactu/src/hour-release.js");
+      const clocks = await import("@waitron/fiscal-verifactu/src/hour-clock-internet.js");
+      const spies = [
+        vi.spyOn(release, "readHourRelease").mockReturnValue({
+          instantMs: Date.parse("2026-10-15T00:00:00Z"),
+          committedAt: "2026-10-15T00:00:00.000Z",
+          sourceCommit: "a".repeat(40),
+          generator: "scripts/generate-hour-release.mjs:v1",
+          generatorSha256: "b".repeat(64),
+        }),
+        vi.spyOn(clocks, "observeInternetHourClock").mockImplementation(async () => {
+          if (internet === "unavailable")
+            return { source: "internet", result: "unavailable", reason: "timeout" };
+          const mono = performance.now(),
+            now = Date.now();
+          return {
+            source: "internet",
+            result: "usable",
+            instantMs: now,
+            uncertaintyMs: 500,
+            wallStartedMs: now,
+            wallFinishedMs: now,
+            monotonicStartedMs: mono,
+            monotonicFinishedMs: mono,
+          };
+        }),
+      ];
+      try {
+        // No third argument: the call production makes (`node-entry.ts`).
+        const server = await startServer({
+          WAITRON_FISCAL_CUSTODIAN_FILE: process.env.WAITRON_FISCAL_CUSTODIAN_FILE,
+          WAITRON_FISCAL_CONFIRMATION_FILE: process.env.WAITRON_FISCAL_CONFIRMATION_FILE,
+          WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: process.env.WAITRON_FISCAL_CUSTODIAN_FINGERPRINT,
+          WAITRON_VENUE_DIR: venue.directory,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "preproduction",
+          WAITRON_HTTP_LANDING_PORT: "0",
+        });
+        const ca = await readFile(join(stateDir, "tls", "ca.crt"));
+        const { via, close } = httpsVia(ca);
+        let owner: { state: NonNullable<Answer["state"]>; capability: string } | undefined;
+        const send = async (path: string, payload?: unknown) => {
+          const response = await fetch(`https://127.0.0.1:${port}/setup-api/first-setup/${path}`, {
+            ...via,
+            method: payload === undefined ? "GET" : "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(owner === undefined
+                ? {}
+                : {
+                    "X-Waitron-Setup-Owner": owner.capability,
+                    "X-Waitron-Setup-Attempt": owner.state.attemptId,
+                    "X-Waitron-Setup-Revision": String(owner.state.revision),
+                    "X-Waitron-Setup-Generation": String(owner.state.ownerGeneration),
+                  }),
+            },
+            ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+          });
+          const value = (await response.json()) as Answer;
+          expect(response.status, JSON.stringify(value)).toBe(200);
+          if (value.state)
+            owner = { state: value.state, capability: value.capability ?? owner!.capability };
+          return value;
+        };
+        try {
+          await body(send);
+        } finally {
+          await close();
+          await server.close();
+        }
+      } finally {
+        for (const spy of spies) spy.mockRestore();
+        await venue.store.close();
+        await rm(venue.directory, { recursive: true, force: true });
+        await rm(stateDir, { recursive: true, force: true });
+      }
+    }
+    const module = "fiscal-verifactu";
+    const claimAndCompare = async (send: Send) => {
+      const draft = provisionVenueBody("60000013M");
+      await send("claim", {
+        venue: draft,
+        clientClaimNonce: randomBytes(32).toString("base64url"),
+      });
+      const challenge = await send("preparation", {
+        module,
+        proposal: { action: "clock-challenge" },
+      });
+      const compared = await send("preparation", {
+        module,
+        proposal: {
+          action: "compare-clocks",
+          browser: { challengeId: challenge.preparation.id, instantMs: Date.now() },
+        },
+      });
+      return { draft, compared: compared.preparation };
+    };
+
+    it("counts its own browser as the box", async () => {
+      await noSeamsSetup("unavailable", async (send) => {
+        const { compared } = await claimAndCompare(send);
+        // A phone switch leaking into production would print `secondClock: true` here.
+        expect(compared.clock.secondClock).toBe(false);
+        expect(compared.clock.unavailable).toContainEqual(
+          expect.objectContaining({ source: "browser", reason: "same_machine" }),
+        );
+      });
+    }, 60_000);
+
+    it("waits at a setup on real time", async () => {
+      await noSeamsSetup("usable", async (send) => {
+        const { draft, compared } = await claimAndCompare(send);
+        const grant = await send("reconfirm", {
+          password: draft.admin.password,
+          purpose: "block-use",
+        });
+        const taken = await send("candidates", {
+          module,
+          proposal: { answer: "no", comparisonId: compared.id },
+          reconfirmation: grant.reconfirmation,
+        });
+        // A test clock leaking into production would print `selected`, or under 90 000 here.
+        expect(taken).toMatchObject({ preparation: { status: "waiting" } });
+        expect(taken.preparation.remainingMs).toBeGreaterThanOrEqual(90_000);
+      });
+    }, 60_000);
+  });
 
   it("boots in trading mode when a venue is bound: mounts the trading API and NOT the setup routes", async () => {
     // A provisioned box mounts the till API and not the setup routes.

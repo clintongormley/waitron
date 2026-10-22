@@ -38,10 +38,12 @@ export function createModuleOperationHost(
     readRetiredSetup?: ModuleOperationHost["readRetiredSetup"];
     readSetupFacts?: ModuleOperationHost["readSetupFacts"];
     readRecoveryFacts?: ModuleOperationHost["readRecoveryFacts"];
+    testClock?: ModuleOperationHost["testClock"];
   },
 ): ModuleOperationHost {
   return Object.freeze({
     environment: Object.freeze({ ...environment }),
+    ...(evidence?.testClock === undefined ? {} : { testClock: evidence.testClock }),
     ...(evidence?.readSetupFacts === undefined ? {} : { readSetupFacts: evidence.readSetupFacts }),
     ...(evidence?.readRecoveryFacts === undefined
       ? {}
@@ -73,6 +75,7 @@ export function createFirstSetupRuntime(options: {
   readPublicEvidence?: ModuleOperationHost["readPublicEvidence"];
   readRetiredSetup?: ModuleOperationHost["readRetiredSetup"];
   onOwnershipRecovered?: (attemptId: string) => void;
+  testClock?: ModuleOperationHost["testClock"];
 }) {
   const readRetiredSetup: NonNullable<ModuleOperationHost["readRetiredSetup"]> =
     options.readRetiredSetup ??
@@ -90,6 +93,7 @@ export function createFirstSetupRuntime(options: {
   };
   const preparation: { current?: ReturnType<typeof createSetupPreparationHost> } = {};
   const host = createModuleOperationHost(options.environment, {
+    testClock: options.testClock,
     readSetupFacts: async (binding) => {
       if (preparation.current === undefined) throw new AppError("setup.not_ready", {});
       return preparation.current.readSetupFacts(binding);

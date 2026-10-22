@@ -12,6 +12,7 @@ import {
   recoveryHourOperator,
 } from "./hour-recovery-preparation.js";
 import { createSetupHourClock, type SetupBrowserClockSample } from "./hour-setup-clock.js";
+import { testClockOptions } from "./hour-preparation.js";
 import type { HourHistorySource } from "./hour-history.js";
 import "./errors.js";
 
@@ -27,10 +28,17 @@ function exact(value: unknown, keys: readonly string[]): value is Record<string,
     keys.every((key) => Object.hasOwn(value, key))
   );
 }
-function createHostedHourRecovery(host: ModuleOperationHost) {
+function createHostedHourRecovery(
+  host: ModuleOperationHost,
+  clock: { wall?(): number; monotonicNow?(): number } = {},
+) {
   if (host.readRecoveryFacts === undefined || host.withPreparationState === undefined)
     return refuse("outside_confirmation_missing");
-  const clocks = createSetupHourClock();
+  const monotonicNow = clock.monotonicNow ?? (() => performance.now());
+  const clocks = createSetupHourClock({
+    ...(clock.wall === undefined ? {} : { wall: clock.wall }),
+    monotonic: monotonicNow,
+  });
   const facts = async (binding: Parameters<NonNullable<typeof host.readRecoveryFacts>>[0]) => {
     const current = await host.readRecoveryFacts!(binding);
     if (current.country !== "ES") return refuse();
@@ -38,7 +46,7 @@ function createHostedHourRecovery(host: ModuleOperationHost) {
   };
   const options: Parameters<typeof createHourRecoveryPreparation>[0] = {
     withState: host.withPreparationState,
-    monotonicNow: () => performance.now(),
+    monotonicNow,
     readContext: async (binding) => {
       const current = await facts(binding);
       return {
@@ -139,7 +147,7 @@ const hosted = new WeakMap<ModuleOperationHost, ReturnType<typeof createHostedHo
 export function hostedHourRecovery(host: ModuleOperationHost) {
   let value = hosted.get(host);
   if (value === undefined) {
-    value = createHostedHourRecovery(host);
+    value = createHostedHourRecovery(host, testClockOptions(host));
     hosted.set(host, value);
   }
   return value;

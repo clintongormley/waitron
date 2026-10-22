@@ -6,6 +6,7 @@ import {
 } from "@waitron/db";
 import {
   configureModuleOperations,
+  type ModuleOperationHost,
   type ModuleRecoveryFacts,
   type OperationBinding,
   type OperationClient,
@@ -57,6 +58,7 @@ interface BaseOptions {
   secret: unknown;
   database(): Database;
   selected: RecoveryBackupPreview;
+  testClock?: ModuleOperationHost["testClock"];
 }
 type Isolation = Pick<
   ModuleRecoveryFacts,
@@ -199,7 +201,7 @@ export function createSelectedRecoveryPreparation(options: Options): {
       };
     },
   });
-  const host = createModuleOperationHost({}, scoped);
+  const host = createModuleOperationHost({}, { ...scoped, testClock: options.testClock });
   const modules = configureModuleOperations(options.modules, host);
   const contribution = modules.find((module) => module.name === binding.module)?.operations;
   return {
@@ -249,6 +251,7 @@ export function createInteractiveRecoveryPreparation(options: {
   migrationsRoot: string | null;
   modules: readonly WaitronModule[];
   coordinator: FirstSetupCoordinator;
+  testClock?: ModuleOperationHost["testClock"];
 }) {
   const requests = new AsyncLocalStorage<{ db: Database; hold: FirstSetupHold }>();
   const sessions = new Map<

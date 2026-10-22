@@ -41,7 +41,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { serve } from "@hono/node-server";
 import { eq, inArray } from "drizzle-orm";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import {
   installChangeFeed,
   subscribeToChanges,
@@ -86,7 +86,7 @@ import {
   reconcile,
   selectTimeRecordExport,
 } from "@waitron/module";
-import type { AlertSource, ModuleRouteContext } from "@waitron/module";
+import type { AlertSource, ModuleOperationHost, ModuleRouteContext } from "@waitron/module";
 import { DEFAULT_MAX_UPLOAD_BYTES } from "@waitron/media";
 import { AppError } from "@waitron/shared";
 import {
@@ -798,6 +798,8 @@ function makeStartedServer(
 export interface StartServerSeams {
   stream?: Pick<StreamHostDeps, "walLimitBytes" | "spawn" | "store">;
   appendOnlyWatch?: { intervalMs?: number };
+  testClock?: ModuleOperationHost["testClock"];
+  requestFromBox?: (c: Context) => boolean;
 }
 
 /**
@@ -866,6 +868,7 @@ async function bootServer(
   const moduleConfig = await readModuleConfig(config.stateDir);
   let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
   const firstSetupHost = createFirstSetupModuleHost({
+    testClock: seams.testClock,
     database: () => db,
     environment: env,
     stateDir: config.stateDir,
@@ -1088,7 +1091,9 @@ async function bootServer(
           guard: firstSetup.assertOtherAllowed,
         }),
         cloudRecovery,
+        requestFromBox: seams.requestFromBox,
         prepareRecovery: createSetupRecoveryPreparation({
+          testClock: seams.testClock,
           stateDir: config.stateDir,
           venueDir: config.venueDir,
           stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
@@ -2576,7 +2581,9 @@ async function bootServer(
       credentialKeyRing: totpKeyRing,
       modules: setsToMigrate,
       run: promoteRun,
+      requestFromBox: seams.requestFromBox,
       nodePreparation: createNodeOperationPreparation({
+        testClock: seams.testClock,
         db,
         node: { nodeId: till.nodeId, locationId: till.locationId },
         modules: enabledModules(ALL_MODULES, moduleConfig),

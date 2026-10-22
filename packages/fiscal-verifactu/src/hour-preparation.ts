@@ -145,15 +145,20 @@ export function createHostedHourPreparation(
   host: ModuleOperationHost,
   options: {
     readClock?(context: InitialSetupContext): Promise<{ clock: HourClockDecision }>;
+    wall?(): number;
     monotonicNow?(): number;
   } = {},
 ) {
   if (host.readSetupFacts === undefined || host.withPreparationState === undefined)
     return refuse("outside_confirmation_missing");
-  const clocks = createSetupHourClock();
+  const monotonicNow = options.monotonicNow ?? (() => performance.now());
+  const clocks = createSetupHourClock({
+    ...(options.wall === undefined ? {} : { wall: options.wall }),
+    monotonic: monotonicNow,
+  });
   const preparation = createHourPreparation({
     withState: host.withPreparationState,
-    monotonicNow: options.monotonicNow ?? (() => performance.now()),
+    monotonicNow,
     read: async (binding, comparisonId) => {
       const facts = await host.readSetupFacts!(binding);
       const clock =
@@ -193,11 +198,17 @@ export function createHostedHourPreparation(
   };
 }
 
+export function testClockOptions(host: ModuleOperationHost) {
+  const clock = host.testClock;
+  return clock === undefined
+    ? {}
+    : { wall: () => clock.wall(), monotonicNow: () => clock.monotonic() };
+}
 const hosted = new WeakMap<ModuleOperationHost, ReturnType<typeof createHostedHourPreparation>>();
 export function hostedHourPreparation(host: ModuleOperationHost) {
   let value = hosted.get(host);
   if (value === undefined) {
-    value = createHostedHourPreparation(host);
+    value = createHostedHourPreparation(host, testClockOptions(host));
     hosted.set(host, value);
   }
   return value;

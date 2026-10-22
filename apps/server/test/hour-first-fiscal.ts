@@ -10,6 +10,8 @@ import { firstSetupModuleContext } from "../src/first-fiscal-evidence.js";
 import { mountSetup } from "../src/setup-api.js";
 import { ownedHourSetup } from "./owned-hour-setup.js";
 import { request, PASSWORD, MODULE } from "./first-fiscal.js";
+import { createHourTestClock, type HourTestClock } from "../src/testing/hour-test-clock.js";
+import type { Context } from "hono";
 
 export async function hourFirstFiscalFixture(options: {
   database: () => Database;
@@ -17,7 +19,11 @@ export async function hourFirstFiscalFixture(options: {
   modules?: readonly WaitronModule[];
   moduleConfig?: ModuleConfig;
   workspace?: { root: string; stateDir: string; venueDir: string };
+  clock?: HourTestClock;
+  /** Defaults to a browser on another device; a case about the box's own screen passes `() => true`. */
+  requestFromBox?: (c: Context) => boolean;
 }) {
+  const clock = options.clock ?? createHourTestClock(Date.now());
   const root = options.workspace?.root ?? (await mkdtemp(join(tmpdir(), "hour-first-fiscal-")));
   try {
     const stateDir = options.workspace?.stateDir ?? join(root, "state"),
@@ -31,11 +37,16 @@ export async function hourFirstFiscalFixture(options: {
       venueDir,
       modules,
       environment: {},
+      testClock: clock,
     });
     const app = new Hono();
     mountSetup(
       app,
-      { environment: options.environment ?? "production", firstFiscal: host },
+      {
+        environment: options.environment ?? "production",
+        firstFiscal: host,
+        requestFromBox: options.requestFromBox ?? (() => false),
+      },
       () => {},
     );
     const owned = await ownedHourSetup(
@@ -43,6 +54,8 @@ export async function hourFirstFiscalFixture(options: {
       "https://box.test",
       request,
       PASSWORD,
+      undefined,
+      clock,
     );
     const state = (await host.store.read())!;
     const ownerAttempt = {
@@ -58,6 +71,7 @@ export async function hourFirstFiscalFixture(options: {
       modules,
       ...(options.moduleConfig === undefined ? {} : { moduleConfig: options.moduleConfig }),
       host,
+      clock,
       store: host.store,
       ownerAttempt,
       context: firstSetupModuleContext(state, MODULE),
