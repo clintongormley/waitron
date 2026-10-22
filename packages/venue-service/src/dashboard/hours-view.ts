@@ -63,7 +63,7 @@ export function formatLongDate(date: LocalDate): string {
 }
 
 /** A date formatted with `options` in the dashboard's language, as the text before and after its
- *  day number: "Tuesday, " and " December 2026", or "martes, " and " de diciembre de 2026". */
+ *  day number. */
 export function dateAroundDay(
   date: LocalDate,
   options: Intl.DateTimeFormatOptions & { day: "numeric" },

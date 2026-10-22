@@ -1,16 +1,7 @@
 import type { Decimal } from "@waitron/shared";
 
-/**
- * The VAT regime a received invoice is treated under (mirrors the `purchase_regime` enum).
- * `general` = régimen general (deductible, on the 303); `equivalence_surcharge` = recargo de
- * equivalencia (non-deductible, off the 303 — excluded from the deducible aggregate).
- */
 export type PurchaseRegime = "general" | "equivalence_surcharge";
 
-/**
- * What a VAT line was spent on (mirrors the `purchase_vat_kind` enum): `ordinary` = current
- * operations (box 28/29); `capital` = investment goods (box 30/31).
- */
 export type PurchaseVatKind = "ordinary" | "capital";
 
 /** One per-rate VAT line of a received invoice. `tax` is the VAT amount (input VAT), filed verbatim. */
@@ -33,7 +24,7 @@ export interface PurchaseInvoice {
   receivedOn: string;
   total: Decimal;
   regime: PurchaseRegime;
-  /** Percentage 0–100 of the input VAT that is deductible (prorrata seam); default "100.00". */
+  /** Percentage 0–100 of the input VAT that is deductible (partial-deductibility seam); default "100.00". */
   deductibleProportion: Decimal;
   note: string | null;
   lines: PurchaseInvoiceLine[];

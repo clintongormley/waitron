@@ -15,7 +15,6 @@ export const diningTables = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     locationId: id("location_id").notNull(),
-    // The human id shown on the floor ("12", "Terraza 3").
     label: label("label").notNull(),
     zoneId: id("zone_id").notNull(),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),

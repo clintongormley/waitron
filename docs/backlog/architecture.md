@@ -563,11 +563,15 @@ until A977).
   derives other geography values (A833 landed: setup and the demo start only for a country with a
   pack). English provided. The ~33 staff and kitchen names with no English (`menu.ts`) and «Menú del
   Día» in an English slot (`menu.ts:840`) are fixed there. After A918.
-- **A974 — Bucket E and F: comments, identifiers, file names.** The audit's tables list them
-  (`apps/server`, `apps/dashboard`, `apps/till`, `packages/db` schema comments, `venue-service`,
-  `catalogue`, `purchasing`, `packages/ui/demo/main.ts`, setup's receipt-language names
-  `apps/setup/src/receipt-languages.ts:6–9`, which disagree with the venue screen, and
-  `packages/core/src/record-substitution.ts:43–67`). Low priority.
+- **A974 — remaining Bucket E and F sites.** Comments still need English in
+  `apps/server/src/working-order.ts`, `apps/dashboard/src/api/client.ts`, and the till's
+  `screens/till-ticket-view.ts`, `widgets/tender-pay.ts` and `widgets/station-queue.ts`.
+  Also open: identifiers and file names from the audit, `packages/ui/demo/main.ts`, setup's
+  `apps/setup/src/receipt-languages.ts` labels (which disagree with the venue screen), and the
+  `WAITRON_CERT_CHECK_NOMBRE` example in `apps/server/README.md`. The separate core-comment
+  [PR #1986](https://github.com/clintongormley/waitron/pull/1986) awaits the owner to land it.
+  The audit is historical; its other listed Bucket E comments have been removed or put in English.
+  Developer/demo script names remain A975's. Low priority.
 - **A975 — developer tools and demo scripts.** `apps/server/scripts/dev-setup.ts:213–316`, the
   `*-demo.ts` scripts, `cloud-integration-fixture.ts`, `receipt-look.ts`, the README's example values
   (`apps/server/README.md:152–156`). The demo seed itself is A972's. Low priority; A977 cannot scan

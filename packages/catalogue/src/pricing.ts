@@ -140,8 +140,7 @@ interface PricingRow {
   kitchenName?: string | null;
 }
 
-// Every entry point's gross arithmetic, so a locked-line filing cannot diverge from a walk-up's to
-// the céntimo. Do not reimplement this arithmetic in a caller.
+// Keep gross arithmetic shared between entry points; do not reimplement it in a caller.
 function grossRows(rows: readonly PricingRow[]): GrossLines {
   const lines = rows.map((row, i) => ({
     lineNo: i + 1,

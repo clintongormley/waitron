@@ -16,7 +16,7 @@ import { departments } from "./service.js";
 
 const calendarColour = enumType(CALENDAR_COLOURS);
 
-/** A department's named period, such as "Mañanas", with the menu its zones start on in it. */
+/** A department's named period with the menu its zones start on in it. */
 export const menuPeriods = table(
   "menu_periods",
   {

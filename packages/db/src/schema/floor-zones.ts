@@ -4,7 +4,7 @@ import { count, flag, id, label, newId, nowIso, table, tsString } from "./column
 import { locations } from "./tenants.js";
 
 /**
- * A venue-configured floor-plan ZONE — "Comedor", "Terraza", "Barra". A grouping the live floor
+ * A venue-configured floor-plan zone. A grouping the live floor
  * renders tables under: an authorable ROW (rename once, reorder, deactivate) rather than a value
  * re-typed onto every table. `dining_tables.zone_id` points at one of these.
  *
