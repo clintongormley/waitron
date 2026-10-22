@@ -338,6 +338,17 @@ describe("till-bill-refund-dialog: how much and why", () => {
     ]);
   });
 
+  it("empties the note when another reason is chosen", async () => {
+    const el = await mount({
+      reasons: [...reasons, voidReason("explain", "Explain", { noteRequired: true })],
+    });
+    await choose(el, "other");
+    await type(el, "note", "Spilled on the coat");
+    expect(field(el, "note")!.value).toBe("Spilled on the coat");
+    await choose(el, "explain");
+    expect(field(el, "note")!.value).toBe("");
+  });
+
   it("offers Retry when the reasons could not be read and asks the app to read them again", async () => {
     const el = await mount({ reasons: null });
     const retried = capture<unknown>(el, "bill-refund-reasons");
@@ -404,6 +415,22 @@ describe("till-bill-refund-dialog: the server's refusals", () => {
     expect(field(el, "reason")!.error).toBe(codeMessage("management.request_invalid"));
     await choose(el, "twice");
     expect(field(el, "reason")!.error).toBe("");
+  });
+
+  it("puts a refusal of the reason under the note while Other is chosen, and drops it when another reason is chosen", async () => {
+    const el = await mount({
+      reasons: [...reasons, voidReason("explain", "Explain", { noteRequired: true })],
+    });
+    await choose(el, "other");
+    await type(el, "note", "Spilled on the coat");
+    el.refusal = { code: "management.request_invalid", field: "reason" };
+    await el.updateComplete;
+    expect(field(el, "note")!.error).toBe(codeMessage("management.request_invalid"));
+    expect(field(el, "reason")!.error).toBe("");
+
+    await choose(el, "explain");
+    expect(field(el, "note")!.error).not.toBe(codeMessage("management.request_invalid"));
+    expect(actions(el).error).not.toContain(codeMessage("management.request_invalid"));
   });
 
   it("puts a refused amount above the action when the whole payment is given back, and a refusal naming another field there too", async () => {
