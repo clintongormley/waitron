@@ -15,7 +15,6 @@ import {
 import { get as httpsGet } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { rm } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -268,8 +267,11 @@ describe("the Box status read and free-space deletion on a real full disk", () =
 
   afterAll(async () => {
     disk?.unfill();
-    await store?.close();
-    if (root !== undefined) await rm(root, { recursive: true, force: true });
+    try {
+      await store?.close();
+    } finally {
+      if (root !== undefined) rmSync(root, { recursive: true, force: true });
+    }
   });
 
   const health = (cookie: string, passive = false) =>
@@ -316,6 +318,9 @@ describe("the Box status read and free-space deletion on a real full disk", () =
       expect(body.disk.stoppedSince).not.toBeNull();
     }
     expect(lastSeen()).toBe(before);
+    expect(db.all<{ id: string }>(sql`select id from change_log where id = 'bs1'`)).toEqual([
+      { id: "bs1" },
+    ]);
   });
 
   it("a manager's ordinary alert read answers on a full disk with a change waiting", async (ctx) => {
