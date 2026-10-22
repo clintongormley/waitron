@@ -67,8 +67,7 @@ async function allocateToCancels(
       cancel.action !== "cancel" ||
       !cancel.refundHandoff ||
       cancel.refundValue === null ||
-      sale?.workingOrderId == null ||
-      cancel.workingOrderId !== sale.workingOrderId
+      cancel.workingOrderId !== sale?.workingOrderId
     )
       throw invalid("cancellationIds");
     const open = Math.max(0, decimalToCents(cancel.refundValue) - decimalToCents(cancel.linked));
