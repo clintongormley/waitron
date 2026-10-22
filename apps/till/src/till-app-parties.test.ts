@@ -12081,13 +12081,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       expect(api.finishTable).toHaveBeenCalledTimes(2);
       emit(tableOrder(el)!, "logout");
       await flush(el);
-      const warning = el.shadowRoot!.querySelector("wt-unsaved-changes");
-      if (warning?.open) {
-        await warning.updateComplete;
-        warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-        await expect.poll(() => warning.open).toBe(false);
-        await flush(el);
-      }
+      expect(el.shadowRoot!.querySelector("wt-unsaved-changes")?.open ?? false).toBe(false);
       emit(lock(el), "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
       await flush(el, 8);
       const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
@@ -12135,6 +12129,14 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       expect(finishDialog(el)!.dishes).toEqual([changed]);
       expect(finishDialog(el)!.collectPending).toBe(false);
       expect(toast(el)?.open ?? false).toBe(false);
+      await collect(el);
+      expect(finish).toHaveBeenCalledTimes(3);
+      expect(finish.mock.calls[2]![3]).toEqual({
+        submissionId: expect.any(String),
+        collect: { bills: [{ billId: "wo-check", expectedBillRevision: 6 }] },
+      });
+      expect(finish.mock.calls[2]![3].submissionId).not.toBe(finish.mock.calls[1]![3].submissionId);
+      expect(tableOrder(el)).toBeNull();
     });
 
     it("shows a refusal in the dialog", async () => {
@@ -12142,12 +12144,13 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         finishTable: vi
           .fn()
           .mockRejectedValueOnce(refusal(rows))
-          .mockRejectedValue({ code: "station.no_default", locationId: "l1" }),
+          .mockRejectedValue({ code: "allergy.unanswered" }),
       });
       await openFinish(el);
       await collect(el);
       expect(api.finishTable).toHaveBeenCalledTimes(2);
-      expect(finishDialog(el)!.refusal).toBe(codeMessage("station.no_default"));
+      expect(codeMessage("allergy.unanswered")).not.toBe(codeMessage("server.internal"));
+      expect(finishDialog(el)!.refusal).toBe(codeMessage("allergy.unanswered"));
       expect(finishDialog(el)!.busy).toBe(false);
       expect(finishDialog(el)!.collectPending).toBe(false);
       expect(finishDialog(el)!.confirmationLocked).toBe(false);
