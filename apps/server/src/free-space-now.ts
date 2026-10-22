@@ -115,7 +115,6 @@ export function createSpaceFreer(
     const removal = await deleteLeftovers(deps);
     const free = await freeBytes(deps.venueDir, deps.statfs);
     deps.space.record(free, deps.now());
-    // The fresh reading lets a noted full-disk stop lift now rather than at the next watch tick.
     if (deps.disk.noted()) await deps.disk.full();
     deps.log("info", "storage.space_freed", { ...removal, personId });
     return { ...removal, freeBytes: free };

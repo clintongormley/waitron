@@ -570,6 +570,7 @@ describe("createSpaceFreer", () => {
       noted?: boolean;
       statfs?: () => Promise<{ bavail: number; frsize: number }>;
       remove?: LeftoverDeps["remove"];
+      full?: () => Promise<boolean>;
     } = {},
   ) {
     const order: string[] = [];
@@ -592,9 +593,10 @@ describe("createSpaceFreer", () => {
       disk: {
         noted: () => options.noted ?? false,
         async full() {
-          order.push("full");
           fullCalls += 1;
-          return false;
+          const answer = options.full === undefined ? false : await options.full();
+          order.push("full");
+          return answer;
         },
       },
       statfs: options.statfs ?? statfs,
@@ -665,6 +667,82 @@ describe("createSpaceFreer", () => {
     expect(c.freedBytes).toBe(10);
     expect(removes).toBe(4);
     expect(f.freedCalls()).toBe(2);
+  });
+
+  it("a press that arrives part-way through a deletion shares it", async () => {
+    await stagingFiles();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let reached!: () => void;
+    const firstRemove = new Promise<void>((resolve) => (reached = resolve));
+    let removes = 0;
+    const f = freer({
+      remove: async (path, opts) => {
+        removes += 1;
+        reached();
+        await held;
+        await rm(path, opts);
+      },
+    });
+    const first = f.free("person-1");
+    await firstRemove;
+    expect(removes).toBe(1);
+    const second = f.free("person-2");
+    release();
+    expect(await second).toBe(await first);
+    expect(removes).toBe(3);
+    expect(f.freedCalls()).toBe(1);
+  });
+
+  it("a deletion that throws frees the slot, still calls onFreed, and the next press runs anew", async () => {
+    await stagingFiles();
+    let throws = true;
+    const f = freer({
+      noted: true,
+      full: async () => {
+        if (throws) throw new Error("full check failed");
+        return false;
+      },
+    });
+    const first = f.free("person-1");
+    const second = f.free("person-2");
+    await expect(first).rejects.toThrow("full check failed");
+    await expect(second).rejects.toThrow("full check failed");
+    expect(f.freedCalls()).toBe(1);
+
+    throws = false;
+    await file(join(stagingDir, DUMP), 10);
+    const next = await f.free("person-3");
+    expect(next.freedBytes).toBe(10);
+    expect(f.fullCalls()).toBe(2);
+    expect(f.freedCalls()).toBe(2);
+  });
+
+  it("does not answer until a noted stop's re-check has finished", async () => {
+    await stagingFiles();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let reached!: () => void;
+    const checking = new Promise<void>((resolve) => (reached = resolve));
+    const f = freer({
+      noted: true,
+      full: async () => {
+        reached();
+        await held;
+        return false;
+      },
+    });
+    let answered = false;
+    const pending = f.free("person-1").then((answer) => {
+      answered = true;
+      return answer;
+    });
+    await checking;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(answered).toBe(false);
+    release();
+    await pending;
+    expect(answered).toBe(true);
   });
 
   it("logs one storage.space_freed line naming the first caller", async () => {
