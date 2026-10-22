@@ -14,6 +14,7 @@ import {
   type PersonRoleValue,
 } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import type { AlertSource } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError, jobOrigin } from "@waitron/shared";
 import { mountAlertsApi } from "./alerts-api.js";
@@ -60,7 +61,7 @@ beforeEach(async () => {
   );
 });
 
-function appFor(db: Database): Hono {
+function appFor(db: Database, sources: readonly AlertSource[] = []): Hono {
   const app = new Hono();
   app.use("*", async (c, next) => {
     if (c.req.method === "GET" && c.req.header("x-waitron-live") === "1") {
@@ -71,7 +72,7 @@ function appFor(db: Database): Hono {
     app,
     {
       db,
-      registry: createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [] }),
+      registry: createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources }),
       now: () => NOW,
     },
     () => {},
@@ -118,6 +119,29 @@ function writeRefusingDb(refusal: () => Error = () => new AppError("storage.disk
             if (changes() !== before) throw refusal();
             return value;
           });
+      }
+      const value = Reflect.get(target, prop, target) as unknown;
+      return typeof value === "function"
+        ? (value as (...args: unknown[]) => unknown).bind(target)
+        : value;
+    },
+  });
+}
+
+/** A disk so full that a request's first write turn is refused before its body runs; later turns
+ * pass, so every request that reaches the full-disk retry is answered by the retry alone. */
+function firstTurnRefusingDb(): Database {
+  let refused = false;
+  return new Proxy(suite.db, {
+    get(target, prop) {
+      if (prop === "withWriteLock") {
+        return <T>(body: () => Promise<T>) => {
+          if (!refused) {
+            refused = true;
+            return Promise.reject(new AppError("storage.disk_full", {}));
+          }
+          return target.withWriteLock(body);
+        };
       }
       const value = Reflect.get(target, prop, target) as unknown;
       return typeof value === "function"
@@ -190,15 +214,19 @@ describe("on a full disk", () => {
 
 describe.each([
   ["with room", () => suite.db],
-  ["on a full disk", () => writeRefusingDb()],
+  ["on a full disk that refuses the stamp", () => writeRefusingDb()],
+  ["on a full disk, answered by the retry alone", () => firstTurnRefusingDb()],
 ])("refusals %s", (_label, db) => {
+  // A fresh database per request, so the stand-in refuses each request's own first turn.
+  const requests = (cookie: string | undefined) => [
+    () => get(appFor(db()), ALERTS, cookie),
+    () => get(appFor(db()), ALERTS, cookie, true),
+    () => get(appFor(db()), HANDLED, cookie),
+  ];
+
   async function expectRefused(cookie: string | undefined, status: number, code: string) {
-    const app = appFor(db());
-    for (const response of [
-      await get(app, ALERTS, cookie),
-      await get(app, ALERTS, cookie, true),
-      await get(app, HANDLED, cookie),
-    ]) {
+    for (const request of requests(cookie)) {
+      const response = await request();
       expect(response.status).toBe(status);
       expect(((await response.json()) as { error: { code: string } }).error.code).toBe(code);
     }
@@ -231,9 +259,47 @@ describe.each([
   });
 
   it("shows nothing to a person holding no alert permission", async () => {
-    const response = await get(appFor(db()), ALERTS, supervisor.cookie);
+    for (const request of requests(supervisor.cookie)) {
+      const response = await request();
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ visible: false, alerts: [] });
+    }
+  });
+});
+
+describe("answered by the full-disk retry alone", () => {
+  const backupSource: AlertSource = {
+    area: "backup",
+    permission: "system.manage",
+    async read({ tx, now }) {
+      const named = await tx
+        .select({ id: persons.id })
+        .from(persons)
+        .where(eq(persons.displayName, "Marta"));
+      return named.map(() => ({
+        key: "backup.stream_behind",
+        code: "backup.stream_behind",
+        params: {},
+        severity: "warning" as const,
+        since: now.toISOString(),
+      }));
+    },
+  };
+
+  it("a manager's ordinary read lists the incidents and what an alert source reads", async () => {
+    const seeded = minuteAgo();
+    await setLastSeen(manager, seeded);
+    const response = await get(
+      appFor(firstTurnRefusingDb(), [backupSource]),
+      ALERTS,
+      manager.cookie,
+    );
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ visible: false, alerts: [] });
+    expect((await codes(response)).sort()).toEqual([
+      "backup.stream_behind",
+      "fiscal.registro_rechazado",
+    ]);
+    expect(await lastSeen(manager)).toBe(seeded.toISOString());
   });
 });
 

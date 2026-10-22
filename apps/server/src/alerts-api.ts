@@ -53,7 +53,7 @@ export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): voi
       const now = deps.now();
       const sessionId = requireManagementSession(c);
       const readAs = async (tx: Transaction, touch: boolean) => {
-        const session = await resolveManagementSession(tx, sessionId, touch ? {} : { touch });
+        const session = await resolveManagementSession(tx, sessionId, { touch });
         const held: ReadonlySet<string> = new Set(permissionsForRole(session.role));
         if (!alertsVisible(deps.registry, held)) return { visible: false, alerts: [], held };
         const alerts = await read(tx, { registry: deps.registry, now, log }, held);
