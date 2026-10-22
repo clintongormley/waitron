@@ -10,12 +10,13 @@ describe("ADJUSTMENTS_CLASSIFICATION", () => {
       ["adjustment_reasons", "state", undefined],
       ["adjustments", "ledger", true],
       ["adjustment_settings", "state", undefined],
+      ["adjustment_refunds", "ledger", true],
     ]);
     expect(ADJUSTMENTS_CLASSIFICATION.every((entry) => entry.reason.trim().length > 0)).toBe(true);
   });
 
   it("carries the append-only table in the migration set a suite hands useVenueDb", () => {
-    expect(ADJUSTMENTS_MIGRATIONS.appendOnlyTables).toEqual(["adjustments"]);
+    expect(ADJUSTMENTS_MIGRATIONS.appendOnlyTables).toEqual(["adjustments", "adjustment_refunds"]);
   });
 
   it("feeds a change for each classified table, under the table's own name", () => {
@@ -23,6 +24,7 @@ describe("ADJUSTMENTS_CLASSIFICATION", () => {
       { table: "adjustment_reasons", type: "adjustment_reasons" },
       { table: "adjustments", type: "adjustments" },
       { table: "adjustment_settings", type: "adjustment_settings" },
+      { table: "adjustment_refunds", type: "adjustment_refunds" },
     ]);
   });
 });

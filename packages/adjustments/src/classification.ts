@@ -17,6 +17,11 @@ export const ADJUSTMENTS_CLASSIFICATION: readonly ClassifiedTable[] = [
     "state",
     "venue discount limit an owner edits; copied to a standby, never drained back",
   ),
+  appendOnly(
+    "adjustment_refunds",
+    "ledger",
+    "which cancelled dishes a refund paid back, and how much of it; nothing may change or remove it",
+  ),
 ];
 
 export const ADJUSTMENTS_CHANGE_SOURCES: readonly ChangeSource[] = ADJUSTMENTS_CLASSIFICATION.map(

@@ -4,6 +4,11 @@ import { CORE_MIGRATIONS, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { validateBackupVerificationContribution } from "@waitron/module";
+import { seedVenue } from "@waitron/reporting/test/fixtures.js";
+import {
+  seedRefundableSale,
+  seedTenderRefund,
+} from "@waitron/reporting/test/tender-refund-fixtures.js";
 import { ADJUSTMENTS_BACKUP_VERIFICATION as OWNER } from "./index.js";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { ADJUSTMENTS_CLASSIFICATION } from "./classification.js";
@@ -86,6 +91,28 @@ async function corrupt(db: Database, statement: string) {
     db.run(sql`pragma foreign_keys=on`);
     for (const row of triggers) db.run(sql.raw(row.sql));
   }
+}
+/** A €3.00 link from one refund, under the same ids in each copy, to the seeded cancel. */
+async function seedRefundLink(db: Database) {
+  const venue = await seedVenue(db);
+  const sale = await seedRefundableSale(db, venue, {
+    method: "cash",
+    applied: "10.00",
+    tip: "0.00",
+    at: "2026-10-20T08:00:00.000Z",
+    invoiceNumber: 1,
+  });
+  const refundId = await seedTenderRefund(db, sale, {
+    applied: "3.00",
+    tip: "0.00",
+    state: "completed",
+    createdAt: "2026-10-20T08:00:00.000Z",
+    at: "2026-10-20T08:00:00.000Z",
+  });
+  await corrupt(db, `update tender_refunds set id='refund' where id='${refundId}'`);
+  db.run(
+    sql`insert into adjustment_refunds (id,adjustment_id,tender_refund_id,amount,created_at) values ('link','adjustment','refund',300,'2026-10-20T08:00:00.000Z')`,
+  );
 }
 function hideTable(table: string) {
   return (q: BackupQuery): BackupQuery => ({
@@ -172,7 +199,12 @@ describe("adjustment backup evidence", () => {
     expect((await run({ sourceSchema: 0 })).status).toBe("invalid");
   });
   it("accepts honest empty target-only data and refuses invented state", async () => {
-    for (const table of ["adjustments", "adjustment_reasons", "adjustment_settings"])
+    for (const table of [
+      "adjustment_refunds",
+      "adjustments",
+      "adjustment_reasons",
+      "adjustment_settings",
+    ])
       await corrupt(restored.db, `delete from "${table}"`);
     expect(await run({ absent: true, sourceSchema: 0 })).toEqual(passed);
     restored.db.run(
@@ -203,6 +235,15 @@ describe("adjustment backup evidence", () => {
       );
       original.db.run(sql`alter table adjustments add column refund_value integer`);
     }
+  });
+  it.each([
+    "update adjustment_refunds set amount=100",
+    "update adjustment_refunds set created_at='2026-10-21T00:00:00.000Z'",
+  ])("refuses a changed link from a refund to a cancel: %s", async (change) => {
+    for (const db of [original.db, restored.db]) await seedRefundLink(db);
+    expect(await run()).toEqual(passed);
+    await corrupt(restored.db, change);
+    expect((await run()).status).toBe("invalid");
   });
   it("keeps query failures distinct from corruption", async () => {
     const failure = new Error("private unavailable read");
