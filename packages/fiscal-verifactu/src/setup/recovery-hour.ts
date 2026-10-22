@@ -11,6 +11,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import {
   ClockWait,
+  clockWaitStrings,
+  dateTimeFormat,
   readClocks,
   record,
   renderClockProblem,
@@ -29,6 +31,62 @@ interface Selected {
   identity: string;
   input: unknown;
 }
+const strings = {
+  en: {
+    ...clockWaitStrings.en,
+    heading: "Recover this box",
+    stopped: "The old box is stopped and will stay offline.",
+    sole: "I am the only person recovering this taxpayer, across all venues.",
+    compare: "Compare clocks",
+    select: "Make the series",
+    again: "Check again",
+    readings: "Clock comparison",
+    box: "Box",
+    browser: "Browser",
+    internet: "Internet",
+    unavailable: "Unavailable",
+    failed: "Check the fields and compare clocks again.",
+    missing: "Complete recovery before continuing.",
+    key: "Check the key for this backup.",
+    chosen: "Series name",
+    blocked: "Box time precedes this Waitron release.",
+    rangeBlocked: "This date is outside the range of series names.",
+    secondClockDo:
+      "Connect the box to the internet, or open this page on a phone or laptop on the venue's network that has the backup.",
+    secondClockEnds:
+      "It carries on by itself once the box reaches the internet, or on the other device if you carry on there.",
+    differDo:
+      "Try from another phone or laptop that has the backup. If they still differ, the box's time may be wrong: ask for help.",
+    clear: "Clear",
+  },
+  es: {
+    ...clockWaitStrings.es,
+    heading: "Recuperar esta caja",
+    stopped: "La caja anterior está apagada y seguirá desconectada.",
+    sole: "Soy la única persona recuperando este contribuyente, en todos sus locales.",
+    compare: "Comparar relojes",
+    select: "Crear las series",
+    again: "Comprobar otra vez",
+    readings: "Comparación de relojes",
+    box: "Caja",
+    browser: "Navegador",
+    internet: "Internet",
+    unavailable: "No disponible",
+    failed: "Revisa los campos y vuelve a comparar los relojes.",
+    missing: "Completa la recuperación antes de continuar.",
+    key: "Revisa la clave de esta copia.",
+    chosen: "Nombre de las series",
+    blocked: "La hora de la caja es anterior a esta versión de Waitron.",
+    rangeBlocked: "Esta fecha está fuera del rango de nombres de serie.",
+    secondClockDo:
+      "Conecta el equipo a internet, o abre esta página desde un móvil o un portátil del local que tenga la copia.",
+    secondClockEnds:
+      "Sigue sola cuando el equipo tenga internet, o en el otro aparato si sigues allí.",
+    differDo:
+      "Prueba desde otro móvil o portátil que tenga la copia. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.",
+    clear: "Borrar",
+  },
+};
 @customElement("vf-recovery-hour")
 export class RecoveryHourEntry extends LitElement {
   static override styles = [
@@ -278,86 +336,11 @@ export class RecoveryHourEntry extends LitElement {
   }
   override render() {
     const en = this.locale === "en";
-    const words = en
-      ? {
-          heading: "Recover this box",
-          stopped: "The old box is stopped and will stay offline.",
-          sole: "I am the only person recovering this taxpayer, across all venues.",
-          compare: "Compare clocks",
-          select: "Make the series",
-          again: "Check again",
-          readings: "Clock comparison",
-          box: "Box",
-          browser: "Browser",
-          internet: "Internet",
-          unavailable: "Unavailable",
-          failed: "Check the fields and compare clocks again.",
-          missing: "Complete recovery before continuing.",
-          key: "Check the key for this backup.",
-          chosen: "Series name",
-          blocked: "Box time precedes this Waitron release.",
-          rangeBlocked: "This date is outside the range of series names.",
-          whyWait: "Waiting to confirm the time, so no invoice series is ever repeated.",
-          nothingToDo: "Nothing to do; keep this page open.",
-          continuesIn: "Continues in",
-          whySecondClock:
-            "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's.",
-          onBox: "This screen is on the box itself, so it does not count.",
-          secondClockDo:
-            "Connect the box to the internet, or open this page on a phone or laptop on the venue's network that has the backup.",
-          secondClockEnds:
-            "It carries on by itself once the box reaches the internet, or on the other device if you carry on there.",
-          whyRefused: "No series is made without a confirmed time, so none is ever repeated.",
-          differ: "This box's time and this device's differ by more than 30 seconds.",
-          differDo:
-            "Try from another phone or laptop that has the backup. If they still differ, the box's time may be wrong: ask for help.",
-          later: "The series cannot be made yet: a later minute is already in use.",
-          laterFrom: (time: string) => `You can carry on from ${time}.`,
-          clear: "Clear",
-        }
-      : {
-          heading: "Recuperar esta caja",
-          stopped: "La caja anterior está apagada y seguirá desconectada.",
-          sole: "Soy la única persona recuperando este contribuyente, en todos sus locales.",
-          compare: "Comparar relojes",
-          select: "Crear las series",
-          again: "Comprobar otra vez",
-          readings: "Comparación de relojes",
-          box: "Caja",
-          browser: "Navegador",
-          internet: "Internet",
-          unavailable: "No disponible",
-          failed: "Revisa los campos y vuelve a comparar los relojes.",
-          missing: "Completa la recuperación antes de continuar.",
-          key: "Revisa la clave de esta copia.",
-          chosen: "Nombre de las series",
-          blocked: "La hora de la caja es anterior a esta versión de Waitron.",
-          rangeBlocked: "Esta fecha está fuera del rango de nombres de serie.",
-          whyWait: "Esperamos a confirmar la hora para que ninguna serie de facturas se repita.",
-          nothingToDo: "No hace falta hacer nada; deja esta página abierta.",
-          continuesIn: "Sigue en",
-          whySecondClock:
-            "Para que ninguna serie de facturas se repita, la hora del equipo se compara con la de otro aparato o con internet.",
-          onBox: "Esta pantalla está en el propio equipo y no cuenta.",
-          secondClockDo:
-            "Conecta el equipo a internet, o abre esta página desde un móvil o un portátil del local que tenga la copia.",
-          secondClockEnds:
-            "Sigue sola cuando el equipo tenga internet, o en el otro aparato si sigues allí.",
-          whyRefused: "Sin una hora confirmada no se crean series, para que ninguna se repita.",
-          differ:
-            "La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos).",
-          differDo:
-            "Prueba desde otro móvil o portátil que tenga la copia. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.",
-          later:
-            "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
-          laterFrom: (time: string) => `Podrás seguir a partir de las ${time}.`,
-          clear: "Borrar",
-        };
+    const words = en ? strings.en : strings.es;
     const format = (ms: number) =>
-      new Intl.DateTimeFormat(en ? "en-GB" : "es-ES", {
+      dateTimeFormat(en ? "en" : "es", this.context.selection.timeZone, {
         dateStyle: "medium",
         timeStyle: "long",
-        timeZone: this.context.selection.timeZone,
       }).format(ms);
     const utc = (ms: number) => new Date(ms).toISOString();
     const clock = this.comparison?.clock;

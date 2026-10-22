@@ -32,6 +32,52 @@ export interface ClockWaitAnswer {
   remainingMs: number;
 }
 
+/** The wait words both setup pages share; each page adds the three that name its own devices. */
+export const clockWaitStrings = {
+  en: {
+    whyWait: "Waiting to confirm the time, so no invoice series is ever repeated.",
+    nothingToDo: "Nothing to do; keep this page open.",
+    continuesIn: "Continues in",
+    whySecondClock:
+      "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's.",
+    onBox: "This screen is on the box itself, so it does not count.",
+    whyRefused: "No series is made without a confirmed time, so none is ever repeated.",
+    differ: "This box's time and this device's differ by more than 30 seconds.",
+    later: "The series cannot be made yet: a later minute is already in use.",
+    laterFrom: (time: string) => `You can carry on from ${time}.`,
+  },
+  es: {
+    whyWait: "Esperamos a confirmar la hora para que ninguna serie de facturas se repita.",
+    nothingToDo: "No hace falta hacer nada; deja esta página abierta.",
+    continuesIn: "Sigue en",
+    whySecondClock:
+      "Para que ninguna serie de facturas se repita, la hora del equipo se compara con la de otro aparato o con internet.",
+    onBox: "Esta pantalla está en el propio equipo y no cuenta.",
+    whyRefused: "Sin una hora confirmada no se crean series, para que ninguna se repita.",
+    differ: "La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos).",
+    later:
+      "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
+    laterFrom: (time: string) => `Podrás seguir a partir de las ${time}.`,
+  },
+} satisfies Record<"en" | "es", Omit<ClockWords, "secondClockDo" | "secondClockEnds" | "differDo">>;
+
+const formats = new Map<string, Intl.DateTimeFormat>();
+
+/** One formatter per language, zone and style, rather than one per redraw of a counting page. */
+export function dateTimeFormat(
+  locale: "en" | "es",
+  timeZone: string,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const key = JSON.stringify([locale, timeZone, options]);
+  let format = formats.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "es-ES", { ...options, timeZone });
+    formats.set(key, format);
+  }
+  return format;
+}
+
 export const SECOND_CLOCK_POLL_MS = 15_000;
 
 export const record = (value: unknown): value is Record<string, unknown> =>
@@ -216,11 +262,10 @@ export function renderClockProblem(
     const time =
       problem.allowedFromMs === undefined
         ? undefined
-        : new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "es-ES", {
+        : dateTimeFormat(locale, timeZone, {
             hour: "2-digit",
             minute: "2-digit",
             hourCycle: "h23",
-            timeZone,
           }).format(problem.allowedFromMs);
     return html`<p role="status" data-test="minute-not-later">
       ${words.later}${time === undefined ? nothing : html` ${words.laterFrom(time)}`}

@@ -14,6 +14,8 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import {
   ClockWait,
   clockProblem,
+  clockWaitStrings,
+  dateTimeFormat,
   readClocks,
   record,
   renderClockProblem,
@@ -46,6 +48,94 @@ interface Selected {
   };
 }
 const empty = (): Draft => ({ reviewed: false, recoveryRevision: 0 });
+const regionNames = new Map<string, Intl.DisplayNames>();
+function regionName(language: "en" | "es", region: string): string | undefined {
+  let names = regionNames.get(language);
+  if (!names) {
+    names = new Intl.DisplayNames([language], { type: "region" });
+    regionNames.set(language, names);
+  }
+  return names.of(region);
+}
+const strings = {
+  en: {
+    ...clockWaitStrings.en,
+    heading: "Check this venue",
+    environment: "Environment",
+    production: "Production",
+    preproduction: "Preproduction",
+    country: "Country",
+    place: "Place",
+    zone: "Time zone",
+    now: "Box time",
+    taxId: "Taxpayer NIF",
+    review: "The country, place, time zone and displayed time are correct.",
+    compare: "Check again",
+    select: "Make the series",
+    readings: "Clock comparison",
+    agreed: "Clocks agree.",
+    box: "Box",
+    browser: "Browser",
+    internet: "Internet",
+    unavailable: "Unavailable",
+    blocked: "Box time precedes this Waitron release.",
+    range: "This date is outside the range of series names.",
+    secondClockDo:
+      "Connect the box to the internet, or open this page on a phone or till on the venue's network and enter the setup password.",
+    secondClockEnds:
+      "It carries on by itself once the box reaches the internet, or on the phone if you carry on there.",
+    differDo:
+      "Try from another phone or till. If they still differ, the box's time may be wrong: ask for help.",
+    chosen: "Series name",
+    failed: "Could not complete this step. Check again.",
+    next: "Keep your recovery PDF.",
+    pdf: "Prepare recovery PDF",
+    download: "Download PDF",
+    print: "Open to print",
+    kept: "I kept the recovery PDF.",
+    confirmKept: "Continue",
+    complete: "Recovery PDF confirmed.",
+    replace: "Replace recovery key",
+  },
+  es: {
+    ...clockWaitStrings.es,
+    heading: "Comprueba este local",
+    environment: "Entorno",
+    production: "Producción",
+    preproduction: "Preproducción",
+    country: "País",
+    place: "Lugar",
+    zone: "Zona horaria",
+    now: "Hora de la caja",
+    taxId: "NIF del contribuyente",
+    review: "El país, lugar, zona horaria y hora mostrada son correctos.",
+    compare: "Comprobar otra vez",
+    select: "Crear las series",
+    readings: "Comparación de relojes",
+    agreed: "Los relojes coinciden.",
+    box: "Caja",
+    browser: "Navegador",
+    internet: "Internet",
+    unavailable: "No disponible",
+    blocked: "La hora de la caja es anterior a esta versión de Waitron.",
+    range: "Esta fecha está fuera del rango de nombres de serie.",
+    secondClockDo:
+      "Conecta el equipo a internet, o abre esta página desde un móvil o una caja del local y escribe la contraseña de la configuración.",
+    secondClockEnds: "Sigue sola cuando el equipo tenga internet, o en el móvil si sigues allí.",
+    differDo:
+      "Prueba desde otro móvil o caja. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.",
+    chosen: "Nombre de las series",
+    failed: "No se pudo completar este paso. Comprueba de nuevo.",
+    next: "Guarda el PDF de recuperación.",
+    pdf: "Preparar PDF de recuperación",
+    download: "Descargar PDF",
+    print: "Abrir para imprimir",
+    kept: "He guardado el PDF de recuperación.",
+    confirmKept: "Continuar",
+    complete: "PDF de recuperación confirmado.",
+    replace: "Sustituir clave de recuperación",
+  },
+};
 @customElement("vf-first-setup-hour")
 export class FirstSetupHour extends LitElement {
   static override styles = [
@@ -358,112 +448,13 @@ export class FirstSetupHour extends LitElement {
   }
   override render() {
     const en = this.locale === "en";
-    const t = en
-      ? {
-          heading: "Check this venue",
-          environment: "Environment",
-          production: "Production",
-          preproduction: "Preproduction",
-          country: "Country",
-          place: "Place",
-          zone: "Time zone",
-          now: "Box time",
-          taxId: "Taxpayer NIF",
-          review: "The country, place, time zone and displayed time are correct.",
-          compare: "Check again",
-          select: "Make the series",
-          readings: "Clock comparison",
-          agreed: "Clocks agree.",
-          box: "Box",
-          browser: "Browser",
-          internet: "Internet",
-          unavailable: "Unavailable",
-          blocked: "Box time precedes this Waitron release.",
-          range: "This date is outside the range of series names.",
-          whyWait: "Waiting to confirm the time, so no invoice series is ever repeated.",
-          nothingToDo: "Nothing to do; keep this page open.",
-          continuesIn: "Continues in",
-          whySecondClock:
-            "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's.",
-          onBox: "This screen is on the box itself, so it does not count.",
-          secondClockDo:
-            "Connect the box to the internet, or open this page on a phone or till on the venue's network and enter the setup password.",
-          secondClockEnds:
-            "It carries on by itself once the box reaches the internet, or on the phone if you carry on there.",
-          whyRefused: "No series is made without a confirmed time, so none is ever repeated.",
-          differ: "This box's time and this device's differ by more than 30 seconds.",
-          differDo:
-            "Try from another phone or till. If they still differ, the box's time may be wrong: ask for help.",
-          later: "The series cannot be made yet: a later minute is already in use.",
-          laterFrom: (time: string) => `You can carry on from ${time}.`,
-          chosen: "Series name",
-          failed: "Could not complete this step. Check again.",
-          next: "Keep your recovery PDF.",
-          pdf: "Prepare recovery PDF",
-          download: "Download PDF",
-          print: "Open to print",
-          kept: "I kept the recovery PDF.",
-          confirmKept: "Continue",
-          complete: "Recovery PDF confirmed.",
-          replace: "Replace recovery key",
-        }
-      : {
-          heading: "Comprueba este local",
-          environment: "Entorno",
-          production: "Producción",
-          preproduction: "Preproducción",
-          country: "País",
-          place: "Lugar",
-          zone: "Zona horaria",
-          now: "Hora de la caja",
-          taxId: "NIF del contribuyente",
-          review: "El país, lugar, zona horaria y hora mostrada son correctos.",
-          compare: "Comprobar otra vez",
-          select: "Crear las series",
-          readings: "Comparación de relojes",
-          agreed: "Los relojes coinciden.",
-          box: "Caja",
-          browser: "Navegador",
-          internet: "Internet",
-          unavailable: "No disponible",
-          blocked: "La hora de la caja es anterior a esta versión de Waitron.",
-          range: "Esta fecha está fuera del rango de nombres de serie.",
-          whyWait: "Esperamos a confirmar la hora para que ninguna serie de facturas se repita.",
-          nothingToDo: "No hace falta hacer nada; deja esta página abierta.",
-          continuesIn: "Sigue en",
-          whySecondClock:
-            "Para que ninguna serie de facturas se repita, la hora del equipo se compara con la de otro aparato o con internet.",
-          onBox: "Esta pantalla está en el propio equipo y no cuenta.",
-          secondClockDo:
-            "Conecta el equipo a internet, o abre esta página desde un móvil o una caja del local y escribe la contraseña de la configuración.",
-          secondClockEnds:
-            "Sigue sola cuando el equipo tenga internet, o en el móvil si sigues allí.",
-          whyRefused: "Sin una hora confirmada no se crean series, para que ninguna se repita.",
-          differ:
-            "La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos).",
-          differDo:
-            "Prueba desde otro móvil o caja. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.",
-          later:
-            "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
-          laterFrom: (time: string) => `Podrás seguir a partir de las ${time}.`,
-          chosen: "Nombre de las series",
-          failed: "No se pudo completar este paso. Comprueba de nuevo.",
-          next: "Guarda el PDF de recuperación.",
-          pdf: "Preparar PDF de recuperación",
-          download: "Descargar PDF",
-          print: "Abrir para imprimir",
-          kept: "He guardado el PDF de recuperación.",
-          confirmKept: "Continuar",
-          complete: "PDF de recuperación confirmado.",
-          replace: "Sustituir clave de recuperación",
-        };
+    const t = en ? strings.en : strings.es;
     const venue = this.context.venue,
       clock = this.comparison?.clock;
     const format = (ms: number) =>
-      new Intl.DateTimeFormat(en ? "en-GB" : "es-ES", {
+      dateTimeFormat(en ? "en" : "es", venue.location.timeZone, {
         dateStyle: "full",
         timeStyle: "long",
-        timeZone: venue.location.timeZone,
       }).format(ms);
     const box = clock?.usable.find((r) => r.source === "box");
     const result = this.#wait.result;
@@ -474,7 +465,7 @@ export class FirstSetupHour extends LitElement {
         <dt>${t.environment}</dt>
         <dd>${t[this.context.environment]}</dd>
         <dt>${t.country}</dt>
-        <dd>${new Intl.DisplayNames([en ? "en" : "es"], { type: "region" }).of(venue.country)}</dd>
+        <dd>${regionName(en ? "en" : "es", venue.country)}</dd>
         <dt>${t.place}</dt>
         <dd>${venue.location.name} · ${venue.location.city}</dd>
         <dt>${t.taxId}</dt>

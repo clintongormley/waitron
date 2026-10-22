@@ -1,6 +1,12 @@
 import { expect, it } from "vitest";
 import { render } from "lit";
-import { clockProblem, renderClockProblem, validWait, type ClockWords } from "./clock-wait.js";
+import {
+  clockProblem,
+  dateTimeFormat,
+  renderClockProblem,
+  validWait,
+  type ClockWords,
+} from "./clock-wait.js";
 
 const LAST_DATE_MS = 8_640_000_000_000_000;
 
@@ -30,4 +36,14 @@ it.each([
   const target = document.createElement("div");
   render(renderClockProblem(read, words as ClockWords, undefined, "en", "UTC"), target);
   expect(target.textContent).toContain("A later minute is in use.");
+});
+
+it("builds each language, zone and style's formatter once", () => {
+  const minute = { hour: "2-digit", minute: "2-digit", hourCycle: "h23" } as const;
+  const first = dateTimeFormat("es", "Atlantic/Canary", minute);
+  expect(dateTimeFormat("es", "Atlantic/Canary", { ...minute })).toBe(first);
+  expect(first.format(Date.parse("2026-10-18T20:04:00Z"))).toBe("21:04");
+  expect(dateTimeFormat("en", "Atlantic/Canary", minute)).not.toBe(first);
+  expect(dateTimeFormat("es", "Europe/Madrid", minute)).not.toBe(first);
+  expect(dateTimeFormat("es", "Atlantic/Canary", { dateStyle: "medium" })).not.toBe(first);
 });
