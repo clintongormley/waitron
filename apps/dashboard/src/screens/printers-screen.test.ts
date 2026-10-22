@@ -70,12 +70,12 @@ async function choosePrinter(el: PrintersScreen, choice: "keep" | "discard") {
 }
 
 beforeEach(() => {
-  localStorage.removeItem("printers:agents:columns");
-  localStorage.removeItem("printers:table:columns");
-  localStorage.removeItem("printers:jobs:columns");
-  sessionStorage.removeItem("printers:agents");
-  sessionStorage.removeItem("printers:table");
-  sessionStorage.removeItem("printers:jobs");
+  localStorage.removeItem("waitron.printers.agents.table:columns");
+  localStorage.removeItem("waitron.printers.table:columns");
+  localStorage.removeItem("waitron.printers.jobs.table:columns");
+  sessionStorage.removeItem("waitron.printers.agents.table");
+  sessionStorage.removeItem("waitron.printers.table");
+  sessionStorage.removeItem("waitron.printers.jobs.table");
 });
 afterEach(cleanupWidgets);
 afterEach(() => vi.restoreAllMocks());
@@ -977,7 +977,7 @@ describe("guided printer calibration", () => {
     expect(select.value).toBe("active");
     await filterPrinters(el, "disabled");
     expect(q(el, '[data-test="printer-row-p1"]')).toBeNull();
-    expect(sessionStorage.getItem("printers:table")).toContain("disabled");
+    expect(sessionStorage.getItem("waitron.printers.table")).toContain("disabled");
   });
 });
 
@@ -1485,15 +1485,15 @@ describe("printers-screen", () => {
 
     expect(q(el, "[data-test=agent-row-a1]")).toBeNull();
     expect(q(el, "[data-test=agent-row-a2]")).not.toBeNull();
-    expect(sessionStorage.getItem("printers:agents")).toContain("disabled");
-    expect(sessionStorage.getItem("printers:table")).toBeNull();
+    expect(sessionStorage.getItem("waitron.printers.agents.table")).toContain("disabled");
+    expect(sessionStorage.getItem("waitron.printers.table")).toBeNull();
   });
 
   it.each([
     {
       tab: "agents",
       table: "agents-table",
-      viewKey: "printers:agents",
+      viewKey: "waitron.printers.agents.table",
       choices: ["host", "status", "lastSeen"],
       hide: "host",
       label: () => t("printers.agent_host"),
@@ -1501,7 +1501,7 @@ describe("printers-screen", () => {
     {
       tab: "printers",
       table: "printers-table",
-      viewKey: "printers:table",
+      viewKey: "waitron.printers.table",
       choices: ["agent", "pending", "status", "lastPrint"],
       hide: "pending",
       label: () => t("printers.pending_jobs"),
@@ -1509,7 +1509,7 @@ describe("printers-screen", () => {
     {
       tab: "queue",
       table: "jobs-table",
-      viewKey: "printers:jobs",
+      viewKey: "waitron.printers.jobs.table",
       choices: ["status", "attempts", "queued", "delivered"],
       hide: "attempts",
       label: () => t("printers.job_attempts"),
@@ -1579,7 +1579,7 @@ describe("printers-screen", () => {
 
   it("ignores saved sort and filter settings for removed printer columns", async () => {
     sessionStorage.setItem(
-      "printers:table",
+      "waitron.printers.table",
       JSON.stringify({
         sortKey: "connection",
         sortDirection: "descending",

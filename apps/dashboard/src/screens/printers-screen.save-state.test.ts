@@ -11,8 +11,8 @@ import type { PrintersScreen } from "./printers-screen.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => {
-  sessionStorage.removeItem("printers:agents");
-  sessionStorage.removeItem("printers:table");
+  sessionStorage.removeItem("waitron.printers.agents.table");
+  sessionStorage.removeItem("waitron.printers.table");
   history.replaceState(null, "", "/manage/printers");
 });
 
