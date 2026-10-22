@@ -301,9 +301,12 @@ withdrawn at ~03:10 (the visiting device's clock is read automatically; nobody t
 at ~03:12 every clock wait explains itself on screen with a countdown. Design: third revision note
 at the top; picture 6 (6-stuck-page.png).
 
-One call made in the third revision that you may want to overturn: on the stuck page a phone's or
-till's clock counts only after a manager signs in on that device, as at a switch (A947). Without
-it, any device on the venue's network could supply the clock the new installation is named by.
+Open, to be asked (not decided): should a phone's or till's clock count on the stuck page only
+after a manager signs in on that device, as at an A947 switch? Proposed default: yes — without it,
+any device on the venue's network could supply the clock the new installation is named by. It
+narrows "or a till's clock": tills sign staff in by PIN, so on a till the manager would type a
+password (plus an authenticator code if they have one). Without it, the page takes any device's
+reading that is not the box's own.
 
 Still needed from you before the first release: your full name, your NIF, and a postal address you
 are content to publish. Item d)'s wording still waits for the asesor's answer to Q53. Next: slice

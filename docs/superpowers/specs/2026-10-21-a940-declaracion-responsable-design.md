@@ -31,8 +31,8 @@ plan: [`2026-10-22-a940-1-software-identity.md`](../plans/2026-10-22-a940-1-soft
 >   upgrade never makes a sale wait but a start can** — the upgrade's step runs before the new
 >   release is installed, so only a box already running the new release with the change unmade can
 >   be stuck. The stuck page is specified: it is served by the start itself (it is not today's
->   failed-start page), and a visitor's clock counts only after a manager signs in on that device
->   (**my call**, §12).
+>   failed-start page). **Open, for the owner:** whether a visitor's clock counts only after a
+>   manager signs in on that device — proposed as the default, not decided (§5.6, §12).
 > - **§5.6, the visitor's clock is read automatically.** The owner's direction of about 03:05, to
 >   ask the person for the time when the only screen is the box's own, was withdrawn by him at
 >   about 03:10. The page reads the visiting device's clock (a phone's, a till's, a laptop's) and
@@ -45,8 +45,8 @@ plan: [`2026-10-22-a940-1-software-identity.md`](../plans/2026-10-22-a940-1-soft
 >   and have no screen; its report lines already say why. The «Nueva instalación fiscal» notice
 >   waits for nothing, so it has no countdown. **New picture 6.**
 > - **§8** gains the stuck page's cases: a phone's reading accepted, a reading more than 30
->   seconds out refused, the box's own screen refused, a reading without a manager's sign-in
->   refused. **§10**: slice 1b's dependency on the owner's answer is met; it still needs slice 1 and
+>   seconds out refused, the box's own screen refused; and, only if the owner adopts the proposed
+>   sign-in, a reading without it refused. **§10**: slice 1b's dependency on the owner's answer is met; it still needs slice 1 and
 >   A947's slice 4a (open as pull request #1990, not landed). **§11** records the answers. **§12**:
 >   the start's fallback and the carried clock reading are closed; three new points are open.
 
@@ -310,14 +310,14 @@ length` answers `0`). Five facts from the code shape the design. Each was found 
 source and following its callers, not by running it; the citations are the receipts.
 
 1. **Every record a box files tells AEAT the version is `0.0.0`.** The `Version` field comes
-   from `DEFAULT_SYSTEM_INFO` in `packages/fiscal-verifactu/src/backend.ts:71-77`, and the one
+   from `DEFAULT_SYSTEM_INFO` in `packages/fiscal-verifactu/src/backend.ts:72-78`, and the one
    production construction of the backend (`packages/fiscal-verifactu/src/slot.ts:54-61`) passes
    no override. The box does know its own build (`WAITRON_BUILD_ID`, a commit id, read by
    `applicationVersion` in `packages/db/src/venue-holder-identity.ts:30-33`), but the fiscal code
    never reads it. A declaration names one version, so the version the records carry has to come
    from the release.
 2. **The producer fields of every record carry the restaurant's name and tax number.**
-   `buildSistemaInformatico` (`backend.ts:641-653`) fills `NombreRazon` with the taxpayer's legal
+   `buildSistemaInformatico` (`backend.ts:646-658`) fills `NombreRazon` with the taxpayer's legal
    name and `NIF` with the taxpayer's NIF. The Orden's annex describes both as the producer's:
    «Nombre-razón social de la persona o entidad productora», «NIF de la persona o entidad
    productora». The repository's own notes on AEAT's FAQ say the same
@@ -335,10 +335,10 @@ source and following its callers, not by running it; the citations are the recei
    "Not yet running in production anywhere" (`README.md:9`). If that holds, no wrong record sits
    at AEAT and the fix changes only what future records carry. The producer will be the owner
    personally (§11, Q1).
-3. **The three usage flags are marked unverified in the code itself** (`backend.ts:58-61`).
+3. **The three usage flags are marked unverified in the code itself** (`backend.ts:59-62`).
    Records send "can only work as Veri\*Factu" (`TipoUsoPosibleSoloVerifactu`) = `S`, "can keep
    several taxpayers" (`TipoUsoPosibleMultiOT`) = `S`, and "keeps several taxpayers now"
-   (`IndicadorMultiplesOT`) = `N` (`backend.ts:74-76`). The owner's answers settle them for this
+   (`IndicadorMultiplesOT`) = `N` (`backend.ts:75-77`). The owner's answers settle them for this
    version (§11, Q2 and Q3). `TipoUsoPosibleSoloVerifactu` stays `S`: the first version supports
    only Veri\*Factu — Spain's common territory is mapped to `fiscal-verifactu`
    (`packages/country-es/src/spain.ts:300-310`), the other Spanish territories are refused, and
@@ -349,7 +349,7 @@ source and following its callers, not by running it; the citations are the recei
    answer is always `N`. The same build also ships `fiscal-none`, which files nothing and is what a UK
    venue gets (`packages/country-gb/src/united-kingdom.ts:21`); §12 says why this design reads it
    as no bar to «S».
-4. **The name sent is "Waitron POS"** (`backend.ts:72`), while the product is called "Waitron"
+4. **The name sent is "Waitron POS"** (`backend.ts:73`), while the product is called "Waitron"
    everywhere it is distributed (`README.md:1`). Item a) is «la denominación genérica dada al
    mismo para su distribución o comercialización», and the records' field will say the same.
 
@@ -1049,14 +1049,22 @@ the change, in one transaction as in way A's step 4, and starts trading.
   place of trading, the way a first setup's resolution page is (`node-entry.ts:374-388`). It keeps
   the curated title and plain words of the recovery page's convention
   ([conventions-ui.md](../../developers/conventions-ui.md), "The unauthenticated recovery page").
-- **A visitor's clock counts only after a manager signs in on that device** (**my call**, §12). The
-  internet's reading comes from AEAT's own server over a checked certificate
-  (`hour-clock-internet.ts:20`, `rejectUnauthorized: true`); a browser's reading is whatever the
-  device sends. Every A947 page whose browser reading leads to a name is behind a credential — the
-  setup password, the backup a restore needs, the manager's sign-in at a switch (A947 §6.2,
-  item 3) — and this page follows the switch: the manager's passkey, or password plus
-  authenticator code when one is enrolled. The sign-in is a witness for the clock only; the
-  authority for the change is still the identity-change step (above).
+- **Open, for the owner: does a visitor's clock count only after a manager signs in on that
+  device?** Not decided; the owner's words of 02:55 name no sign-in, and A947's clock rule 1 asks
+  for none. **Proposed default: yes.** The reason: the internet's reading comes from AEAT's own
+  server over a checked certificate (`hour-clock-internet.ts:20`, `rejectUnauthorized: true`),
+  while a browser's reading is whatever the device sends, so without a sign-in any device on the
+  venue's network could supply the clock the new installation is named by. Each A947 page whose
+  browser reading leads to a name sits behind its own page's credential — the setup password, the
+  backup a restore needs, the manager's sign-in at a switch (A947 §6.2, item 3) — and the proposal
+  copies the switch: the manager's passkey, or password plus authenticator code when one is
+  enrolled. **It narrows the owner's "or a till's clock":** the till signs staff in by PIN and has
+  no passkeys (A947, "Passkeys are bound to that one name, and the till has none";
+  `apps/till/src/api/client.ts:2621`), so on a till a manager would have to type a password, plus
+  an authenticator code when one is enrolled. Either way the sign-in would be a witness for the
+  clock only; the authority for the change stays with the identity-change step (above). The page's
+  words below show the proposal («…e inicia sesión como responsable»); without it, that clause
+  goes.
 - **Every wait explains itself, with a countdown** (the owner, about 03:12 on 2026-10-22, A947
   §6.5). The page says why it waits, what to do, and a live countdown, or what will end a wait
   with no fixed end. The box decides; the page only shows: the box returns how long is left, the
@@ -1067,7 +1075,7 @@ the change, in one transaction as in way A's step 4, and starts trading.
 | Case | What the page says (Spanish as staff see it / English) |
 | --- | --- |
 | Title, every state | «Waitron 1.4.0 abre una nueva instalación fiscal» / "Waitron 1.4.0 opens a new fiscal installation" |
-| No second clock yet (no internet; the page is on the box's own screen, or no device has signed in) | Why: «Para que ninguna serie de facturas se repita, la hora del equipo se compara con la de otro aparato o con internet.» / "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's." On the box's own screen it adds «Esta pantalla está en el propio equipo y no cuenta.» / "This screen is on the box itself, so it does not count." What to do: «Conecta el equipo a internet, o abre esta página desde un móvil o una caja del local e inicia sesión como responsable.» / "Connect the box to the internet, or open this page on a phone or till on the venue's network and sign in as a manager." What ends it: «Sigue sola cuando el equipo tenga internet, o en el móvil o la caja si sigues allí.» / "It carries on by itself once the box reaches the internet, or on the phone or till if you carry on there." No countdown; it checks again every 15 seconds. |
+| No second clock yet (no internet; the page is on the box's own screen, or no other device's reading has arrived) | Why: «Para que ninguna serie de facturas se repita, la hora del equipo se compara con la de otro aparato o con internet.» / "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's." On the box's own screen it adds «Esta pantalla está en el propio equipo y no cuenta.» / "This screen is on the box itself, so it does not count." What to do: «Conecta el equipo a internet, o abre esta página desde un móvil o una caja del local e inicia sesión como responsable.» / "Connect the box to the internet, or open this page on a phone or till on the venue's network and sign in as a manager." What ends it: «Sigue sola cuando el equipo tenga internet, o en el móvil o la caja si sigues allí.» / "It carries on by itself once the box reaches the internet, or on the phone or till if you carry on there." No countdown; it checks again every 15 seconds. |
 | The clock check passed, waiting for the next allowed minute (rule 3) | «Esperamos a confirmar la hora para que ninguna serie de facturas se repita.» / "Waiting to confirm the time, so no invoice series is ever repeated." «No hace falta hacer nada; deja esta página abierta.» / "Nothing to do; keep this page open." «Sigue en 0:24» / "Continues in 0:24", counting down. |
 | Refused: the box and the device differ by more than 30 seconds | «Sin una hora confirmada no se crean series, para que ninguna se repita.» / "No series is made without a confirmed time, so none is ever repeated." «La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos). Prueba desde otro móvil o caja. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.» / "This box's time and this device's differ by more than 30 seconds. Try from another phone or till. If they still differ, the box's time may be wrong: ask for help.", both readings, and «Comprobar otra vez» / "Check again". No countdown. |
 | Refused by rule 4 (a name it knows is more than 150 seconds ahead) | A947's words: «Todavía no se puede abrir la nueva instalación: ya se usó un minuto posterior a la hora de este equipo. Podrás seguir a partir de las ‹HH:MM›.» / "The new installation cannot be opened yet: a later minute is already in use. You can carry on from ‹HH:MM›." No countdown. |
@@ -1293,22 +1301,24 @@ migration (slice 5).
   no internet and checks that no sale is recorded and the old chain gains nothing.
 - **The stuck page takes a phone's or a till's clock, under A947's rule** (§5.6, "The stuck page"),
   run against the real start with no internet, each case built test-first:
-  - *The case that must still be served:* a manager signed in on a device that is not the box,
-    whose browser's reading is within 30 seconds of the box's clock, makes the start take the
+  - *The case that must still be served:* a device that is not the box (with a manager signed in
+    on it, if the proposed sign-in is adopted), whose browser's reading is within 30 seconds of the box's clock, makes the start take the
     current minute's name, make the change and trade; the next sale is the first record of the new
     chain.
   - *Refused, a clock out by more than 30 seconds:* the same with the device's reading 31 seconds
     ahead, and 31 seconds behind; nothing is allocated, the page shows the refusal's words and both
     readings, and no countdown.
-  - *Refused, the box's own screen:* a signed-in request whose source address is the loopback
+  - *Refused, the box's own screen:* a request (signed in, if the sign-in is adopted) whose source address is the loopback
     address or one of the box's own addresses counts as no second clock; nothing is allocated and
     the page shows the "no second clock" words with the "this screen is on the box itself" line.
-  - *Refused, no sign-in:* a reading within 30 seconds sent without a manager's sign-in is not used.
+  - *Refused, no sign-in — only if the owner adopts the proposed sign-in (§5.6, open):* a reading
+    within 30 seconds sent without a manager's sign-in is not used. Without the sign-in, the case
+    that must still be served is a reading from any device that is not the box.
   - *A wait explains itself:* with a name the box knows in the current minute, an accepted reading
     gives a countdown to the next minute, the name is taken only after the clocks are checked
     again at zero, and never before.
   - Each refusing case is proven by deletion: with its check deleted (the 30-second comparison, the
-    source-address test, the sign-in requirement) the case must fail because a name is taken;
+    source-address test, and the sign-in requirement if adopted) the case must fail because a name is taken;
     beside it, the served case stays green. A947's slice 4a test that a restore with a wrong clock
     never reuses a name is extended with a stuck-page row.
 - **A restore of an old-producer backup onto a new release** (§5.6, "What each chain stores"): a
@@ -1460,12 +1470,12 @@ the user to see" — every clock wait explains itself (§5.6, "The stuck page", 
 - **The start's fallback — closed** (the owner, about 02:55 on 2026-10-22): the stuck page takes
   the internet's clock or a phone's or a till's, under A947's clock rule, and explains every wait
   with a countdown; its words are in §5.6, "The stuck page".
-- **A manager's sign-in before a visitor's clock counts on the stuck page — my call, the owner may
-  overturn it.** It follows A947's switch (A947 §6.2, item 3): without it, any device on the
-  venue's network could supply the clock an installation is named by. The cost is a manager on
-  hand with their sign-in; with the internet back the page carries on with no one. If the owner
-  prefers no sign-in, the page takes any device's reading that is not the box's own, as the owner's
-  words of 02:55 read on their own.
+- **Open, for the owner: a manager's sign-in before a visitor's clock counts on the stuck page.**
+  Proposed as the default, not decided (§5.6, "The stuck page", with its reason and the narrowing
+  of "or a till's clock"); the watcher asks the owner. Its cost: a manager on hand with their
+  password; with the internet back the page carries on with no one. Without it, the page takes any
+  device's reading that is not the box's own, as the owner's words of 02:55 read on their own.
+  Slice 1b's plan waits for the answer.
 - **How the stuck page reaches the fiscal module.** The start's page holds the venue lock and
   writes the change, so it lives in the trading start's path, not in `recoveryApp`; how it is
   served without `apps/server` importing `@waitron/fiscal-verifactu` (the composition rule, §5.3)

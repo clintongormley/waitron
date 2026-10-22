@@ -67,7 +67,33 @@
    - **a production start on a published image refuses** with `sif.producer_unset`, at the point
      the trading start builds the fiscal backend (`apps/server/src/boot.ts:1638`), before it serves
      — the existing place a start refuses a wrong fiscal set-up (`module.fiscal_slot_mismatch`,
-     `packages/module/src/fiscal-slot.ts:27`);
+     `packages/module/src/fiscal-slot.ts:27`) — and the recovery page gives it a fixed title and
+     action (Task 5);
+   - "published" is read from the bundle's own build stamp **directly**, not through
+     `readHourRelease()`, because 39 test files besides `hour-release.test.ts` name that function
+     (`git grep -l readHourRelease -- apps packages`), most of them to hand the clock code a stamp
+     of their own;
+     routed through it, the refusal failed 10 server test files (fresh review, 2026-10-22). Measured
+     for this revision on 2026-10-22, in a throwaway `git worktree add
+     --detach` of this branch (head `31da3006c`, documentation only over `main` `556c01004`), with
+     Tasks 1, 2 and 5 applied as a sketch (the stamp read directly; `SOFTWARE_IDENTITY` pending),
+     beside a second throwaway of the same head without it as the control:
+     - The 35 server files of Task 5 Step 5 (every `apps/server/src/*.test.ts` naming
+       `readHourRelease`, the importers of its two helpers, `boot.till-clock`, and the seed golden):
+       control 5 files failed, 10 of 616 tests; sketch 5 files failed, 5 of 616 tests. The sketch's
+       failures are the seed golden test — its 62 differing lines are all `sistema_informatico`,
+       the change Task 6 re-records — and four tests in `first-fiscal-hour-modes`,
+       `first-fiscal-launch`, `first-setup-retired-assignments` and `first-setup-unused-pdf` that
+       failed by name in the control too (not investigated; they fail without the sketch). The
+       sketch's log holds no `sif.producer_unset` and no `slice` crash.
+     - The 12 package files naming it: `composition` 9 of 9 and `fiscal-verifactu` 138 of 138 in
+       both; `provisioning` control 249 of 250 (`first-setup-command-import`, "the actual relocated
+       command resumes a retained import and publishes it once"), sketch the same 249 of 250, the same test failing.
+     - The control in the other direction, that the refusal can still fire: a throwaway test that
+       stubbed the global stamp printed `sif.producer_unset` for production (version
+       `0.0.0-dev+0123456789abcdef0123456789abcdef01234567`), `verifactu` for preproduction,
+       `verifactu` with `0.0.0-dev` for a stamp with no commit, and `verifactu` for production with
+       `readHourRelease` mocked to a stamp and no global — the last being the fresh review's case.
    - filling the two values (Task 8) is a two-line change that switches every new record to the
      producer and lifts the refusal.
 4. **Test checks this slice changes** (the owner's 2026-10-05 rule: a check may change when the
@@ -76,14 +102,14 @@
      `sistema_informatico` string of all 31 records: `"Waitron POS"` → `"Waitron"`, `"0.0.0"` →
      `"0.0.0-dev"`, `TipoUsoPosibleMultiOT` `"S"` → `"N"`. Re-recorded, and the diff must touch
      those 31 lines and nothing else — no `huella` line (Task 6).
-   - `apps/server/src/taxpayer-rename.filing.test.ts:92-93` — deleted: it asserts the software
-     block's `NombreRazon` follows the taxpayer's rename, which the design retires (the block names
-     the producer). The behaviour that stays, the issuer's name following the rename, is line 91,
-     kept (Task 6).
+   - `apps/server/src/taxpayer-rename.filing.test.ts:92-93` — **in Task 8, not before**: while the
+     producer is pending, `producerFields` still answers the taxpayer's name at the moment of
+     recording, so the lines stay true until the producer is filled. Task 8 deletes them; line 91,
+     the issuer's name following the rename, stays.
    - `packages/fiscal-verifactu/src/backup-verification-chain.test.ts:39-43` — set-up only: its
      `append` helper also sets the record's issuer NIF to the SIF row's, because the check now
      compares the issuer (Task 4). Its "wrong taxpayer identity" case (`:270-271`) keeps its
-     expectation.
+     expectation and becomes the change's proof by deletion.
    - None other is expected. Any further changed expectation an implementer meets stops the task
      and goes to the driver with the reason; it is not edited to pass.
 
@@ -110,19 +136,26 @@ the placeholder.
 
 ## Global constraints
 
-- `IDEmisorFactura`, `IDEmisorFacturaAnulada` and `NombreRazonEmisor` stay the taxpayer's, from
-  `currentSif`'s `nif` and the `tenants` row, exactly as today (`backend.ts:225,228,351,426,430,558,562`).
+- `IDEmisorFactura` and `NombreRazonEmisor` stay the taxpayer's, from `currentSif`'s `nif` and the
+  `tenants` row (`backend.ts:225,228,426,430,558,562`); a cancellation's `IDEmisorFacturaAnulada`
+  stays the original sale's stored issuer (`original.id_emisor_factura`, `backend.ts:351`) —
+  exactly as today.
 - Values: `NombreSistemaInformatico` = `"Waitron"`; `TipoUsoPosibleSoloVerifactu` = `"S"`;
   `TipoUsoPosibleMultiOT` = `"N"`; `IndicadorMultiplesOT` = `"N"`; `IdSistemaInformatico` and
   `NumeroInstalacion` still from the SIF row (`backend.ts:651,653`), untouched — A993 changes them.
-- `Version` = `0.0.0-dev+<first 12 characters of the build's commit>` on a stamped build (the
-  commit is `readHourRelease()?.sourceCommit`, `packages/fiscal-verifactu/src/hour-release.ts:29`),
-  else `0.0.0-dev`. Design §5.1 writes `0.0.0-dev+<commit>`; the full 40 characters would fill the
-  field's 50-character limit exactly (`checkXsdText("SistemaInformatico.Version", …, 50)`,
-  `@waitron/verifactu` 0.2.1 `dist/validate.js:459`), so 12 are used. Slice 4 swaps in the tag's
-  version for a release.
-- No Spanish outside `packages/fiscal-verifactu` (CLAUDE.md §3). Error code `sif.producer_unset`,
-  beside its `sif.*` siblings (`packages/fiscal-verifactu/src/errors.ts:55-70`).
+- `Version` = `0.0.0-dev+<the build's 40-character commit>` on a published build, else
+  `0.0.0-dev` — design §5.1's form. The commit is the bundle stamp's `sourceCommit`, read by
+  `software-identity.ts` itself (Task 1), and a stamp without a well-formed commit counts as none.
+  The result is 50 characters, the field's limit (`checkXsdText("SistemaInformatico.Version", …,
+  50)`, `@waitron/verifactu` 0.2.1 `dist/validate.js:459`); the fresh review's probe found `validate`
+  reports no issue on it, and Task 1 pins that. Slice 4 swaps in the tag's version for a release.
+- No Spanish outside `packages/fiscal-verifactu` and translation tables (CLAUDE.md §3); the recovery
+  page's Spanish text is one of its existing tables (`apps/server/src/recovery-surface.ts`,
+  `OPERATOR_TEXT`). Error code `sif.producer_unset`, beside its `sif.*` siblings
+  (`packages/fiscal-verifactu/src/errors.ts:55-70`).
+- **Rebase note:** pull request #1990 (A947 slice 4a, open) also changes
+  `packages/fiscal-verifactu/src/errors.ts`. Whichever lands second resolves the overlap there and
+  re-finds the line numbers this plan cites in that file.
 - Comments only for an invariant or a non-obvious why (CLAUDE.md §1). Cut the "**Unverified**"
   paragraph at `backend.ts:52-63`; the flags are now the owner's answers, and the receipt is the
   design, §11, pointed at in one line.
@@ -140,30 +173,38 @@ name or a NIF exists to be filed by mistake. Its two effects:
   activation requires an accepted test submission (`activationReadiness`,
   `packages/fiscal/src/contribution.ts:115`), so a rejection would stop every preproduction setup.
 - `refuseUnsetProducer` throws `sif.producer_unset` when the environment is `production`, the
-  build is stamped, and the producer is pending. It is called from the fiscal slot's `makeBackend`
+  build is published (its bundle carries a stamp with a 40-character commit), and the producer is
+  pending. It is called from the fiscal slot's `makeBackend`
   (`packages/fiscal-verifactu/src/slot.ts:54-61`), which the trading start calls once before it
   serves (`apps/server/src/till-backend.ts:38-49`, from `apps/server/src/boot.ts:1638`), so the box
   shows the recovery page instead of trading.
 
-Why "stamped": every image a box can install carries the build stamp — CI passes the commit
-(`.github/workflows/ci.yml:2787,2802`), `waitron.sh` builds a branch with it
+Why "published", and why read directly: every image a box can install carries the build stamp —
+CI passes the commit (`.github/workflows/ci.yml:2787,2802`), `waitron.sh` builds a branch with it
 (`deploy/waitron.sh:346`), and the Dockerfile writes the stamp unless the id is the literal
-`development` (`deploy/Dockerfile:28-31`) — while the test suites run unbundled source, where
-`readHourRelease()` answers `null`. More than 30 test files boot or build a backend in production
-(`git grep -ln 'WAITRON_ENV: "production"'`), and the golden test builds
-`new VerifactuBackend({ deploymentEnvironment: "production" })` directly
-(`write-path.e2e.test.ts:71-76`); a refusal keyed on production alone would fail them all and force
-edits to the golden test. **Weaker than "cannot reach production", said plainly:** an unstamped
-build run with `WAITRON_ENV=production` (source run by hand, or an image built without
-`WAITRON_BUILD_ID`) is not refused — and it files today's taxpayer values, never placeholder text.
+`development` (`deploy/Dockerfile:28-31`); the bundler puts it in as the global
+`__WAITRON_HOUR_RELEASE__` (`scripts/bundle-node.mjs:45-47`). Unbundled source, which every test
+suite runs, has no such global. `software-identity.ts` reads that global itself, with the same
+`typeof` guard `hour-release.ts:11` uses, and does **not** call `readHourRelease()`: 39 test files
+besides `hour-release.test.ts` name that function, most to hand the clock code a stamp (`git grep
+-l readHourRelease -- apps packages`), and the fresh review measured what routing through it costs — 10 server
+test files failing, 13 tests on `sif.producer_unset` at `boot.ts:1638` and 2 on a mocked stamp
+with no commit. A refusal keyed on production alone was rejected for the same reason: 31 test files
+set `WAITRON_ENV: "production"` (`git grep -ln 'WAITRON_ENV: "production"'`), and the trading start
+builds the backend through `makeBackend` in each of them that reaches it. **Weaker than "cannot reach production", said plainly:** an unstamped
+build run with `WAITRON_ENV=production` (source run by hand, or an image built with no build id, which the
+Dockerfile treats as `development`, `deploy/Dockerfile:4,28-29`) is not refused — and it files today's taxpayer values, never placeholder text.
 Slice 4's "production refuses an unreleased build" closes that gap; slice 2's `pnpm release
 prepare` refuses while the producer is pending. Also disclosed: a box set up as "live" after this
 lands and before the facts arrive cannot trade (the setup wizard's live choice writes
 `WAITRON_ENV=production`, `deploy/Dockerfile:253`); the README says no box runs in production
 (`README.md:9`) — I believe so; not checked on the owner's box.
 
-Weighed and not taken: refusing in the record builder in production (breaks the golden test, which
-files in production); a production refusal with a test-only way round it in 30-plus files (large,
+Weighed and not taken: refusing in the backend's constructor or record builder in production (the
+golden test builds `VerifactuBackend` directly with `deploymentEnvironment: "production"`,
+`write-path.e2e.test.ts:71-76`, and would fail); having the host pass the build fact through
+`FiscalBackendDeps` (a change to the cross-package fiscal contract and every `makeBackend` caller,
+for the same answer the stamp already gives); a production refusal with a test-only way round it in 30-plus files (large,
 and a test bypass beside a fiscal guard); placeholder text in the records (the readiness risk
 above); a check in the image build (it would stop CI publishing `:main` until the facts arrive).
 
@@ -175,8 +216,8 @@ above); a check in the image build (it would stop CI publishing `:main` until th
    verify; one whose issuer NIF differs from its SIF row must still be refused — Task 4.
 3. **A preproduction box on a published image** with the producer pending must keep trading;
    only production refuses — Task 5's served cases.
-4. **The version a stamped build files** must pass the library's validation (50-character limit)
-   — Task 1's `validate` case.
+4. **The version a published build files** — 50 characters — must pass the library's
+   validation, and a stamp with no usable commit must give `0.0.0-dev`, not a crash — Task 1.
 5. **Every record kind** — sale, corrective, substitute, cancellation — must carry the same block;
    the four call sites share `buildSistemaInformatico` (`backend.ts:238,360,450,570`) — Task 2's
    grep step and Task 3's cancellation case.
@@ -205,27 +246,42 @@ export interface SoftwareIdentity {
   readonly producer: SoftwareProducer | typeof PRODUCER_PENDING;
 }
 export const SOFTWARE_IDENTITY: SoftwareIdentity;
-export function softwareVersion(release?: HourRelease | null): string; // default readHourRelease()
+// The bundle stamp's 40-character `sourceCommit`, read from the global `__WAITRON_HOUR_RELEASE__`
+// with hour-release.ts:11's `typeof` guard — never through readHourRelease(); null when absent,
+// not an object, or its commit is not /^[a-f0-9]{40}$/.
+export const BUILD_COMMIT: string | null;
+export function softwareVersion(commit?: string | null): string; // default BUILD_COMMIT
 export function producerFields(
   identity: SoftwareIdentity,
   taxpayer: { legalName: string; nif: string },
 ): { NombreRazon: string; NIF: string };
 export function refuseUnsetProducer(
   environment: string,
-  stamped: boolean,
-  identity?: SoftwareIdentity, // default SOFTWARE_IDENTITY
+  published?: boolean,          // default BUILD_COMMIT !== null
+  identity?: SoftwareIdentity,  // default SOFTWARE_IDENTITY
 ): void;
 ```
+
+The module starts with `import "./errors.js";`, as every file that throws a code does (CLAUDE.md
+§3; e.g. `registro-sif.ts:2`), and imports `WAITRON_ID_SISTEMA` from `./software.js`, which stays.
 
 - [ ] **Step 1: Write the failing tests** in `software-identity.test.ts`:
   - "holds the owner's answers": `SOFTWARE_IDENTITY` has `name: "Waitron"`, `code: "W1"`,
     `onlyVerifactu: "S"`, `multipleTaxpayersPossible: "N"`, `multipleTaxpayersNow: "N"`.
-  - "names a stamped build by its short commit": `softwareVersion({ sourceCommit:
-    "0123456789abcdef0123456789abcdef01234567", … })` is `"0.0.0-dev+0123456789ab"`;
+  - "names a published build by its commit": `softwareVersion("0123456789abcdef0123456789abcdef01234567")`
+    is `"0.0.0-dev+0123456789abcdef0123456789abcdef01234567"` (50 characters);
     `softwareVersion(null)` is `"0.0.0-dev"`; `softwareVersion()` in this unbundled run is
     `"0.0.0-dev"`.
-  - "a stamped version passes AEAT's checks": a `buildAltaRecord` whose block carries
-    `softwareVersion(stamp)` gives `validate(record, { now })` with no issue on
+  - "reads the bundle's stamp itself": with `vi.stubGlobal("__WAITRON_HOUR_RELEASE__", { sourceCommit:
+    <that commit> })`, `vi.resetModules()` and a dynamic `import("./software-identity.js")` (the
+    pattern of `hour-release.test.ts:30-37`), `BUILD_COMMIT` is that commit; with `{}`, with
+    `{ sourceCommit: "short" }` and with `null` it is `null` and `softwareVersion()` is
+    `"0.0.0-dev"` — a stamp with no usable commit never throws.
+  - "is not fooled by a mocked release reader": with `vi.doMock("./hour-release.js", () => ({
+    readHourRelease: () => ({ sourceCommit: <that commit>, … }) }))` and no global, a fresh import
+    has `BUILD_COMMIT` `null`. This is the case the fresh review's 10 failing server files needed.
+  - "a published version passes AEAT's checks": a `buildAltaRecord` whose block carries the
+    50-character version gives `validate(record, { now })` with no issue on
     `SistemaInformatico.Version` (copy the record shape from
     `packages/fiscal-verifactu/src/initial-paper-candidates.ts:44-77`).
   - "keeps the taxpayer while the producer is pending": `producerFields({ ...SOFTWARE_IDENTITY,
@@ -244,13 +300,13 @@ export function refuseUnsetProducer(
 - [ ] **Step 3: Implement** the module and the error code. `SOFTWARE_IDENTITY.producer` is
   `PRODUCER_PENDING` with the comment line given under "The placeholder".
 - [ ] **Step 4: Run Step 2's command — PASS.** Prove the refusal by deletion: delete the
-  `stamped` term, the refusing case still passes and the `("production", false, pending)` case
+  `published` term, the refusing case still passes and the `("production", false, pending)` case
   fails; delete the pending test, the `filled` case fails. Restore. Write both results in the
   commit message.
 - [ ] **Step 5: Run the guards** `pnpm exec vitest run scripts/errors-reachable.test.ts
-  scripts/english-only.test.ts` — the new code is reachable only once Task 5 throws it from
-  production code; if `errors-reachable` fails here for that reason alone, say so in the commit and
-  continue (Task 5 re-runs it).
+  scripts/english-only.test.ts` — PASS. (`errors-reachable` checks that the package's `errors.ts`
+  is reached from its front file, `scripts/errors-reachable.test.ts:1-11`; it does not check that a
+  code is thrown.)
 - [ ] **Step 6: Commit** — `fiscal: one file for what the records say about the software`.
 
 ### Task 2: the records' software block comes from the identity file
@@ -285,10 +341,13 @@ export function refuseUnsetProducer(
 - [ ] **Step 2: Run, expect FAIL:**
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backend.test.ts`
 - [ ] **Step 3: Implement** as listed under Files.
-- [ ] **Step 4: Run Step 2's command — PASS.** Then
-  `git grep -n "SistemaInformatico:" -- packages/fiscal-verifactu/src ':!*.test.ts' ':!src/testing'`
+- [ ] **Step 4: Run Step 2's command — PASS.** Then, from the repository root,
+  `git grep -nw "SistemaInformatico:" -- packages/fiscal-verifactu/src ':!*.test.ts' ':!packages/fiscal-verifactu/src/testing'`
   must print only `backend.ts`'s four call sites and `initial-paper-candidates.ts`, and
-  `git grep -n "systemInfo\|Waitron POS" -- packages apps ':!*.json' ':!*.test.ts'` nothing.
+  `git grep -n "systemInfo\|Waitron POS" -- packages apps ':!*.json' ':!*.test.ts' ':!packages/fiscal-verifactu/src/testing'`
+  nothing. `TEST_SISTEMA` in `packages/fiscal-verifactu/src/testing/seed.ts:16-26` keeps
+  "Waitron POS": it is fixture input that the chain tests append directly, not what the backend
+  builds, and changing it would move fixture rows other suites read for no gain.
 - [ ] **Step 5: Run the golden and immutability suites, unedited:**
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`
   — PASS, with `git diff --stat main -- packages/fiscal-verifactu/src/write-path.e2e.test.ts
@@ -316,22 +375,33 @@ Once the block names the producer, cancellations would go out under the producer
   are unchanged).
 - Test: `packages/fiscal-verifactu/src/void-path.e2e.test.ts` (new `describe`).
 
-- [ ] **Step 1: Write the failing test** "a cancellation keeps the taxpayer's name when the
-  software names a producer": the suite's set-up with the backend built with a filled producer
-  (`identity: { …, producer: { name: "Producer Person", nif: "12345678Z" } }`); sell, void; the
-  anulación row has `nombre_razon_emisor` "Waitron SL" and `sistema_informatico.NombreRazon`
-  "Producer Person". Then run one drain pass against a fake AEAT
-  (`createFakeAeat` from `@waitron/verifactu/testing`, as `src/acks.test.ts:79` does) and assert
-  the submission that carried the anulación has `Cabecera.ObligadoEmision` `{ NombreRazon:
-  "Waitron SL", NIF: <the SIF's NIF> }` — from the fake's record of what it received; if the fake
-  keeps none, wrap its client's `enviar` in a spy that captures the `Cabecera`.
+- [ ] **Step 1: Write the failing tests:**
+  - In `void-path.e2e.test.ts`, "a cancellation keeps the taxpayer's name when the software names
+    a producer": the suite's set-up with the backend built with a filled producer (`identity: { …,
+    producer: { name: "Producer Person", nif: "12345678Z" } }`); sell, void; the anulación row has
+    `nombre_razon_emisor` "Waitron SL" and `sistema_informatico.NombreRazon` "Producer Person".
+  - In `drain.test.ts`, beside "submits a voided sale's anulación through the same
+    accept-and-persist path as an alta" (`drain.test.ts:110-157`, the template), "a cancellation
+    goes out under the taxpayer's name when the software names a producer": the same set-up with
+    the filled producer, and the fake AEAT's client (`createFakeAeat`, `aeat.client()`) with its
+    `submit` method wrapped in `vi.spyOn` to capture each call's `Cabecera` — the fake exposes only
+    `client()` and `stored()` (`@waitron/verifactu` 0.2.1 `dist/testing/fake-aeat.d.ts:22,25`), and
+    the client's method is `submit` (`dist/client.d.ts:17`). A cancellation is sent only after its
+    original sale has an answer (`drain.ts:601-611`), so run the first pass, then the second at
+    `first.nextDueAt`, as the template does; the second pass's captured `Cabecera.ObligadoEmision`
+    is `{ NombreRazon: "Waitron SL", NIF: <the SIF's NIF> }`. This is design §8's "Cancellations
+    keep the taxpayer's name".
 - [ ] **Step 2: Run, expect FAIL** (the row stores "Producer Person"):
-  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/void-path.e2e.test.ts`
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/void-path.e2e.test.ts src/drain.test.ts`
 - [ ] **Step 3: Implement** as listed under Files.
 - [ ] **Step 4: Run Step 2's command, then the drain and chain suites** —
-  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/void-path.e2e.test.ts src/drain.test.ts src/drain.names.test.ts src/chain.test.ts src/registro-row.test.ts src/inmutabilidad.test.ts`
-  — PASS. Prove by deletion: point line 161 back at `record.SistemaInformatico.NombreRazon`; the new
-  case fails on the stored name. Restore.
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/void-path.e2e.test.ts src/drain.test.ts src/drain.names.test.ts src/chain.test.ts src/registro-row.roundtrip.test.ts src/reconcile.test.ts src/inmutabilidad.test.ts`
+  — PASS, reading the `Tests` count (a misspelt file name matches nothing silently). Prove by
+  deletion: point line 161 back at `record.SistemaInformatico.NombreRazon`; both new cases fail.
+  Restore. The same stored name is also the header of the two lookups AEAT is asked
+  (`reconcile.ts:273`, `drain.ts:1653`), so this one fix covers them; the duplicate-reply check at
+  `drain.ts:1679-1687` compares AEAT's stored copy of a record with our own row of the same record,
+  so it is unaffected.
 - [ ] **Step 5: Commit** — `fiscal: a cancellation is filed under the taxpayer's name, not the producer's`.
 
 ### Task 4: the backup check compares the issuer's NIF, not the software block's
@@ -352,50 +422,88 @@ taxpayer.
 
 - [ ] **Step 1: Write the failing test** "accepts records whose software block names a producer
   other than the taxpayer": append records whose block `NIF` is `"12345678Z"` (and `NombreRazon`
-  "Producer Person"), back up, verify → accepted. Add a tamper row "wrong issuer" to the table at
-  `:255-300`: `update registros_facturacion set id_emisor_factura = '00000000T' where secuencia = 1`
-  → refused.
+  "Producer Person"), back up, verify → accepted. No new tamper row: a changed
+  `id_emisor_factura` is already refused by the fingerprint check (`verifyHuella`,
+  `backup-verification-chain.ts:34`) before the NIF comparison is reached — the "old hashed
+  content" row covers it.
 - [ ] **Step 2: Run, expect FAIL** (the producer case is refused):
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification-chain.test.ts`
 - [ ] **Step 3: Implement** the comparison and the helper change.
 - [ ] **Step 4: Run Step 2's command — PASS**, including the existing "wrong taxpayer identity"
-  row unchanged. Prove by deletion: delete the issuer comparison; "wrong issuer" and "wrong taxpayer
-  identity" fail. Restore. Then run the restore suites that read this check:
+  row (`:270-271`) unchanged. Prove by deletion: delete the issuer comparison; "wrong taxpayer
+  identity" fails (the fresh review ran this: it fails, while a changed-issuer row still passes on
+  the fingerprint). Restore. Then run the restore suites that read this check:
   `pnpm --filter @waitron/server exec vitest run src/restore-fiscal-e2e.test.ts src/restore-fiscal-receipt.test.ts src/restore-command.archive.test.ts src/backup-verification-compatibility.test.ts`
   — PASS; a failure there is reported, not edited around.
 - [ ] **Step 5: Commit** — `fiscal: a backup's records are bound to their taxpayer by the issuer's NIF`.
 
-### Task 5: a production start on a published image refuses while the producer is pending
+### Task 5: a production start on a published image refuses while the producer is pending, and says why
 
 **Files:**
-- Modify: `packages/fiscal-verifactu/src/slot.ts:54-61` — `makeBackend` calls
-  `refuseUnsetProducer(environment, readHourRelease() !== null)` first. Export, for the test, the
-  body as `makeVerifactuBackend(deps: FiscalBackendDeps, stamped: boolean): VerifactuBackend`, and
-  `makeBackend: (deps) => makeVerifactuBackend(deps, readHourRelease() !== null)`.
-- Test: `packages/fiscal-verifactu/src/slot.test.ts` (exists; add a `describe`).
+- Modify: `packages/fiscal-verifactu/src/slot.ts:54-61` — export
+  `makeVerifactuBackend(deps: FiscalBackendDeps, published: boolean): VerifactuBackend`, which calls
+  `refuseUnsetProducer(deps.environment, published)` and then builds today's backend; the slot's
+  `makeBackend: (deps) => makeVerifactuBackend(deps, BUILD_COMMIT !== null)`. Never
+  `readHourRelease()` (see "The placeholder").
+- Modify: `apps/server/src/errors.ts` — declare `"sif.producer_unset": { environment: string };`
+  with identical params, as `server.credential_unusable` is declared in both packages
+  (`apps/server/src/errors.ts:134`, `packages/fiscal-verifactu/src/errors.ts:33`), so the recovery
+  page's table, typed by the error-code union (`apps/server/src/recovery-surface.ts:234`), can name it.
+- Modify: `apps/server/src/recovery-surface.ts` — an `OPERATOR_TEXT` entry for `sif.producer_unset`
+  beside `deployment.environment_mismatch` (`:316-329`). Today a code with no entry is shown with
+  the generic text (`:464-467`). The wording, fixed:
+  - `en-GB` title: "This version of Waitron does not yet name its producer, so it cannot be used
+    for real sales." Action: "Ask whoever installed this box to install a version that names its
+    producer."
+  - `es-ES` title: «Esta versión de Waitron todavía no indica quién la produce, así que no puede
+    usarse para ventas reales.» Action: «Pide a quien instaló este equipo que instale una versión
+    que indique quién la produce.»
+- Test: `packages/fiscal-verifactu/src/slot.test.ts` (exists; add a `describe`) and
+  `apps/server/src/recovery-surface.test.ts`.
 
 - [ ] **Step 1: Write the failing tests:**
-  - "refuses a published production build while the producer is pending":
+  - `slot.test.ts`, "refuses a published production build while the producer is pending":
     `makeVerifactuBackend({ db, clock, environment: "production" }, true)` throws
-    `sif.producer_unset`.
-  - Served: `(…"preproduction"…, true)` and `(…"production"…, false)` return a backend whose `id`
-    is `"verifactu"`.
+    `sif.producer_unset`. Served: `(…"preproduction"…, true)` and `(…"production"…, false)` return
+    a backend whose `id` is `"verifactu"`; and the slot's own `makeBackend` with `"production"` in
+    this unbundled run returns a backend (no stamp, so no refusal).
+  - `recovery-surface.test.ts`, "names the missing producer, in each language": the page for
+    `sif.producer_unset` contains the English title and action above for an English browser and
+    the Spanish ones for a Spanish browser, built the way "the page's language" cases build theirs
+    (`recovery-surface.test.ts:247-262`). The table-wide cases (`:327-365`: both languages present
+    and different, never a word that suggests wiping) then cover the entry too.
 - [ ] **Step 2: Run, expect FAIL:**
-  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/slot.test.ts`
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/slot.test.ts` and
+  `pnpm --filter @waitron/server exec vitest run src/recovery-surface.test.ts`
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run Step 2's command — PASS**; delete the call to `refuseUnsetProducer`, the
+- [ ] **Step 4: Run Step 2's commands — PASS**; delete the call to `refuseUnsetProducer`, the
   refusing case fails; restore. Then the guards:
   `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/module-seams.test.ts scripts/english-only.test.ts`
-  — PASS. And the server's boot suites that build the backend in production, which must be
-  unaffected (no stamp in tests):
-  `pnpm --filter @waitron/server exec vitest run src/boot.test.ts src/boot.till-clock.test.ts src/first-fiscal-boot.test.ts`.
-- [ ] **Step 5: Commit** — `fiscal: a published production build will not trade until the producer is named`.
+  — PASS.
+- [ ] **Step 5: Re-run every test file that names `readHourRelease`**, the two helpers' importers,
+  and the boot suite that builds the backend — the files that broke in the fresh review's
+  experiment (check free memory first, `memory_pressure | grep free`):
+
+  ```bash
+  git grep -l readHourRelease -- 'apps/server/src/*.test.ts' | sed 's|apps/server/||' > /tmp/a940-1-server.txt
+  git grep -l "staged-hour-restore\|hour-recovery-host" -- 'apps/server/src/*.test.ts' | sed 's|apps/server/||' >> /tmp/a940-1-server.txt
+  echo src/boot.till-clock.test.ts >> /tmp/a940-1-server.txt; sort -u -o /tmp/a940-1-server.txt /tmp/a940-1-server.txt
+  (cd apps/server && TESTCONTAINERS_RYUK_DISABLED=true pnpm exec vitest run $(cat /tmp/a940-1-server.txt))
+  for pkg in composition fiscal-verifactu provisioning; do
+    files=$(git grep -l readHourRelease -- "packages/$pkg/src/*.test.ts" | sed "s|packages/$pkg/||")
+    (cd packages/$pkg && pnpm exec vitest run $files)
+  done
+  ```
+
+  Expected: the same counts as the run on `main` before this slice, reported in the commit
+  message with that run as the control (measured for this plan: see item 3 at the top). A file failing here
+  and not on `main` stops the task.
+- [ ] **Step 6: Commit** — `fiscal: a published production build will not trade until the producer is named`.
 
 ### Task 6: the checks whose expected values the design changes, and the wider runs
 
 **Files:**
 - Modify: `apps/server/scripts/demo-seed/testing/spanish-practice-sales.golden.json` (re-recorded)
-- Modify: `apps/server/src/taxpayer-rename.filing.test.ts:92-93` (deleted)
 
 - [ ] **Step 1: Run the seed golden test, expect FAIL** on `sistema_informatico` only:
   `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed-sales.golden.test.ts`
@@ -404,18 +512,17 @@ taxpayer.
   `git diff --numstat -- apps/server/scripts/demo-seed/testing/spanish-practice-sales.golden.json`
   must print `31	31`, and `git diff -U0 -- <that file> | /usr/bin/grep '^[-+] ' | /usr/bin/grep -vc sistema_informatico`
   must print `0` — so no `huella`, amount or number line moved. If either differs, stop and report.
-  Run Step 1's command again — PASS.
-- [ ] **Step 3: Delete `taxpayer-rename.filing.test.ts:92-93`** (the comment and the assertion on
-  the software block's `NombreRazon`); line 91 stays. Run
-  `pnpm --filter @waitron/server exec vitest run src/taxpayer-rename.filing.test.ts` — PASS.
-- [ ] **Step 4: Run the whole fiscal package and the server's fiscal suites** for feedback (CI owns
+  Run Step 1's command again — PASS. Run
+  `pnpm --filter @waitron/server exec vitest run src/taxpayer-rename.filing.test.ts` — PASS
+  unedited (its lines 92-93 stay true while the producer is pending; Task 8 removes them).
+- [ ] **Step 3: Run the whole fiscal package and the server's fiscal suites** for feedback (CI owns
   the package runs, CLAUDE.md §2):
   `pnpm --filter @waitron/fiscal-verifactu test:coverage` — PASS at `98/98/98/95`, reading the
   per-file table for `software-identity.ts`; and
   `pnpm --filter @waitron/server exec vitest run src/full-comp.fiscal-identity.test.ts src/served-at-huella.test.ts src/qr-link-range.test.ts`.
   Check free memory first (`memory_pressure | grep free`). Any other failing expectation: stop and
   report it with the reason.
-- [ ] **Step 5: Commit** — `test: re-record the Spanish practice sales for the new software block`
+- [ ] **Step 4: Commit** — `test: re-record the Spanish practice sales for the new software block`
   with the two `git diff` outputs of Step 2 in the message.
 
 ### Task 7: docs, and the pull request parked for the owner
@@ -449,5 +556,10 @@ taxpayer.
   carrying it shows no `SistemaInformatico.NIF` issue).
 - [ ] Re-run Task 6 Steps 1–2: the seed golden's 31 `sistema_informatico` lines change again (the
   producer's name and NIF), and nothing else.
+- [ ] Delete `apps/server/src/taxpayer-rename.filing.test.ts:92-93` (the comment and the assertion
+  that the software block's `NombreRazon` follows the taxpayer's rename — false from this commit,
+  since the block now names the producer); line 91, the issuer's name following the rename, stays.
+  Run `pnpm --filter @waitron/server exec vitest run src/taxpayer-rename.filing.test.ts` — PASS.
+  This is a changed test check under the owner's 2026-10-05 rule; list it in the pull request.
 - [ ] Commit — `fiscal: the records name the owner as the software's producer`. In the same pull
   request if it is still open; otherwise its own fiscal pull request, which the owner lands.
