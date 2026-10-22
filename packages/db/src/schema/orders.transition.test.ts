@@ -10,6 +10,7 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { catalogues, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
+import { parties } from "./parties.js";
 import { invoiceSeries } from "./series.js";
 import { sales } from "./sales.js";
 import { locations, tenants } from "./tenants.js";
@@ -249,8 +250,8 @@ describe("working_orders state machine (enforce_transition)", () => {
     expect(row?.id).toBe(id);
   });
 
-  it("rejects any OTHER change to a settled order, and a re-stamp of an already-collected one (the settled-state freeze holds)", async () => {
-    // The relaxation permits the collected_at stamp and NOTHING ELSE.
+  it("rejects any change to a settled order other than the handover stamp or leaving its party, and a re-stamp of an already-collected one (the settled-state freeze holds)", async () => {
+    // The relaxations permit the collected_at stamp and leaving a party, and NOTHING ELSE.
     const id = await open();
     await inTx((tx) =>
       tx
@@ -628,6 +629,129 @@ describe("working_orders state machine (enforce_transition)", () => {
         .where(eq(workingOrders.id, id)),
     );
     expect(row?.collectedAt).toBe(stamp);
+  });
+
+  /** A party for a bill to belong to. */
+  async function party(): Promise<string> {
+    const [row] = await suite.db
+      .insert(parties)
+      .values({ openedBy: "person" })
+      .returning({ id: parties.id });
+    return row!.id;
+  }
+
+  /** A paid bill, not yet handed over, in `partyId` (or in none). */
+  async function settledIn(partyId: string | null): Promise<string> {
+    const id = await open();
+    await inTx((tx) => tx.update(workingOrders).set({ partyId }).where(eq(workingOrders.id, id)));
+    await inTx((tx) =>
+      tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: now() })
+        .where(eq(workingOrders.id, id)),
+    );
+    return id;
+  }
+
+  async function rowOf(id: string): Promise<typeof workingOrders.$inferSelect> {
+    const [row] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, id)),
+    );
+    return row!;
+  }
+
+  it("lets a settled order not yet handed over leave its party, nothing else changing", async () => {
+    const id = await settledIn(await party());
+    const before = await rowOf(id);
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ partyId: null }).where(eq(workingOrders.id, id)),
+    );
+    expect(await rowOf(id)).toEqual({ ...before, partyId: null });
+  });
+
+  it.each([
+    { change: "label", set: () => ({ label: "x" }) },
+    { change: "revision", set: (old: number) => ({ revision: old + 1 }) },
+    { change: "settledAt", set: () => ({ settledAt: now() }) },
+    { change: "status", set: () => ({ status: "abandoned" as const }) },
+  ])(
+    "refuses a settled order leaving its party with any other change ($change)",
+    async ({ set }) => {
+      const id = await settledIn(await party());
+      const before = await rowOf(id);
+      const e = await captureError(() =>
+        inTx((tx) =>
+          tx
+            .update(workingOrders)
+            .set({ ...set(before.revision), partyId: null })
+            .where(eq(workingOrders.id, id)),
+        ),
+      );
+      expect(engineErrorMessage(e)).toBe(TRANSITION_REFUSAL);
+    },
+  );
+
+  it("refuses a handed-over order leaving its party", async () => {
+    const id = await settledIn(await party());
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ collectedAt: now() }).where(eq(workingOrders.id, id)),
+    );
+    const e = await captureError(() =>
+      inTx((tx) => tx.update(workingOrders).set({ partyId: null }).where(eq(workingOrders.id, id))),
+    );
+    expect(engineErrorMessage(e)).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("refuses the handover stamp together with leaving the party", async () => {
+    const id = await settledIn(await party());
+    const e = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .update(workingOrders)
+          .set({ collectedAt: now(), partyId: null })
+          .where(eq(workingOrders.id, id)),
+      ),
+    );
+    expect(engineErrorMessage(e)).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("refuses a settled order joining a party or changing party", async () => {
+    const target = await party();
+    const loose = await settledIn(null);
+    const eJoin = await captureError(() =>
+      inTx((tx) =>
+        tx.update(workingOrders).set({ partyId: target }).where(eq(workingOrders.id, loose)),
+      ),
+    );
+    expect(engineErrorMessage(eJoin)).toBe(TRANSITION_REFUSAL);
+    const seated = await settledIn(await party());
+    const eChange = await captureError(() =>
+      inTx((tx) =>
+        tx.update(workingOrders).set({ partyId: target }).where(eq(workingOrders.id, seated)),
+      ),
+    );
+    expect(engineErrorMessage(eChange)).toBe(TRANSITION_REFUSAL);
+  });
+
+  // Weaker than its name: it reads the trigger's stored TEXT, which is why the refusals above
+  // change one column at a time beside it.
+  it("the exception names every column", () => {
+    const columns = suite.db
+      .all<{ name: string }>(sql`select name from pragma_table_info('working_orders')`)
+      .map((c) => c.name);
+    const [trigger] = suite.db.all<{ sql: string }>(
+      sql`select sql from sqlite_master where type = 'trigger' and name = 'working_orders_enforce_transition'`,
+    );
+    const text = trigger!.sql;
+    const anchor = "old.party_id IS NOT NULL AND new.party_id IS NULL";
+    const start = text.indexOf(anchor);
+    expect(start).toBeGreaterThan(-1);
+    const next = text.indexOf("OR (", start);
+    const branch = text.slice(start, next === -1 ? undefined : next);
+    expect(columns).toContain("revision");
+    for (const column of columns.filter((c) => c !== "party_id")) {
+      expect(branch, column).toMatch(new RegExp(`new\\.("?)${column}\\1 IS old\\.\\1${column}\\1`));
+    }
   });
 
   it("rejects a line write on a placed order (composition freeze via require_open_parent)", async () => {

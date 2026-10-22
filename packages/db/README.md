@@ -102,7 +102,11 @@ other column unchanged. `0056_placed_order_handover.sql` re-creates
 (`collected_at`, from empty) with every other column unchanged. `0128_delivery_table_release.sql`
 re-creates it again, with `delivery_table_label` in the presented-bill and handover unchanged-column
 lists, letting an order past `open` drop its delivery table (`delivery_table_id`) and keep its name
-in `delivery_table_label` with every other column unchanged. No migration
+in `delivery_table_label` with every other column unchanged. `0185_settled_order_to_counter.sql`
+re-creates it with every branch of `0143_working_order_receipt_locale_transition.sql` (the last
+re-creation, which added `receipt_locale`) unchanged, letting a paid (`settled`) bill not yet handed
+over leave its party (`party_id` to empty) with every other column unchanged, so a finished table
+can send it to the counter. No migration
 contains a `GRANT`, a role or an `ENABLE ALWAYS`: there is no database role to grant anything to,
 and file permissions on the venue directory are the access control.
 
