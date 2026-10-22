@@ -84,6 +84,7 @@ async function mount(
     decision?: typeof clock | (() => typeof clock);
     select?: () => Promise<unknown>;
     preview?: unknown;
+    locale?: "en" | "es";
     prepare?: (proposal: unknown) => Promise<unknown>;
     request?: typeof context;
   } = {},
@@ -130,7 +131,7 @@ async function mount(
   document.body.append(host);
   hosts.push(host);
   const parent = FISCAL_SETUP.create({
-    locale: "en",
+    locale: options.locale ?? "en",
     request: options.request ?? structuredClone(context),
     api,
   }) as LitElement;
@@ -947,4 +948,154 @@ it("keeps a failed kept confirmation retryable without granting completion", asy
   refuse = false;
   await userEvent.click(button(el, "kept"));
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Recovery PDF confirmed."));
+});
+
+const quiet = (el: LitElement) => {
+  const select = button(el, "select");
+  return { disabled: select.disabled, variant: select.getAttribute("variant") };
+};
+it("draws Make the series quiet and disabled while a countdown runs", async () => {
+  const { el } = await mount({
+    select: async () => ({ status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 }),
+  });
+  await ready(el);
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() => expect(remaining(el)).toBeDefined());
+  await el.updateComplete;
+  expect(quiet(el)).toEqual({ disabled: true, variant: "secondary" });
+});
+const noSecondClock = {
+  ...clock,
+  usable: clock.usable.filter((r) => r.source === "box"),
+  unavailable: [{ source: "internet", result: "unavailable" as const, reason: "offline" }],
+  secondClock: false,
+};
+it("draws Make the series quiet and disabled while it waits for a second clock", async () => {
+  const { el } = await mount({ decision: noSecondClock });
+  await ready(el);
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() => expect(text(el)).toContain(SETUP_DO));
+  await el.updateComplete;
+  expect(quiet(el)).toEqual({ disabled: true, variant: "secondary" });
+});
+function gatedClocks() {
+  const state = {
+    decision: noSecondClock as typeof clock,
+    hold: undefined as Promise<void> | undefined,
+    fail: false,
+  };
+  let compared = 0;
+  const prepare = async (proposal: unknown) => {
+    const action = (proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "selection") return { status: "preview" };
+    if (state.hold) await state.hold;
+    if (state.fail) {
+      state.fail = false;
+      throw { code: "setup.attempt_conflict" };
+    }
+    return { id: `comparison-${++compared}`, clock: state.decision };
+  };
+  return { state, prepare };
+}
+it("keeps the explanation on screen while an automatic re-check is in flight", async () => {
+  const { state, prepare } = gatedClocks();
+  const { el, calls } = await mount({ prepare });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(text(el)).toContain(SETUP_DO));
+    let release!: () => void;
+    state.hold = new Promise((resolve) => {
+      release = resolve;
+    });
+    const before = calls.length;
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() => expect(calls.length).toBeGreaterThan(before));
+    await el.updateComplete;
+    expect(text(el)).toContain(WHY_SECOND);
+    expect(text(el)).toContain(SETUP_DO);
+    release();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("keeps the countdown's explanation on screen while its re-check is in flight", async () => {
+  const { state, prepare } = gatedClocks();
+  state.decision = clock;
+  const { el } = await mount({
+    prepare,
+    select: async () => ({ status: "waiting", targetMs: instant + 1_000, remainingMs: 1_000 }),
+  });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(remaining(el)).toBe("0:01"));
+    let release!: () => void;
+    state.hold = new Promise((resolve) => {
+      release = resolve;
+    });
+    vi.advanceTimersByTime(1_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(text(el)).toContain(WHY_WAIT);
+    release();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("keeps checking for a second clock after one automatic re-check fails", async () => {
+  const { state, prepare } = gatedClocks();
+  const { el, calls } = await mount({ prepare });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(text(el)).toContain(SETUP_DO));
+    state.fail = true;
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() => expect(state.fail).toBe(false));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(text(el)).toContain(SETUP_DO);
+    state.decision = clock;
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() => expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it.each([
+  ["en", "Series name: 0CSQW", "This date is outside the range of series names."],
+  ["es", "Nombre de las series: 0CSQW", "Esta fecha está fuera del rango de nombres de serie."],
+] as const)("%s labels say series name, not hour", async (locale, chosen, range) => {
+  const { el } = await mount({ locale });
+  await ready(el);
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
+  );
+  expect(text(el)).toContain(chosen);
+  const blocked = await mount({ locale, decision: { ...clock, rangeBlocked: true } });
+  await vi.waitFor(() => expect(text(blocked.el)).toContain(range));
+});
+it("says in Spanish that the series cannot be made yet, with the plural verb", async () => {
+  const { el } = await mount({
+    locale: "es",
+    select: async () => {
+      throw {
+        code: "sif.allocation_invalid",
+        params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-18T20:04:00Z") },
+      };
+    },
+  });
+  await ready(el);
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() =>
+    expect(text(el)).toContain(
+      "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo. Podrás seguir a partir de las 22:04.",
+    ),
+  );
 });

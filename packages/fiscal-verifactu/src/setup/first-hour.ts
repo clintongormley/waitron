@@ -117,6 +117,8 @@ export class FirstSetupHour extends LitElement {
     this.#poll = undefined;
   }
   #waitForSecondClock(): void {
+    this.result = undefined;
+    this.#countdown.stop();
     this.problem = { kind: "second-clock" };
     this.#poll ??= setInterval(() => {
       if (!this.busy) void this.#select(true);
@@ -226,9 +228,12 @@ export class FirstSetupHour extends LitElement {
           result.remainingMs >= 0))
     );
   }
-  #showWait(result: Result): void {
+  /** Replaces what the page explains: a problem, a server answer, or neither. */
+  #show(problem: Problem | undefined, result?: Result): void {
+    this.#stopWait();
+    this.problem = problem;
     this.result = result;
-    if (result.status === "waiting" && result.remainingMs !== null)
+    if (result?.status === "waiting" && result.remainingMs !== null)
       this.#countdown.start(result.remainingMs);
   }
   async #compare(): Promise<void> {
@@ -263,7 +268,7 @@ export class FirstSetupHour extends LitElement {
         typeof preview.remainingMs === "number" &&
         preview.remainingMs > 0
       )
-        this.#showWait(preview as unknown as Result);
+        this.#show(undefined, preview as unknown as Result);
     } catch {
       if (current()) this.error = true;
     } finally {
@@ -283,9 +288,8 @@ export class FirstSetupHour extends LitElement {
       context === this.context;
     this.busy = true;
     this.error = false;
-    this.problem = undefined;
-    this.result = undefined;
-    this.#stopWait();
+    // An automatic re-check leaves the current explanation up until its answer replaces it.
+    if (!automatic) this.#show(undefined, undefined);
     try {
       let result: unknown;
       if (context.status === "claimed") {
@@ -293,10 +297,7 @@ export class FirstSetupHour extends LitElement {
         if (!comparison || !current()) return;
         this.comparison = comparison;
         if (!comparison.clock.secondClock) return this.#waitForSecondClock();
-        if (comparison.clock.disagreement) {
-          this.problem = { kind: "disagreement" };
-          return;
-        }
+        if (comparison.clock.disagreement) return this.#show({ kind: "disagreement" });
         result = await api.candidates({ comparisonId: comparison.id });
       } else result = await api.request();
       if (!current()) return;
@@ -317,22 +318,27 @@ export class FirstSetupHour extends LitElement {
         await api.importInput(result.input);
         if (!current()) return;
       } else throw new Error("invalid selection");
-      this.#showWait(result as unknown as Result);
+      this.#show(undefined, result as unknown as Result);
     } catch (error) {
       if (!current()) return;
+      const polling = this.#poll !== undefined;
       const { code, params } = (error ?? {}) as { code?: unknown; params?: unknown };
       const reason =
         code === "sif.allocation_invalid" && record(params) ? params.reason : undefined;
       if (reason === "second_clock_missing") this.#waitForSecondClock();
-      else if (reason === "clock_disagreement") this.problem = { kind: "disagreement" };
+      else if (reason === "clock_disagreement") this.#show({ kind: "disagreement" });
       else if (reason === "minute_not_later" && record(params))
-        this.problem = {
+        this.#show({
           kind: "later",
           ...(Number.isSafeInteger(params.allowedFromMs)
             ? { allowedFromMs: params.allowedFromMs as number }
             : {}),
-        };
-      else this.error = true;
+        });
+      // A lost request while waiting for a second clock is retried by the next poll.
+      else if (!(automatic && polling)) {
+        this.#show(undefined);
+        this.error = true;
+      }
     } finally {
       if (current()) this.busy = false;
     }
@@ -517,7 +523,7 @@ export class FirstSetupHour extends LitElement {
           internet: "Internet",
           unavailable: "Unavailable",
           blocked: "Box time precedes this Waitron release.",
-          range: "This date is outside the supported hour range.",
+          range: "This date is outside the range of series names.",
           whyWait: "Waiting to confirm the time, so no invoice series is ever repeated.",
           nothingToDo: "Nothing to do; keep this page open.",
           continuesIn: "Continues in",
@@ -534,7 +540,7 @@ export class FirstSetupHour extends LitElement {
             "Try from another phone or till. If they still differ, the box's time may be wrong: ask for help.",
           later: "The series cannot be made yet: a later minute is already in use.",
           laterFrom: (time: string) => `You can carry on from ${time}.`,
-          chosen: "Selected hour code",
+          chosen: "Series name",
           failed: "Could not complete this step. Check again.",
           next: "Keep your recovery PDF.",
           pdf: "Prepare recovery PDF",
@@ -565,7 +571,7 @@ export class FirstSetupHour extends LitElement {
           internet: "Internet",
           unavailable: "No disponible",
           blocked: "La hora de la caja es anterior a esta versión de Waitron.",
-          range: "Esta fecha está fuera del rango de horas admitido.",
+          range: "Esta fecha está fuera del rango de nombres de serie.",
           whyWait: "Esperamos a confirmar la hora para que ninguna serie de facturas se repita.",
           nothingToDo: "No hace falta hacer nada; deja esta página abierta.",
           continuesIn: "Sigue en",
@@ -582,9 +588,9 @@ export class FirstSetupHour extends LitElement {
           differDo:
             "Prueba desde otro móvil o caja. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.",
           later:
-            "Todavía no se puede crear las series: ya se usó un minuto posterior a la hora de este equipo.",
+            "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
           laterFrom: (time: string) => `Podrás seguir a partir de las ${time}.`,
-          chosen: "Código de hora seleccionado",
+          chosen: "Nombre de las series",
           failed: "No se pudo completar este paso. Comprueba de nuevo.",
           next: "Guarda el PDF de recuperación.",
           pdf: "Preparar PDF de recuperación",
@@ -605,6 +611,7 @@ export class FirstSetupHour extends LitElement {
       }).format(ms);
     const box = clock?.usable.find((r) => r.source === "box");
     const locked = this.busy || this.result?.status === "selected";
+    const waits = this.result?.status === "waiting" || this.problem?.kind === "second-clock";
     return html`<h2>${t.heading}</h2>
       <dl data-test="venue-review">
         <dt>${t.environment}</dt>
@@ -753,8 +760,8 @@ export class FirstSetupHour extends LitElement {
                   >${t.compare}</wt-button
                 ><wt-button
                   data-test="select"
-                  variant=${this.#canSelect && !locked ? "primary" : "secondary"}
-                  ?disabled=${locked || !this.#canSelect}
+                  variant=${this.#canSelect && !locked && !waits ? "primary" : "secondary"}
+                  ?disabled=${locked || waits || !this.#canSelect}
                   @click=${() => void this.#select()}
                   >${t.select}</wt-button
                 >`
