@@ -246,12 +246,38 @@ export class LookCard extends LitElement {
     }
   }
   edit(target: ThemeEdit): void {
+    if (!this.canEdit || this.submitting) return;
+    let open: () => void;
     if ("kind" in target) {
-      this.#begin({ id: null, from: "new" }, null);
+      open = () => this.#begin({ id: null, from: "new" }, null);
+    } else {
+      const view = this.list?.themes.find((theme) => theme.id === target.id);
+      if (!view) return;
+      if (this.draft && this.#editing?.id === view.id) {
+        this.#scrollIntoPlace();
+        return;
+      }
+      open = () => this.#begin({ id: view.id, name: view.name }, view.choices);
+    }
+    const leave = this.#leave;
+    if (!this.#scope || !leave) {
+      open();
+      this.#scrollIntoPlace();
       return;
     }
-    const view = this.list?.themes.find((theme) => theme.id === target.id);
-    if (view) this.#begin({ id: view.id, name: view.name }, view.choices);
+    // A Discard closes the editor through the scope's restore before `proceed`; closing it any
+    // other way while the question is open disposes the scope, and the coordinator drops the answer.
+    void leave.request({
+      scopes: [this],
+      reason: "navigation",
+      proceed: () => {
+        open();
+        this.#scrollIntoPlace();
+      },
+    });
+  }
+  #scrollIntoPlace(): void {
+    this.scrollIntoView({ block: "start" });
   }
   #begin(editing: Editing, choices: ThemeChoices | null): void {
     this.#nameDialog()?.dismiss();

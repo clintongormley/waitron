@@ -10,7 +10,8 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import "./look-card.js";
 import "./themes-card.js";
-import type { ThemesChanged } from "./themes-card.js";
+import type { LookCard } from "./look-card.js";
+import type { ThemeEdit, ThemesChanged } from "./themes-card.js";
 
 /** Placed by name key, as the server orders the list, until the next read. */
 function placed(themes: readonly ThemeView[], view: ThemeView): ThemeView[] {
@@ -55,6 +56,7 @@ export class AppearanceScreen extends LitElement {
   @property({ attribute: false }) canEdit = false;
   @state() private list?: ThemeList;
   @state() private readError = "";
+  @state() private editingId: string | null = null;
   #generation = 0;
   #writes = 0;
   #loadedBefore = false;
@@ -126,11 +128,19 @@ export class AppearanceScreen extends LitElement {
                 .list=${this.list}
                 .canEdit=${this.canEdit}
                 @themes-changed=${(event: CustomEvent<ThemesChanged>) => this.#changed(event.detail)}
+                @look-editing=${(event: CustomEvent<{ id: string | null }>) => {
+                  this.editingId = event.detail.id;
+                }}
               ></dashboard-look-card>
               <dashboard-themes-card
                 .api=${this.api}
                 .list=${this.list}
                 .canEdit=${this.canEdit}
+                .editingId=${this.editingId}
+                @theme-edit=${(event: CustomEvent<ThemeEdit>) =>
+                  this.renderRoot
+                    .querySelector<LookCard>("dashboard-look-card")
+                    ?.edit(event.detail)}
                 @themes-changed=${(event: CustomEvent<ThemesChanged>) => this.#changed(event.detail)}
               ></dashboard-themes-card>`
           : nothing

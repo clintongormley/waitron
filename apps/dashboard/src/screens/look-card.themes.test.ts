@@ -1,6 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WtButton, WtDialog, WtInput, WtSwitch } from "@waitron/ui";
+import { createLeaveCoordinator, type LeaveDecision } from "@waitron/ui-core/unsaved-changes";
 import { WAITRON_CHOICES, normaliseChoices, type ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
@@ -353,5 +354,192 @@ describe("what the editor announces and when it closes", () => {
     expect(dialog.open).toBe(false);
     expect(isEditing(el)).toBe(false);
     expect(createTheme).not.toHaveBeenCalled();
+  });
+});
+
+const corners = (el: Card) =>
+  q(el, "wt-segmented-control[name=corners]") as HTMLElementTagNameMap["wt-segmented-control"];
+
+async function square(el: Card): Promise<void> {
+  const choice = [...corners(el).shadowRoot!.querySelectorAll("button")].find(
+    (b) => text(b) === t("appearance.corners.square"),
+  )!;
+  await userEvent.click(choice);
+  await el.updateComplete;
+}
+
+/** An application around the card whose leave question answers what `answer` resolves to. */
+function withLeaveQuestion(el: Card) {
+  let answer: (decision: LeaveDecision) => void = () => {};
+  const ask = vi.fn(
+    () =>
+      new Promise<LeaveDecision>((resolve) => {
+        answer = resolve;
+      }),
+  );
+  const coordinator = createLeaveCoordinator(ask, window);
+  el.parentElement!.addEventListener("wt-leave-coordinator", (event) => {
+    event.stopPropagation();
+    (event as CustomEvent<{ accept(value: unknown): void }>).detail.accept(coordinator);
+  });
+  return { ask, answer: (decision: LeaveDecision) => answer(decision) };
+}
+
+describe("opening the editor from the Themes card", () => {
+  it("Edit on another theme with a changed draft asks first", async () => {
+    setLocale("en-GB");
+    const { el, editing } = await mount(luciaInUse);
+    const { ask, answer } = withLeaveQuestion(el);
+    el.edit({ id: "t-lucia" });
+    await el.updateComplete;
+    await square(el);
+
+    el.edit({ id: "t-xmas" });
+    await expect.poll(() => ask.mock.calls.length).toBe(1);
+    answer("keep");
+    await settle(el);
+    expect(heading(el)).toBe("Look");
+    expect(line(el)).toBe("Theme in use: Bar Lucía. Saving changes every screen.");
+    expect(corners(el).value).toBe("square");
+    expect(editing).toEqual([{ id: "t-lucia" }]);
+
+    el.edit({ id: "t-xmas" });
+    await expect.poll(() => ask.mock.calls.length).toBe(2);
+    answer("discard");
+    await settle(el);
+    expect(heading(el)).toBe("Edit theme: Christmas");
+    expect(codeField(el).value).toBe("#7a1f2b");
+    expect(corners(el).value).toBe(WAITRON_CHOICES.corners);
+    expect(button(el, "save").disabled).toBe(true);
+    expect(editing.at(-1)).toEqual({ id: "t-xmas" });
+  });
+
+  it("a Discard answered after the right to edit is lost opens nothing", async () => {
+    const { el, editing } = await mount(luciaInUse);
+    const { ask, answer } = withLeaveQuestion(el);
+    el.edit({ id: "t-lucia" });
+    await el.updateComplete;
+    await square(el);
+    el.edit({ id: "t-xmas" });
+    await expect.poll(() => ask.mock.calls.length).toBe(1);
+    el.canEdit = false;
+    await el.updateComplete;
+    answer("discard");
+    await settle(el);
+    expect(isEditing(el)).toBe(false);
+    expect(editing).toEqual([{ id: "t-lucia" }, { id: null }]);
+  });
+
+  it("Edit on another theme with an unchanged draft opens it without asking", async () => {
+    const { el } = await mount(luciaInUse);
+    const { ask } = withLeaveQuestion(el);
+    el.edit({ id: "t-lucia" });
+    await el.updateComplete;
+    el.edit({ kind: "new" });
+    await settle(el);
+    expect(heading(el)).toBe("New theme");
+    expect(ask).not.toHaveBeenCalled();
+  });
+
+  it("Edit on the theme already open only scrolls", async () => {
+    const { el, editing } = await mount(luciaInUse);
+    const { ask } = withLeaveQuestion(el);
+    const scroll = vi.spyOn(el, "scrollIntoView").mockImplementation(() => {});
+    el.edit({ id: "t-lucia" });
+    await el.updateComplete;
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll).toHaveBeenLastCalledWith({ block: "start" });
+    await square(el);
+
+    el.edit({ id: "t-lucia" });
+    await settle(el);
+    expect(ask).not.toHaveBeenCalled();
+    expect(corners(el).value).toBe("square");
+    expect(button(el, "save").disabled).toBe(false);
+    expect(scroll).toHaveBeenCalledTimes(2);
+    expect(scroll).toHaveBeenLastCalledWith({ block: "start" });
+    expect(editing).toEqual([{ id: "t-lucia" }]);
+  });
+
+  it("Edit is refused without the right to edit and while a save is sent", async () => {
+    const { el, editing, saveTheme } = await mount(luciaInUse, false);
+    el.edit({ id: "t-xmas" });
+    el.edit({ kind: "new" });
+    await settle(el);
+    expect(isEditing(el)).toBe(false);
+    expect(editing).toEqual([]);
+
+    el.canEdit = true;
+    await el.updateComplete;
+    let finish: (view: ThemeView) => void = () => {};
+    saveTheme.mockImplementationOnce(
+      () =>
+        new Promise<ThemeView>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    el.edit({ id: "t-lucia" });
+    await el.updateComplete;
+    await square(el);
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    el.edit({ id: "t-xmas" });
+    await settle(el);
+    expect(heading(el)).toBe("Look");
+    expect(editing).toEqual([{ id: "t-lucia" }]);
+    finish(theme("t-lucia", "Bar Lucía", { ...LUCIA, corners: "square" }));
+    await expect.poll(() => isEditing(el)).toBe(false);
+  });
+
+  it("Edit on a theme no longer in the list opens nothing", async () => {
+    const { el, editing } = await mount(luciaInUse);
+    el.edit({ id: "t-gone" });
+    await settle(el);
+    expect(isEditing(el)).toBe(false);
+    expect(editing).toEqual([]);
+  });
+
+  it("a name stored after the card is taken out and put back announces nothing", async () => {
+    const { el, changes, createTheme, getVenueTheme } = await mount(luciaInUse);
+    let finish: (view: ThemeView) => void = () => {};
+    createTheme.mockImplementationOnce(
+      () =>
+        new Promise<ThemeView>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    el.edit({ kind: "new" });
+    await el.updateComplete;
+    await pickSwatch(el, "#dd5f5f");
+    await userEvent.click(button(el, "save"));
+    const dialog = await nameDialog(el);
+    await typeName(el, dialog, "Holiday");
+    await userEvent.click(nameSave(dialog));
+    await expect.poll(() => createTheme.mock.calls.length).toBe(1);
+    const parent = el.parentElement!;
+    el.remove();
+    parent.append(el);
+    await el.updateComplete;
+    finish(theme("t-new", "Holiday", { ...WAITRON_CHOICES, brandColor: "#dd5f5f" }));
+    await settle(el);
+    await settle(el);
+    expect(changes).toEqual([]);
+    expect(isEditing(el)).toBe(true);
+    expect(codeField(el).value).toBe("#dd5f5f");
+    expect(getVenueTheme).not.toHaveBeenCalled();
+  });
+
+  it("Waitron's theme open while another is switched into use is a new theme", async () => {
+    setLocale("en-GB");
+    const { el } = await mount(waitronInUse);
+    await openWaitronEditor(el);
+    el.list = { ...waitronInUse, inUse: "t-xmas" };
+    await el.updateComplete;
+    expect(heading(el)).toBe("New theme");
+    expect(line(el)).toBe(t("appearance.editing_not_in_use"));
+    await pickSwatch(el, "#dd5f5f");
+    await userEvent.click(button(el, "save"));
+    const dialog = await nameDialog(el);
+    expect(toggle(dialog).checked).toBe(false);
   });
 });
