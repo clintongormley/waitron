@@ -48,7 +48,7 @@ describe("clockNotices", () => {
 });
 
 describe("FISCAL_STAFF_NOTICES", () => {
-  it("the seat's source answers through a transaction", async () => {
+  it("the seat's one source answers the clock notice", async () => {
     expect(FISCAL_STAFF_NOTICES).toHaveLength(1);
     const before = reading("2001-01-01T11:00:00.000Z", 60);
     const after = reading("2026-10-22T10:00:00.000Z", 120);

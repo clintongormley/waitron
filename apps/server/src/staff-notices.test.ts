@@ -41,14 +41,14 @@ async function seedVenue(): Promise<{ deviceId: DeviceId }> {
   const [location] = await db
     .insert(locations)
     .values({
-      name: "Sala",
+      name: "Main room",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
+      operationDescription: "Sale on premises",
     })
     .returning({ id: locations.id });
   const { deviceId } = await seedDevice(db, {
     locationId: brandLocationId(location!.id),
-    label: "Caja 1",
+    label: "Till 1",
   });
   return { deviceId };
 }
@@ -210,6 +210,14 @@ describe("readStaffNotices", () => {
     );
     expect(result.unavailable).toEqual(["m"]);
     expect(log).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenNthCalledWith(1, "error", "staff_notice.source_unavailable", {
+      owner: "m",
+      errorCode: "unknown",
+    });
+    expect(log).toHaveBeenNthCalledWith(2, "error", "staff_notice.source_unavailable", {
+      owner: "m",
+      errorCode: "unknown",
+    });
   });
 
   it("through the real composition, the Veri*Factu module's clock notice and nothing else", async () => {
