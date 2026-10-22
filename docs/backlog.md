@@ -2155,8 +2155,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   there. [Detail](backlog/till.md#a922-discard-on-a-tables-bill-from-parked-orders-fails)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
-  2026-10-18).** Owner-approved design; its portion, bill and picker slices remain queued in lane G
-  after A773-1. Remaining slices: portions and current ticket/receipt grouping; named, stable-numbered bills;
+  2026-10-18).** Owner-approved design; A773-1 has landed. Its portion, bill and picker slices
+  remain queued in lane G. Remaining slices: portions and current ticket/receipt grouping; named, stable-numbered bills;
   always-on bill dropdown with + New bill, even for one bill, and one kebab with current-bill
   then Whole table headings; one picker for Move dishes and Split a table, including waiting
   courses; pre-bills after asesor S2 (A446). The main bill and Tab go; the table
