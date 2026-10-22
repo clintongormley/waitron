@@ -59,7 +59,7 @@ async function seedLocation(): Promise<string> {
   return row!.id;
 }
 
-async function seedSales(issued: { id: string; at: string }[]): Promise<void> {
+async function seedSales(issued: { id: string; at: string; corrects?: string }[]): Promise<void> {
   const location = await seedLocation();
   const node = await seedNode(suite.db, brandLocationId(location));
   const [series] = await suite.db
@@ -68,7 +68,7 @@ async function seedSales(issued: { id: string; at: string }[]): Promise<void> {
     .returning({ id: invoiceSeries.id });
   for (const [index, sale] of issued.entries()) {
     await suite.db.run(
-      sql`insert into sales (id, source, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${sale.id}, 'operator_script', ${node}, ${series!.id}, ${index + 1}, ${sale.at}, 120, 100, '[]', 'es-ES', '["es-ES"]', 'verifactu', 'recorded')`,
+      sql`insert into sales (id, source, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, corrects_sale_id) values (${sale.id}, 'operator_script', ${node}, ${series!.id}, ${index + 1}, ${sale.at}, 120, ${sale.corrects === undefined ? 100 : -100}, '[]', 'es-ES', '["es-ES"]', 'verifactu', 'recorded', ${sale.corrects ?? null})`,
     );
   }
 }
@@ -131,6 +131,20 @@ describe("collectBoxHealth", () => {
     ]);
     const health = await collectBoxHealth(suite.db, stubReaders());
     expect(health.sales.lastAt).toBe("2026-10-22T12:00:00.000Z");
+  });
+
+  it("counts a correction as the last sale when it is the latest", async () => {
+    const original = "00000000-0000-4000-8000-000000000001";
+    await seedSales([
+      { id: original, at: "2026-10-21T12:00:00.000Z" },
+      {
+        id: "00000000-0000-4000-8000-000000000002",
+        at: "2026-10-22T09:00:00.000Z",
+        corrects: original,
+      },
+    ]);
+    const health = await collectBoxHealth(suite.db, stubReaders());
+    expect(health.sales.lastAt).toBe("2026-10-22T09:00:00.000Z");
   });
 
   it("lists only printers that are switched on and not deleted", async () => {
