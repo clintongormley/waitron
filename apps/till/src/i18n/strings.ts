@@ -1730,6 +1730,18 @@ export const en = {
   "update.reload": "Reload",
   "sale.unconfirmed":
     "The server did not answer. Check whether the sale went through before trying again.",
+  "staff_notice.storage.disk_full": "Nothing can be saved: the box is out of space",
+  "staff_notice.clock.unusable": "Sales can't be recorded: the box's clock is wrong",
+  "staff_notice.storage.space_low": "The box is nearly out of space",
+  "staff_notice.fiscal.records_unsent": "{n} sales not yet sent to the tax agency",
+  "staff_notice.fiscal.records_unsent_one": "1 sale not yet sent to the tax agency",
+  "staff_notice.unknown": "The box needs attention",
+  "staff_notice.tell_manager": "Tell a manager",
+  "staff_notice.retried": "Retried automatically",
+  "staff_notice.more": "+{n}",
+  "staff_notice.more_label": "{n} more notices",
+  "staff_notice.more_label_one": "1 more notice",
+  "staff_notice.list": "Notices",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -3423,6 +3435,18 @@ export const es: Record<StringKey, string> = {
   "update.reload": "Recargar",
   "sale.unconfirmed":
     "El servidor no respondió. Comprueba si la venta se registró antes de reintentar.",
+  "staff_notice.storage.disk_full": "No se puede guardar nada: el equipo no tiene espacio",
+  "staff_notice.clock.unusable": "No se pueden registrar ventas: la hora del equipo es incorrecta",
+  "staff_notice.storage.space_low": "Queda poco espacio en el equipo",
+  "staff_notice.fiscal.records_unsent": "{n} ventas sin enviar a Hacienda",
+  "staff_notice.fiscal.records_unsent_one": "1 venta sin enviar a Hacienda",
+  "staff_notice.unknown": "El equipo necesita atención",
+  "staff_notice.tell_manager": "Avisa al encargado",
+  "staff_notice.retried": "Se reintenta solo",
+  "staff_notice.more": "+{n}",
+  "staff_notice.more_label": "{n} avisos más",
+  "staff_notice.more_label_one": "1 aviso más",
+  "staff_notice.list": "Avisos",
 };
 
 // `en` is its own catalogue, so an explicit English request resolves directly rather than through
