@@ -196,6 +196,16 @@ describe("till-held-orders", () => {
         countText(3, "order_counts.ready", "order_counts.ready_one"),
       );
     });
+
+    it("says a single ready item in the Spanish singular", async () => {
+      setLocale("es");
+      const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+        orders: [{ ...ana, counts: { ...ana.counts, ready: 1 } }],
+      });
+      expect(rowOf(el, 7).querySelector('[data-count="ready"]')!.textContent!.trim()).toBe(
+        es["order_counts.ready_one"],
+      );
+    });
   });
 
   it("a Retrieve control emits a composed retrieve-order carrying its own id", async () => {
@@ -287,23 +297,39 @@ describe("till-held-orders: a narrow card", () => {
   it.each([320, 110])(
     "keeps each order's controls clear of its summary at %ipx wide",
     async (width) => {
-      const partlyPaid = { ...mesa, outstanding: "1.00", hasPayments: true };
+      const partlyPaid = {
+        ...mesa,
+        outstanding: "1.00",
+        hasPayments: true,
+        counts: { ordered: 128, unsent: 12, held: 34, waiting: 56, ready: 78 },
+      };
       const { el, host } = await mountWidget<TillHeldOrders>("till-held-orders", {
         orders: [partlyPaid, barra],
       });
       host.style.width = `${width}px`;
       await el.updateComplete;
 
+      expect(
+        el.shadowRoot!.querySelectorAll(".order")[0]!.querySelectorAll("[data-count]"),
+      ).toHaveLength(5);
       for (const order of el.shadowRoot!.querySelectorAll<HTMLElement>(".order")) {
-        const summary = order.querySelector(".summary")!.getBoundingClientRect();
-        for (const control of order.querySelectorAll("wt-button")) {
-          const box = control.getBoundingClientRect();
-          const apart =
-            box.left >= summary.right ||
-            box.right <= summary.left ||
-            box.top >= summary.bottom ||
-            box.bottom <= summary.top;
-          expect(apart, `${control.className} overlaps the summary`).toBe(true);
+        const parts = [
+          ["the summary", order.querySelector(".summary")!],
+          ...[...order.querySelectorAll<HTMLElement>("[data-count]")].map(
+            (chip) => [`the ${chip.dataset.count} count`, chip] as const,
+          ),
+        ] as const;
+        for (const [name, part] of parts) {
+          const summary = part.getBoundingClientRect();
+          for (const control of order.querySelectorAll("wt-button")) {
+            const box = control.getBoundingClientRect();
+            const apart =
+              box.left >= summary.right ||
+              box.right <= summary.left ||
+              box.top >= summary.bottom ||
+              box.bottom <= summary.top;
+            expect(apart, `${control.className} overlaps ${name}`).toBe(true);
+          }
         }
       }
     },
