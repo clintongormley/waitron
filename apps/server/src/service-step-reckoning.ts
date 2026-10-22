@@ -1,13 +1,7 @@
-import type { ServiceStep } from "@waitron/venue-service";
+import type { StepRule } from "@waitron/venue-service";
 import { serviceCompletedAt } from "./line-service-state.js";
 
-export interface StepRule {
-  id: string;
-  name: string;
-  start: ServiceStep["start"];
-  courseId: string | null;
-  minutes: number;
-}
+export type { StepRule };
 
 export interface StepFacts {
   openedAt: number;
