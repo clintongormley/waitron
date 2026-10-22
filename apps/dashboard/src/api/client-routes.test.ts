@@ -526,7 +526,7 @@ describe("DashboardApi routes", () => {
       dark: { "--wt-color-primary": "#f2d300" },
       warnings: [],
     };
-    const renamed = { ...created, name: "Navidad" };
+    const renamed = { ...created, name: "Winter" };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(created))
@@ -538,13 +538,13 @@ describe("DashboardApi routes", () => {
     await expect(
       api.createTheme({ name: "Christmas", theme: LEMON, inUse: false }),
     ).resolves.toEqual(created);
-    await expect(api.renameTheme("t1", "Navidad")).resolves.toEqual(renamed);
+    await expect(api.renameTheme("t1", "Winter")).resolves.toEqual(renamed);
     await expect(api.deleteTheme("t1")).resolves.toEqual({ inUse: "t2" });
     await expect(api.useTheme(null)).resolves.toEqual({ inUse: null });
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/themes", "POST", { name: "Christmas", theme: LEMON, inUse: false }],
-      ["/management-api/themes/t1", "PATCH", { name: "Navidad" }],
+      ["/management-api/themes/t1", "PATCH", { name: "Winter" }],
       ["/management-api/themes/t1", "DELETE", undefined],
       ["/management-api/theme-in-use", "PUT", { customThemeId: null }],
     ]);

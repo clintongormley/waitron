@@ -161,7 +161,7 @@ describe("dashboard-themes-card", () => {
   });
 
   it("the brand chip is the chosen colour, not a fixed shade", async () => {
-    const lemon = theme("t-lemon", "Café Limón", {
+    const lemon = theme("t-lemon", "Lemon Café", {
       ...WAITRON_CHOICES,
       brandColor: "#f2d300",
       brandFix: { light: true },

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { THEME_NAME_MAX_LENGTH, checkThemeName } from "@waitron/ui-core/theme";
 import { codeMessage } from "../i18n/codes.js";
+import { es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
 import { copyName, nameCheckText, nameRefusalText } from "./theme-names.js";
 
@@ -10,7 +11,7 @@ const codePoints = (text: string): number => [...text.normalize("NFC")].length;
 
 describe.each([
   { locale: "en-GB", suffix: " (copy)" },
-  { locale: "es-ES", suffix: " (copia)" },
+  { locale: "es-ES", suffix: es["appearance.copy_name"].replace("{name}", "") },
 ] as const)("copyName in $locale", ({ locale, suffix }) => {
   it("adds the copy words to a short name", () => {
     setLocale(locale);
@@ -70,8 +71,9 @@ it("words a server's refusal of a name and nothing else", () => {
 
 it("words the refusals in Spanish", () => {
   setLocale("es-ES");
-  expect(nameRefusalText("theme.name_taken", undefined)).toBe("Ya existe un tema con este nombre.");
-  expect(nameCheckText({ ok: false, reason: "reserved" })).toBe(
-    "«Waitron» es el nombre del tema integrado. Elige otro.",
+  expect(nameRefusalText("theme.name_taken", undefined)).toBe(
+    codeMessage("theme.name_taken", "es"),
   );
+  expect(codeMessage("theme.name_taken", "es")).not.toBe(codeMessage("theme.name_taken", "en"));
+  expect(nameCheckText({ ok: false, reason: "reserved" })).toBe(es["appearance.name_reserved"]);
 });
