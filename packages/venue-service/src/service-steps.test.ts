@@ -7,6 +7,7 @@ import {
   captureError,
   kitchenCourses,
   locations,
+  parties,
   withTransaction,
   type Database,
   type Transaction,
@@ -16,7 +17,8 @@ import { locationId as brandLocationId, type LocationId } from "@waitron/shared"
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment } from "./operations.js";
 import { departments } from "./schema/service.js";
-import { serviceSteps } from "./schema/service-steps.js";
+import { serviceStepCompletions, serviceSteps } from "./schema/service-steps.js";
+import { clearServiceDeleteSettings } from "./service-delete-settings.js";
 import { listServiceSteps, listStepCourses, saveServiceSteps } from "./service-steps.js";
 
 const suite = useVenueDb({
@@ -282,5 +284,66 @@ describe("service steps", () => {
     );
     await scoped((tx) => saveServiceSteps(tx, cfg, department.id, []));
     expect(await departmentRows(department.id)).toEqual([]);
+  });
+});
+
+describe("a step's completions", () => {
+  async function doneOnEach(stepIds: string[]): Promise<string> {
+    return scoped(async (tx) => {
+      const [party] = await tx
+        .insert(parties)
+        .values({ openedBy: "sender" })
+        .returning({ id: parties.id });
+      await tx.insert(serviceStepCompletions).values(
+        stepIds.map((stepId) => ({
+          partyId: party!.id,
+          stepId,
+          doneAt: "2026-10-22T20:33:00.000Z",
+          doneBy: "waiter-1",
+        })),
+      );
+      return party!.id;
+    });
+  }
+
+  const completedSteps = (partyId: string) =>
+    db
+      .select({ stepId: serviceStepCompletions.stepId })
+      .from(serviceStepCompletions)
+      .where(eq(serviceStepCompletions.partyId, partyId))
+      .then((rows) => rows.map((row) => row.stepId));
+
+  it("a department save keeps a renamed step's completions and drops a removed step's", async () => {
+    const cfg = await seedVenue("Completions on save");
+    const department = await scoped((tx) =>
+      createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
+    );
+    await scoped((tx) =>
+      saveServiceSteps(tx, cfg, department.id, [
+        { name: "Set up", start: "seated", courseId: null, minutes: 0 },
+        { name: "Take order", start: "after_previous", courseId: null, minutes: 2 },
+      ]),
+    );
+    const [setUp, takeOrder] = await departmentRows(department.id);
+    const partyId = await doneOnEach([setUp!.id, takeOrder!.id]);
+    await scoped((tx) =>
+      saveServiceSteps(tx, cfg, department.id, [
+        { id: setUp!.id, name: "Lay the table", start: "seated", courseId: null, minutes: 0 },
+      ]),
+    );
+    expect(await completedSteps(partyId)).toEqual([setUp!.id]);
+  });
+
+  it("a department delete takes its steps' completions", async () => {
+    const cfg = await seedVenue("Completions on delete");
+    const { dining, bar } = await scoped(async (tx) => ({
+      dining: await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
+      bar: await createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" }),
+    }));
+    const [diningStep] = await departmentRows(dining.id);
+    const [barStep] = await departmentRows(bar.id);
+    const partyId = await doneOnEach([diningStep!.id, barStep!.id]);
+    await scoped((tx) => clearServiceDeleteSettings(tx, cfg, [], dining.id));
+    expect(await completedSteps(partyId)).toEqual([barStep!.id]);
   });
 });

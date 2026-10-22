@@ -1,6 +1,17 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
-import { count, enumCheck, enumType, id, kitchenCourses, label, newId, table } from "@waitron/db";
+import {
+  count,
+  enumCheck,
+  enumType,
+  id,
+  kitchenCourses,
+  label,
+  newId,
+  parties,
+  table,
+  tsString,
+} from "@waitron/db";
 import { departments } from "./service.js";
 
 export const SERVICE_STEP_STARTS = [
@@ -47,5 +58,31 @@ export const serviceSteps = table(
       "service_steps_minutes_ck",
       sql`${t.minutes} between 0 and 120 and (${t.start} <> 'since_last_order' or ${t.minutes} >= 1)`,
     ),
+  ],
+);
+
+export const serviceStepCompletions = table(
+  "service_step_completions",
+  {
+    id: id("id").primaryKey().$defaultFn(newId),
+    partyId: id("party_id").notNull(),
+    stepId: id("step_id").notNull(),
+    doneAt: tsString("done_at").notNull(),
+    // A plain person id: persons is in @waitron/identity's migration set.
+    doneBy: id("done_by").notNull(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.partyId],
+      foreignColumns: [parties.id],
+      name: "service_step_completions_party_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.stepId],
+      foreignColumns: [serviceSteps.id],
+      name: "service_step_completions_step_fk",
+    }).onDelete("cascade"),
+    index("service_step_completions_party_idx").on(t.partyId, t.stepId),
+    index("service_step_completions_step_idx").on(t.stepId),
   ],
 );
