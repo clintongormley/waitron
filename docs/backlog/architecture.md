@@ -549,9 +549,6 @@ until A977).
 - **A968 — point 2: the guide's frame and the recovery page.** `guide-pages.ts:73–85` and
   `recovery-surface.ts:107–425` (about 50 strings). The recovery page is served when the box cannot
   start, so its strings must load without the database. No visible change. After A964.
-- **A969 — point 2's sibling in a package.** `packages/dashboard-kit/src/codes.ts:9`,
-  `alert-messages.ts:21` and `table-strings.ts` hold `{ en, es }` pairs in generic code; move them
-  into a strings file.
 - **A970 — point 5: `workforce-es`.** The access-holder values
   `trabajador`, `representantes_legales`, `inspeccion_trabajo` (`registro-jornada.ts:26–31`) print
   untranslated in the English export (from reading, `attendance-export-pdf.ts:120, 141`) — run the

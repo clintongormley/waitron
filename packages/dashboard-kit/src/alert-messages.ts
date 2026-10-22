@@ -1,5 +1,6 @@
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, pickLocale } from "./i18n.js";
+import { GENERIC_ALERT } from "./strings.js";
 
 /** `{name}` is filled with the param as it is; `{name:money}` writes a decimal-string param as
  * euros, the way the alert's language writes them; `{name:date}` writes a `YYYY-MM-DD` param as
@@ -16,10 +17,6 @@ type Words = { readonly en: string; readonly es: string };
 export type AlertWordLists = Readonly<
   Record<string, { readonly words: Readonly<Record<string, Words>>; readonly otherwise: Words }>
 >;
-
-// Unlike an error banner, an alert with no wording is still worth identifying, so the caller shows
-// the raw code beside this sentence (see `hasAlertMessage`).
-const GENERIC = { en: "Something needs attention", es: "Algo requiere atención" };
 
 const messages: Record<string, { en: string; es: string }> = {};
 const wordLists: Record<string, AlertWordLists[string]> = {};
@@ -84,7 +81,7 @@ export function alertMessage(
   params: Readonly<Record<string, unknown>>,
   l: string = currentLocale(),
 ): string {
-  const template = pickLocale(hasAlertMessage(code) ? messages[code]! : GENERIC, l);
+  const template = pickLocale(hasAlertMessage(code) ? messages[code]! : GENERIC_ALERT, l);
   return template.replace(
     /\{([A-Za-z0-9_]+)(?::([a-z_]+))?\}/g,
     (_match, name: string, kind: string | undefined) => {
