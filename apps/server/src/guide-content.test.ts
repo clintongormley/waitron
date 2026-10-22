@@ -108,3 +108,17 @@ describe("the user guides", () => {
     }
   });
 });
+
+it.each(GUIDE_LANGUAGES)(
+  "serves the staff guide in %s with account and self-service sections",
+  (lang) => {
+    expect(GUIDE_PAGES).toContain("staff");
+    const markdown = readGuide(root, lang, "staff");
+    expect(markdown).toBeDefined();
+    expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
+      "staff-details",
+      "account-access",
+      "own-account",
+    ]);
+  },
+);

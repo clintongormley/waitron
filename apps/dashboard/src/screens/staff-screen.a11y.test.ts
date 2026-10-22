@@ -53,7 +53,7 @@ describe.each(["light", "dark"] as const)("staff-screen a11y (%s theme)", (theme
   it("renders accessibly", async () => {
     const { el, host } = await mountWidget<StaffScreen>(
       "dashboard-staff-screen",
-      { api: stubApi() },
+      { canAdminister: true, api: stubApi() },
       theme,
     );
     await flush(el);
@@ -64,7 +64,7 @@ describe.each(["light", "dark"] as const)("staff-screen a11y (%s theme)", (theme
     setHelpMode(true);
     const { el, host } = await mountWidget<StaffScreen>(
       "dashboard-staff-screen",
-      { api: stubApi() },
+      { canAdminister: true, api: stubApi() },
       theme,
     );
     await flush(el);

@@ -21,7 +21,7 @@ describe.each(["light", "dark"] as const)("person-edit a11y (%s theme)", (theme)
   it("renders accessibly when open", async () => {
     const { el, host } = await mountWidget<PersonEdit>(
       "dashboard-person-edit",
-      { person, open: true },
+      { canAdminister: true, person, open: true },
       theme,
     );
     const wtDialog = el.shadowRoot!.querySelector("wt-modal")!;
@@ -38,7 +38,7 @@ describe.each(["light", "dark"] as const)("person-edit a11y (%s theme)", (theme)
   it("with Save quiet and then ready", async () => {
     const { el, host } = await mountWidget<PersonEdit>(
       "dashboard-person-edit",
-      { person, open: true },
+      { canAdminister: true, person, open: true },
       theme,
     );
     await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
@@ -53,6 +53,32 @@ describe.each(["light", "dark"] as const)("person-edit a11y (%s theme)", (theme)
     await el.updateComplete;
     await save.updateComplete;
     expect([save.variant, save.disabled]).toEqual(["primary", false]);
+    await expectNoA11yViolations(host);
+  });
+});
+
+describe.each(["light", "dark"] as const)("manager staff editor (%s)", (theme) => {
+  it("keeps names editable with account controls disabled", async () => {
+    const { el, host } = await mountWidget<PersonEdit>(
+      "dashboard-person-edit",
+      {
+        person: { ...person, firstNames: "Ada", lastNames: "Lovelace", email: "ada@example.test" },
+        currentPersonId: "another",
+        canAdminister: false,
+        open: true,
+      },
+      theme,
+    );
+    await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=edit-email]")!
+        .disabled,
+    ).toBe(true);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+        "[data-test=edit-first-names]",
+      )!.disabled,
+    ).toBe(false);
     await expectNoA11yViolations(host);
   });
 });

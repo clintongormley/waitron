@@ -2519,6 +2519,7 @@ export class DashboardApp extends LitElement {
       case "staff":
         return html`<dashboard-staff-screen
           .api=${this.api}
+          .canAdminister=${this.#sessionPermissions.includes("person.admin")}
           .currentPersonId=${this.myPersonId}
         ></dashboard-staff-screen>`;
       case "modifiers":

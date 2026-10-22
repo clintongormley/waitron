@@ -28,7 +28,10 @@ class StaffEditApp extends LitElement {
   readonly leave = new LeaveController(this);
   api!: DashboardApi;
   override render() {
-    return html`<dashboard-staff-screen .api=${this.api}></dashboard-staff-screen
+    return html`<dashboard-staff-screen
+        .canAdminister=${true}
+        .api=${this.api}
+      ></dashboard-staff-screen
       >${this.leave.render({
         heading: t("unsaved.heading"),
         message: t("unsaved.message"),

@@ -65,9 +65,9 @@ async function emailOf(id: string): Promise<string | null> {
 }
 
 describe("createPerson", () => {
-  it("creates an active person of the given role whose PIN opens a session (manager actor)", async () => {
+  it("creates an active person of the given role whose PIN opens a session (admin actor)", async () => {
     const deviceId = await seedSessionDevice(suite.db);
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
 
     const { id } = await run((tx) =>
       createPerson(tx, {
@@ -114,8 +114,8 @@ describe("createPerson", () => {
     expect(await personCount()).toBe(before);
   });
 
-  it("throws pin.too_short for a PIN below MIN_PIN_LENGTH (manager actor)", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+  it("throws pin.too_short for a PIN below MIN_PIN_LENGTH (admin actor)", async () => {
+    const { token } = await openManagementSession(suite.db, "admin");
     const before = await personCount();
 
     // The actor IS permitted, so only the length gate can be the cause here.
@@ -137,7 +137,7 @@ describe("createPerson", () => {
 
 describe("createPerson email", () => {
   it("stores a normalized (trimmed, lower-cased) email", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     const { id } = await run((tx) =>
       createPerson(tx, {
         managementSessionId: token,
@@ -151,7 +151,7 @@ describe("createPerson email", () => {
   });
 
   it("rejects a malformed email with person.email_invalid, writing no row", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     const before = await personCount();
     const code = await codeOf(() =>
       run((tx) =>
@@ -169,7 +169,7 @@ describe("createPerson email", () => {
   });
 
   it("rejects an omitted email with person.email_invalid, writing no row", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     const before = await personCount();
     const code = await codeOf(() =>
       run((tx) =>
@@ -188,7 +188,7 @@ describe("createPerson email", () => {
 
 describe("setEmail", () => {
   it("sets a normalized login email a manager can then sign in with", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     const target = await seedPerson(suite.db, "supervisor");
     await run((tx) =>
       setEmail(tx, { managementSessionId: token, personId: target, email: "  New@X.com " }),
@@ -197,7 +197,7 @@ describe("setEmail", () => {
   });
 
   it("rejects a malformed email with person.email_invalid, leaving the email unchanged", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     const target = await seedPerson(suite.db, "staff"); // email null
     const code = await codeOf(() =>
       run((tx) => setEmail(tx, { managementSessionId: token, personId: target, email: "nope" })),
@@ -291,7 +291,7 @@ describe("asEmailTaken", () => {
 describe("setRole", () => {
   it("changes the role, seen by a later authorize on an already-open session", async () => {
     const deviceId = await seedSessionDevice(suite.db);
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     const targetId = await seedPerson(suite.db, "staff");
     const targetSessionId = await openSession(suite.db, deviceId, targetId);
 
@@ -332,7 +332,7 @@ describe("setRole", () => {
 describe("resetPin", () => {
   it("replaces the PIN: the new PIN logs in, the old one no longer does", async () => {
     const deviceId = await seedSessionDevice(suite.db);
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     const targetId = await seedPerson(suite.db, "staff"); // PIN "1234"
 
     await run((tx) =>
@@ -357,8 +357,8 @@ describe("resetPin", () => {
     expect(oldPin).toBe("pin.invalid");
   });
 
-  it("throws pin.too_short for a PIN below MIN_PIN_LENGTH, leaving the hash unchanged (manager actor)", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+  it("throws pin.too_short for a PIN below MIN_PIN_LENGTH, leaving the hash unchanged (admin actor)", async () => {
+    const { token } = await openManagementSession(suite.db, "admin");
     const targetId = await seedPerson(suite.db, "staff");
     const before = (await personRow(targetId)).pin_hash;
 
@@ -386,8 +386,8 @@ describe("resetPin", () => {
 });
 
 describe("setPassword", () => {
-  it("setPassword lets a manager grant dashboard access, then that person can log in", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+  it("setPassword lets an admin grant dashboard access, then that person can log in", async () => {
+    const { token } = await openManagementSession(suite.db, "admin");
     const target = await seedPerson(suite.db, "supervisor");
     // loginManager resolves by email.
     await run((tx) =>
@@ -411,7 +411,7 @@ describe("setPassword", () => {
   });
 
   it("setPassword rejects a too-short password", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     const target = await seedPerson(suite.db, "staff");
     const code = await run((tx) =>
       codeOf(() =>
@@ -469,7 +469,7 @@ describe("suspendPerson / reactivatePerson", () => {
 
   // The case above exercises only the self-check; this one needs the UPDATE to fold the id's case.
   it("suspends another person whose id arrived in upper case", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     const targetId = await seedPerson(suite.db, "staff");
     await run((tx) =>
       suspendPerson(tx, { managementSessionId: token, personId: targetId.toUpperCase() }),
@@ -479,7 +479,7 @@ describe("suspendPerson / reactivatePerson", () => {
 
   it("suspend blocks login; reactivate restores it", async () => {
     const deviceId = await seedSessionDevice(suite.db);
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     const targetId = await seedPerson(suite.db, "staff"); // active, PIN "1234"
 
     await run((tx) => loginWithPin(tx, { deviceId, personId: targetId, pin: "1234" }));
@@ -531,7 +531,7 @@ describe("suspendPerson / reactivatePerson", () => {
 
 describe("listActiveStaff", () => {
   it("returns active persons' id + name, sorted, no secrets", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
 
     // Insert Zoe BEFORE Ana so an Ana-first result proves the orderBy, not insertion order.
     const zoe = await run((tx) =>
@@ -576,7 +576,7 @@ describe("listActiveStaff", () => {
 
 describe("listPersons", () => {
   it("listPersons returns a roster with credential booleans, no secrets", async () => {
-    const { token, personId: manager } = await openManagementSession(suite.db, "manager");
+    const { token, personId: manager } = await openManagementSession(suite.db, "admin");
     await run((tx) =>
       createPerson(tx, {
         managementSessionId: token,
@@ -606,7 +606,7 @@ describe("listPersons", () => {
   });
 
   it("projects every created person's required email", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     const withEmail = await run((tx) =>
       createPerson(tx, {
         managementSessionId: token,

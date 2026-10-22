@@ -208,11 +208,50 @@ describe("admin sign-in authority", () => {
   );
 });
 
-describe("manager staff changes remain available", () => {
+describe("non-admin sign-in authority", () => {
   it.each(changes.filter(({ name }) => name !== "staff details"))(
-    "allows a manager's $name change to a non-admin",
-    async ({ status, change, field, value }) => {
+    "refuses a manager's $name change to a non-admin without changing the row",
+    async ({ status, change }) => {
       const actor = await openManagementSession(suite.db, "manager");
+      const target = await seedPerson(suite.db, "staff", status);
+      const before = await row(target);
+      await expect(
+        run((tx) => change(tx, actor.token, target.toUpperCase())),
+      ).rejects.toMatchObject({
+        code: "authorization.not_permitted",
+        params: { permission: "person.admin" },
+      });
+      expect(await row(target)).toEqual(before);
+    },
+  );
+  it("refuses a manager changing another manager's login email", async () => {
+    const actor = await openManagementSession(suite.db, "manager");
+    const target = await seedPerson(suite.db, "manager");
+    const before = await row(target);
+    await expect(
+      run((tx) =>
+        updatePersonDetails(tx, {
+          managementSessionId: actor.token,
+          personId: target,
+          displayName: "Updated Manager",
+          firstNames: "Updated",
+          lastNames: "Manager",
+          telephone: null,
+          email: "changed-manager@example.test",
+          role: "manager",
+          status: "active",
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "authorization.not_permitted",
+      params: { permission: "person.admin" },
+    });
+    expect(await row(target)).toEqual(before);
+  });
+  it.each(changes.filter(({ name }) => name !== "staff details"))(
+    "allows an admin's $name change to a non-admin",
+    async ({ status, change, field, value }) => {
+      const actor = await openManagementSession(suite.db, "admin");
       const target = await seedPerson(suite.db, "staff", status);
       const before = await row(target);
       await run((tx) => change(tx, actor.token, target));
@@ -225,24 +264,81 @@ describe("manager staff changes remain available", () => {
         expect(after[field]).toBe(value);
     },
   );
-  it("allows a manager to change another manager's email", async () => {
+  it.each(
+    changes.filter(({ name }) =>
+      ["email", "password", "PIN replacement", "PIN clearing"].includes(name),
+    ),
+  )("keeps a manager's own $name change available", async ({ change, field }) => {
     const actor = await openManagementSession(suite.db, "manager");
-    const target = await seedPerson(suite.db, "manager");
-    await run((tx) =>
-      updatePersonDetails(tx, {
-        managementSessionId: actor.token,
-        personId: target,
-        displayName: "Updated Manager",
-        firstNames: "Updated",
-        lastNames: "Manager",
-        telephone: null,
-        email: "changed-manager@example.test",
-        role: "manager",
-        status: "active",
-      }),
-    );
-    expect((await row(target)).email).toBe("changed-manager@example.test");
+    const before = await row(actor.personId);
+    await run((tx) => change(tx, actor.token, actor.personId.toUpperCase()));
+    expect((await row(actor.personId))[field]).not.toEqual(before[field]);
   });
+  it.each(["staff", "admin"] as const)(
+    "lets a manager edit a %s person's names and telephone",
+    async (role) => {
+      const actor = await openManagementSession(suite.db, "manager");
+      const target = await seedPerson(suite.db, role);
+      await suite.db
+        .update(persons)
+        .set({ email: "unchanged@example.test" })
+        .where(eq(persons.id, target));
+      await run((tx) =>
+        updatePersonDetails(tx, {
+          managementSessionId: actor.token,
+          personId: target,
+          displayName: "Changed name",
+          firstNames: "Changed",
+          lastNames: "Name",
+          telephone: "+44 20 1234",
+          email: "unchanged@example.test",
+          role,
+          status: "active",
+        }),
+      );
+      expect(await row(target)).toMatchObject({
+        displayName: "Changed name",
+        firstNames: "Changed",
+        lastNames: "Name",
+        telephone: "+44 20 1234",
+        email: "unchanged@example.test",
+        role,
+        status: "active",
+      });
+    },
+  );
+  it.each(["create", "invite"] as const)(
+    "refuses a manager's attempt to %s a non-admin account",
+    async (operation) => {
+      const actor = await openManagementSession(suite.db, "manager");
+      const before = await suite.db.select().from(persons);
+      await expect(
+        run((tx) =>
+          operation === "create"
+            ? createPerson(tx, {
+                managementSessionId: actor.token,
+                displayName: "New Staff",
+                role: "staff",
+                pin: "4321",
+                email: "new@example.test",
+              })
+            : invitePerson(tx, {
+                managementSessionId: actor.token,
+                displayName: "New Staff",
+                firstNames: "New",
+                lastNames: "Staff",
+                telephone: null,
+                role: "staff",
+                email: "new@example.test",
+              }),
+        ),
+      ).rejects.toMatchObject({
+        code: "authorization.not_permitted",
+        params: { permission: "person.admin" },
+      });
+      expect(await suite.db.select().from(persons)).toEqual(before);
+    },
+  );
 });
 
 describe("account links across admin role changes", () => {
@@ -392,5 +488,37 @@ it.each(["details", "setRole"] as const)(
       ),
     ).rejects.toMatchObject({ code: "account_action.invalid" });
     expect((await row(target)).role).toBe("manager");
+  },
+);
+
+it.each(["role", "status"] as const)(
+  "refuses a manager's %s-only edit of non-admin staff",
+  async (field) => {
+    const actor = await openManagementSession(suite.db, "manager");
+    const target = await seedPerson(suite.db, "staff");
+    await suite.db
+      .update(persons)
+      .set({ email: "unchanged@example.test" })
+      .where(eq(persons.id, target));
+    const before = await row(target);
+    await expect(
+      run((tx) =>
+        updatePersonDetails(tx, {
+          managementSessionId: actor.token,
+          personId: target,
+          displayName: before.displayName,
+          firstNames: "Existing",
+          lastNames: "Person",
+          telephone: null,
+          email: before.email!,
+          role: field === "role" ? "manager" : "staff",
+          status: field === "status" ? "suspended" : "active",
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "authorization.not_permitted",
+      params: { permission: "person.admin" },
+    });
+    expect(await row(target)).toEqual(before);
   },
 );

@@ -16,6 +16,7 @@ export class StaffList extends LitElement {
   @property({ attribute: false }) people: PersonSummary[] = [];
 
   @property({ attribute: false }) currentPersonId: string | null = null;
+  @property({ type: Boolean }) canAdminister = false;
   @property() searchTerm = "";
   /** What the table says with no rows; the screen filters by role and status before the table, so
    * it names its own. */
@@ -34,11 +35,8 @@ export class StaffList extends LitElement {
 
   #columnsMemo?: { inputs: readonly unknown[]; columns: DataTableColumn<PersonSummary>[] };
 
-  /** The same array while the language and signed-in person are unchanged, so a typed search does
-   * not make the table fold every row again. The table redraws its cells only when one of its own
-   * properties changes, so `currentPersonId`, which a cell reads, has to be one of the inputs. */
   #columns(): DataTableColumn<PersonSummary>[] {
-    const inputs = [currentLocale(), this.currentPersonId];
+    const inputs = [currentLocale(), this.currentPersonId, this.canAdminister];
     if (this.#columnsMemo?.inputs.every((input, index) => input === inputs[index]))
       return this.#columnsMemo.columns;
     const columns: DataTableColumn<PersonSummary>[] = [
@@ -121,6 +119,7 @@ export class StaffList extends LitElement {
   }
 
   #action(person: PersonSummary, action: string, label: string) {
+    if (!this.canAdminister) return nothing;
     return html`<wt-button
       variant="ghost"
       align="start"

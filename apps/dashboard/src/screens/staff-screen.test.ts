@@ -171,7 +171,10 @@ describe("staff-screen", () => {
     "confirms the row's %s action before changing the selected user",
     async (action, method) => {
       const api = stubApi();
-      const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+      const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+        canAdminister: true,
+        api,
+      });
       await flush(el);
       list(el).dispatchEvent(
         new CustomEvent("person-action", {
@@ -196,7 +199,10 @@ describe("staff-screen", () => {
   it.each(["create", "edit"])(
     "clears a row confirmation when the %s editor is requested",
     async (editor) => {
-      const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+      const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+        canAdminister: true,
+        api: stubApi(),
+      });
       await flush(el);
       list(el).dispatchEvent(
         new CustomEvent("person-action", { detail: { personId: "p1", action: "reset-pin" } }),
@@ -219,7 +225,10 @@ describe("staff-screen", () => {
         .mockResolvedValueOnce(people)
         .mockRejectedValue({ code: "server.internal" }),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     await openEdit(el, "p1");
     await saveThroughEdit(el);
@@ -238,7 +247,10 @@ describe("staff-screen", () => {
       displayName: `User ${i}`,
     }));
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue(roster) });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     await list(el).updateComplete;
     const table = list(el).shadowRoot!.querySelector("wt-data-table")!;
@@ -272,6 +284,7 @@ describe("staff-screen", () => {
         .mockResolvedValue(undefined),
     });
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
       api,
       currentPersonId: "p1",
     });
@@ -310,7 +323,10 @@ describe("staff-screen", () => {
 
   it("loads the staff on connect and hands them to the list", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
 
     expect(api.listStaff).toHaveBeenCalledTimes(1);
@@ -319,7 +335,10 @@ describe("staff-screen", () => {
 
   it("opens the create form when the add button is clicked", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
 
     expect(form(el).open).toBe(false);
@@ -335,7 +354,10 @@ describe("staff-screen", () => {
       await table.updateComplete;
       return table.shadowRoot!.querySelector(".empty .message")!.textContent;
     };
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api: stubApi(),
+    });
     await flush(el);
     el.shadowRoot!.querySelector("[data-test=search]")!.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "zzz" }, bubbles: true, composed: true }),
@@ -345,6 +367,7 @@ describe("staff-screen", () => {
     expect(await sentence(el)).toBe(tableNoMatches());
 
     const none = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(none.el);
@@ -353,7 +376,10 @@ describe("staff-screen", () => {
 
   it("puts the add button under the empty staff table's sentence, opening the same form", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     await list(el).updateComplete;
 
@@ -393,7 +419,10 @@ describe("staff-screen", () => {
         return Promise.resolve({ id: "p1", invitationSent: true });
       }),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     const button = await pressEmptyAdd(el);
     await createThroughForm(el);
@@ -407,6 +436,7 @@ describe("staff-screen", () => {
 
   it("returns focus to the empty table's add button after Cancel", async () => {
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
@@ -418,7 +448,10 @@ describe("staff-screen", () => {
   });
 
   it("draws no add button in the staff table once people exist", async () => {
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api: stubApi(),
+    });
     await flush(el);
     expect(list(el).querySelector("[slot=empty-action]")).toBeNull();
   });
@@ -426,7 +459,10 @@ describe("staff-screen", () => {
   // If a dismiss left `formOpen` true, the next add click would be true→true and render nothing.
   it("reopens the create form after a dismiss", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
@@ -451,7 +487,10 @@ describe("staff-screen", () => {
 
   it("creates the person, reloads the list and closes the form on create-person", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     expect(api.listStaff).toHaveBeenCalledTimes(1);
 
@@ -474,7 +513,10 @@ describe("staff-screen", () => {
     const api = stubApi({
       createPerson: vi.fn().mockResolvedValue({ id: "p3", invitationSent: false }),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     form(el).dispatchEvent(
       new CustomEvent("create-person", {
@@ -491,7 +533,10 @@ describe("staff-screen", () => {
 
   it("forwards the email into createPerson", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
@@ -510,7 +555,10 @@ describe("staff-screen", () => {
     const api = stubApi({
       createPerson: vi.fn().mockRejectedValue({ code: "person.email_taken" }),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
@@ -536,7 +584,10 @@ describe("staff-screen", () => {
         .fn()
         .mockRejectedValue({ code: "profile.invalid", params: { field: "lastNames" } }),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
     await el.updateComplete;
@@ -557,7 +608,10 @@ describe("staff-screen", () => {
         .fn()
         .mockRejectedValue({ code: "person.email_taken", params: { email: "bea@x.com" } }),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     await openEdit(el, "p1");
 
@@ -580,6 +634,7 @@ describe("staff-screen", () => {
       .mockRejectedValueOnce({ code: "management.request_invalid", params: { field: "email" } })
       .mockRejectedValueOnce({ code: "connection.failed" });
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
       api: stubApi({ savePerson }),
     });
     await flush(el);
@@ -613,7 +668,10 @@ describe("staff-screen", () => {
       listStaff: vi.fn().mockResolvedValue([people[0], inactive]),
       createPerson: vi.fn().mockRejectedValue({ code: "person.email_taken" }),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
@@ -641,7 +699,10 @@ describe("staff-screen", () => {
 
   it("shows an error key when the initial staff load is rejected (and never rejects)", async () => {
     const api = stubApi({ listStaff: vi.fn().mockRejectedValue({ code: "server.internal" }) });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
 
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
@@ -652,7 +713,10 @@ describe("staff-screen", () => {
 
   it("falls back to server.internal when the rejected staff load carries no code", async () => {
     const api = stubApi({ listStaff: vi.fn().mockRejectedValue({}) });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
 
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
@@ -662,7 +726,10 @@ describe("staff-screen", () => {
     const api = stubApi({
       createPerson: vi.fn().mockRejectedValue({ code: "pin.too_short" }),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
@@ -684,7 +751,10 @@ describe("staff-screen", () => {
   // shown inside it instead.
   it("routes a rejected create's error into the dialog and suppresses the page banner", async () => {
     const api = stubApi({ createPerson: vi.fn().mockRejectedValue({ code: "pin.too_short" }) });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
@@ -704,7 +774,10 @@ describe("staff-screen", () => {
 
   it("falls back to server.internal when a rejected create carries no code", async () => {
     const api = stubApi({ createPerson: vi.fn().mockRejectedValue({}) });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
@@ -723,7 +796,10 @@ describe("staff-screen", () => {
 
   it("files at most one person when create-person fires twice (double-click)", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
@@ -752,7 +828,10 @@ describe("staff-screen", () => {
 describe("staff-screen — row edit", () => {
   it("opens the edit dialog for the person named by edit-person", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
 
     expect(editForm(el).open).toBe(false);
@@ -763,7 +842,10 @@ describe("staff-screen — row edit", () => {
 
   it("ignores an edit-person for an unknown id (no dialog opens)", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
 
     await openEdit(el, "nope-not-a-real-id");
@@ -772,7 +854,10 @@ describe("staff-screen — row edit", () => {
 
   it("saves all editable fields atomically and reloads the list", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     await openEdit(el, "p1");
 
@@ -796,7 +881,10 @@ describe("staff-screen — row edit", () => {
 
   it("resends an invitation and reports delivery after closing the edit dialog", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     await openEdit(el, "p1");
 
@@ -816,7 +904,10 @@ describe("staff-screen — row edit", () => {
     const api = stubApi({
       savePerson: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     await openEdit(el, "p1");
 
@@ -849,7 +940,10 @@ describe("staff-screen — row edit", () => {
     const api = stubApi({
       savePerson: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     await openEdit(el, "p1");
 
@@ -893,7 +987,10 @@ describe("staff-screen — row edit", () => {
 
   it("falls back to server.internal when a rejected edit action carries no code", async () => {
     const api = stubApi({ savePerson: vi.fn().mockRejectedValue({}) });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     await openEdit(el, "p1");
 
@@ -905,7 +1002,10 @@ describe("staff-screen — row edit", () => {
 
   it("runs at most one edit action when two fire back-to-back", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     await openEdit(el, "p1");
 
@@ -918,7 +1018,10 @@ describe("staff-screen — row edit", () => {
 
   it("drops an edit action that arrives with no person open", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     // No openEdit(): editingPerson is null.
     dispatchSave(el);
@@ -929,7 +1032,10 @@ describe("staff-screen — row edit", () => {
 
   it("closes the edit dialog on wt-close and can reopen it", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     await openEdit(el, "p1");
     expect(editForm(el).open).toBe(true);
@@ -948,7 +1054,8 @@ describe("staff-screen — row edit", () => {
 it("refreshes displayed people when their data changes elsewhere", async () => {
   const liveData = new LiveData();
   const api = Object.assign(stubApi(), { liveData });
-  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>("dashboard-staff-screen", {
+  const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+    canAdminister: true,
     api,
   });
   const rows = (): unknown[] => (el as unknown as Record<string, unknown[]>)["people"]!;
@@ -973,7 +1080,10 @@ describe("staff-screen after the server comes back", () => {
     const api = Object.assign(stubApi({ listStaff: vi.fn().mockRejectedValue(down) }), {
       liveData: new LiveData(),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await vi.waitFor(() => expect(alert(el)).toBe(codeMessage("connection.failed")));
     vi.mocked(api.listStaff).mockResolvedValue(people);
     api.liveData.refresh();
@@ -983,7 +1093,10 @@ describe("staff-screen after the server comes back", () => {
 
   it("clears a failed refresh's message once the server answers again", async () => {
     const api = Object.assign(stubApi(), { liveData: new LiveData() });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await vi.waitFor(() => expect(shownPeople(el)).toEqual(["p1", "p2"]));
     vi.mocked(api.listStaff).mockRejectedValue(down);
     api.liveData.refresh();
@@ -999,7 +1112,10 @@ describe("staff-screen after the server comes back", () => {
       stubApi({ resetPin: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
       { liveData: new LiveData() },
     );
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await vi.waitFor(() => expect(shownPeople(el)).toEqual(["p1", "p2"]));
     vi.mocked(api.listStaff).mockRejectedValue(down);
     api.liveData.refresh();
@@ -1025,7 +1141,10 @@ describe("staff-screen after the server comes back", () => {
     const api = Object.assign(stubApi({ resetPin: vi.fn().mockRejectedValue(down) }), {
       liveData: new LiveData(),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await vi.waitFor(() => expect(shownPeople(el)).toEqual(["p1", "p2"]));
     vi.mocked(api.listStaff).mockRejectedValue(down);
     api.liveData.refresh();
@@ -1075,7 +1194,10 @@ describe("staff-screen — row actions, filters and edit races", () => {
         }),
       ),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     rowAction(el, "p1", "reset-pin");
     await flush(el);
@@ -1092,6 +1214,7 @@ describe("staff-screen — row actions, filters and edit races", () => {
   it("refuses to disable a person who has become the signed-in one after the dialog opened", async () => {
     const api = stubApi();
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
       api,
       currentPersonId: "p1",
     });
@@ -1111,7 +1234,10 @@ describe("staff-screen — row actions, filters and edit races", () => {
     const api = stubApi({
       reactivatePerson: vi.fn().mockResolvedValue({ invitationSent: false }),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     rowAction(el, "p2", "reactivate");
     await flush(el);
@@ -1126,7 +1252,10 @@ describe("staff-screen — row actions, filters and edit races", () => {
 
   it("confirms a row's resend-invitation and reports delivery", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     rowAction(el, "p1", "resend-invitation");
     await flush(el);
@@ -1143,7 +1272,10 @@ describe("staff-screen — row actions, filters and edit races", () => {
 
   it("cancels a row confirmation without calling the API", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     rowAction(el, "p1", "reset-login");
     await flush(el);
@@ -1161,7 +1293,10 @@ describe("staff-screen — row actions, filters and edit races", () => {
       status: "pending",
     };
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([...people, pending]) });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     const shown = () => list(el).people.map((person) => person.personId);
     expect(shown()).toEqual(["p1", "p3"]);
@@ -1188,7 +1323,10 @@ describe("staff-screen — row actions, filters and edit races", () => {
         }),
       ),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     const resend = () =>
       editForm(el).dispatchEvent(
@@ -1212,7 +1350,10 @@ describe("staff-screen — row actions, filters and edit races", () => {
     const api = stubApi({
       resendInvitation: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     await openEdit(el, "p1");
     editForm(el).dispatchEvent(
@@ -1237,7 +1378,10 @@ describe("staff-screen — row actions, filters and edit races", () => {
             }),
           ),
       });
-      const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+      const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+        canAdminister: true,
+        api,
+      });
       await flush(el);
       await openEdit(el, "p1");
       // The saved dialog's native close lands a task later; waiting for it keeps this test about
@@ -1282,7 +1426,10 @@ describe("staff-screen — row actions, filters and edit races", () => {
         .fn()
         .mockRejectedValue({ code: "person.email_taken", params: { field: "email" } }),
     });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
     await flush(el);
     rowAction(el, "p1", "reset-pin");
     await flush(el);
@@ -1331,7 +1478,10 @@ describe("staff-screen filter fields", () => {
   const shown = (el: StaffScreen) => list(el).people.map((person) => person.personId);
 
   it("searches from a labelled search field", async () => {
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api: stubApi(),
+    });
     await flush(el);
     const search = field(el, "wt-input[data-test=search]")!;
     expect(search.type).toBe("search");
@@ -1347,7 +1497,10 @@ describe("staff-screen filter fields", () => {
   });
 
   it("finds nobody by a role or status word, since only names, email and telephone are searched", async () => {
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api: stubApi(),
+    });
     await flush(el);
     expect(await drawn(el)).toEqual(["p1"]);
     await typeSearch(el, roleName("manager"));
@@ -1357,7 +1510,10 @@ describe("staff-screen filter fields", () => {
   });
 
   it("hands the table the same rows and columns while a search is typed", async () => {
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api: stubApi(),
+    });
     await flush(el);
     const table = () => list(el).shadowRoot!.querySelector("wt-data-table")!;
     await typeSearch(el, "a");
@@ -1393,6 +1549,7 @@ describe("staff-screen filter fields", () => {
       person({ personId: "legal", displayName: "Max", lastNames: "Garcia" }),
     ];
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
       api: stubApi({ listStaff: vi.fn().mockResolvedValue(roster) }),
     });
     await flush(el);
@@ -1423,7 +1580,10 @@ describe("staff-screen filter fields", () => {
   });
 
   it("filters by role from a labelled dropdown starting on every role", async () => {
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api: stubApi(),
+    });
     await flush(el);
     const role = field(el, "wt-combobox[data-test=role-filter]")!;
     expect(role.name).toBe("role-filter");
@@ -1443,7 +1603,10 @@ describe("staff-screen filter fields", () => {
   });
 
   it("filters by status from a labelled dropdown starting on current users, its help beside it", async () => {
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api: stubApi(),
+    });
     await flush(el);
     const status = field(el, "wt-combobox[data-test=status-filter]")!;
     expect(status.name).toBe("status-filter");

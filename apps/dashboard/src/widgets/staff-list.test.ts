@@ -43,7 +43,10 @@ async function editButton(el: StaffList, personId: string): Promise<HTMLElement>
 
 describe("staff-list", () => {
   it("opens a row menu with edit, reset login, reset PIN and Disable", async () => {
-    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
+    const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      canAdminister: true,
+      people,
+    });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     const menu = table.shadowRoot!.querySelector("wt-row-actions")!;
@@ -69,7 +72,10 @@ describe("staff-list", () => {
       const before = currentLocale();
       setLocale(locale);
       try {
-        const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
+        const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+          canAdminister: true,
+          people,
+        });
         const table = el.shadowRoot!.querySelector("wt-data-table")!;
         await table.updateComplete;
         const label = (test: string) =>
@@ -87,7 +93,10 @@ describe("staff-list", () => {
     const before = currentLocale();
     setLocale("en-GB");
     try {
-      const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
+      const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+        canAdminister: true,
+        people,
+      });
       const table = el.shadowRoot!.querySelector("wt-data-table")!;
       await table.updateComplete;
       const disable = () =>
@@ -114,7 +123,10 @@ describe("staff-list", () => {
   });
 
   it("renders one row per person with role and status", async () => {
-    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
+    const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      canAdminister: true,
+      people,
+    });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     const rows = table.shadowRoot!.querySelectorAll("tbody tr");
@@ -128,7 +140,10 @@ describe("staff-list", () => {
   });
 
   it("shows the person's email, and an em-dash when there is none", async () => {
-    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
+    const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      canAdminister: true,
+      people,
+    });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     const rows = table.shadowRoot!.querySelectorAll("tbody tr");
@@ -138,7 +153,10 @@ describe("staff-list", () => {
   });
 
   it("emits edit-person when a row's edit control is clicked", async () => {
-    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
+    const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      canAdminister: true,
+      people,
+    });
     const detail = new Promise<{ personId: string }>((resolve) =>
       el.addEventListener("edit-person", (e) => resolve((e as CustomEvent).detail)),
     );
@@ -147,7 +165,10 @@ describe("staff-list", () => {
   });
 
   it("emits edit-person as a bubbling, composed event", async () => {
-    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
+    const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      canAdminister: true,
+      people,
+    });
     const seen = new Promise<Event>((resolve) => el.addEventListener("edit-person", resolve));
     (await editButton(el, "p2")).click();
     const event = await seen;
@@ -164,7 +185,10 @@ describe("staff-list", () => {
         telephone: "+44 20 1234",
       },
     ];
-    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people: detailed });
+    const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      canAdminister: true,
+      people: detailed,
+    });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     const text = table.shadowRoot!.querySelector("tbody tr")!.textContent!;
@@ -173,7 +197,10 @@ describe("staff-list", () => {
   });
 
   it("offers every column but the display name and the actions in a translated column chooser, and remembers a hidden one", async () => {
-    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
+    const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      canAdminister: true,
+      people,
+    });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     const root = table.shadowRoot!;
@@ -209,7 +236,10 @@ describe("staff-list", () => {
   });
 
   it("renders no rows for an empty people list", async () => {
-    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people: [] });
+    const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      canAdminister: true,
+      people: [],
+    });
     expect(
       el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!.querySelectorAll("tbody tr"),
     ).toHaveLength(0);
@@ -259,7 +289,10 @@ describe("staff-list sorting", () => {
   ];
 
   async function sortedBy(key: string): Promise<string[]> {
-    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people: roster });
+    const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      canAdminister: true,
+      people: roster,
+    });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     table.shadowRoot!.querySelector<HTMLButtonElement>(`button[data-sort=${key}]`)!.click();
@@ -292,7 +325,10 @@ describe("staff-list sorting", () => {
   });
 
   it("offers Resend invitation only to a pending person and emits it for that person", async () => {
-    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people: roster });
+    const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      canAdminister: true,
+      people: roster,
+    });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     expect(table.shadowRoot!.querySelector("[data-test=resend-invitation-b]")).toBeNull();
@@ -331,6 +367,7 @@ describe("the staff list at phone width", () => {
         await page.viewport(390, 844);
         expect(window.innerWidth).toBe(390);
         const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+          canAdminister: true,
           people: phonePeople,
         });
         const table = el.shadowRoot!.querySelector("wt-data-table")!;

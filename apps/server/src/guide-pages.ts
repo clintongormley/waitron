@@ -1,3 +1,4 @@
+import { STAFF_GUIDE_TITLE } from "./i18n/staff.js";
 import { createHash } from "node:crypto";
 import type { Context, Hono } from "hono";
 import { GUIDE_LANGUAGES, GUIDE_PAGES, guideRoot, readGuide } from "./guide-catalogue.js";
@@ -71,6 +72,7 @@ const GUIDE_TEXT: { en: GuideWords; es: GuideWords & { missingTwin: string } } =
       appearance: "Appearance",
       "aeat-certificate": GUIDE_CERTIFICATE_TITLE.en,
       "table-service": TABLE_SERVICE_GUIDE_TITLE.en,
+      staff: STAFF_GUIDE_TITLE.en,
     },
     notFoundTitle: "Page not found",
     notFound: "There is no guide page at this address.",
@@ -87,6 +89,7 @@ const GUIDE_TEXT: { en: GuideWords; es: GuideWords & { missingTwin: string } } =
       appearance: "Apariencia",
       "aeat-certificate": GUIDE_CERTIFICATE_TITLE.es,
       "table-service": TABLE_SERVICE_GUIDE_TITLE.es,
+      staff: STAFF_GUIDE_TITLE.es,
     },
     missingTwin: "Esta página aún no está en español. Se muestra en inglés.",
     notFoundTitle: "Página no encontrada",

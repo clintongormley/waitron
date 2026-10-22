@@ -8548,3 +8548,19 @@ it("A182 old canvas URL falls back to the role home without a canvas navigation 
   expect(screenCanvasEditor(el)).toBeNull();
   expect(mountedScreens(el)).toEqual(["dashboard-overview-screen"]);
 });
+
+it.each([false, true])("passes admin authority to the staff screen (%s)", async (admin) => {
+  const api = stubApi({
+    getMe: vi
+      .fn()
+      .mockResolvedValue({
+        ...meResponse,
+        permissions: ["person.manage", ...(admin ? ["person.admin"] : [])],
+      }),
+  });
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+  await flush(el);
+  navStaff(el)!.click();
+  await flush(el);
+  expect((staff(el) as HTMLElementTagNameMap["dashboard-staff-screen"]).canAdminister).toBe(admin);
+});
