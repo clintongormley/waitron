@@ -1,6 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -116,6 +117,101 @@ describe("release metadata is a build product of a pinned source commit", () => 
     mkdirSync(join(packaged, "build"));
     writeFileSync(join(packaged, "build/hour-release.json"), JSON.stringify(stamp));
     expect(readBuildHourRelease({ cwd: packaged })).toEqual(stamp);
+  });
+
+  it.each(["timeout", "refusal"])("retries a source fetch after one %s", (failure) => {
+    const { cwd, hashes } = fixture();
+    let attempts = 0;
+    let scratch;
+    const stamp = generateHourRelease({
+      source: hashes[0],
+      fetchSource: true,
+      run: (command, args, options) => {
+        if (args[0] !== "fetch") return execFileSync(command, args, options);
+        scratch = options.cwd;
+        attempts++;
+        if (attempts === 1) {
+          if (failure === "timeout")
+            return execFileSync(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+              ...options,
+              timeout: 150,
+            });
+          return execFileSync(process.execPath, ["-e", "process.exit(128)"], options);
+        }
+        return execFileSync(
+          command,
+          args.map((arg) => (arg === "https://github.com/clintongormley/waitron.git" ? cwd : arg)),
+          options,
+        );
+      },
+    });
+    expect(stamp).toMatchObject({
+      sourceCommit: hashes[0],
+      committedAt: "2026-10-14T10:00:00.000Z",
+    });
+    expect(attempts).toBe(2);
+    expect(existsSync(scratch)).toBe(false);
+  });
+
+  it.each(["timeout", "refusal"])("refuses the build after two source fetch %ss", (failure) => {
+    let attempts = 0;
+    let scratch;
+    let lastError;
+    expect(() =>
+      generateHourRelease({
+        source: "a".repeat(40),
+        fetchSource: true,
+        run: (command, args, options) => {
+          if (args[0] !== "fetch") return execFileSync(command, args, options);
+          scratch = options.cwd;
+          attempts++;
+          try {
+            return execFileSync(
+              process.execPath,
+              ["-e", failure === "timeout" ? "setInterval(() => {}, 1000)" : "process.exit(128)"],
+              { ...options, timeout: failure === "timeout" ? 150 : options.timeout },
+            );
+          } catch (error) {
+            lastError = error;
+            throw error;
+          }
+        },
+      }),
+    ).toThrow();
+    expect(attempts).toBe(2);
+    expect(lastError[failure === "timeout" ? "code" : "status"]).toBe(
+      failure === "timeout" ? "ETIMEDOUT" : 128,
+    );
+    expect(existsSync(scratch)).toBe(false);
+  });
+
+  it("bounds each source fetch and stops a child that ignores a polite stop", () => {
+    const { cwd, hashes } = fixture();
+    let attempts = 0;
+    generateHourRelease({
+      source: hashes[0],
+      fetchSource: true,
+      run: (command, args, options) => {
+        if (args[0] !== "fetch") return execFileSync(command, args, options);
+        expect(options.timeout).toBe(20_000);
+        expect(options.killSignal).toBe("SIGKILL");
+        expect(options.env.GIT_HTTP_LOW_SPEED_LIMIT).toBe("1000");
+        expect(options.env.GIT_HTTP_LOW_SPEED_TIME).toBe("10");
+        attempts++;
+        if (attempts === 1)
+          return execFileSync(
+            process.execPath,
+            ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"],
+            { ...options, timeout: 1000 },
+          );
+        return execFileSync(
+          command,
+          args.map((arg) => (arg === "https://github.com/clintongormley/waitron.git" ? cwd : arg)),
+          options,
+        );
+      },
+    });
+    expect(attempts).toBe(2);
   });
 
   it("the generator CLI emits the source stamp and refuses an unpinned input", () => {

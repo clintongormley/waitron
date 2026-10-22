@@ -23,7 +23,7 @@ export function generateHourRelease({
   if (typeof source !== "string" || !SHA.test(source))
     throw new Error("A full pinned source commit is required");
   let scratch;
-  const git = (args) =>
+  const git = (args, options = {}) =>
     run("git", args, {
       cwd,
       env: environment(),
@@ -31,19 +31,38 @@ export function generateHourRelease({
       timeout: 20_000,
       maxBuffer: 65_536,
       stdio: ["ignore", "pipe", "pipe"],
+      ...options,
     }).trim();
   try {
     if (fetchSource) {
       scratch = mkdtempSync(join(tmpdir(), "waitron-release-source-"));
       cwd = scratch;
       git(["init", "-q"]);
-      git([
-        "fetch",
-        "--quiet",
-        "--depth=1",
-        "https://github.com/clintongormley/waitron.git",
-        source,
-      ]);
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          git(
+            [
+              "fetch",
+              "--quiet",
+              "--depth=1",
+              "https://github.com/clintongormley/waitron.git",
+              source,
+            ],
+            {
+              env: {
+                ...environment(),
+                GIT_HTTP_LOW_SPEED_LIMIT: "1000",
+                GIT_HTTP_LOW_SPEED_TIME: "10",
+              },
+              killSignal: "SIGKILL",
+            },
+          );
+          break;
+        } catch (error) {
+          console.error(`Release source fetch attempt ${attempt} of 2 failed: ${error.message}`);
+          if (attempt === 2) throw error;
+        }
+      }
     }
     const resolved = git(["rev-parse", "--verify", "--end-of-options", `${source}^{commit}`]);
     const seconds = git(["show", "-s", "--format=%ct", resolved]);

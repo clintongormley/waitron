@@ -5829,11 +5829,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-- **The image build can time out fetching its release source.** Main CI run
-  [39868989648](https://github.com/clintongormley/waitron/actions/runs/39868989648/job/120139166601)
-  failed in `generate-hour-release.mjs --fetch-source` with `spawnSync git ETIMEDOUT`.
-  Diagnose the fetch before changing its bound or retrying; the underlying cause is unverified.
-
 - **The UI showcase overflows a phone and inherits black text in its dark panel.** At a
   390 px viewport, the panels in `packages/ui/index.html` measured 572 px wide before and after
   A974's wording cleanup; unstyled dark-panel text resolved to black on `rgb(16, 18, 22)`.
