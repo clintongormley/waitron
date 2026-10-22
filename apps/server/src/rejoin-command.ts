@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { rm } from "node:fs/promises";
 import {
   lockVenueDatabase,
   openVenueDatabase,
@@ -13,6 +14,7 @@ import { deploymentEnvironment, resolveConfigDir } from "./config.js";
 import { wipeVenueDatabases } from "./db-wipe.js";
 import { createLogger } from "./logger.js";
 import { rejoinAsSecondary, type RejoinDeps, type RejoinResult } from "./rejoin.js";
+import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import { clearTradingEnv } from "./trading-config.js";
 import { tryLoadTillConfig } from "./till-config.js";
 import "./errors.js";
@@ -25,15 +27,6 @@ async function openVenue(directory: string): Promise<{ db: Database; close(): Pr
   return { db: store.venue, close: () => store.close() };
 }
 
-/**
- * `waitron-rejoin rejoin [--accept-loss]` — wipes this fenced ex-primary's venue directory,
- * re-migrates it and clears `trading.env`, so the next boot is setup mode. Configuration comes from
- * the environment, never argv.
- *
- * Returns 0 on success, 2 on a usage error, and 1 otherwise. Every failure is reported by text this
- * command composed; no caught error's `.message` is printed, because a box operator has no terminal
- * to read around it.
- */
 export async function runRejoin(deps: {
   argv: string[];
   env: Env;
@@ -137,6 +130,7 @@ export async function runRejoin(deps: {
           closed = true;
         }),
       wipeDatabase: async () => {
+        await rm(join(stateDir, REBUILD_MARKER), { force: true });
         await wipeVenueDatabases(venueDir);
         await migrate(venueDir);
         await clearTradingEnv(stateDir);
