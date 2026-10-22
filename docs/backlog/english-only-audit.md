@@ -2,6 +2,8 @@
 
 _2026-10-22, A973: the invoice-first settlement operator script and its test are retired by owner decision. References to that command below record the earlier tree; current build plans omit it._
 
+_2026-10-23, A975: the developer setup and Cloud integration fixture now use English operation and street examples; the provisioning README's example values are English too. The rows below retain the audit's earlier values. Remaining demo scripts, receipt picture samples and script-suite test fixtures are tracked in the [current A913 fix items](architecture.md#a913s-fix-items-general-code-english-only)._
+
 Audited 2026-10-20 on main `a3be14ba4`. A dated record: it describes the tree as it was that day.
 The rule it checks is in [conventions-data.md](../developers/conventions-data.md#general-code-is-english-only);
 the backlog entry is [A913](architecture.md#a913s-fix-items-general-code-english-only).
