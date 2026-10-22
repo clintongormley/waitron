@@ -1,3 +1,18 @@
+# Approval update: 2026-10-22
+
+The owner approved the complete revised two-interface design **for preparing its
+implementation plan only**, answering “Yes to both” in the watcher relay at about
+17:25. The [implementation plan](../plans/2026-10-22-a951-connection.md) is now
+prepared for owner review. Approval of that plan, separate build authority, pinned
+bilateral scoped contracts and applicable provider/runtime qualifications remain
+open. No implementation, deployment or service switches are authorised here.
+
+The published revision and historical draft below are preserved verbatim. Their
+awaiting-planning-approval wording records the earlier publication state; this dated
+update supplies the current approval scope without widening it.
+
+---
+
 # CURRENT REVISION: A951 connection and two remote interfaces
 
 **2026-10-22. Incorporates the owner's decision 1 correction at about 16:15 and

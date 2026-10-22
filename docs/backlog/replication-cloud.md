@@ -406,84 +406,45 @@ and cloud operations. See [documentation ownership](../cloud-ownership.md).
 
 ## A951. The box's lasting tunnel and public-certificate client
 
-**Design proposed, 2026-10-22. Owner review and bilateral acceptance remain open.**
-The [box-side design](../superpowers/specs/2026-10-22-a951-box-public-access-design.md)
-covers durable configuration receipt/apply/acknowledgement, scoped WireGuard access,
-lease/expiry/revocation, staged cell moves, the landed test-only staff CSR v1 exchange,
-atomic certificate installation/reload and fresh endpoint secrets after replacement.
-It distinguishes inspected components from proposed lifecycle controls. It supplies
-no implementation plan, customer-page mock-ups, product changes or deployment authority.
+The owner approved the complete revised design for preparing its implementation
+plan only on 2026-10-22 (“Yes to both”, watcher relay about 17:25). The
+[plan](../superpowers/plans/2026-10-22-a951-connection.md) is prepared for review.
+The [design](../superpowers/specs/2026-10-22-a951-box-public-access-design.md)
+records the dated approval scope above its unchanged published revision and
+historical draft. Plan approval and separate build authority remain open.
 
-The owner raised A951's design to next after A1014 on 22 October. Venue devices use
-`.local` by default; a certified staff hostname is optional. Customers reach public
-menus, bookings (A1013), table-QR service (A508), collection orders (A509) and later
-delivery (A1012) through Cloud and WireGuard, soon after go-live. Their page designs,
-exact routes/assets and customer session/operation contracts remain separate work.
-Today's availability endpoint is not those customer products.
+The plan stages the transport foundation with an empty customer manifest, the
+existing opt-in test-only staff CSR exchange, independent customer upstream mutual
+TLS, movement/replacement and separately qualified staff-browser access. It proposes
+synced private node-owned files without a database migration. Exact appliance,
+helper, grant, upstream identity, authority, move and diagnostic contracts still
+need pinned bilateral acceptance before their affected code or enablement. The
+foundation does not wait for customer pages or product policies.
 
-Cloud's proposed joint home is [Public access and A951](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/waitron-integration-contract.md#L115),
-lines 115–263 at full baseline `35af2d396d916223ff4f319d8f44093685d62da5`.
-D88's overall hosting/shared contract remains proposed and unaccepted by both sides.
-Cold Cloud recovery when needed is already chosen. D101's planning approval and its
-separately authorised first slice do not approve A951 or hosting. Current A947 has
-advanced beyond D88's older pin; promotion, fencing and fiscal control stay with
-Waitron/A947. A951 neither restarts the cloud-standby proof nor changes those rules.
+A951 supplies reachability only. Staff TLS passes through Cloud and ends at the
+box; customer HTTPS ends at Cloud for filtering, then uses verified encrypted
+transport to a separate box listener. Customer ingress denies staff/till/setup/
+recovery/fiscal/backup/hardware routes. Public credentials do not grant staff API
+access. Customer-on-staff routes remain a separate interface decision, default
+denied in the proposed plan. These are planned controls, not runtime proof.
 
-Next owner topic: independent publication of each customer service versus one opening
-action for all ready services. The design recommends independent, initially closed
-controls, with a Monday menu/bookings and Friday collection example. Full-design
-approval is separate. Take one owner question at a time. The transport foundation
-can be planned separately from later customer manifests after its own contract is
-accepted. Joint acceptance, implementation planning, migration decision, FULL build
-review and runtime/provider qualification remain later gates.
+Venue devices keep `.local`; remote customer work follows soon after go-live.
+A1013 bookings, A508 table QR, A509 collection and later A1012 delivery own their
+pages, exact route/assets, customer authentication, business operations and service
+availability. Connecting Cloud enables none of them. The earlier per-service
+publication question is superseded and is not asked again.
 
-### A951 correction, 2026-10-22: connection reachability and the existing two interfaces
+The joint home remains Cloud's [Public access and A951](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/waitron-integration-contract.md#L115),
+proposed at that full baseline. Reconcile the actual consumer pins before scoped
+acceptance. Cloud's existing [confirmed architecture](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/product-and-platform.md#L89)
+is separate from acceptance of every contract detail. Cloud sees customer plaintext
+for filtering; that grants no general retention authority. A980/D101 must accept
+metadata fields, purpose, access, location, bounds and retention for the affected
+flow, including staff transport metadata. Keep bodies, credentials and QR/session
+secrets out of shared diagnostics and shared private-state caches.
 
-The owner's decision 1 answer at about 16:15 and addendum at about 16:20 supersede
-the publication question and recommendation in the historical A951 body above.
-The [current revision](../superpowers/specs/2026-10-22-a951-box-public-access-design.md)
-aligns with Cloud's existing [confirmed compromise, lines 89–104 and 148–180](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/product-and-platform.md#L89)
-and [proposed A951 contract, lines 115–263](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/waitron-integration-contract.md#L115).
-It records exact source hashes and historical section/line receipts: sections 3 and
-7 already separate the paths and certificate purposes, and section 8 already denies
-unlisted routes. Section 13's first question was misplaced; section 10's public
-product readiness and sections 8/11's publication choices are separate product work.
-
-A951 gives reachability to segregated listeners, with a default-deny manifest
-framework. It enables no product automatically and authorises no publication,
-pause or per-service switches. Staff TLS passes through Cloud and ends at the box;
-the staff private key stays there. Customer HTTPS ends at Cloud for bot/attack
-filtering, then uses scoped WireGuard and verified encrypted upstream transport,
-with an independent box identity/key/certificate and authenticated Cloud forwarder.
-The public certificate key stays at Cloud. Customer ingress refuses all staff,
-till/device, setup/recovery, sync, fiscal, backup/restore and hardware routes; no
-wildcard proxy. Public credentials cannot enter staff APIs. Whether any customer
-routes also appear on the staff hostname remains a named product/interface decision;
-default deny is a recommendation, not an owner-approved answer to that question.
-
-Cloud can read public request/response plaintext in memory, including contact/order
-details, for filtering. That grants no general retention authority. Keep raw bodies,
-cookies, authentication and QR/session secrets out of shared diagnostics and shared
-private-state caches. Bounded metadata policy remains an A980/D101 joint gate,
-following [D101's inventory, lines 43–79 and 124–128](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/superpowers/specs/2026-10-22-cloud-data-protection-design.md#L43).
-Staff hostname/IP/connection metadata remains visible to passthrough. This describes
-architecture and proposals, not deployed protection from host-provider privileges.
-
-All other technical invariants/proposals remain, including three revision/grant
-counters, test-only opt-in staff CSR v1, independent upstream mutual TLS, scoped
-expiry/revocation, local sale independence and no offsite queue or writer/restore/
-fiscal authority from connectivity. D88 cold-recovery, `.local` and timing
-decisions stay answered; proposed timer values still need agreement. Storage and
-migration stay with the later approved plan. The foundation need not wait for
-customer pages/policies; staff-only qualification can proceed after its own scoped
-approvals, including origin/device/passkey behaviour. Customer routes and product
-privacy/authentication/pause choices remain separate.
-
-The revised design's sole new owner question asks approval of the complete revised
-connection design **for planning only**, recommending yes. Its example keeps tills
-on `.local`, gives an away manager the encrypted dashboard, and filters a customer's
-booking at Cloud before forwarding; the booking product controls availability.
-A yes authorises writing a plan, not approving an unwritten plan, implementation,
-deployment, provider operations or service switches. Full revised-design approval,
-pinned bilateral scoped contracts, plan/build approval and provider/runtime
-qualification remain open. Source inspection supplies no runtime verification.
+D88's answered recovery choice stays cold recovery when needed. A947 owns writer,
+fencing, promotion, clocks and fiscal identity; the tunnel, certificate or control
+lease grants none of that authority. Production staff issuance/replacement, runtime,
+provider and supported-device qualification remain separately gated. Source reading
+and documentation checks qualify no composed network or recovery lifecycle.
