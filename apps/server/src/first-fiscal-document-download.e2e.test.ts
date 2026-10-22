@@ -41,10 +41,18 @@ vi.mock("@waitron/composition", async (original) => {
 vi.mock("./smtp-test-message.js", () => ({
   sendSmtpTestMessage: async () => ({ accepted: true }),
 }));
+// The box's hour clock runs at real time plus `aheadMs`; the test moves the page's clock as far.
+const time = vi.hoisted(() => ({
+  aheadMs: 0,
+  clock: {
+    wall: () => Date.now() + time.aheadMs,
+    monotonic: () => performance.now() + time.aheadMs,
+  },
+}));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: async () => {
-    const now = Date.now(),
-      mono = performance.now();
+    const now = time.clock.wall(),
+      mono = time.clock.monotonic();
     return {
       source: "internet",
       result: "usable",
@@ -110,7 +118,8 @@ it.each(["en", "es"] as const)(
         WAITRON_SETUP_APP_DIR: setupDist,
         WAITRON_DASHBOARD_APP_DIR: setupDist,
       };
-      server = await startServer(env);
+      time.aheadMs = 0;
+      server = await startServer(env, {}, { testClock: time.clock });
       const leaf = new X509Certificate(await readFile(join(stateDir, "tls/server.crt")));
       const pin = createHash("sha256")
         .update(leaf.publicKey.export({ type: "spki", format: "der" }))
@@ -127,6 +136,7 @@ it.each(["en", "es"] as const)(
         new URL(route.request().url()).origin === url ? route.continue() : route.abort(),
       );
       const page = await context.newPage();
+      await page.clock.install({ time: time.clock.wall() });
       page.setDefaultTimeout(12000);
       page.on("pageerror", (error) => errors.push(error.message));
       const click = async (selector: string) => {
@@ -214,9 +224,19 @@ it.each(["en", "es"] as const)(
       const vf = "vf-first-setup-hour";
       await page.locator(`${vf} [data-test=clock-readings]`).waitFor();
       await page.locator(`${vf} input[name=setup-details-confirmed]`).check();
-      await page.locator(`${vf} input[name=taxpayer-hour][value=no]`).check();
+      const waitingPromise = page.waitForResponse(
+        (response) => new URL(response.url()).pathname === "/setup-api/first-setup/candidates",
+      );
       await click(`${vf} [data-test=select]`);
       await prove();
+      const { preparation } = (await (await waitingPromise).json()) as {
+        preparation: { status: string; remainingMs: number };
+      };
+      expect(preparation.status).toBe("waiting");
+      await page.locator(`${vf} [data-test=remaining]`).waitFor();
+      const pastTheWait = preparation.remainingMs + 1000;
+      time.aheadMs += pastTheWait;
+      await page.clock.fastForward(pastTheWait);
       await page.locator(`${vf} [data-test=selected-hour]`).waitFor();
       const registeredPromise = page.waitForRequest(
         (request) =>
