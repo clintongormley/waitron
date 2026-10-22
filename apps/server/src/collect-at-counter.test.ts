@@ -1,17 +1,20 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, gt, inArray, isNull } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   orderGroupEvents,
   orderGroups,
   parties,
   printJobs,
+  products,
   ticketItems,
   workingOrderLines,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { createPrinter } from "@waitron/printing";
+import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -19,6 +22,9 @@ import { readBillEditState } from "./bill-editing.js";
 import { splitBill } from "./bill-actions.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem } from "./line-cancel.js";
+import { createStation } from "./kitchen.js";
+import { VENUE_SERVICE } from "./modules.js";
+import { moveBill, moveSettledBillToCounter } from "./move-bill.js";
 import { releaseHeldWorkOf } from "./order-groups.js";
 import { seatTable } from "./parties.js";
 import { combineParties } from "./testing/table-action-fixture.js";
@@ -28,6 +34,7 @@ import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import {
   billWith,
   inTx,
+  lineIdOf,
   provisionAdjustmentVenue,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
@@ -272,5 +279,264 @@ describe("releaseHeldWorkOf", () => {
     expect(facts.map((fact) => [fact.key, fact.personId, fact.locationId]).sort()).toEqual(
       events.map((event) => [`group:${event.id}`, venue.staffId, venue.cfg.locationId]).sort(),
     );
+  });
+});
+
+/** A second station, Salads, with a printer of its own, preparing the Salad; made once. */
+let salads: Promise<{ stationId: string; printerId: string }> | undefined;
+function saladStation() {
+  salads ??= inTx(venue, async (tx) => {
+    const printer = await createPrinter(
+      tx,
+      { locationId: venue.cfg.locationId },
+      { name: "Fríos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+    );
+    const station = await createStation(tx, venue.cfg, {
+      name: "Salads",
+      printerIds: [printer.id],
+    });
+    const [salad] = await tx
+      .select({ id: products.id })
+      .from(products)
+      .where(eq(products.name, "Salad"));
+    await setRoutingCell(
+      tx,
+      venue.cfg,
+      { row: { kind: "product", productId: salad!.id }, zoneId: null },
+      { kind: "station", stationId: station.id },
+    );
+    return { stationId: station.id, printerId: printer.id };
+  });
+  return salads;
+}
+
+async function orderRow(billId: string) {
+  const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
+  return order!;
+}
+
+async function zoneOf(billId: string) {
+  return inTx(venue, async (tx) =>
+    (await VENUE_SERVICE.findOrderZones(tx, venue.cfg, [billId])).get(billId),
+  );
+}
+
+async function serve(billId: string, lineNo: number) {
+  const id = await lineIdOf(venue, billId, lineNo);
+  const [line] = await venue.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.id, id));
+  await venue.db
+    .update(workingOrderLines)
+    .set({ servedQuantity: line!.quantity })
+    .where(eq(workingOrderLines.id, id));
+}
+
+async function noticesOn(billId: string) {
+  const rows = await venue.db
+    .select({
+      stationId: kitchenNotices.stationId,
+      kind: kitchenNotices.kind,
+      lineName: kitchenNotices.lineName,
+      movedTo: kitchenNotices.movedTo,
+    })
+    .from(kitchenNotices)
+    .where(eq(kitchenNotices.workingOrderId, billId));
+  return rows.sort((a, b) => a.lineName.localeCompare(b.lineName));
+}
+
+/** Print job ids are random, so the jobs since a point are told by rowid. */
+function lastJobRow() {
+  return (
+    venue.db.all<{ row: number | null }>(sql`select max(rowid) as row from print_jobs`)[0]!.row ?? 0
+  );
+}
+
+function jobsByPrinterAfter(row: number) {
+  return venue.db
+    .all<{ printerId: string; payload: Uint8Array }>(
+      sql`select printer_id as printerId, payload from print_jobs where rowid > ${row} order by rowid`,
+    )
+    .map((job) => ({ printerId: job.printerId, lines: printedLines(job.payload) }));
+}
+
+const toCounter = (p: { partyId: string; billId: string }) =>
+  inTx(venue, async (tx) =>
+    moveSettledBillToCounter(
+      tx,
+      venue.cfg,
+      p.billId,
+      { partyId: p.partyId },
+      await readBillEditState(tx, p.billId),
+    ),
+  );
+
+async function paidFired(lines: { name: string; quantity?: string }[], amount: string) {
+  const p = await billWith(venue, lines, { release: "fire" });
+  await pay(p.billId, amount);
+  return p;
+}
+
+describe("moveSettledBillToCounter", () => {
+  it("moves a paid bill to the counter, changing only its party", async () => {
+    const p = await paidFired([{ name: "Burger" }], "12.00");
+    const before = await orderRow(p.billId);
+    const zone = await zoneOf(p.billId);
+    expect(zone).toBe(venue.tables.zoneId);
+
+    await toCounter(p);
+
+    expect(await orderRow(p.billId)).toEqual({ ...before, partyId: null });
+    expect(await zoneOf(p.billId)).toBe(zone);
+  });
+
+  it("tells each station with food still to come that it went to the counter", async () => {
+    const p = await paidFired([{ name: "Burger", quantity: "2" }, { name: "Steak" }], "49.00");
+    const before = lastJobRow();
+
+    await toCounter(p);
+
+    const jobs = jobsByPrinterAfter(before);
+    expect(jobs.map((job) => job.printerId)).toEqual([venue.printerId]);
+    const [slip] = jobs.map((job) => job.lines);
+    expect(slip![0]).toBe("*** MOVIDO ***");
+    expect(slip).toContain("A:  (mostrador)");
+    const text = slip!.join("\n");
+    expect(text).toContain("2.000 x BURG");
+    expect(text).toContain("1.000 x CHULETA");
+    expect(await noticesOn(p.billId)).toEqual([
+      { stationId: venue.stationId, kind: "moved", lineName: "BURG", movedTo: null },
+      { stationId: venue.stationId, kind: "moved", lineName: "CHULETA", movedTo: null },
+    ]);
+  });
+
+  it("tells nothing about a served dish", async () => {
+    const station = await saladStation();
+    const p = await billWith(venue, [{ name: "Burger" }, { name: "Salad" }], { release: "fire" });
+    expect((await ticketsOf([p.billId])).map((item) => item.stationId).sort()).toEqual(
+      [venue.stationId, station.stationId].sort(),
+    );
+    await serve(p.billId, 2);
+    await pay(p.billId, "22.00");
+    const before = lastJobRow();
+
+    await toCounter(p);
+
+    const jobs = jobsByPrinterAfter(before);
+    expect(jobs.map((job) => job.printerId)).toEqual([venue.printerId]);
+    expect(jobs[0]!.lines.join("\n")).toContain("1.000 x BURG");
+    expect(jobs[0]!.lines.join("\n")).not.toContain("ENSAL");
+    expect(await noticesOn(p.billId)).toEqual([
+      { stationId: venue.stationId, kind: "moved", lineName: "BURG", movedTo: null },
+    ]);
+  });
+
+  it("tells only the station of the one dish still to come when every other dish was served", async () => {
+    await saladStation();
+    const p = await billWith(venue, [{ name: "Burger" }, { name: "Steak" }, { name: "Salad" }], {
+      release: "fire",
+    });
+    await serve(p.billId, 2);
+    await serve(p.billId, 3);
+    await pay(p.billId, "47.00");
+    const before = lastJobRow();
+
+    await toCounter(p);
+
+    const jobs = jobsByPrinterAfter(before);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]!.printerId).toBe(venue.printerId);
+    const text = jobs[0]!.lines.join("\n");
+    expect(text).toContain("1.000 x BURG");
+    expect(text).not.toContain("CHULETA");
+    expect(text).not.toContain("ENSAL");
+    expect(await noticesOn(p.billId)).toEqual([
+      { stationId: venue.stationId, kind: "moved", lineName: "BURG", movedTo: null },
+    ]);
+  });
+
+  it("tells the kitchen nothing when every dish was served", async () => {
+    const p = await billWith(venue, [{ name: "Burger" }], { release: "fire" });
+    await serve(p.billId, 1);
+    await pay(p.billId, "12.00");
+    const before = lastJobRow();
+
+    await toCounter(p);
+
+    expect((await orderRow(p.billId)).partyId).toBeNull();
+    expect(jobsByPrinterAfter(before)).toEqual([]);
+    expect(await noticesOn(p.billId)).toEqual([]);
+  });
+
+  it("copies the party's kitchen note", async () => {
+    const p = await paidFired([{ name: "Burger" }], "12.00");
+    await inTx(venue, async (tx) => {
+      const scope = { partyId: p.partyId };
+      const notes = await VENUE_SERVICE.readKitchenNotes(tx, [scope]);
+      const current = notes.get(VENUE_SERVICE.kitchenNoteKey(scope))!;
+      await VENUE_SERVICE.writeKitchenNote(tx, scope, current.revision, "No salt");
+    });
+
+    await toCounter(p);
+
+    const scope = { workingOrderId: p.billId };
+    const notes = await inTx(venue, (tx) => VENUE_SERVICE.readKitchenNotes(tx, [scope]));
+    expect(notes.get(VENUE_SERVICE.kitchenNoteKey(scope))!.note).toBe("No salt");
+  });
+
+  it("refuses held work", async () => {
+    const p = await paidHeld();
+    const order = await orderRow(p.billId);
+    const groups = await groupsOf(p.partyId);
+    const lines = await topLines([p.billId]);
+
+    await expect(toCounter(p)).rejects.toMatchObject({ code: "group.held_leaves_party" });
+
+    expect(await orderRow(p.billId)).toEqual(order);
+    expect(await groupsOf(p.partyId)).toEqual(groups);
+    expect(await topLines([p.billId])).toEqual(lines);
+  });
+
+  it("refuses an open bill and a collected one", async () => {
+    const open = await billWith(venue, [{ name: "Burger" }], { release: "fire" });
+    const collected = await paidFired([{ name: "Burger" }], "12.00");
+    await venue.db
+      .update(workingOrders)
+      .set({ collectedAt: new Date().toISOString() })
+      .where(eq(workingOrders.id, collected.billId));
+
+    for (const p of [open, collected]) {
+      const order = await orderRow(p.billId);
+      await expect(toCounter(p)).rejects.toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "billId" },
+      });
+      expect(await orderRow(p.billId)).toEqual(order);
+    }
+  });
+
+  it("Move this bill → The counter still refuses a paid bill", async () => {
+    const p = await paidFired([{ name: "Burger" }], "12.00");
+    const order = await orderRow(p.billId);
+
+    await expect(
+      inTx(venue, async (tx) =>
+        moveBill(
+          tx,
+          venue.cfg,
+          p.billId,
+          { counter: { zoneId: null } },
+          {
+            expectedEdits: [await readBillEditState(tx, p.billId)],
+            bills: "separate",
+            expectedPartyRevision: await partyRevision(p.partyId),
+            partyId: p.partyId,
+            operatorId: venue.staffId,
+          },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "bill.paid", params: { workingOrderId: p.billId } });
+    expect(await orderRow(p.billId)).toEqual(order);
   });
 });
