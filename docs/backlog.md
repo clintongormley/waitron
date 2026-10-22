@@ -6606,7 +6606,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   moves into `country-es`, plus region demos ("catalán demo in Catalunya"). After A918. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A974. Remaining comments and identifiers in general code to English.**
-  The remaining CSS-comment/naming sites and the owner-held core-comment PR are listed in the
+  The remaining naming sites, README example and owner-held core-comment PR are listed in the
   [detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
 - **Setup's receipt-language selection still reads inherited object properties.** Its

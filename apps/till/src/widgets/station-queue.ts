@@ -474,8 +474,6 @@ export class TillStationQueue extends LitElement {
         gap: var(--wt-space-1);
       }
 
-      /* The course header — the coursing section's name ("Entrantes"). A muted, uppercased label like the
-         kanban column titles; the null (auto-fired earliest) course has no header at all. */
       .course-head {
         margin: var(--wt-space-1) 0 0;
         font-size: var(--wt-font-size-sm);

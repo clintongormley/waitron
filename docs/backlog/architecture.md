@@ -563,10 +563,8 @@ until A977).
   derives other geography values (A833 landed: setup and the demo start only for a country with a
   pack). English provided. The ~33 staff and kitchen names with no English (`menu.ts`) and «Menú del
   Día» in an English slot (`menu.ts:840`) are fixed there. After A918.
-- **A974 — remaining Bucket E and F sites.** The till's
-  `apps/till/src/widgets/station-queue.ts` still has a Spanish example inside a CSS comment.
-  Also open: identifiers and file names from the audit and the
-  `WAITRON_CERT_CHECK_NOMBRE` example in `apps/server/README.md`. The separate core-comment
+- **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit
+  and the `WAITRON_CERT_CHECK_NOMBRE` example in `apps/server/README.md`. The separate core-comment
   [PR #1986](https://github.com/clintongormley/waitron/pull/1986) awaits the owner to land it.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Developer/demo script names remain A975's. Low priority.
