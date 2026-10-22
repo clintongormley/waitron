@@ -25,7 +25,7 @@ Each theme has a light version and a dark version, and each screen shows one of 
 **Theme** setting says: Light, Dark or Follow device. The **Themes** card under it lists the
 venue's themes.
 
-Anyone whose role is **Supervisor** or above can open this page and read the card. Only a
+Anyone whose role is **Supervisor** or above can open this page and read both cards. Only a
 **Manager** or an **Admin** can change the look.
 
 ## Edit a theme {#edit}
@@ -97,7 +97,7 @@ theme** dialog, after the **Hard to read** dialog when that appears, because you
 to become a theme of their own. Its **Use it on every screen now** switch starts on when you are
 editing Waitron's theme in use, and off for a new theme. **Save** in the dialog stores the new theme
 and closes the editor. **Back** leaves you in the editor with nothing saved, asking first if you
-typed a name. The rules for a name are under "Name a theme" below.
+changed anything in it. The rules for a name are under "Name a theme" below.
 
 When something is still hard to read, Save first opens the **Hard to read** dialog, with one line
 for each colour that is. It offers three choices:
@@ -118,8 +118,9 @@ for counter service, check every 15 seconds. Any other cash register checks ever
 a table's order is open on it, and otherwise follows when it next opens one, or when it restarts.
 Saving a theme that is not in use changes no screen until you put it in use.
 
-If you saved anyway, the Look card keeps a warning line for each colour that is still hard to read,
-so the next person who opens the page sees it too.
+If you saved anyway, the Themes card's row for that theme shows a tag such as "2 hard to read", and
+while it is the theme in use the Look card also keeps a warning line for each colour that is still
+hard to read, so the next person who opens the page sees it too.
 
 While you edit one of the venue's own themes, the editor also offers **Save as new theme…**. It
 opens the name dialog with the theme's name followed by "(copy)", stores your choices under the name

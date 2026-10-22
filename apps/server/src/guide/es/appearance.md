@@ -26,7 +26,7 @@ Cada tema tiene una versión clara y una oscura, y cada pantalla muestra una de 
 propio ajuste de **Tema**: Claro, Oscuro o Según el dispositivo. La tarjeta **Temas**, debajo,
 muestra los temas del local.
 
-Cualquier persona con el rol **Supervisor** o superior puede abrir esta página y leer la tarjeta.
+Cualquier persona con el rol **Supervisor** o superior puede abrir esta página y leer las dos tarjetas.
 Solo un **Encargado** o un **Administrador** puede cambiar el aspecto.
 
 ## Edita un tema {#edit}
@@ -100,7 +100,7 @@ Si editas el tema de Waitron, o un tema que empezaste con **Añadir tema**, Guar
 elecciones van a convertirse en un tema propio. Su interruptor **Usarlo ya en todas las pantallas**
 empieza activado cuando editas el tema de Waitron en uso, y desactivado para un tema nuevo.
 **Guardar** en el diálogo guarda el tema nuevo y cierra el editor. **Volver** te deja en el editor
-sin guardar nada, y antes te lo pregunta si escribiste un nombre. Las reglas de un nombre están en
+sin guardar nada, y antes te lo pregunta si cambiaste algo en él. Las reglas de un nombre están en
 «Pon nombre a un tema», más abajo.
 
 Si algo sigue leyéndose mal, Guardar abre primero el diálogo **Difícil de leer**, con una línea por
@@ -124,8 +124,9 @@ cada 15 segundos. Cualquier otra caja registradora lo comprueba cada 15 segundos
 abierto el pedido de una mesa y, si no, lo sigue cuando vuelve a abrir uno, o cuando se reinicia.
 Guardar un tema que no está en uso no cambia ninguna pantalla hasta que lo pones en uso.
 
-Si guardaste de todos modos, la tarjeta Aspecto conserva una línea de aviso por cada color que
-sigue leyéndose mal, para que también lo vea la próxima persona que abra la página.
+Si guardaste de todos modos, la fila de ese tema en la tarjeta Temas muestra una etiqueta como «2 se
+leen mal» y, mientras sea el tema en uso, la tarjeta Aspecto conserva además una línea de aviso por
+cada color que sigue leyéndose mal, para que también lo vea la próxima persona que abra la página.
 
 Mientras editas uno de los temas propios del local, el editor ofrece también **Guardar como tema
 nuevo…**. Abre el diálogo del nombre con el nombre del tema seguido de «(copia)», guarda tus

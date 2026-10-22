@@ -471,7 +471,8 @@ colour a person gave a category, a product or a menu section is painted as it is
 token. Its users are the colour chooser's palette (`apps/dashboard/src/widgets/color-field.ts`), the
 category swatches in the Products tree, the product and section swatches in a menu's Structure tree,
 the brand colour and fix shade chips on Settings → Appearance's Look card
-(`apps/dashboard/src/screens/look-card.ts`), and the till's product and section tiles (`apps/till/src/widgets/menu-browser.ts`). A painted till
+(`apps/dashboard/src/screens/look-card.ts`), the colour chips in the Themes card's rows
+(`apps/dashboard/src/screens/themes-card.ts`), and the till's product and section tiles (`apps/till/src/widgets/menu-browser.ts`). A painted till
 tile takes black or white for its labels and its icon, whichever `readableTextColor`
 (`packages/ui/src/category-color.ts`) picks for that colour, because the label still carries the
 meaning and the colour is never the only signal. `wt-lozenge` takes a colour the same way, filling
@@ -2849,6 +2850,8 @@ These open already savable:
   filled in from them, and turning them back on is itself the change (`#applyAction` in
   `apps/dashboard/src/screens/backup-screen.ts`);
 - the printers' name dialog (Add, or Enable for a switched-off printer): pressing it is the add;
+- the theme name dialog's Make a copy and Save as new theme…: pressing Save is the copy
+  (`savableAtOpen`, `apps/dashboard/src/widgets/theme-name-dialog.ts`);
 - the calibration wizard when an add opened it: after a fresh add it confirms a new printer's
   default settings, and after a re-add pressing Save is what keeps the printer on, because closing
   the wizard switches it off again (`#calibrationOpenedByAdd` in
@@ -4063,8 +4066,9 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   (`apps/dashboard/src/widgets/hard-to-read-dialog.ts`) before any name dialog (D7): one line per warning, then Back, Save
   anyway and, only when fixing all would leave no warning, Fix and save. With Fix and save offered
   it is the main button and Save anyway is `secondary`; without it, Save anyway is the main button.
-- **A theme saved with warnings keeps them on the saved card**, one warning line each, in the same
-  warning colour and icon.
+- **A theme saved with warnings keeps them**: while it is the theme in use, the Look card shows one
+  warning line each, in the same warning colour and icon; its row on the Themes card shows the
+  "{count} hard to read" tag whether or not it is in use.
 
 The Themes card lists Waitron's theme first, then the venue's own, in a `wt-data-table`:
 
@@ -5036,7 +5040,8 @@ and enabled. While its own delete is sent (`submitting`) it stays `danger`, disa
 Cancel and Escape do nothing. The screen owns the requests: it sets `submitting` inside its
 `wt-delete-confirm` listener, reads again on `wt-delete-retry`, and closes the dialog itself after a
 delete succeeds. A failed read goes in `readError` and a refused delete in `actionError`, which
-alone leaves Delete usable.
+alone leaves Delete usable. The Themes card builds its impact on the screen instead of reading it;
+see "Appearance (venue themes)" above.
 
 A printer offers both. **Disable** switches the printer off and keeps its id, and Enable brings it
 back. **Delete** is permanent: it ends the printer's waiting work and removes the settings that name
