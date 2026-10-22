@@ -207,6 +207,9 @@ describe("the software block", () => {
       resolveClient: staticResolver(fakeClient),
       identity: {
         ...SOFTWARE_IDENTITY,
+        onlyVerifactu: "N",
+        multipleTaxpayersPossible: "S",
+        multipleTaxpayersNow: "N",
         producer: { name: "Producer Person", nif: "12345678Z" },
       },
     });
@@ -215,6 +218,9 @@ describe("the software block", () => {
     expect(row.sistemaInformatico).toMatchObject({
       NombreRazon: "Producer Person",
       NIF: "12345678Z",
+      TipoUsoPosibleSoloVerifactu: "N",
+      TipoUsoPosibleMultiOT: "S",
+      IndicadorMultiplesOT: "N",
     });
     const sif = await withTransaction(suite.db, (tx) => currentSif(tx, nodeId));
     expect(row.idEmisorFactura).toBe(sif.nif);

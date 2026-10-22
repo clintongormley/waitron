@@ -46,7 +46,8 @@ export function softwareVersion(commit: string | null = BUILD_COMMIT): string {
   return commit === null ? "0.0.0-dev" : `0.0.0-dev+${commit}`;
 }
 
-// While pending, the taxpayer is named: AEAT's test service, whose acceptance the first production activation requires, could reject placeholder text.
+// While pending, the taxpayer is named: AEAT's test service, whose acceptance the first production
+// activation requires, could reject placeholder text.
 export function producerFields(
   identity: SoftwareIdentity,
   taxpayer: { legalName: string; nif: string },
