@@ -430,6 +430,8 @@ describe("devSetup against a real venue directory", () => {
     });
     const printed = DEMO_DEVICE_LINES.join("\n");
     for (const label of labels) expect(printed).toContain(label);
+    expect(printed).toContain("Counter (till)");
+    expect(printed).toContain("Handheld 1 (handheld)");
     expect(printed).toContain("Kitchen screen (station screen)");
     expect(printed).toContain("Pass screen (pass screen)");
     expect(printed).toContain("Pass monitor (pass monitor)");

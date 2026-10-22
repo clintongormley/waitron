@@ -158,6 +158,8 @@ Candidates from the first look (awaiting owner confirmation — not yet fixes):
 - [ ] The admin user shows as **"Administradora"** (Spanish) among otherwise English staff names with
       an `en-GB` locale — likely a seed-data naming choice; confirm whether the admin should have a
       real person name.
+      Update 2026-10-23 (A975): fresh developer venues use **"Administrator"**. The choice of a real
+      person's name remains open; retained demo venues keep their recorded names until reset.
 - [x] Language label and placement decided 2026-09-06: **English**, bottom right throughout the UI.
       Implementation is covered by the general corrections above. Placement changed 2026-09-30
       (C93, owner): the setup wizard and the dashboard show the chooser in a footer below the
