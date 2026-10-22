@@ -37,7 +37,7 @@ export const helpEn = {
   "help.more.equipment":
     "Chooses what this device prints receipts, payment slips and invoices on, which card reader it uses and which cash drawer it opens. Pick each from the list; a printer or card reader can also be scanned by its label.",
   "help.more.transfers":
-    "Asks another department to take over the current tab, and shows the tabs other departments send you to accept or decline. Your department stays responsible for a tab until the other accepts it. A tab your department holds shows the same counts.",
+    "Asks another department to take over the current tab, and shows the tabs other departments send you to accept or decline. Your department stays responsible for a tab until the other accepts it. A tab offered to your department, or still yours in the zones this device serves, shows how many items it has, then how many are unsent, held, waiting or ready.",
   "help.more.pass":
     "Opens the pass: the open orders, each with its dishes grouped by course, or by group on a table's bill, and which of them are ready.",
   "help.person.fix_hours":
@@ -81,7 +81,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.more.equipment":
     "Elige dónde imprime este dispositivo los tickets, los justificantes de pago y las facturas, qué lector de tarjetas usa y qué cajón abre. Elige cada uno de la lista; una impresora o un lector de tarjetas también se puede escanear por su etiqueta.",
   "help.more.transfers":
-    "Pide a otro departamento que se haga cargo de la cuenta actual y muestra las cuentas que otros departamentos te envían para aceptarlas o rechazarlas. Tu departamento sigue siendo responsable hasta que el otro la acepte. Una cuenta de tu departamento muestra los mismos recuentos.",
+    "Pide a otro departamento que se haga cargo de la cuenta actual y muestra las cuentas que otros departamentos te envían para aceptarlas o rechazarlas. Tu departamento sigue siendo responsable hasta que el otro la acepte. Una cuenta que se ofrece a tu departamento, o que sigue siendo de tu departamento en las zonas que atiende este dispositivo, muestra cuántos artículos tiene y cuántos están sin enviar, en espera, esperando o listos.",
   "help.more.pass":
     "Abre el pase: los pedidos abiertos, cada uno con sus platos agrupados por curso, o por grupo en la cuenta de una mesa, y cuáles están listos.",
   "help.person.fix_hours":

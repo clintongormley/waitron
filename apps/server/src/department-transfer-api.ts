@@ -224,7 +224,7 @@ export function mountDepartmentTransferApi(
         const context = await VENUE_SERVICE.getOrderContext(tx, deps.cfg, tabId);
         if (context.departmentId === sender.departmentId)
           await checkZones(tx, deps.cfg, sender, [{ orderId: tabId }]);
-        // Resolution remains visible to the source after responsibility moves; it exposes no tab contents.
+        // Resolution remains visible to the source after responsibility moves; `withCounts` then sends no counts.
         return withCounts(tx, deps, rows, sender);
       });
       return c.json({ requests });

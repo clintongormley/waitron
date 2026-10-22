@@ -1262,8 +1262,8 @@ export interface BillLookupRow {
   stillOwed: string;
 }
 
-/** An order's dishes: `ordered` counts every one, the rest count those not yet served by where
- * they stand. */
+/** An order's dishes: `ordered` counts the order's dishes less cancellations, extras left out and a
+ * dish not sold by the unit as one; the rest count those not yet served by where they stand. */
 export interface OrderStateCounts {
   ordered: number;
   unsent: number;

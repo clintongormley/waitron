@@ -43,8 +43,8 @@ const ZERO: OrderStateCounts = { ordered: 0, unsent: 0, held: 0, waiting: 0, rea
  * One dish's counts. A dish sold by the unit (`takesExtras`'s rule: no hardware unit, no decimal
  * places, not a measure) counts its whole quantity; any other dish, or a fractional quantity,
  * counts as one; extras count nothing. The units left to serve take the first state that matches:
- * not sent, held (any unfired kitchen part, which keeps Requested here once it is stored), waiting,
- * ready. A handed-over order has nothing left to serve.
+ * not sent, held (an extra's unfired kitchen part, or, unless the dish is made here, its own
+ * unfired part or a held group), waiting, ready. A handed-over order has nothing left to serve.
  */
 export function dishCounts(
   dish: CountedLine,

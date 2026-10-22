@@ -54,7 +54,7 @@ import type { CountedLine } from "./order-state-counts.js";
 import "./errors.js";
 
 let venue: BillVenue;
-let pulpoLarge: string;
+let octopusLarge: string;
 let sauces: { listId: string; productId: string };
 const zones = {} as Record<"prepay" | "ticket_then_pay", string>;
 
@@ -81,11 +81,11 @@ useVenueDb({
       });
     }
     await inTx(venue, async (tx) => {
-      const cana = await productOf(tx, "Caña");
+      const beer = await productOf(tx, "Caña");
       await setRoutingCell(
         tx,
         venue.cfg,
-        { row: { kind: "product", productId: cana }, zoneId: null },
+        { row: { kind: "product", productId: beer }, zoneId: null },
         { kind: "no_preparation" },
       );
       const text = (word: string) => ({ en: word });
@@ -138,11 +138,11 @@ useVenueDb({
       await assignProductUnit(tx, await productOf(tx, "Chuletón"), ml.id);
       await assignProductUnit(tx, await productOf(tx, "Ensalada"), kilo!.id);
       await assignProductUnit(tx, await productOf(tx, "Croquetas"), tenth.id);
-      const pulpo = await productOf(tx, "Pulpo");
-      await assignProductUnit(tx, pulpo, gram!.id);
+      const octopus = await productOf(tx, "Pulpo");
+      await assignProductUnit(tx, octopus, gram!.id);
       const [large] = await setProductVariants(
         tx,
-        pulpo,
+        octopus,
         [
           {
             name: "Large",
@@ -155,12 +155,12 @@ useVenueDb({
         ],
         "en",
       );
-      pulpoLarge = large!.id;
-      const tarta = await productOf(tx, "Tarta");
+      octopusLarge = large!.id;
+      const cake = await productOf(tx, "Tarta");
       const [{ catalogueId, categoryId }] = await tx
         .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
         .from(products)
-        .where(eq(products.id, tarta));
+        .where(eq(products.id, cake));
       const sauce = await createProduct(tx, {
         catalogueId,
         categoryId: categoryId!,
@@ -184,7 +184,7 @@ useVenueDb({
         },
         "es-ES",
       );
-      await writeProductModifiers(tx, tarta, [{ kind: "extras", id: list.id }]);
+      await writeProductModifiers(tx, cake, [{ kind: "extras", id: list.id }]);
       const grill = await createStation(tx, venue.cfg, { name: "Grill" });
       await routeProductTo(tx, venue.cfg, sauce.id, grill.id);
       sauces = { listId: list.id, productId: sauce.id };
@@ -442,7 +442,7 @@ describe("readOrderStateCounts", () => {
     await parkOrder(deps(), venue.cfg, {
       id,
       zoneId: zones.prepay,
-      lines: [{ menuItemId: venue.offerFor("Pulpo"), variantId: pulpoLarge, quantity: "150" }],
+      lines: [{ menuItemId: venue.offerFor("Pulpo"), variantId: octopusLarge, quantity: "150" }],
       operatorId: venue.operatorId,
     });
     expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, unsent: 1 }]]));
@@ -501,7 +501,7 @@ describe("readOrderStateCounts", () => {
     const three = await statementsFor(ids);
     const none = await statementsFor([]);
 
-    expect(one.statements).toBeGreaterThan(0);
+    expect(one.statements).toBe(2);
     expect(three.statements).toBe(one.statements);
     expect([...three.counts.keys()]).toEqual(ids);
     expect(none).toEqual({ counts: new Map(), statements: 0 });
@@ -789,11 +789,11 @@ describe("readOrderStateCounts on a party's bill", () => {
   it("counts cancellations out: one of three, and a weighed dish cancelled whole", async () => {
     const { billId } = await seatParty();
     await sendRound(billId, [plain("Tarta", "3"), plain("Ensalada", "0.450")]);
-    const [tarta, ensalada] = await dishLines(billId);
-    await cancel(tarta!.id, 1000);
+    const [cake, salad] = await dishLines(billId);
+    await cancel(cake!.id, 1000);
     expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 3, waiting: 3 });
 
-    await cancel(ensalada!.id, 450);
+    await cancel(salad!.id, 450);
     expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 2, waiting: 2 });
   });
 

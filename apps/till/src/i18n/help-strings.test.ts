@@ -73,7 +73,11 @@ describe("the order lists' help", () => {
     ["English", helpEn, en],
     ["Spanish", helpEs, es],
   ] as const) {
-    for (const key of ["help.counter.parked_orders", "help.counter.waiting_orders"] as const) {
+    for (const key of [
+      "help.counter.parked_orders",
+      "help.counter.waiting_orders",
+      "help.more.transfers",
+    ] as const) {
       it(`${key} in ${language} names the five counts by their chips' words`, () => {
         for (const state of states)
           expect(help[key]).toMatch(wholeWord(words[`order_counts.${state}`].replace("{n} ", "")));
@@ -81,9 +85,9 @@ describe("the order lists' help", () => {
     }
   }
 
-  it("help.more.transfers says a held tab shows the same counts", () => {
+  it("help.more.transfers says which tabs show the counts", () => {
     expect(helpEn["help.more.transfers"]).toContain(
-      "A tab your department holds shows the same counts.",
+      "A tab offered to your department, or still yours in the zones this device serves, shows how many items it has, then how many are unsent, held, waiting or ready.",
     );
     const sentences = (text: string) => text.split(/(?<=\.)\s+/).length;
     expect(sentences(helpEs["help.more.transfers"])).toBe(sentences(helpEn["help.more.transfers"]));

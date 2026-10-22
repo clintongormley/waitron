@@ -4691,7 +4691,7 @@ export interface HeldOrderSummary {
   outstanding: string;
   /** A payment is pending or received on the bill, one given back in full included. */
   hasPayments: boolean;
-  /** The bill's own dishes ready or waiting long, which the counter's list shows. */
+  /** The bill's own dishes ready at a station, and its long wait; the counter's list draws only the long wait. */
   signals: KitchenSignal[];
   /** {@link readFormerNumbers}; absent when there are none. */
   formerNumbers?: number[];

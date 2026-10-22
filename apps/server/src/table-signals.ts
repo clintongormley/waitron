@@ -134,7 +134,7 @@ function kitchenSignals(lines: readonly KitchenLine[], nowMs: number): KitchenSi
   return signals;
 }
 
-/** Each bill's `ready` and `long_wait` signals, keyed by bill: the counter's tab list shows them. */
+/** Each bill's `ready` and `long_wait` signals, keyed by bill; the counter's tab list draws only `long_wait`. */
 export async function readBillSignals(
   tx: Transaction,
   billIds: readonly string[],
