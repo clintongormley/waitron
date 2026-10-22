@@ -703,3 +703,26 @@ The failing and corrected focused commands are retained in lane G's
 `receipts/a994-20261022-022554/plain-bundle-mode-green.log` (status-zero CLI with missing files)
 and `plain-bundle-mode-green2.log` (15 passed). The copied source bytes were unchanged; only the
 fixture command path changed between those probes.
+
+## Deployment-status guard matches a temporary path
+
+**Update, 2026-10-22:** [A1010 (#1978)](https://github.com/clintongormley/waitron/pull/1978) landed as `f2d4c3ce97bce1f4c86856ac8a2ccb0638eb96d1`, changing the status assertions and removing the open root-backlog entry. The receipt below describes the earlier guard; its proposed follow-up is superseded by that change.
+
+A1003 ([PR #1973](https://github.com/clintongormley/waitron/pull/1973)), 2026-10-22: the normal
+pre-push root run at `3250e0c3` passed 8,026 cases and failed the status-provenance case at
+`scripts/waitron-sh.test.mjs:508`. The pattern `compose .*up` matched the path prefix
+`compose -f /var/folders/.../waitron-sh-qeup` in `waitron-sh-qeupej`; the recorded commands were
+compose `ps`, container `inspect` and image `inspect` only. The image facts themselves passed.
+
+Measured again in a detached temporary worktree at the untouched base
+`af98f192de08da2d4b64bd04d2c4fe7a762b4549`, with its own frozen dependencies and Git environment
+variables removed: the unchanged status case passed with `TMPDIR=<owned-parent>/safe` (one case,
+102 skipped), and failed at the same assertion with `TMPDIR=<owned-parent>/up` (one case,
+102 skipped). Command: `pnpm exec vitest run scripts/waitron-sh.test.mjs -t 'reports running image
+IDs and local build times after status' --reporter=verbose`. Neither the guard nor
+`deploy/waitron.sh` differs from that base in A1003.
+
+This is another receipt for the existing A738 follow-up in the root backlog. Parse the compose
+action after removing its file argument and retain the no-build/pull/up assertions, including a
+path containing `up`. A1003 leaves the guard unchanged. A later passing gate qualifies that run;
+it does not repair this path-dependent guard.

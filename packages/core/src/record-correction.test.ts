@@ -1172,9 +1172,8 @@ describe("recordCorrection — authorization", () => {
   });
 });
 
-describe("recordCorrection — no fiscal condition blocks a correction (§5)", () => {
+describe("recordCorrection — stored-predecessor and clock warnings", () => {
   it("completes the correction when chain verification fails, recording an incident on it", async () => {
-    // «NUNCA debe interrumpirse». The incident is recorded against the corrective sale.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
     backend.breakIntegrity(nodeId, { code: "predecessor-hash-mismatch", params: { sequence: 1 } });

@@ -527,6 +527,7 @@ const PERMANENT_SALE_REFUSALS = new Set([
 
 /** Table refusals shown in their code's own words. */
 const TABLE_REFUSALS = new Set([
+  "fiscal.fingerprint_mismatch",
   "service_zone.closed",
   "order.payment_in_flight",
   "sale.total_exceeds_simplified_limit",
@@ -819,6 +820,7 @@ function lineWriteError(error: unknown): CounterError {
  * generic "try again" does not: what to do next, or, for `device.profile_changed`, that no card was
  * charged. */
 const ACTIONABLE_REFUSALS = new Set([
+  "fiscal.fingerprint_mismatch",
   "bill.unsent_dishes",
   "service_zone.closed",
   "device.forbidden_action",
@@ -901,7 +903,8 @@ function counterError(error: unknown, fallback: StringKey): CounterError {
 function discardError(error: unknown): CounterError {
   if (isPaymentsReceived(error)) return "held.discard_holds_money";
   const code = (error as { code?: string } | undefined)?.code;
-  return code === "order.payment_in_flight" ||
+  return code === "fiscal.fingerprint_mismatch" ||
+    code === "order.payment_in_flight" ||
     code === "bill.refund_in_progress" ||
     code === "storage.disk_full"
     ? { code }
@@ -1492,6 +1495,8 @@ function saleRefusalOf(
   const refusal = error as
     { code?: string; reason?: unknown; clockAt?: unknown; offsetMinutes?: unknown } | undefined;
   switch (refusal?.code) {
+    case "fiscal.fingerprint_mismatch":
+      return { code: refusal.code };
     case "storage.disk_full":
       return tender.manualCard ? "sale.disk_full_manual_card" : "sale.disk_full";
     case "sale.charged_not_recorded":

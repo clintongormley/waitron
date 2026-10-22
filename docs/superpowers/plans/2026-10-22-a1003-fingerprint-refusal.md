@@ -1,5 +1,10 @@
 # A1003: Refuse a new record with a wrong fingerprint Implementation Plan
 
+**Implementation update, 2026-10-22:** the owner approved exactly the two fiscal-test changes
+below at 08:15. The implementation is on `fix/a1003-fingerprint-refusal` and its finished PR
+requires owner landing. The draft approval gate and draft handoff below record the proposal
+before that answer; they do not request another approval of the settled refusal policy.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Before building, obtain the exact fiscal-test approval in [the implementation gate](#implementation-gate).
 
 **Goal:** Refuse an invoice operation when the newly built record's fingerprint fails its local check, roll back the issuing transaction, and record a separate alert.

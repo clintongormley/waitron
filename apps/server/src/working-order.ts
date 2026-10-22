@@ -1,3 +1,4 @@
+import { withIssuanceTransaction } from "@waitron/core";
 import {
   newCustomerPresentation,
   newCustomerText,
@@ -6299,7 +6300,7 @@ export async function updateHeldOrder(
   issue?: IssueOnSave,
   attendance?: OrderAttendance,
 ): Promise<number> {
-  return withTransaction(deps.db, async (tx) => {
+  return withIssuanceTransaction(deps.db, async (tx) => {
     const { label, locationId } = await requireEditableOrder(tx, id, req.revision);
     await requireOrderBillEditor(tx, id, {
       operatorId: req.operatorId,
@@ -6719,7 +6720,7 @@ async function cancelPlaced(
   override: Override | undefined,
 ): Promise<void> {
   const authz = { sessionId: operator.sessionId, override };
-  return withTransaction(deps.db, async (tx) => {
+  return withIssuanceTransaction(deps.db, async (tx) => {
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)

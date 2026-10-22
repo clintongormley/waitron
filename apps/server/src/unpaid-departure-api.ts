@@ -1,3 +1,4 @@
+import { withIssuanceTransaction } from "@waitron/core";
 import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
 import { listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
@@ -64,14 +65,18 @@ export function mountUnpaidDepartureApi(
       );
       const result = await withPinCheckAhead(deps.db, toCheck, attempts, (checked) => {
         const checkedRequest = { ...request, override: withCheck(request.override, checked) };
-        return withTransaction(deps.db, async (tx) => {
-          await checkZones(tx, deps.cfg, session, [{ partyId }]);
-          return recordUnpaidDeparture(tx, { ...deps, log }, cfg, partyId, checkedRequest, {
-            personId,
-            sessionId,
-            attempts,
-          });
-        });
+        return withIssuanceTransaction(
+          deps.db,
+          async (tx) => {
+            await checkZones(tx, deps.cfg, session, [{ partyId }]);
+            return recordUnpaidDeparture(tx, { ...deps, log }, cfg, partyId, checkedRequest, {
+              personId,
+              sessionId,
+              attempts,
+            });
+          },
+          log,
+        );
       });
       return c.json(result);
     }),

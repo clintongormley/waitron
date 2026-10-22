@@ -248,11 +248,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
     subsequent lookup `Anulado` and the matching cancellation fingerprint. A real
     `3000`/`Anulada` response and Waitron's handling of it remain unobserved in that run.
     [Findings](compliance/verifactu-findings.md#19-cancellation-replay-zero-total-and-wrong-fingerprint-added-2026-10-22-a985).
-  - **A1003. Refuse a locally detected fingerprint mismatch before writing the record.**
-    The owner chose refusal on 22 October. The [implementation plan](superpowers/plans/2026-10-22-a1003-fingerprint-refusal.md)
-    covers rollback, a separate alert and retry with the unused number. Implementation waits for
-    exact approval of two existing fiscal-test changes; the owner lands the complete fiscal PR.
-    A985's TEST lookup retained the wrong fingerprint; production behaviour remains unmeasured.
   - A voided sale whose lookup AEAT answers under the sale's own reference is not handled; not
     shown to happen either way.
   - An unusable `TiempoEsperaEnvio` is not recorded anywhere (the raw value is dropped).

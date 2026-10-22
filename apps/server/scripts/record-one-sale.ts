@@ -13,13 +13,13 @@
 //
 // `WAITRON_ENV` is required here rather than defaulted: it stamps `entorno` onto an append-only
 // fiscal record (CLAUDE.md §5), so a wrong default cannot be corrected afterwards.
-import { recordSale } from "@waitron/core";
+import { recordSale, withIssuanceTransaction } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { openVenueDatabase, withTransaction } from "@waitron/db";
+import { openVenueDatabase } from "@waitron/db";
 import { deploymentEnvironment } from "../src/config.js";
 import { resolveScriptVenueDir } from "./venue-dir.js";
 import {
@@ -140,7 +140,7 @@ export async function recordOneSale(
       clock,
     };
 
-    return await withTransaction(db, (tx) => recordSale(tx, backend, input));
+    return await withIssuanceTransaction(db, (tx) => recordSale(tx, backend, input));
   } finally {
     await store.close();
   }

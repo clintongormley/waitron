@@ -4,6 +4,10 @@ import { currentLocale, pickLocale } from "./t.js";
 // An operator must never see a raw wire code: a code missing from this table degrades to the GENERIC
 // sentence. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "fiscal.fingerprint_mismatch": {
+    en: "Fingerprint check failed; ask a manager.",
+    es: "Ha fallado la comprobación de la huella; avisa a un responsable.",
+  },
   "allergy.unanswered": { en: en["allergy.unanswered"], es: es["allergy.unanswered"] },
   "allergy.out_of_date": { en: en["allergy.stale"], es: es["allergy.stale"] },
   "allergy.invalid": { en: en["allergy.invalid"], es: es["allergy.invalid"] },

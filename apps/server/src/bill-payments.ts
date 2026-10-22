@@ -1,3 +1,4 @@
+import { withIssuanceTransaction } from "@waitron/core";
 import { parseBillEditExpected, requireOrderBillEditor } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
@@ -1177,51 +1178,55 @@ export async function takeBillPayment(
   // Awaited only while `since()` names a refusal: otherwise the payment enters the write queue in
   // this turn.
   const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
-  return withTransaction(deps.db, async (tx) => {
-    const reading = deps.clock.now();
-    const receivedAt = reading.instant;
-    const begun = await beginBillPayment(
-      tx,
-      deps.backend,
-      cfg,
-      workingOrderId,
-      req,
-      operator,
-      "received",
-      reading,
-      { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
-      deps.attendance,
-    );
-    if ("replay" in begun) return resultOf(tx, deps, cfg, begun.replay, null);
-    const { payment } = begun;
-    const printers = printerLookup(tx, cfg.origin);
-    if (req.method === "card") {
-      await recordManualCardPayment(tx, {
-        origin: cfg.origin,
+  return withIssuanceTransaction(
+    deps.db,
+    async (tx) => {
+      const reading = deps.clock.now();
+      const receivedAt = reading.instant;
+      const begun = await beginBillPayment(
+        tx,
+        deps.backend,
+        cfg,
         workingOrderId,
-        amount: centsToDecimal(payment.applied + payment.tip),
-        settledAt: receivedAt,
-        externalRef: req.externalRef,
-        billPaymentId: payment.id,
-      });
-      await enqueueBillCardSlipDrawer(tx, cfg, payment.id, operator.personId, printers);
-    } else {
-      await enqueueBillPaymentDrawer(tx, cfg, payment.id, operator.personId, printers);
-    }
-    const { invoice, total } = await issueWhenFullyPaid(
-      tx,
-      deps,
-      cfg,
-      workingOrderId,
-      operator.personId,
-      {
-        total: begun.total,
-        printers,
-        guests: req.guests,
-      },
-    );
-    return resultOf(tx, deps, cfg, payment, invoice, total);
-  });
+        req,
+        operator,
+        "received",
+        reading,
+        { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
+        deps.attendance,
+      );
+      if ("replay" in begun) return resultOf(tx, deps, cfg, begun.replay, null);
+      const { payment } = begun;
+      const printers = printerLookup(tx, cfg.origin);
+      if (req.method === "card") {
+        await recordManualCardPayment(tx, {
+          origin: cfg.origin,
+          workingOrderId,
+          amount: centsToDecimal(payment.applied + payment.tip),
+          settledAt: receivedAt,
+          externalRef: req.externalRef,
+          billPaymentId: payment.id,
+        });
+        await enqueueBillCardSlipDrawer(tx, cfg, payment.id, operator.personId, printers);
+      } else {
+        await enqueueBillPaymentDrawer(tx, cfg, payment.id, operator.personId, printers);
+      }
+      const { invoice, total } = await issueWhenFullyPaid(
+        tx,
+        deps,
+        cfg,
+        workingOrderId,
+        operator.personId,
+        {
+          total: begun.total,
+          printers,
+          guests: req.guests,
+        },
+      );
+      return resultOf(tx, deps, cfg, payment, invoice, total);
+    },
+    deps.log,
+  );
 }
 
 /** The card bill payments at a reader in this process, by id: a pending payment missing here is
@@ -1469,18 +1474,22 @@ export async function takeReaderBillPayment(
       // Wrapped outside the transaction: when a full disk ended it or refused its commit,
       // `withTransaction` throws the store's own error (`failure` in `node-sqlite-adapter.ts`).
       return await afterCardCharged(deps, workingOrderId, () =>
-        withTransaction(deps.db, async (tx) => {
-          const done = await completeBillPayment(
-            tx,
-            deps,
-            cfg,
-            payment.id,
-            settledAt,
-            undefined,
-            req.guests,
-          );
-          return resultOf(tx, deps, cfg, done.payment, done.invoice, done.total);
-        }),
+        withIssuanceTransaction(
+          deps.db,
+          async (tx) => {
+            const done = await completeBillPayment(
+              tx,
+              deps,
+              cfg,
+              payment.id,
+              settledAt,
+              undefined,
+              req.guests,
+            );
+            return resultOf(tx, deps, cfg, done.payment, done.invoice, done.total);
+          },
+          deps.log,
+        ),
       );
     }
     return await withTransaction(deps.db, async (tx) => {

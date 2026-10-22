@@ -1543,6 +1543,32 @@ describe("till-app: service cancellation consent", () => {
     emit(cancelDialog(el)!, "cancel-item-choice", offBillChoice());
     await flush(el);
   }
+  it.each(["en-GB", "es-ES"])(
+    "keeps a fingerprint refusal and its cancellation choice retryable in %s",
+    async (locale) => {
+      const cancelItem = vi
+        .fn()
+        .mockRejectedValue({ code: "fiscal.fingerprint_mismatch", status: 409 });
+      const { el } = await mountApp(apiFor(consent(), { cancelItem }));
+      await openMesa4(el);
+      setLocale(locale);
+      await openCancel(el);
+      await submitOffBill(el);
+      const editor = cancelDialog(el)!;
+      await editor.updateComplete;
+      expect(editor.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+        codeMessage("fiscal.fingerprint_mismatch"),
+      );
+      expect(editor.busy).toBe(false);
+      expect(cancelItem).toHaveBeenCalledOnce();
+      await submitOffBill(el);
+      expect(cancelItem).toHaveBeenCalledTimes(2);
+      expect(cancelDialog(el)).toBe(editor);
+      expect(tableOrder(el)).not.toBeNull();
+      setLocale("en-GB");
+    },
+  );
+
   it("previews and applies off-bill cancellation from its main dialog without a second editor", async () => {
     const methods = apiFor();
     const { el } = await mountApp(methods);
@@ -4268,3 +4294,31 @@ it("a combined Comp preview cannot become a write after its bill is paid", async
   expect(dialog(el)).toBeNull();
   expect(banner(el)!.textContent).toContain(codeMessage("bill.paid"));
 });
+
+it.each(["en-GB", "es-ES"])(
+  "keeps a fingerprint-refused comp and permits an explicit retry in %s",
+  async (locale) => {
+    const applyAdjustment = vi
+      .fn()
+      .mockRejectedValue({ code: "fiscal.fingerprint_mismatch", status: 409 });
+    const { el } = await mountApp({ applyAdjustment });
+    const order = await openMesa4(el);
+    setLocale(locale);
+    try {
+      await previewComp(el, order);
+      await press(el, inDialog(el, "[data-adjust-confirm]"));
+      expect((inDialog(el, "wt-form-actions") as HTMLElement & { error: string }).error).toBe(
+        codeMessage("fiscal.fingerprint_mismatch"),
+      );
+      expect(dialog(el)!.busy).toBe(false);
+      expect(applyAdjustment).toHaveBeenCalledOnce();
+      emit(dialog(el)!, "adjust-confirm");
+      await flush(el);
+      expect(applyAdjustment).toHaveBeenCalledTimes(2);
+      expect(tableOrder(el).orderId).toBe(order.orderId);
+      expect(tableOrder(el).lines).toEqual(order.lines);
+    } finally {
+      setLocale("en-GB");
+    }
+  },
+);

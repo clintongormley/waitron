@@ -1,7 +1,8 @@
+import { withIssuanceTransaction } from "@waitron/core";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
-import { openVenueDatabase, stampDeployment, withTransaction, type Database } from "@waitron/db";
+import { openVenueDatabase, stampDeployment, type Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { FiscalContribution, TrustedClock } from "@waitron/fiscal";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
@@ -106,7 +107,7 @@ export async function submitFiscalReadiness(args: {
     `);
     if (existing.rows[0]!.count === 0) {
       const now = (args.now ?? (() => new Date()))();
-      await withTransaction(db, (tx) =>
+      await withIssuanceTransaction(db, (tx) =>
         recordSale(
           tx,
           args.contribution.makeBackend({ db, clock: args.clock(), environment: "preproduction" }),

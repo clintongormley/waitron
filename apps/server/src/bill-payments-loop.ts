@@ -1,3 +1,4 @@
+import { IssuanceRefusal, withIssuanceTransaction } from "@waitron/core";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -179,16 +180,20 @@ export async function settlePendingBillPayments(
   for (const { id } of pending) {
     const now = deps.clock.now().instant;
     try {
-      const { settled } = await withTransaction(deps.db, (tx) =>
-        settleFromProviderRow(tx, deps, id, now, PAYMENT_CHECK),
+      const { settled } = await withIssuanceTransaction(
+        deps.db,
+        (tx) => settleFromProviderRow(tx, deps, id, now, PAYMENT_CHECK),
+        deps.log,
       );
       if (settled !== "left") pass[settled] += 1;
       if (settled === "received" || settled === "failed") pass.pending -= 1;
     } catch (error) {
       pass.errors.push({ billPaymentId: id, error: String(error) });
-      await raiseSettleFailed(deps, id, error, now).catch((alertError: unknown) => {
-        pass.errors.push({ billPaymentId: id, error: String(alertError) });
-      });
+      if (!(error instanceof IssuanceRefusal)) {
+        await raiseSettleFailed(deps, id, error, now).catch((alertError: unknown) => {
+          pass.errors.push({ billPaymentId: id, error: String(alertError) });
+        });
+      }
     }
   }
   await settlePendingBillRefunds(deps, pass);

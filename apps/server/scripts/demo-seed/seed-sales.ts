@@ -1,3 +1,4 @@
+import { withIssuanceTransaction } from "@waitron/core";
 // Back-fills the last N days with sales through `recordSale`, so the report screens are non-blank
 // when the demo is first opened. Each sale goes through the backend the composition's fiscal seat
 // gives the venue's node, as a till sale does; it writes fiscal records ONLY through `recordSale`
@@ -295,7 +296,7 @@ export async function seedSales(
   inputs.sort((a, b) => a.instant.getTime() - b.instant.getTime());
   for (const { instant, offsetMinutes, input } of inputs) {
     backDating.set(instant, offsetMinutes);
-    await withTransaction(db, (tx) => recordSale(tx, backend, input));
+    await withIssuanceTransaction(db, (tx) => recordSale(tx, backend, input));
   }
 
   return { count: inputs.length };

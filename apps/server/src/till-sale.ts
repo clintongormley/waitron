@@ -46,7 +46,12 @@ import {
   recordManualCardPayment,
 } from "@waitron/payments";
 import type { CapturedPaymentForOrder, PaymentProvider, PaymentResult } from "@waitron/payments";
-import { formatInvoiceNumber, recordSale, settleSale } from "@waitron/core";
+import {
+  formatInvoiceNumber,
+  recordSale,
+  settleSale,
+  withIssuanceTransaction,
+} from "@waitron/core";
 import type { FiscalBackend, ReceiptQrText } from "@waitron/fiscal";
 import {
   createOpenOrder,
@@ -665,88 +670,92 @@ async function runPayWorkingOrder(
   // turn.
   const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
   try {
-    return await withTransaction(deps.db, async (tx) => {
-      await admit(tx);
-      // Step 1; the doc comment says what serialises a concurrent pay against this read.
-      const [locked] = await tx
-        .select({
-          status: workingOrders.status,
-          partyId: workingOrders.partyId,
-          revision: workingOrders.revision,
-          receiptLocale: workingOrders.receiptLocale,
-        })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, req.id));
+    return await withIssuanceTransaction(
+      deps.db,
+      async (tx) => {
+        await admit(tx);
+        // Step 1; the doc comment says what serialises a concurrent pay against this read.
+        const [locked] = await tx
+          .select({
+            status: workingOrders.status,
+            partyId: workingOrders.partyId,
+            revision: workingOrders.revision,
+            receiptLocale: workingOrders.receiptLocale,
+          })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, req.id));
 
-      if (locked?.status === "settled") {
-        return readSettledTicket(deps.backend, tx, cfg, req.id);
-      }
-      if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
-
-      const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
-
-      refuseUnavailableInvoiceRequest(req.invoiceType, req.recipient);
-
-      // The domain code, rather than the raw `working_orders_enforce_transition` trigger error the
-      // settle UPDATE would otherwise raise.
-      if (locked !== undefined && locked.status !== "open") {
-        throw new AppError("working_order.not_open", { workingOrderId: req.id });
-      }
-      if (locked !== undefined) {
-        await requireOrderBillEditor(tx, req.id, { operatorId, expectedEdit: req.expectedEdit });
-        await assertBillHasNoUnsent(tx, req.id);
-        // Before the in-flight check, so the answer names the money already on the bill.
-        await refuseBillWithPayments(tx, req.id);
-        // A card payment of this order would file its own sale after this one (plan D22).
-        await refusePaymentInFlight(tx, [req.id]);
-        await refuseUnavailableFullInvoice(tx, req.id);
-      }
-
-      // The till is a network boundary. AFTER the replay check, so a retry of an already-settled
-      // order is never refused for the shape of its retry body.
-      if (req.tender.method !== "cash" && req.tender.method !== "card") {
-        throw new AppError("sale.unsupported_tender", { method: req.tender.method });
-      }
-
-      let order: GrossOrder;
-      if (locked === undefined) {
-        // Walk-up only, because a retrieved order ignores `req.lines`.
-        if (req.lines.length === 0) {
-          throw new AppError("sale.empty_basket", {});
+        if (locked?.status === "settled") {
+          return readSettledTicket(deps.backend, tx, cfg, req.id);
         }
-        order = await createOpenOrder(tx, cfg, req.id, req.lines, null, {
-          kitchenNote: req.kitchenNote,
-          deliveryTableId: req.deliveryTableId,
-          zoneId: req.zoneId,
-          receiptLocale: req.receiptLanguage,
-          creditedTo: operatorId,
-          invalidMakeAt: "ignore",
-          invoiceChoice: {
-            invoiceType: req.invoiceType,
-            recipient: req.recipient,
-            recipientNameMaxLength: deps.backend.recipientNameMaxLength,
-          },
-        });
-      } else {
-        await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
-        order = await priceStoredOrderForIssuance(tx, req.id);
-      }
+        if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
 
-      // A walk-up is created with no party.
-      const ticket = await fireAndFileSale(
-        tx,
-        deps,
-        cfg,
-        req.id,
-        req.tender,
-        order,
-        locked?.partyId ?? null,
-        req.guests,
-        operatorId,
-      );
-      await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
-      return ticket;
-    });
+        const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
+
+        refuseUnavailableInvoiceRequest(req.invoiceType, req.recipient);
+
+        // The domain code, rather than the raw `working_orders_enforce_transition` trigger error the
+        // settle UPDATE would otherwise raise.
+        if (locked !== undefined && locked.status !== "open") {
+          throw new AppError("working_order.not_open", { workingOrderId: req.id });
+        }
+        if (locked !== undefined) {
+          await requireOrderBillEditor(tx, req.id, { operatorId, expectedEdit: req.expectedEdit });
+          await assertBillHasNoUnsent(tx, req.id);
+          // Before the in-flight check, so the answer names the money already on the bill.
+          await refuseBillWithPayments(tx, req.id);
+          // A card payment of this order would file its own sale after this one (plan D22).
+          await refusePaymentInFlight(tx, [req.id]);
+          await refuseUnavailableFullInvoice(tx, req.id);
+        }
+
+        // The till is a network boundary. AFTER the replay check, so a retry of an already-settled
+        // order is never refused for the shape of its retry body.
+        if (req.tender.method !== "cash" && req.tender.method !== "card") {
+          throw new AppError("sale.unsupported_tender", { method: req.tender.method });
+        }
+
+        let order: GrossOrder;
+        if (locked === undefined) {
+          // Walk-up only, because a retrieved order ignores `req.lines`.
+          if (req.lines.length === 0) {
+            throw new AppError("sale.empty_basket", {});
+          }
+          order = await createOpenOrder(tx, cfg, req.id, req.lines, null, {
+            kitchenNote: req.kitchenNote,
+            deliveryTableId: req.deliveryTableId,
+            zoneId: req.zoneId,
+            receiptLocale: req.receiptLanguage,
+            creditedTo: operatorId,
+            invalidMakeAt: "ignore",
+            invoiceChoice: {
+              invoiceType: req.invoiceType,
+              recipient: req.recipient,
+              recipientNameMaxLength: deps.backend.recipientNameMaxLength,
+            },
+          });
+        } else {
+          await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
+          order = await priceStoredOrderForIssuance(tx, req.id);
+        }
+
+        // A walk-up is created with no party.
+        const ticket = await fireAndFileSale(
+          tx,
+          deps,
+          cfg,
+          req.id,
+          req.tender,
+          order,
+          locked?.partyId ?? null,
+          req.guests,
+          operatorId,
+        );
+        await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
+        return ticket;
+      },
+      deps.log,
+    );
   } catch (error) {
     // Step 6. Anything but a unique violation is a real failure and surfaces unchanged.
     if (!isUniqueViolation(error)) {
@@ -1577,106 +1586,110 @@ async function finalizeCapture(
   }
   /* v8 ignore stop */
   try {
-    return await withTransaction(deps.db, async (tx) => {
-      const [locked] = await tx
-        .select({ status: workingOrders.status })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, req.id));
-      if (locked?.status === "settled") return readSettledTicket(deps.backend, tx, cfg, req.id);
-      const { priced, clock } = issueMoment(deps.clock, grossInP1, deps.backend);
-      const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
-      const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
-        log: deps.log,
-        workingOrderId: req.id,
-      });
-      const operationDescription = await readSaleOperationDescription(tx, cfg, {
-        kind: "order",
-        orderId: req.id,
-      });
-      const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-        origin: cfg.origin,
-        nodeId: cfg.nodeId,
-        ...selected.sale,
-        operationDescription,
-        // The sale-idempotency key (`sales_working_order_id_key`) the backstop below relies on.
-        workingOrderId: brandWorkingOrderId(req.id),
-        ...language,
-        total: priced.total,
-        lines: withReceiptListPrices(priced.lines, identities),
-        vatBreakdown: priced.vatBreakdown,
-        clock,
-        operatorId,
-        settlement: {
-          kind: "immediate",
-          tenders: [
-            { method: "card", amount: addDecimal(priced.total, tip), tipAmount: tip, settledAt },
-          ],
-        },
-      });
-      await recordSaleReceiptFacts(
-        tx,
-        cfg,
-        { saleId, workingOrderId: req.id, counterparty: selected.sale.counterparty },
-        req.guests,
-      );
-
-      // The provider already recorded the payment row; this only points its `sale_id` at the sale.
-      await associatePaymentWithSale(tx, {
-        provider: result.provider,
-        paymentRef: result.paymentRef,
-        saleId,
-        ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
-      });
-
-      // After `recordSale`, so a concurrent loser, refused there, never reaches the fire. A placed
-      // order was fired when it was placed and must not be fired again.
-      const notSent = wasPlaced ? null : await fireDishesAtPayment(tx, cfg, req.id);
-
-      await tx
-        .update(workingOrders)
-        .set({
-          label: (await readReceiptOrder(tx, cfg, req.id, { atIssuance: true })).orderLabel,
-          status: "settled",
-          settledAt: settledAt.toISOString(),
-          ...(wasPlaced ? {} : { paymentAttemptAt: null }),
-        })
-        .where(eq(workingOrders.id, req.id));
-      await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
-      await clearBillRequestIfPaid(tx, req.id, deps.log);
-      await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
-      if (notSent !== null) {
-        await raiseDishesNotSent(
+    return await withIssuanceTransaction(
+      deps.db,
+      async (tx) => {
+        const [locked] = await tx
+          .select({ status: workingOrders.status })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, req.id));
+        if (locked?.status === "settled") return readSettledTicket(deps.backend, tx, cfg, req.id);
+        const { priced, clock } = issueMoment(deps.clock, grossInP1, deps.backend);
+        const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
+        const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
+          log: deps.log,
+          workingOrderId: req.id,
+        });
+        const operationDescription = await readSaleOperationDescription(tx, cfg, {
+          kind: "order",
+          orderId: req.id,
+        });
+        const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+          origin: cfg.origin,
+          nodeId: cfg.nodeId,
+          ...selected.sale,
+          operationDescription,
+          // The sale-idempotency key (`sales_working_order_id_key`) the backstop below relies on.
+          workingOrderId: brandWorkingOrderId(req.id),
+          ...language,
+          total: priced.total,
+          lines: withReceiptListPrices(priced.lines, identities),
+          vatBreakdown: priced.vatBreakdown,
+          clock,
+          operatorId,
+          settlement: {
+            kind: "immediate",
+            tenders: [
+              { method: "card", amount: addDecimal(priced.total, tip), tipAmount: tip, settledAt },
+            ],
+          },
+        });
+        await recordSaleReceiptFacts(
           tx,
           cfg,
-          saleId,
-          req.id,
-          notSent,
-          deps.clock.now().instant,
-          deps.log,
+          { saleId, workingOrderId: req.id, counterparty: selected.sale.counterparty },
+          req.guests,
         );
-      }
 
-      const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id);
+        // The provider already recorded the payment row; this only points its `sale_id` at the sale.
+        await associatePaymentWithSale(tx, {
+          provider: result.provider,
+          paymentRef: result.paymentRef,
+          saleId,
+          ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
+        });
 
-      const ticket: TillSaleResult = {
-        ...(await readReceiptIssuer(deps.backend, tx, saleId)),
-        ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
-        ...(await readReceiptOrder(tx, cfg, req.id)),
-        locale: language.locale,
-        namesLocale: language.invoiceLocales[0]!,
-        invoiceNumber: await readInvoiceNumber(tx, saleId),
-        issuedAt: fiscal.issuedAt.toISOString(),
-        total: priced.total,
-        vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-        ...(await receiptLines(tx, req.id, priced, identities, saleId)),
-        tender: tenderBlock,
-        ...receiptQr(deps.backend, fiscal.verificationUrl),
-      };
-      // A card on a connected machine: a receipt and no drawer. A throw here would roll back a sale
-      // whose card P2 already charged.
-      await enqueueSaleReceipt(tx, cfg, ticket, saleId);
-      return ticket;
-    });
+        // After `recordSale`, so a concurrent loser, refused there, never reaches the fire. A placed
+        // order was fired when it was placed and must not be fired again.
+        const notSent = wasPlaced ? null : await fireDishesAtPayment(tx, cfg, req.id);
+
+        await tx
+          .update(workingOrders)
+          .set({
+            label: (await readReceiptOrder(tx, cfg, req.id, { atIssuance: true })).orderLabel,
+            status: "settled",
+            settledAt: settledAt.toISOString(),
+            ...(wasPlaced ? {} : { paymentAttemptAt: null }),
+          })
+          .where(eq(workingOrders.id, req.id));
+        await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
+        await clearBillRequestIfPaid(tx, req.id, deps.log);
+        await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
+        if (notSent !== null) {
+          await raiseDishesNotSent(
+            tx,
+            cfg,
+            saleId,
+            req.id,
+            notSent,
+            deps.clock.now().instant,
+            deps.log,
+          );
+        }
+
+        const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id);
+
+        const ticket: TillSaleResult = {
+          ...(await readReceiptIssuer(deps.backend, tx, saleId)),
+          ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
+          ...(await readReceiptOrder(tx, cfg, req.id)),
+          locale: language.locale,
+          namesLocale: language.invoiceLocales[0]!,
+          invoiceNumber: await readInvoiceNumber(tx, saleId),
+          issuedAt: fiscal.issuedAt.toISOString(),
+          total: priced.total,
+          vatBreakdown: toVatBreakdown(priced.vatBreakdown),
+          ...(await receiptLines(tx, req.id, priced, identities, saleId)),
+          tender: tenderBlock,
+          ...receiptQr(deps.backend, fiscal.verificationUrl),
+        };
+        // A card on a connected machine: a receipt and no drawer. A throw here would roll back a sale
+        // whose card P2 already charged.
+        await enqueueSaleReceipt(tx, cfg, ticket, saleId);
+        return ticket;
+      },
+      deps.log,
+    );
   } catch (error) {
     // Anything but a unique violation is a real failure and surfaces unchanged.
     if (!isUniqueViolation(error)) {
@@ -1707,145 +1720,153 @@ async function finalizeRecovery(
   operatorId?: string,
   attendanceKey?: string,
 ): Promise<IntegratedPayOutcome> {
-  return withTransaction(deps.db, async (tx) => {
-    const [locked] = await tx
-      .select({ status: workingOrders.status, partyId: workingOrders.partyId })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, req.id));
+  return withIssuanceTransaction(
+    deps.db,
+    async (tx) => {
+      const [locked] = await tx
+        .select({ status: workingOrders.status, partyId: workingOrders.partyId })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, req.id));
 
-    // A concurrent winner filed the sale and settled the order before this transaction started:
-    // replay, filing and associating nothing.
-    if (locked?.status === "settled") {
-      return {
-        outcome: "captured",
-        ticket: await readSettledTicket(deps.backend, tx, cfg, req.id),
-      };
-    }
+      // A concurrent winner filed the sale and settled the order before this transaction started:
+      // replay, filing and associating nothing.
+      if (locked?.status === "settled") {
+        return {
+          outcome: "captured",
+          ticket: await readSettledTicket(deps.backend, tx, cfg, req.id),
+        };
+      }
 
-    const order = await priceStoredOrderForIssuance(tx, req.id, { refuseUnsentUnavailable: false });
-    const { priced, clock } = issueMoment(
-      deps.clock,
-      await issuancePass(tx, cfg, req.id, order),
-      deps.backend,
-    );
-    const capturedAmount = decimal(captured.amount);
-
-    if (compareDecimal(capturedAmount, priced.total) < 0) {
-      throw new Error(
-        `finalizeRecovery: captured ${captured.amount} is below the locked total ${priced.total} for working order ${req.id}`,
+      const order = await priceStoredOrderForIssuance(tx, req.id, {
+        refuseUnsentUnavailable: false,
+      });
+      const { priced, clock } = issueMoment(
+        deps.clock,
+        await issuancePass(tx, cfg, req.id, order),
+        deps.backend,
       );
-    }
+      const capturedAmount = decimal(captured.amount);
 
-    const tip = subtractDecimal(capturedAmount, priced.total);
+      if (compareDecimal(capturedAmount, priced.total) < 0) {
+        throw new Error(
+          `finalizeRecovery: captured ${captured.amount} is below the locked total ${priced.total} for working order ${req.id}`,
+        );
+      }
 
-    /* v8 ignore start -- a captured/accepted_offline row always carries settled_at (store.ts's
+      const tip = subtractDecimal(capturedAmount, priced.total);
+
+      /* v8 ignore start -- a captured/accepted_offline row always carries settled_at (store.ts's
        insertCapturedPayment/captureAttempting set it); the null-typed column is DEFENDED here, not
        reasoned away (CLAUDE.md §1), mirroring finalizeCapture's own settledAt guard. */
-    if (captured.settledAt === null) {
-      throw new Error(
-        `finalizeRecovery: captured payment for working order ${req.id} carried no settledAt`,
-      );
-    }
-    /* v8 ignore stop */
-    const settledAt = new Date(captured.settledAt);
+      if (captured.settledAt === null) {
+        throw new Error(
+          `finalizeRecovery: captured payment for working order ${req.id} carried no settledAt`,
+        );
+      }
+      /* v8 ignore stop */
+      const settledAt = new Date(captured.settledAt);
 
-    // Filed under the device that took the card, as the stuck resolve and a bill payment are.
-    const [startedOn] = await tx
-      .select({ source: payments.source, deviceId: payments.deviceId })
-      .from(payments)
-      .where(eq(payments.id, captured.id));
-    const origin = storedDeviceOrigin(startedOn!);
-    const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
-    const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
-      log: deps.log,
-      workingOrderId: req.id,
-    });
-    const operationDescription = await readSaleOperationDescription(tx, cfg, {
-      kind: "order",
-      orderId: req.id,
-    });
-    const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-      origin,
-      nodeId: cfg.nodeId,
-      ...selected.sale,
-      operationDescription,
-      workingOrderId: brandWorkingOrderId(req.id),
-      ...language,
-      total: priced.total,
-      lines: withReceiptListPrices(priced.lines, order.identities),
-      vatBreakdown: priced.vatBreakdown,
-      clock,
-      operatorId,
-      settlement: {
-        kind: "immediate",
-        tenders: [{ method: "card", amount: capturedAmount, tipAmount: tip, settledAt }],
-      },
-    });
-    await recordSaleReceiptFacts(
-      tx,
-      cfg,
-      { saleId, workingOrderId: req.id, counterparty: selected.sale.counterparty },
-      req.guests,
-    );
-
-    await associatePaymentWithSale(tx, {
-      provider: deps.provider.provider,
-      paymentRef: captured.paymentRef,
-      saleId,
-      ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
-    });
-
-    // A placed order was fired when it was placed; an open one's unsent dishes go now, for the
-    // orders `fireDishesAtPayment` names, except a zoned order's dish no station can take.
-    const notSent =
-      locked?.status === "open" ? await fireDishesAtPayment(tx, cfg, req.id, locked.partyId) : null;
-
-    // Settled at the ORIGINAL capture instant.
-    await tx
-      .update(workingOrders)
-      .set({
-        label: (await readReceiptOrder(tx, cfg, req.id, { atIssuance: true })).orderLabel,
-        status: "settled",
-        settledAt: settledAt.toISOString(),
-        ...(locked?.status === "placed" ? {} : { paymentAttemptAt: null }),
-      })
-      .where(eq(workingOrders.id, req.id));
-    await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
-    await clearBillRequestIfPaid(tx, req.id, deps.log);
-    await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
-    if (notSent !== null) {
-      await raiseDishesNotSent(
+      // Filed under the device that took the card, as the stuck resolve and a bill payment are.
+      const [startedOn] = await tx
+        .select({ source: payments.source, deviceId: payments.deviceId })
+        .from(payments)
+        .where(eq(payments.id, captured.id));
+      const origin = storedDeviceOrigin(startedOn!);
+      const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
+      const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
+        log: deps.log,
+        workingOrderId: req.id,
+      });
+      const operationDescription = await readSaleOperationDescription(tx, cfg, {
+        kind: "order",
+        orderId: req.id,
+      });
+      const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+        origin,
+        nodeId: cfg.nodeId,
+        ...selected.sale,
+        operationDescription,
+        workingOrderId: brandWorkingOrderId(req.id),
+        ...language,
+        total: priced.total,
+        lines: withReceiptListPrices(priced.lines, order.identities),
+        vatBreakdown: priced.vatBreakdown,
+        clock,
+        operatorId,
+        settlement: {
+          kind: "immediate",
+          tenders: [{ method: "card", amount: capturedAmount, tipAmount: tip, settledAt }],
+        },
+      });
+      await recordSaleReceiptFacts(
         tx,
         cfg,
-        saleId,
-        req.id,
-        notSent,
-        deps.clock.now().instant,
-        deps.log,
+        { saleId, workingOrderId: req.id, counterparty: selected.sale.counterparty },
+        req.guests,
       );
-    }
 
-    const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id);
+      await associatePaymentWithSale(tx, {
+        provider: deps.provider.provider,
+        paymentRef: captured.paymentRef,
+        saleId,
+        ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
+      });
 
-    const ticket: TillSaleResult = {
-      ...(await readReceiptIssuer(deps.backend, tx, saleId)),
-      ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
-      ...(await readReceiptOrder(tx, cfg, req.id)),
-      locale: language.locale,
-      namesLocale: language.invoiceLocales[0]!,
-      invoiceNumber: await readInvoiceNumber(tx, saleId),
-      issuedAt: fiscal.issuedAt.toISOString(),
-      total: priced.total,
-      vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-      ...(await receiptLines(tx, req.id, priced, order.identities, saleId)),
-      tender: tenderBlock,
-      ...receiptQr(deps.backend, fiscal.verificationUrl),
-    };
-    // A card on a connected machine: a receipt and no drawer. The replay above returns before this,
-    // so nothing prints twice.
-    await enqueueSaleReceipt(tx, cfg, ticket, saleId);
-    return { outcome: "captured", ticket };
-  });
+      // A placed order was fired when it was placed; an open one's unsent dishes go now, for the
+      // orders `fireDishesAtPayment` names, except a zoned order's dish no station can take.
+      const notSent =
+        locked?.status === "open"
+          ? await fireDishesAtPayment(tx, cfg, req.id, locked.partyId)
+          : null;
+
+      // Settled at the ORIGINAL capture instant.
+      await tx
+        .update(workingOrders)
+        .set({
+          label: (await readReceiptOrder(tx, cfg, req.id, { atIssuance: true })).orderLabel,
+          status: "settled",
+          settledAt: settledAt.toISOString(),
+          ...(locked?.status === "placed" ? {} : { paymentAttemptAt: null }),
+        })
+        .where(eq(workingOrders.id, req.id));
+      await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
+      await clearBillRequestIfPaid(tx, req.id, deps.log);
+      await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
+      if (notSent !== null) {
+        await raiseDishesNotSent(
+          tx,
+          cfg,
+          saleId,
+          req.id,
+          notSent,
+          deps.clock.now().instant,
+          deps.log,
+        );
+      }
+
+      const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id);
+
+      const ticket: TillSaleResult = {
+        ...(await readReceiptIssuer(deps.backend, tx, saleId)),
+        ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
+        ...(await readReceiptOrder(tx, cfg, req.id)),
+        locale: language.locale,
+        namesLocale: language.invoiceLocales[0]!,
+        invoiceNumber: await readInvoiceNumber(tx, saleId),
+        issuedAt: fiscal.issuedAt.toISOString(),
+        total: priced.total,
+        vatBreakdown: toVatBreakdown(priced.vatBreakdown),
+        ...(await receiptLines(tx, req.id, priced, order.identities, saleId)),
+        tender: tenderBlock,
+        ...receiptQr(deps.backend, fiscal.verificationUrl),
+      };
+      // A card on a connected machine: a receipt and no drawer. The replay above returns before this,
+      // so nothing prints twice.
+      await enqueueSaleReceipt(tx, cfg, ticket, saleId);
+      return { outcome: "captured", ticket };
+    },
+    deps.log,
+  );
 }
 
 /**
@@ -2101,106 +2122,110 @@ async function runCollectOrder(
   // Awaited only while `since()` names a refusal: otherwise the collect enters the write queue in
   // this turn.
   const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
-  return withTransaction(deps.db, async (tx) => {
-    await admit(tx);
-    const [locked] = await tx
-      .select({
-        status: workingOrders.status,
-        revision: workingOrders.revision,
-        receiptLocale: workingOrders.receiptLocale,
-      })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, req.id));
+  return withIssuanceTransaction(
+    deps.db,
+    async (tx) => {
+      await admit(tx);
+      const [locked] = await tx
+        .select({
+          status: workingOrders.status,
+          revision: workingOrders.revision,
+          receiptLocale: workingOrders.receiptLocale,
+        })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, req.id));
 
-    if (locked?.status === "settled") {
-      return readSettledTicket(deps.backend, tx, cfg, req.id);
-    }
-    if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
+      if (locked?.status === "settled") {
+        return readSettledTicket(deps.backend, tx, cfg, req.id);
+      }
+      if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
 
-    const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
+      const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
 
-    if (locked === undefined || locked.status !== "placed") {
-      throw new AppError("working_order.not_placed", { workingOrderId: req.id });
-    }
-    await refuseBillWithPayments(tx, req.id);
-    await refusePlacedPaymentInFlight(deps.db, tx, [req.id]);
+      if (locked === undefined || locked.status !== "placed") {
+        throw new AppError("working_order.not_placed", { workingOrderId: req.id });
+      }
+      await refuseBillWithPayments(tx, req.id);
+      await refusePlacedPaymentInFlight(deps.db, tx, [req.id]);
 
-    await requireOrderBillEditor(tx, req.id, { operatorId, expectedEdit: req.expectedEdit });
-    await assertBillHasNoUnsent(tx, req.id);
+      await requireOrderBillEditor(tx, req.id, { operatorId, expectedEdit: req.expectedEdit });
+      await assertBillHasNoUnsent(tx, req.id);
 
-    // AFTER the replay check, so a retry is never refused for its body shape.
-    if (req.tender.method !== "cash" && req.tender.method !== "card") {
-      throw new AppError("sale.unsupported_tender", { method: req.tender.method });
-    }
-    const outstanding = await readOutstandingSaleForOrder(tx, req.id);
+      // AFTER the replay check, so a retry is never refused for its body shape.
+      if (req.tender.method !== "cash" && req.tender.method !== "card") {
+        throw new AppError("sale.unsupported_tender", { method: req.tender.method });
+      }
+      const outstanding = await readOutstandingSaleForOrder(tx, req.id);
 
-    if (outstanding !== undefined) {
-      // Before the owes-nothing return, so a malformed cash amount is refused whatever is owed.
-      const { settledAmount } = settlementFor(req.tender, outstanding.amountDue);
-      if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
-        const ticket = await settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId);
+      if (outstanding !== undefined) {
+        // Before the owes-nothing return, so a malformed cash amount is refused whatever is owed.
+        const { settledAmount } = settlementFor(req.tender, outstanding.amountDue);
+        if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
+          const ticket = await settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId);
+          await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
+          return ticket;
+        }
+        const settledAt = deps.clock.now().instant;
+
+        await settleSale(tx, {
+          saleId: outstanding.saleId,
+          tenders: [
+            {
+              method: req.tender.method,
+              amount: settledAmount,
+              tipAmount: "0.00",
+              cashTendered: req.tender.method === "cash" ? req.tender.amount : null,
+              settledAt,
+            },
+          ],
+        });
+
+        if (req.tender.method === "card") {
+          const { provider, paymentRef } = await recordManualCardPayment(tx, {
+            origin: cfg.origin,
+            workingOrderId: req.id,
+            amount: outstanding.amountDue,
+            settledAt,
+            externalRef: req.tender.externalRef,
+          });
+          await associatePaymentWithSale(tx, {
+            provider,
+            paymentRef,
+            saleId: outstanding.saleId,
+          });
+        }
+
+        await tx
+          .update(workingOrders)
+          .set({ status: "settled", settledAt: settledAt.toISOString() })
+          .where(eq(workingOrders.id, req.id));
+        await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
+        await clearBillRequestIfPaid(tx, req.id, deps.log);
+
+        const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
+        await enqueueSaleDrawer(tx, cfg, outstanding.saleId, req.tender.method, operatorId);
         await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
         return ticket;
       }
-      const settledAt = deps.clock.now().instant;
 
-      await settleSale(tx, {
-        saleId: outstanding.saleId,
-        tenders: [
-          {
-            method: req.tender.method,
-            amount: settledAmount,
-            tipAmount: "0.00",
-            cashTendered: req.tender.method === "cash" ? req.tender.amount : null,
-            settledAt,
-          },
-        ],
-      });
-
-      if (req.tender.method === "card") {
-        const { provider, paymentRef } = await recordManualCardPayment(tx, {
-          origin: cfg.origin,
-          workingOrderId: req.id,
-          amount: outstanding.amountDue,
-          settledAt,
-          externalRef: req.tender.externalRef,
-        });
-        await associatePaymentWithSale(tx, {
-          provider,
-          paymentRef,
-          saleId: outstanding.saleId,
-        });
-      }
-
-      await tx
-        .update(workingOrders)
-        .set({ status: "settled", settledAt: settledAt.toISOString() })
-        .where(eq(workingOrders.id, req.id));
-      await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
-      await clearBillRequestIfPaid(tx, req.id, deps.log);
-
-      const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
-      await enqueueSaleDrawer(tx, cfg, outstanding.saleId, req.tender.method, operatorId);
+      await refuseUnavailableFullInvoice(tx, req.id);
+      await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
+      const order = await priceStoredOrderForIssuance(tx, req.id);
+      const ticket = await fileImmediateSale(
+        tx,
+        deps,
+        cfg,
+        req.id,
+        req.tender,
+        order,
+        req.guests,
+        operatorId,
+      );
       await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
       return ticket;
-    }
-
-    await refuseUnavailableFullInvoice(tx, req.id);
-    await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
-    const order = await priceStoredOrderForIssuance(tx, req.id);
-    const ticket = await fileImmediateSale(
-      tx,
-      deps,
-      cfg,
-      req.id,
-      req.tender,
-      order,
-      req.guests,
-      operatorId,
-    );
-    await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
-    return ticket;
-  });
+    },
+    deps.log,
+  );
 }
 
 /**

@@ -61,3 +61,12 @@ Hasta que se envía el primer pedido, no se muestra ningún paso mientras se tom
 Un paso ya hecho vuelve cuando ocurre otra vez el momento en que empieza, como cuando se sirven más
 platos de un curso. Un paso que se repite cada pocos minutos desde el último pedido vuelve con cada
 repetición: **Hecho** quita la que se ve, y otro pedido vuelve a empezar la cuenta.
+
+## Ha fallado la comprobación de la huella {#fingerprint-check-failed}
+
+Si Waitron indica que ha fallado la comprobación de la huella, avisa a un responsable para que
+se repare el fallo antes de reintentar la operación de factura. La operación rechazada no crea
+ninguna factura ni consume su número; las facturas ya guardadas no cambian.
+
+Si la tarjeta ya se ha cobrado, no vuelvas a cobrarla. Conserva los datos de la cuenta y del pago
+para que el responsable pueda recuperar el pago una vez reparado el fallo.

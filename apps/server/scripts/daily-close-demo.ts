@@ -1,3 +1,4 @@
+import { withIssuanceTransaction } from "@waitron/core";
 import { resolveVenueClock } from "@waitron/reporting";
 // Rings up a day of trade through the real write path against the fake `FiscalBackend`, in a
 // throwaway venue directory, and prints `@waitron/reporting`'s `DailyClose` for a human to check.
@@ -163,7 +164,7 @@ async function main(): Promise<void> {
         tenders: [{ method: "cash", amount: "121.00", tipAmount: "0.00", settledAt: ISSUED_AT }],
       },
     };
-    const saleA = await withTransaction(db, async (tx) => {
+    const saleA = await withIssuanceTransaction(db, async (tx) => {
       return recordSale(tx, backend, saleAInput);
     });
 
@@ -189,7 +190,7 @@ async function main(): Promise<void> {
       clock,
       settlement: { kind: "deferred" },
     };
-    const saleB = await withTransaction(db, async (tx) => {
+    const saleB = await withIssuanceTransaction(db, async (tx) => {
       return recordSale(tx, backend, saleBInput);
     });
 
@@ -230,7 +231,7 @@ async function main(): Promise<void> {
       clock,
       authz: { sessionId: authorizerSession.id },
     };
-    await withTransaction(db, async (tx) => {
+    await withIssuanceTransaction(db, async (tx) => {
       await recordCorrection(tx, backend, correctionInput);
     });
 
