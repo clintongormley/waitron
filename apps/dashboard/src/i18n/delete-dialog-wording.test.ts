@@ -15,6 +15,7 @@ describe.each([
       (field) => {
         const own = DASHBOARD_MODULES.find((entry) => entry.module === module)!.strings[locale];
         const expected = device[`devices.delete_${field}`];
+        expect(expected).toEqual(expect.any(String));
         expect(expected).not.toBe("");
         expect(own[`${prefix}_${field}`]).toBe(expected);
       },
