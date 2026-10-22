@@ -18,6 +18,7 @@ export async function sendSmtpMessage(
   const socket = new Socket();
   let transport: SmtpTransport | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let finished = false;
   let context: SmtpFailureContext = { encryption: "starttls", hasUser: false };
   const failure = (error: unknown): SmtpSendOutcome => {
     const reply =
@@ -34,12 +35,13 @@ export async function sendSmtpMessage(
     if (url.protocol !== "smtp:" && url.protocol !== "smtps:") return failure(undefined);
     const secure = url.protocol === "smtps:";
     context = { encryption: secure ? "tls" : "starttls", hasUser: url.username !== "" };
+    const port = url.port === "" ? (secure ? 465 : 587) : Number(url.port);
     // URL query options must not enable provider logging or weaken certificate checks.
     transport =
       options.transport ??
       nodemailer.createTransport({
         host: url.hostname,
-        port: url.port === "" ? (secure ? 465 : 587) : Number(url.port),
+        port,
         secure,
         requireTLS: url.searchParams.get("requireTLS") === "true",
         ...(context.hasUser
@@ -50,7 +52,28 @@ export async function sendSmtpMessage(
               },
             }
           : {}),
-        socket,
+        // Node owns DNS and dialing so destroying the socket cancels a pending connection.
+        getSocket(_options, callback) {
+          if (finished) {
+            callback(new Error("email.send_timeout"), false);
+            return;
+          }
+          let answered = false;
+          const answer = (error: Error | null) => {
+            if (answered) return;
+            answered = true;
+            socket.off("error", onError);
+            socket.off("close", onClose);
+            callback(error, error === null ? { connection: socket } : false);
+          };
+          const onError = (error: Error) => answer(error);
+          const onClose = () => answer(new Error("email.send_timeout"));
+          socket.once("error", onError);
+          socket.once("close", onClose);
+          socket.connect({ host: url.hostname, port }, () => {
+            answer(finished ? new Error("email.send_timeout") : null);
+          });
+        },
         logger: false,
         debug: false,
         tls: { rejectUnauthorized: true, ...(options.ca === undefined ? {} : { ca: options.ca }) },
@@ -68,6 +91,7 @@ export async function sendSmtpMessage(
   } catch (error) {
     return failure(error);
   } finally {
+    finished = true;
     clearTimeout(timer);
     socket.destroy();
     try {
