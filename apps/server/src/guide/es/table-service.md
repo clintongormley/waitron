@@ -32,10 +32,10 @@ de minutos después de marcar **Montar mesa** como hecho, o **¿Algo más?** cua
 todos los platos. Cada paso empieza en un momento así y vence unos minutos después. Tu local los
 configura en **Pasos de servicio**, en la pestaña **Servicio** del departamento, en el panel.
 
-Cuando vence un paso, la tarjeta de la mesa muestra su nombre con un botón **Hecho**. En el plano,
-si no hay nada más urgente, la mesa se vuelve azul con una campana y el nombre del paso, y los
-detalles de la mesa muestran el paso con **Hecho**. Una mesa muestra un paso cada vez: el último que
-ha vencido.
+Cuando vence un paso, la tarjeta de la mesa muestra su nombre, con un botón **Hecho** si puedes
+tomar pedidos. En el plano, si no hay nada más urgente, la mesa se vuelve azul con una campana y el
+nombre del paso, y los detalles de la mesa muestran el paso, con **Hecho** si puedes tomar pedidos.
+Una mesa muestra un paso cada vez: el último que ha vencido.
 
 Toca **Hecho** cuando hayas pasado por la mesa y los clientes no quieran nada. Quita el paso que se
 ve y cualquier paso anterior que estuviera tapando. Muchas veces no hace falta tocarlo, porque estas

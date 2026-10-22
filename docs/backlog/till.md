@@ -1268,9 +1268,9 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 
 ## A893. Owner review of every table state and its look, after A757 lands
 
-**A893 (owner, 2026-10-18).** A757 landed 2026-10-22 (it was to wait for the whole of A757: owner,
-relayed by the watcher, 2026-10-18); Waiter called (design §4 row 5) cannot be shown until A508. Once A757 lands, show the
-owner, on the running till:
+**A893 (owner, 2026-10-18).** A757 is built (2026-10-22; it was to wait for the whole of A757:
+owner, relayed by the watcher, 2026-10-18); Waiter called (design §4 row 5) cannot be shown until
+A508. Show the owner, on the running till:
 
 - every row of [A757 §4](../superpowers/specs/2026-10-17-a757-table-states-design.md#4-one-order-of-precedence),
   Forgotten through Free, on the floor map and on the list card, in light and dark, at 390 and
@@ -1290,12 +1290,12 @@ owner, on the running till:
   not change it; I believe the stretching predates slice 4.
 - the Open points of slice 4's follow-up, the owner's look changes
   (`docs/superpowers/plans/2026-10-20-a757-4b-owner-look-changes.md`).
-- the choices slice 8 made where the pictures are silent: its plan's Owner points
-  (`docs/superpowers/plans/2026-10-22-a757-8-service-steps-floor.md`), each built with the default
-  named there, and the step pictures as built (`docs/backlog/mockups/a757-table-states/built-8/`).
 - the choices slice 6 made where the pictures are silent: its plan's Owner points
   (`docs/superpowers/plans/2026-10-21-a757-6-item-counts-by-state.md`), each built with the default
   named there.
+- the choices slice 8 made where the pictures are silent: its plan's Owner points
+  (`docs/superpowers/plans/2026-10-22-a757-8-service-steps-floor.md`), each built with the default
+  named there, and the step pictures as built (`docs/backlog/mockups/a757-table-states/built-8/`).
 - the choices slice 5 made where the pictures are silent: its plan's Owner points
   (`docs/superpowers/plans/2026-10-20-a757-5-map-zone-tabs.md`), each built with the default named
   here, plus two found while building it (the last two):

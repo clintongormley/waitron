@@ -32,10 +32,10 @@ couple of minutes after **Set up** is done, or **Anything else?** once every dis
 Each step starts at a moment like that and falls due a set number of minutes later. Your venue sets
 them up under **Service steps** on the department's **Service** tab in the dashboard.
 
-When a step is due, the table's card shows its name with a **Done** button. On the map, unless
-something more urgent is showing, the table turns blue with a bell and the step's name, and the
-table's details list the step with **Done**. A table shows one step at a time: the one that fell due
-last.
+When a step is due, the table's card shows its name, with a **Done** button if you may take orders.
+On the map, unless something more urgent is showing, the table turns blue with a bell and the step's
+name, and the table's details list the step, with **Done** if you may take orders. A table shows one
+step at a time: the one that fell due last.
 
 Tap **Done** when you have been to the table and the guests want nothing. It clears the step on show
 and any earlier step it was hiding. Often you don't need to tap it, because these clear a step too:

@@ -97,26 +97,32 @@ describe("the order lists' help", () => {
 
 describe("the floor's help on service steps", () => {
   const sentences = (text: string) => text.split(/(?<=\.)\s+/).length;
+  const doneWord = (word: string) => new RegExp(`(?<!\\p{L})${word}(?!\\p{L})`, "u");
 
-  it("the list says where Done is, by the button's word", () => {
+  it("the list says where Done is, by the button's word, and only where it shows", () => {
     expect(helpEn["help.floor.tables_list"]).toContain(
-      `A card with a service step has ${en["floor.step_done"]}: tap it when the guests want nothing.`,
+      `A card with a service step has ${en["floor.step_done"]}, if you may take orders: tap it when the guests want nothing.`,
     );
   });
 
-  it("both map texts say the details hold Done", () => {
-    const sentence = `Its details list a service step with ${en["floor.step_done"]}.`;
-    expect(helpEn["help.floor.tables_map"]).toContain(sentence);
-    expect(helpEn["help.floor.tables_map_view"]).toContain(sentence);
+  it("the map that can change today's floor says the details hold Done", () => {
+    expect(helpEn["help.floor.tables_map"]).toContain(
+      `Its details list a service step with ${en["floor.step_done"]}.`,
+    );
   });
 
-  for (const key of [
-    "help.floor.tables_list",
-    "help.floor.tables_map",
-    "help.floor.tables_map_view",
-  ] as const) {
+  it("the view-only map shows the step in the details without offering Done", () => {
+    expect(helpEn["help.floor.tables_map_view"]).toContain("Its details show a service step.");
+    expect(helpEn["help.floor.tables_map_view"]).not.toMatch(doneWord(en["floor.step_done"]));
+    expect(helpEs["help.floor.tables_map_view"]).not.toMatch(doneWord(es["floor.step_done"]));
+    expect(sentences(helpEs["help.floor.tables_map_view"])).toBe(
+      sentences(helpEn["help.floor.tables_map_view"]),
+    );
+  });
+
+  for (const key of ["help.floor.tables_list", "help.floor.tables_map"] as const) {
     it(`${key} in Spanish names Done by its button's word, sentence for sentence`, () => {
-      expect(helpEs[key]).toMatch(new RegExp(`(?<!\\p{L})${es["floor.step_done"]}(?!\\p{L})`, "u"));
+      expect(helpEs[key]).toMatch(doneWord(es["floor.step_done"]));
       expect(sentences(helpEs[key])).toBe(sentences(helpEn[key]));
     });
   }
