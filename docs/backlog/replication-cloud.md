@@ -378,3 +378,36 @@ Cloud product and infrastructure work moved to the
 [Waitron Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md)
 on 2026-09-22: provisioning, cloud-only redundancy, trials, remote access, provider integration
 and cloud operations. See [documentation ownership](../cloud-ownership.md).
+
+## A951. The box's lasting tunnel and public-certificate client
+
+**Design proposed, 2026-10-22. Owner review and bilateral acceptance remain open.**
+The [box-side design](../superpowers/specs/2026-10-22-a951-box-public-access-design.md)
+covers durable configuration receipt/apply/acknowledgement, scoped WireGuard access,
+lease/expiry/revocation, staged cell moves, the landed test-only staff CSR v1 exchange,
+atomic certificate installation/reload and fresh endpoint secrets after replacement.
+It distinguishes inspected components from proposed lifecycle controls. It supplies
+no implementation plan, customer-page mock-ups, product changes or deployment authority.
+
+The owner raised A951's design to next after A1014 on 22 October. Venue devices use
+`.local` by default; a certified staff hostname is optional. Customers reach public
+menus, bookings (A1013), table-QR service (A508), collection orders (A509) and later
+delivery (A1012) through Cloud and WireGuard, soon after go-live. Their page designs,
+exact routes/assets and customer session/operation contracts remain separate work.
+Today's availability endpoint is not those customer products.
+
+Cloud's proposed joint home is [Public access and A951](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/waitron-integration-contract.md#L115),
+lines 115–263 at full baseline `35af2d396d916223ff4f319d8f44093685d62da5`.
+D88's overall hosting/shared contract remains proposed and unaccepted by both sides.
+Cold Cloud recovery when needed is already chosen. D101's planning approval and its
+separately authorised first slice do not approve A951 or hosting. Current A947 has
+advanced beyond D88's older pin; promotion, fencing and fiscal control stay with
+Waitron/A947. A951 neither restarts the cloud-standby proof nor changes those rules.
+
+Next owner topic: independent publication of each customer service versus one opening
+action for all ready services. The design recommends independent, initially closed
+controls, with a Monday menu/bookings and Friday collection example. Full-design
+approval is separate. Take one owner question at a time. The transport foundation
+can be planned separately from later customer manifests after its own contract is
+accepted. Joint acceptance, implementation planning, migration decision, FULL build
+review and runtime/provider qualification remain later gates.

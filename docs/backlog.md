@@ -6028,14 +6028,11 @@ the tree. What remains, largest first:
 - **Observations are synthetic until service adapters exist.** Left open by the Cloud connection
   integration (2026-09-24; #638, #808).
 
-- **A951. The box's lasting tunnel and public-certificate client, for the customer-facing pages
-  (owner, 2026-10-21; raised 2026-10-22).** Customers reach the venue's public pages — online
-  booking (A1013), the table's QR code (A508), online orders (A509) and delivery (A1012) — over the
-  box's WireGuard link to its Cloud instance; venue devices keep `.local` by default. Still missing
-  here: the box's certificate-exchange client with lease renewal and TLS reload, and walling the
-  public routes off from staff and till routes. Designed with Waitron Cloud's D88 proposal, which is
-  not yet approved. Soon after go-live, not at it, and the first of the customer-facing work: "The
-  remote access is the bottleneck for most of these features, so we need to get that working soon."
+- **A951. The box's lasting tunnel and public-certificate client, for the customer-facing pages**
+  — design proposed; owner review and pinned joint Cloud contract acceptance remain open.
+  Venue devices keep `.local` by default; customer access comes soon after go-live and precedes
+  A1013/A508/A509/A1012. No plan or build is approved. [Design](superpowers/specs/2026-10-22-a951-box-public-access-design.md);
+  [detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client).
 
 - **Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side
   networking and `@waitron/tunnel`'s retirement; first-contact trust bootstrap; and the
