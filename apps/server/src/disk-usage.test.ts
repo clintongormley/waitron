@@ -1,4 +1,14 @@
-import { lstat, mkdir, mkdtemp, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -9,7 +19,9 @@ let venueDir: string;
 let logDir: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "wt-disk-usage-"));
+  // Its real path: macOS's temporary folder is reached through a link, and the device seams below
+  // match the folders by path.
+  root = await realpath(await mkdtemp(join(tmpdir(), "wt-disk-usage-")));
   venueDir = join(root, "venue");
   logDir = join(root, "logs");
   await mkdir(venueDir);
@@ -326,5 +338,132 @@ describe("readDiskUsage", () => {
     });
 
     expect(usage.databaseBytes).toBeNull();
+  });
+
+  describe("a folder reached through a link", () => {
+    it("counts a backup folder once when a link to it is listed too", async () => {
+      const backups = join(root, "backups");
+      await mkdir(backups);
+      await fill(join(backups, "a.tar"), 1048576);
+      const alias = join(root, "backups-alias");
+      await symlink(backups, alias);
+
+      const usage = await readDiskUsage({
+        venueDir,
+        logDir,
+        backupDirs: [backups, alias],
+        statfs: disk(10_000_000, 4_000_000, 3_000_000),
+      });
+
+      expect(usage.backupsBytes).toBe(1048576);
+    });
+
+    it("does not count the venue folder again under backups through a link to it", async () => {
+      await fill(join(venueDir, "venue.db"), 1000);
+      const alias = join(root, "venue-alias");
+      await symlink(venueDir, alias);
+
+      const usage = await readDiskUsage({
+        venueDir,
+        logDir,
+        backupDirs: [alias],
+        statfs: disk(100000, 40000, 30000),
+      });
+
+      expect(usage.databaseBytes).toBe(1000);
+      expect(usage.backupsBytes).toBe(0);
+      expect(usage.otherBytes).toBe(60000 - 1000);
+    });
+
+    it("does not count the venue folder again inside a linked backup folder that holds it", async () => {
+      await fill(join(venueDir, "venue.db"), 1000);
+      await fill(join(root, "a.tar"), 2000);
+      const alias = join(root, "venue-alias");
+      await symlink(venueDir, alias);
+      const rootAlias = join(root, "root-alias");
+      await symlink(root, rootAlias);
+
+      const usage = await readDiskUsage({
+        venueDir: alias,
+        logDir,
+        backupDirs: [rootAlias],
+        statfs: disk(100000, 40000, 30000),
+      });
+
+      expect(usage.databaseBytes).toBe(1000);
+      expect(usage.backupsBytes).toBe(2000);
+    });
+
+    it("counts a backup folder named only through a link as backups", async () => {
+      const backups = join(root, "backups");
+      await mkdir(backups);
+      await fill(join(backups, "a.tar"), 5000);
+      const alias = join(root, "backups-alias");
+      await symlink(backups, alias);
+
+      const usage = await readDiskUsage({
+        venueDir,
+        logDir,
+        backupDirs: [alias],
+        statfs: disk(100000, 40000, 30000),
+      });
+
+      expect(usage.backupsBytes).toBe(5000);
+    });
+
+    it("counts a log folder that is a link to a backup folder once, under backups", async () => {
+      const backups = join(root, "backups");
+      await mkdir(backups);
+      await fill(join(backups, "a.tar"), 5000);
+      const alias = join(root, "logs-alias");
+      await symlink(backups, alias);
+
+      const usage = await readDiskUsage({
+        venueDir,
+        logDir: alias,
+        backupDirs: [backups],
+        statfs: disk(100000, 40000, 30000),
+      });
+
+      expect(usage.backupsBytes).toBe(5000);
+      expect(usage.logBytes).toBe(0);
+    });
+
+    it("answers null for a folder whose real path cannot be read", async () => {
+      const usage = await readDiskUsage({
+        venueDir,
+        logDir,
+        backupDirs: [],
+        statfs: disk(100000, 40000, 30000),
+        realpath: async (path) => {
+          if (path === logDir) throw Object.assign(new Error("denied"), { code: "EACCES" });
+          return realpath(path);
+        },
+      });
+
+      expect(usage.logBytes).toBeNull();
+      expect(usage.databaseBytes).toBe(0);
+    });
+
+    it("answers null for every part when the venue folder's real path cannot be read", async () => {
+      const usage = await readDiskUsage({
+        venueDir,
+        logDir,
+        backupDirs: [],
+        statfs: disk(100000, 40000, 30000),
+        realpath: async () => {
+          throw Object.assign(new Error("denied"), { code: "EACCES" });
+        },
+      });
+
+      expect(usage).toEqual({
+        freeBytes: 30000,
+        totalBytes: 100000,
+        databaseBytes: null,
+        backupsBytes: null,
+        logBytes: null,
+        otherBytes: null,
+      });
+    });
   });
 });

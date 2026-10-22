@@ -44,6 +44,7 @@ export async function readDiskUsage(deps: {
   deviceOf?: DeviceOf;
   lstat?: (path: string) => Promise<Stats>;
   readdir?: (path: string) => Promise<string[]>;
+  realpath?: (path: string) => Promise<string>;
 }): Promise<DiskUsage> {
   const statfs = deps.statfs ?? fs.statfs;
   const deviceOf = deps.deviceOf ?? (async (path: string) => (await fs.stat(path)).dev);
@@ -57,9 +58,13 @@ export async function readDiskUsage(deps: {
   const totalBytes = disk.blocks * disk.frsize;
   const usedBytes = (disk.blocks - disk.bfree) * disk.frsize;
 
-  const venueDir = resolve(deps.venueDir);
+  // Each folder is counted by its real path, so a folder listed again through a link, or one
+  // inside a counted folder through a link, is not counted twice.
+  const realpath = deps.realpath ?? fs.realpath;
+  let venueDir: string;
   let venueDevice: number;
   try {
+    venueDir = await realpath(resolve(deps.venueDir));
     venueDevice = await deviceOf(venueDir);
   } catch {
     return { ...UNREADABLE, freeBytes, totalBytes };
@@ -80,16 +85,17 @@ export async function readDiskUsage(deps: {
   const databaseBytes = await walkOrNull(venueDir, []);
   const counted = [venueDir];
   const measure = async (dir: string): Promise<number | null | typeof OFF_DISK> => {
-    const root = resolve(dir);
-    if (counted.some((earlier) => isWithin(root, earlier))) return 0;
-    const skip = [...counted];
-    counted.push(root);
+    let root: string;
     let device: number;
     try {
+      root = await realpath(resolve(dir));
       device = await deviceOf(root);
     } catch (error) {
       return errnoOf(error) === "ENOENT" ? 0 : null;
     }
+    if (counted.some((earlier) => isWithin(root, earlier))) return 0;
+    const skip = [...counted];
+    counted.push(root);
     return device === venueDevice ? await walkOrNull(root, skip) : OFF_DISK;
   };
 
