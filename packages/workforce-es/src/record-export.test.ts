@@ -469,3 +469,11 @@ it("retains unknown actor references instead of dropping their decisions", async
     correctsEntryId: target,
   });
 });
+
+it.each([
+  { locale: "en", holders: ["Worker", "Legal representatives", "Labour inspectorate"] },
+  { locale: "es", holders: ["trabajador", "representantes_legales", "inspeccion_trabajo"] },
+] as const)("exports access-holder labels for $locale", async ({ locale, holders }) => {
+  const exported = await doc({ locale });
+  expect(cells(exported, "metadata").map((row) => row.accessHolder)).toEqual(holders);
+});
