@@ -910,6 +910,8 @@ it("an edit to a declaration stops the wait", async () => {
     check(el, "recovery-old-box-stopped", false);
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
+    check(el, "recovery-old-box-stopped");
+    await el.updateComplete;
     vi.advanceTimersByTime(5_000);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(selects(prepare)).toHaveLength(1);
