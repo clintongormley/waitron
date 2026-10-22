@@ -33,7 +33,6 @@ describe("A803 refund wording", () => {
       "This payment was for particular items, so it is refunded in full: {amount}. Those items can then be paid for again.",
     ],
     ["bill_refund.amount", "Amount to refund"],
-    ["bill_refund.reason_invalid", "Say why this is refunded"],
     ["bill_refund.continue", "Refund {amount}"],
     [
       "bill_refund.terminal_next",

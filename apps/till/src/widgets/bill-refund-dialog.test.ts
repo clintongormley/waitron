@@ -234,7 +234,7 @@ describe("till-bill-refund-dialog: how much and why", () => {
     await click(el, "[data-refund-continue]");
 
     expect(asked).toEqual([]);
-    expect(field(el, "reason")!.error).toBe(t("bill_refund.reason_invalid"));
+    expect(field(el, "reason")!.error).toBe(t("adjust.reason_required"));
     expect(actions(el).error).toBe(t("form.fix_fields"));
     expect(button(el, "[data-refund-continue]").disabled).toBe(true);
     await choose(el, "long");
@@ -339,7 +339,7 @@ describe("till-bill-refund-dialog: how much and why", () => {
     expect(root(el).querySelector("wt-input[name=reason]")).toBeNull();
     await click(el, "[data-refund-continue]");
     expect(asked).toEqual([]);
-    expect(field(el, "reason")!.error).toBe(t("bill_refund.reason_invalid"));
+    expect(field(el, "reason")!.error).toBe(t("adjust.reason_required"));
     expect(button(el, "[data-refund-continue]").disabled).toBe(true);
   });
 

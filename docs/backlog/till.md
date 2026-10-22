@@ -2715,25 +2715,23 @@ Left open by A758-6. Each works as built, with the default named; the owner may 
 7. **A803's English for the till line stays**: "Refund the payment at a till: choose Refund a
    payment on the receipt.", where design §3.9 wrote "Give the money back at a till: Refund a
    payment on the receipt."
-8. **Give back a payment's reason is now the same drop-down**, as D15 asks. With no reason chosen it
-   says "Say why this is refunded", while a receipt's refund says "Choose a reason".
-9. **A refund in flight across the upgrade**, sent again with its first submission, is refused as
+8. **A refund in flight across the upgrade**, sent again with its first submission, is refused as
    reused (`submission.id_reused`); checking it by its refund id still works.
-10. **A finished table is checked against all its bills' zones**, not the order's zone as design
-    §3.8 says: a device limited to zone 1 is refused a finished table that also had a zone-2 bill,
-    though it served part of it. On a finished table, a device outside its zones is now also
-    refused the table's read routes (403 `service_zone.not_allowed`).
-11. **The cancel's note is not carried to the refund**: the refund starts on the cancel's reason,
+9. **A finished table is checked against all its bills' zones**, not the order's zone as design
+   §3.8 says: a device limited to zone 1 is refused a finished table that also had a zone-2 bill,
+   though it served part of it. On a finished table, a device outside its zones is now also
+   refused the table's read routes (403 `service_zone.not_allowed`).
+10. **The cancel's note is not carried to the refund**: the refund starts on the cancel's reason,
     so a reason that needs a note (such as Other) asks for the note again.
-12. **With two receipts, closing the first refund without sending it drops the carried PIN for
+11. **With two receipts, closing the first refund without sending it drops the carried PIN for
     both**, so the second asks for the PIN.
-13. **The refund dialogs keep Refund enabled before a reason is chosen** and explain on press,
+12. **The refund dialogs keep Refund enabled before a reason is chosen** and explain on press,
     drawing it quiet until a reason is chosen, while Cancel item and Finish table grey their action
     out.
-14. **Finish table is simpler than picture 06**: no table and payment line, no amount or status
+13. **Finish table is simpler than picture 06**: no table and payment line, no amount or status
     per dish.
-15. **The Spanish Refund tick reads «Devolución»**, where the picture said «Devolver».
-16. **Cancel item on a partly served line does not say one was served.**
-17. **The reason drop-down shows a search box** even with the five starter Void reasons.
-18. **The report's "Refunded €5.50" cell repeats its column heading.**
-19. **On a phone, the report's new columns sit mid-scroll.**
+14. **The Spanish Refund tick reads «Devolución»**, where the picture said «Devolver».
+15. **Cancel item on a partly served line does not say one was served.**
+16. **The reason drop-down shows a search box** even with the five starter Void reasons.
+17. **The report's "Refunded €5.50" cell repeats its column heading.**
+18. **On a phone, the report's new columns sit mid-scroll.**
