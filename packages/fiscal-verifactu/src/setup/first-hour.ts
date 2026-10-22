@@ -334,8 +334,8 @@ export class FirstSetupHour extends LitElement {
             ? { allowedFromMs: params.allowedFromMs as number }
             : {}),
         });
-      // A lost request while waiting for a second clock is retried by the next poll.
-      else if (!(automatic && polling)) {
+      // A request lost on the way (no refusal code) is retried by the next poll; a refusal is not.
+      else if (!(automatic && polling && code === undefined)) {
         this.#show(undefined);
         this.error = true;
       }

@@ -983,6 +983,7 @@ function gatedClocks() {
     decision: noSecondClock as typeof clock,
     hold: undefined as Promise<void> | undefined,
     fail: false,
+    refusal: undefined as unknown,
   };
   let compared = 0;
   const prepare = async (proposal: unknown) => {
@@ -990,9 +991,10 @@ function gatedClocks() {
     if (action === "clock-challenge") return { id: "challenge" };
     if (action === "selection") return { status: "preview" };
     if (state.hold) await state.hold;
+    if (state.refusal !== undefined) throw state.refusal;
     if (state.fail) {
       state.fail = false;
-      throw { code: "setup.attempt_conflict" };
+      throw new TypeError("Failed to fetch");
     }
     return { id: `comparison-${++compared}`, clock: state.decision };
   };
@@ -1063,6 +1065,32 @@ it("keeps checking for a second clock after one automatic re-check fails", async
     state.decision = clock;
     vi.advanceTimersByTime(15_000);
     await vi.waitFor(() => expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("stops checking for a second clock when a re-check is refused, and shows the failure", async () => {
+  const { state, prepare } = gatedClocks();
+  const { el, calls } = await mount({ prepare });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(text(el)).toContain(SETUP_DO));
+    state.refusal = { code: "setup.owner_required" };
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).toBe(
+        "true",
+      ),
+    );
+    await el.updateComplete;
+    expect(text(el)).not.toContain(SETUP_ENDS);
+    expect(quiet(el)).toEqual({ disabled: false, variant: "primary" });
+    const after = calls.length;
+    vi.advanceTimersByTime(45_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(calls).toHaveLength(after);
   } finally {
     vi.useRealTimers();
   }
