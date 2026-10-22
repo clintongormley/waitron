@@ -11986,7 +11986,11 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
   });
 
   describe("collect at the counter", () => {
-    const rows = [dish("line-1", "wo-4"), dish("line-2", "wo-4"), dish("line-3", "wo-check")];
+    const rows = [
+      { ...dish("line-3", "wo-check"), billRevision: 5 },
+      { ...dish("line-1", "wo-4"), billRevision: 2 },
+      { ...dish("line-2", "wo-4"), billRevision: 2 },
+    ];
     const toast = (el: TillApp) =>
       el.shadowRoot!.querySelector<HTMLElement & { open: boolean; message: string }>(
         "wt-toast[data-submitted-toast]",
@@ -12022,8 +12026,8 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         submissionId: expect.any(String),
         collect: {
           bills: [
-            { billId: "wo-4", expectedBillRevision: 0 },
-            { billId: "wo-check", expectedBillRevision: 0 },
+            { billId: "wo-4", expectedBillRevision: 2 },
+            { billId: "wo-check", expectedBillRevision: 5 },
           ],
         },
       });
@@ -12062,6 +12066,37 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
           .shadowRoot!.querySelector('[data-refresh-notice="waiting"] .refresh-message')!
           .textContent!.trim(),
       ).toBe(t("refresh.waiting_after_move"));
+    });
+
+    it("says nothing and reads no waiting orders when the answer comes after a sign-out", async () => {
+      const pending = held();
+      const { el } = await mountCollect({
+        finishTable: vi
+          .fn()
+          .mockRejectedValueOnce(refusal(rows))
+          .mockImplementation(() => pending.call()),
+      });
+      await openFinish(el);
+      await collect(el);
+      expect(api.finishTable).toHaveBeenCalledTimes(2);
+      emit(tableOrder(el)!, "logout");
+      await flush(el);
+      const warning = el.shadowRoot!.querySelector("wt-unsaved-changes");
+      if (warning?.open) {
+        await warning.updateComplete;
+        warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+        await expect.poll(() => warning.open).toBe(false);
+        await flush(el);
+      }
+      emit(lock(el), "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
+      await flush(el, 8);
+      const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+
+      pending.answer.settle({ state: "closed" });
+      await flush(el, 10);
+
+      expect(toast(el)?.open ?? false).toBe(false);
+      expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
     });
 
     it("opens no refund and asks no PIN", async () => {
