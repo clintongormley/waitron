@@ -5703,89 +5703,51 @@ _Formerly _Afterwards_ and _Cloud connection integration_._ Detail: [backlog/rep
 
 Not in any track until the standalone primary is done.
 
-- **A1018. Agree and build the hosted writer stop-proof contract.** [Contract direction agreed](superpowers/specs/2026-10-22-a1018-cloud-stop-proof-design.md)
-  by Lane G for Cloud under the explicit D118 transfer on 2026-10-22. The single worked-example
-  owner question remains pending. Cloud's [canonical contract section](https://github.com/waitron-io/waitron-cloud/blob/6700d6f2319ff0b62b0ccc27e833487935ad2174/docs/waitron-integration-contract.md#hosted-writer-retirement-a1018-direction-agreed)
-  is published; Lane D's two wording corrections remain open. Build authority,
-  implementation and provider qualification remain separate gates; no enforcement profile is qualified.
-  Continuation still requires runtime retirement and final-data proof; explicit cold restore
-  stays separate. [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
+- **A1018. Agree and build the hosted writer stop-proof contract.** The single worked-example
+  owner question remains pending. Build authority, implementation and provider qualification
+  remain separate gates; no enforcement profile is qualified.
+  [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
 - **The till's theme fetch does not follow a server move (A841 slice 3).** The till fetches
   `/api/theme` from the page's own address, not through `ServerRouter`; moved to another server, it
   would keep the theme it has, or take the old server's while that one still answers, so failover
   work must route it ([conventions-ui.md](developers/conventions-ui.md)).
 
-- **A mirror keeps a renamed server's old chart (A917).** A mirror node is given the venue's chart
-  when it is paired; A917's round-3 review found no path that delivers a later one, so after a
-  rename its copy would name the old address until it is paired again. No reader routing by a
-  mirror's copy was found (not exhaustive). [Design §7.2](superpowers/specs/2026-10-20-a917-box-local-name-design.md#72-at-the-confirm-one-chart-write-then-a-swap-decided-from-what-is-on-disk)
+- **A mirror keeps a renamed server's old chart (A917).** After a rename its copy would name the
+  old address until it is paired again. No reader routing by a mirror's copy was found (not exhaustive).
+  [Detail](backlog/replication-cloud.md#a-mirror-keeps-a-renamed-servers-old-chart-a917)
 
 - **A completed provision or adopt operation replayed on a later request still answers 200 without
-  restarting and keeps the setup lock set** — found by #657 while pruning comments. After a refused
-  resend of a half-finished adopt (A50, #685), what the first identity leaves behind on the primary
-  and on this node is still not measured. The standby's reset page does not show this server's
-  machine id, so an operator cannot tell which row on the primary's Servers screen is this server's
-  (left for the owner from A70's review).
+  restarting and keeps the setup lock set.**
   [Detail](backlog/replication-cloud.md#a-completed-provision-or-adopt-operation-replayed-on-a-later-request-still-answers-200-without-restarting-and-keeps-the-setup-lock-set)
 
 - **`docs/developers/conventions-data.md`'s `busy_timeout` receipt … should carry the date and Node
-  version the deleted comment had** — found by #625 while pruning comments. `adoptFromPrimary`
-  (`adopt.ts`) spreads one adoption across several transactions with file writes between and no
-  commented decision (CLAUDE.md §3), so a failure partway could leave a stamped mirror with no
-  break-glass verifier.
+  version the deleted comment had.**
   [Detail](backlog/replication-cloud.md#docsdevelopersconventions-datamds-busy_timeout-receipt--should-carry-the-date-and-node-version-the-deleted-comment-had)
 
 - **The boot-time fetch is given only the URL … and boot never reads the `superseded` that
-  `reconcileMembershipOnBoot` returns** — found by #617 while pruning comments. `shouldFenceRestart`
-  (`membership-fence.ts`) has no caller outside its test (`git grep`). `setup-operation.ts` (around
-  lines 128–133) may treat a lock written by a different store as a previous boot's, so a live
-  process's lock could be taken over (a belief, not verified).
+  `reconcileMembershipOnBoot` returns.**
   [Detail](backlog/replication-cloud.md#the-boot-time-fetch-is-given-only-the-url--and-boot-never-reads-the-superseded-that-reconcilemembershiponboot-returns)
 
-- **The tunnel's stand-in relay pairs with sockets that have already gone** — OPEN (found
-  2026-09-23, writing tunnel's coverage tests, PR #506). `packages/tunnel/src/testing/relay.ts` is
-  test-only: nothing outside `packages/tunnel`'s own suites imports it, and Waitron ships no relay.
-  When a parked box closes, it stays in `idle` until a client takes it, so the next client is paired
-  with the dead box and its bytes go nowhere (both reviewers of that branch ran this).
+- **The tunnel's stand-in relay pairs with sockets that have already gone.** When a parked box
+  closes, it stays in `idle` until a client takes it, so the next client is paired with the dead
+  box and its bytes go nowhere. Only fix this if `@waitron/tunnel` outlives its planned retirement.
   [Detail](backlog/replication-cloud.md#the-tunnels-stand-in-relay-pairs-with-sockets-that-have-already-gone)
 
 **The on-prem mirror.** Read this section as requirements slices 3–5 must meet, not as work
 outstanding on code that exists.
 
-- **A947. Go-live on two local boxes — design revised twice for the owner's answers; his approval of
-  the second revision awaited.** The owner, 2026-10-21: "For go live I want one box with failover to another
-  local box." The [design](superpowers/specs/2026-10-21-a947-two-box-failover-design.md) re-cuts
-  slices 3–5 into pull requests (§11) and answers several entries below: the vault-ring question
-  (the spare gets the credentials key at joining), adding a spare with the internet down (the first
-  copy over the LAN), the stored primary key (A45), and the drain confirmations rejoin lost (the
-  tail receipt). All four questions are answered (§12): a manager switches from any till, signing
-  in with a passkey or a password plus authenticator code when enrolled — no recovery sheet; the
-  switch never waits for the next hour, because every series name is five symbols for the UTC
-  minute (`A-0CZZW`, §6.5; the owner's 22:25 follow-up), with no "last hour" question anywhere;
-  the recovery sheet and the restore form would drop the installation code once slice 4a's test
-  passes. A test of today's name-picking code with its demand for a typed code taken out showed it takes an earlier name once a wrong clock is
-  confirmed, even with Thursday's stale sheet code, and repeats a name it cannot see in the same
-  hour or after a fast clock; so once slice 4a is built, every name a box takes would refuse a box
-  clock more than 30 seconds behind or ahead of another device's, and a setup or restore would wait
-  90–150 seconds before naming (§6.5, §6.7). That
-  the new rules refuse is slice 4a's test, still to be built — fiscal, the owner lands it, first;
-  any device, even a reloaded one, reaches the
-  switch (§6.6); the returning box hands over and becomes the spare by itself after three checks
-  (§7.2); a spare is a choice per venue. Found while revising: both boxes put the same address in
-  the membership chart, so a till's router sees one server (§2). No build before the owner
-  approves the second revision.
-  [Mock-ups](backlog/mockups/a947-two-box-failover/README.md) The membership, promotion and rejoin arc (#197–#272) is still in
-the tree. What remains, largest first:
+- **A947. Go-live on two local boxes.** The owner approved the revised design; slice 4a is
+  [PR #1990](https://github.com/clintongormley/waitron/pull/1990), open for the owner to land.
+  The remaining slices are still open. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
+
+The membership, promotion and rejoin arc remains in the tree. What remains, largest first:
 
 - **Status, alarms and the operator surface for replication.** An operator needs to see whether the
   standby is keeping up, and to be alarmed when it is not.
 
-- **Fiscal-certificate distribution** — rebuild on the asynchronous adopt (see the residuals). Open
-  design question: how the dormant certificate is protected when the seal must happen after the
-  initial copy. Beside it, **the vault-ring question**: `tenant_credentials` is `local` and a blob
-  sealed under one node's ring cannot be opened under another's, so `fiscal.aeat` and
-  `payments.stripe` do not travel to a standby at all.
+- **Fiscal-certificate distribution** — rebuild on the asynchronous adopt. Open design question:
+  how the dormant certificate is protected when the seal must happen after the initial copy.
   [Detail](backlog/replication-cloud.md#fiscal-certificate-distribution)
 
 - **Node-role collapse** — derive ONE `NodeRole` at boot from the membership document and pick one
@@ -5794,10 +5756,9 @@ the tree. What remains, largest first:
 - **The mirror as a backup destination**, and the mirror's print agent (gated on B6's cross-box
   TLS).
 
-- **Adding a mirror while the internet is down** (owner, 2026-10-02). So with the internet down
-  there is no way to add a mirror, which is the very case an on-prem mirror exists for. Wanted: a
-  new mirror takes its first copy straight from the primary over the LAN. Slice 5 should name this
-  as the way a mirror is added and prove it with the internet unplugged.
+- **Adding a mirror while the internet is down** (owner, 2026-10-02). Wanted: a new mirror takes
+  its first copy straight from the primary over the LAN. Slice 5 should name this as the way a
+  mirror is added and prove it with the internet unplugged.
   [Detail](backlog/replication-cloud.md#adding-a-mirror-while-the-internet-is-down)
 
 - **The two-node end-to-end proof over LAN and over WireGuard**, including the same-site cookie
@@ -5806,42 +5767,21 @@ the tree. What remains, largest first:
 
 - **Richer daily close** — one close run by the primary across all tills.
 
-- **Replication, membership & failover — residuals** — **Until slice 3 a venue has ONE node and no
-  failover at all.** Read the residuals as requirements for what failover is rebuilt INTO, not as
-  descriptions of code that exists today. Open, among them: a cut-off primary keeps streaming, into
-  its own copy (owner, 2026-09-24); a standby checks a promotion against the primary's key (owner,
-  2026-09-26); and
-  [provider cancellation ownership](backlog/payments.md#decisions-and-deliberate-limits) before
-  enabling a second venue node (A764).
+- **Replication, membership & failover — residuals.** Until slice 3 a venue has ONE node and no
+  failover at all. Read the residuals as requirements for what failover is rebuilt INTO, not as
+  descriptions of code that exists today.
   [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
 
 **Cloud integration and SQLite work.**
 
-- **Loose ends left by the Cloud connection integration (2026-09-24; #638, #808).**
-  - Customer remote setup UI and production deployment remain open.
-  - Shutdown waits for an in-progress local database copy or encryption step. Next: measure that
-    shutdown latency, real venue uplink budgets and spool disk use, and stream archive assembly
-    beyond its current in-memory 512 MiB format limit. Cloud documentation:
-    `docs/authenticated-captures.md` in waitron-cloud.
-  - After a Cloud replacement (#638), installing the new tunnel and TLS certificate remains an
-    operator step. Continuous complete-server recovery, planned final-write handover and production
-    recovery remain open. Cloud owns route placement and fencing in its backlog.
-  - A stop made while `cloud-replacement.json` is unreadable is not recorded in it. Owner to choose:
-    refuse Stop access while the replacement file is unreadable, or record the stop somewhere that
-    survives the repair.
-    [Detail](backlog/replication-cloud.md#a-stop-made-while-cloud-replacementjson-is-unreadable-is-not-recorded-in-it)
-  - The Litestream stream's sealed-state restore and activation still need integration with Cloud
-    storage and owner recovery. Connected does not mean those services are configured. Cloud service
-    ownership stays in the Cloud backlog; this repository owns its adapter, screen and node-side
-    behavior. Public hosting, ingress controls and Cloud audit/retention remain deployment work.
+- **Loose ends left by the Cloud connection integration.** Customer remote setup UI and production
+  deployment remain open. Continuous complete-server recovery, planned final-write handover and
+  production recovery remain open.
+  [Detail](backlog/replication-cloud.md#loose-ends-left-by-the-cloud-connection-integration)
 
 - **Four Cloud reply and state readers accept a one-item list where they want text.** Each turns
-  the field into text before checking it, so `["ready"]` passes as `"ready"`:
-  `apps/server/src/cloud-client.ts` (the pairing reply's and saved view's `state`),
-  `cloud-recovery.ts` (the saved recovery `phase`, and Cloud's `result.state`) and
-  `cloud-replacement.ts` (Cloud's `state`). A689's first PR fixed the same pattern in
-  `cloud-installation.ts` and `cloud-translation.ts`; these four predate it. Found by its review
-  (2026-10-15), not measured against a real Cloud.
+  the field into text before checking it, so `["ready"]` passes as `"ready"`.
+  [Detail](backlog/replication-cloud.md#four-cloud-reply-and-state-readers-accept-a-one-item-list-where-they-want-text)
 
 - **The signing and size-capped reading of a request to Cloud is repeated across the
   `apps/server/src/cloud-*.ts` files.** One shared helper would serve them all; left out of #1729
@@ -5850,93 +5790,49 @@ the tree. What remains, largest first:
 - **Observations are synthetic until service adapters exist.** Left open by the Cloud connection
   integration (2026-09-24; #638, #808).
 
-- **A951. The box's lasting tunnel and public-certificate client** — the owner approved
-  the revised two-interface design for planning only on 2026-10-22. The
-  [implementation plan](superpowers/plans/2026-10-22-a951-connection.md) covers the
-  connection foundation, test-only staff certificates, independent customer upstream,
-  movement/replacement and separately qualified staff-browser access. Plan approval,
-  separate build authority and pinned scoped bilateral contracts remain open; runtime
-  and provider qualification follow. A951 gives reachability without publishing services.
-  `.local` stays the default; customer products remain separate and denied until agreed.
-  [Design](superpowers/specs/2026-10-22-a951-box-public-access-design.md);
-  [detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client).
+- **A951. The box's lasting tunnel and public-certificate client.** The owner approved the revised
+  two-interface design for planning only. Plan approval, separate build authority and pinned scoped
+  bilateral contracts remain open; runtime and provider qualification follow.
+  [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
 - **Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side
-  networking and `@waitron/tunnel`'s retirement; first-contact trust bootstrap; and the
-  cloud-standby end-to-end proof. **Do not restart the cloud-standby work until the
-  Waitron↔Waitron-Cloud boundary contract is settled.**
+  networking and `@waitron/tunnel`'s retirement; first-contact trust bootstrap; and the cloud-standby
+  end-to-end proof. Do not restart the cloud-standby work until the boundary contract is settled.
   [Detail](backlog/replication-cloud.md#waitron-retains)
 
-- **SQLite + Litestream replaces PostgreSQL** (owner decision 2026-09-16). **Next: slice 3, seats
-  and promotion. Its first task is already decided: credentials move to a venue key** stored in
-  `venue.db` only in locked form — do not reopen it.
+- **SQLite + Litestream replaces PostgreSQL.** Next: slice 3, seats and promotion. Its first task
+  is already decided: credentials move to a venue key stored in `venue.db` only in locked form.
   [Detail](backlog/replication-cloud.md#sqlite--litestream-replaces-postgresql)
 
-- **Loose ends left by the SQLite failover-loop prototype gate (#425; receipts in
-  [the results note](research/2026-09-16-sqlite-failover-prototype.md)).**
-  - **Validate every supported object store.** Topology §12.2's real-store gate remains open; the
-    conditional-write promotion tie-break must be demonstrated on each target (risk 11). Waitron
-    Cloud's production store still needs its own run.
-    [Detail](backlog/replication-cloud.md#validate-every-supported-object-store)
-  - The store pointer and a new generation are exercised for a rebuild, not for a promotion. A
-    promoted node's generation, and Cloud's recovery orchestration (tracked in the
-    [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md)), remain;
-    settle the Waitron ↔ Waitron Cloud contract before assigning them.
-  - 250 sales a day is still an assumption nothing in this repository measures, so the days-per-GiB
-    figure rescales but does not hold.
-  - Three scenarios have no mutation receipts (S1, S6, `smoke`), two branches of the litestream
-    wrapper are driven by no scenario, and the runner's own `main()` is undriven — a later task
-    should pin them or delete them.
+- **Loose ends left by the SQLite failover-loop prototype gate.** Validate every supported object
+  store. A promoted node's generation and Cloud's recovery orchestration remain; settle the
+  Waitron ↔ Waitron Cloud contract before assigning them.
+  [Detail](backlog/replication-cloud.md#loose-ends-left-by-the-sqlite-failover-loop-prototype-gate)
 
-- **Task 1a** (#548, each machine's own rows keyed by its node id). Deny's delete is the one
-  join-request node filter no test fails without (the `requirePending` read before it already
-  refuses another node's row); and the run-it review did not reach three claims within its budget —
-  holders torn by a concurrent promotion, credential sealing, and scheduler takeover. Left open by
-  SQLite slice 2.
+- **Task 1a** — Deny's delete is the one join-request node filter no test fails without. Holders
+  torn by a concurrent promotion, credential sealing and scheduler takeover remain unverified.
+  [Detail](backlog/replication-cloud.md#task-1a--node-filters-and-unverified-concurrency-claims)
 
-- **Loose ends left by SQLite slice 2 Task 9a (#630, the first start after a restore).**
-  - A node row holding no endorsement still signs `endorsements: []`, and no first-start case
-    asserts it.
-  - A comment claims more than the code keeps: `retireSelf`'s header (`apps/server/src/retire.ts`)
-    says a signing failure "leaves the node exactly as it was". Signing empties pending
-    `change_log` rows (measured by #655's Codex seat), so they are not strictly untouched; no case
-    losing a real one is known. Narrow it the next time the file is edited.
-  - A restored box whose cloud peer does not answer during its first start signs the next term and
-    removes the marker; a fencing document the peer serves later at that same term reads as not
-    newer, so the box is never fenced (reproduced with a temporary two-boot case in
-    `apps/server/src/boot.reconcile.test.ts`). Recorded, not redesigned.
-    [Detail](backlog/replication-cloud.md#a-restored-box-whose-cloud-peer-does-not-answer-during-its-first-start-signs-the-next-term-and-removes-the-marker)
-  - The pointer's term is taken without checking its signature, as the supervisor already does, so
-    whoever can write the bucket can push a restored box's term up (never down).
-  - A sell-only local secondary that is not fenced runs the first start and signs the next term.
-  - The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the
-    restored copy holds.
-    [Detail](backlog/replication-cloud.md#the-restored-membership-rows-check-assertrestoredmembershipvalid-678-trusts-the-keys-the-restored-copy-holds)
-  - Only the start that finishes a restore checks the row's signature. A mirror or fenced start
-    checks only that it can be read and is shaped as a document (A53); a start still finishing an
-    adoption checks neither.
-    [Detail](backlog/replication-cloud.md#only-the-start-that-finishes-a-restore-checks-the-rows-signature)
-  - On a start with NO restore marker, text that is not JSON or a machine list that is not a list
-    fails with the generic text. Whether to give it a curated code is open.
-    [Detail](backlog/replication-cloud.md#on-a-start-with-no-restore-marker-text-that-is-not-json-or-a-machine-list-that-is-not-a-list-fails-with-the-generic-text)
-  - A mirror that deferred its first start and is then promoted without a restart
-    (`promoteMirrorToPrimary`) keeps the bucket copy held, reading off with the reason
-    `first_start_pending` and raising no alert, until the box next starts. From reading, not a run.
+- **Loose ends left by SQLite slice 2 Task 9a.** A node row holding no endorsement still signs
+  `endorsements: []`, and no first-start case asserts it. Restore fencing, membership trust and
+  signature checks, curated refusals and promotion with a pending first start remain open.
+  [Detail](backlog/replication-cloud.md#loose-ends-left-by-sqlite-slice-2-task-9a)
 
-- **If a later slice moves `local` tables into `node.db`** (slice 2's design reserved it for slice
-  5), that slice decides again how the drain crosses the two files: SQLite refuses a trigger body
-  that writes another attached database, so either `change_log` is reclassified to the file its
-  writers live on, or the triggers stop writing it directly and something above them does (P3). Left
-  open by SQLite slice 1 (#490 and the preparation tasks).
+- **If a later slice moves `local` tables into `node.db`**, that slice decides again how the drain
+  crosses the two files: SQLite refuses a trigger body that writes another attached database.
+  [Detail](backlog/replication-cloud.md#if-a-later-slice-moves-local-tables-into-nodedb)
 
 - **A promoting standby may list itself with an empty `contactUrl`, so no till is told to dial it.**
-  Nothing the #600 review could find copies `node_membership` from the primary to a standby. A
-  standby whose own held membership list omits it takes the fallback in `nextStandings`
-  (`packages/membership/src/standings.ts`), which appends it with an empty `contactUrl`, and
-  `routableServers` (`packages/membership/src/fence.ts`) then drops it. Found by reading, not run.
-  [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
+  `nextStandings` appends it with an empty `contactUrl`, and `routableServers` then drops it.
+  Found by reading, not run.
+  [Detail](backlog/replication-cloud.md#a-promoting-standby-may-list-itself-with-an-empty-contacturl)
 
 ### CI, tests and developer tooling
+
+- **The image build can time out fetching its release source.** Main CI run
+  [39868989648](https://github.com/clintongormley/waitron/actions/runs/39868989648/job/120139166601)
+  failed in `generate-hour-release.mjs --fetch-source` with `spawnSync git ETIMEDOUT`.
+  Diagnose the fetch before changing its bound or retrying; the underlying cause is unverified.
 
 - **The UI showcase overflows a phone and inherits black text in its dark panel.** At a
   390 px viewport, the panels in `packages/ui/index.html` measured 572 px wide before and after

@@ -149,7 +149,7 @@ implementation or authorises provider work.
 writing tunnel's coverage tests, PR #506).** `packages/tunnel/src/testing/relay.ts` is test-only:
 nothing outside `packages/tunnel`'s own suites imports it, and Waitron ships no relay. When a parked
 box closes, it stays in `idle` until a client takes it, so the next client is paired with the dead
-box and its bytes go nowhere (both reviewers of that branch ran this). When a waiting client closes,
+box and its bytes go nowhere. When a waiting client closes,
 it stays in `waiters` until its wait window (`waitForBoxMs`) runs out, so a box registering inside
 that window is sent `go` and paired with the dead client. Three tests in `relay.test.ts` pass anyway
 because they check only the next `ack`: the two reset cases say so, and the older "drops an idle box
@@ -202,19 +202,9 @@ its cloud support-service proposal is tracked in Cloud and is not approved by th
 
 ## SQLite + Litestream replaces PostgreSQL
 
-**SQLite + Litestream replaces PostgreSQL** (owner decision 2026-09-16). The architecture is
-[SQLite + Litestream topologies](../superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md),
-whose §11 is the build order. The failover-loop prototype gate is done (#392, #395, #406, #411, #415, #417, #422, #425;
-[the results note](../research/2026-09-16-sqlite-failover-prototype.md)); its one
-negative result, **S2** — a handed-over batch can re-file a sale the receiver already filed, which
-costs one wasted AEAT call (error 3000, already read as filed) — produced the fence-before-ship rule
-in topology design §5.2. The tag `pre-sqlite-migration` (`c9d80c59`) marks the last commit before
-any of this code. **Slice 1, the storage swap, is complete (2026-09-23; F1 #489, T1 #490, T2 #492,
-T3 #494, and its preparation tasks).** **Slice 2, stream and cold restore, is complete
-(2026-09-25;** #513, #540, #543, #548, #554, #557, #560, #566, #569, #590, #619, #627, #628, #630, #642, #646
-and #652, with follow-ups #573, #576, #594, #599, #608, #643, #647, #649 and #650).
-**Next: slice 3, seats and promotion. Its first task is already decided: credentials move to a
-venue key** stored in `venue.db` only in locked form — do not reopen it.
+Next: slice 3, seats and promotion. Its first task is already decided: credentials move to a venue
+key stored in `venue.db` only in locked form. Do not reopen it. See
+[Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 ## Validate every supported object store
 
@@ -300,30 +290,9 @@ is in `venue.db` (#548). Read the residuals below as requirements for what failo
 rebuilt INTO, not as descriptions of code that exists today. A standby holds its full dormant
 identity from JOIN and promotion never mints a chain.
 
-**Owner decision 2026-09-24 — a cut-off primary keeps streaming, into its own copy.** Raised by #590
-(slice 2 Task 6), whose `StreamHost` streams on any node whose role is primary, while the Cloud
-snapshot worker also requires the node not be fenced (`cloudPrimary`, `apps/server/src/boot.ts`).
-Invoices a primary has recorded and chained but not yet sent to AEAT exist only in its database, and
-Litestream copies the whole file page by page — it cannot pick out the fiscal tables — so the way to
-carry them across is to keep streaming everything and extract the fiscal records afterwards, from a
-restore of that node's copy, on the promoted side. So when slice 3 builds fencing and promotion: a
-fenced primary does NOT stop streaming; it streams into its OWN generation and never writes over the
-live one, and the tail shipper files what that copy holds that the promoted side lacks. Watch for the
-rule #590's review described — a node refuses itself once the bucket's pointer names another
-generation — which, if it stops a fenced node's stream the moment the promoted node claims the
-pointer, would cut off exactly the tail this decision is meant to keep. Invoices already sent to AEAT
-stay recoverable from AEAT either way.
-
-**Owner decision 2026-09-26 (A45's first point) — a standby checks a promotion against the
-primary's key, built in slice 3.** A restored membership document's signature is checked only at
-the start that finishes a restore (#678); A53 added a check that it can be read and is shaped as a
-document on every restored start not finishing an adoption. Promotion, `retireSelf` and the standby chart append
-(`apps/server/src/promote.ts`, `apps/server/src/retire.ts`, `apps/server/src/mirror-bundle-api.ts`)
-sign over the held document without checking it, because a mirror's stored keys name only itself,
-so a document its primary genuinely signed fails the check there (measured, see Task 9a's #678
-entry). The owner chose to leave those paths unchecked now and, as part of the failover work: a
-standby stores the primary's key when it joins, and promotion, `retireSelf` and the standby chart
-append check the held document against it. Not built; until then those paths stay unchecked.
+The streaming and stored-primary-key decisions are under
+[Decisions and deliberate limits](#decisions-and-deliberate-limits). Before enabling a second venue
+node, settle [provider cancellation ownership](payments.md#decisions-and-deliberate-limits) (A764).
 
 Two of those keepers came through CHANGED, not untouched, and the change is a real loss of safety
 that slice 3 has to restore:
@@ -390,7 +359,7 @@ that slice 3 has to restore:
   and was reverted by #281, and the replication it was rebuilt against was itself removed on
   2026-09-19 — so the design and its plan describe a mechanism that no longer exists. Redesign it with
   slice 3. Installing or renewing the certificate on the primary, on the dashboard's AEAT certificate
-card (A795), does not wait for this (A9).
+  card (A795), does not wait for this (A9).
 - **Still owed after the cert-distribution rebuild:** the restore-onto-cloud re-encrypt; a dashboard
   promote UI; an a11y test for the break-glass panel.
 - **Carry-ins, accepted or to be stated in a threat model:** the primary burns an installation number
@@ -404,6 +373,38 @@ card (A795), does not wait for this (A9).
 - **Till UX for the timed-out card case** — retry, alternative tender, or wait.
 
 ## Decisions and deliberate limits
+
+**SQLite + Litestream replaces PostgreSQL** (owner decision 2026-09-16). The architecture is
+[SQLite + Litestream topologies](../superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md).
+The prototype's S2 result, a handed-over batch re-filing a sale the receiver already filed,
+costs one wasted AEAT call (error 3000, already read as filed). It produced the fence-before-ship
+rule in topology design §5.2; the
+[results note](../research/2026-09-16-sqlite-failover-prototype.md) holds the completed gate's receipts.
+
+**Owner decision 2026-09-24 — a cut-off primary keeps streaming, into its own copy.** Raised by #590
+(slice 2 Task 6), whose `StreamHost` streams on any node whose role is primary, while the Cloud
+snapshot worker also requires the node not be fenced (`cloudPrimary`, `apps/server/src/boot.ts`).
+Invoices a primary has recorded and chained but not yet sent to AEAT exist only in its database, and
+Litestream copies the whole file page by page — it cannot pick out the fiscal tables — so the way to
+carry them across is to keep streaming everything and extract the fiscal records afterwards, from a
+restore of that node's copy, on the promoted side. So when slice 3 builds fencing and promotion: a
+fenced primary does NOT stop streaming; it streams into its OWN generation and never writes over the
+live one, and the tail shipper files what that copy holds that the promoted side lacks. Watch for the
+rule #590's review described — a node refuses itself once the bucket's pointer names another
+generation — which, if it stops a fenced node's stream the moment the promoted node claims the
+pointer, would cut off exactly the tail this decision is meant to keep. Invoices already sent to AEAT
+stay recoverable from AEAT either way.
+
+**Owner decision 2026-09-26 (A45's first point) — a standby checks a promotion against the
+primary's key, built in slice 3.** A restored membership document's signature is checked only at
+the start that finishes a restore (#678); A53 added a check that it can be read and is shaped as a
+document on every restored start not finishing an adoption. Promotion, `retireSelf` and the standby chart append
+(`apps/server/src/promote.ts`, `apps/server/src/retire.ts`, `apps/server/src/mirror-bundle-api.ts`)
+sign over the held document without checking it, because a mirror's stored keys name only itself,
+so a document its primary genuinely signed fails the check there (measured, see Task 9a's #678
+entry). The owner chose to leave those paths unchecked now and, as part of the failover work: a
+standby stores the primary's key when it joins, and promotion, `retireSelf` and the standby chart
+append check the held document against it. Not built; until then those paths stay unchecked.
 
 - **Translate all keeps the suggestion routes’ existing primary checks** (owner, 2026-10-15,
   lane B question 3, answer (a)). Do not add a separate primary check to discarding a suggestion;
@@ -467,3 +468,131 @@ fencing, promotion, clocks and fiscal identity; the tunnel, certificate or contr
 lease grants none of that authority. Production staff issuance/replacement, runtime,
 provider and supported-device qualification remain separately gated. Source reading
 and documentation checks qualify no composed network or recovery lifecycle.
+
+## A mirror keeps a renamed server's old chart (A917)
+
+**A mirror keeps a renamed server's old chart (A917).** A mirror node is given the venue's chart
+when it is paired; A917's round-3 review found no path that delivers a later one, so after a
+rename its copy would name the old address until it is paired again. No reader routing by a
+mirror's copy was found (not exhaustive). [Design §7.2](../superpowers/specs/2026-10-20-a917-box-local-name-design.md#72-at-the-confirm-one-chart-write-then-a-swap-decided-from-what-is-on-disk)
+
+## A947. Go-live on two local boxes
+
+The owner approved the second revision on 2026-10-22 at about 02:40; the amendment adds his
+03:12 direction. Slice 4a is [PR #1990](https://github.com/clintongormley/waitron/pull/1990), open for
+the owner to land. The remaining slices are still open.
+
+The owner, 2026-10-21: "For go live I want one box with failover to another
+local box." The [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md) re-cuts
+slices 3–5 into pull requests (§11) and answers several entries below: the vault-ring question
+(the spare gets the credentials key at joining), adding a spare with the internet down (the first
+copy over the LAN), the stored primary key (A45), and the drain confirmations rejoin lost (the
+tail receipt). All four questions are answered (§12): a manager switches from any till, signing
+in with a passkey or a password plus authenticator code when enrolled — no recovery sheet; the
+switch never waits for the next hour, because every series name is five symbols for the UTC
+minute (`A-0CZZW`, §6.5; the owner's 22:25 follow-up), with no "last hour" question anywhere;
+the recovery sheet and the restore form would drop the installation code once slice 4a's test
+passes. Once slice 4a lands, every name a box takes would refuse a box
+clock more than 30 seconds behind or ahead of another device's, and a setup or restore would wait
+90–150 seconds before naming (§6.5, §6.7). Any device, even a reloaded one, reaches the
+switch (§6.6); the returning box hands over and becomes the spare by itself after three checks
+(§7.2); a spare is a choice per venue. Found while revising: both boxes put the same address in
+the membership chart, so a till's router sees one server (§2).
+
+[Mock-ups](mockups/a947-two-box-failover/README.md).
+
+## Loose ends left by the Cloud connection integration
+
+**Loose ends left by the Cloud connection integration (2026-09-24; #638, #808).**
+
+- Customer remote setup UI and production deployment remain open.
+- Shutdown waits for an in-progress local database copy or encryption step. Next: measure that
+  shutdown latency, real venue uplink budgets and spool disk use, and stream archive assembly
+  beyond its current in-memory 512 MiB format limit. Cloud documentation:
+  `docs/authenticated-captures.md` in waitron-cloud.
+- After a Cloud replacement (#638), installing the new tunnel and TLS certificate remains an
+  operator step. Continuous complete-server recovery, planned final-write handover and production
+  recovery remain open. Cloud owns route placement and fencing in its backlog.
+- A stop made while `cloud-replacement.json` is unreadable is not recorded in it. Owner to choose:
+  refuse Stop access while the replacement file is unreadable, or record the stop somewhere that
+  survives the repair.
+  [Detail](../backlog/replication-cloud.md#a-stop-made-while-cloud-replacementjson-is-unreadable-is-not-recorded-in-it)
+- The Litestream stream's sealed-state restore and activation still need integration with Cloud
+  storage and owner recovery. Connected does not mean those services are configured. Cloud service
+  ownership stays in the Cloud backlog; this repository owns its adapter, screen and node-side
+  behavior. Public hosting, ingress controls and Cloud audit/retention remain deployment work.
+
+## Four Cloud reply and state readers accept a one-item list where they want text
+
+**Four Cloud reply and state readers accept a one-item list where they want text.** Each turns
+the field into text before checking it, so `["ready"]` passes as `"ready"`:
+`apps/server/src/cloud-client.ts` (the pairing reply's and saved view's `state`),
+`cloud-recovery.ts` (the saved recovery `phase`, and Cloud's `result.state`) and
+`cloud-replacement.ts` (Cloud's `state`). A689's first PR fixed the same pattern in
+`cloud-installation.ts` and `cloud-translation.ts`; these four predate it. Found by its review
+(2026-10-15), not measured against a real Cloud.
+
+## Loose ends left by the SQLite failover-loop prototype gate
+
+**Loose ends left by the SQLite failover-loop prototype gate (#425; receipts in
+[the results note](../research/2026-09-16-sqlite-failover-prototype.md)).**
+
+- **Validate every supported object store.** Topology §12.2's real-store gate remains open; the
+  conditional-write promotion tie-break must be demonstrated on each target (risk 11). Waitron
+  Cloud's production store still needs its own run.
+  [Detail](../backlog/replication-cloud.md#validate-every-supported-object-store)
+- The store pointer and a new generation are exercised for a rebuild, not for a promotion. A
+  promoted node's generation, and Cloud's recovery orchestration (tracked in the
+  [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md)), remain;
+  settle the Waitron ↔ Waitron Cloud contract before assigning them.
+- 250 sales a day is still an assumption nothing in this repository measures, so the days-per-GiB
+  figure rescales but does not hold.
+- Three scenarios have no mutation receipts (S1, S6, `smoke`), two branches of the litestream
+  wrapper are driven by no scenario, and the runner's own `main()` is undriven — a later task
+  should pin them or delete them.
+
+## Task 1a — node filters and unverified concurrency claims
+
+**Task 1a** (#548, each machine's own rows keyed by its node id). Deny's delete is the one
+join-request node filter no test fails without (the `requirePending` read before it already
+refuses another node's row); and the run-it review did not reach three claims within its budget —
+holders torn by a concurrent promotion, credential sealing, and scheduler takeover. Left open by
+SQLite slice 2.
+
+## Loose ends left by SQLite slice 2 Task 9a
+
+**Loose ends left by SQLite slice 2 Task 9a (#630, the first start after a restore).**
+
+- A node row holding no endorsement still signs `endorsements: []`, and no first-start case
+  asserts it.
+- A comment claims more than the code keeps: `retireSelf`'s header (`apps/server/src/retire.ts`)
+  says a signing failure "leaves the node exactly as it was". Signing empties pending
+  `change_log` rows (measured by #655's Codex seat), so they are not strictly untouched; no case
+  losing a real one is known. Narrow it the next time the file is edited.
+- [Restore fencing when the cloud peer does not answer](#a-restored-box-whose-cloud-peer-does-not-answer-during-its-first-start-signs-the-next-term-and-removes-the-marker).
+- The pointer's term is taken without checking its signature, as the supervisor already does, so
+  whoever can write the bucket can push a restored box's term up (never down).
+- A sell-only local secondary that is not fenced runs the first start and signs the next term.
+- [Trust in the restored copy’s own keys](#the-restored-membership-rows-check-assertrestoredmembershipvalid-678-trusts-the-keys-the-restored-copy-holds).
+- [Signature checks outside the restore first start](#only-the-start-that-finishes-a-restore-checks-the-rows-signature).
+- [Curated refusal for malformed membership with no restore marker](#on-a-start-with-no-restore-marker-text-that-is-not-json-or-a-machine-list-that-is-not-a-list-fails-with-the-generic-text).
+- A mirror that deferred its first start and is then promoted without a restart
+  (`promoteMirrorToPrimary`) keeps the bucket copy held, reading off with the reason
+  `first_start_pending` and raising no alert, until the box next starts. From reading, not a run.
+
+## If a later slice moves local tables into node.db
+
+**If a later slice moves `local` tables into `node.db`** (slice 2's design reserved it for slice
+5), that slice decides again how the drain crosses the two files: SQLite refuses a trigger body
+that writes another attached database, so either `change_log` is reclassified to the file its
+writers live on, or the triggers stop writing it directly and something above them does (P3). Left
+open by SQLite slice 1 (#490 and the preparation tasks).
+
+## A promoting standby may list itself with an empty contactUrl
+
+**A promoting standby may list itself with an empty `contactUrl`, so no till is told to dial it.**
+Nothing the #600 review could find copies `node_membership` from the primary to a standby. A
+standby whose own held membership list omits it takes the fallback in `nextStandings`
+(`packages/membership/src/standings.ts`), which appends it with an empty `contactUrl`, and
+`routableServers` (`packages/membership/src/fence.ts`) then drops it. Found by reading, not run.
+[Detail](../backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
