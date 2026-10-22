@@ -1381,7 +1381,7 @@ describe("department transfer live invalidation", () => {
     const before = logged.length;
     const writeLock = vi
       .spyOn(suite.db, "withWriteLock")
-      .mockRejectedValueOnce(new AppError("storage.disk_full", {}));
+      .mockRejectedValue(new AppError("storage.disk_full", {}));
     try {
       await reader.read();
       liveEvents.publish({ resources: [{ type: "department_transfer_requests" }] });
