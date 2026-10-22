@@ -5,6 +5,7 @@ import { AppError } from "@waitron/shared";
 import type { InitialSetupContext } from "@waitron/module";
 import { isAllocatedSeries } from "./allocation-identity.js";
 import { parsePaperAllocation, type PaperAllocation } from "./paper-protocol.js";
+import { SOFTWARE_IDENTITY } from "./software-identity.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
 
 export interface ValidatedInitialCandidates {
@@ -65,12 +66,12 @@ function checkRecordNames(allocation: PaperAllocation): void {
           SistemaInformatico: {
             NombreRazon: "Allocation boundary check",
             NIF: "89890001K",
-            NombreSistemaInformatico: "Waitron POS",
+            NombreSistemaInformatico: SOFTWARE_IDENTITY.name,
             IdSistemaInformatico: WAITRON_ID_SISTEMA,
             Version: "1",
             NumeroInstalacion: allocation.installationIdentity,
             TipoUsoPosibleSoloVerifactu: "S",
-            TipoUsoPosibleMultiOT: "S",
+            TipoUsoPosibleMultiOT: SOFTWARE_IDENTITY.multipleTaxpayersPossible,
             IndicadorMultiplesOT: "N",
           },
           Encadenamiento: { PrimerRegistro: "S" },
