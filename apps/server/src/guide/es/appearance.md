@@ -139,8 +139,10 @@ color que escribiste no es válido, y no guarda nada hasta que lo corriges.
 
 La tarjeta **Temas** muestra todos los temas del local, primero el de Waitron. Cada fila muestra el
 **Nombre** del tema, sus **Colores** y su **Estado**. Los colores son tres puntos: el color de
-marca y después el color de la página de la versión clara y de la versión oscura. En una pantalla
-del tamaño de un teléfono, la tarjeta no muestra los colores. Las etiquetas de estado dicen qué
+marca y después el color de la página de la versión clara y de la versión oscura. Cuando la tarjeta
+es estrecha, como en un teléfono o junto al menú lateral en una pantalla pequeña, no muestra los
+colores, y en un teléfono las etiquetas de estado van tras el nombre del tema en lugar de en una
+columna propia. Las etiquetas de estado dicen qué
 tema está **En uso** y cuántos de los colores de un tema se leen mal, por ejemplo «2 se leen mal».
 El tema de Waitron lleva la etiqueta **integrado**.
 

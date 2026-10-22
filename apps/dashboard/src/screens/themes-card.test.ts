@@ -190,12 +190,100 @@ describe("dashboard-themes-card", () => {
       "Actions: Christmas",
     );
   });
+});
 
-  it("at phone width the colours column is left out", async () => {
-    await page.viewport(390, 800);
-    const el = await mount(four);
-    await expect.poll(() => columnKeys(el)).toEqual(["name", "status", "actions"]);
+/** The card widths the look run measured: a 390 px window, an 800 px window with the side menu
+ * open, and a 1024 px window with the side menu open. */
+const WIDTHS = [
+  { window: 390, card: 310 },
+  { window: 800, card: 420 },
+  { window: 1024, card: 644 },
+] as const;
+
+describe("the Themes card fits its own width", () => {
+  async function sized(cardWidth: number, list = four, canEdit = true): Promise<Card> {
+    const el = await mount(list, canEdit);
+    el.parentElement!.style.width = `${cardWidth}px`;
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await el.updateComplete;
+    await table(el).updateComplete;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    return el;
+  }
+
+  for (const locale of ["en-GB", "es-ES"] as const) {
+    for (const { window: width, card } of WIDTHS) {
+      for (const canEdit of [true, false]) {
+        it(`does not scroll sideways and shows every tag whole in a ${card}px card (${locale}, ${canEdit ? "editor" : "supervisor"})`, async () => {
+          await page.viewport(width, 800);
+          setLocale(locale);
+          const el = await sized(card, four, canEdit);
+          expect(el.shadowRoot!.querySelector("section")!.getBoundingClientRect().width).toBe(card);
+          const box = inTable(el, ".scroll")!;
+          expect(box.scrollWidth, `${box.scrollWidth} in ${box.clientWidth}`).toBeLessThanOrEqual(
+            box.clientWidth,
+          );
+          const edge = box.getBoundingClientRect();
+          const tags = [...table(el).shadowRoot!.querySelectorAll<HTMLElement>("[part~=tag]")];
+          expect(tags.length).toBeGreaterThanOrEqual(3);
+          for (const tag of tags) {
+            const rect = tag.getBoundingClientRect();
+            expect(rect.right, text(tag)).toBeLessThanOrEqual(edge.right);
+            expect(tag.scrollWidth, text(tag)).toBeLessThanOrEqual(tag.clientWidth);
+          }
+        });
+      }
+    }
+  }
+
+  for (const { window: width, card } of WIDTHS) {
+    it(`fits a row carrying both status tags in a ${card}px card`, async () => {
+      await page.viewport(width, 800);
+      setLocale("es-ES");
+      const el = await sized(card, { ...four, inUse: "t-summer" });
+      const box = inTable(el, ".scroll")!;
+      expect(box.scrollWidth, `${box.scrollWidth} in ${box.clientWidth}`).toBeLessThanOrEqual(
+        box.clientWidth,
+      );
+      const both = row(el, "t-summer")!.querySelectorAll<HTMLElement>("[part~=tag]");
+      expect(both).toHaveLength(2);
+      for (const tag of both) {
+        expect(tag.getBoundingClientRect().right).toBeLessThanOrEqual(
+          box.getBoundingClientRect().right,
+        );
+      }
+    });
+  }
+
+  it("decides the colours column by the card's width, not the window's", async () => {
     await page.viewport(1280, 800);
+    const narrow = await sized(420);
+    await expect.poll(() => columnKeys(narrow)).toEqual(["name", "status", "actions"]);
+    cleanupWidgets();
+    await page.viewport(390, 800);
+    const wide = await sized(644);
+    await expect.poll(() => columnKeys(wide)).toEqual(["name", "colours", "status", "actions"]);
+  });
+
+  it("follows the card as it narrows and widens", async () => {
+    const el = await sized(644);
+    expect(columnKeys(el)).toEqual(["name", "colours", "status", "actions"]);
+    el.parentElement!.style.width = "310px";
+    await expect.poll(() => columnKeys(el)).toEqual(["name", "actions"]);
+    el.parentElement!.style.width = "900px";
     await expect.poll(() => columnKeys(el)).toEqual(["name", "colours", "status", "actions"]);
+  });
+
+  it("in the narrowest card the status tags follow the name", async () => {
+    setLocale("en-GB");
+    const el = await sized(310);
+    expect(columnKeys(el)).toEqual(["name", "actions"]);
+    const name = (key: string) => row(el, key)!.querySelector("td")!;
+    expect(text(name("t-lucia").querySelector("[data-test=tag-in-use]"))).toBe("In use");
+    expect(text(name("t-summer").querySelector("[data-test=tag-hard-to-read]"))).toBe(
+      "1 hard to read",
+    );
+    expect(name("waitron").querySelector("[data-test=tag-built-in]")).not.toBeNull();
+    expect(name("t-xmas").querySelector("[part~=tag]")).toBeNull();
   });
 });

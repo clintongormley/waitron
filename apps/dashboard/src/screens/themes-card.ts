@@ -34,8 +34,11 @@ export type ThemeEdit = { id: string } | { kind: "new" };
 const WAITRON_KEY = "waitron";
 const PRIMARY = "--wt-color-primary";
 const BG = "--wt-color-bg";
-/** Repeats DRAWER_BREAKPOINT's literal (`dashboard-app.ts`), as `settings-card.ts` does in CSS. */
-const PHONE = "(max-width: 48rem)";
+/** Card widths, in px, measured with `wrap-to-fit` in Spanish, the wider of the two languages: the
+ * four columns need a 429 px card and Name, Status and Actions a 360 px one. Each threshold leaves
+ * about a tenth more for a larger font. */
+const COLOURS_FROM = 480;
+const STATUS_COLUMN_FROM = 400;
 
 interface Row {
   key: string;
@@ -114,6 +117,14 @@ export class ThemesCard extends LitElement {
         font-size: var(--wt-font-size-sm);
         white-space: nowrap;
       }
+      wt-data-table::part(tags) {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-1);
+      }
+      wt-data-table::part(tags after-name) {
+        margin-inline-start: var(--wt-space-2);
+      }
       wt-data-table::part(tag built-in) {
         margin-inline-start: var(--wt-space-2);
         background: var(--wt-color-surface-lifted);
@@ -135,16 +146,21 @@ export class ThemesCard extends LitElement {
   @property({ attribute: false }) canEdit = false;
   /** The stored theme the Look card's editor has open. */
   @property({ attribute: false }) editingId: string | null = null;
-  @state() private phone = false;
+  /** The card's own width; null until first read. */
+  @state() private width: number | null = null;
   @state() private submitting = false;
   @state() private switching: Switching | null = null;
   @state() private switchError = "";
   @state() private deleting: { id: string; name: string } | null = null;
   @state() private deleteError = "";
-  readonly #phone = matchMedia(PHONE);
-  readonly #onPhone = () => {
-    this.phone = this.#phone.matches;
-  };
+  /** Waits a frame: the new columns change the card's height, and a change made inside the
+   * callback makes Chromium report "ResizeObserver loop completed with undelivered notifications". */
+  readonly #resize = new ResizeObserver(([entry]) => {
+    const width = entry!.contentRect.width;
+    requestAnimationFrame(() => {
+      this.width = width;
+    });
+  });
 
   constructor() {
     super();
@@ -153,16 +169,16 @@ export class ThemesCard extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.#onPhone();
-    this.#phone.addEventListener("change", this.#onPhone);
+    this.#resize.observe(this);
   }
 
   override disconnectedCallback(): void {
-    this.#phone.removeEventListener("change", this.#onPhone);
+    this.#resize.disconnect();
     super.disconnectedCallback();
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    if (this.width === null && this.isConnected) this.width = this.getBoundingClientRect().width;
     if (changed.has("canEdit") && !this.canEdit) {
       this.switching = null;
       this.deleting = null;
@@ -170,6 +186,8 @@ export class ThemesCard extends LitElement {
   }
 
   #columns(): DataTableColumn<Row>[] {
+    const width = this.width ?? 0;
+    const statusColumn = width >= STATUS_COLUMN_FROM;
     const columns: DataTableColumn<Row>[] = [
       {
         key: "name",
@@ -181,10 +199,10 @@ export class ThemesCard extends LitElement {
                     >${t("appearance.built_in")}</span
                   >`
                 : nothing
-            }`,
+            }${statusColumn ? nothing : this.#status(row, "tags after-name")}`,
       },
     ];
-    if (!this.phone) {
+    if (width >= COLOURS_FROM) {
       columns.push({
         key: "colours",
         label: t("appearance.themes_colours"),
@@ -195,11 +213,13 @@ export class ThemesCard extends LitElement {
           ),
       });
     }
-    columns.push({
-      key: "status",
-      label: t("appearance.themes_status"),
-      cell: (row) => this.#status(row),
-    });
+    if (statusColumn) {
+      columns.push({
+        key: "status",
+        label: t("appearance.themes_status"),
+        cell: (row) => this.#status(row, "tags"),
+      });
+    }
     if (this.canEdit) {
       columns.push({
         key: "actions",
@@ -384,7 +404,7 @@ export class ThemesCard extends LitElement {
       ></wt-delete-dialog>`;
   }
 
-  #status(row: Row): TemplateResult[] {
+  #status(row: Row, part: string): TemplateResult | typeof nothing {
     const tags: TemplateResult[] = [];
     if (row.inUse) {
       tags.push(
@@ -401,7 +421,7 @@ export class ThemesCard extends LitElement {
         >`,
       );
     }
-    return tags;
+    return tags.length === 0 ? nothing : html`<span part=${part}>${tags}</span>`;
   }
 
   override render() {
@@ -419,6 +439,7 @@ export class ThemesCard extends LitElement {
           >`
         : nothing,
       body: html`<wt-data-table
+        wrap-to-fit
         aria-label=${t("appearance.themes_table")}
         .rows=${rowsOf(this.list)}
         .columns=${this.#columns()}

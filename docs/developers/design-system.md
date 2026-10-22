@@ -4064,11 +4064,16 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
 The Themes card lists Waitron's theme first, then the venue's own, in a `wt-data-table`:
 
 - **Its columns are Name, Colours and Status, then Actions.** Name carries a "built in" tag on
-  Waitron's row. Colours shows three chips (the brand colour, the light and the dark page colour),
-  painted as data in each chip's `style`, and the column is dropped at the dashboard's
-  `(max-width: 48rem)` breakpoint, the literal `DRAWER_BREAKPOINT` uses. Status carries "In use"
-  and "{count} hard to read" tags. Chips and tags are styled through `::part()`, never a class
-  (Primitives, above).
+  Waitron's row, painted `--wt-color-surface-lifted`, so it shows as a pill on the white card of
+  the light scheme. Colours shows three chips (the brand colour, the light and the dark page
+  colour), painted as data in each chip's `style`. Status carries "In use" and "{count} hard to
+  read" tags. Chips and tags are styled through `::part()`, never a class (Primitives, above).
+- **The columns follow the card's own width, never the window's** (a `ResizeObserver` on the
+  card), and the table is `wrap-to-fit`, so it never scrolls sideways: Colours shows from a 480 px
+  card, Status has its own column from 400 px, and narrower still the status tags follow the name
+  in the Name cell. Measured in Spanish, the wider language, the four columns need a 429 px card
+  and Name, Status and Actions a 360 px one; each threshold leaves about a tenth more for a larger
+  font. A 390 px window gives a 310 px card, an 800 px window with the side menu open a 420 px one.
 - **The Actions column and Add theme are for `layout.configure` only**; a person without it sees
   the list alone. The row menu offers Use on every screen (not on the row in use), Edit and Rename
   (not on Waitron's row), Make a copy, and Delete in the danger colour (not on Waitron's row, and
