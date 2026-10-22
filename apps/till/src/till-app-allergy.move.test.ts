@@ -160,6 +160,9 @@ describe("A669 counter move refusal recovery", () => {
     await userEvent.fill(who.shadowRoot!.querySelector("input")!, "Corrected guest");
     await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
     await form.updateComplete;
+    el.requestUpdate();
+    await el.updateComplete;
+    await form.updateComplete;
     expect(form.shadowRoot!.querySelector("[data-tick]")).not.toBeNull();
     expect(write).toHaveBeenCalledOnce();
     await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);

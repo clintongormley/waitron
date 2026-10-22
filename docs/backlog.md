@@ -6131,6 +6131,12 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   is not seen by them. Export one function from `@waitron/ui` that both the shell and the tests
   use. Left open by A719 (#1838).
 
+- **A999 residual: retain the other allergy-move failure if it recurs.** The original loaded
+  run reported two failing cases without their names or assertion output. The 2026-10-22
+  reproduction identified the corrected-guest case, where a parent render restored a cleared
+  refusal. Capture the exact case and output on any further recurrence before attributing it
+  to the same mechanism. [Receipt](developers/conventions-ui.md#a-parent-render-must-not-restore-a-corrected-request-refusal).
+
 - **Retain failure screenshots for long browser test names.** A failed waiting-list refresh case
   in `apps/till/src/till-app.test.ts` logged `locator.screenshot: ENAMETOOLONG` during A743's
   fixture checks. Bound the generated screenshot filename and keep the complete test name in
