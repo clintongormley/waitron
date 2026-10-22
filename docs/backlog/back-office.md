@@ -5,31 +5,33 @@ their full text.
 
 ## The recipe routes and the recipe screen are unreached
 
-- Found by #615 (`apps/server` part d), outside its files or not fixable in a comments-only
-  change. **The recipe routes and the recipe screen are unreached**: #345 (`f5c8e7b5f`) removed
-  `mountRecipeApi` from `apps/server/src/boot.ts`, nothing outside tests mounts
-  `/management-api/ingredients` or `/management-api/products/:id/recipe`, and
-  `apps/dashboard/src/screens/recipe-screen.ts` is imported by nothing (`git grep`), while its
-  client methods in `apps/dashboard/src/api/client.ts` still call those routes (read, not run).
-  Next action: the owner decides whether to delete `recipe-api.ts`, the screen and the client
-  methods, or to remount the routes and route the screen. Read, not run: `alert.not_found` was
-  documented as never revealing which case applied, but `apps/server/src/alerts-api.ts` answers
-  `authorization.not_permitted` for an incident the session cannot see and `alert.not_found` for
-  a missing id, so a caller can tell a real incident exists (#615 narrowed the comment; the route
-  is unchanged). `mirror.bundle_fetch_failed` was documented as logging its cause; nothing logs
-  it (`mirror-bundle-fetch.ts` discards the caught error) — whether it should is open.
-  `packages/server-kit/src/request-screens.ts` says its screens are the only refusal and an
-  unparseable value is stored; a foreign-key column refuses it (read, not run; #615 narrowed the
-  `till-api.ts` twin). `docs/developers/conventions-ui.md` says the no-secret-in-params rule is
-  stated per code in `apps/server/src/errors.ts`; it is now stated once, in that file's header.
-  Test titles #615 could not touch: "before it reaches Postgres" (two, in
-  `management-api-passkey.test.ts`), "not an opaque 500" and "non-uuid" titles in
-  `management-api-passkey.test.ts`, `catalogue-api.test.ts` and `recipe-api.test.ts`,
-  "option groups, gates, by-id FKs" in `catalogue-api.full-manifest.test.ts` (option groups no
-  longer exist), "(Task 11)" twice in `management-api.canvases.test.ts`, "(Task 7)" in
+Recipe authoring is gone from the dashboard, and nothing replaces it as a surface; the parked
+recipe depth work (nested sub-recipes, plate costing, stock depletion) assumes an authoring
+surface that no longer exists. Nothing outside tests mounts `/management-api/ingredients` or
+`/management-api/products/:id/recipe`, and `apps/dashboard/src/screens/recipe-screen.ts` is imported
+by nothing, while its client methods in `apps/dashboard/src/api/client.ts` still call those routes
+(read, not run).
+
+Next action: the owner decides whether to delete `recipe-api.ts`, the screen and the client
+methods, or to remount the routes and route the screen; whoever reopens recipe depth decides
+first whether recipe authoring returns as its own surface.
+
+## Comments and test titles left open by #615
+
+Read, not run:
+
+- `alert.not_found` was documented as never revealing which case applied, but
+  `apps/server/src/alerts-api.ts` answers `authorization.not_permitted` for an incident the session
+  cannot see and `alert.not_found` for a missing id, so a caller can tell a real incident exists.
+- `mirror.bundle_fetch_failed` was documented as logging its cause; nothing logs it
+  (`mirror-bundle-fetch.ts` discards the caught error). Whether it should is open.
+- `packages/server-kit/src/request-screens.ts` says its screens are the only refusal and an
+  unparseable value is stored; a foreign-key column refuses it.
+- Test titles: "not an opaque 500" and "non-uuid" titles in `management-api-passkey.test.ts`,
+  `catalogue-api.test.ts` and `recipe-api.test.ts`, "option groups, gates, by-id FKs" in
+  `catalogue-api.full-manifest.test.ts` (option groups no longer exist), "(Task 7)" in
   `management-api.accounts-and-receipt-config.test.ts`, "(Task 4)" in
-  `management-api.device-profiles.test.ts`, and "KDS-1", "KDS-2", "FP-2" and "KDS-3" in
-  `management-api.test.ts`.
+  `management-api.device-profiles.test.ts`, and "KDS-1" and "KDS-2" in `management-api.test.ts`.
 
 ## A supplier credit note cannot be entered through the dashboard
 
@@ -40,6 +42,15 @@ design (see the supplier credit note decision below). The dashboard form's
 (`apps/dashboard/src/widgets/purchase-form.ts`) refuses one, so the form refuses the very document
 the ruling calls legitimate. Nobody has decided whether the form should be relaxed or the credit
 note should become its own document type.
+
+## Loose ends left by service Task 12 (#923, adjustment reports)
+
+- A weighed item cancelled in part can differ by a cent between the cancel's list value and what
+  stays on the line, so a rate can be a cent's share off. **Next action:** none unless someone
+  sees it matter.
+- With no day picked, a screen left open past the day's cutover moves to the new, empty day; the
+  date inputs show it, nothing announces it. **Next action:** decide whether it should keep the
+  day it opened on.
 
 ## Decisions and deliberate limits
 
@@ -52,7 +63,6 @@ note should become its own document type.
   The purchase-invoice routes accept and store a negative gross total by design.
 
 **Sales: the category report names each category by its full path (W73, #1212).** Because
-every row carries its whole path, a very deep tree prints far more lines than before (the
-deep-tree case in `apps/server/src/category-sales-page.test.ts`, at 58mm and 203dpi, went from about
-1,000 lines to about 14,500, measured 2026-10-05), and its print preview is cut short; the owner
+every row carries its whole path, a very deep tree prints far more lines than before, and its
+print preview is cut short; the owner
 chose to leave it as it is rather than shorten deep paths on paper (2026-10-05).

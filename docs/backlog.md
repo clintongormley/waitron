@@ -5239,27 +5239,25 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 _Formerly entries spread across the old sections._ Detail: [backlog/back-office.md](backlog/back-office.md).
 
-- **The recipe routes and the recipe screen are unreached** — found by #615 while pruning comments.
-  Recipe authoring is gone from the dashboard, and nothing replaces it as a surface; the parked
-  recipe depth work (nested sub-recipes, plate costing, stock depletion) assumes an authoring
-  surface that no longer exists. Next action: the owner decides whether to delete `recipe-api.ts`,
-  the screen and the client methods, or to remount the routes and route the screen; whoever
-  reopens recipe depth decides first whether recipe authoring returns as its own surface.
+- **The recipe routes and the recipe screen are unreached.** Recipe authoring is gone from the
+  dashboard, and nothing replaces it as a surface; whoever reopens recipe depth decides first
+  whether recipe authoring returns as its own surface.
   [Detail](backlog/back-office.md#the-recipe-routes-and-the-recipe-screen-are-unreached)
 
-- **A supplier credit note cannot be entered through the dashboard** — OPEN, unqueued. A negative
-  gross total on the purchase-invoice routes is a supplier credit note and is accepted and stored by
-  design (owner ruling 2026-09-21; task N1). Nobody has decided whether the form should be relaxed
-  or the credit note should become its own document type.
+- **A supplier credit note cannot be entered through the dashboard** — OPEN, unqueued.
+  Nobody has decided whether the form should be relaxed or the credit note should become its own
+  document type.
   [Detail](backlog/back-office.md#a-supplier-credit-note-cannot-be-entered-through-the-dashboard)
 
-- **Loose ends left by service Task 12 (#923, adjustment reports).**
-  - A weighed item cancelled in part can differ by a cent between the cancel's list value and what
-    stays on the line, so a rate can be a cent's share off. **Next action:** none unless someone
-    sees it matter.
-  - With no day picked, a screen left open past the day's cutover moves to the new, empty day; the
-    date inputs show it, nothing announces it. **Next action:** decide whether it should keep the
-    day it opened on.
+- **Loose ends left by service Task 12 (#923, adjustment reports).** A weighed item cancelled in
+  part can differ by a cent between the cancel's list value and what stays on the line, so a rate
+  can be a cent's share off.
+  [Detail](backlog/back-office.md#loose-ends-left-by-service-task-12-923-adjustment-reports)
+
+- **Comments and test titles left open by #615** — read, not run. `mirror.bundle_fetch_failed`
+  was documented as logging its cause; nothing logs it (`mirror-bundle-fetch.ts` discards the
+  caught error). Whether it should is open.
+  [Detail](backlog/back-office.md#comments-and-test-titles-left-open-by-615)
 
 ### The box: backups, upgrades and recovery
 
