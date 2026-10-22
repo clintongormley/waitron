@@ -406,6 +406,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       const { sources, clock } = deps.notices;
       const reading = clock.now();
       const filing = deps.notices.filing();
+      const noticeRead = noticeLog.begin();
       const read = await readStaffNoticesInTurns(
         deps.db,
         sources.map(({ owner, source }) => ({
@@ -414,7 +415,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         })),
         { reading, log: noticeLog.log },
       );
-      noticeLog.settle(read.unavailable);
+      noticeRead.settle(read.unavailable);
       return c.json({ ...equipment, notices: read.notices, noticesUnavailable: read.unavailable });
     }),
   );

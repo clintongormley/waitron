@@ -19,6 +19,7 @@ import {
   createStaffNoticeLog,
   readStaffNotices,
   readStaffNoticesInTurns,
+  type OwnedStaffNoticeSource,
 } from "./staff-notices.js";
 import "./errors.js";
 
@@ -386,10 +387,12 @@ describe("createStaffNoticeLog", () => {
   it("logs an owner's failure once while it keeps failing", () => {
     const spy = vi.fn<Logger>();
     const notices = createStaffNoticeLog(spy);
+    const first = notices.begin();
     notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "first.code" });
-    notices.settle(["m"]);
+    first.settle(["m"]);
+    const second = notices.begin();
     notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "second.code" });
-    notices.settle(["m"]);
+    second.settle(["m"]);
     expect(spy.mock.calls).toEqual([
       ["error", UNAVAILABLE, { owner: "m", errorCode: "first.code" }],
     ]);
@@ -398,9 +401,10 @@ describe("createStaffNoticeLog", () => {
   it("logs every failure line that names no owner, and notes no recovery for it", () => {
     const spy = vi.fn<Logger>();
     const notices = createStaffNoticeLog(spy);
+    const read = notices.begin();
     notices.log("error", UNAVAILABLE, { errorCode: "first.code" });
     notices.log("error", UNAVAILABLE, { errorCode: "second.code" });
-    notices.settle([]);
+    read.settle([]);
     expect(spy.mock.calls).toEqual([
       ["error", UNAVAILABLE, { errorCode: "first.code" }],
       ["error", UNAVAILABLE, { errorCode: "second.code" }],
@@ -410,13 +414,14 @@ describe("createStaffNoticeLog", () => {
   it("notes the recovery once, and logs a new failure after it", () => {
     const spy = vi.fn<Logger>();
     const notices = createStaffNoticeLog(spy);
+    const failed = notices.begin();
     notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "first.code" });
-    notices.settle(["m"]);
+    failed.settle(["m"]);
     spy.mockClear();
-    notices.settle([]);
+    notices.begin().settle([]);
     expect(spy.mock.calls).toEqual([["info", "staff_notice.source_recovered", { owner: "m" }]]);
     spy.mockClear();
-    notices.settle([]);
+    notices.begin().settle([]);
     expect(spy).not.toHaveBeenCalled();
     notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "again.code" });
     expect(spy.mock.calls).toEqual([
@@ -427,11 +432,12 @@ describe("createStaffNoticeLog", () => {
   it("notes the recovery only of the owners that stopped failing", () => {
     const spy = vi.fn<Logger>();
     const notices = createStaffNoticeLog(spy);
+    const failed = notices.begin();
     notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "x" });
     notices.log("error", UNAVAILABLE, { owner: "n", errorCode: "x" });
-    notices.settle(["m", "n"]);
+    failed.settle(["m", "n"]);
     spy.mockClear();
-    notices.settle(["n"]);
+    notices.begin().settle(["n"]);
     expect(spy.mock.calls).toEqual([["info", "staff_notice.source_recovered", { owner: "m" }]]);
   });
 
@@ -452,16 +458,95 @@ describe("createStaffNoticeLog", () => {
     const spy = vi.fn<Logger>();
     const notices = createStaffNoticeLog(spy);
     for (let i = 0; i < 3; i += 1) {
+      const read = notices.begin();
       const result = await withTransaction(db, (tx) =>
         readStaffNotices(tx, [{ owner: "m", source: failing("boom") }], {
           reading: READING,
           log: notices.log,
         }),
       );
-      notices.settle(result.unavailable);
+      read.settle(result.unavailable);
     }
     expect(spy.mock.calls.filter(([, event]) => event === UNAVAILABLE)).toHaveLength(1);
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not note a recovery from a read that checked the source before it failed", async () => {
+    const lines: string[] = [];
+    const logger = createStaffNoticeLog((_level, event) => lines.push(event));
+    let calls = 0;
+    const sources: OwnedStaffNoticeSource[] = [
+      {
+        owner: "m",
+        source: {
+          read: async () => {
+            calls += 1;
+            if (calls > 1) throw new Error("down");
+            return [];
+          },
+        },
+      },
+      { owner: "n", source: { read: async () => [] } },
+    ];
+    // The two reads take turns source by source: the first checks `m` while it still answers, the
+    // second sees it fail, and only then does the first finish.
+    const run = async () => {
+      const begun = logger.begin();
+      const read = await readStaffNoticesInTurns(db, sources, {
+        reading: READING,
+        log: logger.log,
+      });
+      begun.settle(read.unavailable);
+    };
+    await Promise.all([run(), run()]);
+    expect(lines).toEqual([UNAVAILABLE]);
+  });
+
+  it("does not note a recovery from a read begun before a repeated failure", () => {
+    const spy = vi.fn<Logger>();
+    const notices = createStaffNoticeLog(spy);
+    const first = notices.begin();
+    notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "x" });
+    first.settle(["m"]);
+    const earlier = notices.begin();
+    const later = notices.begin();
+    notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "x" });
+    earlier.settle([]);
+    later.settle(["m"]);
+    expect(spy.mock.calls).toEqual([["error", UNAVAILABLE, { owner: "m", errorCode: "x" }]]);
+  });
+
+  it("through the reader, reads one after another note a recovery once and a new failure", async () => {
+    const lines: string[] = [];
+    const logger = createStaffNoticeLog((_level, event) => lines.push(event));
+    let down = true;
+    const sources: OwnedStaffNoticeSource[] = [
+      {
+        owner: "m",
+        source: {
+          read: async () => {
+            if (down) throw new Error("down");
+            return [];
+          },
+        },
+      },
+    ];
+    const run = async () => {
+      const begun = logger.begin();
+      const read = await readStaffNoticesInTurns(db, sources, {
+        reading: READING,
+        log: logger.log,
+      });
+      begun.settle(read.unavailable);
+    };
+    await run();
+    await run();
+    down = false;
+    await run();
+    await run();
+    down = true;
+    await run();
+    expect(lines).toEqual([UNAVAILABLE, "staff_notice.source_recovered", UNAVAILABLE]);
   });
 });
 

@@ -105,22 +105,32 @@ async function collect(
 export interface StaffNoticeLog {
   /** Hand this to a reader as its `log`. */
   readonly log: Logger;
-  /** After each read, with its `unavailable`: notes each owner that has stopped failing. */
+  /** Call before each read starts, and settle what it returns once the read is done. */
+  begin(): StaffNoticeLogRead;
+}
+
+export interface StaffNoticeLogRead {
+  /** With the read's `unavailable`: notes each owner that has stopped failing. An owner whose
+   * last failure was logged after this read began is left failing, since the read may have
+   * checked it before that failure. */
   settle(unavailable: readonly string[]): void;
 }
 
 /** Wraps `log` so a source that fails on every read is logged once per spell of failing, and each
  * repeated key once. Other events pass through. */
 export function createStaffNoticeLog(log: Logger): StaffNoticeLog {
-  const failing = new Set<string>();
+  let begun = 0;
+  /** Each failing owner, with how many reads had begun when it last failed. */
+  const failing = new Map<string, number>();
   const duplicates = new Set<string>();
   return {
     log(level, event, fields) {
       if (event === "staff_notice.source_unavailable") {
         const owner = fields?.owner;
         if (typeof owner === "string") {
-          if (failing.has(owner)) return;
-          failing.add(owner);
+          const known = failing.has(owner);
+          failing.set(owner, begun);
+          if (known) return;
         }
       } else if (event === "staff_notice.duplicate_key") {
         const id = JSON.stringify([fields?.owner, fields?.key]);
@@ -129,12 +139,18 @@ export function createStaffNoticeLog(log: Logger): StaffNoticeLog {
       }
       log(level, event, fields);
     },
-    settle(unavailable) {
-      for (const owner of failing) {
-        if (unavailable.includes(owner)) continue;
-        failing.delete(owner);
-        log("info", "staff_notice.source_recovered", { owner });
-      }
+    begin() {
+      begun += 1;
+      const started = begun;
+      return {
+        settle(unavailable) {
+          for (const [owner, failedAt] of failing) {
+            if (failedAt >= started || unavailable.includes(owner)) continue;
+            failing.delete(owner);
+            log("info", "staff_notice.source_recovered", { owner });
+          }
+        },
+      };
     },
   };
 }
