@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import {
   copyFileSync,
   existsSync,
@@ -54,6 +55,14 @@ function fixture() {
     hashes.push(git(cwd, ["rev-parse", "HEAD"]));
   }
   return { cwd, hashes };
+}
+
+function stopOwnedProcess(pid) {
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch (error) {
+    if (error.code !== "ESRCH") throw error;
+  }
 }
 
 describe("release metadata is a build product of a pinned source commit", () => {
@@ -212,6 +221,76 @@ describe("release metadata is a build product of a pinned source commit", () => 
       },
     });
     expect(attempts).toBe(2);
+  });
+
+  it("recovers after a killed partial shallow download leaves its repository locked", () => {
+    const { cwd } = fixture();
+    writeFileSync(join(cwd, "download.bin"), randomBytes(512_000));
+    git(cwd, ["add", "download.bin"]);
+    git(cwd, ["commit", "-s", "-qm", "Large source"], {
+      GIT_AUTHOR_DATE: "2026-10-16T12:00:00Z",
+      GIT_COMMITTER_DATE: "2026-10-16T12:00:00Z",
+    });
+    const source = git(cwd, ["rev-parse", "HEAD"]);
+    const wrapper = join(cwd, "upload-pack.mjs");
+    const pidFile = join(cwd, "upload-pids.json");
+    writeFileSync(
+      wrapper,
+      `#!/usr/bin/env node
+import { spawn } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+const child = spawn('git-upload-pack', process.argv.slice(2), { stdio: ['pipe', 'pipe', 'ignore'] });
+writeFileSync(${JSON.stringify(pidFile)}, JSON.stringify([process.pid, child.pid]));
+process.on('SIGTERM', () => { child.kill(); process.exit(); });
+process.stdin.pipe(child.stdin);
+let remaining = 200000;
+child.stdout.on('data', bytes => {
+  const prefix = bytes.subarray(0, remaining);
+  process.stdout.write(prefix);
+  remaining -= prefix.length;
+  if (remaining === 0) child.stdout.pause();
+});
+`,
+      { mode: 0o755 },
+    );
+    let attempts = 0;
+    let locked = false;
+    const directories = [];
+    try {
+      const stamp = generateHourRelease({
+        source,
+        fetchSource: true,
+        run: (command, args, options) => {
+          if (args[0] !== "fetch") return execFileSync(command, args, options);
+          directories.push(options.cwd);
+          attempts++;
+          const local = args.map((arg) =>
+            arg === "https://github.com/clintongormley/waitron.git" ? cwd : arg,
+          );
+          if (attempts !== 1) return execFileSync(command, local, options);
+          try {
+            return execFileSync(command, [...local, `--upload-pack=${wrapper}`], {
+              ...options,
+              timeout: 5000,
+            });
+          } catch (error) {
+            locked = existsSync(join(options.cwd, ".git/shallow.lock"));
+            expect(error.code).toBe("ETIMEDOUT");
+            throw error;
+          }
+        },
+      });
+      expect(stamp).toMatchObject({
+        sourceCommit: source,
+        committedAt: "2026-10-16T12:00:00.000Z",
+      });
+      expect(attempts).toBe(2);
+      expect(locked).toBe(true);
+    } finally {
+      if (existsSync(pidFile))
+        for (const pid of JSON.parse(readFileSync(pidFile, "utf8"))) stopOwnedProcess(pid);
+      expect(directories.every((directory) => !existsSync(directory))).toBe(true);
+    }
   });
 
   it("the generator CLI emits the source stamp and refuses an unpinned input", () => {

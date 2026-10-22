@@ -35,10 +35,11 @@ export function generateHourRelease({
     }).trim();
   try {
     if (fetchSource) {
-      scratch = mkdtempSync(join(tmpdir(), "waitron-release-source-"));
-      cwd = scratch;
-      git(["init", "-q"]);
       for (let attempt = 1; attempt <= 2; attempt++) {
+        if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
+        scratch = mkdtempSync(join(tmpdir(), "waitron-release-source-"));
+        cwd = scratch;
+        git(["init", "-q"]);
         try {
           git(
             [

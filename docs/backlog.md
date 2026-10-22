@@ -5829,6 +5829,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **The original release-source network stall is undiagnosed.** Main run
+  [39868989648](https://github.com/clintongormley/waitron/actions/runs/39868989648/job/120139166601)
+  timed out after 20 seconds. A1024 adds bounded retries; if it recurs, retain the attempt logs
+  and identify whether connection, negotiation or download stalled.
+
 - **The UI showcase overflows a phone and inherits black text in its dark panel.** At a
   390 px viewport, the panels in `packages/ui/index.html` measured 572 px wide before and after
   A974's wording cleanup; unstyled dark-panel text resolved to black on `rgb(16, 18, 22)`.
