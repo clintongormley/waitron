@@ -16,7 +16,12 @@ import {
   refuseTrading,
   startAppendOnlyWatch,
 } from "./append-only-watch.js";
-import { createAuthorityClockStatus, authorityClockAlertSource } from "./time-health.js";
+import {
+  createAuthorityClockStatus,
+  authorityClockAlertSource,
+  checkTimeHealth,
+  type TimeHealth,
+} from "./time-health.js";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
 import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
@@ -267,6 +272,13 @@ import {
 import { buildLandingApp } from "./landing-app.js";
 import { closeListener } from "./close-listener.js";
 import { mountBoxStatusApi } from "./box-status.js";
+import { mountBoxHealthApi } from "./box-health-api.js";
+import { collectBoxHealth } from "./box-health.js";
+import { createStagingTurn } from "./backup-staging-turn.js";
+import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
+import { createSpaceFreer, surveyLeftovers, type LeftoverDeps } from "./free-space-now.js";
+import { freeBytes } from "./free-bytes.js";
+import { createStaffNoticeLog } from "./staff-notices.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { mountRecoveryPackApi } from "./recovery-pack-api.js";
@@ -2067,6 +2079,7 @@ async function bootServer(
   const readRecoveryKey = async (): Promise<string | undefined> =>
     loadRecoveryKey(await loadBoxEnv(base, config.stateDir));
   const isBackupManagedByEnvironment = (): boolean => backupKeysInEnv(base);
+  const stagingTurn = createStagingTurn();
   const backupSupervisor = new BackupSupervisor({
     buildConfig: async () =>
       loadBackupSettings({
@@ -2091,6 +2104,7 @@ async function bootServer(
     onScheduled: (at) => {
       backupDeadlines.archive = at === null ? null : new Date(at).toISOString();
     },
+    stagingTurn,
     log,
   });
   undoOnFailure.push(() => backupSupervisor.stop());
@@ -2220,6 +2234,66 @@ async function bootServer(
       readMode: () => holders.mode.current,
       readSingletonRole: () => holders.singletonRole.current,
       readAwaitingFiscalCertificate: () => awaitingFiscalCert.current,
+    },
+    log,
+  );
+
+  const leftoverDeps: LeftoverDeps = {
+    logDir: config.logDir,
+    stateDir: config.stateDir,
+    now,
+    staging: stagingTurn,
+    log,
+  };
+  const timeHealthCache = createTtlCache<TimeHealth>({ ttlMs: 60_000, now });
+  const diskUsageCache = createTtlCache<DiskUsage>({ ttlMs: 60_000, now });
+  // Bumped after each free-space deletion, so the next read walks the disk afresh.
+  let usageGeneration = 0;
+  // Its own, so the page's notice failures are logged once per spell apart from the equipment read's.
+  const pageNoticeLog = createStaffNoticeLog(log);
+  mountBoxHealthApi(
+    app,
+    {
+      db,
+      readHealth: () =>
+        collectBoxHealth(db, {
+          now,
+          notices: {
+            sources: deviceNoticeSources({ disk: diskFull, space: freeSpace }, setsToMigrate),
+            clock: tillClock,
+            filing: filesRecords,
+            log: pageNoticeLog,
+          },
+          stream: () => streamHost.status(),
+          authorityClock: authorityClock.read,
+          timeHealth: () => timeHealthCache.get("sync", () => checkTimeHealth()),
+          disk: diskFull,
+          space: freeSpace,
+          usage: () =>
+            diskUsageCache.get(`usage:${usageGeneration}`, () =>
+              readDiskUsage({
+                venueDir: config.venueDir,
+                logDir: config.logDir,
+                backupDirs: backupSupervisor
+                  .current()
+                  .destinations.flatMap((d) => (d.kind === "local-fs" ? [d.dir] : [])),
+              }),
+            ),
+          free: () => freeBytes(config.venueDir),
+          leftovers: () => surveyLeftovers(leftoverDeps),
+          paymentsEnabled: setsToMigrate.some((module) => module.name === "payments"),
+          // The read-only gate's own condition, read per call so a live promotion lifts it.
+          canFree: () => !(holders.mode.current === "mirror" || fenced),
+        }),
+      freeSpace: createSpaceFreer({
+        ...leftoverDeps,
+        venueDir: config.venueDir,
+        space: freeSpace,
+        disk: diskFull,
+        onFreed: () => {
+          usageGeneration += 1;
+        },
+      }),
     },
     log,
   );
