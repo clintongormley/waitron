@@ -41,6 +41,29 @@ not an approved spec); B3's revision (2026-10-21) replaces the card for a stick-
 one-time password an admin opens from the dashboard, used only at the box's own console (B3 design
 §11). Its remote-support half is tracked in Cloud and not approved.
 
+## A1016. Keep every box current and backed up
+
+**Owner, 2026-10-22:** "Another super important part of the story especially for on prem is
+automated backups. We need to make it incredibly easy for users to upgrade, hopefully even
+automatically, and to give them good reasons not to fall too far behind, so that we don't end up
+supporting ancient buggy versions."
+
+Three parts:
+
+- **Upgrading takes no effort.** The automatic upgrade below (snapshot, upgrade, check, roll back
+  until the first order) is the mechanism. Still to decide: whether automatic upgrades are on by
+  default, and when they run (the quiet hour B3 gives A950).
+- **Reasons not to fall behind.** Nothing defines how far behind a box may be. To decide: how many
+  versions or months back are still supported; what a box beyond that is told, and where (the
+  dashboard, the till, an email); and what it loses: Cloud services, new features, help with
+  problems. Whatever is decided, a box that falls behind must keep trading, because nothing
+  external may block a sale (CLAUDE.md §5).
+- **Backups need no setup.** Today the tour's step 13, "Backups: a copy off the box", ticks and
+  never blocks (`docs/backlog/setup.md`), so a venue can trade with no copy anywhere but the box.
+  To decide: whether a copy off the box is set up by default (Waitron Cloud's backups as the
+  one-step choice, a bucket of the owner's as the other), and how loudly a box with no copy, or a
+  stale one, says so.
+
 ## Automatic upgrades that can be undone until the first order
 
 - **Automatic upgrades that can be undone until the first order** (owner, 2026-10-02). Today an
