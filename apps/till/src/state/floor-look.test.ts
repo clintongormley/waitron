@@ -5,6 +5,7 @@ import type { TableParty, TableState, TableToday } from "../api/client.js";
 import { en, es } from "../i18n/strings.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { PRECEDENCE } from "./table-precedence.js";
+import { dueStepSignal } from "../../test/service-steps.js";
 import {
   MAP_PRECEDENCE,
   TAB_KINDS,
@@ -87,7 +88,7 @@ const unsent = { billId: "wo-3", billNumber: 3, ownerName: "Alex", lineCount: 1 
 const wait = (band: "warm" | "overdue" | "forgotten"): TableSignal => ({ kind: "long_wait", band });
 const unavailable: TableSignal = { kind: "held_unavailable", groupId: "g1", lineNames: ["Steak"] };
 const bill: TableSignal = { kind: "bill_requested", requestedAt: inMinutes(-3) };
-const takeOrder: TableSignal = { kind: "take_order" };
+const takeOrder: TableSignal = dueStepSignal("Take order");
 const held = (count: number): TableSignal => ({ kind: "held", count });
 const due = (m: number | null) =>
   party({ reminder: { groupId: "g2", dueAt: m === null ? null : inMinutes(m) } });
@@ -177,7 +178,7 @@ describe("mapLook", () => {
         fill: "seated",
         outline: null,
         pulse: null,
-        cue: { icon: "floor-step", text: en["signal.take_order"] },
+        cue: { icon: "floor-step", text: "Take order" },
       },
     ],
     [
@@ -295,7 +296,7 @@ describe("mapLook", () => {
       "step",
       { signals: [wait("warm"), takeOrder] },
       "seated",
-      { icon: "floor-step", text: en["signal.take_order"] },
+      { icon: "floor-step", text: "Take order" },
     ],
     [
       "not-sent",
@@ -350,6 +351,18 @@ describe("mapLook", () => {
     const merged = mapLook(both, now);
     expect(merged.cue).toEqual({ icon: "floor-ready", text: "2" });
     expect(merged.description).toBe(`${en["floor.status_seated"]}, ${readyText(2)}`);
+  });
+
+  it("a merge says the step of the member due latest", () => {
+    const members = [
+      table({ id: "a", signals: [dueStepSignal("Set up", inMinutes(-10))] }),
+      table({ id: "b", signals: [dueStepSignal("Dessert?", inMinutes(-2))] }),
+      table({ id: "c", signals: [dueStepSignal("Coffee?", inMinutes(5))] }),
+    ];
+    for (const order of [members, [...members].reverse()]) {
+      expect(kindWords("step", order, now)).toBe("Dessert?");
+      expect(mapLook(order, now).cue).toEqual({ icon: "floor-step", text: "Dessert?" });
+    }
   });
 
   it("a merge reads the largest ready count, the soonest held countdown and the dishes from one member", () => {
@@ -455,7 +468,7 @@ describe("mapLook", () => {
     expect(words("forgotten")).toBe(en["floor.forgotten"]);
     expect(words("overdue")).toBe(en["signal.wait_overdue"]);
     expect(words("fire")).toBe(en["floor.fire_due"]);
-    expect(words("step")).toBe(en["signal.take_order"]);
+    expect(words("step", { signals: [takeOrder] })).toBe("Take order");
     expect(words("delivery", { pendingDeliveries: 2 })).toBe(`2 ${en["floor.pending_delivery"]}`);
     expect(words("not-sent")).toBe(en["floor.unsent_mark"]);
     expect(words("waiting")).toBe(en["signal.wait_warm"]);
@@ -802,6 +815,33 @@ describe("reminderClock", () => {
     expect(at(dueAt - 1)).not.toBe(at(dueAt));
     expect(at(dueAt)).toBe(at(dueAt + 5 * 60_000));
     expect(reminderClock([table({ id: "c", ...free })], now)).toBe("");
+  });
+});
+
+describe("reminderClock and service steps", () => {
+  it("changes when a step falls due and not before", () => {
+    const dueAt = now + 4 * 60_000;
+    const tables = [
+      table({
+        id: "a",
+        signals: [
+          {
+            kind: "service_step",
+            steps: [
+              { stepId: "s1", name: "Set up", dueAt: inMinutes(-5) },
+              { stepId: "s2", name: "Dessert?", dueAt: new Date(dueAt).toISOString() },
+            ],
+          },
+        ],
+      }),
+    ];
+    const at = (ms: number) => reminderClock(tables, ms);
+    expect(at(now)).toBe(at(dueAt - 1));
+    expect(at(dueAt - 1)).not.toBe(at(dueAt));
+    expect(at(dueAt)).toBe(at(dueAt + 5 * 60_000));
+    expect(
+      reminderClock([table({ id: "b", signals: [dueStepSignal("Set up", inMinutes(1))] })], now),
+    ).toBe("");
   });
 });
 

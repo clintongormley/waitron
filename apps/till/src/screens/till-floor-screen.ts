@@ -176,7 +176,10 @@ const RING_OF: Partial<Record<TableStateKind, FloorRing>> = {
 
 /** The table's own Forgotten badge already says a forgotten wait. */
 function tableChips(table: TableState, now: number) {
-  const chips = signalChips(table.signals, { forgottenShown: lateBand(table) === "forgotten" });
+  const chips = signalChips(table.signals, {
+    forgottenShown: lateBand(table) === "forgotten",
+    now,
+  });
   const held = heldChip(table.signals, reminderDueAt(table.party?.reminder), now);
   return byPrecedence(held === null ? chips : [...chips, held], (chip) =>
     chipState(chip, table.signals),

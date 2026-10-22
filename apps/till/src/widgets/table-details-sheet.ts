@@ -206,8 +206,9 @@ export class TillTableDetailsSheet extends LitElement {
 
   #body(table: TableState): TemplateResult {
     const seats = seatsFor(table);
-    const chips = byPrecedence(signalChips(table.signals), (chip) =>
-      chipState(chip, table.signals),
+    const chips = byPrecedence(
+      signalChips(table.signals, { now: this.now ?? Date.now() }),
+      (chip) => chipState(chip, table.signals),
     );
     const lines = this.#lines(table, chips.length);
     if (seats !== null)

@@ -274,6 +274,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table no longer exists",
     es: "Esa mesa ya no existe",
   },
+  "service_step.not_found": {
+    en: "This step no longer exists.",
+    es: "Este paso ya no existe.",
+  },
   "table.inactive": {
     en: "That table is no longer in use. Choose another table",
     es: "Esa mesa ya no está en uso. Elige otra mesa",

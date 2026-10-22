@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
 import type { TableSignal } from "@waitron/shared";
+import { dueStepSignal } from "../../test/service-steps.js";
 import { chipState, heldChip, signalChips } from "./signal-chips.js";
+
+const now = Date.parse("2026-09-30T20:00:00.000Z");
 
 beforeEach(() => setLocale("en"));
 
@@ -57,16 +60,37 @@ describe("signalChips", () => {
     expect(signalChips([signal]).map((chip) => chip.icon)).toEqual([icon]);
   });
 
-  it("draws the overdue wait with the timer, and Take order with no icon", () => {
+  it("draws the overdue wait with the timer, and a service step with the bell", () => {
     expect(signalChips([{ kind: "long_wait", band: "overdue" }])[0]?.icon).toBe("floor-timer");
-    expect(signalChips([{ kind: "take_order" }])[0]?.icon).toBeUndefined();
+    expect(signalChips([dueStepSignal("Dessert?")], { now })).toEqual([
+      { key: "service-step", text: "Dessert?", tone: "primary-filled", icon: "floor-step" },
+    ]);
+  });
+
+  it("gives no step chip without a clock", () => {
+    expect(signalChips([dueStepSignal("Dessert?")])).toEqual([]);
+  });
+
+  it("draws the latest due step, and none while no step is due", () => {
+    const signals: TableSignal[] = [
+      {
+        kind: "service_step",
+        steps: [
+          { stepId: "s1", name: "Set up", dueAt: new Date(now - 60_000).toISOString() },
+          { stepId: "s2", name: "Take order", dueAt: new Date(now).toISOString() },
+          { stepId: "s3", name: "Dessert?", dueAt: new Date(now + 60_000).toISOString() },
+        ],
+      },
+    ];
+    expect(signalChips(signals, { now }).map((chip) => chip.text)).toEqual(["Take order"]);
+    expect(signalChips(signals, { now: now - 120_000 })).toEqual([]);
   });
 });
 
 describe("chipState", () => {
   it("puts every chip signalChips gives, and the held chip, in its table state", () => {
     const signals: TableSignal[] = [
-      { kind: "take_order" },
+      dueStepSignal("Take order"),
       {
         kind: "ready",
         byStation: [
@@ -78,7 +102,7 @@ describe("chipState", () => {
       { kind: "held_unavailable", groupId: "g2", lineNames: ["Steak"] },
       { kind: "bill_requested", requestedAt: "2026-09-30T19:59:00.000Z" },
     ];
-    expect(signalChips(signals).map((chip) => chipState(chip, signals))).toEqual([
+    expect(signalChips(signals, { now }).map((chip) => chipState(chip, signals))).toEqual([
       "step",
       "ready",
       "ready",
@@ -110,7 +134,7 @@ describe("heldChip", () => {
   const held = (count: number) => [{ kind: "held" as const, count }];
 
   it("gives no chip without held dishes", () => {
-    expect(heldChip([{ kind: "take_order" }], now + 240_000, now)).toBeNull();
+    expect(heldChip([dueStepSignal("Take order")], now + 240_000, now)).toBeNull();
     expect(heldChip([], Number.POSITIVE_INFINITY, now)).toBeNull();
   });
 

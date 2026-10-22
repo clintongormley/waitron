@@ -4,6 +4,7 @@ import { setLocale } from "../i18n/t.js";
 import "./table-details-sheet.js";
 import type { TillTableDetailsSheet } from "./table-details-sheet.js";
 import type { TableState } from "../api/client.js";
+import { dueStepSignal } from "../../test/service-steps.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("es-ES"));
@@ -38,7 +39,7 @@ const everything = table({
   pendingDeliveries: 2,
   nextReservation: { time: "20:30" },
   signals: [
-    { kind: "take_order" },
+    dueStepSignal("Take order"),
     { kind: "long_wait", band: "overdue" },
     { kind: "held_unavailable", groupId: "g1", lineNames: ["Croquetas"] },
     { kind: "bill_requested", requestedAt: "2026-10-10T11:00:00Z" },

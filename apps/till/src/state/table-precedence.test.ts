@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TableSignal } from "@waitron/shared";
 import type { TableParty, TableState } from "../api/client.js";
+import { dueStepSignal } from "../../test/service-steps.js";
 import {
   PRECEDENCE,
   byPrecedence,
@@ -98,7 +99,7 @@ describe("tableStates", () => {
     ["fire", { party: party({ reminder: { groupId: "g2", dueAt: inMinutes(-1) } }) }, ["fire"]],
     ["bill", { signals: [{ kind: "bill_requested", requestedAt: inMinutes(-1) }] }, ["bill"]],
     ["ready", { signals: [ready] }, ["ready"]],
-    ["step", { signals: [{ kind: "take_order" }] }, ["step"]],
+    ["step", { signals: [dueStepSignal("Take order")] }, ["step"]],
     ["not-sent", { party: party({ unsentDrafts: [unsent] }) }, ["not-sent"]],
     ["waiting", { timingBand: "warm" }, ["waiting"]],
     ["clearing", { party: null, state: "free", condition: "needs_clearing" }, ["clearing"]],
@@ -111,6 +112,12 @@ describe("tableStates", () => {
 
   it.each(alone)("puts a table in %s from its own fact alone", (_, over, kinds) => {
     expect(tableStates(table(over), now)).toEqual(kinds);
+  });
+
+  it("a step not yet due ranks nothing", () => {
+    const ahead = table({ signals: [dueStepSignal("Dessert?", inMinutes(1))] });
+    expect(tableStates(ahead, now)).not.toContain("step");
+    expect(tableStates(ahead, now)).toEqual(["nothing-needed"]);
   });
 
   it("ready counts a ready signal or count, ignoring retired dispatch", () => {
@@ -159,7 +166,7 @@ describe("tableStates", () => {
         unsentDrafts: [unsent],
       }),
       signals: [
-        { kind: "take_order" },
+        dueStepSignal("Take order"),
         { kind: "held", count: 2 },
         ready,
         { kind: "bill_requested", requestedAt: inMinutes(-1) },
@@ -184,7 +191,7 @@ describe("tableStates", () => {
       signals: [
         ready,
         { kind: "bill_requested", requestedAt: inMinutes(-1) },
-        { kind: "take_order" },
+        dueStepSignal("Take order"),
       ],
     });
     expect(tableStates(t4, now)).toEqual(["bill", "ready", "step"]);

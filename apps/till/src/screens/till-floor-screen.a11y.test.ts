@@ -12,6 +12,7 @@ import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { FloorZone, TableState } from "../api/client.js";
 import type { WtFloorMap } from "@waitron/ui";
+import { dueStepSignal } from "../../test/service-steps.js";
 
 const zones: FloorZone[] = [
   {
@@ -478,7 +479,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
             ...table,
             readyToServe: 1,
             signals: [
-              { kind: "take_order" },
+              dueStepSignal("Take order"),
               {
                 kind: "ready",
                 byStation: [
@@ -674,7 +675,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
           { signals: [{ kind: "bill_requested", requestedAt: "2026-09-29T19:55:00.000Z" }] },
         ],
         ["Ready", { readyToServe: 2 }],
-        ["Step", { readyToServe: 0, signals: [{ kind: "take_order" }] }],
+        ["Step", { readyToServe: 0, signals: [dueStepSignal("Take order")] }],
       ];
       const familyZones: FloorZone[] = [
         zones[0]!,

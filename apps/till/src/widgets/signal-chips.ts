@@ -4,6 +4,7 @@ import type { TableSignal } from "@waitron/shared";
 import { countText, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { minutesToFire } from "../state/release-reminder.js";
+import { currentStep } from "../state/service-steps.js";
 import type { TableStateKind } from "../state/table-precedence.js";
 
 type WaitBand = Extract<TableSignal, { kind: "long_wait" }>["band"];
@@ -18,18 +19,24 @@ const WAIT_WORDS: Record<WaitBand, { words: StringKey; tone: FloorChipTone }> = 
  * The chips for the signals no other mark already shows. An unsent draft, a group due to fire and a
  * table needing clearing each have a mark of their own on the floor, and the list card and the
  * unplaced token draw held dishes with `heldChip`, so none of them gives a chip here; nor does a
- * forgotten wait where `forgottenShown` says the caller shows its own Forgotten badge.
+ * forgotten wait where `forgottenShown` says the caller shows its own Forgotten badge. A service
+ * step's chip needs `now`, to know which step is due; without it there is none.
  */
 export function signalChips(
   signals: readonly TableSignal[],
-  { forgottenShown = false }: { forgottenShown?: boolean } = {},
+  { forgottenShown = false, now }: { forgottenShown?: boolean; now?: number } = {},
 ): FloorChip[] {
   return signals.flatMap((signal): FloorChip[] => {
     switch (signal.kind) {
       case "take_order":
-        return [{ key: "take-order", text: t("signal.take_order"), tone: "primary" }];
-      case "service_step":
         return [];
+      case "service_step": {
+        const step = now === undefined ? null : currentStep([signal], now);
+        if (step === null) return [];
+        return [
+          { key: "service-step", text: step.name, tone: "primary-filled", icon: "floor-step" },
+        ];
+      }
       case "ready":
         return signal.byStation.map(({ stationName, count }) => ({
           key: "ready",
@@ -110,6 +117,7 @@ export function chipState(
     case "ready":
       return "ready";
     case "take-order":
+    case "service-step":
       return "step";
     case "held":
       return "held";

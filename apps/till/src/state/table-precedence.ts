@@ -1,6 +1,7 @@
 import { worstBand, type TimingBand } from "@waitron/shared";
 import type { TableState } from "../api/client.js";
 import { reminderDueAt } from "./release-reminder.js";
+import { currentStep } from "./service-steps.js";
 
 /**
  * A757 §4's order, most urgent first, for the states that exist today; Waiter called (row 5, A508)
@@ -44,7 +45,7 @@ export function tableStates(table: TableState, now: number): TableStateKind[] {
   if (fire) active.add("fire");
   if (has("bill_requested")) active.add("bill");
   if (has("ready") || table.readyToServe > 0) active.add("ready");
-  if (has("take_order")) active.add("step");
+  if (currentStep(table.signals, now) !== null) active.add("step");
   if ((table.party?.unsentDrafts.length ?? 0) > 0) active.add("not-sent");
   if (band === "warm") active.add("waiting");
   if (table.condition === "needs_clearing") active.add("clearing");

@@ -6,6 +6,7 @@ import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { TableParty, TableState, TableToday } from "../api/client.js";
 import type { TableSignal } from "@waitron/shared";
+import { dueStepSignal } from "../../test/service-steps.js";
 
 const now = Date.parse("2026-09-30T20:00:00.000Z");
 const past = new Date(now - 60_000).toISOString();
@@ -152,7 +153,7 @@ describe("till-floor-screen: the signals at a table", () => {
   });
 
   it("says take the order for a party with nothing ordered or drafted", async () => {
-    const el = await mountFloor([table({ signals: [{ kind: "take_order" }] })]);
+    const el = await mountFloor([table({ signals: [dueStepSignal("Take order")] })]);
     expect(chips(card(el, "t2"))).toEqual(["Take order"]);
   });
 
@@ -207,7 +208,7 @@ describe("till-floor-screen: the signals at a table", () => {
     const el = await mountFloor([
       table({
         signals: [
-          { kind: "take_order" },
+          dueStepSignal("Take order"),
           ready(["bar", "Bar", 3], ["kitchen", "Kitchen", 1]),
           { kind: "long_wait", band: "overdue" },
           { kind: "held_unavailable", groupId: "g2", lineNames: ["Steak"] },
@@ -221,7 +222,6 @@ describe("till-floor-screen: the signals at a table", () => {
       "signal.bill_requested",
       "signal.ready_at",
       "signal.ready_at_one",
-      "signal.take_order",
     ] as const;
     for (const key of keys) expect(es[key]).not.toBe(en[key]);
     expect(chips(card(el, "t2"))).toEqual([
@@ -230,7 +230,7 @@ describe("till-floor-screen: the signals at a table", () => {
       es["signal.bill_requested"],
       es["signal.ready_at"].replace("{station}", "Bar").replace("{n}", "3"),
       es["signal.ready_at_one"].replace("{station}", "Kitchen"),
-      es["signal.take_order"],
+      "Take order",
     ]);
   });
 });
@@ -308,7 +308,7 @@ describe("till-floor-screen: what each station has ready", () => {
   });
 
   it("is not shown while nothing is ready", async () => {
-    const el = await mountFloor([table({ signals: [{ kind: "take_order" }] })]);
+    const el = await mountFloor([table({ signals: [dueStepSignal("Take order")] })]);
     expect(el.shadowRoot!.querySelector("[data-station-summary]")).toBeNull();
   });
 
