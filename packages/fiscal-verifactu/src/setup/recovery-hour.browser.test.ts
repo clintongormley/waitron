@@ -1037,3 +1037,31 @@ it("says in Spanish that the series cannot be made yet", async () => {
     ),
   );
 });
+it("keeps the 15-second rhythm when a re-check again finds no second clock", async () => {
+  const { state, prepare } = scripted();
+  state.decision = noSecondClock;
+  const { el } = await mount(prepare);
+  await ready(el);
+  fakeClock();
+  try {
+    await compare(el);
+    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+    let release!: () => void;
+    state.hold = new Promise((resolve) => {
+      release = resolve;
+    });
+    const compares = () => actionsOf(prepare).filter((a) => a === "compare-clocks").length;
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() => expect(compares()).toBe(2));
+    vi.advanceTimersByTime(10_000);
+    state.hold = undefined;
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(text(el)).toContain(RESTORE_DO);
+    vi.advanceTimersByTime(5_000);
+    await vi.waitFor(() => expect(compares()).toBe(3));
+  } finally {
+    vi.useRealTimers();
+  }
+});
