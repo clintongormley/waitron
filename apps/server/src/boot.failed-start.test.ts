@@ -19,6 +19,7 @@ import {
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { appendOnlyTriggerFaults } from "@waitron/store";
 import { startAppendOnlyWatch } from "./append-only-watch.js";
+import { startFreeSpaceWatch } from "./free-space-watch.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
@@ -81,6 +82,11 @@ vi.mock("./menu-activation.js", async (importOriginal) => {
 vi.mock("./append-only-watch.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./append-only-watch.js")>();
   return { ...actual, startAppendOnlyWatch: vi.fn(actual.startAppendOnlyWatch) };
+});
+
+vi.mock("./free-space-watch.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./free-space-watch.js")>();
+  return { ...actual, startFreeSpaceWatch: vi.fn(actual.startFreeSpaceWatch) };
 });
 
 vi.mock("./tender-refund-recovery.js", async (importOriginal) => {
@@ -163,6 +169,19 @@ async function spyOnAppendOnlyWatchStop() {
     await vi.importActual<typeof import("./append-only-watch.js")>("./append-only-watch.js");
   const stop = vi.fn<() => void>();
   vi.mocked(startAppendOnlyWatch).mockImplementationOnce((deps) => {
+    const watch = realStart(deps);
+    stop.mockImplementation(() => watch.stop());
+    return { stop };
+  });
+  return stop;
+}
+
+/** Spies on the stop of the next free-space watch boot starts. */
+async function spyOnFreeSpaceWatchStop() {
+  const { startFreeSpaceWatch: realStart } =
+    await vi.importActual<typeof import("./free-space-watch.js")>("./free-space-watch.js");
+  const stop = vi.fn<() => void>();
+  vi.mocked(startFreeSpaceWatch).mockImplementationOnce((deps) => {
     const watch = realStart(deps);
     stop.mockImplementation(() => watch.stop());
     return { stop };
@@ -555,6 +574,19 @@ describe("a start that fails after the venue folder is opened gives the folder b
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 
+  it("in trading mode, when a step after the listener is started throws, stopping the free-space watch", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = await tradingEnv(venueDir, state, { landing: true });
+    const failure = new Error("interfaces unreadable");
+    failLandingAfterMdns(failure);
+    const stop = await spyOnFreeSpaceWatchStop();
+
+    await expect(startServer(env)).rejects.toBe(failure);
+    expect(stop).toHaveBeenCalledOnce();
+    expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60_000);
+
   it("waits for the cloud snapshot loop when the cloud worker refuses to stop", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
@@ -872,6 +904,20 @@ describe("closing a started server", () => {
     const state = await stateDir(undefined, { leaf: true });
     const env = await tradingEnv(venueDir, state);
     const stop = await spyOnMenuActivationStop();
+    const server = await startServer(env);
+    await listening(Number(env.WAITRON_HTTP_PORT));
+    expect(stop).not.toHaveBeenCalled();
+
+    await server.close();
+    expect(stop).toHaveBeenCalledOnce();
+    expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60_000);
+
+  it("stops the free-space watch", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = await tradingEnv(venueDir, state);
+    const stop = await spyOnFreeSpaceWatchStop();
     const server = await startServer(env);
     await listening(Number(env.WAITRON_HTTP_PORT));
     expect(stop).not.toHaveBeenCalled();

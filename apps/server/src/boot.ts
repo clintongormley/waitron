@@ -135,6 +135,7 @@ import {
   printingAlertSource,
   contentSuggestionsAlertSource,
   stationOutputAlertSource,
+  storageAlertSource,
 } from "./alert-sources.js";
 import type { BackupStatus } from "./backup-status.js";
 import { createTtlCache } from "./ttl-cache.js";
@@ -154,6 +155,11 @@ import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { createDiskFullState, noteFullAtStart, watchForDiskFull } from "./disk-full-state.js";
+import {
+  createFreeSpaceState,
+  FREE_SPACE_CHECK_MS,
+  startFreeSpaceWatch,
+} from "./free-space-watch.js";
 import { mountNodeApi } from "./node-api.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { mountDeviceApi } from "./device-api.js";
@@ -936,6 +942,7 @@ async function bootServer(
   const stopWatchingDisk = watchForDiskFull(diskFull, [store.venue, store.node]);
   undoOnFailure.push(async () => stopWatchingDisk());
   await noteFullAtStart(diskFull, { dir: config.venueDir, log });
+  const freeSpace = createFreeSpaceState({ log });
   const db = store.venue;
   // After migrating, which reinstalls a missing trigger but leaves a same-name altered one in place.
   assertAppendOnlyIntact(db, appendOnlyTables);
@@ -2134,8 +2141,18 @@ async function bootServer(
     now,
     readStream: () => streamHost.status(),
   });
+  const freeSpaceWatch = startFreeSpaceWatch({
+    dir: config.venueDir,
+    state: freeSpace,
+    disk: diskFull,
+    intervalMs: FREE_SPACE_CHECK_MS,
+    now,
+    log,
+  });
+  undoOnFailure.push(async () => freeSpaceWatch.stop());
   const serverAlertSources: AlertSource[] = [
     backupSource,
+    storageAlertSource({ space: freeSpace, disk: diskFull }),
     sealedStateAlertSource(sealedStateStatus),
     firstStartAlertSource(firstStart),
     appendOnlyRestoredAlertSource(appendOnlyRestored),
@@ -2722,6 +2739,7 @@ async function bootServer(
           unsubscribeFromChanges,
           () => menuActivation.stop(),
           () => appendOnlyWatch.stop(),
+          () => freeSpaceWatch.stop(),
           () => liveEvents.close(),
           () => tunnelController.abort(),
           () => loop,
