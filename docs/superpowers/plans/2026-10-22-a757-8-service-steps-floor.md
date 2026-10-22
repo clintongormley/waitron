@@ -530,8 +530,8 @@ sentences live in `apps/till/src/i18n/codes.ts`.
    provisioned starter step's `service_step` signal gets the same delete in its own setup, named in
    the pull request. Task 3b proves the starter set itself reaches the floor. `createDepartment`
    also writes the starter steps (`packages/venue-service/src/operations.ts:214`), and
-   `apps/server/src/testing/service-zone.ts` creates departments with it, so a second department
-   made in a test starts with the starters (Spanish names in the es-ES test venue): Tasks 3b and 5
+   `createZone` in `apps/server/src/testing/service-zone.ts` calls it when the venue has no active
+   department, so a second department made in a test starts with the starters (Spanish names in the es-ES test venue): Tasks 3b and 5
    replace them with `setSteps` before relying on a department's list.
 
 10. **Help, guide and design system.** `help.floor.tables_list` gains a sentence about Done and the
@@ -572,7 +572,7 @@ last column names the task that makes the edit.
 | `apps/till/src/widgets/signal-chips.test.ts:49-52` "draws the overdue wait with the timer, and Take order with no icon" | `signalChips([{ kind: "take_order" }])[0]?.icon` undefined | title "…and a service step with the bell"; a due step's chip has icon `floor-step`, text the step's name, tone `primary-filled`, key `service-step` | §4 row 8 cue "🛎 and the step's name"; picture 10's bell | 6 |
 | `apps/till/src/widgets/signal-chips.test.ts:55-58` (chipState) | `{ kind: "take_order" }` → `step` | a due `service_step` → `step`; one not yet due gives no chip | same state, new signal | 6 |
 | `apps/till/src/state/table-precedence.test.ts:101` | `["step", { signals: [take_order] }, ["step"]]` | a due step → `["step"]`; new row: a step not yet due ranks nothing (`step` absent) | `currentStep` (Decision 7) | 6 |
-| `apps/till/src/state/floor-look.test.ts:90`, `:172-181`, `:292-299`, `:458` | cue and words `en["signal.take_order"]` | the step's name ("Take order", the fixture's) | §4 row 8, §6 | 6 |
+| `apps/till/src/state/floor-look.test.ts:90`, `:172-181`, `:292-299`, `:458` | cue and words `en["signal.take_order"]` | the step's name ("Take order", the fixture's); `:458` calls `kindWords("step", …)` on a table with no signal, so it gains `signals: [dueStepSignal("Take order")]` | §4 row 8, §6 | 6 |
 | `apps/till/src/screens/till-floor-screen.signals.test.ts:205-237` "says the signals in Spanish" | keys list holds `signal.take_order`; last chip `es["signal.take_order"]` | `signal.take_order` leaves the keys list; the last chip is the fixture step's stored name, "Take order", untranslated; the other chips unchanged | a step's name is venue data; `signal.take_order` retires | 6 |
 | `apps/till/src/screens/till-floor-screen.precedence.test.ts:375-401` "lists every mark, most urgent first…" | `'[data-chip="take-order"]'` sixth | `'[data-chip="service-step"]'` sixth — same place | same rank, new mark | 6 |
 | `apps/till/src/screens/till-floor-screen.a11y.test.ts:473-500` "has no violations with signals side by side…, on the list" | mounted with `{ zones, tables, canOpenStation: true }` | also `canMarkSteps: true`, so axe checks the card with Done in both themes; its assertions unchanged | Decision 6 | 7b |
@@ -584,7 +584,7 @@ mounted without `canMarkSteps`, so the plain chip reads "Take order", as the ass
 expects), `:311`, `till-floor-screen.precedence.test.ts:206`, `:565`,
 `till-floor-screen.zone-tabs.test.ts:237`, `:284`, `:471`, `:799`, `:911`, `:966`, `:1114`,
 `:1150`, `:1247`, `till-floor-screen.a11y.test.ts:481`, `:677` (a zone-tab case: the table is off
-screen and never draws Done; the zone states it asserts at `:707` keep `"step"`),
+screen and never draws Done; the zone states it asserts at `:712` keep `"step"`),
 `apps/till/src/widgets/table-details-sheet.a11y.test.ts:41`,
 `apps/till/src/widgets/table-status.a11y.test.ts:65`.
 
@@ -769,9 +769,11 @@ doneBy: string }[]): Promise<void>` — one insert, none for `[]`.
   - `"before the first order no step shows while the party has an open draft"` (`saveDraftForTest`
     with a line, as `table-signals.test.ts:240-247`);
   - `"a party at tables of two departments gets each table's own steps"` — a second department and
-    zone made as `apps/server/src/testing/service-zone.ts` does (`createDepartment` writes the
-    starters, `packages/venue-service/src/operations.ts:214`; `setSteps` replaces them); the party
-    joined to a table there;
+    zone made with `createDepartment` and `createServiceZone` from `@waitron/venue-service` —
+    not with `service-zone.ts`'s `createZone`, which reuses the venue's existing active department
+    (`apps/server/src/testing/service-zone.ts:10-16`) and so makes no second one (`createDepartment`
+    writes the starters, `packages/venue-service/src/operations.ts:214`; `setSteps` replaces them);
+    the party joined to a table there;
   - `"a table whose zone has no department shows no step"`;
   - `"a new venue's starter steps reach the floor"` — `addStarterServiceSteps` on the tables zone's
     department, seat: one live step named `Montar mesa` (the venue's locale is `es-ES`,
@@ -806,9 +808,13 @@ doneBy: string }[]): Promise<void>` — one insert, none for `[]`.
   showing when the party leaves"` (`finishTable`: the table's row has no party and no
   `service_step`); and extend `"reads every kind of fact once for the whole floor"`
   (`:768-817`) by giving the tables' department steps with `setSteps` before the first count, so
-  the step reads run in both counts. Its parties hold an open draft and order only through the
-  test-only `addTabRound` (`:775-786`), so no step is live and the kinds assertion (`:803-808`)
-  stays unchanged; `three.count` must still equal `one.count`.
+  the step reads run in both counts. Each party (`seatBusyTable`, `:773-787`) orders a Caña
+  through the test-only `addTabRound`, which records no order, but also holds a Burger group
+  through `holdGroup` → `placeGroups`, which records a `submitted` event (`order-groups.ts:388-397`)
+  — so every party has its first order and its open draft hides nothing. Give the department
+  `seated` steps: the first order comes after the seating, so it clears them, no step is live and
+  the kinds assertion (`:804-809`) stays unchanged. A `since_last_order` step would be live there.
+  `three.count` must still equal `one.count`.
 - [ ] **Step 2: Run, watch them fail:**
   `pnpm --filter @waitron/server exec vitest run src/table-signals.test.ts src/service-step-signals.test.ts`
 - [ ] **Step 3: Implement.**
