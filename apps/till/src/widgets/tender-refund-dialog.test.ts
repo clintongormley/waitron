@@ -122,6 +122,36 @@ it("requires a choice between original tenders and resets amounts and the hand-k
   ).toBe(false);
 });
 
+it("draws Refund quiet until a reason is chosen, and keeps it blue while its refund is sent", async () => {
+  const el = await mount();
+  expect(button(el).variant).toBe("secondary");
+  expect(button(el).disabled).toBe(false);
+  await click(el);
+  expect(combo(el).error).toBe(t("adjust.reason_required"));
+  expect(button(el).variant).toBe("secondary");
+  await choose(el, "return");
+  expect(button(el).variant).toBe("primary");
+  await click(el);
+  expect(button(el).variant).toBe("primary");
+  el.busy = true;
+  await el.updateComplete;
+  expect(button(el).variant).toBe("primary");
+  expect(button(el).loading).toBe(true);
+});
+
+it("draws Refund quiet while the reasons load, and blue once the cancel's reason arrives", async () => {
+  const el = await mount({ reasons: null, reasonsLoading: true, startReasonId: "courtesy" });
+  expect(button(el).variant).toBe("secondary");
+  expect(button(el).disabled).toBe(false);
+  el.reasons = reasons;
+  el.reasonsLoading = false;
+  await el.updateComplete;
+  expect(button(el).variant).toBe("primary");
+  el.reasonsLoading = true;
+  await el.updateComplete;
+  expect(button(el).variant).toBe("secondary");
+});
+
 it("draws no switch for a cash payment and submits without one", async () => {
   const el = await mount({ tenders: [cash] });
   const asks = collect<TenderRefundAsk>(el, "tender-refund-submit");

@@ -2728,7 +2728,8 @@ Left open by A758-6. Each works as built, with the default named; the owner may 
 12. **With two receipts, closing the first refund without sending it drops the carried PIN for
     both**, so the second asks for the PIN.
 13. **The refund dialogs keep Refund enabled before a reason is chosen** and explain on press,
-    while Cancel item and Finish table grey their action out.
+    drawing it quiet until a reason is chosen, while Cancel item and Finish table grey their action
+    out.
 14. **Finish table is simpler than picture 06**: no table and payment line, no amount or status
     per dish.
 15. **The Spanish Refund tick reads «Devolución»**, where the picture said «Devolver».

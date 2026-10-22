@@ -528,7 +528,7 @@ export class TillTenderRefundDialog extends LitElement {
                 >`
             : !locked
               ? html`<wt-button
-                  .variant=${selected ? "primary" : "secondary"}
+                  .variant=${selected && this.#reason() && !this.reasonsLoading ? "primary" : "secondary"}
                   data-submit
                   .loading=${this.#busy()}
                   .disabled=${this.#busy() || !selected || own.size > 0}

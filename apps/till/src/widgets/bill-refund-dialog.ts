@@ -463,7 +463,7 @@ export class TillBillRefundDialog extends LitElement {
       <wt-form-actions .error=${this.#bottomMessage(errors)}>
         ${this.#cancelButton()}
         <wt-button
-          variant="primary"
+          variant=${this.#reason() && !this.reasonsLoading ? "primary" : "secondary"}
           data-refund-continue
           .loading=${this.busy}
           .disabled=${this.busy || own.size > 0}

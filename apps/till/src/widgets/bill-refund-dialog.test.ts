@@ -244,6 +244,39 @@ describe("till-bill-refund-dialog: how much and why", () => {
     expect(button(el, "[data-refund-continue]").disabled).toBe(false);
   });
 
+  it("draws Refund quiet until a reason is chosen, and keeps it blue while its refund is sent", async () => {
+    const el = await mount();
+    const refund = () =>
+      root(el).querySelector<HTMLElementTagNameMap["wt-button"]>("[data-refund-continue]")!;
+    expect(refund().variant).toBe("secondary");
+    expect(refund().disabled).toBe(false);
+    await click(el, "[data-refund-continue]");
+    expect(field(el, "reason")!.error).not.toBe("");
+    expect(refund().variant).toBe("secondary");
+    await choose(el, "twice");
+    expect(refund().variant).toBe("primary");
+    el.busy = true;
+    await el.updateComplete;
+    expect(refund().variant).toBe("primary");
+    expect(refund().loading).toBe(true);
+  });
+
+  it("draws Refund quiet while the reasons load", async () => {
+    const el = await mount({ reasons: null, reasonsLoading: true });
+    const refund = () =>
+      root(el).querySelector<HTMLElementTagNameMap["wt-button"]>("[data-refund-continue]")!;
+    expect(refund().variant).toBe("secondary");
+    expect(refund().disabled).toBe(false);
+    el.reasons = reasons;
+    el.reasonsLoading = false;
+    await el.updateComplete;
+    await choose(el, "twice");
+    expect(refund().variant).toBe("primary");
+    el.reasonsLoading = true;
+    await el.updateComplete;
+    expect(refund().variant).toBe("secondary");
+  });
+
   it("refuses a part above what the payment took, or of nothing", async () => {
     const el = await mount();
     await pick(el, "part");
