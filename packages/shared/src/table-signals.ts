@@ -5,8 +5,6 @@
  * sits at carries its signals; `needs_clearing` is the table's own.
  */
 export type TableSignal =
-  /** An open party with no line on any bill of its family that is not abandoned, and no open draft. */
-  | { kind: "take_order" }
   /** The table's department's steps that have a trigger and are not cleared, soonest due first. */
   | { kind: "service_step"; steps: ServiceStepDue[] }
   /** The owners of the party's open drafts holding a line, oldest first; "" for one no longer known. */

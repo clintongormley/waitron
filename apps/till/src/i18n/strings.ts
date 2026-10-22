@@ -1029,7 +1029,6 @@ export const en = {
   "floor.rename_label": "Name",
   "floor.rename_save": "Save",
   // What wants attention at a table or on a counter order, shown as chips side by side.
-  "signal.take_order": "Take order",
   "signal.ready_at": "{station}: {n} ready",
   "signal.ready_at_one": "{station}: 1 ready",
   "signal.wait_warm": "Waiting",
@@ -2734,7 +2733,6 @@ export const es: Record<StringKey, string> = {
   "floor.rename_title": "Cambiar el nombre de {table}",
   "floor.rename_label": "Nombre",
   "floor.rename_save": "Guardar",
-  "signal.take_order": "Tomar nota",
   "signal.ready_at": "{station}: {n} listos",
   "signal.ready_at_one": "{station}: 1 listo",
   "signal.wait_warm": "Esperando",

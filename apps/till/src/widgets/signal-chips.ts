@@ -28,8 +28,6 @@ export function signalChips(
 ): FloorChip[] {
   return signals.flatMap((signal): FloorChip[] => {
     switch (signal.kind) {
-      case "take_order":
-        return [];
       case "service_step": {
         const step = now === undefined ? null : currentStep([signal], now);
         if (step === null) return [];
@@ -116,7 +114,6 @@ export function chipState(
       return "bill";
     case "ready":
       return "ready";
-    case "take-order":
     case "service-step":
       return "step";
     case "held":
