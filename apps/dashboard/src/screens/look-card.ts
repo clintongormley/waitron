@@ -257,7 +257,11 @@ export class LookCard extends LitElement {
         this.#scrollIntoPlace();
         return;
       }
-      open = () => this.#begin({ id: view.id, name: view.name }, view.choices);
+      open = () => {
+        // Deleted while the question was open, it still opens as last read (D19).
+        const latest = this.list?.themes.find((theme) => theme.id === view.id) ?? view;
+        this.#begin({ id: latest.id, name: latest.name }, latest.choices);
+      };
     }
     const leave = this.#leave;
     if (!this.#scope || !leave) {

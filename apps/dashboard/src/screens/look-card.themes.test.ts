@@ -414,6 +414,53 @@ describe("opening the editor from the Themes card", () => {
     expect(editing.at(-1)).toEqual({ id: "t-xmas" });
   });
 
+  it("a Discard opens the theme as the latest read has it", async () => {
+    const { el } = await mount(luciaInUse);
+    const { ask, answer } = withLeaveQuestion(el);
+    el.edit({ id: "t-lucia" });
+    await el.updateComplete;
+    await square(el);
+    el.edit({ id: "t-xmas" });
+    await expect.poll(() => ask.mock.calls.length).toBe(1);
+    const saved = theme("t-xmas", "Christmas", {
+      ...WAITRON_CHOICES,
+      brandColor: "#225588",
+      brandFix: { dark: true },
+    });
+    el.list = { ...luciaInUse, themes: [lucia, saved] };
+    await el.updateComplete;
+    answer("discard");
+    await settle(el);
+    expect(heading(el)).toBe("Edit theme: Christmas");
+    expect(codeField(el).value).toBe("#225588");
+    expect(button(el, "save").disabled).toBe(true);
+  });
+
+  it("a Discard after the theme is deleted elsewhere opens it as last read", async () => {
+    const { el, saveTheme } = await mount(luciaInUse);
+    const { ask, answer } = withLeaveQuestion(el);
+    el.edit({ id: "t-lucia" });
+    await el.updateComplete;
+    await square(el);
+    el.edit({ id: "t-xmas" });
+    await expect.poll(() => ask.mock.calls.length).toBe(1);
+    el.list = { ...luciaInUse, themes: [lucia] };
+    await el.updateComplete;
+    answer("discard");
+    await settle(el);
+    expect(heading(el)).toBe("Edit theme: Christmas");
+    expect(line(el)).toBe(t("appearance.editing_not_in_use"));
+    expect(codeField(el).value).toBe("#7a1f2b");
+    await pickSwatch(el, "#dd5f5f");
+    saveTheme.mockRejectedValueOnce({ code: "theme.not_found" });
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    expect(saveTheme.mock.calls[0]![0]).toBe("t-xmas");
+    await settle(el);
+    expect(isEditing(el)).toBe(true);
+    expect(button(el, "save").disabled).toBe(false);
+  });
+
   it("a Discard answered after the right to edit is lost opens nothing", async () => {
     const { el, editing } = await mount(luciaInUse);
     const { ask, answer } = withLeaveQuestion(el);

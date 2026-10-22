@@ -309,15 +309,17 @@ describe("the page opens the Look card's editor from the Themes card", () => {
     const stub = routedApi(lists);
     const el = await mount(stub.api);
     await expect.poll(() => themesCard(el)?.list).toEqual(lists[0]);
-    vi.spyOn(card(el)!, "scrollIntoView").mockImplementation(() => {});
+    const scroll = vi.spyOn(card(el)!, "scrollIntoView").mockImplementation(() => {});
     await settle(el);
-    return { el, ...stub };
+    return { el, scroll, ...stub };
   }
 
   it("a row's Edit and New theme open the Look card's editor", async () => {
-    const { el } = await mountBoth();
+    const { el, scroll } = await mountBoth();
     await choose(el, "t-xmas", "edit");
     expect(heading(el)).toBe("Edit theme: Christmas");
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll).toHaveBeenLastCalledWith({ block: "start" });
     expect(themesCard(el)!.editingId).toBe("t-xmas");
     await userEvent.click(
       themesCard(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=new-theme]")!,
@@ -325,6 +327,7 @@ describe("the page opens the Look card's editor from the Themes card", () => {
     await settle(el);
     expect(heading(el)).toBe("New theme");
     expect(themesCard(el)!.editingId).toBeNull();
+    expect(scroll).toHaveBeenCalledTimes(2);
   });
 
   it("the theme being edited has no Delete on its row", async () => {
