@@ -4243,6 +4243,14 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
+- **A manager can take over an admin account by changing its email address and resetting the password (found by A987's review, 2026-10-22) — OPEN.** `PUT /management-api/staff/:id` needs only `person.manage` and refuses `person.admin` only when the role
+  changes (`packages/identity/src/staff.ts:182-186`). Run 2026-10-22: a manager changed the admin's
+  address to one the manager controls (204), requested a reset to it, the message went there, the link
+  completed (200), sign-in answered 200 and `mirror.create` was allowed. Decide the fix: e.g. changing an
+  admin's sign-in address needs `person.admin`, or a reset to a changed address needs the old address's
+  confirmation.
+  [Detail](backlog/dashboard.md#a-manager-can-take-over-an-admin-account-by-changing-its-email-address-and-resetting-the-password-found-by-a987s-review-2026-10-22--open)
+
 - **Spacing for buttons grouped beside Cancel belongs in `wt-form-actions`.** The
   `[Cancel] [Delete…] … [Save]` row (design-system.md → Forms) has each dialog space its own group;
   move it into `packages/ui/src/components/wt-form-actions.ts`. Left open by A719 (#1838).
@@ -5714,7 +5722,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **The setup wizard's email test connects wherever an unauthenticated caller points it (A987
   review, 2026-10-22) — OPEN.** In setup mode, `POST /setup-api/email-test` checks no sign-in and
-  sends to the host, port and address the request names. Read, not run.
+  sends to the host, port and address the request names. Run 2026-10-22: answered 200 and the
+  message was delivered.
   [Detail](backlog/box.md#the-setup-wizards-email-test-connects-wherever-an-unauthenticated-caller-points-it-a987-review-2026-10-22--open)
 
 - **A blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }`** — left open by

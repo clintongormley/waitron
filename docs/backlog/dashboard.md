@@ -3,6 +3,15 @@
 The open entries are listed in [the backlog](../backlog.md), under "Users, sign-in and the dashboard shell". This file holds
 their full text.
 
+## A manager can take over an admin account by changing its email address and resetting the password (found by A987's review, 2026-10-22) — OPEN
+
+`PUT /management-api/staff/:id` needs only `person.manage` and refuses `person.admin` only when the role
+changes (`packages/identity/src/staff.ts:182-186`). Run 2026-10-22: a manager changed the admin's
+address to one the manager controls (204), requested a reset to it, the message went there, the link
+completed (200), sign-in answered 200 and `mirror.create` was allowed. Decide the fix: e.g. changing an
+admin's sign-in address needs `person.admin`, or a reset to a changed address needs the old address's
+confirmation.
+
 ## `date-utils.test.ts` has a test titled as guarding "against a vacuous pass"
 
 - Found by #612 (the rest of `apps/dashboard`), not fixable in a comments-only change.

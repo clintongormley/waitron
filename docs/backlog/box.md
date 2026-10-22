@@ -407,7 +407,10 @@ owner's header (`apps/server/src/setup-first-fiscal-api.ts:182-184`) reaches a r
 sign-in, takes the recipient from the request's `venue.admin.email` and connects to whatever host and
 port the request names (`apps/server/src/setup-email-api.ts:25-38`). Anyone who can reach such a box
 can make it send a short test message to any address through any mail server it can reach, including
-one on the venue's network that accepts local mail without a login. Read, not run. Live has it today;
+one on the venue's network that accepts local mail without a login. Run 2026-10-22: a preproduction
+setup-mode boot answered a no-header request with 200 and a local Mailpit received the message; with
+an owner-held setup claimed the same request was refused 409 `setup.attempt_conflict`. The wizard's
+Live path has it today;
 A987's design does not change the route
 ([§7](../superpowers/specs/2026-10-22-a987-prepare-venue-email-design.md#7-security)).
 

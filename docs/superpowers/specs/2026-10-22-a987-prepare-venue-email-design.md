@@ -52,7 +52,7 @@ account sender carries three kinds of message:
 | Staff invitation, resend, reset-login and reactivate invitations | `account-email.ts:75-150` | Inside the request, which waits for it (`management-api.ts:1114`, `:1138`, `:1225`, `:1249`) | The person is still created; the answer says `invitationSent: false` and the Users screen says "The account was created, but the invitation could not be sent…" (`strings.ts:1161-1162`). No retry. |
 | Forgotten-password link | same sender | After the request has answered 202, whether or not the address exists (`management-api.ts:906-930`) | Logged only; the person sees nothing, by design. |
 | New-email confirmation code | same sender | Inside the request (`me-api.ts:155-171`) | `emailVerificationSent: false`. |
-| Full invoice as a PDF | `invoice-email.ts:31-80` | An outbox table, `invoice_deliveries`, drained by a loop on the primary (`boot.ts:1779-1789`) | A failure carrying an SMTP reply from 400 to 599 is "failed" and every other failure "unknown" (`invoice-email.ts:58-70`). Only "failed" is retried, up to five attempts, after 5 s, 30 s, 2 min and 10 min (`invoice-delivery.ts:380-400`). So by M1's error codes: a refused login, a refused recipient, and STARTTLS chosen against a plain server (reply 502) are retried; an unknown host, a refused connection, an untrusted certificate and TLS chosen against a plain server carry no reply number and are not. |
+| Full invoice as a PDF | `invoice-email.ts:31-80` | An outbox table, `invoice_deliveries`, drained by a loop on the primary (`boot.ts:1779-1789`) | A send the mail server refused with a reply from 400 to 599, or one tried while no mail server is set (`invoice-email.ts:24-26`), is "failed". Every other failure, the 30 s deadline included, is "unknown" (`:42-70`). Only "failed" is retried, up to five attempts, after 5 s, 30 s, 2 min and 10 min (`invoice-delivery.ts:380-400`). So by M1's error codes: a refused login, a refused recipient, and STARTTLS chosen against a plain server (reply 502) are retried; an unknown host, a refused connection, an untrusted certificate and TLS chosen against a plain server carry no reply number and are not. |
 | Missing clock-time reminders | `attendance-email.ts` | An outbox table, `attendance_mail`, drained by a loop (`boot.ts:1728-1742`) | Skipped while no delivery exists (`attendance-email-worker.ts:65`). Only messages marked pending or rejected are claimed again, at their next attempt time (`attendance-email-worker.ts:79-80`); a send that ends "unknown" is not (`:137-148`). |
 | Signing-certificate expiry reminders | `certificate-reminder-email.ts` | A loop (`boot.ts:1749-1767`), to everyone holding `system.manage` (`certificate-reminder-worker.ts:76-77`) | Skipped while no delivery exists (`certificate-reminder-worker.ts:55`). Never runs in Demo or Prepare (`onboarding-policy.ts:12-16`, `:22-29`). |
 | The settings test message | `smtp-test-message.ts` | Inside the request, with a 30 s deadline (`:25`) | Reports one of two codes (§2.6). |
@@ -198,7 +198,7 @@ none): invoice Email is not offered, and invitations report "not sent" (`email-d
 
 ### 2.8 Who can read a reset link while email is kept on the box
 
-Read, not run. Each step, followed through the routes:
+Run 2026-10-22 through the real management and inbox routes against a real Mailpit (a temporary test copying `management-api.accounts-and-receipt-config.test.ts`'s setup: reset requested with no cookie → 202; manager's inbox read → 200 with the reset message to the admin; link followed → 200 and the admin's earlier session ended; sign-in with the new password → 200 and the session allowed `mirror.create`, `node.promote`, `person.admin`), with a two-factor control (sign-in refused 401 `totp.required`). Each step, followed through the routes:
 
 1. Anyone may ask for a password reset for any address. The route needs no sign-in and answers 202
    either way (`management-api.ts:906-930`). For an active account it issues a reset link whatever
@@ -216,8 +216,7 @@ Read, not run. Each step, followed through the routes:
 So a manager can sign in as an admin who has no two-factor sign-in, and so gain what only admins
 hold: `person.admin`, `mirror.create` and `node.promote` (`permissions.ts:16`, `:35-36`; managers'
 set at `:56-75`, admins' at `:76`). The admin would find their sessions ended. I believe this is
-reachable today in Demo, and in every Prepare venue, which captures account email because it cannot
-set a mail server (§2.3); that is read, not run. The inbox's permission line dates from `fabdb224d`
+reachable today in Demo, and in every Prepare venue whose mail server was not set from a terminal, which is every Prepare venue set up without one (§2.3); that is read, not run. The inbox's permission line dates from `fabdb224d`
 (2026-09-10).
 
 ---
@@ -300,8 +299,7 @@ a comma, and an encoded word for `Café "El Rincón"`. The control, the comma na
 by hand, printed the same `From:` line, so this probe shows the object form works, not that joining
 breaks.
 
-Read, not run: the dashboard and wizard screens, every route's permission, the takeover chain of
-§2.8, the outbox retry rules, the vault's encryption and where its key travels, the configuration
+Read, not run: the dashboard and wizard screens, every route's permission, the outbox retry rules, the vault's encryption and where its key travels, the configuration
 export's contents, the practice line on invoice PDFs, and the Linux connection timeout.
 
 ---
@@ -319,7 +317,7 @@ Each can be overruled; each says why it is the default.
    `person.manage`, and the Email screen's inbox part follows. That closes §2.8's path wherever email
    is still kept on the box (Demo, a development server, and Prepare if the owner picks O1 (C)): a
    manager can still ask for an admin's reset, but cannot read it. An admin already holds every
-   permission (`permissions.ts:76`).
+   permission (`permissions.ts:76`). It does not stop a manager changing an admin's sign-in address (`PUT /management-api/staff/:id`, `staff.ts:182-186`) and then resetting it, which works in every stage that sends real email (run 2026-10-22).
 3. **Who may set or remove the mail server: `system.manage`**, as in Live today
    (`email-settings-api.ts:35-40`), so managers and admins.
 4. **No "none" encryption.** STARTTLS or TLS only, as today (`email-settings.ts:24-26`). Without
@@ -460,7 +458,7 @@ Written for the recommended answers; §6.1 shows where the others differ.
 
 | | Demo | Prepare | Live |
 | --- | --- | --- | --- |
-| Account email, clock-time reminders | kept on the box | sent; not sent while no server is set (only after Remove, under O1 (A)) | sent; not sent without a server |
+| Account email, clock-time reminders | kept on the box | sent; not sent while no server is set (only after the mail server is removed, under O1 (A)) | sent; not sent without a server |
 | Invoice email | kept on the box | sent, with the practice line; not offered without a server | sent; not offered without a server |
 | Mail server set in the wizard | no | yes, required (O1 (A)) | yes, required in production |
 | Mail server set or removed on the dashboard | no | yes | yes |
@@ -611,13 +609,14 @@ processor for it (A980 design §3). Not designed here.
   it; decision 2 narrows the inbox to admins wherever it is still kept.
 - **Where a test message goes.** On the dashboard, only to the signed-in manager's own address, never
   one typed into the form (`email-settings-api.ts:84-97`). The setup wizard's test is different, and
-  already so for Live: while the box is in setup mode, a request to `POST /setup-api/email-test`
-  without the setup owner's header (`setup-first-fiscal-api.ts:182-184`) reaches a route that checks
-  no sign-in, takes the recipient from the request's `venue.admin.email`, and connects to whatever
-  host and port the request names (`setup-email-api.ts:25-38`). So anyone who can reach a box in
-  setup mode can make it send a short test message to any address through any mail server it can
-  reach, including a server on the venue's network that accepts local mail without a login. Read, not
-  run. Opening the Prepare path does not change the route. It is recorded as its own backlog entry
+  already so for Live. While a box is in setup mode and no owner-held first setup is claimed
+  (`setup-api.ts:642-648`), a request to `POST /setup-api/email-test` without the setup owner's header
+  reaches a route that checks no sign-in. It sends a test message, from the address the request names,
+  to the request's `venue.admin.email`, through whatever host and port the request names, provided
+  that server offers STARTTLS or TLS with a certificate the box trusts. That includes a server on the
+  venue's network that takes mail without a login. Run 2026-10-22: a preproduction setup-mode boot
+  answered a no-header request with 200 and a local Mailpit received the message; with an owner-held
+  setup claimed the same request was refused 409 `setup.attempt_conflict`. Opening the Prepare path does not change the route. It is recorded as its own backlog entry
   (`docs/backlog/box.md`, "The setup wizard's email test connects wherever an unauthenticated caller
   points it").
 - **What a visitor learns.** `emailCaptured` is only on the signed-in session read (decision 10).
@@ -663,7 +662,7 @@ time.
    dashboard's rule for the inbox part and its link follows (`dashboard-app.ts:301`, `:1712-1713`).
    **Full review**: permissions. Tests: a manager's inbox read refused, an admin's served; and the
    whole §2.8 path as a test (a manager requests an admin's reset and cannot read it), with a control
-   that restores `person.manage` and fails.
+   that restores `person.manage` and fails. This test would pass with the address-change route (`PUT /management-api/staff/:id`) still open, so it does not prove an admin cannot be taken over.
 3. **Test results, invitation deadline, safe logs.** The shared classifier, the 30 s deadline on the
    account sender, the reason codes on every log line, the `me-api.ts` fix. **Full review**: secrets in
    logs and codes shared by the server, the dashboard and the wizard. Tests: one case per row of §6.5
@@ -700,6 +699,12 @@ a processor relationship the A980 design already lists (its §2.4, "Email").
 ## 11. Found while reading
 
 - §2.8: a manager can read an admin's reset link in the captured inbox. Decision 2 and O1.
+- A manager can take over an admin account by changing its email address and resetting the password:
+  `PUT /management-api/staff/:id` needs only `person.manage` and refuses `person.admin` only when the
+  role changes (`packages/identity/src/staff.ts:182-186`). Run 2026-10-22: a manager changed the
+  admin's address to one the manager controls (204), requested a reset to it, the message went there,
+  the link completed (200), sign-in answered 200 and `mirror.create` was allowed. Outside A987's scope;
+  recorded as its own backlog entry.
 - §7: the setup wizard's email test, reachable without sign-in in setup mode, connects where the
   caller points it and mails the address the caller names. Backlog entry in `docs/backlog/box.md`.
 - `me-api.ts:165-168` logs the mailer's error message, against the reason given at
