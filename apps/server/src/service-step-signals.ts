@@ -17,6 +17,8 @@ import {
   servedTimes,
   type DishServing,
   type LiveStep,
+  type StepFacts,
+  type StepRule,
 } from "./service-step-reckoning.js";
 
 export interface StepParty {
@@ -31,6 +33,12 @@ export interface TableSteps {
   live: LiveStep[];
 }
 
+export interface TableStepFacts {
+  departmentId: string;
+  rules: readonly StepRule[];
+  facts: StepFacts;
+}
+
 function pushTo<T>(map: Map<string, T[]>, key: string, value: T): void {
   const list = map.get(key);
   if (list === undefined) map.set(key, [value]);
@@ -39,8 +47,7 @@ function pushTo<T>(map: Map<string, T[]>, key: string, value: T): void {
 
 /**
  * Each seated table's department steps and those live for the party sitting there, keyed by table;
- * a table in no department is absent. Dishes and orders are the party's family's, Done and drafts
- * the party's own. Six statements for all the parties, none for none.
+ * a table in no department is absent.
  */
 export async function readTableSteps(
   tx: Transaction,
@@ -48,6 +55,26 @@ export async function readTableSteps(
   nowMs: number,
 ): Promise<Map<string, TableSteps>> {
   const found = new Map<string, TableSteps>();
+  for (const [tableId, { departmentId, rules, facts }] of await readStepFacts(tx, parties)) {
+    found.set(tableId, {
+      departmentId,
+      ruleIds: new Set(rules.map((rule) => rule.id)),
+      live: liveSteps(rules, facts, nowMs),
+    });
+  }
+  return found;
+}
+
+/**
+ * Each seated table's department steps and the facts of the party sitting there they are reckoned
+ * from, keyed by table; a table in no department is absent. Dishes and orders are the party's
+ * family's, Done and drafts the party's own. Six statements for all the parties, none for none.
+ */
+export async function readStepFacts(
+  tx: Transaction,
+  parties: readonly StepParty[],
+): Promise<Map<string, TableStepFacts>> {
+  const found = new Map<string, TableStepFacts>();
   if (parties.length === 0) return found;
   const partyIds = parties.map((party) => party.partyId);
   const families = await partyFamilies(tx, partyIds);
@@ -139,11 +166,7 @@ export async function readTableSteps(
     for (const tableId of party.tableIds) {
       const table = rules.get(tableId);
       if (table === undefined) continue;
-      found.set(tableId, {
-        departmentId: table.departmentId,
-        ruleIds: new Set(table.rules.map((rule) => rule.id)),
-        live: liveSteps(table.rules, facts, nowMs),
-      });
+      found.set(tableId, { departmentId: table.departmentId, rules: table.rules, facts });
     }
   }
   return found;

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   liveSteps,
   servedTimes,
+  stepsClearedByDone,
   type DishServing,
   type StepFacts,
   type StepRule,
@@ -132,6 +133,20 @@ describe("liveSteps", () => {
     ]);
   });
 
+  it("a Done before a repeat falls due clears that repeat, and the next one shows N minutes after it", () => {
+    const rules = [rule("Drinks?", "since_last_order", 20)];
+    const ordered = { firstOrderAt: at("21:00"), lastOrderAt: at("22:00") };
+    const early = facts({ ...ordered, doneAt: new Map([["Drinks?", at("22:19")]]) });
+    for (const now of ["22:19", "22:39", "22:40"]) {
+      expect(liveSteps(rules, early, at(now))).toEqual([live("Drinks?", "22:40", "22:40")]);
+    }
+    const late = facts({ ...ordered, doneAt: new Map([["Drinks?", at("22:25")]]) });
+    expect(liveSteps(rules, late, at("22:25"))).toEqual([live("Drinks?", "22:40", "22:40")]);
+    expect(liveSteps(rules, facts(ordered), at("22:25"))).toEqual([
+      live("Drinks?", "22:20", "22:20"),
+    ]);
+  });
+
   it("a Done after a step's trigger clears it; one before its next trigger does not", () => {
     const rules = [rule("Check", "course_served", 5, "mains")];
     const ordered = { firstOrderAt: at("20:40"), lastOrderAt: at("20:40") };
@@ -220,6 +235,46 @@ describe("liveSteps", () => {
       "C",
       "A",
     ]);
+  });
+});
+
+describe("stepsClearedByDone", () => {
+  const ordered = { firstOrderAt: at("21:00"), lastOrderAt: at("22:00") };
+
+  it("a Done on a repeat not yet due clears it, and a second Done for the same repeat clears nothing", () => {
+    const rules = [rule("Drinks?", "since_last_order", 20)];
+    expect(stepsClearedByDone(rules, facts(ordered), "Drinks?", at("22:19"))).toEqual(["Drinks?"]);
+    const doneAt = new Map([["Drinks?", at("22:19")]]);
+    for (const now of ["22:19", "22:39"]) {
+      expect(stepsClearedByDone(rules, facts({ ...ordered, doneAt }), "Drinks?", at(now))).toEqual(
+        [],
+      );
+    }
+    expect(
+      stepsClearedByDone(rules, facts({ ...ordered, doneAt }), "Drinks?", at("22:40")),
+    ).toEqual(["Drinks?"]);
+  });
+
+  it("clears the tapped step and the live steps due no later that a Done would clear", () => {
+    const rules = [
+      rule("Drinks?", "since_last_order", 20),
+      rule("Check", "all_served", 0),
+      rule("Coffee?", "all_served", 11),
+    ];
+    const doneAt = new Map([["Drinks?", at("22:21")]]);
+    const served = facts({ ...ordered, doneAt, allServedAt: at("22:30") });
+    expect(liveSteps(rules, served, at("22:39")).map((step) => step.stepId)).toEqual([
+      "Check",
+      "Drinks?",
+      "Coffee?",
+    ]);
+    expect(stepsClearedByDone(rules, served, "Coffee?", at("22:39"))).toEqual(["Check", "Coffee?"]);
+  });
+
+  it("a step that is not live clears nothing", () => {
+    const rules = [rule("Set up", "seated", 0)];
+    const doneAt = new Map([["Set up", at("20:31")]]);
+    expect(stepsClearedByDone(rules, facts({ doneAt }), "Set up", at("20:32"))).toEqual([]);
   });
 });
 

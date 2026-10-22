@@ -2955,6 +2955,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
         return markServiceStepDone(tx, {
+          cfg: deps.cfg,
+          deviceProfileId: session.device.deviceProfileId,
           partyId,
           stepId,
           personId: session.personId,

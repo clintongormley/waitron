@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { nowIso, parties, partyTables } from "@waitron/db";
+import { deviceProfiles, nowIso, orderGroupEvents, parties, partyTables } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createDepartment,
   createServiceZone,
   serviceStepCompletions,
+  setProfileServiceAccess,
 } from "@waitron/venue-service";
 import { markServiceStepDone } from "./service-step-done.js";
 import { readTableSteps } from "./service-step-signals.js";
@@ -15,6 +17,7 @@ import {
   inTx,
   join,
   OPERATOR,
+  orderForParty,
   seatWithNoAllergies as seat,
   setupPartyVenue,
   type PartyVenue,
@@ -54,8 +57,46 @@ async function liveAt(v: PartyVenue, partyId: string, tableId: string, nowMs = N
   });
 }
 
-function done(v: PartyVenue, partyId: string, stepId: string, nowMs = NOW) {
-  return inTx(v, (tx) => markServiceStepDone(tx, { partyId, stepId, personId: OPERATOR, nowMs }));
+async function profile(v: PartyVenue): Promise<string> {
+  const [row] = await v.db
+    .insert(deviceProfiles)
+    .values({
+      name: `Till ${randomUUID()}`,
+      formFactor: "till",
+      capabilities: [...CAPABILITY_FLAGS],
+    })
+    .returning({ id: deviceProfiles.id });
+  return row!.id;
+}
+
+async function done(
+  v: PartyVenue,
+  partyId: string,
+  stepId: string,
+  nowMs = NOW,
+  deviceProfileId?: string,
+) {
+  const profileId = deviceProfileId ?? (await profile(v));
+  return inTx(v, (tx) =>
+    markServiceStepDone(tx, {
+      cfg: v.cfg,
+      deviceProfileId: profileId,
+      partyId,
+      stepId,
+      personId: OPERATOR,
+      nowMs,
+    }),
+  );
+}
+
+async function lastOrderAt(v: PartyVenue, partyId: string): Promise<number> {
+  const rows = await inTx(v, (tx) =>
+    tx
+      .select({ at: orderGroupEvents.createdAt })
+      .from(orderGroupEvents)
+      .where(eq(orderGroupEvents.partyId, partyId)),
+  );
+  return Math.max(...rows.map((row) => Date.parse(row.at)));
 }
 
 function completions(v: PartyVenue, partyId: string) {
@@ -114,6 +155,31 @@ describe("markServiceStepDone", () => {
     expect(await done(v, partyId, setUp!, NOW + MINUTE)).toEqual({ cleared: [] });
 
     expect(await completions(v, partyId)).toHaveLength(1);
+  });
+
+  it("Done on an every-N-minutes step before its repeat is due records once; a second tap clears nothing", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const [drinks] = await setSteps(v, await departmentOf(v, v.tables.zoneId), [
+      { name: "Drinks?", start: "since_last_order", courseId: null, minutes: 20 },
+    ]);
+    const { tableId, partyId } = await seatedAtMesa1(v);
+    await orderForParty(v, partyId, ["Caña"]);
+    const ordered = await lastOrderAt(v, partyId);
+
+    expect(await done(v, partyId, drinks!, ordered + 19 * MINUTE)).toEqual({ cleared: [drinks] });
+    expect(await done(v, partyId, drinks!, ordered + 19 * MINUTE + 30_000)).toEqual({
+      cleared: [],
+    });
+
+    expect(await completions(v, partyId)).toEqual([
+      {
+        partyId,
+        stepId: drinks,
+        doneAt: new Date(ordered + 19 * MINUTE).toISOString(),
+        doneBy: OPERATOR,
+      },
+    ]);
+    expect(await liveAt(v, partyId, tableId, ordered + 40 * MINUTE)).toEqual([drinks]);
   });
 
   it("Done also records the due steps the shown one was hiding, so their followers start", async () => {
@@ -224,5 +290,32 @@ describe("markServiceStepDone", () => {
 
     expect(await liveAt(v, partyId, tableId)).toEqual([]);
     expect(await liveAt(v, partyId, terraceTable)).toEqual([water]);
+  });
+
+  it("refuses a step found on a table in a zone the profile may not serve", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const restaurant = await departmentOf(v, v.tables.zoneId);
+    const [setUp] = await setSteps(v, restaurant, [seated("Set up")]);
+    const outside = await terrace(v);
+    const [water] = await setSteps(v, outside.departmentId, [seated("Water?")]);
+    const { partyId } = await seatedAtMesa1(v);
+    const terraceTable = await v.table("T1", outside.zoneId);
+    // `joinTables` refuses a table of another zone (`service_zone.join_mismatch`).
+    await inTx(v, (tx) => tx.insert(partyTables).values({ partyId, tableId: terraceTable }));
+    const tablesOnly = await profile(v);
+    await inTx(v, (tx) =>
+      setProfileServiceAccess(tx, v.cfg, tablesOnly, {
+        departmentId: restaurant,
+        allowedZoneIds: [v.tables.zoneId],
+        startingZoneId: v.tables.zoneId,
+      }),
+    );
+
+    await expect(done(v, partyId, water!, NOW, tablesOnly)).rejects.toMatchObject({
+      code: "service_zone.not_allowed",
+      params: { zoneId: outside.zoneId },
+    });
+    expect(await completions(v, partyId)).toEqual([]);
+    expect(await done(v, partyId, setUp!, NOW, tablesOnly)).toEqual({ cleared: [setUp] });
   });
 });
