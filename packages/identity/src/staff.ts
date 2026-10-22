@@ -122,6 +122,37 @@ export async function assertEmailAvailable(
   if (existing !== undefined) throw new AppError("person.email_taken", { email });
 }
 
+function requireAdminAuthority(actorRole: PersonRoleValue, targetRole: PersonRoleValue): void {
+  if (targetRole === "admin" && !roleHasPermission(actorRole, "person.admin")) {
+    throw new AppError("authorization.not_permitted", { permission: "person.admin" });
+  }
+}
+
+export async function authorizePersonLoginChange(
+  tx: Transaction,
+  input: { managementSessionId: string; personId: string },
+) {
+  const actor = await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "person.manage",
+  });
+  const [person] = await tx
+    .select({ role: persons.role })
+    .from(persons)
+    .where(eq(persons.id, settleId(input.personId)));
+  if (person !== undefined) requireAdminAuthority(actor.role, person.role);
+  return { ...actor, targetRole: person?.role };
+}
+
+async function invalidatePersonAccountActions(tx: Transaction, personId: string): Promise<void> {
+  await tx
+    .update(managementAccountActions)
+    .set({ usedAt: nowIso() })
+    .where(
+      and(eq(managementAccountActions.personId, personId), isNull(managementAccountActions.usedAt)),
+    );
+}
+
 async function revokePersonAccess(tx: Transaction, personId: string): Promise<void> {
   await tx
     .update(sessions)
@@ -131,12 +162,7 @@ async function revokePersonAccess(tx: Transaction, personId: string): Promise<vo
     .update(managementSessions)
     .set({ endedAt: nowIso() })
     .where(and(eq(managementSessions.personId, personId), isNull(managementSessions.endedAt)));
-  await tx
-    .update(managementAccountActions)
-    .set({ usedAt: nowIso() })
-    .where(
-      and(eq(managementAccountActions.personId, personId), isNull(managementAccountActions.usedAt)),
-    );
+  await invalidatePersonAccountActions(tx, personId);
 }
 
 /**
@@ -200,6 +226,9 @@ export async function updatePersonDetails(
   if (telephone !== null && !isValidTelephone(telephone))
     throw new AppError("person.telephone_invalid", {});
   const email = normalizeAndValidateEmail(input.email);
+  if (email !== person.email || input.status !== person.status) {
+    requireAdminAuthority(actorRole, person.role);
+  }
   await assertDisplayNameAvailable(tx, displayName, person.id);
   await assertEmailAvailable(tx, email, person.id);
   try {
@@ -223,13 +252,15 @@ export async function updatePersonDetails(
   }
   if (email !== person.email || input.status !== person.status)
     await revokePersonAccess(tx, person.id);
+  else if (input.role !== person.role && (input.role === "admin" || person.role === "admin"))
+    await invalidatePersonAccountActions(tx, person.id);
 }
 
 export async function deactivatePerson(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  const { authorizedBy } = await authorizeManager(tx, {
+  const { authorizedBy, role: actorRole } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
@@ -249,6 +280,7 @@ export async function deactivatePerson(
   if (person.role === "admin" && person.status === "active" && activeAdmins.length === 1) {
     throw new AppError("person.last_admin", {});
   }
+  requireAdminAuthority(actorRole, person.role);
   if (person.status === "suspended") return;
   await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, person.id));
   await revokePersonAccess(tx, person.id);
@@ -258,10 +290,7 @@ export async function clearPersonPin(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  await authorizeManager(tx, {
-    managementSessionId: input.managementSessionId,
-    permission: "person.manage",
-  });
+  await authorizePersonLoginChange(tx, input);
   const updated = await tx
     .update(persons)
     .set({ pinHash: null })
@@ -278,7 +307,7 @@ export async function resetPersonLogin(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  await authorizeManager(tx, {
+  const { role: actorRole } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
@@ -301,6 +330,7 @@ export async function resetPersonLogin(
   if (person.role === "admin" && person.status === "active" && activeAdmins.length === 1) {
     throw new AppError("person.last_admin", {});
   }
+  requireAdminAuthority(actorRole, person.role);
   await tx
     .update(persons)
     .set({
@@ -323,16 +353,22 @@ export async function reactivatePersonForInvitation(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  await authorizeManager(tx, {
+  const { role: actorRole } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
   const [person] = await tx
-    .select({ id: persons.id, displayName: persons.displayName, status: persons.status })
+    .select({
+      id: persons.id,
+      displayName: persons.displayName,
+      role: persons.role,
+      status: persons.status,
+    })
     .from(persons)
     .where(eq(persons.id, settleId(input.personId)));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (person.status !== "suspended") throw new AppError("person.transition_invalid", {});
+  requireAdminAuthority(actorRole, person.role);
   await assertDisplayNameAvailable(tx, person.displayName, person.id);
   try {
     await tx
@@ -368,10 +404,11 @@ export async function invitePerson(
     email: string;
   },
 ): Promise<{ id: string }> {
-  await authorizeManager(tx, {
+  const { role: actorRole } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
+  requireAdminAuthority(actorRole, input.role);
   const displayName = requiredText(input.displayName, "displayName");
   const firstNames = requiredText(input.firstNames, "firstNames");
   const lastNames = requiredText(input.lastNames, "lastNames");
@@ -421,10 +458,11 @@ export async function createPerson(
     email: string;
   },
 ): Promise<{ id: string }> {
-  await authorizeManager(tx, {
+  const { role: actorRole } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
+  requireAdminAuthority(actorRole, input.role);
   assertPinLength(input.pin);
   const email = normalizeAndValidateEmail(input.email);
   const displayName = requiredText(input.displayName, "displayName");
@@ -460,24 +498,21 @@ export async function setRole(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; role: PersonRoleValue },
 ): Promise<void> {
-  await authorizeManager(tx, {
-    managementSessionId: input.managementSessionId,
-    permission: "person.manage",
-  });
+  const { role: actorRole, targetRole } = await authorizePersonLoginChange(tx, input);
+  requireAdminAuthority(actorRole, input.role);
   await tx
     .update(persons)
     .set({ role: input.role })
     .where(eq(persons.id, settleId(input.personId)));
+  if (input.role !== targetRole && (input.role === "admin" || targetRole === "admin"))
+    await invalidatePersonAccountActions(tx, settleId(input.personId));
 }
 
 export async function resetPin(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; pin: string },
 ): Promise<void> {
-  await authorizeManager(tx, {
-    managementSessionId: input.managementSessionId,
-    permission: "person.manage",
-  });
+  await authorizePersonLoginChange(tx, input);
   assertPinLength(input.pin);
   await tx
     .update(persons)
@@ -489,10 +524,7 @@ export async function setPassword(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; password: string },
 ): Promise<void> {
-  await authorizeManager(tx, {
-    managementSessionId: input.managementSessionId,
-    permission: "person.manage",
-  });
+  await authorizePersonLoginChange(tx, input);
   assertPasswordLength(input.password);
   await tx
     .update(persons)
@@ -505,10 +537,7 @@ export async function setEmail(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; email: string },
 ): Promise<void> {
-  await authorizeManager(tx, {
-    managementSessionId: input.managementSessionId,
-    permission: "person.manage",
-  });
+  await authorizePersonLoginChange(tx, input);
   const email = normalizeAndValidateEmail(input.email);
   try {
     await tx
@@ -539,10 +568,7 @@ export async function suspendPerson(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  const { authorizedBy } = await authorizeManager(tx, {
-    managementSessionId: input.managementSessionId,
-    permission: "person.manage",
-  });
+  const { authorizedBy } = await authorizePersonLoginChange(tx, input);
   if (authorizedBy === settleId(input.personId)) throw new AppError("person.self_deactivation", {});
   await tx
     .update(persons)
@@ -554,10 +580,7 @@ export async function reactivatePerson(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  await authorizeManager(tx, {
-    managementSessionId: input.managementSessionId,
-    permission: "person.manage",
-  });
+  await authorizePersonLoginChange(tx, input);
   await tx
     .update(persons)
     .set({ status: "active" })

@@ -1,5 +1,10 @@
 # A987: a venue preparing to go live sends real email
 
+> 2026-10-22: A998 supersedes the account-takeover paths described below. Admin sign-in changes,
+> admin invitations and saved SMTP relay changes require `person.admin`; captured messages are
+> visible only to admins. The dated experiments below describe the earlier tree. A987's decisions
+> about email delivery stages remain separate.
+
 Status: draft for owner review
 
 Written 2026-10-22 by an unattended campaign run, and revised the same day after a fresh review and a

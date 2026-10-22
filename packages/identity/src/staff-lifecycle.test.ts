@@ -501,9 +501,12 @@ describe("updatePersonDetails refusals and side effects", () => {
     expect(await sessionEndedAt(tillSessionId)).toEqual(expect.any(String));
   });
 
-  it("lets a manager edit the only active admin's details when role and status stay the same", async () => {
+  it("lets a manager edit an admin's non-login details when sign-in details stay the same", async () => {
     const { token } = await openManagementSession(suite.db, "manager");
     const admin = await seedPerson(suite.db, "admin");
+    await suite.db.execute(
+      sql`update persons set email = ${details(token, admin).email} where id = ${admin}`,
+    );
     await run((tx) =>
       updatePersonDetails(
         tx,

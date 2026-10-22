@@ -1,5 +1,6 @@
 // The management-session permission gate over a migrated venue database: a real session row, a real
 // person row and a real permission lookup, with only the Mailpit client faked.
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
@@ -21,7 +22,7 @@ const suite = useVenueDb({
 const noopLog: Logger = () => {};
 let nif = 74_000_000;
 
-async function setupVenue(): Promise<{ manager: string; staff: string }> {
+async function setupVenue(): Promise<{ admin: string; manager: string; staff: string }> {
   nif += 1;
   await applyVenue(
     planVenue(
@@ -67,9 +68,18 @@ async function setupVenue(): Promise<{ manager: string; staff: string }> {
         personId: inserted!.id,
       });
     };
-    return { manager: await start("manager"), staff: await start("staff") };
+    const [admin] = await tx
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.role, "admin"));
+    return {
+      admin: await startManagementSession(tx, { personId: admin!.id }),
+      manager: await start("manager"),
+      staff: await start("staff"),
+    };
   });
   return {
+    admin: `${MANAGEMENT_COOKIE}=${sessions.admin.token}`,
     manager: `${MANAGEMENT_COOKIE}=${sessions.manager.token}`,
     staff: `${MANAGEMENT_COOKIE}=${sessions.staff.token}`,
   };
@@ -141,11 +151,11 @@ describe("mountEmailInboxApi", () => {
     expect((await get(app, "/management-api/email", venue.staff)).status).toBe(403);
   });
 
-  it("returns the captured inbox to a manager", async () => {
+  it("returns the captured inbox to an admin", async () => {
     const venue = await setupVenue();
     const { app } = mount("local_capture");
 
-    const response = await get(app, "/management-api/email", venue.manager);
+    const response = await get(app, "/management-api/email", venue.admin);
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ mode: "local_capture", ...SUMMARY });
@@ -165,7 +175,7 @@ describe("mountEmailInboxApi", () => {
     const venue = await setupVenue();
     const { app, mailpit } = mount("local_capture");
 
-    const response = await get(app, "/management-api/email/message/mail-1", venue.manager);
+    const response = await get(app, "/management-api/email/message/mail-1", venue.admin);
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ id: "mail-1", subject: "Set up your account" });
@@ -176,11 +186,31 @@ describe("mountEmailInboxApi", () => {
     const venue = await setupVenue();
     const { app } = mount("smtp");
 
-    const response = await get(app, "/management-api/email/message/mail-1", venue.manager);
+    const response = await get(app, "/management-api/email/message/mail-1", venue.admin);
 
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({
       error: { code: "email.test_inbox_unavailable" },
     });
   });
+});
+
+it("does not return captured message headers, snippets or links to a manager", async () => {
+  const venue = await setupVenue();
+  const { app, mailpit } = mount("local_capture");
+  const response = await get(app, "/management-api/email", venue.manager);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ mode: "local_capture", count: 0, messages: [] });
+  expect(mailpit.list).not.toHaveBeenCalled();
+});
+
+it("refuses a manager's direct captured-message read", async () => {
+  const venue = await setupVenue();
+  const { app, mailpit } = mount("local_capture");
+  const response = await get(app, "/management-api/email/message/mail-1", venue.manager);
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({
+    error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+  });
+  expect(mailpit.read).not.toHaveBeenCalled();
 });

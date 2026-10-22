@@ -3,14 +3,16 @@
 The open entries are listed in [the backlog](../backlog.md), under "Users, sign-in and the dashboard shell". This file holds
 their full text.
 
-## A manager can take over an admin account by changing its email address and resetting the password (found by A987's review, 2026-10-22) — OPEN
+## Non-admin sign-in authority
 
-`PUT /management-api/staff/:id` needs only `person.manage` and refuses `person.admin` only when the role
-changes (`packages/identity/src/staff.ts:182-186`). Run 2026-10-22: a manager changed the admin's
-address to one the manager controls (204), requested a reset to it, the message went there, the link
-completed (200), sign-in answered 200 and `mirror.create` was allowed. Decide the fix: e.g. changing an
-admin's sign-in address needs `person.admin`, or a reset to a changed address needs the old address's
-confirmation.
+Decide whether staff management includes changing a non-admin's sign-in details. A manager can
+change a non-admin's email, then receive and complete a reset sent to that address. Restricting
+all other people's email, PIN and login resets to admins would change this staff-management
+workflow. A998's owner instructions explicitly protect admins and retain non-admin management,
+but also say managers never receive another person's reset link; the broader policy needs an
+owner decision. Admin targets, captured messages and saved account-mail relays are protected
+separately. The non-admin email case is exercised in
+`packages/identity/src/staff-authority.test.ts`.
 
 ## `date-utils.test.ts` has a test titled as guarding "against a vacuous pass"
 

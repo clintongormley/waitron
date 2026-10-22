@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import { withTransaction, type Database } from "@waitron/db";
-import { authorizeManager } from "@waitron/identity";
+import { authorizeManager, roleHasPermission, type Permission } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
@@ -23,21 +23,21 @@ const STATUS = {
   "email.test_inbox_unavailable": 409,
 } as const;
 
-/** Mount the manager-only view of locally captured account email. */
 export function mountEmailInboxApi(app: Hono, deps: EmailInboxApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "email_inbox.failed");
-  const authorize = async (c: Context): Promise<void> => {
+  const authorize = async (c: Context, permission: Permission = "person.manage") => {
     const sessionId = requireManagementSession(c);
-    await withTransaction(deps.db, async (tx) => {
-      await authorizeManager(tx, { managementSessionId: sessionId, permission: "person.manage" });
+    return withTransaction(deps.db, async (tx) => {
+      return authorizeManager(tx, { managementSessionId: sessionId, permission });
     });
   };
 
   app.get("/management-api/email", (c) =>
     run(c, log, async () => {
-      await authorize(c);
+      const actor = await authorize(c);
       const mode = await deps.resolveMode();
-      if (mode !== "local_capture") return c.json({ mode, count: 0, messages: [] });
+      if (mode !== "local_capture" || !roleHasPermission(actor.role, "person.admin"))
+        return c.json({ mode, count: 0, messages: [] });
       const inbox = await deps.mailpit.list();
       return c.json({ mode, ...inbox });
     }),
@@ -45,7 +45,7 @@ export function mountEmailInboxApi(app: Hono, deps: EmailInboxApiDeps, log: Logg
 
   app.get("/management-api/email/message/:id", (c) =>
     run(c, log, async () => {
-      await authorize(c);
+      await authorize(c, "person.admin");
       if ((await deps.resolveMode()) !== "local_capture") {
         throw new AppError("email.test_inbox_unavailable", {});
       }

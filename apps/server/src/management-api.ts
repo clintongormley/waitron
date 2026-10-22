@@ -37,6 +37,7 @@ import {
   beginGoogleLogin,
   beginPasskeyAuthentication,
   beginPasskeyRegistration,
+  authorizePersonLoginChange,
   clearPersonPin,
   claimGoogleState,
   completeAccountAction,
@@ -1121,15 +1122,13 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
       await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "person.manage",
-        });
+        await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
       });
       if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });
       }
       const issued = await withTransaction(deps.db, async (tx) => {
+        await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
         return issueAccountAction(tx, {
           personId,
           purpose: "invitation",
@@ -1207,10 +1206,7 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
       await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "person.manage",
-        });
+        await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
       });
       if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });
@@ -1231,10 +1227,7 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
       await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "person.manage",
-        });
+        await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
       });
       if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });

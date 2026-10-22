@@ -4257,13 +4257,11 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
-- **A manager can take over an admin account by changing its email address and resetting the password (found by A987's review, 2026-10-22) — OPEN.** `PUT /management-api/staff/:id` needs only `person.manage` and refuses `person.admin` only when the role
-  changes (`packages/identity/src/staff.ts:182-186`). Run 2026-10-22: a manager changed the admin's
-  address to one the manager controls (204), requested a reset to it, the message went there, the link
-  completed (200), sign-in answered 200 and `mirror.create` was allowed. Decide the fix: e.g. changing an
-  admin's sign-in address needs `person.admin`, or a reset to a changed address needs the old address's
-  confirmation.
-  [Detail](backlog/dashboard.md#a-manager-can-take-over-an-admin-account-by-changing-its-email-address-and-resetting-the-password-found-by-a987s-review-2026-10-22--open)
+- **Decide whether managers may change non-admin sign-in details.** Staff management lets a
+  manager change a non-admin's email and request a reset there; a manager can therefore receive
+  that account's reset link. Decide whether this authority stays with staff management or every
+  other person's sign-in change needs an admin. Admin accounts and the shared mail paths have
+  separate checks. [Detail](backlog/dashboard.md#non-admin-sign-in-authority)
 
 - **Spacing for buttons grouped beside Cancel belongs in `wt-form-actions`.** The
   `[Cancel] [Delete…] … [Save]` row (design-system.md → Forms) has each dialog space its own group;
