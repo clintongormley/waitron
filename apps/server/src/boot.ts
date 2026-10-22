@@ -1508,6 +1508,9 @@ async function bootServer(
   // A BOOT decision, deliberately not live: an in-process promotion does not start the duties gated
   // on this without a restart.
   const isSingletonPrimary = holders.singletonRole.current === "primary";
+  // Asked on each call, unlike `isSingletonPrimary`: the role can change while the box runs.
+  const filesRecords = () =>
+    fiscalDrainEnabled(config) && holders.singletonRole.current === "primary";
   // FAIL CLOSED before the mirror's ambient full-admin viewer is seeded below: the loopback default
   // of `config.httpHost` is the only thing keeping it off the network, so a non-loopback bind is
   // refused unless the operator opts in (`WAITRON_MIRROR_ALLOW_EXPOSED`).
@@ -1829,9 +1832,7 @@ async function bootServer(
         notices: {
           sources: deviceNoticeSources({ disk: diskFull, space: freeSpace }, setsToMigrate),
           clock: tillClock,
-          filing: () => ({
-            enabled: fiscalDrainEnabled(config) && holders.singletonRole.current === "primary",
-          }),
+          filing: () => ({ enabled: filesRecords() }),
         },
       },
       log,
@@ -1951,7 +1952,7 @@ async function bootServer(
         nodeId: till.nodeId,
         locationId: till.locationId,
         environment: config.environment,
-        filing: () => fiscalDrainEnabled(config) && holders.singletonRole.current === "primary",
+        filing: filesRecords,
         now,
       },
       log,

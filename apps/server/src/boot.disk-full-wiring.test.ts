@@ -7,6 +7,7 @@ import type { VenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
+import type { DeviceApiDeps } from "./device-api.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { TillApiDeps } from "./till-api.js";
 import { serverFixture } from "./testing/server-fixture.js";
@@ -209,6 +210,35 @@ describe("boot's full-disk stop wiring", () => {
       await rm(scratch, { recursive: true, force: true });
     }
   });
+
+  it.each([
+    { extra: {}, filing: false },
+    { extra: { WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled" }, filing: true },
+  ])(
+    "hands the equipment read the box's notice over the same stop, the enabled modules' sources and filing: $filing",
+    async ({ extra, filing }) => {
+      beforeServerStarts();
+      const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-disk-full-wiring-"));
+      let server: StartedServer | undefined;
+      try {
+        const { env } = await startEnv(scratch);
+        server = await startServer({ ...env, ...extra }, { ...env, ...extra });
+        const state = seen.created[0]!.state as DiskFullState;
+        const notices = (seen.deviceDeps[0] as DeviceApiDeps).notices!;
+        expect(notices.sources.map(({ owner }) => owner)).toEqual(["box", "fiscal-verifactu"]);
+        expect(notices.filing()).toEqual({ enabled: filing });
+        const reading = notices.clock.now();
+        const box = notices.sources[0]!.source;
+        const ask = () => box.read({ tx: suite.db, reading });
+        expect(await ask()).toEqual([]);
+        state.noteRefused();
+        expect((await ask()).map(({ key }) => key)).toEqual(["storage.disk_full"]);
+      } finally {
+        await server?.close();
+        await rm(scratch, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("a refused start stops listening", async () => {
     beforeServerStarts();

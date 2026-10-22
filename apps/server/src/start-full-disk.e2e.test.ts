@@ -565,6 +565,8 @@ describe("a start on a real full disk", () => {
         .set({ tokenHash: hashSecret(token), lastSeenAt: "2020-01-01T00:00:00.000Z" })
         .where(eq(devices.id, deviceId));
       db.run(sql`create table zz (id integer primary key, pad blob)`);
+      // The full disk refuses this insert too, so this case shows the writer failing alone, not
+      // why; the changed-row rule is checked by `readStaffNoticesInTurns`' own cases.
       const writer: OwnedStaffNoticeSource = {
         owner: "writer",
         source: {
