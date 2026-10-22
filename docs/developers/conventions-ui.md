@@ -1579,6 +1579,36 @@ changes.
 Nothing guards a new field: a new `/api/till` field moves the revision, but reaches an open till
 only once someone adds it to `#applyVenueSetup`.
 
+**Notices.** The till's staff notices (the strip under its top bar, see
+[design-system.md](design-system.md#the-notice-strip-till)) come with every read of
+`GET /api/device/equipment`: the equipment poll's, every 15 seconds from sign-in (`POLL_MS`,
+`apps/till/src/state/equipment-poll.ts`), and every other read of the device's equipment. Each goes
+through `#readDeviceEquipment` (`apps/till/src/till-app.ts`), which numbers the read when it is
+sent and applies its notices only when no read sent after it has been applied and the person who
+was signed in when it was sent still is (`#operatorSession`). Its notices apply even when an
+equipment change overtook its equipment. A read that fails changes nothing. The answer's
+`noticesUnavailable` names the owners whose check failed on the box; the till keeps what each of
+those owners last said and drops every other owner's old notices (`nextNotices`,
+`apps/till/src/state/staff-notices.ts`), then orders them errors, warnings, then the rest, in the
+box's order within each. Logging out clears them (`#endOperatorSession`), so nothing carries from
+one session to the next. A kitchen display in device mode signs no one in, runs no equipment poll
+and draws no strip. Pinned by `apps/till/src/till-app.notices.test.ts`, under "the staff notices an
+open till keeps", and `apps/till/src/state/staff-notices.test.ts`.
+
+**A notice code's words.** The till words a notice by its `code` (`staffNoticeText`,
+`apps/till/src/i18n/staff-notices.ts`) from `staff_notice.<code>` in
+`apps/till/src/i18n/strings.ts`, in English and Spanish; a code it has no words for is drawn as
+"The box needs attention · Tell a manager", in its own tone. `scripts/staff-notice-codes.test.ts`
+holds every code a source sends to those words, and is weaker than its name:
+
+- It reads text: only a double-quoted `code: "…"` literal is found, so a code built at runtime or
+  spelled with another quote escapes it.
+- It reads only the files it lists (`apps/server/src/box-staff-notices.ts` and
+  `packages/fiscal-verifactu/src/staff-notices.ts`); a source in another file, such as a new
+  module's, is seen by nothing until that file is added to the list.
+- It checks the strings file, not `staffNoticeText`: a code with words but no branch there is still
+  drawn as unknown.
+
 **The handheld's pay sheet.** Opening the sheet on a handheld reads the phone's equipment again,
 for an open bill and for a presented one; while the sheet shows a card payment of its own that the
 reader has not answered, it reads the bill again every 5 seconds (`PENDING_REREAD_MS`,

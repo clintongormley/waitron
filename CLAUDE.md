@@ -325,6 +325,10 @@ called weaker than its name, the topic file lists what it does not see.
 - **A value the till takes from its start read either refreshes through `setupRevision` or is
   listed as fixed until reload**, with why, in [conventions-ui.md](docs/developers/conventions-ui.md).
   Cost: courses stayed missing from an open table until a reload (A768). Nothing guards it.
+- **A staff-notice code needs till words in English and Spanish** (`staff_notice.<code>` in
+  `apps/till/src/i18n/strings.ts`); a code without them is drawn as "The box needs attention".
+  Guard: `scripts/staff-notice-codes.test.ts`, weaker than its name — it reads `code: "…"` literals
+  in the files it lists. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A background API client does not make POST requests passive.** Only GETs are marked passive;
   automatic pairing renewal uses its own authenticated route.
 - **Dashboard subscription names travel with their server sources.** A rejected subscription closes
@@ -494,7 +498,18 @@ called weaker than its name, the topic file lists what it does not see.
   (`inTurn`, `apps/server/src/attempt-turns.ts`), derives
   under the lock or once per attempt in a burst, unnoticed. **Splitting one logical change across
   transactions is a commented decision, never a default.** **Queries on one transaction are awaited
-  in turn, never `Promise.all`.** No guard enforces it.
+  in turn, never `Promise.all`.** No guard enforces it. The one stated exception to one
+  `withTransaction` per route is the next entry's.
+- **A housekeeping write on a read path must not take the read down on a full disk.** The
+  last-seen stamp gives way to a full disk in `readDeviceProof` and `requireSession` (there, so
+  does its own transaction's change-log drain); a read-only `withTransaction` is still refused
+  while a change waits, by its drain, so a read that must answer on a full disk reads in turns
+  (`withWriteLock`, no drain), as the equipment read does — the one stated exception to one
+  `withTransaction` per route. Cost: the strip's read and every non-passive session-checked read
+  answered 507 on a full disk a minute after the last stamp (A798-B slice 6). Guard: the full-disk
+  cases in `apps/server/src/start-full-disk.e2e.test.ts`, weaker than the rule — they cover the
+  routes they name. Receipt:
+  [conventions-data.md](docs/developers/conventions-data.md#a-read-on-a-full-disk-must-not-fail-on-its-own-housekeeping-write).
 - **A read taken while ANOTHER caller's write transaction is open sees committed rows only.** Three
   shapes are outside the rule, each stated at its site. Cost: a concurrent read returned rows a
   rollback then removed. Guard: the routing cases in `packages/store/src/index.test.ts` and
