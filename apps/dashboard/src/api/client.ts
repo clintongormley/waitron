@@ -3914,7 +3914,7 @@ export class DashboardApi {
     );
   }
 
-  // ── Purchase invoices (facturas recibidas) ────────────────────────────────────────────────────
+  // ── Purchase invoices ────────────────────────────────────────────────────────────────────────
 
   listPurchaseInvoices(): Promise<PurchaseInvoice[]> {
     return this.#request<PurchaseInvoice[]>("/management-api/purchase-invoices", "GET");

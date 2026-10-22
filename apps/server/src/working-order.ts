@@ -4681,7 +4681,7 @@ export interface HeldOrderSummary {
   id: string;
   orderNumber: number;
   /**
-   * The operator-supplied label ("Mesa 4"); on an open bill moved to the counter, the party's display
+   * The operator-supplied label; on an open bill moved to the counter, the party's display
    * name the server set; null when neither gave one.
    */
   label: string | null;
