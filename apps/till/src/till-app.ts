@@ -53,6 +53,7 @@ import {
 import {
   MONEY_SCALE,
   addDecimal,
+  cancelRefundShare,
   subtractDecimal,
   compareDecimal,
   decimal,
@@ -182,7 +183,7 @@ import type { CancelItemChoice } from "./widgets/cancel-item-dialog.js";
 import "./widgets/finish-table-dialog.js";
 import type { FinishTableChoice } from "./widgets/finish-table-dialog.js";
 import type { FinishTableResolution, UnservedDish } from "./api/finish-table-types.js";
-import type { CancellationRead, CancelItemRequest } from "./api/line-cancel-types.js";
+import type { CancellationRead, CancelItemRequest, RefundLink } from "./api/line-cancel-types.js";
 import {
   refusalField,
   type AdjustKind,
@@ -224,6 +225,7 @@ import {
   TenderRefundAttempts,
   TenderRefundSession,
   TenderRefundAttemptError,
+  tenderRefundAmount,
   type SavedTenderRefund,
   type TenderRefundAsk,
   type TenderRefundScope,
@@ -1000,6 +1002,14 @@ function sameFinishContext(
       ),
   ];
   return JSON.stringify(values(a)) === JSON.stringify(values(b));
+}
+
+/** What a cancel handed to a refund fills in on the refund screen. */
+interface RefundFill {
+  target: string;
+  startReasonId: string;
+  dishes: string;
+  cancellationIds: string[];
 }
 
 interface FinishingTable {
@@ -2783,6 +2793,9 @@ export class TillApp extends LitElement {
     refusal: DialogRefusal | null;
     approvers?: StaffMember[];
     pinError: string | null;
+    reasons: AdjustmentReason[] | null;
+    reasonsLoading: boolean;
+    fill?: RefundFill;
   } | null = null;
   @state() private findBillError?:
     | StringKey
@@ -7336,6 +7349,7 @@ export class TillApp extends LitElement {
       refundId: string | null;
     },
     cancellation?: CancellingItem | (() => boolean),
+    fill?: RefundFill,
   ): Promise<void> {
     const originCurrent =
       cancellation === undefined
@@ -7408,7 +7422,7 @@ export class TillApp extends LitElement {
             this.#operatorSession === session &&
             this.api === api
           )
-            this.#openTenderRefund();
+            this.#openTenderRefund(fill);
         }
       }
     } catch {
@@ -7501,7 +7515,7 @@ export class TillApp extends LitElement {
     this.#closeTenderRefund();
   }
 
-  #openTenderRefund(): void {
+  #openTenderRefund(fill?: RefundFill): void {
     const receipt = this.historicalReceipt;
     const session = this.#tenderRefundSession;
     if (
@@ -7523,10 +7537,59 @@ export class TillApp extends LitElement {
         refusal: null,
         pinError: null,
         busy: false,
+        reasons: null,
+        reasonsLoading: false,
+        ...(fill === undefined ? {} : { fill }),
       };
     } catch {
       this.errorKey = "tender_refund.storage";
+      return;
     }
+    void this.#loadTenderRefundReasons();
+  }
+
+  async #loadTenderRefundReasons(): Promise<void> {
+    const open = this.tenderRefunding;
+    if (!open || open.reasonsLoading) return;
+    const api = this.api;
+    const current = () =>
+      this.isConnected && this.tenderRefunding?.visit === open.visit && this.api === api;
+    this.tenderRefunding = { ...open, reasonsLoading: true };
+    let reasons: AdjustmentReason[] | null = null;
+    try {
+      reasons = await api.listAdjustmentReasons();
+    } catch {
+      // The dialog offers Retry while the reasons are unread.
+    }
+    if (current())
+      this.tenderRefunding = { ...this.tenderRefunding!, reasons, reasonsLoading: false };
+  }
+
+  /** The cancels' ids go only with a refund the fill covers: no tip, and at most the dishes' total. */
+  #linkedAsk(ask: TenderRefundAsk, fill: RefundFill | undefined): TenderRefundAsk {
+    const rest: TenderRefundAsk = { ...ask };
+    delete rest.cancellationIds;
+    const applied = tenderRefundAmount(ask.appliedAmount);
+    const tip = tenderRefundAmount(ask.tipAmount);
+    if (
+      fill === undefined ||
+      fill.cancellationIds.length === 0 ||
+      applied === null ||
+      tip === null ||
+      compareDecimal(decimal(tip), decimal("0")) !== 0 ||
+      compareDecimal(decimal(applied), decimal(fill.target)) > 0
+    )
+      return rest;
+    return { ...rest, cancellationIds: [...fill.cancellationIds] };
+  }
+
+  #refundAtTill(fill: RefundFill | undefined): boolean {
+    if (fill === undefined) return false;
+    const available = this.refundableTenders.filter((row) =>
+      this.#cancellationPaymentAvailable(row),
+    );
+    const here = available.filter((row) => this.#refundMethodAllowed(row));
+    return here.length <= 1 && here.length < available.length;
   }
 
   async #askTenderRefundApprover(): Promise<void> {
@@ -7552,7 +7615,12 @@ export class TillApp extends LitElement {
     if (!open || open.busy || open.attempt || open.result) return;
     const tender = this.refundableTenders.find((row) => row.tenderId === ask.tenderId);
     if (!tender || tender.pendingRefundId !== null || !this.#refundMethodAllowed(tender)) return;
-    this.tenderRefunding = { ...open, ask, busy: true, refusal: null };
+    this.tenderRefunding = {
+      ...open,
+      ask: this.#linkedAsk(ask, open.fill),
+      busy: true,
+      refusal: null,
+    };
     if (tender.manual) await this.#askTenderRefundApprover();
     else await this.#runTenderRefund("submit");
   }
@@ -7668,6 +7736,16 @@ export class TillApp extends LitElement {
         .result=${open.result}
         .busy=${open.busy}
         .refusal=${open.refusal}
+        .reasons=${open.reasons}
+        .reasonsLoading=${open.reasonsLoading}
+        .startReasonId=${open.fill?.startReasonId ?? ""}
+        .dishes=${open.fill?.dishes ?? ""}
+        .target=${open.fill?.target ?? ""}
+        .refundAtTill=${this.#refundAtTill(open.fill)}
+        @tender-refund-reasons=${(event: Event) => {
+          event.stopPropagation();
+          if (this.tenderRefunding?.visit === open.visit) void this.#loadTenderRefundReasons();
+        }}
         @tender-refund-submit=${(event: CustomEvent<TenderRefundAsk>) => {
           event.stopPropagation();
           if (this.tenderRefunding?.visit === open.visit)
@@ -12801,6 +12879,7 @@ export class TillApp extends LitElement {
       await this.#rereadAmounts(open.billId, open.visit);
       if (choice.outcome === "refund" && this.#cancellationCurrent(open)) {
         await this.updateComplete;
+        const fill = this.#cancelRefundFill(open, choice, answer.refundLinks ?? []);
         // Kitchen cancellation is committed before entering the independently retried refund flow.
         this.#requestLeave(() =>
           this.#openHistoricalReceipt(
@@ -12810,6 +12889,7 @@ export class TillApp extends LitElement {
               refundId: null,
             },
             open,
+            fill,
           ),
         );
       }
@@ -12825,6 +12905,27 @@ export class TillApp extends LitElement {
     } finally {
       limit.done();
     }
+  }
+
+  #cancelRefundFill(
+    open: CancellingItem,
+    choice: CancelItemChoice,
+    links: RefundLink[],
+  ): RefundFill | undefined {
+    const value = choice.consent.refundValue;
+    const component = choice.consent.context.components.find((row) => row.lineId === open.lineId);
+    if (value === undefined || component === undefined) return undefined;
+    return {
+      target: toScale(
+        cancelRefundShare(value, component.cancelledQuantity, choice.quantity),
+        MONEY_SCALE,
+      ),
+      startReasonId: choice.reasonId ?? "",
+      dishes: `${choice.quantity} × ${open.name}`,
+      cancellationIds: links
+        .filter((link) => link.lineId === open.lineId)
+        .map((link) => link.adjustmentId),
+    };
   }
 
   async #refuseItemCancellation(

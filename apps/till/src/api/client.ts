@@ -8,7 +8,7 @@ import type {
 } from "@waitron/module";
 import type { FinishTableResolution } from "./finish-table-types.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
-import type { CancellationRead, CancelItemRequest } from "./line-cancel-types.js";
+import type { CancelItemAnswer, CancellationRead, CancelItemRequest } from "./line-cancel-types.js";
 export type {
   CancellationContext,
   CancellationRead,
@@ -4235,7 +4235,7 @@ export class TillApi {
     lineId: string,
     command: CancelItemRequest,
     options: ReadOptions = {},
-  ): Promise<{ revision: number }> {
+  ): Promise<CancelItemAnswer> {
     return this.#request(
       `/api/parties/${partyId}/lines/${lineId}/cancel-item`,
       "POST",

@@ -555,3 +555,46 @@ it.each([false, true])(
     }
   },
 );
+
+it("keeps the cancellation ids in the order sent in the saved attempt, and in any order for its lock", () => {
+  const store = new TenderRefundAttempts();
+  const a = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const b = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const sent = store.prepare(scope, "sale-1", { ...ask, cancellationIds: [b, a] });
+  expect(sent.request.cancellationIds).toEqual([b, a]);
+  expect(store.read(scope, "sale-1")!.request.cancellationIds).toEqual([b, a]);
+  expect(store.prepare(scope, "sale-1", { ...ask, cancellationIds: [a, b] })).toEqual(sent);
+  expect(() => store.prepare(scope, "sale-1", { ...ask, cancellationIds: [a] })).toThrow("locked");
+  expect(() => store.prepare(scope, "sale-1", ask)).toThrow("locked");
+});
+
+it("saves no cancellation ids when none are named", () => {
+  const store = new TenderRefundAttempts();
+  expect(
+    store.prepare(scope, "sale-1", { ...ask, cancellationIds: [] }).request,
+  ).not.toHaveProperty("cancellationIds");
+  expect(store.prepare(scope, "sale-2", ask).request).not.toHaveProperty("cancellationIds");
+});
+
+it("resends the saved request with its cancellation ids after a lost answer", async () => {
+  const ids = ["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"];
+  const sent: TenderRefundRequest[] = [];
+  const api = {
+    refundTransaction: vi.fn(async (_sale: string, request: TenderRefundRequest) => {
+      sent.push(structuredClone(request));
+      if (sent.length === 1) throw new TypeError("Failed to fetch");
+      return reply();
+    }),
+    getTenderRefund: vi.fn(async () => reply()),
+    retryTenderRefund: vi.fn(async () => reply()),
+  };
+  const session = new TenderRefundSession(scope, api);
+  await expect(session.submit("sale-1", { ...ask, cancellationIds: ids })).rejects.toThrow(
+    "Failed to fetch",
+  );
+  await new TenderRefundSession(scope, api).retry("sale-1");
+  expect(sent).toHaveLength(2);
+  expect(sent[1]!.submissionId).toBe(sent[0]!.submissionId);
+  expect(sent[0]!.cancellationIds).toEqual(ids);
+  expect(sent[1]!.cancellationIds).toEqual(ids);
+});

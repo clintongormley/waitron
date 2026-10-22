@@ -24,6 +24,16 @@ export interface CancellationRead {
   refundValue?: { quantity: string; gross: string };
 }
 
+export interface RefundLink {
+  lineId: string;
+  adjustmentId: string;
+}
+
+export interface CancelItemAnswer {
+  revision: number;
+  refundLinks?: RefundLink[];
+}
+
 export interface CancelItemRequest {
   expectedEdit: BillEditExpected;
   quantity: string;

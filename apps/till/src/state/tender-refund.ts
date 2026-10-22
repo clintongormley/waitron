@@ -44,6 +44,12 @@ function normalized(ask: TenderRefundAsk): TenderRefundAsk {
     return fail("invalid");
   if (ask.manualConfirmed !== undefined && typeof ask.manualConfirmed !== "boolean")
     return fail("invalid");
+  const ids = ask.cancellationIds;
+  if (
+    ids !== undefined &&
+    (!Array.isArray(ids) || ids.some((id) => typeof id !== "string" || id === ""))
+  )
+    return fail("invalid");
   const appliedAmount = tenderRefundAmount(ask.appliedAmount) ?? fail("invalid");
   const tipAmount = tenderRefundAmount(ask.tipAmount) ?? fail("invalid");
   const total = moneyPlus(appliedAmount, tipAmount);
@@ -58,11 +64,13 @@ function normalized(ask: TenderRefundAsk): TenderRefundAsk {
     tipAmount,
     reason: ask.reason.trim(),
     manualConfirmed: ask.manualConfirmed === true,
+    ...(ids === undefined || ids.length === 0 ? {} : { cancellationIds: [...ids] }),
   };
 }
 
 function fingerprint(ask: TenderRefundAsk): string {
-  return JSON.stringify(normalized(ask));
+  const body = normalized(ask);
+  return JSON.stringify({ ...body, cancellationIds: [...(body.cancellationIds ?? [])].sort() });
 }
 
 /** Unknown outcomes keep the original request; a PIN exists only on the outgoing call. */
