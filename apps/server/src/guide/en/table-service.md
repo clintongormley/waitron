@@ -21,9 +21,9 @@ to do so.
 
 If a change to a bill would leave it owing less than it has already received, the refusal offers
 **Refund** with the excess amount. Choose it to open the bill's payments. When only one payment
-can be refunded, its refund window opens with the excess amount selected. Otherwise, choose the
-payment to refund. If the payments cannot be read, the window explains the failure; try again
-before choosing a payment.
+can be refunded, its refund window opens with the excess amount selected. If several payments
+can be refunded, choose which one to refund. If the payments cannot be read, the window explains
+the failure; close it and open it again before choosing a payment.
 
 ## Refund a card payment on a separate terminal {#separate-terminal}
 
