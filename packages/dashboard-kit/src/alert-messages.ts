@@ -3,8 +3,9 @@ import { currentLocale, pickLocale } from "./i18n.js";
 
 /** `{name}` is filled with the param as it is; `{name:money}` writes a decimal-string param as
  * euros, the way the alert's language writes them; `{name:date}` writes a `YYYY-MM-DD` param as
- * that calendar day, the way the alert's language writes it; `{name:list}` writes the words a
- * registered word list gives the param's value. */
+ * that calendar day, the way the alert's language writes it; `{name:bytes}` writes a number of
+ * bytes as gigabytes or megabytes, the way the alert's language writes them; `{name:list}` writes
+ * the words a registered word list gives the param's value. */
 export type AlertMessageTable = Readonly<
   Record<string, { readonly en: string; readonly es: string }>
 >;
@@ -54,6 +55,23 @@ function formatDay(value: unknown, l: string): string {
   }).format(at);
 }
 
+function formatBytes(value: unknown, l: string): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "—";
+  const v = Math.max(0, value);
+  const locale = pickLocale(DAY_LOCALES, l);
+  return Math.round(v / 1e6) >= 1000
+    ? new Intl.NumberFormat(locale, {
+        style: "unit",
+        unit: "gigabyte",
+        maximumFractionDigits: 1,
+      }).format(v / 1e9)
+    : new Intl.NumberFormat(locale, {
+        style: "unit",
+        unit: "megabyte",
+        maximumFractionDigits: 0,
+      }).format(v / 1e6);
+}
+
 function formatParam(value: unknown): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean")
@@ -77,6 +95,7 @@ export function alertMessage(
           : formatParam(value);
       }
       if (kind === "date") return formatDay(value, l);
+      if (kind === "bytes") return formatBytes(value, l);
       if (kind === undefined) return formatParam(value);
       if (!Object.hasOwn(wordLists, kind)) return formatParam(null);
       const list = wordLists[kind]!;
