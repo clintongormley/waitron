@@ -310,8 +310,9 @@ function sandbox({
   selfReplaceFail = false,
   imageMissing = "",
   imagePullFail = "",
+  directorySuffix = "",
 } = {}) {
-  const root = mkdtempSync(join(tmpdir(), "waitron-sh-"));
+  const root = mkdtempSync(join(tmpdir(), `waitron-sh-${directorySuffix}`));
   dirs.push(root);
   const boxDir = join(root, "box");
   const log = join(root, "calls.log");
@@ -489,10 +490,15 @@ describe("waitron.sh image provenance", () => {
     TZ: "Europe/Rome",
   };
 
-  it.each([["install"], ["update"], ["status"]])(
-    "reports running image IDs and local build times after %s",
-    (verb) => {
-      const sb = sandbox();
+  it.each([
+    ["install", ""],
+    ["update", ""],
+    ["status", ""],
+    ["status", "up-build-pull-"],
+  ])(
+    "reports running image IDs and local build times after %s with path suffix %j",
+    (verb, directorySuffix) => {
+      const sb = sandbox({ directorySuffix });
       writeFileSync(join(sb.boxDir, "compose.yml"), "stub\n");
       const r = run(sb, [verb], labels);
       expect(r.status, r.stderr).toBe(0);
@@ -505,7 +511,14 @@ describe("waitron.sh image provenance", () => {
       const calls = readFileSync(sb.log, "utf8");
       expect(calls).toContain("sha256:running-app");
       expect(calls).toContain("sha256:running-agent");
-      if (verb === "status") expect(calls).not.toMatch(/docker (build|pull)|compose .*up|curl /);
+      if (verb === "status") {
+        expect(calls).not.toMatch(/docker (build|pull)|curl /);
+        expect(
+          composeCalls(sb).filter((call) =>
+            call.split(/\s+/).some((word) => ["up", "build", "pull"].includes(word)),
+          ),
+        ).toEqual([]);
+      }
     },
   );
 
