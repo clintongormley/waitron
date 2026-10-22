@@ -74,7 +74,8 @@ persona.
 ## Mantén la comida visible hasta terminar el servicio {#service-lifetime}
 
 Una cuenta cobrada puede tener comida pendiente de servir. El pase y su monitor conservan esa
-comida hasta que la marques como servida o termines el servicio de la mesa. El pase no tiene una
+comida hasta que la marques como servida o termines el servicio de la mesa; la comida que una mesa
+cerrada pasa al mostrador sigue hasta que se entrega el pedido (más abajo). El pase no tiene una
 acción Hecho ni En camino aparte. Los platos listos conservan su estado Listo y los avisos de
 retraso mientras esperan a que los sirvas. Si las mesas se han
 unido a otro grupo de comensales, sus cuentas cobradas siguen visibles hasta que termine el grupo
@@ -98,8 +99,10 @@ cuenta.
 
 Un pedido de mostrador sigue visible después del cobro hasta que lo entregues o cierres. Cuando
 una mesa pagada se cierra con **Lo recogerán en el mostrador**, sus platos por llegar pasan a ser
-un pedido así: cada estación con un plato por llegar en él recibe un ticket MOVIDO al mostrador, y
-los platos siguen en el pase hasta que se entrega el pedido. Cada pase sigue mostrando solo las
+un pedido así: cada estación con un plato por llegar en él recibe el aviso de que el pedido pasó al
+mostrador, e imprime un ticket **MOVIDO** si su ajuste **Imprimir un aviso al cambiar de mesa los
+platos enviados** es **Imprimir**, o sigue el ajuste del local **Imprimir avisos MOVIDO**; los
+platos siguen en el pase hasta que se entrega el pedido. Cada pase sigue mostrando solo las
 estaciones y zonas de servicio que tiene asignadas.
 
 Tú decides cuándo pedir la preparación desde el terminal. En **Configuración del local**, la

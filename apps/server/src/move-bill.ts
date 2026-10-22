@@ -327,8 +327,8 @@ async function moveBillOnce(
 
 /**
  * Move a paid bill not yet handed over from `from`, the party being finished, to the counter. The
- * bill keeps its label, revision and zone: the database lets a settled bill's own row change its
- * party and nothing else. Only the stations with something on it still to come are told.
+ * bill keeps its label, revision and zone: the database lets a settled bill's own row leave its
+ * party and change nothing else. Only the stations with something on it still to come are told.
  */
 export async function moveSettledBillToCounter(
   tx: Transaction,

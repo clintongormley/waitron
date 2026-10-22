@@ -68,7 +68,8 @@ copies with the resulting kitchen work; it does not replace the guest's instruct
 ## Keep food visible until service ends {#service-lifetime}
 
 A paid bill can still have food waiting for its guests. The pass and its monitor keep that food
-visible until you mark it served or finish the table's service. The pass has no separate Done or Away action. Ready dishes keep their Ready label and late flags while they wait to be served. If tables have joined another
+visible until you mark it served or finish the table's service; food a finished table sends to the
+counter stays until the order is handed over (below). The pass has no separate Done or Away action. Ready dishes keep their Ready label and late flags while they wait to be served. If tables have joined another
 party, their paid bills stay visible until the surviving party finishes.
 
 On the table, a ready dish stays **Ready** in its detail window until you mark it served.
@@ -85,7 +86,9 @@ quantity no longer counts as food to serve, even when its charge stays on the bi
 
 A counter order stays visible after payment until you collect or close it. When a paid table
 finishes with **They'll collect it at the counter**, its food still to come becomes such an order:
-each station with a dish still to come on it gets a MOVED slip to the counter, and the food stays
+each station with a dish still to come on it is told it moved to the counter, and prints a **MOVED**
+slip when its **Print a slip when sent dishes move table** setting is **Print**, or follows the
+venue's **Print MOVED slips**; the food stays
 on the pass until the order is handed over. Each pass still shows only the stations and service
 zones assigned to it.
 

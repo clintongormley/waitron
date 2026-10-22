@@ -269,7 +269,7 @@ describe("working_orders state machine (enforce_transition)", () => {
       ),
     );
     expect(engineErrorMessage(eLabel)).toBe(TRANSITION_REFUSAL);
-    // A bare settled_at edit: the relaxation requires collected_at itself to go NULL→non-null.
+    // A bare settled_at edit: the handover relaxation requires collected_at itself to go NULL→non-null.
     const eSettledAt = await captureError(() =>
       inTx((tx) =>
         tx.update(workingOrders).set({ settledAt: now() }).where(eq(workingOrders.id, id)),
@@ -280,7 +280,7 @@ describe("working_orders state machine (enforce_transition)", () => {
     await inTx((tx) =>
       tx.update(workingOrders).set({ collectedAt: now() }).where(eq(workingOrders.id, id)),
     );
-    // A re-stamp of an already-collected order: the relaxation requires the old collected_at null.
+    // A re-stamp of an already-collected order: the handover relaxation requires the old collected_at null.
     const eRecollect = await captureError(() =>
       inTx((tx) =>
         tx.update(workingOrders).set({ collectedAt: now() }).where(eq(workingOrders.id, id)),

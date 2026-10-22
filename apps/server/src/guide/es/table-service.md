@@ -49,8 +49,9 @@ rellenada, como se explica en **Devolver un pago desde el recibo**.
 
 ## Cerrar una mesa pagada con platos aún por llegar {#finish-paid-table}
 
-Cuando eliges **Cerrar mesa** y una cuenta pagada aún tiene platos sin servir, todos se cancelan
-antes de cerrar la mesa. Una ventana con un título como **2 platos sin servir** los muestra.
+Cuando eliges **Cerrar mesa** y una cuenta pagada aún tiene platos sin servir, una ventana con un
+título como **2 platos sin servir** los muestra, y puedes cancelarlos todos o, si alguno tiene ticket de cocina, pasar
+la comida al mostrador.
 
 Para un plato que ha pasado a cocina pero no está marcado como empezado, responde a **En
 preparación**. Para los demás, la ventana muestra la respuesta. Marca **Devolución** junto a cada
@@ -63,16 +64,16 @@ marcado. **Atrás** deja la mesa abierta. Si marcas **Devolución** y no puedes 
 alguien que pueda introduce su PIN. Si un pago se cobró de una forma que este dispositivo no
 acepta, la ventana te indica que lo devuelvas en una caja desde el recibo.
 
+Cuando la mesa se cierra, una ventana **Devolución** muestra cada recibo con platos marcados. Elige
+uno para abrir su devolución, ya rellenada. Si solo hay un recibo, su devolución se abre
+directamente.
+
 Si los clientes van a esperar y recoger la comida en el mostrador, elige **Lo recogerán en el
 mostrador**. Aparece cuando al menos uno de los platos tiene ticket de cocina. No se cancela ni se
 devuelve nada. Los platos en espera pasan ahora a cocina, cada cuenta cuyos platos por llegar
 tienen ticket de cocina pasa a ser un pedido pagado que espera en el mostrador, y la mesa se
 cierra. El pedido espera en **Pedidos pendientes**, en la pantalla **Mostrador**, marcado
 **Pagado, sin entregar**, y aparece en **Buscar cuenta**; elige **Entregar** cuando lo recojan.
-
-Cuando la mesa se cierra, una ventana **Devolución** muestra cada recibo con platos marcados. Elige
-uno para abrir su devolución, ya rellenada. Si solo hay un recibo, su devolución se abre
-directamente.
 
 ## Devolver un pago desde el recibo {#refund-receipt}
 

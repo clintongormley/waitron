@@ -266,7 +266,7 @@ the owner points at the end.
     "Decisions and deliberate limits", and adds **A1025** (the owner looks at A758-7's choices),
     **A1026** (Decision 11) and **A1027** (Decision 10). The numbers were first taken
     from `~/waitron-campaign-shared/next-item-number` as A1023–A1025; other lanes took those
-    meanwhile, so the build renumbered them A1025–A1027 (2026-10-23).
+    meanwhile, so the build renumbered them A1025–A1027 (2026-10-23). The build also found A1029 and A1030.
 
 ---
 
@@ -805,7 +805,8 @@ its header, beside the A758-6 one at `:3-5`).
   sigue visible después del cobro hasta que lo entregues o cierres.» — "Cuando una mesa pagada se
   cierra con **Lo recogerán en el mostrador**, sus platos por llegar pasan a ser un pedido así: cada
   estación recibe un ticket MOVIDO al mostrador, y los platos siguen en el pase hasta que se entrega
-  el pedido." Each bold word is checked against the till's strings in both languages before
+  el pedido." (2026-10-23: the shipped wording differs — see the guides; a station prints only as
+  its moved-slip setting says.) Each bold word is checked against the till's strings in both languages before
   committing (`tab.counter`, `waiting.title`, `waiting.paid_not_handed_over`, `waiting.hand_over`,
   `find_bill.title`, `finish_table.collect`). No new heading, so no new `{#id}`. Run the guide
   suites.

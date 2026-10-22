@@ -840,7 +840,7 @@ observations against that design; the original observations below are not fresh 
     invoices it.** Every other path that invoices such a bill saves the receipt label in the
     update that settles it; the departure leaves the bill placed, and the placed-to-placed clause
     of `working_orders_enforce_transition` (latest in
-    `packages/db/drizzle/0056_placed_order_handover.sql`) requires the label to stay as it is
+    `packages/db/drizzle/0185_settled_order_to_counter.sql`) requires the label to stay as it is
     (measured 2026-10-01: saving it made the departure answer 500). Not measured: what its
     invoice's reprint and the debt list then show. Fixing it needs that trigger to allow the
     label to change. A bill the departure settles because it owes nothing goes through

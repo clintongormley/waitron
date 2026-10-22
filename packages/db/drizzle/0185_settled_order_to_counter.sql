@@ -84,7 +84,7 @@ BEGIN
         AND new.receipt_locale IS old.receipt_locale
         AND new."party_id" IS old."party_id"
         AND new.delivery_table_label IS old.delivery_table_label)
-    -- A paid bill a finished table sends to the counter leaves its party once, before handover (A758-7).
+    -- A paid bill not yet handed over may leave its party, once; only the server limits this to Finish table's counter collection (A758-7).
     OR (old.status = 'settled' AND new.status = 'settled'
         AND old.collected_at IS NULL AND new.collected_at IS NULL
         AND old.party_id IS NOT NULL AND new.party_id IS NULL
