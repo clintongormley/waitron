@@ -115,7 +115,7 @@ export async function provisionAllocatedTestVenue(deps: ProvisionDeps, request: 
     }),
   });
   const held = await withOperationAuthority(binding, administratorId, (authority) =>
-    preparation.select({ binding, authority, answer: "no" }),
+    preparation.select({ binding, authority, answer: "no", comparisonId: "comparison" }),
   );
   if (held.status !== "selected") throw new Error("synthetic hour was not selected");
   return provisionVenue(

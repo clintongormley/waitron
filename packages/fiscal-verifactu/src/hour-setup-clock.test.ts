@@ -358,3 +358,46 @@ it("two pages keep their own readings", async () => {
   expect(f.clock.read("owned-scope", resultB.id).clock.secondClock).toBe(true);
   expect(f.clock.read("owned-scope", resultA.id).clock.secondClock).toBe(false);
 });
+it("a read with no comparison id uses the newest reading that admits a name", async () => {
+  const f = fixture();
+  const b = f.clock.challenge("owned-scope");
+  await f.clock.compare(
+    "owned-scope",
+    "preproduction",
+    { challengeId: b.id, instantMs: NOW },
+    PHONE,
+  );
+  f.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
+  const a = f.clock.challenge("owned-scope");
+  await f.clock.compare("owned-scope", "preproduction", { challengeId: a.id, instantMs: NOW }, BOX);
+  expect(canSelectHour(f.clock.read("owned-scope").clock)).toBe(true);
+});
+it("a read with no comparison id and only a box-only fresh reading refuses", async () => {
+  const f = fixture();
+  f.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
+  const a = f.clock.challenge("owned-scope");
+  await f.clock.compare("owned-scope", "preproduction", { challengeId: a.id, instantMs: NOW }, BOX);
+  expect(clockRefusal(f.clock.read("owned-scope").clock)).toBe("second_clock_missing");
+});
+it("a read with no comparison id does not use a passing reading older than thirty seconds", async () => {
+  const f = fixture();
+  await f.clock.compare("owned-scope", "preproduction", null, PHONE);
+  f.advance(30_001);
+  expect(() => f.clock.read("owned-scope")).toThrowError(
+    expect.objectContaining({ params: { reason: "clock_stale" } }),
+  );
+});
+it("a stale passing reading leaves the newest fresh reading's refusal", async () => {
+  const f = fixture();
+  await f.clock.compare("owned-scope", "preproduction", null, PHONE);
+  f.advance(30_001);
+  f.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
+  await f.clock.compare("owned-scope", "preproduction", null, BOX);
+  expect(clockRefusal(f.clock.read("owned-scope").clock)).toBe("second_clock_missing");
+});
+it("a read with no comparison id and no reading refuses clock_stale", () => {
+  const f = fixture();
+  expect(() => f.clock.read("owned-scope")).toThrowError(
+    expect.objectContaining({ params: { reason: "clock_stale" } }),
+  );
+});

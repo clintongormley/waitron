@@ -91,9 +91,9 @@ function fixture() {
     context(next: string) {
       key = next;
     },
-    select: () =>
+    select: (comparisonId: string) =>
       withOperationAuthority(binding, "administrator", (authority) =>
-        preparation.select({ binding, authority, answer: "no" }),
+        preparation.select({ binding, authority, answer: "no", comparisonId }),
       ),
   };
 }
@@ -106,7 +106,7 @@ it("the default host clock provider reaches the unchanged real activation writer
     { onBox: false },
   );
   expect(comparison.clock.usable.map((row) => row.source)).toEqual(["browser", "internet", "box"]);
-  const selected = await f.select();
+  const selected = await f.select(comparison.id);
   expect(selected).toMatchObject({ status: "selected", identity: "0CNNW" });
   if (selected.status !== "selected") throw new Error("expected selected hour");
   await withOperationAuthority(binding, "administrator", (authority) =>
@@ -132,8 +132,8 @@ it("the default host clock provider reaches the unchanged real activation writer
 it("the default release provider refuses when the artifact has no embedded floor", async () => {
   const f = fixture();
   outside.release.mockReturnValue(null);
-  await f.preparation.compareClocks(binding, null, { onBox: true });
-  await expect(f.select()).rejects.toMatchObject({
+  const compared = await f.preparation.compareClocks(binding, null, { onBox: true });
+  await expect(f.select(compared.id)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "clock_unconfirmed" },
   });
@@ -142,12 +142,13 @@ it("the default release provider refuses when the artifact has no embedded floor
 it("evicted frozen scopes cannot reuse their old clock reading", async () => {
   const f = fixture();
   outside.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
+  const ids: string[] = [];
   for (let index = 0; index < 65; index++) {
     f.context(`scope-${index}`);
-    await f.preparation.compareClocks(binding, null, { onBox: true });
+    ids.push((await f.preparation.compareClocks(binding, null, { onBox: true })).id);
   }
   f.context("scope-0");
-  await expect(f.select()).rejects.toMatchObject({
+  await expect(f.select(ids[0]!)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "clock_stale" },
   });

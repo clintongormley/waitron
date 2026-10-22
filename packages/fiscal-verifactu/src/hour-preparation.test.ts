@@ -102,7 +102,7 @@ function fixture() {
     },
     async select(answer: "no" | "yes" | "unknown" = "no") {
       return withOperationAuthority(binding, "administrator", (authority) =>
-        preparation.select({ binding, authority, answer }),
+        preparation.select({ binding, authority, answer, comparisonId: "comparison" }),
       );
     },
     activate(input: unknown, selectedBinding = binding) {
@@ -334,7 +334,7 @@ it("a recovery-key principal cannot spend an initial-setup hour", async () => {
     },
     async (authority) => {
       await expect(
-        f.preparation.select({ binding, authority, answer: "no" }),
+        f.preparation.select({ binding, authority, answer: "no", comparisonId: "comparison" }),
       ).rejects.toMatchObject(refuse("reauthentication_required"));
     },
   );
@@ -357,7 +357,12 @@ it.each(["restore", "re-register", "promote", "reserve"])(
     const other = { ...binding, action };
     await withOperationAuthority(other, "administrator", async (authority) => {
       await expect(
-        f.preparation.select({ binding: other, authority, answer: "no" }),
+        f.preparation.select({
+          binding: other,
+          authority,
+          answer: "no",
+          comparisonId: "comparison",
+        }),
       ).rejects.toMatchObject(refuse("event_mismatch"));
       await expect(async () =>
         f.preparation.prepare({ binding: other, authority, input: null }, async () => undefined),
@@ -370,9 +375,9 @@ it.each(["restore", "re-register", "promote", "reserve"])(
 it("expired authority cannot record a selection or inspect one during preparation", async () => {
   const f = fixture();
   const authority = await withOperationAuthority(binding, "administrator", async (value) => value);
-  await expect(f.preparation.select({ binding, authority, answer: "no" })).rejects.toMatchObject(
-    refuse("reauthentication_required"),
-  );
+  await expect(
+    f.preparation.select({ binding, authority, answer: "no", comparisonId: "comparison" }),
+  ).rejects.toMatchObject(refuse("reauthentication_required"));
   await expect(async () =>
     f.preparation.prepare({ binding, authority, input: null }, async () => undefined),
   ).rejects.toMatchObject(refuse("reauthentication_required"));
@@ -399,7 +404,12 @@ it("the general selector can resume the same authenticated recovery-key principa
     eventId: recovery.eventId,
   };
   await withOperationAuthority(recovery, principal, async (authority) => {
-    const first = await f.selection.select({ binding: recovery, authority, answer: "no" });
+    const first = await f.selection.select({
+      binding: recovery,
+      authority,
+      answer: "no",
+      comparisonId: "comparison",
+    });
     const resumed = await f.selection.selected({ binding: recovery, authority });
     expect(resumed).toEqual(first);
     expect(resumed.operatorId).toEqual(principal);
@@ -475,75 +485,71 @@ it.each(["", "   "])(
     const f = fixture();
     await withOperationAuthority(binding, operatorId, async (authority) => {
       await expect(
-        f.preparation.select({ binding, authority, answer: "no" }),
+        f.preparation.select({ binding, authority, answer: "no", comparisonId: "comparison" }),
       ).rejects.toMatchObject(refuse("reauthentication_required"));
     });
     expect(f.revisions).toEqual([]);
   },
 );
 
-it.each([false, true])(
-  "the hosted adapter keeps the host scope separate from clock metadata (confirmed: %s)",
-  async (confirmed) => {
-    const f = fixture();
-    const host: ModuleOperationHost = {
-      environment: {},
-      readPublicEvidence: async () => undefined,
-      withPreparationState: f.withState,
-      readSetupFacts: async () => ({
-        context: {
-          attemptId: "owned-attempt",
-          binding,
-          administratorId: "administrator",
-          country: "ES",
-          taxId: f.facts.scope.taxpayerNif,
-          environment: f.facts.scope.environment,
-          recipientVenueId: binding.sourceId,
-          bases: structuredClone(bases),
-        },
-        contextKey: f.facts.contextKey,
-        localHistory: f.facts.history[0],
-      }),
-    };
-    const preparation = createHostedHourPreparation(host, {
-      monotonicNow: () => 0,
-      readClock: async (context) => {
-        Object.assign(context, { taxId: "changed" });
-        return {
-          clock: f.facts.clock,
-          ...(confirmed ? { confirmation: {} } : {}),
-          scope: { taxpayerNif: "changed", environment: "production" },
-        };
+it("the hosted adapter keeps the host scope separate from clock metadata", async () => {
+  const f = fixture();
+  const host: ModuleOperationHost = {
+    environment: {},
+    readPublicEvidence: async () => undefined,
+    withPreparationState: f.withState,
+    readSetupFacts: async () => ({
+      context: {
+        attemptId: "owned-attempt",
+        binding,
+        administratorId: "administrator",
+        country: "ES",
+        taxId: f.facts.scope.taxpayerNif,
+        environment: f.facts.scope.environment,
+        recipientVenueId: binding.sourceId,
+        bases: structuredClone(bases),
       },
-    });
-    const selected = await withOperationAuthority(binding, "administrator", (authority) =>
-      preparation.select({ binding, authority, answer: "no" }),
-    );
-    expect(selected).toMatchObject({ status: "selected", scope: f.facts.scope });
-    if (selected.status !== "selected") throw new Error("expected selected hour");
-    await withOperationAuthority(binding, "administrator", (authority) =>
-      preparation.prepare({ binding, authority, input: selected.input }, (operation) =>
-        withTransaction(suite.db, (tx) =>
-          activatePreparedModuleAllocation(
-            tx,
-            {
-              nodeId: TENANT_A.nodeId,
-              locationId: locationId(TENANT_A.locationId),
-            },
-            operation,
-          ),
+      contextKey: f.facts.contextKey,
+      localHistory: f.facts.history[0],
+    }),
+  };
+  const preparation = createHostedHourPreparation(host, {
+    monotonicNow: () => 0,
+    readClock: async (context) => {
+      Object.assign(context, { taxId: "changed" });
+      return {
+        clock: f.facts.clock,
+        scope: { taxpayerNif: "changed", environment: "production" },
+      };
+    },
+  });
+  const selected = await withOperationAuthority(binding, "administrator", (authority) =>
+    preparation.select({ binding, authority, answer: "no", comparisonId: "comparison" }),
+  );
+  expect(selected).toMatchObject({ status: "selected", scope: f.facts.scope });
+  if (selected.status !== "selected") throw new Error("expected selected hour");
+  await withOperationAuthority(binding, "administrator", (authority) =>
+    preparation.prepare({ binding, authority, input: selected.input }, (operation) =>
+      withTransaction(suite.db, (tx) =>
+        activatePreparedModuleAllocation(
+          tx,
+          {
+            nodeId: TENANT_A.nodeId,
+            locationId: locationId(TENANT_A.locationId),
+          },
+          operation,
         ),
       ),
-    );
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([
-      expect.objectContaining({
-        taxpayerNif: f.facts.scope.taxpayerNif,
-        environment: "preproduction",
-        installationIdentity: "0CNNW",
-      }),
-    ]);
-  },
-);
+    ),
+  );
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual([
+    expect.objectContaining({
+      taxpayerNif: f.facts.scope.taxpayerNif,
+      environment: "preproduction",
+      installationIdentity: "0CNNW",
+    }),
+  ]);
+});
 
 it.each(["readSetupFacts", "withPreparationState"] as const)(
   "a hosted adapter requires %s",

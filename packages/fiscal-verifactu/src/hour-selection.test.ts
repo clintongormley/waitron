@@ -100,7 +100,7 @@ function fixture() {
     },
     run(answer: "no" | "yes" | "unknown" = "no", selected = binding) {
       return withOperationAuthority(selected, "administrator", (authority) =>
-        engine.select({ binding: selected, authority, answer }),
+        engine.select({ binding: selected, authority, answer, comparisonId: "comparison" }),
       );
     },
     preview() {
@@ -333,9 +333,9 @@ it("never returns usable material after persistence fails, before or after actua
     throw new Error("disk refused");
   });
   await withOperationAuthority(binding, "administrator", async (authority) => {
-    await expect(before.select({ binding, authority, answer: "no" })).rejects.toThrow(
-      "disk refused",
-    );
+    await expect(
+      before.select({ binding, authority, answer: "no", comparisonId: "comparison" }),
+    ).rejects.toThrow("disk refused");
     const after = f.create((selected, run) =>
       f.store(selected, (state) =>
         run({
@@ -347,9 +347,9 @@ it("never returns usable material after persistence fails, before or after actua
         }),
       ),
     );
-    await expect(after.select({ binding, authority, answer: "no" })).rejects.toThrow(
-      "lost durable reply",
-    );
+    await expect(
+      after.select({ binding, authority, answer: "no", comparisonId: "comparison" }),
+    ).rejects.toThrow("lost durable reply");
   });
   expect(await f.run()).toMatchObject({ status: "selected", identity: "0CNNW" });
   expect(f.writes).toHaveLength(1);
@@ -361,9 +361,9 @@ it("expired authority cannot select and expiry during persistence cannot expose 
     "administrator",
     async (authority) => authority,
   );
-  await expect(f.create().select({ binding, authority, answer: "no" })).rejects.toMatchObject(
-    refusal("reauthentication_required"),
-  );
+  await expect(
+    f.create().select({ binding, authority, answer: "no", comparisonId: "comparison" }),
+  ).rejects.toMatchObject(refusal("reauthentication_required"));
   expect(f.writes).toEqual([]);
   let pending!: Promise<unknown>;
   await withOperationAuthority(binding, "administrator", async (active) => {
@@ -372,7 +372,7 @@ it("expired authority cannot select and expiry during persistence cannot expose 
         await new Promise((resolve) => setTimeout(resolve, 0));
         return f.store(binding, run);
       })
-      .select({ binding, authority: active, answer: "no" });
+      .select({ binding, authority: active, answer: "no", comparisonId: "comparison" });
   });
   await expect(pending).rejects.toMatchObject(refusal("reauthentication_required"));
   expect(f.writes).toEqual([]);
@@ -435,7 +435,7 @@ it("expiry while awaiting durable persistence leaves a spent hour but returns no
         }),
       ),
     );
-    pending = engine.select({ binding, authority, answer: "no" });
+    pending = engine.select({ binding, authority, answer: "no", comparisonId: "comparison" });
     await reached;
   });
   release();
@@ -466,7 +466,9 @@ it("refuses a taxpayer declaration outside the three offered answers", async () 
   const f = fixture();
   await withOperationAuthority(binding, "administrator", async (authority) => {
     await expect(
-      f.create().select({ binding, authority, answer: "maybe" as never }),
+      f
+        .create()
+        .select({ binding, authority, answer: "maybe" as never, comparisonId: "comparison" }),
     ).rejects.toMatchObject(refusal("event_mismatch"));
   });
   expect(f.writes).toEqual([]);
@@ -502,9 +504,9 @@ it.each([-1, NaN, Infinity])(
       monotonicNow: () => mono,
     });
     await withOperationAuthority(binding, "administrator", async (authority) => {
-      await expect(engine.select({ binding, authority, answer: "yes" })).rejects.toMatchObject(
-        refusal("clock_unconfirmed"),
-      );
+      await expect(
+        engine.select({ binding, authority, answer: "yes", comparisonId: "comparison" }),
+      ).rejects.toMatchObject(refusal("clock_unconfirmed"));
     });
   },
 );
@@ -581,9 +583,9 @@ it("a host that omits retained revisions cannot authorise a fresh hour", async (
     f.store(selected, (state) => run({ value: state.value, replace: state.replace } as never)),
   );
   await withOperationAuthority(binding, "administrator", async (authority) => {
-    await expect(engine.select({ binding, authority, answer: "no" })).rejects.toMatchObject(
-      refusal("history_invalid"),
-    );
+    await expect(
+      engine.select({ binding, authority, answer: "no", comparisonId: "comparison" }),
+    ).rejects.toMatchObject(refusal("history_invalid"));
   });
   expect(f.writes).toEqual([]);
 });

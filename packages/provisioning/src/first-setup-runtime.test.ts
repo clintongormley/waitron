@@ -221,7 +221,12 @@ async function selectThroughHost(
       () => f.host.owner.consumeReconfirmation(owner, reconfirmation, "block-use", hold),
       () =>
         withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
-          preparation.select({ binding: f.context.binding, authority, answer: "no" }),
+          preparation.select({
+            binding: f.context.binding,
+            authority,
+            answer: "no",
+            comparisonId: "comparison",
+          }),
         ),
     ),
   );
@@ -398,7 +403,12 @@ it("a clock provider cannot replace the host's scope or bases", async () => {
       () => f.host.owner.consumeReconfirmation(owner, grant, "block-use", hold),
       () =>
         withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
-          preparation.select({ binding: f.context.binding, authority, answer: "no" }),
+          preparation.select({
+            binding: f.context.binding,
+            authority,
+            answer: "no",
+            comparisonId: "comparison",
+          }),
         ),
     ),
   );
@@ -427,7 +437,12 @@ it("cannot retain an hour selection without a fresh owner password grant", async
   await expect(
     f.host.coordinator.run(() =>
       withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
-        preparation.select({ binding: f.context.binding, authority, answer: "no" }),
+        preparation.select({
+          binding: f.context.binding,
+          authority,
+          answer: "no",
+          comparisonId: "comparison",
+        }),
       ),
     ),
   ).rejects.toMatchObject({ code: "setup.owner_required" });

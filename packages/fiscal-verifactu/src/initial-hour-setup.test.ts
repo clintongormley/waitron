@@ -797,3 +797,78 @@ it("binds an exact public recovery statement to its staged node and frozen setup
   );
   expect(f.history).toEqual([]);
 });
+
+async function boxOnlyComparison(f: ReturnType<typeof configured>) {
+  source.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
+  const challenge = (await f.prepare({ action: "clock-challenge" })) as { id: string };
+  return (await f.prepare({
+    action: "compare-clocks",
+    browser: { challengeId: challenge.id, instantMs: Date.now() },
+  })) as { id: string };
+}
+const prepareSetup = (f: ReturnType<typeof configured>) =>
+  withOperationAuthority(context.binding, context.administratorId, (authority) =>
+    FISCAL_OPERATIONS.configure!(f.host).prepare(
+      { binding: context.binding, authority, input },
+      async () => "prepared",
+    ),
+  );
+
+it("a page's name is issued after another page's box-only re-check", async () => {
+  const f = configured();
+  await f.clock();
+  expect(await f.select()).toMatchObject({ status: "selected", identity: "0CNNW" });
+  await boxOnlyComparison(f);
+  expect(await prepareSetup(f)).toBe("prepared");
+});
+
+it("issuing refuses when the only fresh reading is the box's alone", async () => {
+  const f = configured();
+  await f.clock();
+  await f.select();
+  const stale = vi.spyOn(performance, "now");
+  const start = performance.now();
+  stale.mockImplementation(() => start + 31_000);
+  vi.setSystemTime(Date.now() + 31_000);
+  try {
+    await boxOnlyComparison(f);
+    await expect(prepareSetup(f)).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "second_clock_missing" },
+    });
+  } finally {
+    stale.mockRestore();
+  }
+});
+
+it("issuing refuses clock_stale when the only passing reading is older than thirty seconds", async () => {
+  const f = configured();
+  await f.clock();
+  await f.select();
+  const stale = vi.spyOn(performance, "now");
+  const start = performance.now();
+  stale.mockImplementation(() => start + 30_001);
+  vi.setSystemTime(Date.now() + 30_001);
+  try {
+    await expect(prepareSetup(f)).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "clock_stale" },
+    });
+  } finally {
+    stale.mockRestore();
+  }
+});
+
+it("a select with another page's box-only comparison stays refused", async () => {
+  const f = configured();
+  const boxPage = await boxOnlyComparison(f);
+  await f.clock();
+  await expect(
+    f.seat.candidates(context, { answer: "no", comparisonId: boxPage.id }),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "second_clock_missing" },
+  });
+  expect(f.history).toEqual([]);
+  expect(await f.select()).toMatchObject({ status: "selected", identity: "0CNNW" });
+});

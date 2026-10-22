@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { DeploymentEnvironment } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { compareHourClocks, type HourClockObservation } from "./hour-clock.js";
+import {
+  canSelectHour,
+  compareHourClocks,
+  type HourClockDecision,
+  type HourClockObservation,
+} from "./hour-clock.js";
 import { observeInternetHourClock } from "./hour-clock-internet.js";
 import { readHourRelease } from "./hour-release.js";
 import "./errors.js";
@@ -28,7 +33,6 @@ export interface SetupClockClient {
 interface Session {
   readonly challenges: Map<string, { wall: number; monotonic: number }>;
   readonly readings: Map<string, Reading>;
-  newest?: string;
 }
 const PER_SESSION = 8;
 function keep<T>(map: Map<string, T>, id: string, value: T) {
@@ -134,21 +138,38 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
         monotonic: sample.monotonicFinishedMs,
       };
       keep(state.readings, reading.id, reading);
-      state.newest = reading.id;
       return { id: reading.id, clock };
     },
-    /** With no `comparisonId`, the session's newest reading is used. */
+    /** With no `comparisonId`, the newest fresh reading that admits a name, else the newest's answer. */
     read(key: string, comparisonId?: string) {
       const state = session(key);
-      const id = comparisonId ?? state.newest;
-      const held = id === undefined ? undefined : state.readings.get(id);
-      if (held === undefined) return refuse("clock_stale");
-      try {
-        return { clock: current(held, box()) };
-      } catch (error) {
-        state.readings.delete(held.id);
-        throw error;
+      const check = (id: string) => {
+        const held = state.readings.get(id);
+        if (held === undefined) return refuse("clock_stale");
+        try {
+          return current(held, box());
+        } catch (error) {
+          state.readings.delete(id);
+          throw error;
+        }
+      };
+      if (comparisonId !== undefined) return { clock: check(comparisonId) };
+      const ids = [...state.readings.keys()].reverse();
+      if (ids.length === 0) return refuse("clock_stale");
+      let newest: { clock: HourClockDecision } | { error: unknown } | undefined;
+      for (const id of ids) {
+        let clock: HourClockDecision;
+        try {
+          clock = check(id);
+        } catch (error) {
+          newest ??= { error };
+          continue;
+        }
+        if (canSelectHour(clock)) return { clock };
+        newest ??= { clock };
       }
+      if ("error" in newest!) throw newest.error;
+      return { clock: newest!.clock };
     },
   };
 }

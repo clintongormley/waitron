@@ -32,9 +32,10 @@ interface SelectionRequest {
   binding: OperationBinding;
   authority: OperationAuthority;
   answer: Answer;
-  comparisonId?: string;
+  comparisonId: string;
   reportedIdentities?: readonly string[];
 }
+type BareRequest = Omit<SelectionRequest, "answer" | "comparisonId">;
 interface EntryBase {
   softwareId: string;
   operatorId: OperationOperator;
@@ -62,7 +63,7 @@ interface Resumption extends Omit<Intent, "kind"> {
   documentBinding: string;
 }
 type Entry = Intent | Wait | Resumption;
-type ResumeRequest = Omit<SelectionRequest, "answer"> & {
+type ResumeRequest = BareRequest & {
   documentBinding: string;
   validate(selected: ReturnType<typeof material>): void;
 };
@@ -276,7 +277,7 @@ export function createHourSelection(options: {
   // Monotonic readings are process-local; persisted waits carry only their original UTC target.
   const timers = new Map<string, { start: number; duration: number }>();
   const perform = async (
-    supplied: Omit<SelectionRequest, "answer"> & { answer?: Answer } & Partial<ResumeRequest>,
+    supplied: BareRequest & { answer?: Answer; comparisonId?: string } & Partial<ResumeRequest>,
     mode: "select" | "preview" | "selected" | "resume" | "committed",
   ) => {
     const persist = mode === "select";
@@ -531,7 +532,7 @@ export function createHourSelection(options: {
     });
   };
   return {
-    async committed(request: Omit<SelectionRequest, "answer">) {
+    async committed(request: BareRequest) {
       const result = await perform(request, "committed");
       if (result.status !== "selected") return refuse("event_mismatch");
       return result;
@@ -542,9 +543,8 @@ export function createHourSelection(options: {
       return result;
     },
     select: (request: SelectionRequest) => perform(request, "select"),
-    preview: (request: Omit<SelectionRequest, "answer">) =>
-      perform({ ...request, answer: "no" }, "preview"),
-    async selected(request: Omit<SelectionRequest, "answer">) {
+    preview: (request: BareRequest) => perform({ ...request, answer: "no" }, "preview"),
+    async selected(request: BareRequest) {
       const result = await perform(request, "selected");
       if (result.status !== "selected") return refuse("clock_unconfirmed");
       return result;

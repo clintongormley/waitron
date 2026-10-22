@@ -81,7 +81,7 @@ async function fixture(environment: "production" | "preproduction" = "preproduct
   const context = firstSetupModuleContext(state, MODULE);
   const prepared = createHostedHourPreparation(bound);
   const owner = { ...claim.state, capability: claim.capability };
-  const select = async (answer: "no" | "yes" | "unknown" = "no") => {
+  const select = async (comparisonId: string, answer: "no" | "yes" | "unknown" = "no") => {
     const reconfirmation = await host.owner.reconfirm(owner, PASSWORD, "block-use");
     return host.coordinator.run((hold) =>
       host.withPreparationAuthorization(
@@ -90,7 +90,7 @@ async function fixture(environment: "production" | "preproduction" = "preproduct
         },
         () =>
           withOperationAuthority(context.binding, context.administratorId, (authority) =>
-            prepared.select({ binding: context.binding, authority, answer }),
+            prepared.select({ binding: context.binding, authority, answer, comparisonId }),
           ),
       ),
     );
@@ -112,7 +112,7 @@ it.each(["production", "preproduction"] as const)(
       "internet",
       "box",
     ]);
-    const selected = await f.select();
+    const selected = await f.select(comparison.id);
     expect(selected).toMatchObject({
       status: "selected",
       identity: "0CNNW",
@@ -136,13 +136,13 @@ it.each(["production", "preproduction"] as const)(
     expect(external.internet).toHaveBeenCalledWith(environment);
   },
 );
-it("an unavailable browser and TLS comparison need the owner's exact displayed-clock confirmation", async () => {
+it("an unavailable browser and TLS comparison refuse the name for want of a second clock", async () => {
   const f = await fixture();
   external.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
-  await f.prepared.compareClocks(f.context.binding, null, { onBox: true });
-  await expect(f.select()).rejects.toMatchObject({
+  const compared = await f.prepared.compareClocks(f.context.binding, null, { onBox: true });
+  await expect(f.select(compared.id)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "clock_unconfirmed" },
+    params: { reason: "second_clock_missing" },
   });
   await expect(readFile(join(f.stateDir, "module-preparation-state.json"))).rejects.toMatchObject({
     code: "ENOENT",

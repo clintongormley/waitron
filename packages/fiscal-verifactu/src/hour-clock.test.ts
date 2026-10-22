@@ -50,6 +50,16 @@ describe("a name needs a second clock within 30 seconds of the box", () => {
     expect(canSelectHour(decision)).toBe(true);
   });
 
+  it("reads the middle of a range behind the box, not its edge", () => {
+    const decision = compareHourClocks(
+      [sample("box", T), sample("browser", T - 29_000, 2500)],
+      RELEASE,
+    );
+    expect(decision.usable[1]).toMatchObject({ lowerMs: T - 31_500, upperMs: T - 26_500 });
+    expect(decision.disagreement).toBe(false);
+    expect(canSelectHour(decision)).toBe(true);
+  });
+
   it("every other clock must agree, not just one", () => {
     const decision = compareHourClocks(
       [sample("box", T), sample("browser", T), sample("internet", T + 31_000)],

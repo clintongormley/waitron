@@ -34,7 +34,6 @@ interface Context {
 }
 interface Comparison {
   id: string;
-  // The server no longer sends the last two; the screen's rewrite drops them.
   clock: HourClockDecision & { requiresConfirmation?: boolean; boundaryWait?: boolean };
 }
 type Result =

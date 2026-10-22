@@ -215,14 +215,19 @@ it.each(["no", "yes", "unknown"] as const)(
     const before = await snapshot();
     await withOperationAuthority(f.binding, f.operatorId, async (authority) => {
       await expect(
-        selector.select({ binding: f.binding, authority, answer }),
+        selector.select({ binding: f.binding, authority, answer, comparisonId: "comparison" }),
       ).rejects.toMatchObject({
         code: "sif.allocation_invalid",
         params: { reason: "hour_not_later" },
       });
       expect(writes).toEqual([]);
       instant = Date.parse("2026-10-16T12:00:00.000Z");
-      const next = await selector.select({ binding: f.binding, authority, answer: "no" });
+      const next = await selector.select({
+        binding: f.binding,
+        authority,
+        answer: "no",
+        comparisonId: "comparison",
+      });
       expect(next).toMatchObject({ status: "selected", identity: "0CNPG" });
       expect(writes).toHaveLength(1);
     });

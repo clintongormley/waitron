@@ -149,7 +149,7 @@ function createPreparation(options: PreparationOptions, operatorFor: typeof reco
         ? { ...selected, input: inputFor(selected, operator) }
         : selected;
     },
-    async preview(supplied: Omit<Request, "answer">) {
+    async preview(supplied: Omit<Request, "answer" | "comparisonId">) {
       const request = { ...supplied, binding: { ...supplied.binding } };
       operatorFor(request.binding, request.authority);
       const result = await engine.preview(request);

@@ -69,7 +69,12 @@ async function fixture(withStore = false) {
                       context.binding,
                       context.administratorId,
                       (authority) =>
-                        engine.select({ binding: context.binding, authority, answer: "no" }),
+                        engine.select({
+                          binding: context.binding,
+                          authority,
+                          answer: "no",
+                          comparisonId: "comparison",
+                        }),
                     );
                     return { ready: true, selection };
                   },

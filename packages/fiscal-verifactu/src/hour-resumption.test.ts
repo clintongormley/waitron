@@ -70,7 +70,7 @@ function fixture() {
     },
     select: () =>
       withOperationAuthority(binding, "admin", (authority) =>
-        preparation.select({ binding, authority, answer: "no" }),
+        preparation.select({ binding, authority, answer: "no", comparisonId: "comparison" }),
       ),
     resume: (input: unknown, digest = "a".repeat(64)) =>
       withOperationAuthority(binding, "admin", (authority) =>

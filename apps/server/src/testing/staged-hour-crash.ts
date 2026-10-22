@@ -99,7 +99,12 @@ export async function stagedHourCrash(db: Database, kind: "archive" | "stream", 
       }),
     });
     await withOperationAuthority(initial, "administrator", async (authority) => {
-      const selected = await setup.select({ binding: initial, authority, answer: "no" });
+      const selected = await setup.select({
+        binding: initial,
+        authority,
+        answer: "no",
+        comparisonId: "comparison",
+      });
       if (selected.status !== "selected") throw new Error("initial hour not selected");
       await setup.prepare({ binding: initial, authority, input: selected.input }, (prepared) =>
         withTransaction(db, (tx) => activatePreparedModuleAllocation(tx, node, prepared)),

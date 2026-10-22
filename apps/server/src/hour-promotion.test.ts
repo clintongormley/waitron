@@ -164,7 +164,12 @@ beforeEach(async () => {
     }),
   });
   await withOperationAuthority(first, ADMIN, async (authority) => {
-    const selected = await setup.select({ binding: first, authority, answer: "no" });
+    const selected = await setup.select({
+      binding: first,
+      authority,
+      answer: "no",
+      comparisonId: "comparison",
+    });
     if (selected.status !== "selected") throw new Error("first setup selection");
     await setup.prepare({ binding: first, authority, input: selected.input }, (ready) =>
       withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, primary, ready)),
