@@ -8551,12 +8551,10 @@ it("A182 old canvas URL falls back to the role home without a canvas navigation 
 
 it.each([false, true])("passes admin authority to the staff screen (%s)", async (admin) => {
   const api = stubApi({
-    getMe: vi
-      .fn()
-      .mockResolvedValue({
-        ...meResponse,
-        permissions: ["person.manage", ...(admin ? ["person.admin"] : [])],
-      }),
+    getMe: vi.fn().mockResolvedValue({
+      ...meResponse,
+      permissions: ["person.manage", ...(admin ? ["person.admin"] : [])],
+    }),
   });
   const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
   await flush(el);
