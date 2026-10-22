@@ -4929,6 +4929,8 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 - **The dashboard's locale lookup reads inherited properties** (A626 review, 2026-10-14).
   `pickLocale` in `packages/dashboard-kit/src/i18n.ts`, re-exported by the dashboard's
   `i18n/t.ts`, returns a function for `"constructor"` and an object for `"__proto__"`.
+  A969 also reproduced `alertMessage` throwing `TypeError` for `"__proto__"`, `"constructor"`
+  and `"toString"` as locales in both its base and candidate; English and Spanish controls returned text.
   **Next:** check own locale keys, test the English fallback and trace the callers.
   [Detail](backlog/languages.md#the-dashboards-locale-lookup-reads-inherited-properties)
 

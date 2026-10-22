@@ -63,6 +63,12 @@ their full text.
   An installed disposable-copy probe asserted both results and the Spanish control
   (`pnpm --filter @waitron/dashboard-kit exec vitest run src/a626-driver-probe.test.ts`,
   1 passed). Whether a real dashboard caller admits those locales is unverified.
+  A969's installed disposable-copy probe (2026-10-22) compared the base at
+  `af98f192de08da2d4b64bd04d2c4fe7a762b4549` with the candidate: an unregistered alert's
+  `alertMessage` threw `TypeError` for each of `"__proto__"`, `"constructor"` and `"toString"`
+  as its locale in both versions. The `en-GB` and `es-ES` controls returned their expected text
+  (`pnpm --filter @waitron/dashboard-kit exec vitest run src/a969-locale-probe.test.ts`,
+  5 passed). No caller-admission check was made.
   **Next:** check own locale keys, test the English fallback and trace the callers.
 
 ## A886. Dashboard wording: "Disabled product", "Menús", and two strings nothing reads

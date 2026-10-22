@@ -110,7 +110,6 @@ test "flags bare Spanish prose in a line comment"). It should be fixed whatever 
 _2026-10-22 (A969): the fallback error, fallback alert and empty-table pairs moved to
 `packages/dashboard-kit/src/strings.ts`; the audit row above records their earlier location._
 
-
 ## Bucket D — starter and demo content written into a database
 
 **Real venues:**
