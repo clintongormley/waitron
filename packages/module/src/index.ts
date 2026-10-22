@@ -81,6 +81,12 @@ export type {
   ModuleAlerts,
   OngoingAlert,
 } from "./alerts.js";
+export type {
+  StaffNotice,
+  StaffNoticeContext,
+  StaffNoticeSeverity,
+  StaffNoticeSource,
+} from "./staff-notices.js";
 export type { VocabularyOwner } from "./vocabulary.js";
 export { forbiddenVocabulary, vocabularyOwners } from "./vocabulary.js";
 export type { ModuleConfig } from "./config.js";
