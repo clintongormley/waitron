@@ -104,7 +104,7 @@ describe("till-counter-waiting", () => {
     expect(row.textContent).toContain(formatMoney("18.00", currentLocale()));
   });
 
-  it("shows how many items an order holds and how many wait, after its state and total, and only the items once it is handed over", async () => {
+  it("shows how many items an order holds and how many wait, after its state and total; a handed-over row whose items are all served shows only the items", async () => {
     const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
       orders: [sent, handedOver],
     });
