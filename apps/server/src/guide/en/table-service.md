@@ -63,6 +63,13 @@ Choose **Cancel and refund** with the ticked dishes' total, or **Cancel** when n
 can enters their PIN. When a payment was taken in a way this device does not take, the window tells
 you to refund it at a till from the receipt.
 
+When the guests will wait and take their food from the counter, choose **They'll collect it at the
+counter** instead. It is offered when at least one of the dishes has a kitchen ticket. Nothing is
+cancelled or refunded. Dishes held back go to the kitchen now, each bill whose food still to come
+has a kitchen ticket becomes a paid order waiting at the counter, and the table finishes. The order
+waits under **Waiting orders** on the **Counter** screen, marked **Paid, not handed over**, and
+**Find a bill** lists it; choose **Hand over** when the guests collect it.
+
 Once the table is finished, a **Refund** window lists each receipt with ticked dishes. Choose one to
 open its refund, filled in. When there is only one receipt, its refund opens straight away.
 

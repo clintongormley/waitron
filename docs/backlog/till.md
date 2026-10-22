@@ -1414,117 +1414,6 @@ decides "whole units" with `soldByTheUnit`, which does not read `measure`
 `apps/till/src/widgets/product-name.ts:85-88`), so it adds 330 for a 330 ml dish. Fix: the
 `takesExtras` rule (`apps/server/src/working-order.ts:457-459`) in all three.
 
-## A758. Adjustment reasons: review the rules, then a page of their own
-
-**A758 (owner, 2026-10-16) — design first; the review comes back to the owner with worked examples
-and mock-ups before anything is built.** The owner: the page is ugly, the edit form assumes the
-roles are a ranking, and "does the logic work? are we asking the right questions?"
-
-**Design (2026-10-17, revised the same day with the owner's answers):** [the decisions, the rules, the page and the starter list](../superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
-with [mock-ups](mockups/a758-adjustment-reasons/). Revised 2026-10-18 for food left on the pass after
-a table has paid (§3.8, pictures 06–09), then rewritten the same day for the owner's Q40 answer.
-Revised again on 2026-10-19 for the owner's Q43 notes, and settled: Cancel item… follows where the
-dish is (§3.3, picture 03), the refund permission decides "Cancel, don't charge" on an unpaid bill
-and every refund, a Void reason is a label, and Finish table on a paid table cancels every dish not
-served with a Refund tick each (§3.8, pictures 06–08). Revised a second time on 2026-10-19 for the
-owner's four answers to A758r3's question: the Spanish words (§3.9; the question and the report
-column are «En preparación»), no confirmation switch on a cash refund (§3.8.2, with what the drawer
-and its count do), a fired dish removed before preparation started not listed, and the refund
-screen's Reason as the same drop-down (§3.8 item 3). What A773-1 builds is in the design's §10. The
-owner answered the last question on 2026-10-19 (§11, D28): a cash refund only on a device whose
-profile takes cash, as today; no question is open. **A758-1 built the rules** ([plan](../superpowers/plans/2026-10-19-a758-reason-rules.md));
-A909–A912 and A918 are what it left open. **A758-2 built the page** ([plan](../superpowers/plans/2026-10-20-a758-2-voids-and-comps-page.md)):
-Voids and comps under Service, with search, drag to reorder and a real Delete; A923–A926 are what
-it left open. **A758-3 built the report** ([plan](../superpowers/plans/2026-10-21-a758-3-voids-and-comps-report.md)):
-Voids and Comps in the totals, each entry's words, who asked for and approved each reason, and a
-Reason filter on the list; A952–A959 are what it left open. **A758-4 built the receipt words**
-([plan](../superpowers/plans/2026-10-21-a758-4-full-comp-receipt.md)): a full comp — Free, or an
-amount that took the whole list price — prints «Descuento 100%» in each language's own discount
-word, and the «Invitación» receipt label is gone; a test shows the filed record is unchanged;
-A911, A960 and A961 are what it left open. **A758-5 built the till's words**
-([plan](../superpowers/plans/2026-10-22-a758-5-comp-window-words.md)): a counter order's dishes
-offer one Comp… that opens the Comp window; "Comp the bill" offers Free beside %
-and €; no till word says "Give away" or «Invitar»; A1007 is what it left open; [pictures as
-built](mockups/a758-adjustment-reasons/built/). **A758-6 built the paid-table slice**
-([plan](../superpowers/plans/2026-10-22-a758-6-unserved-on-paid-table.md)): Finish table's reason
-starts on Not served; Void… opens the Cancel item window for a paid line's unserved quantity; the
-refund opens filled in with the Void reasons drop-down and the dishes, without asking the PIN again
-while it stays within the dishes' total with no tip (not for a card keyed on a separate terminal);
-Give back a payment takes the same drop-down; no cash switch; the report says Void, charged,
-whether preparation had started and what was refunded; a finished table is checked against its
-bills' zones. A cancel now stores whether it kept its charge, so the report's "Void, charged"
-(«Cancelado, cobrado», design §3.6) reads right even for a dish already comped to €0.00. A1020 and
-A1021 are what it left open. Left: "They'll collect it at the counter". The notes below are the
-review as written before the
-answers: where they differ from the design's decisions (§1 there) — three kinds, give-away against
-100% discount, "Invitación", role lists "with or after" editable roles, approval for a Void by
-reason or by stage — the design wins.
-
-How a reason works today (`packages/adjustments/src/policy.ts`): it allows one or more of cancel
-(void), give away (comp), a percentage discount and an amount discount; it may cap the percentage
-off one item (counting percentage discounts only) and the total off one bill (counting everything
-the reason does on that bill); a person below "lowest role that applies it without approval" needs
-someone at or above "lowest role that may approve it"; and it may require a note.
-
-What a cancel, a give-away and a 100% discount do (`apps/server/src/adjustments-apply.ts:804-808`):
-
-| | On the bill and receipt | Kitchen | Counts towards the bill's discount limit |
-|---|---|---|---|
-| Cancel (void) | The item goes | Told | Only if the cancel raises the discount share of what is left |
-| Give away (comp) | Stays at zero, printed "Invitació" | Not told | No |
-| 100% discount | Stays at full price with a discount line | Not told | Yes |
-
-**What the review settles**, each with a worked example:
-
-1. **An approver who is never asked.** "Entry error" reads "Staff / Supervisor approves", but staff
-   is the lowest role, so nobody ever needs approval for it. The seed writes that pair
-   (`packages/adjustments/src/provisioning.ts`).
-2. **Going past a reason's limit cannot be approved by anyone** — the limit refuses before approval
-   is considered (`evaluateAdjustment`). Deliberate or not.
-3. **One kind per reason.** A reason that mixes actions makes the limits unclear, and the form
-   offers a percentage cap and a bill cap to a cancel-only reason. Void and give-away stay separate:
-   they tell the kitchen different things, and a report separates mistakes from hospitality. The
-   till should make the choice plain ("Take it off the bill" or "Give it free").
-4. **Role lists, not a ranking** — "Who can apply it without approval" and "Who can approve it" —
-   because roles become something an admin defines (the editable-roles entry under _Users, sign-in
-   and the dashboard shell_); the role lists are built with or after it. The venue-wide bill limit's
-   approver, written into the code as "manager" (`policy.ts:139`), becomes a role list too.
-5. **Give-away or 100% discount.** In Square, Santet filed complaints as a void, a comp and a "100%"
-   discount depending on the button. As a give-away, a comped coffee alone on a bill goes through;
-   as a 100% discount it is 100% of the bill and asks for a manager's PIN. Decide whether a 100%
-   discount should exist beside a give-away.
-6. **The venue-wide limit on a bill's discounts**: a share of the bill, so a one-item bill reaches
-   100% at once. Options: drop it and rely on each reason's own limits; a euro amount per bill; the
-   share only above a minimum bill. Its paragraph of explanation goes, for one short hint.
-7. **Staff meals** — a give-away or a discount, and whether reports need them apart.
-8. **What a Square import does with reasons that are not adjustments.** Every Square reason at
-   Santet was made by the venue (owner, 2026-10-16), so the lists show what a venue needs:
-   - Square's void reasons: ENTRY ERROR, ITEM NO LONGER AVAILABLE and CUSTOMER CHANGED MIND are
-     voids; COMPLAINT is a give-away; CUSTOMER LEFT WITHOUT PAYING is Waitron's "Record unpaid
-     departure" (the bill is invoiced and the debt recorded), not a void; PAID SEPARATELY and ALREADY
-     PAID mean the item belongs on the bill that was paid; TRAINING is believed to be practice
-     mode's job (not checked).
-   - Square's comp reasons: Entry error and Customer changed mind are voids (both are on the void
-     list too); Customer complaint, Friends and family, Manager special and INVITED BY STAFF are
-     give-aways; Employee discount is item 7; CUSTOMER LEFT WITHOUT PAYING again is an unpaid
-     departure.
-   - Square's discounts came in as percentage reasons: EVENT GUEST 100%, INVITATIONAL ITEM 100%,
-     CUSTOMER COMPLAINT 100%, FAMILY DISCOUNT 10%.
-9. **A starter list for a new venue** (decided: a venue starts with a list it can delete or change;
-   today it gets one, "Entry error"). Draft to settle:
-
-   | Kind | English / Spanish | Who can apply it |
-   |---|---|---|
-   | Void | Entry error / Error al marcar | Anyone |
-   | Void | Item not available / Producto agotado | Anyone |
-   | Void | Customer changed mind / Cambio del cliente | Approval once the kitchen has it |
-   | Give-away | Complaint / Queja del cliente | Approval |
-   | Give-away | On the house / Invitación | Approval |
-   | Give-away | Staff meal / Comida de personal | Approval |
-   | Discount | Discount / Descuento (percentage) | Approval |
-
-   Whether an approval rule can depend on the item having been sent was not checked.
-
 ## A859. Floor plans and the till's layout banner: looks left to the owner
 
 **A859 (2026-10-18).** A504's LOOK passes kept these as built, as judgement calls: the solid
@@ -1560,6 +1449,19 @@ while 4 and 5 needed moving, so Leave it here only makes it last until the next 
 whether those reads should follow today's map once a group is left.
 
 ## Decisions and deliberate limits
+
+### A paid bill may leave its party for the counter once (A758-7, 2026-10-22)
+
+The database's freeze on a paid (settled) bill has one exception, added by the core migration
+`packages/db/drizzle/0185_settled_order_to_counter.sql`, which re-creates
+`working_orders_enforce_transition`: a paid bill not yet handed over may leave its party, once,
+with every other column of its row unchanged — its `revision` and `label` included. Nothing else
+about a paid bill may change; it cannot join a party, change party, or leave one after handover.
+The database allows this for every paid table bill not yet handed over, a party closed days ago
+included; only the server code limits it to Finish table's collection at the counter
+(`finishPartyService`, `apps/server/src/finish-party-service.ts`). Decision 2 of the
+[plan](../superpowers/plans/2026-10-22-a758-7-collect-at-counter.md) has the reasons; A1025 is the
+owner's look at it.
 
 ### A841 slice 2's review points kept as built (lane A, 2026-10-21, before slice 3)
 

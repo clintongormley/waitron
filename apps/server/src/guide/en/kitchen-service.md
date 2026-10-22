@@ -83,8 +83,11 @@ When you serve one of two dishes on a line, the pass shows the one still to serv
 the served quantity without restarting the kitchen's preparation or ready time. A cancelled
 quantity no longer counts as food to serve, even when its charge stays on the bill.
 
-A counter order stays visible after payment until you collect or close it. Each pass still shows
-only the stations and service zones assigned to it.
+A counter order stays visible after payment until you collect or close it. When a paid table
+finishes with **They'll collect it at the counter**, its food still to come becomes such an order:
+each station with a dish still to come on it gets a MOVED slip to the counter, and the food stays
+on the pass until the order is handed over. Each pass still shows only the stations and service
+zones assigned to it.
 
 You choose when to request cooking from the till. In **Venue settings**, the **Kitchen** tab
 lets you choose whether to mark preparation ready by line or by whole ticket, and set the default

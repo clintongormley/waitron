@@ -96,8 +96,11 @@ Deshacer restaura la cantidad servida sin reiniciar el tiempo de preparación ni
 Una cantidad anulada deja de contar como comida pendiente, aunque se conserve su importe en la
 cuenta.
 
-Un pedido de mostrador sigue visible después del cobro hasta que lo entregues o cierres. Cada
-pase sigue mostrando solo las estaciones y zonas de servicio que tiene asignadas.
+Un pedido de mostrador sigue visible después del cobro hasta que lo entregues o cierres. Cuando
+una mesa pagada se cierra con **Lo recogerán en el mostrador**, sus platos por llegar pasan a ser
+un pedido así: cada estación con un plato por llegar en él recibe un ticket MOVIDO al mostrador, y
+los platos siguen en el pase hasta que se entrega el pedido. Cada pase sigue mostrando solo las
+estaciones y zonas de servicio que tiene asignadas.
 
 Tú decides cuándo pedir la preparación desde el terminal. En **Configuración del local**, la
 pestaña **Cocina** permite elegir si se marca como listo cada plato o la comanda completa y fijar
