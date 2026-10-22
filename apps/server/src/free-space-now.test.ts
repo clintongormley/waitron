@@ -16,7 +16,12 @@ import { dirname, join, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { backupArchiveKey } from "./backup-keys.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
-import { deleteLeftovers, surveyLeftovers, type LeftoverDeps } from "./free-space-now.js";
+import {
+  createSpaceFreer,
+  deleteLeftovers,
+  surveyLeftovers,
+  type LeftoverDeps,
+} from "./free-space-now.js";
 import type { Logger } from "./logger.js";
 
 const NOW = new Date("2026-10-21T12:00:00Z");
@@ -553,5 +558,169 @@ describe("what the deletion must never delete", () => {
     expect(await surveyLeftovers(deps())).toEqual({ bytes: 0, backupRunning: false });
     expect(await deleteLeftovers(deps())).toEqual(NOTHING);
     await expectAllPresent(paths);
+  });
+});
+
+describe("createSpaceFreer", () => {
+  const FREE = 4096 * 1000;
+  const statfs = async () => ({ bavail: 1000, frsize: 4096 });
+
+  function freer(
+    options: {
+      noted?: boolean;
+      statfs?: () => Promise<{ bavail: number; frsize: number }>;
+      remove?: LeftoverDeps["remove"];
+    } = {},
+  ) {
+    const order: string[] = [];
+    const records: { free: number | null; at: Date }[] = [];
+    let fullCalls = 0;
+    let freedCalls = 0;
+    const remove: LeftoverDeps["remove"] = async (path, opts) => {
+      order.push("remove");
+      await (options.remove ?? ((p, o) => rm(p, o)))(path, opts);
+    };
+    const free = createSpaceFreer({
+      ...deps({ remove }),
+      venueDir: join(stateDir, "venue"),
+      space: {
+        record(value, at) {
+          order.push("record");
+          records.push({ free: value, at });
+        },
+      },
+      disk: {
+        noted: () => options.noted ?? false,
+        async full() {
+          order.push("full");
+          fullCalls += 1;
+          return false;
+        },
+      },
+      statfs: options.statfs ?? statfs,
+      onFreed() {
+        order.push("freed");
+        freedCalls += 1;
+      },
+    });
+    return {
+      free,
+      order,
+      records,
+      fullCalls: () => fullCalls,
+      freedCalls: () => freedCalls,
+    };
+  }
+
+  it("deletes, records the fresh reading and answers both", async () => {
+    await stagingFiles();
+    const f = freer();
+    expect(await f.free("person-1")).toEqual({
+      freedBytes: 5500,
+      deleted: 3,
+      failed: 0,
+      backupRunning: false,
+      freeBytes: FREE,
+    });
+    expect(f.records).toEqual([{ free: FREE, at: NOW }]);
+  });
+
+  it("asks a noted stop to re-check once, after the deletion; an unnoted one never", async () => {
+    await stagingFiles();
+    const noted = freer({ noted: true });
+    await noted.free("person-1");
+    expect(noted.fullCalls()).toBe(1);
+    expect(noted.order.filter((step) => step !== "remove")).toEqual(["record", "full", "freed"]);
+    expect(noted.order.lastIndexOf("remove")).toBeLessThan(noted.order.indexOf("full"));
+
+    await stagingFiles();
+    const quiet = freer({ noted: false });
+    await quiet.free("person-1");
+    expect(quiet.fullCalls()).toBe(0);
+  });
+
+  it("two calls during one deletion share it; a later call runs a new one", async () => {
+    await stagingFiles();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let removes = 0;
+    const f = freer({
+      remove: async (path, opts) => {
+        removes += 1;
+        await held;
+        await rm(path, opts);
+      },
+    });
+    const first = f.free("person-1");
+    const second = f.free("person-2");
+    release();
+    const [a, b] = await Promise.all([first, second]);
+    expect(b).toBe(a);
+    expect(removes).toBe(3);
+    expect(f.freedCalls()).toBe(1);
+
+    await file(join(stagingDir, DUMP), 10);
+    const c = await f.free("person-3");
+    expect(c).not.toBe(a);
+    expect(c.freedBytes).toBe(10);
+    expect(removes).toBe(4);
+    expect(f.freedCalls()).toBe(2);
+  });
+
+  it("logs one storage.space_freed line naming the first caller", async () => {
+    await stagingFiles();
+    const f = freer();
+    await Promise.all([f.free("person-1"), f.free("person-2")]);
+    expect(lines.filter((line) => line.event === "storage.space_freed")).toEqual([
+      {
+        level: "info",
+        event: "storage.space_freed",
+        fields: {
+          freedBytes: 5500,
+          deleted: 3,
+          failed: 0,
+          backupRunning: false,
+          personId: "person-1",
+        },
+      },
+    ]);
+  });
+
+  it("an unreadable reading answers null, is recorded, and a noted stop still re-checks", async () => {
+    await stagingFiles();
+    const f = freer({
+      noted: true,
+      statfs: async () => {
+        throw errnoError("EIO");
+      },
+    });
+    expect((await f.free("person-1")).freeBytes).toBeNull();
+    expect(f.records).toEqual([{ free: null, at: NOW }]);
+    expect(f.fullCalls()).toBe(1);
+  });
+
+  it("calls onFreed once per deletion, after it settles", async () => {
+    await stagingFiles();
+    const f = freer();
+    const pending = f.free("person-1");
+    expect(f.freedCalls()).toBe(0);
+    await pending;
+    expect(f.freedCalls()).toBe(1);
+    expect(f.order.at(-1)).toBe("freed");
+    await f.free("person-1");
+    expect(f.freedCalls()).toBe(2);
+  });
+
+  it("works without onFreed and with the real statfs", async () => {
+    const records: (number | null)[] = [];
+    const free = createSpaceFreer({
+      ...deps(),
+      venueDir: join(stateDir, "venue"),
+      space: { record: (value) => records.push(value) },
+      disk: { noted: () => false, full: async () => false },
+    });
+    const answer = await free("person-1");
+    expect(answer).toEqual({ ...NOTHING, freeBytes: records[0] });
+    expect(typeof records[0]).toBe("number");
   });
 });

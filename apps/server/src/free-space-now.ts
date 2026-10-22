@@ -3,7 +3,10 @@ import * as fs from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { BACKUP_ENCRYPT_DIR_PREFIX } from "./backup-keys.js";
 import type { StagingTurn } from "./backup-staging-turn.js";
+import type { DiskFullState } from "./disk-full-state.js";
 import { errnoOf } from "./errno.js";
+import { freeBytes, type Statfs } from "./free-bytes.js";
+import type { FreeSpaceState } from "./free-space-watch.js";
 import type { Logger } from "./logger.js";
 import {
   BACKUP_STAGING_DIR,
@@ -88,6 +91,43 @@ export async function deleteLeftovers(deps: LeftoverDeps): Promise<LeftoverRemov
   result.backupRunning = !staged.ran;
   await removeAll(await logLeftovers(walk));
   return result;
+}
+
+export interface FreedSpace extends LeftoverRemoval {
+  /** The venue folder's free space after the deletion; null where it cannot be read. */
+  freeBytes: number | null;
+}
+
+/** A call while a deletion is under way answers that deletion's promise. */
+export function createSpaceFreer(
+  deps: LeftoverDeps & {
+    venueDir: string;
+    space: Pick<FreeSpaceState, "record">;
+    disk: Pick<DiskFullState, "noted" | "full">;
+    statfs?: Statfs;
+    /** Called once after each deletion settles, so boot can start a fresh disk usage walk. */
+    onFreed?: () => void;
+  },
+): (personId: string) => Promise<FreedSpace> {
+  let running: Promise<FreedSpace> | null = null;
+
+  async function run(personId: string): Promise<FreedSpace> {
+    const removal = await deleteLeftovers(deps);
+    const free = await freeBytes(deps.venueDir, deps.statfs);
+    deps.space.record(free, deps.now());
+    // The fresh reading lets a noted full-disk stop lift now rather than at the next watch tick.
+    if (deps.disk.noted()) await deps.disk.full();
+    deps.log("info", "storage.space_freed", { ...removal, personId });
+    return { ...removal, freeBytes: free };
+  }
+
+  return (personId) => {
+    running ??= run(personId).finally(() => {
+      running = null;
+      deps.onFreed?.();
+    });
+    return running;
+  };
 }
 
 function walkFor(deps: LeftoverDeps, report: boolean): Walk {
