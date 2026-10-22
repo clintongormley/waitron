@@ -2579,8 +2579,9 @@ a small real filesystem; the cases that now pin them are in
   in `apps/server/src/device-session.test.ts`, and the cases from "a stamp refused for a full disk
   still answers the session" to "with room, a stamp due is saved" in
   `apps/server/src/till-api.test.ts`, through a stand-in database that refuses the stamp.
-- **The equipment read reads in turns.** It opens no `withTransaction`: the
-  equipment is read in one `withWriteLock` turn (`device-api.ts`), and each notice source in a turn
+- **The equipment read reads in turns.** Its own reads open no `withTransaction` (the device
+  check before them can, to stamp the last-seen time: `requireDevice`,
+  `apps/server/src/device-session.ts`): the equipment is read in one `withWriteLock` turn (`device-api.ts`), and each notice source in a turn
   of its own (`readStaffNoticesInTurns`, `apps/server/src/staff-notices.ts`), with no drain; a
   source whose turn changes a row (`total_changes()` moved) is failed and rolled back. This is the
   stated exception to one `withTransaction` per route. Cost: one lock turn for the equipment and

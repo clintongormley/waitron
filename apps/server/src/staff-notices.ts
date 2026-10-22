@@ -49,8 +49,9 @@ export async function readStaffNotices(
 const SOURCE_WROTE = new Error("a staff notice source changed rows");
 
 /** Asks each source in a write-lock turn of its own, with no change-log drain, so one source's
- * failure — a full disk included — and anything it wrote go with its own turn. A source that
- * changes any row fails. Same order, owners, duplicate rule and log lines as `readStaffNotices`. */
+ * failure — a full disk included — goes with its own turn. A source that changes any row fails,
+ * and the rows it changed go with its turn; a schema change changes no row, so it is not caught.
+ * Same order, owners, duplicate rule and log lines as `readStaffNotices`. */
 export async function readStaffNoticesInTurns(
   db: Database,
   sources: readonly OwnedStaffNoticeSource[],
@@ -58,6 +59,8 @@ export async function readStaffNoticesInTurns(
 ): Promise<StaffNoticesRead> {
   const changes = () => db.all<{ n: number }>(sql`select total_changes() as n`)[0]!.n;
   return collect(sources, deps, ({ owner, source }) =>
+    // A source does database work only: a slow wait here holds the write lock, and nothing times
+    // a turn out.
     db.withWriteLock(async () => {
       const before = changes();
       const found = stamped(await source.read({ tx: db, reading: deps.reading }), owner);
@@ -114,9 +117,11 @@ export function createStaffNoticeLog(log: Logger): StaffNoticeLog {
   return {
     log(level, event, fields) {
       if (event === "staff_notice.source_unavailable") {
-        const owner = String(fields?.owner);
-        if (failing.has(owner)) return;
-        failing.add(owner);
+        const owner = fields?.owner;
+        if (typeof owner === "string") {
+          if (failing.has(owner)) return;
+          failing.add(owner);
+        }
       } else if (event === "staff_notice.duplicate_key") {
         const id = JSON.stringify([fields?.owner, fields?.key]);
         if (duplicates.has(id)) return;

@@ -395,6 +395,18 @@ describe("createStaffNoticeLog", () => {
     ]);
   });
 
+  it("logs every failure line that names no owner, and notes no recovery for it", () => {
+    const spy = vi.fn<Logger>();
+    const notices = createStaffNoticeLog(spy);
+    notices.log("error", UNAVAILABLE, { errorCode: "first.code" });
+    notices.log("error", UNAVAILABLE, { errorCode: "second.code" });
+    notices.settle([]);
+    expect(spy.mock.calls).toEqual([
+      ["error", UNAVAILABLE, { errorCode: "first.code" }],
+      ["error", UNAVAILABLE, { errorCode: "second.code" }],
+    ]);
+  });
+
   it("notes the recovery once, and logs a new failure after it", () => {
     const spy = vi.fn<Logger>();
     const notices = createStaffNoticeLog(spy);
