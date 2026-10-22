@@ -296,6 +296,21 @@ it.each([
   expect(api.refundTransaction).not.toHaveBeenCalled();
 });
 
+it("an older saved attempt holding cashConfirmed drops it and is not locked", () => {
+  const store = new TenderRefundAttempts();
+  const sent = store.prepare(scope, "sale-1", ask);
+  const key = localStorage.key(0)!;
+  const saved = JSON.parse(localStorage.getItem(key)!) as { request: Record<string, unknown> };
+  localStorage.setItem(
+    key,
+    JSON.stringify({ ...saved, request: { ...saved.request, cashConfirmed: true } }),
+  );
+  expect(localStorage.getItem(key)).toContain('"cashConfirmed":true');
+  const read = store.read(scope, "sale-1")!;
+  expect(read.request).not.toHaveProperty("cashConfirmed");
+  expect(store.prepare(scope, "sale-1", ask).request.submissionId).toBe(sent.request.submissionId);
+});
+
 it.each(["completed", "failed"] as const)(
   "a known %s outcome releases the request even after reopening",
   async (state) => {

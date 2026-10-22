@@ -74,7 +74,7 @@ it("refunds the original card's remaining applied amount and tip, explicitly lea
   ]);
 });
 
-it("requires a choice between original tenders and resets amounts and handover on another choice", async () => {
+it("requires a choice between original tenders and resets amounts and the hand-keyed switch on another choice", async () => {
   const manual = { ...card, tenderId: "manual-1", last4: "0077", manual: true };
   const el = await mount({ tenders: [manual, card] });
   expect(button(el).disabled).toBe(true);
@@ -101,6 +101,28 @@ it("draws no switch for a cash payment and submits without one", async () => {
   expect(button(el).disabled).toBe(false);
   await click(el);
   expect(root(el).querySelector("[data-confirm-error]")).toBeNull();
+  expect(asks).toEqual([
+    {
+      tenderId: "cash-1",
+      appliedAmount: "40.00",
+      tipAmount: "5.00",
+      reason: "Return",
+      manualConfirmed: false,
+    },
+  ]);
+});
+
+it("quiets a cash refund's action on an empty reason and sends once the reason is filled", async () => {
+  const el = await mount({ tenders: [cash] });
+  const asks = collect<TenderRefundAsk>(el, "tender-refund-submit");
+  await click(el);
+  expect(asks).toEqual([]);
+  expect(field(el, "reason").error).toBe(t("bill_refund.reason_invalid"));
+  expect(button(el).disabled).toBe(true);
+  await fill(el, "reason", "Return");
+  expect(field(el, "reason").error).toBe("");
+  expect(button(el).disabled).toBe(false);
+  await click(el);
   expect(asks).toEqual([
     {
       tenderId: "cash-1",
