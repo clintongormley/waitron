@@ -15,7 +15,11 @@ import {
   type DeviceId,
 } from "@waitron/shared";
 import { ALL_MODULES, enabledStaffNoticeSources } from "./modules.js";
-import { createStaffNoticeLog, readStaffNotices } from "./staff-notices.js";
+import {
+  createStaffNoticeLog,
+  readStaffNotices,
+  readStaffNoticesInTurns,
+} from "./staff-notices.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -446,5 +450,137 @@ describe("createStaffNoticeLog", () => {
     }
     expect(spy.mock.calls.filter(([, event]) => event === UNAVAILABLE)).toHaveLength(1);
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("readStaffNoticesInTurns", () => {
+  it("orders errors, warnings, then notices, sources in the order given, one after another", async () => {
+    const order: string[] = [];
+    const seen: StaffNoticeReadContext[] = [];
+    const mk = (name: string, notices: StaffNotice[]): StaffNoticeSource => ({
+      read: async (ctx) => {
+        seen.push(ctx);
+        order.push(`${name} in`);
+        await ctx.tx.execute(sql`select 1`);
+        await new Promise((r) => setTimeout(r, 5));
+        order.push(`${name} out`);
+        return notices;
+      },
+    });
+    const result = await readStaffNoticesInTurns(
+      db,
+      [
+        { owner: "p", source: mk("p", [n("p-notice", "notice"), n("p-error", "error")]) },
+        { owner: "q", source: mk("q", [n("q-warning", "warning"), n("q-error", "error")]) },
+      ],
+      { reading: READING, log: noopLog },
+    );
+    expect(order).toEqual(["p in", "p out", "q in", "q out"]);
+    expect(result.notices.map((x) => x.key)).toEqual([
+      "p-error",
+      "q-error",
+      "q-warning",
+      "p-notice",
+    ]);
+    expect(result.notices.map((x) => x.owner)).toEqual(["p", "q", "q", "p"]);
+    expect(result.unavailable).toEqual([]);
+    expect(seen).toHaveLength(2);
+    for (const ctx of seen) {
+      expect(ctx.tx).toBe(db);
+      expect(ctx.reading).toBe(READING);
+    }
+  });
+
+  it("a source that changes a row fails, keeps nothing, and the rest are asked", async () => {
+    const { deviceId } = await seedVenue();
+    const log = vi.fn<Logger>();
+    const result = await readStaffNoticesInTurns(
+      db,
+      [
+        {
+          owner: "w",
+          source: {
+            read: async (ctx) => {
+              await record(ctx.tx, deviceId, "test.w");
+              return [n("w-1", "error")];
+            },
+          },
+        },
+        { owner: "h", source: { read: () => Promise.resolve([n("h-1", "notice")]) } },
+      ],
+      { reading: READING, log },
+    );
+    expect(result.notices).toEqual([{ ...n("h-1", "notice"), owner: "h" }]);
+    expect(result.unavailable).toEqual(["w"]);
+    const open = await withTransaction(db, async (tx) =>
+      (await listOpenIncidents(tx)).map((i) => i.code),
+    );
+    expect(open).toEqual([]);
+    expect(log).toHaveBeenCalledWith("error", "staff_notice.source_unavailable", {
+      owner: "w",
+      errorCode: "staff_notice.source_wrote",
+    });
+  });
+
+  it("a source that throws is reported by its code", async () => {
+    const log = vi.fn<Logger>();
+    const result = await readStaffNoticesInTurns(
+      db,
+      [
+        {
+          owner: "t",
+          source: { read: () => Promise.reject(new AppError("server.internal", {})) },
+        },
+      ],
+      { reading: READING, log },
+    );
+    expect(result).toEqual({ notices: [], unavailable: ["t"] });
+    expect(log).toHaveBeenCalledWith("error", "staff_notice.source_unavailable", {
+      owner: "t",
+      errorCode: "server.internal",
+    });
+  });
+
+  it("the duplicate rule holds across turns", async () => {
+    const log = vi.fn<Logger>();
+    const result = await readStaffNoticesInTurns(
+      db,
+      [
+        {
+          owner: "d",
+          source: {
+            read: () =>
+              Promise.resolve([{ key: "k", code: "first.code", severity: "warning", params: {} }]),
+          },
+        },
+        {
+          owner: "d",
+          source: {
+            read: () =>
+              Promise.resolve([{ key: "k", code: "second.code", severity: "error", params: {} }]),
+          },
+        },
+      ],
+      { reading: READING, log },
+    );
+    expect(result.notices).toEqual([
+      { key: "k", code: "first.code", severity: "warning", params: {}, owner: "d" },
+    ]);
+    expect(result.unavailable).toEqual([]);
+    expect(log).toHaveBeenCalledWith("error", "staff_notice.duplicate_key", {
+      owner: "d",
+      key: "k",
+    });
+  });
+
+  it("drains nothing", async () => {
+    db.run(sql`insert into change_log (id, payload) values ('zz1', '{"resource":"zz","id":"1"}')`);
+    const result = await readStaffNoticesInTurns(
+      db,
+      [{ owner: "h", source: { read: () => Promise.resolve([n("h-1", "notice")]) } }],
+      { reading: READING, log: noopLog },
+    );
+    expect(result.notices.map((x) => x.key)).toEqual(["h-1"]);
+    expect(db.all<{ id: string }>(sql`select id from change_log`)).toEqual([{ id: "zz1" }]);
   });
 });

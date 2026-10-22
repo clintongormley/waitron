@@ -1,4 +1,5 @@
-import type { Transaction } from "@waitron/db";
+import { sql } from "drizzle-orm";
+import type { Database, Transaction } from "@waitron/db";
 import type {
   StaffNotice,
   StaffNoticeReadContext,
@@ -38,19 +39,50 @@ export async function readStaffNotices(
   sources: readonly OwnedStaffNoticeSource[],
   deps: StaffNoticeReadDeps,
 ): Promise<StaffNoticesRead> {
+  // A savepoint per source, so a failed source's own writes go with it. Its answer is read inside
+  // it too, so an answer that throws while being read counts as a failed source.
+  return collect(sources, deps, ({ owner, source }) =>
+    tx.transaction(async () => stamped(await source.read({ tx, reading: deps.reading }), owner)),
+  );
+}
+
+const SOURCE_WROTE = new Error("a staff notice source changed rows");
+
+/** Asks each source in a write-lock turn of its own, with no change-log drain, so one source's
+ * failure — a full disk included — and anything it wrote go with its own turn. A source that
+ * changes any row fails. Same order, owners, duplicate rule and log lines as `readStaffNotices`. */
+export async function readStaffNoticesInTurns(
+  db: Database,
+  sources: readonly OwnedStaffNoticeSource[],
+  deps: StaffNoticeReadDeps,
+): Promise<StaffNoticesRead> {
+  const changes = () => db.all<{ n: number }>(sql`select total_changes() as n`)[0]!.n;
+  return collect(sources, deps, ({ owner, source }) =>
+    db.withWriteLock(async () => {
+      const before = changes();
+      const found = stamped(await source.read({ tx: db, reading: deps.reading }), owner);
+      if (changes() !== before) throw SOURCE_WROTE;
+      return found;
+    }),
+  );
+}
+
+function stamped(answer: readonly StaffNotice[], owner: string): OwnedStaffNotice[] {
+  // `key` is named so that a null in the answer throws here; the spread keeps later fields.
+  return Array.from(answer, (notice): OwnedStaffNotice => ({ ...notice, key: notice.key, owner }));
+}
+
+async function collect(
+  sources: readonly OwnedStaffNoticeSource[],
+  deps: StaffNoticeReadDeps,
+  ask: (source: OwnedStaffNoticeSource) => Promise<OwnedStaffNotice[]>,
+): Promise<StaffNoticesRead> {
   const notices: OwnedStaffNotice[] = [];
   const unavailable: string[] = [];
-  for (const { owner, source } of sources) {
+  for (const entry of sources) {
+    const { owner } = entry;
     try {
-      // A savepoint per source, so a failed source's own writes go with it. Its answer is read
-      // inside it too, so an answer that throws while being read counts as a failed source.
-      const found = await tx.transaction(async () =>
-        Array.from(
-          await source.read({ tx, reading: deps.reading }),
-          // `key` is named so that a null in the answer throws here; the spread keeps later fields.
-          (notice): OwnedStaffNotice => ({ ...notice, key: notice.key, owner }),
-        ),
-      );
+      const found = await ask(entry);
       for (const notice of found) {
         if (notices.some((kept) => kept.owner === owner && kept.key === notice.key)) {
           deps.log("error", "staff_notice.duplicate_key", { owner, key: notice.key });
@@ -59,7 +91,8 @@ export async function readStaffNotices(
         notices.push(notice);
       }
     } catch (error) {
-      deps.log("error", "staff_notice.source_unavailable", { owner, errorCode: codeOf(error) });
+      const errorCode = error === SOURCE_WROTE ? "staff_notice.source_wrote" : codeOf(error);
+      deps.log("error", "staff_notice.source_unavailable", { owner, errorCode });
       if (!unavailable.includes(owner)) unavailable.push(owner);
     }
   }

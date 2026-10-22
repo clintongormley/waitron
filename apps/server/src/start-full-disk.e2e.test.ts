@@ -34,6 +34,7 @@ import { runEntry, serveRecovery, type RecoveryServeOptions } from "./node-entry
 import { FRESH, readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { escapeHtml } from "./recovery-surface.js";
+import { readStaffNoticesInTurns, type OwnedStaffNoticeSource } from "./staff-notices.js";
 import { provisionBillVenue } from "./testing/bill-venue.js";
 import { freePorts } from "./testing/free-ports.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
@@ -457,6 +458,80 @@ describe("a start on a real full disk", () => {
       small.unfill();
       expect((await request("/api/working-orders", venue.cookie)).status).toBe(200);
       expect(lastSeen()).not.toBe(longAgo);
+    } finally {
+      small.unfill();
+      await store.close();
+    }
+  });
+  it("the notice reader answers on a full disk with a change waiting, and a source that writes fails alone", async (ctx) => {
+    const small = needDisk(ctx);
+    const dir = realpathSync(small.folder("notices"));
+    await applyMigrations(dir, migrationOptionsFor(manifestSets(), null));
+    const store = await openVenueDatabase(dir);
+    const db = store.venue;
+    try {
+      db.run(sql`create table zz (id integer primary key, pad blob)`);
+      const sources: OwnedStaffNoticeSource[] = [
+        {
+          owner: "box",
+          source: {
+            read: () =>
+              Promise.resolve([
+                {
+                  key: "storage.disk_full",
+                  code: "storage.disk_full",
+                  severity: "error",
+                  params: {},
+                },
+              ]),
+          },
+        },
+        {
+          owner: "writer",
+          source: {
+            read: ({ tx }) => {
+              tx.run(sql`insert into zz (pad) values (zeroblob(16))`);
+              return Promise.resolve([{ key: "w", code: "w.w", severity: "error", params: {} }]);
+            },
+          },
+        },
+        {
+          owner: "count",
+          source: {
+            read: ({ tx }) => {
+              const [row] = tx.all<{ n: number }>(
+                sql`select count(*) as n from envios where estado in ('pendiente', 'enviando', 'detenido', 'retenido')`,
+              );
+              return Promise.resolve([
+                { key: "unsent", code: "x.unsent", severity: "notice", params: { count: row!.n } },
+              ]);
+            },
+          },
+        },
+      ];
+      db.run(
+        sql`insert into change_log (id, payload) values ('zz1', '{"resource":"zz","id":"1"}')`,
+      );
+      db.all(sql`pragma wal_checkpoint(truncate)`);
+      small.fill(0);
+
+      const read = () =>
+        readStaffNoticesInTurns(db, sources, {
+          reading: { instant: new Date(), offsetMinutes: 0 },
+          log: () => {},
+        });
+      for (let i = 0; i < 2; i += 1) {
+        const result = await read();
+        expect(result.notices.map((x) => `${x.owner}:${x.key}`)).toEqual([
+          "box:storage.disk_full",
+          "count:unsent",
+        ]);
+        expect(result.unavailable).toEqual(["writer"]);
+      }
+
+      small.unfill();
+      expect(db.all<{ n: number }>(sql`select count(*) as n from zz`)).toEqual([{ n: 0 }]);
+      expect(db.all<{ id: string }>(sql`select id from change_log`)).toEqual([{ id: "zz1" }]);
     } finally {
       small.unfill();
       await store.close();
