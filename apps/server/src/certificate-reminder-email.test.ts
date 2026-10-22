@@ -131,3 +131,87 @@ describe("certificate reminder SMTP", () => {
     }
   });
 });
+
+it.each([
+  ["accepted", "sent", []],
+  ["data-refused", "rejected", ["email.test_refused"]],
+  ["lost-ack", "unknown", ["email.test_refused"]],
+] as const)(
+  "reports structured certificate failure without changing %s outcome",
+  async (reply, expected, reasons) => {
+    const { smtpRig: diagnosticRig } = await import("./testing/smtp-settings-fixture.js");
+    const rig = await diagnosticRig(reply);
+    const failures: unknown[] = [];
+    try {
+      expect(
+        await createCertificateReminderSender({ onFailure: (reason) => failures.push(reason) })({
+          ...message,
+          smtp: rig.config,
+        }),
+      ).toBe(expected);
+      expect(failures).toEqual(reasons);
+      expect(JSON.stringify(failures)).not.toContain("secret-smtp-password");
+      await rig.connectionClosed;
+      expect(rig.sockets.size).toBe(0);
+    } finally {
+      await rig.close();
+    }
+  },
+);
+
+it.each(["venue@example.test", { name: "Harbour Kitchen", address: "venue@example.test" }])(
+  "keeps the certificate sender envelope %j and message",
+  async (from) => {
+    const { smtpRig: diagnosticRig } = await import("./testing/smtp-settings-fixture.js");
+    const rig = await diagnosticRig("accepted");
+    const reminder = {
+      ...message,
+      subject: "Certificate expires soon",
+      text: "Renew the certificate before expiry.",
+    };
+    try {
+      expect(
+        await createCertificateReminderSender()({ ...reminder, smtp: { ...rig.config, from } }),
+      ).toBe("sent");
+      expect(rig.messages[0]).toContain(
+        typeof from === "string"
+          ? "From: venue@example.test"
+          : "From: Harbour Kitchen <venue@example.test>",
+      );
+      expect(rig.messages[0]).toContain(`Subject: ${reminder.subject}`);
+      expect(decode(rig.messages[0]!)).toBe(reminder.text);
+    } finally {
+      await rig.close();
+    }
+  },
+);
+
+it("reports a reminder deadline as unknown with only its safe diagnostic", async () => {
+  const { smtpRig: diagnosticRig } = await import("./testing/smtp-settings-fixture.js");
+  const rig = await diagnosticRig("silent");
+  const failures: unknown[] = [];
+  const realTimeout = globalThis.setTimeout;
+  let expire!: () => void;
+  const spy = vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+    fn: (...args: unknown[]) => void,
+    ms?: number,
+    ...args: unknown[]
+  ) => {
+    if (ms === 30_000 && expire === undefined) expire = fn as () => void;
+    return realTimeout(fn, ms, ...args);
+  }) as typeof setTimeout);
+  try {
+    const sending = createCertificateReminderSender({
+      onFailure: (reason) => failures.push(reason),
+    })({ ...message, smtp: rig.config });
+    await rig.dataReceived;
+    expire();
+    expect(await sending).toBe("unknown");
+    expect(failures).toEqual(["email.test_timeout"]);
+    await rig.connectionClosed;
+    expect(rig.sockets.size).toBe(0);
+  } finally {
+    spy.mockRestore();
+    await rig.close();
+  }
+});

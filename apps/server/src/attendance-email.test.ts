@@ -173,3 +173,90 @@ describe("missing-attendance SMTP", () => {
     }
   });
 });
+
+it.each([
+  ["accepted", "sent", []],
+  ["data-refused", "rejected", ["email.test_refused"]],
+  ["lost-ack", "unknown", ["email.test_refused"]],
+] as const)(
+  "reports structured attendance failure without changing %s outcome",
+  async (reply, expected, reasons) => {
+    const { smtpRig: diagnosticRig } = await import("./testing/smtp-settings-fixture.js");
+    const { createAttendanceEmailSender } = await import("./attendance-email.js");
+    const rig = await diagnosticRig(reply);
+    const failures: unknown[] = [];
+    try {
+      expect(
+        await createAttendanceEmailSender({ onFailure: (reason) => failures.push(reason) })({
+          ...message,
+          smtp: rig.config,
+        }),
+      ).toBe(expected);
+      expect(failures).toEqual(reasons);
+      expect(JSON.stringify(failures)).not.toContain("secret-smtp-password");
+      await rig.connectionClosed;
+      expect(rig.sockets.size).toBe(0);
+    } finally {
+      await rig.close();
+    }
+  },
+);
+
+it.each(["venue@example.test", { name: "Harbour Kitchen", address: "venue@example.test" }])(
+  "keeps the attendance sender envelope %j",
+  async (from) => {
+    const { smtpRig: diagnosticRig } = await import("./testing/smtp-settings-fixture.js");
+    const { createAttendanceEmailSender } = await import("./attendance-email.js");
+    const rig = await diagnosticRig("accepted");
+    try {
+      expect(
+        await createAttendanceEmailSender()({
+          ...message,
+          locale: "en",
+          smtp: { ...rig.config, from },
+        }),
+      ).toBe("sent");
+      expect(rig.messages[0]).toContain(
+        typeof from === "string"
+          ? "From: venue@example.test"
+          : "From: Harbour Kitchen <venue@example.test>",
+      );
+      expect(decode(rig.messages[0]!)).toContain(message.businessDay);
+      expect(decode(rig.messages[0]!)).toContain(message.locationName);
+    } finally {
+      await rig.close();
+    }
+  },
+);
+
+it("reports an attendance deadline as unknown with only its safe diagnostic", async () => {
+  const { smtpRig: diagnosticRig } = await import("./testing/smtp-settings-fixture.js");
+  const { createAttendanceEmailSender } = await import("./attendance-email.js");
+  const rig = await diagnosticRig("silent");
+  const failures: unknown[] = [];
+  const realTimeout = globalThis.setTimeout;
+  let expire!: () => void;
+  const spy = vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+    fn: (...args: unknown[]) => void,
+    ms?: number,
+    ...args: unknown[]
+  ) => {
+    if (ms === 30_000 && expire === undefined) expire = fn as () => void;
+    return realTimeout(fn, ms, ...args);
+  }) as typeof setTimeout);
+  try {
+    const sending = createAttendanceEmailSender({ onFailure: (reason) => failures.push(reason) })({
+      ...message,
+      smtp: rig.config,
+    });
+    await rig.dataReceived;
+    expire();
+    expect(await sending).toBe("unknown");
+    expect(failures).toEqual(["email.test_timeout"]);
+    await rig.connectionClosed;
+    expect(rig.sockets.size).toBe(0);
+  } finally {
+    spy.mockRestore();
+    await rig.close();
+  }
+});

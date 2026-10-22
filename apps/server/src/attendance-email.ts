@@ -1,9 +1,9 @@
-import nodemailer from "nodemailer";
-import { Socket } from "node:net";
+import { sendSmtpMessage, type SmtpConnection } from "./smtp-send.js";
+import type { SmtpTestCode } from "./smtp-failure.js";
 
 export type AttendanceMailOutcome = "sent" | "rejected" | "unknown";
 export type AttendanceEmailSender = (message: {
-  smtp: { url: string; from: string };
+  smtp: SmtpConnection;
   recipient: string;
   locale: "en" | "es";
   businessDay: string;
@@ -11,7 +11,9 @@ export type AttendanceEmailSender = (message: {
   missingKinds: readonly ("in" | "out")[];
 }) => Promise<AttendanceMailOutcome>;
 
-export function createAttendanceEmailSender(): AttendanceEmailSender {
+export function createAttendanceEmailSender(
+  options: { onFailure?: (reason: SmtpTestCode) => void } = {},
+): AttendanceEmailSender {
   return async ({ smtp, recipient, locale, businessDay, locationName, missingKinds }) => {
     const missing =
       locale === "es"
@@ -25,45 +27,18 @@ export function createAttendanceEmailSender(): AttendanceEmailSender {
           : missingKinds[0] === "in"
             ? "clock in"
             : "clock out";
-    const socket = new Socket();
-    const transport = nodemailer.createTransport({ url: smtp.url, socket });
-    let timer: ReturnType<typeof setTimeout>;
-    const timeout = new Promise<AttendanceMailOutcome>((resolve) => {
-      timer = setTimeout(() => {
-        resolve("unknown");
-        socket.destroy();
-        transport.close();
-      }, 30_000);
+    const outcome = await sendSmtpMessage(smtp, {
+      to: recipient,
+      subject:
+        locale === "es"
+          ? `Fichajes pendientes: ${businessDay}`
+          : `Missing clock times: ${businessDay}`,
+      text:
+        locale === "es"
+          ? `El ${businessDay}, en ${locationName}, faltó ${missing}. Corrige las horas en tu próximo fichaje de entrada.`
+          : `On ${businessDay} at ${locationName}, you did not ${missing}. Fix your hours at your next clock-in.`,
     });
-    try {
-      const sending = transport
-        .sendMail({
-          from: smtp.from,
-          to: recipient,
-          subject:
-            locale === "es"
-              ? `Fichajes pendientes: ${businessDay}`
-              : `Missing clock times: ${businessDay}`,
-          text:
-            locale === "es"
-              ? `El ${businessDay}, en ${locationName}, faltó ${missing}. Corrige las horas en tu próximo fichaje de entrada.`
-              : `On ${businessDay} at ${locationName}, you did not ${missing}. Fix your hours at your next clock-in.`,
-        })
-        .then<AttendanceMailOutcome, AttendanceMailOutcome>(
-          () => "sent",
-          (error: unknown) => {
-            const code =
-              typeof error === "object" && error !== null && "responseCode" in error
-                ? error.responseCode
-                : undefined;
-            return typeof code === "number" && code >= 400 && code <= 599 ? "rejected" : "unknown";
-          },
-        );
-      return await Promise.race([sending, timeout]);
-    } finally {
-      clearTimeout(timer!);
-      socket.destroy();
-      transport.close();
-    }
+    if (outcome.status !== "sent") options.onFailure?.(outcome.reason);
+    return outcome.status;
   };
 }
