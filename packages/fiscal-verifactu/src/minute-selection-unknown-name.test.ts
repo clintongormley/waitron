@@ -1,15 +1,19 @@
 // The owner's condition for taking the installation code off the recovery sheet and the restore
-// form (design §6.7): a restore from an old backup never reuses a name it cannot see. Written down
-// before the first run: a failing row selects a code at or below the unseen name; a passing row is
-// refused, or selects a later code.
-import { describe, expect, it } from "vitest";
+// form (design §6.7): a restore from an old backup never reuses a name it cannot see. A failing row
+// selects a code at or below the unseen name; a passing row is refused, or selects a later code.
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   withOperationAuthority,
   type ModuleOperationHost,
   type ModuleRecoveryFacts,
   type OperationBinding,
 } from "@waitron/module";
-import { createHourRecoveryPreparation } from "./hour-recovery-preparation.js";
+import {
+  createHourPromotionPreparation,
+  createHourRecoveryPreparation,
+} from "./hour-recovery-preparation.js";
+import * as internetClock from "./hour-clock-internet.js";
+import * as hourRelease from "./hour-release.js";
 import { createSetupHourClock } from "./hour-setup-clock.js";
 import type { HourClockObservation } from "./hour-clock.js";
 import type { HourHistorySource } from "./hour-history.js";
@@ -43,6 +47,8 @@ const SWITCH = at("2026-10-23T19:40:50.000Z");
 const TRUE_NOW = at("2026-10-24T09:00:00.000Z");
 const RELEASE = at("2026-10-15T00:00:00.000Z");
 const BEHIND = at("2026-10-20T10:00:00.000Z");
+// Above both backup floors and below the unseen name: only the clock rules stand in the way.
+const ABOVE_FLOORS = at("2026-10-23T10:00:00.000Z");
 const KNOWN = "0CNNW";
 const UNSEEN = "0CZZW";
 
@@ -50,7 +56,8 @@ function row(reference: string, kind: string, nodeId: string, identity: string, 
   return { reference, kind, ...scope, softwareId: "77", nodeId, identity, recordedAtMs: ms };
 }
 // What the restore path hands the selection: the backup's history with its newest record as a
-// floor (readHourHistoryWithRecordFloor) and the backup's creation time (readHourRecoveryState).
+// floor (readHourHistoryWithRecordFloor) and the backup's creation time
+// (apps/server/src/recovery-preparation.ts, from the selected backup's createdAt).
 const backupHistory: HourHistorySource[] = [
   {
     reference: "venue",
@@ -68,6 +75,12 @@ const survivingWithSwitch: HourHistorySource = {
   complete: true,
   records: [row("surviving-venue/switch/registro_sif/2", "activation", SPARE, UNSEEN, SWITCH)],
 };
+// A live series carries no time, so only the spent-name floor can refuse it.
+const survivingLiveSeries: HourHistorySource = {
+  reference: "surviving-venue/live",
+  complete: true,
+  records: [row("surviving-venue/live/invoice_series/2", "series", SPARE, UNSEEN, null)],
+};
 
 interface Row {
   box: number;
@@ -77,6 +90,7 @@ interface Row {
   release?: number;
   surviving?: HourHistorySource[];
   reportedIdentities?: string[];
+  promote?: boolean;
 }
 type Outcome =
   | { refused: string; allowedFromMs?: string }
@@ -101,7 +115,17 @@ function store(): HourSelectionStore {
     });
 }
 
+const promoteBinding: OperationBinding = {
+  ...binding,
+  action: "promote",
+  eventId: "promote-spare",
+  targetNodeId: SPARE,
+};
+
 async function restore(c: Row): Promise<Outcome> {
+  const operation = c.promote
+    ? { binding: promoteBinding, operator: "owner" }
+    : { binding, operator };
   let elapsed = 0;
   const monotonic = () => 1000 + elapsed;
   const internet = async (): Promise<HourClockObservation> =>
@@ -133,7 +157,7 @@ async function restore(c: Row): Promise<Outcome> {
     noParallelRecovery: true,
     priorActivation: "none" as const,
   };
-  const preparation = createHourRecoveryPreparation({
+  const preparation = (c.promote ? createHourPromotionPreparation : createHourRecoveryPreparation)({
     withState: store(),
     read: async (_binding, comparisonId) => ({ ...facts, ...clocks.read(KEY, comparisonId) }),
     monotonicNow: monotonic,
@@ -147,9 +171,9 @@ async function restore(c: Row): Promise<Outcome> {
     const comparison = await clocks.compare(KEY, scope.environment, browser, {
       onBox: c.onBox ?? false,
     });
-    return withOperationAuthority(binding, operator, (authority) =>
+    return withOperationAuthority(operation.binding, operation.operator, (authority) =>
       preparation.select({
-        binding,
+        binding: operation.binding,
         authority,
         comparisonId: comparison.id,
         ...(c.reportedIdentities === undefined ? {} : { reportedIdentities: c.reportedIdentities }),
@@ -185,6 +209,10 @@ it("the model's names are the minutes it says", () => {
   expect(encodeMinuteIdentity(at("2026-10-24T09:02:00Z"))).toBe("0D0RY");
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("refused", () => {
   it("A: a clock before the backup's own floors", async () => {
     const box = at("2026-10-16T10:00:00Z");
@@ -200,9 +228,36 @@ describe("refused", () => {
     });
   });
 
-  it("B2: a clock days behind a right browser, and no proposal confirms it", async () => {
+  it("A2v: as A2 above the backup's floors", async () => {
+    expect(await restore({ box: ABOVE_FLOORS, release: at("2026-10-23T12:00:00Z") })).toEqual({
+      refused: "clock_unconfirmed",
+    });
+  });
+
+  it("B2: a clock days behind a right browser", async () => {
     expect(await restore({ box: BEHIND, browser: TRUE_NOW })).toEqual({
       refused: "clock_disagreement",
+    });
+  });
+
+  it("B2v: as B2 above the backup's floors", async () => {
+    expect(await restore({ box: ABOVE_FLOORS, browser: TRUE_NOW })).toEqual({
+      refused: "clock_disagreement",
+    });
+  });
+
+  it("B2: no proposal confirms a disagreeing comparison", async () => {
+    vi.spyOn(hourRelease, "readHourRelease").mockReturnValue({
+      sourceCommit: "a".repeat(40),
+      instantMs: RELEASE,
+      committedAt: new Date(RELEASE).toISOString(),
+      generator: "scripts/generate-hour-release.mjs:v1",
+      generatorSha256: "b".repeat(64),
+    });
+    vi.spyOn(internetClock, "observeInternetHourClock").mockResolvedValue({
+      source: "internet",
+      result: "unavailable",
+      reason: "tls",
     });
     const facts: ModuleRecoveryFacts = {
       country: "ES",
@@ -221,19 +276,34 @@ describe("refused", () => {
       readPublicEvidence: async () => undefined,
       readRecoveryFacts: async () => facts,
       withPreparationState: store(),
+      testClock: { wall: () => ABOVE_FLOORS, monotonic: () => 1000 },
     };
+    const recovery = FISCAL_OPERATIONS.configure!(host).recovery!;
     await withOperationAuthority(binding, operator, async (authority) => {
+      const operation = { binding, authority };
+      const client = { onBox: false };
+      const challenge = (await recovery(operation, { action: "clock-challenge" }, client)) as {
+        id: string;
+      };
+      const comparison = (await recovery(
+        operation,
+        { action: "compare-clocks", browser: { challengeId: challenge.id, instantMs: TRUE_NOW } },
+        client,
+      )) as { id: string; clock: { disagreement: boolean } };
+      expect(comparison.clock.disagreement).toBe(true);
       await expect(
-        FISCAL_OPERATIONS.configure!(host).recovery!(
-          { binding, authority },
-          { action: "confirm-clock", comparisonId: "comparison" },
-          { onBox: false },
-        ),
+        recovery(operation, { action: "confirm-clock", comparisonId: comparison.id }, client),
       ).rejects.toMatchObject({
         code: "sif.allocation_invalid",
         params: { reason: "event_mismatch" },
       });
     });
+  });
+
+  it("Sv: as S above the backup's floors", async () => {
+    expect(
+      await restore({ box: ABOVE_FLOORS, browser: TRUE_NOW, reportedIdentities: [KNOWN] }),
+    ).toEqual({ refused: "clock_disagreement" });
   });
 
   it("S: as B2, with the old sheet's code typed", async () => {
@@ -253,9 +323,23 @@ describe("refused", () => {
     },
   );
 
+  it("B4v: as B4 above the backup's floors", async () => {
+    expect(await restore({ box: ABOVE_FLOORS, browser: ABOVE_FLOORS, onBox: true })).toEqual({
+      refused: "second_clock_missing",
+    });
+  });
+
   it("D1: a known later name in the surviving database", async () => {
     const box = at("2026-10-23T19:00:00Z");
     expect(await restore({ box, surviving: [survivingWithSwitch] })).toEqual({
+      refused: "minute_not_later",
+      allowedFromMs: "2026-10-23T19:41:00.000Z",
+    });
+  });
+
+  it("D1v: a known later name on a live series, with no time", async () => {
+    const box = at("2026-10-23T19:00:00Z");
+    expect(await restore({ box, surviving: [survivingLiveSeries] })).toEqual({
       refused: "minute_not_later",
       allowedFromMs: "2026-10-23T19:41:00.000Z",
     });
@@ -296,9 +380,19 @@ describe("refused", () => {
     });
   });
 
-  it("F1: a box two hours fast", async () => {
+  it("D4v: as D4 above the backup's floors", async () => {
+    expect(await restore({ box: ABOVE_FLOORS, browser: null, internet: TRUE_NOW })).toEqual({
+      refused: "clock_disagreement",
+    });
+  });
+
+  it("F1: a promote on a box two hours fast", async () => {
     expect(
-      await restore({ box: at("2026-10-23T21:10:00Z"), browser: at("2026-10-23T19:10:00Z") }),
+      await restore({
+        box: at("2026-10-23T21:10:00Z"),
+        browser: at("2026-10-23T19:10:00Z"),
+        promote: true,
+      }),
     ).toEqual({ refused: "clock_disagreement" });
   });
 });
