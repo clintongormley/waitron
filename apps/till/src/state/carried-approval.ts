@@ -21,6 +21,15 @@ export class CarriedApproval {
     return { ...approver };
   }
 
+  /** Counts a sale whose refund was sent without the carried PIN. */
+  markSent(saleId: string): void {
+    if (this.#waiting.delete(saleId) && this.#waiting.size === 0) this.#approver = null;
+  }
+
+  get held(): boolean {
+    return this.#approver !== null;
+  }
+
   clear(): void {
     this.#approver = null;
     this.#waiting.clear();

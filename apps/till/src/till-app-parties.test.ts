@@ -11224,6 +11224,248 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     expect(api.getRefundableTenders).toHaveBeenCalledOnce();
   });
 
+  describe("each receipt's refund opens filled in", () => {
+    // A refund left awaiting its answer is saved for its sale, and would reopen in the next case.
+    afterEach(() => {
+      for (const key of Object.keys(localStorage))
+        if (key.startsWith("waitron.tender-refund:")) localStorage.removeItem(key);
+    });
+    type RefundForm = HTMLElementTagNameMap["till-tender-refund-dialog"];
+    const refundForm = (el: TillApp) =>
+      el.shadowRoot!.querySelector<RefundForm>("till-tender-refund-dialog");
+    const refundPrompt = (el: TillApp) =>
+      el.shadowRoot!.querySelector<TillSupervisorOverrideDialog>(
+        "till-supervisor-override-dialog[data-tender-refund-approval]",
+      );
+    function named(lineId: string, name: string, quantity: string, billId = "wo-4"): Dish {
+      return { ...dish(lineId, billId), name, quantity };
+    }
+    const refundTransaction = () =>
+      vi.fn(async (saleId: string, ask: { tenderId: string; appliedAmount: string }) => ({
+        id: `refund-${saleId}-${ask.appliedAmount}`,
+        saleId,
+        tenderId: ask.tenderId,
+        state: "completed",
+        appliedAmount: ask.appliedAmount,
+        tipAmount: "0.00",
+        createdAt: "2026-10-22T11:01:00.000Z",
+        completedAt: "2026-10-22T11:01:01.000Z",
+      }));
+    const sent = () => vi.mocked(api.refundTransaction).mock.calls.map((call) => call[1]);
+    async function untick(el: TillApp, index: number) {
+      const dialog = finishDialog(el)!;
+      await dialog.updateComplete;
+      await userEvent.click(
+        dialog.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="refund"]')[index]!,
+      );
+      await dialog.updateComplete;
+    }
+    async function openedRefund(el: TillApp) {
+      await expect.poll(() => refundForm(el)?.reasons ?? null).not.toBeNull();
+      await refundForm(el)!.updateComplete;
+      return refundForm(el)!;
+    }
+    async function sendRefund(el: TillApp, change: Record<string, string> = {}) {
+      const form = await openedRefund(el);
+      for (const [name, value] of Object.entries(change))
+        emit(form.shadowRoot!.querySelector(`[name="${name}"]`)!, "wt-change", { value });
+      await form.updateComplete;
+      await userEvent.click(
+        page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!),
+      );
+      await flush(el, 8);
+    }
+    async function openReceipt(el: TillApp, saleId: string) {
+      await expect
+        .poll(() => el.shadowRoot!.querySelector(`[data-finish-refund="${saleId}"]`))
+        .not.toBeNull();
+      await userEvent.click(
+        el.shadowRoot!.querySelector<HTMLElement>(`[data-finish-refund="${saleId}"]`)!,
+      );
+      await flush(el, 10);
+    }
+    async function backToList(el: TillApp) {
+      await expect.poll(() => refundForm(el)).toBeNull();
+      emit(el.shadowRoot!.querySelector("till-ticket-view")!, "back-to-find-bill");
+      await flush(el, 8);
+    }
+
+    it("opens each sale's refund filled in with its ticked dishes", async () => {
+      const rows = [
+        named("line-c", "Croquetas", "2.000"),
+        named("line-1", "Flan", "1.000"),
+        named("line-3", "Water", "1.000"),
+      ];
+      const { el } = await mountFinish({
+        finishTable: vi
+          .fn()
+          .mockRejectedValueOnce(refusal(rows))
+          .mockResolvedValue({
+            state: "closed",
+            refundLinks: [
+              { lineId: "line-1", adjustmentId: "adj-1" },
+              { lineId: "line-c", adjustmentId: "adj-c" },
+            ],
+          }),
+        getCancellation: vi.fn(async (_p: string, id: string) =>
+          consent(rows.find((row) => row.lineId === id)!),
+        ),
+        refundTransaction: refundTransaction(),
+      });
+      await openFinish(el);
+      await untick(el, 2);
+      await choose(el, true);
+      const form = await openedRefund(el);
+      expect(form.target).toBe("16.50");
+      expect(form.dishes).toBe("2 × Croquetas, 1 × Flan");
+      expect(form.startReasonId).toBe("r-cancel");
+      await sendRefund(el);
+      expect(sent()).toEqual([
+        expect.objectContaining({
+          appliedAmount: "16.50",
+          tipAmount: "0.00",
+          cancellationIds: ["adj-c", "adj-1"],
+        }),
+      ]);
+      expect(sent()[0]).not.toHaveProperty("override");
+    });
+
+    it("fills in the dish's share of a comp on the whole bill", async () => {
+      // The filed value of 3 portions after a 10% comp on the whole bill is €9.00, one already
+      // cancelled: the next portion's share is share(2) − share(1) of €9.00 over 3.
+      const row = dish();
+      row.context.components[0]!.cancelledQuantity = "1.000";
+      const read = { ...consent(row), refundValue: { quantity: "3.000", gross: "9.00" } };
+      const { el } = await mountFinish({
+        finishTable: vi
+          .fn()
+          .mockRejectedValueOnce(refusal([row]))
+          .mockResolvedValue({
+            state: "closed",
+            refundLinks: [{ lineId: "line-1", adjustmentId: "adj-1" }],
+          }),
+        getCancellation: vi.fn().mockResolvedValue(read),
+        refundTransaction: refundTransaction(),
+      });
+      await openFinish(el);
+      expect(finishDialog(el)!.refunds).toEqual({ "line-1": "3.00" });
+      await choose(el, true);
+      const form = await openedRefund(el);
+      expect(form.target).toBe("3.00");
+      expect(form.dishes).toBe("1 × Flan");
+    });
+
+    describe("the PIN Finish table asked for", () => {
+      const twoSales = [dish(), dish("line-2", "wo-check")];
+      function approvedFinish(more: Record<string, unknown> = {}) {
+        return mountFinish({
+          finishTable: vi
+            .fn()
+            .mockRejectedValueOnce(refusal(twoSales))
+            .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+            .mockResolvedValue({
+              state: "closed",
+              refundLinks: [
+                { lineId: "line-1", adjustmentId: "adj-1" },
+                { lineId: "line-2", adjustmentId: "adj-2" },
+              ],
+            }),
+          refundTransaction: refundTransaction(),
+          ...more,
+        });
+      }
+      async function approve(el: TillApp) {
+        await openFinish(el);
+        await choose(el, true);
+        expect(approval(el)).not.toBeNull();
+        emit(approval(el)!, "override-confirm", { personId: "m1", pin: "7777" });
+        await flush(el, 10);
+      }
+
+      it("sends it once with each sale's own refund", async () => {
+        const { el } = await approvedFinish();
+        await approve(el);
+        await openReceipt(el, "sale-wo-4");
+        const first = await openedRefund(el);
+        expect(first.target).toBe("5.50");
+        expect(first.dishes).toBe("1 × Flan");
+        await sendRefund(el);
+        await backToList(el);
+        await openReceipt(el, "sale-wo-check");
+        const second = await openedRefund(el);
+        expect(second.target).toBe("5.50");
+        expect(second.dishes).toBe("1 × Water");
+        await sendRefund(el);
+        expect(vi.mocked(api.refundTransaction).mock.calls.map((call) => call[0])).toEqual([
+          "sale-wo-4",
+          "sale-wo-check",
+        ]);
+        expect(sent()).toEqual([
+          expect.objectContaining({
+            appliedAmount: "5.50",
+            cancellationIds: ["adj-1"],
+            override: { personId: "m1", pin: "7777" },
+          }),
+          expect.objectContaining({
+            appliedAmount: "5.50",
+            cancellationIds: ["adj-2"],
+            override: { personId: "m1", pin: "7777" },
+          }),
+        ]);
+        expect(refundPrompt(el)).toBeNull();
+        expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
+        for (const storage of [localStorage, sessionStorage])
+          for (const key of Object.keys(storage))
+            expect(storage.getItem(key)).not.toContain("7777");
+      });
+
+      it("asks again for a second refund of the same sale", async () => {
+        const { el } = await approvedFinish();
+        await approve(el);
+        await openReceipt(el, "sale-wo-4");
+        await sendRefund(el, { appliedAmount: "3.00" });
+        expect(sent()[0]).toMatchObject({ override: { personId: "m1", pin: "7777" } });
+        await expect.poll(() => refundForm(el)).toBeNull();
+        vi.mocked(api.refundTransaction).mockRejectedValueOnce({
+          code: "authorization.not_permitted",
+        });
+        emit(el.shadowRoot!.querySelector("till-ticket-view")!, "tender-refund-open");
+        await flush(el);
+        await sendRefund(el, { reason: "r-cancel", appliedAmount: "2.50", tipAmount: "0.00" });
+        await expect.poll(() => refundPrompt(el)).not.toBeNull();
+        expect(sent()[1]).not.toHaveProperty("override");
+      });
+
+      it("asks again above the total, and the other sale still gets it", async () => {
+        const { el } = await approvedFinish();
+        await approve(el);
+        vi.mocked(api.refundTransaction).mockRejectedValueOnce({
+          code: "authorization.not_permitted",
+        });
+        await openReceipt(el, "sale-wo-4");
+        await sendRefund(el, { appliedAmount: "5.51" });
+        await expect.poll(() => refundPrompt(el)).not.toBeNull();
+        expect(sent()[0]).not.toHaveProperty("override");
+        expect(sent()[0]).not.toHaveProperty("cancellationIds");
+        emit(refundPrompt(el)!, "override-confirm", { personId: "m1", pin: "1234" });
+        await flush(el, 8);
+        await expect.poll(() => sent()).toHaveLength(2);
+        expect(sent()[1]).toMatchObject({
+          appliedAmount: "5.51",
+          override: { personId: "m1", pin: "1234" },
+        });
+        await backToList(el);
+        await openReceipt(el, "sale-wo-check");
+        await sendRefund(el);
+        expect(sent()[2]).toMatchObject({
+          appliedAmount: "5.50",
+          cancellationIds: ["adj-2"],
+          override: { personId: "m1", pin: "7777" },
+        });
+      });
+    });
+  });
+
   it("offers every selected paid bill after closing instead of losing the second receipt", async () => {
     const rows = [dish(), dish("line-2", "wo-check")];
     const { el } = await mountFinish({

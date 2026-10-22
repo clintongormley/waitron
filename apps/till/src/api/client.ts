@@ -6,7 +6,7 @@ import type {
   KitchenAllergyBlock,
   PartyAllergyRead,
 } from "@waitron/module";
-import type { FinishTableResolution } from "./finish-table-types.js";
+import type { FinishTableAnswer, FinishTableResolution } from "./finish-table-types.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import type { CancelItemAnswer, CancellationRead, CancelItemRequest } from "./line-cancel-types.js";
 export type {
@@ -3631,7 +3631,7 @@ export class TillApi {
     expectedEdits: BillEditExpected[],
     resolution?: FinishTableResolution,
     options: ReadOptions = {},
-  ): Promise<{ state: "closed" }> {
+  ): Promise<FinishTableAnswer> {
     return this.#request(
       `/api/parties/${partyId}/finish`,
       "POST",

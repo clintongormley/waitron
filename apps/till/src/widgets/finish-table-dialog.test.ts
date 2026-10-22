@@ -112,6 +112,18 @@ it("lists the entire unserved set with known preparation and waits for a reason"
   expect(button(el).variant).toBe("secondary");
   expect(dialogOpenUnder(el)).toBe(true);
 });
+it("offers no counter collection: Back and the main action are its only buttons", async () => {
+  for (const refundAtTill of [false, true]) {
+    const el = await mount({ refundAtTill });
+    await reason(el);
+    expect(
+      [...root(el).querySelectorAll("wt-button")].map((row) =>
+        row.hasAttribute("data-close") ? "back" : row.hasAttribute("data-confirm") ? "main" : "?",
+      ),
+    ).toEqual(["back", "main"]);
+    cleanupWidgets();
+  }
+});
 it("confirms all dishes with exact observed contexts and one reason without returning money itself", async () => {
   const el = await mount();
   const calls = collect(el);

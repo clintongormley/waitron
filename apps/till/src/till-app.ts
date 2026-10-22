@@ -53,7 +53,6 @@ import {
 } from "@waitron/ui";
 import {
   MONEY_SCALE,
-  addDecimal,
   cancelRefundShare,
   subtractDecimal,
   compareDecimal,
@@ -2134,7 +2133,7 @@ export class TillApp extends LitElement {
     this.#stopTableAllergy();
     this.#closeAllergyDialog();
     this.#closeFinishTable();
-    this.finishRefunds = null;
+    this.#closeFinishRefunds();
     clearTimeout(this.#servedTimer);
     this.servedCommand = null;
     this.#closeDeviceZones();
@@ -3110,7 +3109,8 @@ export class TillApp extends LitElement {
     session: number;
     visit: number;
     tab: BuiltInScreen | undefined;
-    receipts: FinishingTable["receipts"];
+    receipts: (FinishingTable["receipts"][number] & { fill: RefundFill })[];
+    approval?: CarriedApproval;
     busy: boolean;
     refusal: string;
   } | null = null;
@@ -3892,7 +3892,7 @@ export class TillApp extends LitElement {
     if (this.#paySheetWasOpen !== sheetOpen) this.nfcNotice = null;
     this.#paySheetWasOpen = sheetOpen;
     if (this.finishRefunds !== null && !this.#finishRefundsCurrent(this.finishRefunds))
-      this.finishRefunds = null;
+      this.#closeFinishRefunds();
     if (
       (this.finishingTable !== null && !this.#finishCurrent(this.finishingTable.composition)) ||
       (this.#finishOpening !== undefined &&
@@ -7669,9 +7669,10 @@ export class TillApp extends LitElement {
     await this.#holdingReload(async () => {
       try {
         let result: TenderRefundView;
-        if (action === "submit")
+        if (action === "submit") {
+          open.fill?.approval?.markSent(open.saleId);
           result = await open.session.submit(open.saleId, open.ask!, override);
-        else if (action === "inspect") result = await api.getTenderRefund(refundId!, {});
+        } else if (action === "inspect") result = await api.getTenderRefund(refundId!, {});
         else if (open.attempt !== null || open.session.read(open.saleId) !== null)
           result =
             action === "retry"
@@ -12949,7 +12950,7 @@ export class TillApp extends LitElement {
         MONEY_SCALE,
       ),
       startReasonId: choice.reasonId ?? "",
-      dishes: `${formatDecimalInput(trimQuantity(choice.quantity), currentLocale())} × ${open.name}`,
+      dishes: this.#refundDishWords(choice.quantity, open.name),
       cancellationIds: links
         .filter((link) => link.lineId === open.lineId)
         .map((link) => link.adjustmentId),
@@ -14960,18 +14961,10 @@ export class TillApp extends LitElement {
         }
         const value = consent.refundValue;
         if (compareDecimal(decimal(value.quantity), decimal("0")) <= 0) continue;
-        const cancelled = decimal(
+        const gross = cancelRefundShare(
+          value,
           consent.context.components.find((row) => row.lineId === dish.lineId)!.cancelledQuantity,
-        );
-        const share = (quantity: ReturnType<typeof decimal>) =>
-          divideDecimal(
-            multiplyDecimal(decimal(value.gross), quantity),
-            decimal(value.quantity),
-            2,
-          );
-        const gross = subtractDecimal(
-          share(addDecimal(cancelled, decimal(dish.quantity))),
-          share(cancelled),
+          dish.quantity,
         );
         const budget = budgets.get(consent.saleId)!;
         const amount = compareDecimal(gross, budget) < 0 ? gross : budget;
@@ -15094,7 +15087,7 @@ export class TillApp extends LitElement {
     this.finishingTable = { ...open, busy: true, refusal: "", refusalField: null };
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      await this.#resend(
+      const answer = await this.#resend(
         (signal) =>
           asked.api.finishTable(
             asked.partyId,
@@ -15108,15 +15101,25 @@ export class TillApp extends LitElement {
       );
       if (!this.#finishCurrent(asked)) return;
       this.#closeFinishTable();
-      const selected = new Set(
-        open.command!.cancellations.filter((row) => row.refundHandoff).map((row) => row.lineId),
-      );
-      const receipts = open.receipts.filter(
-        (row, index, all) =>
-          selected.has(row.lineId) &&
-          all.findIndex((other) => selected.has(other.lineId) && other.saleId === row.saleId) ===
-            index,
-      );
+      const handedOff = open.command!.cancellations.filter((row) => row.refundHandoff);
+      const selected = new Set(handedOff.map((row) => row.lineId));
+      const ticked = open.receipts.filter((row) => selected.has(row.lineId));
+      const approval =
+        approver === undefined
+          ? undefined
+          : new CarriedApproval(approver, new Set(ticked.map((row) => row.saleId)));
+      const receipts = ticked
+        .filter((row, index) => ticked.findIndex((other) => other.saleId === row.saleId) === index)
+        .map((row) => ({
+          ...row,
+          fill: this.#finishRefundFill(
+            open,
+            ticked.filter((other) => other.saleId === row.saleId),
+            handedOff,
+            answer.refundLinks ?? [],
+            approval,
+          ),
+        }));
       await this.#onTableClosed(asked.partyId, asked.visit, asked.sent);
       if (
         receipts.length > 0 &&
@@ -15131,11 +15134,12 @@ export class TillApp extends LitElement {
           visit: this.#orderVisit,
           tab: this.activeTabKey,
           receipts,
+          ...(approval === undefined ? {} : { approval }),
           busy: false,
           refusal: "",
         };
         if (receipts.length === 1) await this.#openFinishRefund(receipts[0]!);
-      }
+      } else approval?.clear();
     } catch (error) {
       if (!this.#finishCurrent(asked) || this.finishingTable?.composition !== asked) return;
       const code = (error as { code?: string })?.code ?? "server.internal";
@@ -15206,6 +15210,42 @@ export class TillApp extends LitElement {
     }
   }
 
+  #finishRefundFill(
+    open: FinishingTable,
+    lines: FinishingTable["receipts"],
+    cancellations: FinishTableResolution["cancellations"],
+    links: RefundLink[],
+    approval: CarriedApproval | undefined,
+  ): RefundFill {
+    return {
+      target: toScale(
+        sumDecimals(lines.map((row) => decimal(open.refunds[row.lineId]!))),
+        MONEY_SCALE,
+      ),
+      startReasonId: cancellations.find((row) => row.lineId === lines[0]!.lineId)?.reasonId ?? "",
+      dishes: lines
+        .map((row) => {
+          const dish = open.dishes.find((candidate) => candidate.lineId === row.lineId)!;
+          return this.#refundDishWords(dish.quantity, dish.name);
+        })
+        .join(", "),
+      cancellationIds: lines.flatMap((row) =>
+        links.filter((link) => link.lineId === row.lineId).map((link) => link.adjustmentId),
+      ),
+      ...(open.reasons === null ? {} : { reasons: open.reasons }),
+      ...(approval === undefined ? {} : { approval }),
+    };
+  }
+
+  #refundDishWords(quantity: string, name: string): string {
+    return `${formatDecimalInput(trimQuantity(quantity), currentLocale())} × ${name}`;
+  }
+
+  #closeFinishRefunds(): void {
+    this.finishRefunds?.approval?.clear();
+    this.finishRefunds = null;
+  }
+
   async #askFinishApprover(open: FinishingTable): Promise<void> {
     const asked = open.composition;
     try {
@@ -15259,7 +15299,9 @@ export class TillApp extends LitElement {
     );
   }
 
-  async #openFinishRefund(receipt: FinishingTable["receipts"][number]): Promise<void> {
+  async #openFinishRefund(
+    receipt: NonNullable<TillApp["finishRefunds"]>["receipts"][number],
+  ): Promise<void> {
     const open = this.finishRefunds;
     if (open === null || open.busy || !this.#finishRefundsCurrent(open)) return;
     this.finishRefunds = { ...open, busy: true, refusal: "" };
@@ -15268,6 +15310,7 @@ export class TillApp extends LitElement {
       { saleId: receipt.saleId, workingOrderId: receipt.workingOrderId, refundId: null },
       () =>
         this.finishRefunds !== null && this.#finishRefundsCurrent(open) && this.drill === origin,
+      receipt.fill,
     );
     if (this.finishRefunds === null || !this.#finishRefundsCurrent(open)) return;
     if (
@@ -15335,7 +15378,7 @@ export class TillApp extends LitElement {
             .beforeClose=${async () => !this.finishRefunds?.busy}
             @wt-close=${(event: Event) => {
               event.stopPropagation();
-              this.finishRefunds = null;
+              this.#closeFinishRefunds();
             }}
           >
             <div class="finish-refund-list">
@@ -15356,7 +15399,7 @@ export class TillApp extends LitElement {
                 variant="secondary"
                 .disabled=${handoff.busy}
                 @click=${() => {
-                  if (!this.finishRefunds?.busy) this.finishRefunds = null;
+                  if (!this.finishRefunds?.busy) this.#closeFinishRefunds();
                 }}
                 >${t("action.back")}</wt-button
               >
