@@ -309,19 +309,36 @@ describe("dashboard-themes-card actions", () => {
     expect(changes).toEqual([]);
   });
 
+  it("the row menus are usable again after a refused request", async () => {
+    const { el, renameTheme } = await mount(four);
+    renameTheme.mockRejectedValueOnce({ code: "theme.not_found" });
+    await choose(el, "t-xmas", "rename");
+    const dialog = await nameDialog(el);
+    await type(el, dialog, "Holiday");
+    await userEvent.click(save(dialog));
+    await settle(el);
+    expect(renameTheme).toHaveBeenCalledTimes(1);
+    await table(el).updateComplete;
+    for (const item of ["edit", "rename", "copy", "delete"]) {
+      expect(
+        menu(el, "t-lucia").querySelector<WtButton>(`[data-test=${item}-t-lucia]`)!.disabled,
+      ).toBe(false);
+    }
+  });
+
   it("Rename changes only the name", async () => {
     const { el, changes, renameTheme, getVenueTheme } = await mount(four);
     await choose(el, "t-xmas", "rename");
     const dialog = await nameDialog(el);
     expect(toggle(dialog)).toBeNull();
     expect(input(dialog).value).toBe("Christmas");
-    await type(el, dialog, "Navidad");
+    await type(el, dialog, "Holiday");
     const closed = dialogClosed(dialog);
     await userEvent.click(save(dialog));
     await closed;
     expect(renameTheme).toHaveBeenCalledTimes(1);
-    expect(renameTheme).toHaveBeenCalledWith("t-xmas", "Navidad");
-    expect(changes).toEqual([{ kind: "renamed", theme: { ...xmas, name: "Navidad" } }]);
+    expect(renameTheme).toHaveBeenCalledWith("t-xmas", "Holiday");
+    expect(changes).toEqual([{ kind: "renamed", theme: { ...xmas, name: "Holiday" } }]);
     expect(getVenueTheme).not.toHaveBeenCalled();
   });
 
@@ -330,7 +347,7 @@ describe("dashboard-themes-card actions", () => {
     renameTheme.mockRejectedValueOnce({ code: "theme.not_found" });
     await choose(el, "t-xmas", "rename");
     const dialog = await nameDialog(el);
-    await type(el, dialog, "Navidad");
+    await type(el, dialog, "Holiday");
     await userEvent.click(save(dialog));
     await settle(el);
     expect(dialog.open).toBe(true);
