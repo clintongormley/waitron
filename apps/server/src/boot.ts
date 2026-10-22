@@ -1530,13 +1530,14 @@ async function bootServer(
   // Resolved once so the mirror's ambient session and every mounted login surface agree with the
   // listener about whether cookies require HTTPS.
   const secureCookies = resolveTradingTls(config) !== undefined;
+  const isReadOnly = () => holders.mode.current === "mirror" || fenced;
   if (fencedOrMirror) {
     app.use(
       "*",
       // A mirror gates by mode, per request, so a live promotion lifts it; a fenced node gates on the
       // boot-captured `fenced`, and leaves the fence only through a fresh boot.
       readOnlyGate(
-        () => holders.mode.current === "mirror" || fenced,
+        isReadOnly,
         // Retirement and promote writes use their own authentication gates.
         (c) =>
           (fenced && c.req.method === "POST" && c.req.path === "/api/box/retire") ||
@@ -2247,10 +2248,13 @@ async function bootServer(
   };
   const timeHealthCache = createTtlCache<TimeHealth>({ ttlMs: 60_000, now });
   const diskUsageCache = createTtlCache<DiskUsage>({ ttlMs: 60_000, now });
-  // Bumped after each free-space deletion, so the next read walks the disk afresh.
-  let usageGeneration = 0;
   // Its own, so the page's notice failures are logged once per spell apart from the equipment read's.
   const pageNoticeLog = createStaffNoticeLog(log);
+  const pageNoticeSources = deviceNoticeSources(
+    { disk: diskFull, space: freeSpace },
+    setsToMigrate,
+  );
+  const paymentsEnabled = setsToMigrate.some((module) => module.name === "payments");
   mountBoxHealthApi(
     app,
     {
@@ -2259,7 +2263,7 @@ async function bootServer(
         collectBoxHealth(db, {
           now,
           notices: {
-            sources: deviceNoticeSources({ disk: diskFull, space: freeSpace }, setsToMigrate),
+            sources: pageNoticeSources,
             clock: tillClock,
             filing: filesRecords,
             log: pageNoticeLog,
@@ -2270,7 +2274,7 @@ async function bootServer(
           disk: diskFull,
           space: freeSpace,
           usage: () =>
-            diskUsageCache.get(`usage:${usageGeneration}`, () =>
+            diskUsageCache.get("usage", () =>
               readDiskUsage({
                 venueDir: config.venueDir,
                 logDir: config.logDir,
@@ -2281,18 +2285,16 @@ async function bootServer(
             ),
           free: () => freeBytes(config.venueDir),
           leftovers: () => surveyLeftovers(leftoverDeps),
-          paymentsEnabled: setsToMigrate.some((module) => module.name === "payments"),
-          // The read-only gate's own condition, read per call so a live promotion lifts it.
-          canFree: () => !(holders.mode.current === "mirror" || fenced),
+          paymentsEnabled,
+          canFree: () => !isReadOnly(),
         }),
       freeSpace: createSpaceFreer({
         ...leftoverDeps,
         venueDir: config.venueDir,
         space: freeSpace,
         disk: diskFull,
-        onFreed: () => {
-          usageGeneration += 1;
-        },
+        // A deletion changes what the disk holds, so the next read walks it afresh.
+        onFreed: () => diskUsageCache.clear(),
       }),
     },
     log,

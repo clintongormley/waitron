@@ -159,6 +159,18 @@ describe("the running server's Box status read and free-space deletion", () => {
     const during = await turn.runBackup(async () => box.get());
     expect(during.disk.reclaimable.backupRunning).toBe(true);
     expect((await box.get()).disk.reclaimable.backupRunning).toBe(false);
+
+    // The state folder: a press during a backup run must leave that run's dump alone.
+    const stagingDir = join(dirname(box.logDir), "backup-staging");
+    await mkdir(stagingDir, { recursive: true });
+    const dump = join(stagingDir, "waitron-20261022T100000Z.dump");
+    await writeFile(dump, Buffer.alloc(700, 1));
+    const body = await turn.runBackup(async () => (await box.free()).json());
+    expect((body as { backupRunning: boolean }).backupRunning).toBe(true);
+    expect(await exists(dump)).toBe(true);
+    const after = (await (await box.free()).json()) as { backupRunning: boolean };
+    expect(after.backupRunning).toBe(false);
+    expect(await exists(dump)).toBe(false);
   });
 
   it("caches the clock check and the disk walk for a minute, and a deletion starts a fresh walk", async () => {

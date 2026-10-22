@@ -5,6 +5,7 @@ interface Entry<V> {
 
 export interface TtlCache<V> {
   get(key: string, compute: () => Promise<V>): Promise<V>;
+  clear(): void;
 }
 
 export function createTtlCache<V>(opts: { ttlMs: number; now: () => Date }): TtlCache<V> {
@@ -22,5 +23,6 @@ export function createTtlCache<V>(opts: { ttlMs: number; now: () => Date }): Ttl
       });
       return value;
     },
+    clear: () => entries.clear(),
   };
 }
