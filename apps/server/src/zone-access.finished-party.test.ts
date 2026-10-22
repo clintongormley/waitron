@@ -4,13 +4,20 @@ import { describe, expect, it } from "vitest";
 import { devices, parties } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { listDepartments, setProfileServiceAccess } from "@waitron/venue-service";
+import {
+  createServiceZone,
+  listDepartments,
+  setProfileServiceAccess,
+  zoneServicePolicies,
+} from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
-import { splitBill } from "./bill-actions.js";
+import { mergeBills, splitBill } from "./bill-actions.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { seatTable } from "./parties.js";
 import { markServed } from "./working-order.js";
 import { combineParties } from "./testing/table-action-fixture.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
+import { createTable } from "./testing/live-table.js";
 import { createZone } from "./testing/service-zone.js";
 import {
   billWith,
@@ -125,6 +132,22 @@ async function withZones<T>(zones: string[] | null, fn: () => Promise<T>): Promi
   }
 }
 
+/** A new zone in the tables zone's department, taking orders at a table as it does. */
+async function patioZone() {
+  return inTx(venue, async (tx) => {
+    const [policy] = await tx
+      .select({ departmentId: zoneServicePolicies.departmentId })
+      .from(zoneServicePolicies)
+      .where(eq(zoneServicePolicies.zoneId, venue.tables.zoneId));
+    const zone = await createServiceZone(tx, venue.cfg, {
+      name: `Patio-${randomUUID()}`,
+      departmentId: policy!.departmentId,
+      orderStart: "table",
+    });
+    return zone.id;
+  });
+}
+
 const refused = { status: 403, json: { error: { code: "service_zone.not_allowed" } } };
 
 describe("a finished party's dishes are checked against its family's bills' zones", () => {
@@ -181,6 +204,39 @@ describe("a finished party's dishes are checked against its family's bills' zone
     expect(both.status, JSON.stringify(both.json)).toBe(200);
   });
 
+  it("leaves out a bill emptied by a merge, whatever zone it was recorded in", async () => {
+    const p = await servedParty();
+    const water = p.lines.find((line) => line.name === "Water")!;
+    const moved = await inTx(venue, async (tx) =>
+      splitBill(tx, venue.cfg, p.billId, [{ lineNo: water.lineNo }], {
+        operatorId: venue.staffId,
+        expectedPartyRevision: await revisionOf(p.partyId),
+        expectedEdit: await readBillEditState(tx, p.billId),
+      }),
+    );
+    // Merging needs one service mode, so the emptied bill sits in another zone like the tables'.
+    const patio = await patioZone();
+    await inTx(venue, (tx) =>
+      VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, moved.billId, patio),
+    );
+    await inTx(venue, async (tx) =>
+      mergeBills(tx, venue.cfg, p.billId, moved.billId, {
+        operatorId: venue.staffId,
+        expectedPartyRevision: await revisionOf(p.partyId),
+        expectedEdits: [
+          await readBillEditState(tx, p.billId),
+          await readBillEditState(tx, moved.billId),
+        ],
+      }),
+    );
+    await pay(p.billId);
+    await finish(p.partyId, [p.billId, moved.billId]);
+    const burger = p.lines.find((line) => line.name === "Burger")!;
+    const answer = await withZones([venue.tables.zoneId], () => read(p.partyId, burger.id));
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await withZones([patio], () => read(p.partyId, burger.id))).toMatchObject(refused);
+  });
+
   it("refuses a merged party's dish read through the finished party it joined", async () => {
     const survivor = await servedParty();
     const merged = await servedParty();
@@ -207,6 +263,34 @@ describe("a finished party's dishes are checked against its family's bills' zone
       read(survivor.partyId, merged.lines[0]!.id),
     );
     expect(both.status, JSON.stringify(both.json)).toBe(200);
+  });
+
+  it("judges an open party holding two tables by the table it sat at first", async () => {
+    const p = await servedParty();
+    const patio = await patioZone();
+    const joining = await inTx(venue, async (tx) => {
+      const table = await createTable(tx, venue.cfg, {
+        label: `P-${randomUUID().slice(0, 8)}`,
+        zoneId: patio,
+      });
+      return seatTable(tx, venue.cfg, {
+        tableId: table.id,
+        guestCount: null,
+        operatorId: venue.staffId,
+      });
+    });
+    await inTx(venue, (tx) =>
+      combineParties(tx, venue.cfg, {
+        from: joining.partyId,
+        into: p.partyId,
+        bills: "separate",
+        tables: "join",
+        operatorId: venue.staffId,
+      }),
+    );
+    const first = await withZones([venue.tables.zoneId], () => read(p.partyId, p.lines[0]!.id));
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    expect(await withZones([patio], () => read(p.partyId, p.lines[0]!.id))).toMatchObject(refused);
   });
 
   it("still judges an open party by its table's zone, not its bills'", async () => {

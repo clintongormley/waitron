@@ -205,14 +205,23 @@ export async function partyZone(
   partyId: string,
 ): Promise<string | null> {
   void cfg;
-  const [table] = await tx
-    .select({ zoneId: diningTables.zoneId })
-    .from(partyTables)
-    .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
-    .where(and(eq(partyTables.partyId, partyId), isNull(partyTables.leftAt)))
+  return (await partyStateAndZone(tx, partyId))?.zoneId ?? null;
+}
+
+/** The party's state and {@link partyZone}'s answer in one read; undefined when there is no such party. */
+export async function partyStateAndZone(
+  tx: Transaction,
+  partyId: string,
+): Promise<{ state: (typeof parties.$inferSelect)["state"]; zoneId: string | null } | undefined> {
+  const [row] = await tx
+    .select({ state: parties.state, zoneId: diningTables.zoneId })
+    .from(parties)
+    .leftJoin(partyTables, and(eq(partyTables.partyId, parties.id), isNull(partyTables.leftAt)))
+    .leftJoin(diningTables, eq(diningTables.id, partyTables.tableId))
+    .where(eq(parties.id, partyId))
     .orderBy(partyTables.joinedAt, sql`${partyTables}.rowid`)
     .limit(1);
-  return table?.zoneId ?? null;
+  return row;
 }
 
 /** Name the party, or with an empty name clear it; a party command guarded by its revision. */

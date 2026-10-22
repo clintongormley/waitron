@@ -1,9 +1,9 @@
-import { and, eq, inArray } from "drizzle-orm";
-import { diningTables, parties, workingOrders } from "@waitron/db";
+import { and, eq, inArray, ne } from "drizzle-orm";
+import { diningTables, workingOrders } from "@waitron/db";
 import type { Database, SQL, Transaction } from "@waitron/db";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
-import { partyFamily, partyZone } from "./parties.js";
+import { partyFamily, partyStateAndZone } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
 
 /** What a till request acts on, by where its service zone is read from. */
@@ -36,24 +36,23 @@ async function subjectZones(
   return [table?.zoneId ?? null];
 }
 
-/**
- * An open party is where its table is. A closed one holds no table, so it is wherever any bill of its
- * family was recorded, as a dish of any of those bills can still be read through it.
- */
+/** A closed party holds no table, and a dish of any bill of its family can still be read through it. */
 async function partySubjectZones(
   tx: Transaction,
   cfg: TillConfig,
   partyId: string,
 ): Promise<(string | null)[]> {
-  const [party] = await tx
-    .select({ state: parties.state })
-    .from(parties)
-    .where(eq(parties.id, partyId));
-  if (party?.state !== "closed") return [await partyZone(tx, cfg, partyId)];
+  const party = await partyStateAndZone(tx, partyId);
+  if (party?.state !== "closed") return [party?.zoneId ?? null];
   const bills = await tx
     .select({ id: workingOrders.id })
     .from(workingOrders)
-    .where(inArray(workingOrders.partyId, await partyFamily(tx, partyId)));
+    .where(
+      and(
+        inArray(workingOrders.partyId, await partyFamily(tx, partyId)),
+        ne(workingOrders.status, "abandoned"),
+      ),
+    );
   const zones = await VENUE_SERVICE.findOrderZones(
     tx,
     cfg,
