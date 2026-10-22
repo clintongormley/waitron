@@ -75,6 +75,7 @@ export { webauthnCredentials, webauthnChallenges } from "./schema/webauthn.js";
 export { MIN_PIN_LENGTH, assertPinLength } from "./verify-pin.js";
 export { isValidEmail } from "./email.js";
 export {
+  authorizePersonLoginChange,
   clearPersonPin,
   deactivatePerson,
   invitePerson,

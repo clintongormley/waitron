@@ -2659,3 +2659,131 @@ describe("optional receipt source failures within one transaction", () => {
     },
   );
 });
+
+describe("A998 admin account authority", () => {
+  it("blocks the manager email-change and password-reset takeover of an admin", async () => {
+    await setupTenant();
+    const [admin] = (
+      await suite.db.execute<{ id: string }>(sql`select id from persons where role = 'admin'`)
+    ).rows;
+    const sent: Parameters<AccountEmailSender>[0][] = [];
+    const app = mountApp(async (message) => {
+      sent.push(message);
+    });
+    const managerCookie = await login(app, MANAGER_EMAIL);
+    const changed = await app.request(`/management-api/staff/${admin!.id}`, {
+      method: "PUT",
+      headers: { cookie: managerCookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        displayName: "Owner",
+        firstNames: "Venue",
+        lastNames: "Owner",
+        telephone: null,
+        email: "manager-controlled@example.test",
+        role: "admin",
+        status: "active",
+      }),
+    });
+    const requested = await app.request("/management-api/password-reset", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "manager-controlled@example.test" }),
+    });
+    await app.settle();
+    let completionStatus: number | null = null;
+    if (sent.length > 0) {
+      const url = new URL(sent[0]!.actionUrl);
+      const completed = await app.request("/management-api/account-actions/complete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          token: url.searchParams.get("token"),
+          purpose: "password_reset",
+          password: "manager chosen password",
+        }),
+      });
+      completionStatus = completed.status;
+    }
+    const signedIn = await app.request("/management-api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "manager-controlled@example.test",
+        password: "manager chosen password",
+      }),
+    });
+    expect({
+      edit: changed.status,
+      reset: requested.status,
+      delivered: sent.length,
+      completion: completionStatus,
+      signIn: signedIn.status,
+    }).toEqual({ edit: 403, reset: 202, delivered: 0, completion: null, signIn: 401 });
+    expect(await changed.json()).toMatchObject({
+      error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+    });
+    expect(await signedIn.json()).toMatchObject({ error: { code: "password.invalid" } });
+    expect(
+      (
+        await suite.db.execute<{ email: string }>(
+          sql`select email from persons where id = ${admin!.id}`,
+        )
+      ).rows,
+    ).toEqual([{ email: "owner@example.test" }]);
+  });
+});
+
+describe("A998 staff route authority", () => {
+  it.each([
+    { action: "reset-pin", status: "active" },
+    { action: "reset-login", status: "active" },
+    { action: "reactivate", status: "suspended" },
+    { action: "invitation", status: "pending" },
+    { action: "deactivate", status: "active" },
+  ])(
+    "refuses a manager's $action on an admin before any change or email",
+    async ({ action, status }) => {
+      const { staffId } = await setupTenant();
+      await suite.db.execute(
+        sql`update persons set role = 'admin', status = ${status} where id = ${staffId}`,
+      );
+      const before = await suite.db.select().from(persons).where(eq(persons.id, staffId));
+      const sent: Parameters<AccountEmailSender>[0][] = [];
+      const app = mountApp(async (message) => {
+        sent.push(message);
+      });
+      const cookie = await login(app, MANAGER_EMAIL);
+      const response = await app.request(`/management-api/staff/${staffId}/${action}`, {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({
+        error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+      });
+      expect(sent).toEqual([]);
+      expect(await suite.db.select().from(persons).where(eq(persons.id, staffId))).toEqual(before);
+    },
+  );
+  it("refuses a manager's invitation creating an admin", async () => {
+    await setupTenant();
+    const sent: Parameters<AccountEmailSender>[0][] = [];
+    const app = mountApp(async (message) => {
+      sent.push(message);
+    });
+    const cookie = await login(app, MANAGER_EMAIL);
+    const response = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(
+        invitationBody("New Admin", "new-admin@example.test", { role: "admin" }),
+      ),
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+    });
+    expect(await countPersonsNamed("New Admin")).toBe(0);
+    expect(sent).toEqual([]);
+  });
+});

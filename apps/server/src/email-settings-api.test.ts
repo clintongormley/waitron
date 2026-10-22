@@ -30,7 +30,7 @@ const ring = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 let nif = 76_000_000;
-async function setupVenue(): Promise<{ manager: string; staff: string }> {
+async function setupVenue(): Promise<{ admin: string; manager: string; staff: string }> {
   nif += 1;
   await applyVenue(
     planVenue(
@@ -79,9 +79,18 @@ async function setupVenue(): Promise<{ manager: string; staff: string }> {
         personId: inserted!.id,
       });
     };
-    return { manager: await start("manager"), staff: await start("staff") };
+    const [admin] = await tx
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.role, "admin"));
+    return {
+      admin: await startManagementSession(tx, { personId: admin!.id }),
+      manager: await start("manager"),
+      staff: await start("staff"),
+    };
   });
   return {
+    admin: `${MANAGEMENT_COOKIE}=${sessions.admin.token}`,
     manager: `${MANAGEMENT_COOKIE}=${sessions.manager.token}`,
     staff: `${MANAGEMENT_COOKIE}=${sessions.staff.token}`,
   };
@@ -122,13 +131,13 @@ const request = (app: Hono, cookie: string | undefined, body?: unknown) =>
   });
 
 describe("SMTP settings", () => {
-  it("seals a manager's settings and routes invoice mail through them without returning secrets", async () => {
+  it("seals an admin's settings and routes invoice mail through them without returning secrets", async () => {
     const venue = await setupVenue();
     const logs: unknown[] = [];
     const app = mount("live", (...args) => {
       logs.push(args);
     });
-    const response = await request(app, venue.manager, settings);
+    const response = await request(app, venue.admin, settings);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ saved: true });
     expect(
@@ -146,7 +155,7 @@ describe("SMTP settings", () => {
     const rows = await suite.db.select().from(tenantCredentials);
     expect(JSON.stringify(rows)).not.toContain("p@ss:word");
     expect(JSON.stringify(rows)).not.toContain("smtp-user");
-    const read = await request(app, venue.manager);
+    const read = await request(app, venue.admin);
     expect(read.status).toBe(200);
     expect(await read.json()).toEqual({
       mode: "smtp",
@@ -165,10 +174,10 @@ describe("SMTP settings", () => {
   it("replaces a sealed setting with implicit TLS and no authentication", async () => {
     const venue = await setupVenue();
     const app = mount();
-    expect((await request(app, venue.manager, settings)).status).toBe(200);
+    expect((await request(app, venue.admin, settings)).status).toBe(200);
     expect(
       (
-        await request(app, venue.manager, {
+        await request(app, venue.admin, {
           server: "next.example.test",
           port: 465,
           encryption: "tls",
@@ -185,7 +194,7 @@ describe("SMTP settings", () => {
       mode: "smtp",
       smtp: { url: "smtps://next.example.test:465", from: "next@example.test" },
     });
-    expect(await (await request(app, venue.manager)).json()).toEqual({
+    expect(await (await request(app, venue.admin)).json()).toEqual({
       mode: "smtp",
       editable: true,
       settings: {
@@ -200,7 +209,7 @@ describe("SMTP settings", () => {
   });
   it("reports missing live SMTP so the card can ask for settings", async () => {
     const venue = await setupVenue();
-    expect(await (await request(mount(), venue.manager)).json()).toEqual({
+    expect(await (await request(mount(), venue.admin)).json()).toEqual({
       mode: "unconfigured",
       editable: true,
       settings: null,
@@ -236,7 +245,7 @@ describe("SMTP settings", () => {
         }),
       );
       const app = mount(intent);
-      const response = await request(app, venue.manager, settings);
+      const response = await request(app, venue.admin, settings);
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual({
         error: { code: "email.settings_not_allowed", params: {} },
@@ -246,7 +255,7 @@ describe("SMTP settings", () => {
           tryGetCredential(tx, ring, { purpose: "email.smtp" }),
         ),
       ).toEqual({ url: "smtps://old:old-secret@old.example.test:465", from: "old@example.test" });
-      const read = await request(app, venue.manager);
+      const read = await request(app, venue.admin);
       expect(await read.json()).toEqual(
         intent === "demo"
           ? { mode: "local_capture", editable: false, settings: null }
@@ -266,7 +275,7 @@ describe("SMTP settings", () => {
   );
   it("a preparing venue without credentials reports captured mail", async () => {
     const venue = await setupVenue();
-    expect(await (await request(mount("prepare"), venue.manager)).json()).toEqual({
+    expect(await (await request(mount("prepare"), venue.admin)).json()).toEqual({
       mode: "local_capture",
       editable: false,
       settings: null,
@@ -295,7 +304,7 @@ describe("SMTP settings", () => {
     "refuses invalid %s without changing the credential or echoing the value",
     async (field, value) => {
       const venue = await setupVenue();
-      const response = await request(mount(), venue.manager, {
+      const response = await request(mount(), venue.admin, {
         ...settings,
         [field as string]: value,
       });
@@ -415,7 +424,7 @@ describe("SMTP settings boundary cases", () => {
           value: { url, from: "venue@example.test" },
         }),
       );
-      expect(await (await request(mount(), venue.manager)).json()).toEqual({
+      expect(await (await request(mount(), venue.admin)).json()).toEqual({
         mode: "smtp",
         editable: true,
         settings: {
@@ -443,7 +452,7 @@ describe("SMTP settings boundary cases", () => {
         mount("live", (...args) => {
           logs.push(args);
         }),
-        venue.manager,
+        venue.admin,
       );
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
@@ -463,7 +472,7 @@ describe("SMTP settings boundary cases", () => {
     ["user", ""],
   ])("rejects malformed authority or unpaired authentication: %s=%s", async (field, value) => {
     const venue = await setupVenue();
-    const response = await request(mount(), venue.manager, {
+    const response = await request(mount(), venue.admin, {
       ...settings,
       [field as string]: value,
     });
@@ -475,7 +484,7 @@ describe("SMTP settings boundary cases", () => {
   });
   it("accepts an IPv6 server and trims the server and sender", async () => {
     const venue = await setupVenue();
-    const response = await request(mount(), venue.manager, {
+    const response = await request(mount(), venue.admin, {
       server: " [::1] ",
       port: 465,
       encryption: "tls",
@@ -521,7 +530,7 @@ it("allows another database write while an SMTP settings upload is unfinished", 
   });
   const raw = new Request(`http://box.test${path}`, {
     method: "PUT",
-    headers: { cookie: venue.manager, "Content-Type": "application/json" },
+    headers: { cookie: venue.admin, "Content-Type": "application/json" },
     body,
     duplex: "half",
   } as RequestInit);
@@ -593,4 +602,31 @@ it.each([
   } finally {
     await rig.close();
   }
+});
+
+it("refuses a manager replacing the relay that delivers admin password resets", async () => {
+  const venue = await setupVenue();
+  const response = await request(mount(), venue.manager, {
+    ...settings,
+    server: "manager-relay.example.test",
+  });
+  const delivery = await resolveInvoiceEmailDelivery(suite.db, ring, {
+    onboardingIntent: "live",
+    devMode: false,
+  });
+  expect({ status: response.status, delivery }).toEqual({
+    status: 403,
+    delivery: { mode: "unconfigured" },
+  });
+  expect(await response.json()).toMatchObject({
+    error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+  });
+  expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+});
+
+it("keeps SMTP settings read-only for a manager", async () => {
+  const venue = await setupVenue();
+  const response = await request(mount(), venue.manager);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ mode: "unconfigured", editable: false, settings: null });
 });

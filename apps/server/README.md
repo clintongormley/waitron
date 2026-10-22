@@ -412,9 +412,14 @@ skipped and makes no network call.
 ### Account email
 
 Demo and Prepare capture invitation and password-reset email in Mailpit when you have not configured
-SMTP. Sign in as a manager and open the **Email inbox** link in the dashboard's top bar to read a
+SMTP. Sign in as an admin and open the **Email inbox** link in the dashboard's top bar to read a
 message and follow its account link. The inbox is served through Waitron's authenticated API;
 Mailpit's own ports bind to the box loopback only.
+
+Captured account email is visible only to admins because it carries password-reset and invitation
+links. Managers see the delivery mode without captured messages. Changing the saved SMTP relay
+also needs an admin: account links go through that relay. Managers can read its redacted settings
+and send a test to their own address.
 
 `pnpm dev:setup`, `pnpm dev:reset`, `pnpm dev:onboard`, `pnpm dev:reset:onboard`, and the `wa-wt`
 worktree launcher also start Mailpit. During local development you can inspect its own UI at

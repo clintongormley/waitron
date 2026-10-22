@@ -2,7 +2,7 @@ import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { putCredential, type KeyRing } from "@waitron/credentials";
-import { authorizeManager, persons } from "@waitron/identity";
+import { authorizeManager, persons, roleHasPermission, type Permission } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
@@ -32,20 +32,25 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
     },
     "email_settings.failed",
   );
-  const authorize = async (tx: Transaction, c: Context): Promise<void> => {
-    await authorizeManager(tx, {
+  const authorize = async (
+    tx: Transaction,
+    c: Context,
+    permission: Permission = "system.manage",
+  ) => {
+    return authorizeManager(tx, {
       managementSessionId: requireManagementSession(c),
-      permission: "system.manage",
+      permission,
     });
   };
   const editable =
     deps.config.onboardingIntent !== "demo" && deps.config.onboardingIntent !== "prepare";
   app.get("/management-api/email/settings", (c) =>
     run(c, log, async () => {
-      await withTransaction(deps.db, (tx) => authorize(tx, c));
+      const actor = await withTransaction(deps.db, (tx) => authorize(tx, c));
+      const canEdit = editable && roleHasPermission(actor.role, "person.admin");
       const delivery = await resolveInvoiceEmailDelivery(deps.db, deps.ring, deps.config);
       if (delivery.mode !== "smtp")
-        return c.json({ mode: delivery.mode, editable, settings: null });
+        return c.json({ mode: delivery.mode, editable: canEdit, settings: null });
       let url: URL;
       try {
         url = new URL(delivery.smtp.url);
@@ -55,7 +60,7 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
       }
       return c.json({
         mode: "smtp",
-        editable,
+        editable: canEdit,
         settings: {
           server: url.hostname,
           port: Number(url.port || (url.protocol === "smtps:" ? 465 : 587)),
@@ -71,7 +76,8 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
       requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       await withTransaction(deps.db, async (tx) => {
-        await authorize(tx, c);
+        // The relay carries account-reset links as well as invoice mail.
+        await authorize(tx, c, "person.admin");
         if (!editable) throw new AppError("email.settings_not_allowed", {});
         const value = parseEmailSettings(body);
         await putCredential(tx, deps.ring, { purpose: "email.smtp", value });
