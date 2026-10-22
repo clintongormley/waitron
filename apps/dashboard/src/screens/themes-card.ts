@@ -5,13 +5,18 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import { BUILT_IN_THEME_NAME } from "@waitron/ui-core/theme";
+import { BUILT_IN_THEME_NAME, WAITRON_CHOICES } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { countOf } from "../widgets/count-text.js";
 import { settingsCard, settingsCardStyles } from "../widgets/settings-card.js";
+import "../widgets/theme-name-dialog.js";
+import type { ThemeNameDialog, ThemeNameRequest } from "../widgets/theme-name-dialog.js";
+import { copyName } from "../widgets/theme-names.js";
+import { saveDialogLine } from "../widgets/theme-words.js";
+import { repaintVenueTheme } from "../widgets/venue-theme-repaint.js";
 
 export type ThemesChanged =
   | { kind: "saved"; theme: ThemeView }
@@ -19,6 +24,8 @@ export type ThemesChanged =
   | { kind: "renamed"; theme: ThemeView }
   | { kind: "deleted"; id: string; inUse: string | null }
   | { kind: "switched"; inUse: string | null };
+
+export type ThemeEdit = { id: string } | { kind: "new" };
 
 const WAITRON_KEY = "waitron";
 const PRIMARY = "--wt-color-primary";
@@ -33,6 +40,8 @@ interface Row {
   inUse: boolean;
   colours: [string, string, string];
   warnings: number;
+  /** null on Waitron's row. */
+  view: ThemeView | null;
 }
 
 function coloursOf(view: ThemeView | null): [string, string, string] {
@@ -51,6 +60,7 @@ function rowsOf(list: ThemeList): Row[] {
       inUse: list.inUse === null,
       colours: coloursOf(null),
       warnings: 0,
+      view: null,
     },
     ...list.themes.map((view) => ({
       key: view.id,
@@ -59,6 +69,7 @@ function rowsOf(list: ThemeList): Row[] {
       inUse: list.inUse === view.id,
       colours: coloursOf(view),
       warnings: view.warnings.length,
+      view,
     })),
   ];
 }
@@ -114,6 +125,7 @@ export class ThemesCard extends LitElement {
   /** The stored theme the Look card's editor has open. */
   @property({ attribute: false }) editingId: string | null = null;
   @state() private phone = false;
+  @state() private submitting = false;
   readonly #phone = matchMedia(PHONE);
   readonly #onPhone = () => {
     this.phone = this.#phone.matches;
@@ -171,13 +183,103 @@ export class ThemesCard extends LitElement {
         key: "actions",
         label: t("appearance.theme_actions"),
         pinned: "end",
-        cell: (row) =>
-          html`<wt-row-actions
-            label=${`${t("appearance.theme_actions")}: ${row.name}`}
-          ></wt-row-actions>`,
+        cell: (row) => this.#menu(row),
       });
     }
     return columns;
+  }
+
+  #item(row: Row, kind: string, label: string, onClick: () => void): TemplateResult {
+    return html`<wt-button
+      align="start"
+      data-test=${`${kind}-${row.key}`}
+      variant=${kind === "delete" ? "danger" : "ghost"}
+      ?disabled=${this.submitting}
+      @click=${onClick}
+      >${label}</wt-button
+    >`;
+  }
+
+  #menu(row: Row): TemplateResult {
+    const view = row.view;
+    return html`<wt-row-actions label=${`${t("appearance.theme_actions")}: ${row.name}`}>
+      ${row.inUse ? nothing : this.#item(row, "use", t("appearance.use_everywhere"), () => {})}
+      ${
+        view === null
+          ? nothing
+          : html`${this.#item(row, "edit", t("action.edit"), () => this.#edit({ id: view.id }))}
+            ${this.#item(row, "rename", t("appearance.rename"), () => this.#rename(view))}`
+      }
+      ${this.#item(row, "copy", t("appearance.make_copy"), () => this.#copy(row))}
+      ${
+        view === null || view.id === this.editingId
+          ? nothing
+          : this.#item(row, "delete", t("action.delete"), () => {})
+      }
+    </wt-row-actions>`;
+  }
+
+  #edit(detail: ThemeEdit): void {
+    this.dispatchEvent(
+      new CustomEvent<ThemeEdit>("theme-edit", { detail, bubbles: true, composed: true }),
+    );
+  }
+
+  #changed(detail: ThemesChanged): void {
+    this.dispatchEvent(
+      new CustomEvent<ThemesChanged>("themes-changed", { detail, bubbles: true, composed: true }),
+    );
+  }
+
+  #nameDialog(): ThemeNameDialog | null {
+    return this.renderRoot.querySelector("dashboard-theme-name-dialog");
+  }
+
+  /** Set before the request's first await: the menus stay disabled until it answers. */
+  async #write<T>(send: () => Promise<T>): Promise<T> {
+    this.submitting = true;
+    try {
+      return await send();
+    } finally {
+      this.submitting = false;
+    }
+  }
+
+  #ask(request: ThemeNameRequest): void {
+    this.#nameDialog()?.show(request);
+  }
+
+  #rename(view: ThemeView): void {
+    this.#ask({
+      kind: "rename",
+      name: view.name,
+      inUse: false,
+      warningLines: [],
+      submit: async ({ name }) => {
+        const renamed = await this.#write(() => this.api.renameTheme(view.id, name));
+        this.#changed({ kind: "renamed", theme: renamed });
+      },
+    });
+  }
+
+  #copy(row: Row): void {
+    const choices = row.view?.choices ?? null;
+    this.#ask({
+      kind: "copy",
+      name: copyName(row.name),
+      inUse: false,
+      warningLines:
+        choices === null
+          ? []
+          : row.view!.warnings.map((warning) => saveDialogLine(warning, choices)),
+      submit: async ({ name, inUse }) => {
+        const created = await this.#write(() =>
+          this.api.createTheme({ name, theme: choices ?? WAITRON_CHOICES, inUse }),
+        );
+        this.#changed({ kind: "created", theme: created, inUse });
+        if (inUse) repaintVenueTheme(this.api);
+      },
+    });
   }
 
   #status(row: Row): TemplateResult[] {
@@ -202,12 +304,15 @@ export class ThemesCard extends LitElement {
 
   override render() {
     if (this.list === undefined) return nothing;
-    return settingsCard({
+    return html`${settingsCard({
       id: "themes-card",
       heading: t("appearance.themes"),
       editing: false,
       action: this.canEdit
-        ? html`<wt-button data-test="new-theme" variant="secondary"
+        ? html`<wt-button
+            data-test="new-theme"
+            variant="secondary"
+            @click=${() => this.#edit({ kind: "new" })}
             >${t("appearance.new_theme")}</wt-button
           >`
         : nothing,
@@ -217,7 +322,9 @@ export class ThemesCard extends LitElement {
         .columns=${this.#columns()}
         .rowKey=${(row: Row) => row.key}
       ></wt-data-table>`,
-    });
+    })}${
+      this.canEdit ? html`<dashboard-theme-name-dialog></dashboard-theme-name-dialog>` : nothing
+    }`;
   }
 }
 
