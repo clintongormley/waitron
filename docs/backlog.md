@@ -6615,7 +6615,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A975. Developer tools and demo scripts to English** (`dev-setup.ts`, the `*-demo.ts` scripts,
-  README examples). Low priority; needed before A977 can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  Cloud fixture, receipt pictures and README examples). The developer setup's location examples
+  remain. Low priority; needed before A977 can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A976. The server's test venues default to English** — the first test cleanup; later ones go
   package by package from A977's list. Low priority. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
