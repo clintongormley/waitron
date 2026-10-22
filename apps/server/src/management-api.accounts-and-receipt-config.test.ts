@@ -2982,3 +2982,33 @@ describe("A1000 non-admin account authority", () => {
     ).toEqual([{ email: STAFF_EMAIL }]);
   });
 });
+
+it("preserves a manager changing their own email through staff details", async () => {
+  const { managerId } = await setupTenant();
+  const sent: Parameters<AccountEmailSender>[0][] = [];
+  const app = mountApp(async (message) => {
+    sent.push(message);
+  });
+  const cookie = await login(app, MANAGER_EMAIL);
+  const saved = await app.request(`/management-api/staff/${managerId.toUpperCase()}`, {
+    method: "PUT",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify(
+      invitationBody("The Manager", "own-replacement@example.test", {
+        role: "manager",
+        status: "active",
+      }),
+    ),
+  });
+  expect(saved.status).toBe(204);
+  expect(
+    await suite.db
+      .select({ email: persons.email, role: persons.role, status: persons.status })
+      .from(persons)
+      .where(eq(persons.id, managerId)),
+  ).toEqual([{ email: "own-replacement@example.test", role: "manager", status: "active" }]);
+  expect(sent).toEqual([]);
+  const expired = await app.request("/management-api/staff", { headers: { cookie } });
+  expect(expired.status).toBe(401);
+  expect(await expired.json()).toMatchObject({ error: { code: "management_session.required" } });
+});
