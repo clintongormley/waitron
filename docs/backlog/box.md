@@ -788,6 +788,15 @@ only a current claim. The opt-in target-bound recovery client uses version 2; th
 caller stays on version 1 until Cloud implements that exchange. Joint acceptance must include
 recovery with the continuous source absent. Separate recovery authority still applies.
 
+**A1017, 2026-10-22:** the existing `archiveHost()` / `archiveCommand()` fixture is qualified
+for a separately authorised ordinary restore at Waitron `0ee4ec275461cae439b74ef62bfba884b9466d12`.
+Its three unchanged recovery-placement suites passed all 99 tests, including the ordinary
+command, wrong-key and missing-preparation controls. Use the
+[fixture recipe and qualification limits](../developers/authorised-cloud-restore-fixture.md).
+Cloud's same-run capture-to-recovery proof remains open. Its evidence must distinguish the
+verifier's non-activation from the ordinary restore's authorised fresh fiscal allocation;
+the existing Cloud refusal is retained, not converted to a pass by this independent receipt.
+
 The current release trust list contains no historical Cloud or paper public roots. A historical
 signature requiring an absent reviewed root remains unsupported. External vault-key custody
 also needs its separately versioned archive contract. Full-history work under the configured

@@ -5329,6 +5329,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   catalogue and deployment gates; see the
   [Waitron implementation and release handoff](superpowers/plans/2026-10-20-a850-backup-verification.md#task-27-finish-evidence-branch-review-and-release-handoff)
   and [box limits](backlog/box.md#backup-data-verification-and-cloud-release).
+  A1017 qualified the existing [authorised ordinary-restore fixture](developers/authorised-cloud-restore-fixture.md)
+  separately (99 existing restore tests passed). Cloud still needs its own same-run proof and
+  must distinguish verifier non-activation from the ordinary restore's authorised fiscal recovery.
 
 - **A917 — the owner chooses the server's `.local` name instead of `waitron.local`** — DESIGNED
   2026-10-20 (revised after review rounds 1–3), waiting for the owner's answers to three questions
