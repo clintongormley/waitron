@@ -186,7 +186,11 @@ import "./widgets/cancel-item-dialog.js";
 import type { CancelItemChoice } from "./widgets/cancel-item-dialog.js";
 import "./widgets/finish-table-dialog.js";
 import type { FinishTableChoice } from "./widgets/finish-table-dialog.js";
-import type { FinishTableResolution, UnservedDish } from "./api/finish-table-types.js";
+import type {
+  FinishTableCollect,
+  FinishTableResolution,
+  UnservedDish,
+} from "./api/finish-table-types.js";
 import type { CancellationRead, CancelItemRequest, RefundLink } from "./api/line-cancel-types.js";
 import {
   refusalField,
@@ -1035,7 +1039,7 @@ interface FinishingTable {
   busy: boolean;
   refusal: string;
   refusalField?: "reason" | "note" | null;
-  command?: Omit<FinishTableResolution, "approver">;
+  command?: Omit<FinishTableResolution, "approver"> | FinishTableCollect;
   unconfirmed?: boolean;
   retryApproverId?: string;
   approval?: { authorizers: StaffMember[]; error: string | null };
@@ -15104,6 +15108,35 @@ export class TillApp extends LitElement {
     } else await this.#sendFinishTable({ ...open, command });
   }
 
+  async #collectFinishTable(event: Event): Promise<void> {
+    event.stopPropagation();
+    const open = this.finishingTable;
+    if (
+      open === null ||
+      open.busy ||
+      open.approval !== undefined ||
+      !this.#finishCurrent(open.composition)
+    )
+      return;
+    if (!open.unconfirmed && !this.#billCompositionUnchanged(open.composition)) {
+      this.finishingTable = { ...open, busy: false, refusal: codeMessage("draft.out_of_date") };
+      return;
+    }
+    if (open.command !== undefined && !("collect" in open.command)) return;
+    const bills = new Map<string, number>();
+    for (const dish of open.dishes)
+      if (!bills.has(dish.billId)) bills.set(dish.billId, dish.billRevision);
+    const command = open.command ?? {
+      submissionId: crypto.randomUUID(),
+      collect: {
+        bills: [...bills]
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+          .map(([billId, expectedBillRevision]) => ({ billId, expectedBillRevision })),
+      },
+    };
+    await this.#sendFinishTable({ ...open, command });
+  }
+
   async #sendFinishTable(
     open: FinishingTable,
     approver?: { personId: string; pin: string },
@@ -15129,7 +15162,9 @@ export class TillApp extends LitElement {
             asked.partyId,
             open.partyRevision,
             asked.expectedEdits,
-            { ...open.command!, ...(approver === undefined ? {} : { approver }) },
+            approver === undefined || open.command!.cancellations === undefined
+              ? open.command!
+              : { ...open.command!, approver },
             { signal },
           ),
         limit.signal,
@@ -15137,6 +15172,15 @@ export class TillApp extends LitElement {
       );
       if (!this.#finishCurrent(asked)) return;
       this.#closeFinishTable();
+      if (open.command!.cancellations === undefined) {
+        await this.#onTableClosed(asked.partyId, asked.visit, asked.sent);
+        if (!this.isConnected || this.api !== asked.api || this.#operatorSession !== asked.session)
+          return;
+        this.submittedNotice = t("station.notice.moved_to_counter");
+        this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
+        void this.#refreshAfterWrite("waiting", "refresh.waiting_after_move");
+        return;
+      }
       const handedOff = open.command!.cancellations.filter((row) => row.refundHandoff);
       const selected = new Set(handedOff.map((row) => row.lineId));
       const ticked = open.receipts.filter((row) => selected.has(row.lineId));
@@ -15208,7 +15252,7 @@ export class TillApp extends LitElement {
       } else if (
         code === "authorization.not_permitted" &&
         approver === undefined &&
-        open.command!.cancellations.some((row) => row.refundHandoff)
+        open.command!.cancellations?.some((row) => row.refundHandoff) === true
       ) {
         await this.#askFinishApprover(open);
       } else if (
@@ -15226,7 +15270,7 @@ export class TillApp extends LitElement {
           reasons:
             code === "adjustment.note_required"
               ? (open.reasons?.map((reason) =>
-                  open.command!.cancellations.some((row) => row.reasonId === reason.id)
+                  open.command!.cancellations?.some((row) => row.reasonId === reason.id) === true
                     ? { ...reason, noteRequired: true }
                     : reason,
                 ) ?? null)
@@ -15378,6 +15422,7 @@ export class TillApp extends LitElement {
               .confirmationLocked=${open.unconfirmed === true}
               .refusalField=${open.refusalField ?? null}
               @finish-table-choice=${(event: CustomEvent<FinishTableChoice>) => void this.#confirmFinishTable(event)}
+              @finish-table-collect=${(event: Event) => void this.#collectFinishTable(event)}
               @finish-table-reasons=${() => void this.#loadFinishReasons()}
               @finish-table-close=${() => this.#closeFinishTable()}
             ></till-finish-table-dialog>

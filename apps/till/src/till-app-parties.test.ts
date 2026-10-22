@@ -11984,4 +11984,101 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     expect(finishDialog(el)!.busy).toBe(false);
     expect(finishDialog(el)!.refusal).toBe(codeMessage("draft.out_of_date"));
   });
+
+  describe("collect at the counter", () => {
+    const rows = [dish("line-1", "wo-4"), dish("line-2", "wo-4"), dish("line-3", "wo-check")];
+    const toast = (el: TillApp) =>
+      el.shadowRoot!.querySelector<HTMLElement & { open: boolean; message: string }>(
+        "wt-toast[data-submitted-toast]",
+      );
+    async function mountCollect(overrides: Record<string, unknown> = {}) {
+      return mountFinish({
+        finishTable: vi.fn().mockRejectedValueOnce(refusal(rows)).mockResolvedValue({
+          state: "closed",
+        }),
+        getCancellation: vi.fn(async (_p: string, id: string) =>
+          consent(rows.find((row) => row.lineId === id)!),
+        ),
+        ...overrides,
+      });
+    }
+    async function collect(el: TillApp) {
+      const dialog = finishDialog(el)!;
+      expect(dialog).not.toBeNull();
+      await dialog.updateComplete;
+      await userEvent.click(dialog.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!);
+      await flush(el, 10);
+    }
+
+    it("sends the counter collection with each bill once and the revision it read, and leaves the table", async () => {
+      const { el } = await mountCollect();
+      await openFinish(el);
+      const reads = vi.mocked(api.getTablesState).mock.calls.length;
+      await collect(el);
+      expect(api.finishTable).toHaveBeenCalledTimes(2);
+      const call = vi.mocked(api.finishTable).mock.calls[1]!;
+      expect(call.slice(0, 3)).toEqual(["v1", 3, closingEdits]);
+      expect(call[3]).toEqual({
+        submissionId: expect.any(String),
+        collect: {
+          bills: [
+            { billId: "wo-4", expectedBillRevision: 0 },
+            { billId: "wo-check", expectedBillRevision: 0 },
+          ],
+        },
+      });
+      expect(call[3]).not.toHaveProperty("cancellations");
+      expect(finishDialog(el)).toBeNull();
+      expect(tableOrder(el)).toBeNull();
+      expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
+    });
+
+    it("says the order moved to the counter", async () => {
+      const { el } = await mountCollect();
+      await openFinish(el);
+      await collect(el);
+      expect(toast(el)!.open).toBe(true);
+      expect(toast(el)!.message).toBe(t("station.notice.moved_to_counter"));
+    });
+
+    it("re-reads the waiting orders", async () => {
+      const { el } = await mountCollect();
+      await openFinish(el);
+      const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+      await collect(el);
+      expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads + 1);
+      expect(vi.mocked(api.finishTable).mock.invocationCallOrder.at(-1)!).toBeLessThan(
+        vi.mocked(api.listCounterWaiting).mock.invocationCallOrder.at(-1)!,
+      );
+    });
+
+    it("re-reads the waiting orders and says the move stands when they cannot be read", async () => {
+      const { el } = await mountCollect();
+      await openFinish(el);
+      vi.mocked(api.listCounterWaiting).mockRejectedValue(new TypeError("Failed to fetch"));
+      await collect(el);
+      expect(
+        el
+          .shadowRoot!.querySelector('[data-refresh-notice="waiting"] .refresh-message')!
+          .textContent!.trim(),
+      ).toBe(t("refresh.waiting_after_move"));
+    });
+
+    it("opens no refund and asks no PIN", async () => {
+      const { el } = await mountCollect();
+      const dialog = await openFinish(el);
+      await dialog!.updateComplete;
+      const ticks = [
+        ...dialog!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="refund"]'),
+      ];
+      expect(ticks.some((input) => input.checked)).toBe(true);
+      await collect(el);
+      expect(api.finishTable).toHaveBeenCalledTimes(2);
+      expect(tableOrder(el)).toBeNull();
+      expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
+      expect(approval(el)).toBeNull();
+      expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
+    });
+  });
 });
