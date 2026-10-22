@@ -518,9 +518,11 @@ inline arithmetic today (Decision 4). Tasks 10c and 11b replace the till's two i
   `value` is `cancellationRefundValue(tx, bill.id, sale.id, lineId)` (the sale found as
   `line-cancel-api.ts:130-137` does) and `c` the checked context's `cancelledQuantity` for the line;
   null when `value` is undefined. The started don't-charge branch passes
-  `preparationStarted: true` to `applyAdjustment` (harmless for the kitchen slips: `removeFromLine`
-  ORs it with the item's own state, `working-order.ts:2919-2921`), and `applyAdjustment` records
-  `preparationStarted: args.preparationStarted ?? null` on a cancel row.
+  `recordedPreparationStarted: true` for the row, and keeps `ask.preparationStarted` for
+  `removeFromLine` (passing `preparationStarted: true` there is not harmless: it ORs "started" into
+  every component's void notice, `working-order.ts:2919-2921`, as Task 2a's review measured), and
+  `applyAdjustment` records `preparationStarted: args.recordedPreparationStarted ?? null` on a
+  cancel row.
 - [ ] **Run** the file, then `src/adjustments-apply.test.ts src/adjustments-report.test.ts
   src/draft-discard.test.ts` (whole-row `toEqual`s meet four keys: row 16). Typecheck `@waitron/shared`
   and `@waitron/server`; the fiscal gates.
@@ -1026,6 +1028,7 @@ every existing value unchanged.
 | 21 | 1b | `packages/adjustments/src/backup-verification.test.ts:175` (the tables emptied for an honest target-only restore) | gains `adjustment_refunds` — shape pin | §3.6 |
 | 22 | 1b | `scripts/append-only-triggers.test.ts:35` (`EXPECTED`, every append-only table by name) | gains `"adjustment_refunds"` in its sorted place — waits for the owner's approval of that one name (above) | §3.6 |
 | 23 | 14 | `apps/till/src/widgets/bill-refund-dialog.test.ts` and `.unsaved.test.ts` cases that type a reason (25 and 12 hits of `git grep -c '"reason"\|reason:'` on `0abad3d7e`, which include fixture and assertion lines; the typing goes through `type(el, "reason", …)` and `fill(form, "reason", …)`), and `payment-leading-zeros.test.ts`, which types one at `:187` and `:205` | choose from the drop-down | D15 |
+| 23b | 14 | `apps/till/src/till-app-bill-payments.test.ts` old `:5203-5205` (`signInAndAskRefund` types the reason) and old `:5587` (the refusal read from `wt-input[name="reason"]`) | the helper chooses "Charged twice" from the drop-down; the refusal is read from `wt-combobox[name="reason"]`, its expected text unchanged; every expected request unchanged | D15 |
 
 **Unchanged, checked:** `apps/server/src/line-cancel-api.test.ts:597` and
 `apps/server/src/till-api.parties.test.ts:295` pin answers with no refund handoff, which stay `{
@@ -1043,6 +1046,16 @@ If a suite turns red on a check not in this table, it is a stop and a report, th
   product code, listed here because it decides what an older backup is compared with.
 - `apps/server/src/testing/adjustment-venue.ts`: a helper that cancels a paid dish with
   `refundHandoff` and pays the bill, if Tasks 2b, 3a, 3b and 7 share one (listed with its signature).
+- `apps/till/src/till-app-bill-payments.test.ts` (Task 14): the `chargedTwice` reason (id and name
+  "Charged twice") and `refundReasons()`, which answers `listAdjustmentReasons` with it beside
+  `cancelReason` (new `:5155-5158`), spread into `askRefund`'s mount (new `:5194`) and the
+  box-update case's `stubApi` (new `:5856`), inside `describe("till-app: giving back a bill
+  payment")` only.
+- Task 14's widget suites: `bill-refund-dialog.test.ts` gains `voidReason`, `reasons` (mounted by
+  default) and a `choose` helper; `.unsaved.test.ts` gains `reasons` and `choose`; `.a11y.test.ts`
+  gains `reasons`, mounted by default; `payment-leading-zeros.test.ts` gains `chargedTooMuch` and
+  `choose`.
+- Tasks 11a and 11b grew no fixture.
 - The throwaway look harnesses of Task 13 are not committed.
 
 ## Owner points (each with the default this PR builds)

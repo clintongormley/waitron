@@ -13,8 +13,10 @@ Cuando tengas que devolver un pago de una cuenta, empieza por ese pago para comp
 disponible para devolver.
 
 En la ventana de pagos de la cuenta, elige **Devolver** junto al pago. La ventana **Devolver un
-pago** te pide cuánto se devuelve y el motivo. Para **Una parte**, escribe el **Importe a devolver**.
-Un pago de artículos concretos se devuelve entero y después esos artículos pueden pagarse de nuevo.
+pago** te pide cuánto se devuelve y por qué. Para **Una parte**, escribe el **Importe a devolver**.
+Elige el **Motivo** de la lista. Un motivo que necesita una nota, como **Otro motivo**, te pide que
+la escribas, y la nota queda registrada como motivo. Un pago de artículos concretos se devuelve
+entero y después esos artículos pueden pagarse de nuevo.
 
 Elige **Devolver** con el importe mostrado. Si no puedes aprobar devoluciones, un supervisor o
 encargado introduce su PIN. En una devolución en efectivo, entrega el dinero al cliente cuando el
@@ -25,6 +27,70 @@ con el importe que sobra. Elígelo para abrir los pagos de la cuenta. Si solo se
 pago, se abre su ventana de devolución con el importe que sobra seleccionado. Si se pueden
 devolver varios pagos, elige cuál quieres devolver. Si no se pueden consultar los pagos, la
 ventana explica el problema; ciérrala y vuelve a abrirla antes de elegir un pago.
+
+## Cancelar un plato de una cuenta pagada {#cancel-paid-dish}
+
+Cuando una mesa ha pagado un plato que no va a llegar, cancélalo para que la cocina deje de
+prepararlo y el cliente pueda recuperar el dinero. Entre los platos enviados de la mesa, elige
+**Cancelar…** junto al plato. En una cuenta pagada solo se ofrece para lo que aún no se ha servido.
+
+La ventana **Cancelar plato** indica **Esta cuenta está pagada**. Elige **Cuántos**, hasta los que
+aún no se han servido. Si el plato ha pasado a cocina pero nadie lo ha marcado como empezado,
+responde a **En preparación**. Después elige un **Motivo**.
+
+Marca **Devolución** para devolver el dinero del plato. Empieza marcada cuando la preparación no ha
+empezado y sin marcar cuando sí. El botón principal dice entonces **Cancelar y devolver** con el
+importe. Sin la marca dice **Cancelar**, y la cuenta mantiene el cobro. Si no puedes hacer
+devoluciones, alguien que pueda introduce su PIN.
+
+La marca solo aparece cuando este dispositivo puede devolver el pago. Si el cliente pagó de una
+forma que este dispositivo no acepta, la ventana dice **Devuelve el dinero en una caja: Devolver un
+pago, en el recibo.** Después de **Cancelar y devolver**, la devolución del recibo se abre ya
+rellenada, como se explica en **Devolver un pago desde el recibo**.
+
+## Cerrar una mesa pagada con platos aún por llegar {#finish-paid-table}
+
+Cuando eliges **Cerrar mesa** y una cuenta pagada aún tiene platos sin servir, todos se cancelan
+antes de cerrar la mesa. Una ventana con un título como **2 platos sin servir** los muestra.
+
+Para un plato que ha pasado a cocina pero no está marcado como empezado, responde a **En
+preparación**. Para los demás, la ventana muestra la respuesta. Marca **Devolución** junto a cada
+plato cuyo dinero se devuelve; un plato empieza marcado cuando la preparación no ha empezado. Un
+solo **Motivo** sirve para todos los platos, y empieza en **No servido** si tu local conserva ese
+motivo.
+
+Elige **Cancelar y devolver** con el total de los platos marcados, o **Cancelar** si no hay ninguno
+marcado. **Atrás** deja la mesa abierta. Si marcas **Devolución** y no puedes hacer devoluciones,
+alguien que pueda introduce su PIN. Si un pago se cobró de una forma que este dispositivo no
+acepta, la ventana te indica que lo devuelvas en una caja desde el recibo.
+
+Cuando la mesa se cierra, una ventana **Devolución** muestra cada recibo con platos marcados. Elige
+uno para abrir su devolución, ya rellenada. Si solo hay un recibo, su devolución se abre
+directamente.
+
+## Devolver un pago desde el recibo {#refund-receipt}
+
+En un recibo anterior, elige **Devolver un pago**. Elige el **Pago original**, revisa el **Importe
+del pago que se devuelve** y la **Propina que se devuelve**, y elige un **Motivo**. Un motivo que
+necesita una nota, como **Otro motivo**, te pide que la escribas. Elige **Devolver**. En efectivo,
+entrega el dinero al cliente cuando la devolución se haya hecho.
+
+Después de **Cancelar y devolver**, o de **Cerrar mesa** con platos marcados, la ventana se abre
+ya rellenada. El pago queda elegido cuando solo uno se puede devolver en este dispositivo. El
+importe es el total de los platos, la propina es 0,00, el motivo es el que diste al cancelar y los
+platos aparecen debajo.
+
+Si alguien introdujo su PIN para la cancelación, ese PIN sirve también para esta devolución, una
+vez por recibo, así que nadie tiene que volver a escribirlo. Vale mientras no devuelvas más del
+total de los platos ni propina. Si subes el importe o añades propina, se vuelve a pedir el PIN, y
+las entradas de esos platos en el informe no muestran la devolución. Si cierras la ventana sin
+devolver, el PIN también se pide la próxima vez. Una tarjeta registrada desde un datáfono aparte
+siempre pide el PIN, porque allí confirma que la devolución en el datáfono se ha hecho.
+
+Cuando el pago elegido tiene menos que el total de los platos, el importe es lo que tiene, y una
+línea como **Quedan 2,00 € por devolver de otro pago** indica lo que falta. Devuelve el resto desde
+otro pago. Si ese pago no se puede devolver en este dispositivo, la ventana te indica que lo
+devuelvas en una caja.
 
 ## Devolver una tarjeta en un datáfono aparte {#separate-terminal}
 

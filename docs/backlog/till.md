@@ -1445,13 +1445,16 @@ A911, A960 and A961 are what it left open. **A758-5 built the till's words**
 ([plan](../superpowers/plans/2026-10-22-a758-5-comp-window-words.md)): a counter order's dishes
 offer one Comp… that opens the Comp window; "Comp the bill" offers Free beside %
 and €; no till word says "Give away" or «Invitar»; A1007 is what it left open; [pictures as
-built](mockups/a758-adjustment-reasons/built/). The §3.8 and "collect it at the counter" slices
-follow. The §3.8 slice also makes the
-report's entries read "Void, charged" («Cancelado, cobrado», design §3.6) for a cancel that kept
-the charge, deferred from A758-3; most such rows are already told apart without a migration,
-because A773-1 writes a still-charge cancel with before = after = the dish's charge and nothing off
-(`apps/server/src/line-cancel.ts:331-333`), so `afterAmount > 0` marks them — all but a
-still-charge cancel of a dish already comped to €0.00, which needs the slice's stored flag. The notes below are the review as written before the
+built](mockups/a758-adjustment-reasons/built/). **A758-6 built the paid-table slice**
+([plan](../superpowers/plans/2026-10-22-a758-6-unserved-on-paid-table.md)): Finish table's reason
+starts on Not served; Cancel item… offers a paid line's unserved quantity; the refund opens filled
+in with the Void reasons drop-down and the dishes, without asking the PIN again; Give back a
+payment takes the same drop-down; no cash switch; the report says Void, charged, whether
+preparation had started and what was refunded; a finished table is checked against its bills'
+zones. A cancel now stores whether it kept its charge, so the report's "Void, charged"
+(«Cancelado, cobrado», design §3.6) reads right even for a dish already comped to €0.00. A1020 and
+A1021 are what it left open. Left: "They'll collect it at the counter". The notes below are the
+review as written before the
 answers: where they differ from the design's decisions (§1 there) — three kinds, give-away against
 100% discount, "Invitación", role lists "with or after" editable roles, approval for a Void by
 reason or by stage — the design wins.
@@ -2683,3 +2686,42 @@ one-or-all choice (`#quantityChoice`, `apps/till/src/widgets/adjustment-dialog.t
 the cancel mode, which stays, uses them (a cancel offer of several whole units draws the choice,
 `apps/till/src/screens/till-table-order-screen.a11y.test.ts:375-389`), so they stay unless the
 cancel moves too.
+
+## A1020. The owner looks at A758-6's words and choices
+
+Left open by A758-6. Each works as built, with the default named; the owner may want it different.
+[Pictures as built](mockups/a758-adjustment-reasons/built/).
+
+1. **No "Table finished" on the pass.** Since A773-2 (#1944) a finished table's food leaves the
+   pass, so design §3.8 item 5 has nowhere to show (the plan's Decision 1).
+2. **"Not served" is found by its English name.** Finish table starts on the first Void reason
+   whose English name is exactly "Not served"; a renamed one stops being the start. The rule's
+   "Void" half never decides anything, because a Comp reason cannot carry cancel.
+3. **The PIN given for "Cancel and refund" is kept in the till's memory** and sent once per
+   receipt, only up to the ticked dishes' total with no tip, never for a card keyed on a separate
+   terminal. The server refuses a PIN-approved linked refund above that total
+   (`tender.refund_exceeds_cancelled`).
+4. **A refund raised above the filled-in total is an ordinary refund**: it asks for a PIN and the
+   dish's report entry shows no "Refunded", though money did go back for the dish (D19 and §3.6
+   show such money linked to the cancel).
+5. **New words, ours:** "Refund pending €x" («Devolución pendiente …») and "This refund is more
+   than the cancelled dishes' value." («Esta devolución supera el valor de los platos
+   cancelados.»), which names no amount where the plan's wording did.
+6. **A still-charged cancelled dish is counted once in the person's sales**, where it used to be
+   counted twice. It still counts as one cancel and still adds its menu price to "List value of
+   cancelled items".
+7. **A803's English for the till line stays**: "Refund the payment at a till: choose Refund a
+   payment on the receipt.", where design §3.9 wrote "Give the money back at a till: Refund a
+   payment on the receipt."
+8. **Give back a payment's reason is now the same drop-down**, as D15 asks. With no reason chosen it
+   says "Say why this is refunded", while a receipt's refund says "Choose a reason".
+9. **A refund in flight across the upgrade**, sent again with its first submission, is refused as
+   reused (`submission.id_reused`); checking it by its refund id still works.
+10. **A finished table is checked against all its bills' zones**, not the order's zone as design
+    §3.8 says: a device limited to zone 1 is refused a finished table that also had a zone-2 bill,
+    though it served part of it. On a finished table, a device outside its zones is now also
+    refused the table's read routes (403 `service_zone.not_allowed`).
+11. **The cancel's note is not carried to the refund**: the refund starts on the cancel's reason,
+    so a reason that needs a note (such as Other) asks for the note again.
+12. **With two receipts, closing the first refund without sending it drops the carried PIN for
+    both**, so the second asks for the PIN.

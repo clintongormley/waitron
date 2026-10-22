@@ -1911,12 +1911,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group; printing
   problems).** [Detail](backlog/kitchen.md#task-5-750-kitchen-pass-and-table-screen-by-group-printing-problems)
-  - A party finished while its food is still on the pass keeps its cards there with no group
-    button that works (each is refused `party.not_open`). Designed in A758 §3.8 (revised
-    2026-10-19 for the owner's Q43 notes): Finish table on a paid table cancels every dish not
-    served first, with a reason, a "Has preparation started?" answer and a Refund tick per dish; the
-    card says Table finished. Built with A773-1 and A758's slice after it. What Record unpaid
-    departure leaves on the pass is A908.
   - `*** REPRINT ***`, `GROUP n`, `*** HOLD ***`, `*** FIRE ***`, `*** HOLD CHANGED ***` and
     `*** HOLD CANCELLED ***` print in English.
   - A switched-off printer's printing problem keeps showing until the printer is switched on and a
@@ -2226,13 +2220,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   A911, A960 and A961 are what it left open. **A758-5 built the till's words**
   ([plan](superpowers/plans/2026-10-22-a758-5-comp-window-words.md)): a counter order's dishes offer
   one Comp… that opens the Comp window; "Comp the bill" offers Free beside % and €;
-  no till word says "Give away" or «Invitar»; A1007 is what it left open. Left: the §3.8 slice and
-  the "collect it at the counter" slice. The §3.8 slice also makes the report's entries read
-  "Void, charged" («Cancelado, cobrado», design §3.6) for a cancel that kept the charge, deferred from
-  A758-3; most such rows are already told apart without a migration, because A773-1 writes a
-  still-charge cancel with before = after = the dish's charge and nothing off
-  (`apps/server/src/line-cancel.ts:331-333`), so `afterAmount > 0` marks them — all but a
-  still-charge cancel of a dish already comped to €0.00, which needs the slice's stored flag.
+  no till word says "Give away" or «Invitar»; A1007 is what it left open. **A758-6 built the
+  paid-table slice** ([plan](superpowers/plans/2026-10-22-a758-6-unserved-on-paid-table.md)): Finish
+  table's reason starts on Not served; Cancel item… offers a paid line's unserved quantity; the
+  refund opens filled in with the Void reasons drop-down and the dishes, without asking the PIN
+  again; Give back a payment takes the same drop-down; no cash switch; the report says Void,
+  charged, whether preparation had started and what was refunded; a finished table is checked
+  against its bills' zones. A cancel now stores whether it kept its charge, so the report's "Void,
+  charged" («Cancelado, cobrado», design §3.6) reads right even for a dish already comped to
+  €0.00. A1020 and A1021 are what it left open. Left: "They'll collect it at the counter".
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),
   [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
   [mockups](backlog/mockups/a758-adjustment-reasons/),
@@ -2259,6 +2255,18 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `adjustment.no_reduction`); and two English refusals the Comp windows can show still saying
   "discount" (`adjustment.exceeds_amount`, `adjustment.no_reduction`).
   [Pictures as built](backlog/mockups/a758-adjustment-reasons/built/)
+
+- **A1020. The owner looks at A758-6's words and choices (left open by A758-6).** Each works as
+  built; the owner may want it different: among them no Table finished on the pass, Not served
+  found by its English name, the PIN carried from the cancel to its refund, a finished table
+  checked against all its bills' zones, and the two refund dialogs' different words for a missing
+  reason. [Detail](backlog/till.md#a1020-the-owner-looks-at-a758-6s-words-and-choices),
+  [pictures as built](backlog/mockups/a758-adjustment-reasons/built/)
+
+- **A1021. Cap Void and Comp reason names at the reasons route (left open by A758-6).** The reasons
+  page and its route (`packages/adjustments/src/routes.ts`) take a name of any length, while a
+  receipt's refund refuses a reason over 500 characters (`tender-refund-reservation.ts`), which the
+  till marks `bill_refund.reason_long`.
 
 - **A924. Void and Comp lozenges are neutral, not red and green as picture 01 draws (left open by
   A758-2).** `wt-lozenge` takes only a hex colour and a screen may not write one, so the word

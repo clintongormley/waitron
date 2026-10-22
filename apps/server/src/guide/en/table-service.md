@@ -12,8 +12,10 @@ When a bill's payment needs returning, start with that payment so you can see ho
 available to refund.
 
 In the bill's payment window, choose **Refund** beside the payment. The **Refund a payment**
-window asks how much to refund and the reason. For **Part of it**, enter the **Amount to refund**.
-A payment for particular items is refunded in full, and those items can then be paid for again.
+window asks how much to refund and why. For **Part of it**, enter the **Amount to refund**. Choose
+the **Reason** from the list. A reason that needs a note, such as **Other**, asks you to type one,
+and the note is recorded as the reason. A payment for particular items is refunded in full, and
+those items can then be paid for again.
 
 Choose **Refund** with the amount shown. If you cannot approve refunds yourself, a supervisor or
 manager enters their PIN. For a cash refund, hand the money to the guest when the result tells you
@@ -24,6 +26,69 @@ If a change to a bill would leave it owing less than it has already received, th
 can be refunded, its refund window opens with the excess amount selected. If several payments
 can be refunded, choose which one to refund. If the payments cannot be read, the window explains
 the failure; close it and open it again before choosing a payment.
+
+## Cancel a dish on a paid bill {#cancel-paid-dish}
+
+When a table has paid for a dish that is not coming, cancel it so the kitchen stops making it and
+the guest can have the money back. Among the table's sent dishes, choose **Void…** beside the dish.
+On a paid bill, it is offered only for what has not been served yet.
+
+The **Cancel item** window says **This bill is paid**. Choose **How many**, up to the number not
+yet served. If the dish has gone to the kitchen but nobody has marked it started, answer **Has
+preparation started?**. Then choose a **Reason**.
+
+Tick **Refund** to give the dish's money back. It starts ticked when preparation has not started,
+and unticked when it has. The main button then reads **Cancel and refund** with the amount. Without
+the tick it reads **Cancel**, and the bill keeps the charge. If you cannot give refunds yourself,
+someone who can enters their PIN.
+
+The tick appears only when this device can return the payment. When the guest paid in a way this
+device does not take, the window says **Refund the payment at a till: choose Refund a payment on
+the receipt.** After **Cancel and refund**, the receipt's refund opens filled in, as described
+under **Refund a payment on a receipt**.
+
+## Finish a paid table with food still to come {#finish-paid-table}
+
+When you choose **Finish table** and a paid bill still has dishes nobody has served, every one of
+them is cancelled before the table closes. A window headed, for example, **2 dishes not served**
+lists them.
+
+For a dish that has gone to the kitchen but is not marked started, answer **Has preparation
+started?**. For the others, the window shows the answer. Tick **Refund** beside each dish whose
+money goes back; a dish starts ticked when preparation has not started. One **Reason** covers every
+dish, and it starts on **Not served** when your venue keeps that reason.
+
+Choose **Cancel and refund** with the ticked dishes' total, or **Cancel** when nothing is ticked.
+**Back** leaves the table open. If you tick **Refund** and cannot give refunds yourself, someone who
+can enters their PIN. When a payment was taken in a way this device does not take, the window tells
+you to refund it at a till from the receipt.
+
+Once the table is finished, a **Refund** window lists each receipt with ticked dishes. Choose one to
+open its refund, filled in. When there is only one receipt, its refund opens straight away.
+
+## Refund a payment on a receipt {#refund-receipt}
+
+On a past receipt, choose **Refund a payment**. Pick the **Original payment**, check the **Payment
+amount to return** and the **Tip to return**, and choose a **Reason**. A reason that needs a note,
+such as **Other**, asks you to type one. Choose **Refund**. For cash, hand the money to the guest
+once the refund is done.
+
+After **Cancel and refund**, or **Finish table** with dishes ticked, the window opens filled in.
+The payment is chosen when only one can be refunded on this device. The amount is the dishes'
+total, the tip is 0.00, the reason is the one you gave for the cancel, and the dishes are listed
+under it.
+
+If someone entered their PIN for the cancel, it also covers this refund, once for each receipt, so
+nobody types it again. That holds while you return no more than the dishes' total and no tip. Raise
+the amount or add a tip and the PIN is asked for again, and the dishes' entries in the report then
+do not show the refund. Closing the window without refunding also means the PIN is asked for next
+time. A card keyed on a separate terminal always asks for the PIN, because there it confirms that
+the terminal refund was done.
+
+When the chosen payment holds less than the dishes' total, the amount is what it holds, and a line
+such as **€2.00 left to refund from another payment** says what remains. Refund the rest from
+another payment. If that payment cannot be refunded on this device, the window tells
+you to refund it at a till.
 
 ## Refund a card payment on a separate terminal {#separate-terminal}
 
