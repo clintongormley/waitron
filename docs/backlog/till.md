@@ -2363,6 +2363,11 @@ Board 1 is the target; board 2 the windows.
 
 ### A739. Paying: Hold · Pay, and one payment window
 
+2026-10-22 proposed revision, awaiting owner decision: [timing A after settlement versus timing B
+on Finish, with six-case static mockups](../superpowers/specs/2026-10-22-a739-receipt-timing-revision.md).
+The settling edit owns a new receipt decision; partial-slip choice needs an explicit replacement.
+All implementation and acceptance work remains open. The historical design below is retained.
+
 2026-10-20: the owner’s 2026-10-18 copy amendment replaces Hold with Park, so the target
 bottom row is **Park · Pay**. The earlier board and wording below remain a dated design record.
 

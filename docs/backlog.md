@@ -2486,6 +2486,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   reproduced and fixed; the Demo card reader goes; no receipt screen after paying. It follows the Counter cleanup; the custom-item residual is separate.
   Once it lands, add help-mode badges to the payment window's buttons (A582 slice 4b left them for it).
   [Detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
+  **2026-10-22 proposed revision, awaiting owner decision:** compare asking for final delivery
+  after settlement or on Finish, including edit-owned choice and partial-slip replacement.
+  [Six-case revision and static mockups](superpowers/specs/2026-10-22-a739-receipt-timing-revision.md).
+  All implementation and acceptance work remains open; the earlier scope above is retained.
 
 - **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`
   (used by MOVED slips) reads a counter order whose delivery table was released as the counter,
