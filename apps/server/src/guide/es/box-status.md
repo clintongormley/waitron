@@ -27,8 +27,7 @@ Cada parte tiene una fila con un punto de color:
   tan incorrecta que no se puede registrar una venta. Cualquiera de los dos pone también en rojo
   **Ventas**.
 
-Cada fila muestra los mismos avisos que la campana para esa parte, con las mismas palabras, salvo
-los avisos del disco: la fila **Espacio en disco** ya dice lo mismo. Las
+Cada fila muestra los mismos avisos que la campana para esa parte, con las mismas palabras. Las
 filas **Copia en el bucket**, **Impresoras** y **Lectores de tarjeta** tienen un botón **Ir a …**,
 como **Ir a Copias de seguridad**, que abre su propia página cuando puedes abrirla, y un aviso que
 tiene su propia página añade un botón para esa página. Los avisos que no corresponden a ninguna fila

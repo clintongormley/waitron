@@ -557,25 +557,4 @@ describe("dashboard-box-status-screen's layout", () => {
     const aside = box(el, "[data-test=row-disk] [data-test=read-only]");
     expect(aside.top - detail.bottom).toBe(detail.top - line.bottom);
   });
-
-  it("does not repeat on this page the sentence of an alert that sends people to this page", async () => {
-    const answer = health({
-      notices: [
-        {
-          key: "storage.space_low",
-          code: "storage.space_low",
-          severity: "warning",
-          params: {},
-          owner: "box",
-        },
-      ],
-    });
-    const lowDisk = alert("storage.space_low", "box", {
-      params: { freeBytes: 1_800_000_000 },
-      screen: "box-status",
-    });
-    const { el } = await mount(stubApi({}, answer, [lowDisk]));
-    expect(q(el, "[data-test=row-disk]")!.getAttribute("data-state")).toBe("attention");
-    expect(qa(el, "[data-test=row-disk] [data-test=row-alert]")).toHaveLength(0);
-  });
 });

@@ -283,12 +283,9 @@ export class BoxStatusScreen extends LitElement {
   }
 
   #renderRow(row: PartRow, health: BoxHealth): TemplateResult {
-    // An alert that sends people to this page would only send them here again.
     const sentences = [
       ...new Set(
-        row.alerts
-          .filter((alert) => alert.screen !== "box-status")
-          .map((alert) => alertMessage(alert.code, alert.params, currentLocale())),
+        row.alerts.map((alert) => alertMessage(alert.code, alert.params, currentLocale())),
       ),
     ].filter((sentence) => sentence !== row.line);
     const disk = row.id === "disk";
