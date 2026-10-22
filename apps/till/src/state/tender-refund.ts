@@ -42,8 +42,8 @@ function normalized(ask: TenderRefundAsk): TenderRefundAsk {
   if (typeof ask.tenderId !== "string" || ask.tenderId === "") return fail("invalid");
   if (typeof ask.reason !== "string" || ask.reason.trim() === "" || ask.reason.length > REASON_MAX)
     return fail("invalid");
-  for (const field of ["cashConfirmed", "manualConfirmed"] as const)
-    if (ask[field] !== undefined && typeof ask[field] !== "boolean") return fail("invalid");
+  if (ask.manualConfirmed !== undefined && typeof ask.manualConfirmed !== "boolean")
+    return fail("invalid");
   const appliedAmount = tenderRefundAmount(ask.appliedAmount) ?? fail("invalid");
   const tipAmount = tenderRefundAmount(ask.tipAmount) ?? fail("invalid");
   const total = moneyPlus(appliedAmount, tipAmount);
@@ -57,7 +57,6 @@ function normalized(ask: TenderRefundAsk): TenderRefundAsk {
     appliedAmount,
     tipAmount,
     reason: ask.reason.trim(),
-    cashConfirmed: ask.cashConfirmed === true,
     manualConfirmed: ask.manualConfirmed === true,
   };
 }

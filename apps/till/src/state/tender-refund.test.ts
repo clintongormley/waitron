@@ -9,7 +9,6 @@ const ask = {
   appliedAmount: "12.50",
   tipAmount: "0.00",
   reason: "Courtesy return",
-  cashConfirmed: true,
 };
 const reply = (over: Partial<TenderRefundView> = {}): TenderRefundView => ({
   id: "refund-1",
@@ -90,29 +89,24 @@ it("uses status and same-attempt retry after the refund id is known, releasing o
   expect(next.request.submissionId).not.toBe(originalId);
 });
 
-it.each([
-  "appliedAmount",
-  "tipAmount",
-  "reason",
-  "tenderId",
-  "cashConfirmed",
-  "manualConfirmed",
-] as const)("locks changes to %s until the original request has a terminal result", (field) => {
-  const store = new TenderRefundAttempts();
-  const sent = store.prepare(scope, "sale-1", ask);
-  const changes = {
-    appliedAmount: "11.00",
-    tipAmount: "1.00",
-    reason: "Other",
-    tenderId: "tender-2",
-    cashConfirmed: false,
-    manualConfirmed: true,
-  };
-  expect(() => store.prepare(scope, "sale-1", { ...ask, [field]: changes[field] })).toThrow(
-    "locked",
-  );
-  expect(store.read(scope, "sale-1")).toEqual(sent);
-});
+it.each(["appliedAmount", "tipAmount", "reason", "tenderId", "manualConfirmed"] as const)(
+  "locks changes to %s until the original request has a terminal result",
+  (field) => {
+    const store = new TenderRefundAttempts();
+    const sent = store.prepare(scope, "sale-1", ask);
+    const changes = {
+      appliedAmount: "11.00",
+      tipAmount: "1.00",
+      reason: "Other",
+      tenderId: "tender-2",
+      manualConfirmed: true,
+    };
+    expect(() => store.prepare(scope, "sale-1", { ...ask, [field]: changes[field] })).toThrow(
+      "locked",
+    );
+    expect(store.read(scope, "sale-1")).toEqual(sent);
+  },
+);
 
 it("keeps normalized equivalents and ignores property order and transient authorization", () => {
   const store = new TenderRefundAttempts();
@@ -123,13 +117,11 @@ it("keeps normalized equivalents and ignores property order and transient author
     appliedAmount: "00012.50",
     tipAmount: "0",
     tenderId: "tender-1",
-    cashConfirmed: true,
     manualConfirmed: false,
   });
   expect(two).toEqual(one);
   expect(Object.keys(one.request).sort()).toEqual([
     "appliedAmount",
-    "cashConfirmed",
     "manualConfirmed",
     "reason",
     "submissionId",
@@ -293,7 +285,6 @@ it.each([
   { reason: " " },
   { reason: "x".repeat(501) },
   { tenderId: "" },
-  { cashConfirmed: "true" },
   { manualConfirmed: null },
 ])("refuses malformed request %j without retaining or sending it", async (change) => {
   const api = { refundTransaction: vi.fn(), getTenderRefund: vi.fn(), retryTenderRefund: vi.fn() };

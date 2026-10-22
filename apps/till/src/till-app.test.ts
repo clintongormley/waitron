@@ -23912,7 +23912,6 @@ describe("A737 post-invoice refund integration", () => {
     appliedAmount: "3.00",
     tipAmount: "0.00",
     reason: "Customer request",
-    cashConfirmed: true,
   };
   const dialog = (el: TillApp) =>
     el.shadowRoot!.querySelector<TillTenderRefundDialog>("till-tender-refund-dialog");
@@ -23971,7 +23970,6 @@ describe("A737 post-invoice refund integration", () => {
     const form = dialog(el)!;
     const reason = form.shadowRoot!.querySelector<WtInput>('[name="reason"]')!;
     emit(reason, "wt-change", { value: "Customer request" });
-    emit(form.shadowRoot!.querySelector('[name="cashConfirmed"]')!, "wt-change", { checked: true });
     await form.updateComplete;
     await userEvent.click(
       page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!),

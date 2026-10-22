@@ -42,7 +42,7 @@ describe.each(["light", "dark"] as const)("settled-tender refund accessibility (
     });
     await expectNoA11yViolations(host);
   });
-  it("has no violations with required cash fields and handover marked", async () => {
+  it("has no violations with required cash fields marked", async () => {
     const { el, host } = await mount({ tenders: [{ ...card, method: "cash", last4: null }] });
     el.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
     await el.updateComplete;

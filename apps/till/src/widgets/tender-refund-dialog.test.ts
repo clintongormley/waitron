@@ -69,32 +69,51 @@ it("refunds the original card's remaining applied amount and tip, explicitly lea
       appliedAmount: "40.00",
       tipAmount: "5.00",
       reason: "Courtesy return",
-      cashConfirmed: false,
       manualConfirmed: false,
     },
   ]);
 });
 
 it("requires a choice between original tenders and resets amounts and handover on another choice", async () => {
-  const el = await mount({ tenders: [cash, card] });
+  const manual = { ...card, tenderId: "manual-1", last4: "0077", manual: true };
+  const el = await mount({ tenders: [manual, card] });
   expect(button(el).disabled).toBe(true);
   expect(button(el).variant).toBe("secondary");
-  await click(el, "input[name=tender][value=cash-1]");
+  await click(el, "input[name=tender][value=manual-1]");
   expect(field(el, "appliedAmount").value).toBe("40.00");
-  await click(el, "wt-switch[name=cashConfirmed]");
+  await click(el, "wt-switch[name=manualConfirmed]");
   await fill(el, "appliedAmount", "12.50");
   await click(el, "input[name=tender][value=card-1]");
   expect(field(el, "appliedAmount").value).toBe("40.00");
-  expect(root(el).querySelector("wt-switch[name=cashConfirmed]")).toBeNull();
-  await click(el, "input[name=tender][value=cash-1]");
+  expect(root(el).querySelector("wt-switch[name=manualConfirmed]")).toBeNull();
+  await click(el, "input[name=tender][value=manual-1]");
   expect(
-    root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>("wt-switch[name=cashConfirmed]")!
+    root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>("wt-switch[name=manualConfirmed]")!
       .checked,
   ).toBe(false);
 });
 
-it("validates amount, tip, reason and cash handover beside each control and above the buttons", async () => {
+it("draws no switch for a cash payment and submits without one", async () => {
   const el = await mount({ tenders: [cash] });
+  const asks = collect<TenderRefundAsk>(el, "tender-refund-submit");
+  expect(root(el).querySelector("wt-switch")).toBeNull();
+  await fill(el, "reason", "Return");
+  expect(button(el).disabled).toBe(false);
+  await click(el);
+  expect(root(el).querySelector("[data-confirm-error]")).toBeNull();
+  expect(asks).toEqual([
+    {
+      tenderId: "cash-1",
+      appliedAmount: "40.00",
+      tipAmount: "5.00",
+      reason: "Return",
+      manualConfirmed: false,
+    },
+  ]);
+});
+
+it("validates amount, tip, reason and hand-keyed confirmation beside each control and above the buttons", async () => {
+  const el = await mount({ tenders: [{ ...card, manual: true }] });
   const asks = collect(el, "tender-refund-submit");
   await fill(el, "appliedAmount", "40.01");
   await fill(el, "tipAmount", "5.01");
@@ -113,17 +132,16 @@ it("validates amount, tip, reason and cash handover beside each control and abov
   await fill(el, "tipAmount", "0");
   await fill(el, "reason", "Return");
   expect(button(el).disabled).toBe(true);
-  await click(el, "wt-switch[name=cashConfirmed]");
+  await click(el, "wt-switch[name=manualConfirmed]");
   expect(button(el).disabled).toBe(false);
   await click(el);
   expect(asks).toEqual([
     {
-      tenderId: "cash-1",
+      tenderId: "card-1",
       appliedAmount: "12.50",
       tipAmount: "0.00",
       reason: "Return",
-      cashConfirmed: true,
-      manualConfirmed: false,
+      manualConfirmed: true,
     },
   ]);
 });
@@ -163,7 +181,6 @@ it("returns tip only with all remaining applied money and refuses a zero total",
       appliedAmount: "40.00",
       tipAmount: "2.50",
       reason: "Return",
-      cashConfirmed: false,
       manualConfirmed: false,
     },
   ]);
@@ -186,7 +203,6 @@ it("requires explicit manual-terminal confirmation before requesting its mandato
       appliedAmount: "40.00",
       tipAmount: "5.00",
       reason: "Return",
-      cashConfirmed: false,
       manualConfirmed: true,
     },
   ]);
@@ -360,24 +376,24 @@ it("dispatches one recovery action before its parent paints busy and releases it
   expect(retries).toHaveLength(1);
 });
 
-it("marks cash handover as required, describes its error to the native switch and shows the total", async () => {
-  const el = await mount({ tenders: [cash] });
+it("marks hand-keyed confirmation as required, describes its error to the native switch and shows the total", async () => {
+  const el = await mount({ tenders: [{ ...card, manual: true }] });
   await click(el);
   const sw = root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>(
-    "wt-switch[name=cashConfirmed]",
+    "wt-switch[name=manualConfirmed]",
   )!;
   expect(sw.label).toContain("*");
   expect(sw.description).toBe(t("tender_refund.confirm_required"));
   expect(root(el).querySelector("[data-total]")!.textContent).toContain("45.00");
 });
 
-it("clears a server handover refusal when that confirmation changes", async () => {
+it("clears a server hand-keyed confirmation refusal when that confirmation changes", async () => {
   const el = await mount({
-    tenders: [cash],
-    refusal: { code: "management.request_invalid", field: "cashConfirmed" },
+    tenders: [{ ...card, manual: true }],
+    refusal: { code: "management.request_invalid", field: "manualConfirmed" },
   });
   expect(root(el).querySelector("[data-confirm-error]")).not.toBeNull();
-  await click(el, "wt-switch[name=cashConfirmed]");
+  await click(el, "wt-switch[name=manualConfirmed]");
   expect(root(el).querySelector("[data-confirm-error]")).toBeNull();
   expect(root(el).querySelector("wt-form-actions")!.error).toBe("");
 });

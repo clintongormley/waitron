@@ -7,7 +7,6 @@ export interface TenderRefundRequest {
   appliedAmount: string;
   tipAmount: string;
   reason: string;
-  cashConfirmed?: boolean;
   manualConfirmed?: boolean;
   override?: { personId: string; pin: string };
 }

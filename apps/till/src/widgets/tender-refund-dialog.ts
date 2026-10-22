@@ -31,7 +31,6 @@ type Draft = {
   appliedAmount: string;
   tipAmount: string;
   reason: string;
-  cashConfirmed: boolean;
   manualConfirmed: boolean;
 };
 type Field = "appliedAmount" | "tipAmount" | "reason" | "confirmation";
@@ -40,7 +39,6 @@ const blank = (): Draft => ({
   appliedAmount: "",
   tipAmount: "",
   reason: "",
-  cashConfirmed: false,
   manualConfirmed: false,
 });
 const supported = (row: RefundableTender) => row.method === "cash" || row.method === "card";
@@ -157,7 +155,6 @@ export class TillTenderRefundDialog extends LitElement {
         appliedAmount: this.attempt.request.appliedAmount,
         tipAmount: this.attempt.request.tipAmount,
         reason: this.attempt.request.reason,
-        cashConfirmed: this.attempt.request.cashConfirmed === true,
         manualConfirmed: this.attempt.request.manualConfirmed === true,
       };
       this.#baseline = { ...this.draft };
@@ -193,8 +190,7 @@ export class TillTenderRefundDialog extends LitElement {
     const field = this.#refusalField();
     if (
       field !== null &&
-      (field in change ||
-        (field === "confirmation" && ("cashConfirmed" in change || "manualConfirmed" in change)))
+      (field in change || (field === "confirmation" && "manualConfirmed" in change))
     )
       this.shownRefusal = null;
   }
@@ -225,10 +221,7 @@ export class TillTenderRefundDialog extends LitElement {
     if (this.draft.reason.trim() === "") errors.set("reason", t("bill_refund.reason_invalid"));
     else if (this.draft.reason.length > REASON_MAX)
       errors.set("reason", t("bill_refund.reason_long"));
-    if (
-      (row.method === "cash" && !this.draft.cashConfirmed) ||
-      (row.manual && !this.draft.manualConfirmed)
-    )
+    if (row.manual && !this.draft.manualConfirmed)
       errors.set("confirmation", t("tender_refund.confirm_required"));
     return errors;
   }
@@ -241,7 +234,7 @@ export class TillTenderRefundDialog extends LitElement {
     const field = this.shownRefusal?.field;
     if (this.shownRefusal?.code !== "management.request_invalid") return null;
     if (field === "appliedAmount" || field === "tipAmount" || field === "reason") return field;
-    return field === "cashConfirmed" || field === "manualConfirmed" ? "confirmation" : null;
+    return field === "manualConfirmed" ? "confirmation" : null;
   }
   #refusalText(): string {
     if (this.shownRefusal === null) return "";
@@ -320,18 +313,17 @@ export class TillTenderRefundDialog extends LitElement {
     ></wt-input>`;
   }
   #confirm(row: RefundableTender, error: string) {
-    if (row.method !== "cash" && !row.manual) return nothing;
-    const name = row.method === "cash" ? "cashConfirmed" : "manualConfirmed";
-    return html`${row.manual ? html`<p data-manual-instruction>${t("tender_refund.manual_instruction")}</p>` : nothing}
+    if (!row.manual) return nothing;
+    return html`<p data-manual-instruction>${t("tender_refund.manual_instruction")}</p>
       <wt-switch
-        name=${name}
-        .label=${`${t(name === "cashConfirmed" ? "tender_refund.cash_confirm" : "tender_refund.manual_confirm")} *`}
+        name="manualConfirmed"
+        .label=${`${t("tender_refund.manual_confirm")} *`}
         .description=${error}
-        .checked=${this.draft[name]}
+        .checked=${this.draft.manualConfirmed}
         .disabled=${this.#busy() || this.#locked()}
         @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
           event.stopPropagation();
-          this.#set({ [name]: event.detail.checked });
+          this.#set({ manualConfirmed: event.detail.checked });
         }}
       ></wt-switch
       >${error ? html`<p class="error" data-confirm-error role="alert">${error}</p>` : nothing}`;

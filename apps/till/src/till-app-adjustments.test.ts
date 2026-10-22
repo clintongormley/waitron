@@ -3102,9 +3102,6 @@ describe("till-app: service cancellation consent", () => {
         ["reason", "Wine returned; customer request"],
       ])
         emit(form.shadowRoot!.querySelector(`[name="${name}"]`)!, "wt-change", { value });
-      emit(form.shadowRoot!.querySelector('[name="cashConfirmed"]')!, "wt-change", {
-        checked: true,
-      });
       await form.updateComplete;
       await userEvent.click(
         page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!),
@@ -3426,7 +3423,6 @@ describe("till-app: service cancellation consent", () => {
           appliedAmount: "7.50",
           tipAmount: "0.00",
           reason: "Wrong dish",
-          cashConfirmed: true,
           manualConfirmed: true,
         });
         await flush(el);
@@ -3562,7 +3558,6 @@ describe("till-app: service cancellation consent", () => {
         appliedAmount: "7.50",
         tipAmount: "0.00",
         reason: "Wine returned; customer request",
-        cashConfirmed: true,
         manualConfirmed: false,
         submissionId: expect.any(String),
       });
