@@ -983,6 +983,18 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
     });
   }
 
+  for (const cardWidth of [310, 358]) {
+    it(`leaves a space between the preview and Use Waitron's look in a ${cardWidth}px card`, async () => {
+      await onDesk(async () => {
+        setLocale("es-ES");
+        const { el } = await mountEditing(inUse(lucia));
+        await resize(el, cardWidth);
+        const gap = rect(button(el, "use-waitron")).top - rect(preview(el)).bottom;
+        expect(gap).toBeGreaterThanOrEqual(16);
+      });
+    });
+  }
+
   /** Where the fixed line's "·" is: drawn or not, and whether Undo shares the colour's line. */
   function dotOf(el: Card, mode: "light" | "dark") {
     const span = q(el, `[data-test=brand-fixed-${mode}]`)!;

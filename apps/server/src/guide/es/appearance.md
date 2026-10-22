@@ -142,9 +142,9 @@ La tarjeta **Temas** muestra todos los temas del local, primero el de Waitron. C
 marca y después el color de la página de la versión clara y de la versión oscura. Cuando la tarjeta
 es estrecha, como en un teléfono o junto al menú lateral en una pantalla pequeña, no muestra los
 colores, y en un teléfono las etiquetas de estado van tras el nombre del tema en lugar de en una
-columna propia. Las etiquetas de estado dicen qué
-tema está **En uso** y cuántos de los colores de un tema se leen mal, por ejemplo «2 se leen mal».
-El tema de Waitron lleva la etiqueta **integrado**.
+columna propia. Las etiquetas de estado dicen qué tema está **En uso** y cuántos de los colores de
+un tema se leen mal, por ejemplo «2 se leen mal». El tema de Waitron lleva la etiqueta
+**integrado**.
 
 Un **Encargado** o un **Administrador** ve **Añadir tema** en la tarjeta, que abre el editor con las
 elecciones de Waitron para un tema que aún no está guardado, y un menú en cada fila:

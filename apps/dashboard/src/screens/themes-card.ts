@@ -40,6 +40,14 @@ const BG = "--wt-color-bg";
 const COLOURS_FROM = 480;
 const STATUS_COLUMN_FROM = 400;
 
+/** Which columns the card's width allows. */
+type Band = "colours" | "status" | "narrow";
+
+function bandOf(width: number): Band {
+  if (width >= COLOURS_FROM) return "colours";
+  return width >= STATUS_COLUMN_FROM ? "status" : "narrow";
+}
+
 interface Row {
   key: string;
   name: string;
@@ -148,8 +156,8 @@ export class ThemesCard extends LitElement {
   @property({ attribute: false }) canEdit = false;
   /** The stored theme the Look card's editor has open. */
   @property({ attribute: false }) editingId: string | null = null;
-  /** The card's own width; null until first read. */
-  @state() private width: number | null = null;
+  /** Null until the card's width is first read. */
+  @state() private band: Band | null = null;
   @state() private submitting = false;
   @state() private switching: Switching | null = null;
   @state() private switchError = "";
@@ -158,11 +166,14 @@ export class ThemesCard extends LitElement {
   /** Waits a frame: the new columns change the card's height, and a change made inside the
    * callback makes Chromium report "ResizeObserver loop completed with undelivered notifications". */
   readonly #resize = new ResizeObserver(([entry]) => {
-    const width = entry!.contentRect.width;
-    requestAnimationFrame(() => {
-      this.width = width;
+    const band = bandOf(entry!.contentRect.width);
+    cancelAnimationFrame(this.#frame);
+    if (band === this.band) return;
+    this.#frame = requestAnimationFrame(() => {
+      this.band = band;
     });
   });
+  #frame = 0;
 
   constructor() {
     super();
@@ -176,11 +187,14 @@ export class ThemesCard extends LitElement {
 
   override disconnectedCallback(): void {
     this.#resize.disconnect();
+    cancelAnimationFrame(this.#frame);
     super.disconnectedCallback();
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (this.width === null && this.isConnected) this.width = this.getBoundingClientRect().width;
+    if (this.band === null && this.isConnected) {
+      this.band = bandOf(this.getBoundingClientRect().width);
+    }
     if (changed.has("canEdit") && !this.canEdit) {
       this.switching = null;
       this.deleting = null;
@@ -188,8 +202,8 @@ export class ThemesCard extends LitElement {
   }
 
   #columns(): DataTableColumn<Row>[] {
-    const width = this.width ?? 0;
-    const statusColumn = width >= STATUS_COLUMN_FROM;
+    const band = this.band ?? "narrow";
+    const statusColumn = band !== "narrow";
     const columns: DataTableColumn<Row>[] = [
       {
         key: "name",
@@ -206,7 +220,7 @@ export class ThemesCard extends LitElement {
           >`,
       },
     ];
-    if (width >= COLOURS_FROM) {
+    if (band === "colours") {
       columns.push({
         key: "colours",
         label: t("appearance.themes_colours"),

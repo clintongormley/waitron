@@ -134,9 +134,10 @@ it.
 The **Themes** card lists every theme the venue has, Waitron's first. Each row shows the theme's
 **Name**, its **Colours** and its **Status**. The colours are three dots: the brand colour, then
 the page colour of the light version and of the dark version. When the card is narrow, as on a
-phone or beside the side menu on a small screen, it leaves the colours out, and on a phone the status
-tags sit after the theme's name instead of in a column of their own. The status tags say which theme is **In use** and how many of a theme's
-colours are hard to read, such as "2 hard to read". Waitron's theme carries the tag **built in**.
+phone or beside the side menu on a small screen, it leaves the colours out, and on a phone the
+status tags sit after the theme's name instead of in a column of their own. The status tags say
+which theme is **In use** and how many of a theme's colours are hard to read, such as "2 hard to
+read". Waitron's theme carries the tag **built in**.
 
 A **Manager** or an **Admin** sees **Add theme** on the card, which opens the editor on Waitron's
 choices for a theme that is not yet stored, and a menu on each row:

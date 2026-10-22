@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
@@ -67,6 +67,7 @@ async function mount(list: ThemeList, canEdit = true, scheme?: "light" | "dark")
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   cleanupWidgets();
   setLocale("en-GB");
   await page.viewport(1280, 800);
@@ -272,6 +273,51 @@ describe("the Themes card fits its own width", () => {
     await expect.poll(() => columnKeys(el)).toEqual(["name", "actions"]);
     el.parentElement!.style.width = "900px";
     await expect.poll(() => columnKeys(el)).toEqual(["name", "colours", "status", "actions"]);
+  });
+
+  const frames = (count: number) =>
+    Array.from({ length: count }).reduce<Promise<unknown>>(
+      (chain) => chain.then(() => new Promise((resolve) => requestAnimationFrame(resolve))),
+      Promise.resolve(),
+    );
+
+  it("a resize that keeps the same columns draws nothing again", async () => {
+    const el = await sized(644);
+    const render = vi.spyOn(el, "render");
+    for (const width of [700, 900, 520]) {
+      el.parentElement!.style.width = `${width}px`;
+      await frames(3);
+    }
+    expect(render).not.toHaveBeenCalled();
+    el.parentElement!.style.width = "420px";
+    await expect.poll(() => columnKeys(el)).toEqual(["name", "status", "actions"]);
+    expect(render).toHaveBeenCalled();
+  });
+
+  it("stops watching its width once removed, and watches again when put back", async () => {
+    const el = await sized(644);
+    const host = el.parentElement!;
+    const render = vi.spyOn(el, "render");
+    el.remove();
+    host.style.width = "310px";
+    await frames(3);
+    expect(render).not.toHaveBeenCalled();
+    host.append(el);
+    await expect.poll(() => columnKeys(el)).toEqual(["name", "actions"]);
+  });
+
+  it("a width read waiting for its frame is dropped when the card is removed", async () => {
+    const el = await sized(644);
+    const waiting: number[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => {
+      waiting.push(4242);
+      return 4242;
+    });
+    const cancel = vi.spyOn(window, "cancelAnimationFrame");
+    el.parentElement!.style.width = "310px";
+    await expect.poll(() => waiting.length).toBeGreaterThan(0);
+    el.remove();
+    expect(cancel).toHaveBeenCalledWith(4242);
   });
 
   it("in the narrowest card the status tags follow the name", async () => {
