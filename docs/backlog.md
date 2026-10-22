@@ -3300,7 +3300,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `color: var(--wt-color-primary)` outside a list of icons and spinners. Slice 5 landed 2026-10-21 (#1947): Settings →
   Appearance shows the theme in use, and a manager edits the brand colour, background and corners in
   place with a Light and Dark preview, warnings with one-press fixes, Fix all and a Hard to read
-  dialog before saving anyway. Slice 13 landed 2026-10-22 (#PR): the Themes card lists Waitron's theme and the venue's own; a
+  dialog before saving anyway. Slice 13 landed 2026-10-22 (#1959): the Themes card lists Waitron's theme and the venue's own; a
   manager adds, copies, renames, deletes and switches themes, edits any of them, and names a draft
   with Save as new theme…; Edit works while Waitron's theme is in use, so a new venue makes its first
   theme from the screen. The create button reads "Add theme", not the design's "New theme", by the
@@ -3311,8 +3311,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   check returns, and that check asks about the counter zone plus the zone of a table whose order is
   on screen (`apps/till/src/till-app.ts:2585-2591`); a cash register whose profile has no counter
   zone gets an empty one at sign-in (`:4884-4901`; a handheld always gets one), so on the floor plan it asks about no zone and keeps the old
-  theme until it opens a table, its zones or profile change, or it reloads. Traced by reading, not
-  run. The design says every signed-in till follows within one poll (design section 12). Decide:
+  theme until it opens a table, its zones or profile change, or it reloads. Run 2026-10-22 by
+  slice 13's review: with the till fixture in `apps/till/src/till-app-setup-refresh.test.ts` changed
+  to a signed-in floor view with no counter zone, "a moved theme hash repaints an open till without
+  a reload" failed, the background staying on the old colour. The design says every signed-in till follows within one poll (design section 12). Decide:
   have the poll return the setup revision without asking about a zone, or accept it and correct the
   design. The user guide's Appearance page already says what is true. The switch dialog's sentence "every signed-in
   till within 15 seconds" (A841 slice 13, the design's approved words) is untrue for this till too
