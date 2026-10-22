@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import type { WtButton, WtDialog, WtInput, WtRowActions, WtSwitch } from "@waitron/ui";
+import type {
+  WtButton,
+  WtDeleteDialog,
+  WtDialog,
+  WtInput,
+  WtRowActions,
+  WtSwitch,
+} from "@waitron/ui";
+import { createLeaveCoordinator } from "@waitron/ui-core/unsaved-changes";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
@@ -12,6 +20,7 @@ import {
   dialogMessageOf,
   mountWidget,
 } from "../widgets/test-helpers.js";
+import type { ThemeSwitchDialog } from "../widgets/theme-switch-dialog.js";
 import type { ThemesChanged } from "./themes-card.js";
 import "./themes-card.js";
 
@@ -60,8 +69,16 @@ function stubApi() {
     name,
   }));
   const getVenueTheme = vi.fn(async () => ({ hash: "h2", css: "", logo: null }));
-  const api = { createTheme, renameTheme, getVenueTheme } as unknown as DashboardApi;
-  return { api, createTheme, renameTheme, getVenueTheme };
+  const useTheme = vi.fn<DashboardApi["useTheme"]>(async (id) => ({ inUse: id }));
+  const deleteTheme = vi.fn<DashboardApi["deleteTheme"]>(async () => ({ inUse: null }));
+  const api = {
+    createTheme,
+    renameTheme,
+    getVenueTheme,
+    useTheme,
+    deleteTheme,
+  } as unknown as DashboardApi;
+  return { api, createTheme, renameTheme, getVenueTheme, useTheme, deleteTheme };
 }
 
 async function mount(list: ThemeList, extra: Partial<Card> = {}) {
@@ -142,6 +159,35 @@ async function flip(el: Card, dialog: WtDialog, checked: boolean): Promise<void>
   );
   await settle(el);
 }
+
+const switchHost = (el: Card) =>
+  el.shadowRoot!.querySelector<ThemeSwitchDialog>("dashboard-theme-switch-dialog");
+const deleteHost = (el: Card) => el.shadowRoot!.querySelector<WtDeleteDialog>("wt-delete-dialog");
+
+async function switchDialog(el: Card): Promise<WtDialog> {
+  const host = switchHost(el)!;
+  await host.updateComplete;
+  const dialog = host.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
+  await expect.poll(() => dialog.open).toBe(true);
+  return dialog;
+}
+
+const switchButton = (dialog: WtDialog, which: "use" | "back") =>
+  dialog.querySelector<WtButton>(`wt-button[data-test=switch-${which}]`)!;
+
+async function deleteDialog(el: Card): Promise<WtDeleteDialog> {
+  const host = deleteHost(el)!;
+  await expect.poll(() => host.open).toBe(true);
+  await host.updateComplete;
+  return host;
+}
+
+const confirmDelete = (dialog: WtDeleteDialog) =>
+  dialog.shadowRoot!.querySelector<WtButton>("wt-button[data-test=delete-confirm]")!;
+
+/** The lines of the dialog's "What changes" group, or [] when it is not drawn. */
+const endsOf = (dialog: WtDeleteDialog) =>
+  [...dialog.shadowRoot!.querySelectorAll("[data-group=ends] li")].map((li) => li.textContent);
 
 afterEach(() => {
   cleanupWidgets();
@@ -355,5 +401,203 @@ describe("dashboard-themes-card actions", () => {
     expect(codeMessage("theme.not_found")).toBe("This theme no longer exists.");
     expect(save(dialog).disabled).toBe(false);
     expect(changes).toEqual([]);
+  });
+
+  it("Use on every screen asks once, then switches", async () => {
+    const { el, changes, useTheme, getVenueTheme } = await mount(four);
+    await choose(el, "t-xmas", "use");
+    let dialog = await switchDialog(el);
+    expect(dialog.heading).toBe("Use Christmas on every screen?");
+    expect(dialog.querySelectorAll("li")).toHaveLength(0);
+    let closed = dialogClosed(dialog);
+    await userEvent.click(switchButton(dialog, "back"));
+    await closed;
+    expect(useTheme).not.toHaveBeenCalled();
+
+    await choose(el, "t-xmas", "use");
+    dialog = await switchDialog(el);
+    closed = dialogClosed(dialog);
+    await userEvent.click(switchButton(dialog, "use"));
+    await closed;
+    expect(useTheme).toHaveBeenCalledTimes(1);
+    expect(useTheme).toHaveBeenCalledWith("t-xmas");
+    expect(changes).toEqual([{ kind: "switched", inUse: "t-xmas" }]);
+    await expect.poll(() => getVenueTheme.mock.calls.length).toBe(1);
+
+    await choose(el, "t-summer", "use");
+    dialog = await switchDialog(el);
+    expect(dialog.heading).toBe("Use Summer terrace on every screen?");
+    expect([...dialog.querySelectorAll("li")].map((li) => li.textContent)).toEqual([
+      "Brand colour: buttons are hard to see on dark screens.",
+    ]);
+    closed = dialogClosed(dialog);
+    await userEvent.click(switchButton(dialog, "back"));
+    await closed;
+
+    await choose(el, "waitron", "use");
+    dialog = await switchDialog(el);
+    expect(dialog.heading).toBe("Use Waitron on every screen?");
+    closed = dialogClosed(dialog);
+    await userEvent.click(switchButton(dialog, "use"));
+    await closed;
+    expect(useTheme).toHaveBeenLastCalledWith(null);
+    expect(useTheme).toHaveBeenCalledTimes(2);
+  });
+
+  it("a switch to a theme deleted elsewhere says so", async () => {
+    const { el, changes, useTheme, getVenueTheme } = await mount(four);
+    useTheme.mockRejectedValueOnce({ code: "theme.not_found" });
+    await choose(el, "t-xmas", "use");
+    const dialog = await switchDialog(el);
+    await userEvent.click(switchButton(dialog, "use"));
+    await settle(el);
+    await switchHost(el)!.updateComplete;
+    expect(useTheme).toHaveBeenCalledTimes(1);
+    expect(dialog.open).toBe(true);
+    expect(await dialogMessageOf(dialog)).toBe(codeMessage("theme.not_found"));
+    expect(switchButton(dialog, "use").disabled).toBe(false);
+    expect(changes).toEqual([]);
+    expect(getVenueTheme).not.toHaveBeenCalled();
+  });
+
+  it("Delete asks with the shared dialog, naming the theme in use", async () => {
+    const { el, changes, deleteTheme, getVenueTheme } = await mount(four);
+    await choose(el, "t-lucia", "delete");
+    let dialog = await deleteDialog(el);
+    expect(dialog.shadowRoot!.querySelector("[data-target]")!.textContent).toBe("Bar Lucía");
+    expect(endsOf(dialog)).toEqual([
+      "Bar Lucía is in use on every screen. Deleting it puts Waitron's theme on every screen.",
+    ]);
+    await userEvent.click(confirmDelete(dialog));
+    expect(deleteTheme).toHaveBeenCalledTimes(1);
+    expect(deleteTheme).toHaveBeenCalledWith("t-lucia");
+    await expect.poll(() => dialog.open).toBe(false);
+    expect(changes).toEqual([{ kind: "deleted", id: "t-lucia", inUse: null }]);
+    await expect.poll(() => getVenueTheme.mock.calls.length).toBe(1);
+
+    deleteTheme.mockResolvedValueOnce({ inUse: "t-lucia" });
+    await choose(el, "t-xmas", "delete");
+    dialog = await deleteDialog(el);
+    expect(dialog.shadowRoot!.querySelector("[data-target]")!.textContent).toBe("Christmas");
+    expect(endsOf(dialog)).toEqual([]);
+    await userEvent.click(confirmDelete(dialog));
+    await expect.poll(() => dialog.open).toBe(false);
+    expect(deleteTheme).toHaveBeenLastCalledWith("t-xmas");
+    expect(changes.at(-1)).toEqual({ kind: "deleted", id: "t-xmas", inUse: "t-lucia" });
+    await settle(el);
+    expect(getVenueTheme).toHaveBeenCalledTimes(1);
+  });
+
+  it("the delete dialog follows the live list", async () => {
+    const { el } = await mount(four);
+    await choose(el, "t-xmas", "delete");
+    const dialog = await deleteDialog(el);
+    expect(endsOf(dialog)).toEqual([]);
+    el.list = { ...four, inUse: "t-xmas" };
+    await el.updateComplete;
+    await dialog.updateComplete;
+    expect(endsOf(dialog)).toEqual([
+      "Christmas is in use on every screen. Deleting it puts Waitron's theme on every screen.",
+    ]);
+  });
+
+  it("a refused delete keeps the dialog usable", async () => {
+    const { el, changes, deleteTheme } = await mount(four);
+    deleteTheme.mockRejectedValueOnce({ code: "theme.not_found" });
+    await choose(el, "t-xmas", "delete");
+    const dialog = await deleteDialog(el);
+    await userEvent.click(confirmDelete(dialog));
+    await settle(el);
+    await dialog.updateComplete;
+    expect(deleteTheme).toHaveBeenCalledTimes(1);
+    expect(dialog.open).toBe(true);
+    expect(dialog.actionError).toBe(codeMessage("theme.not_found"));
+    expect(confirmDelete(dialog).disabled).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it("a double press sends once", async () => {
+    const { el, useTheme, deleteTheme } = await mount(four);
+    useTheme.mockImplementationOnce(() => new Promise(() => {}));
+    await choose(el, "t-xmas", "use");
+    await switchDialog(el);
+    const confirm = () =>
+      new CustomEvent("theme-switch-confirm", { bubbles: true, composed: true });
+    switchHost(el)!.dispatchEvent(confirm());
+    switchHost(el)!.dispatchEvent(confirm());
+    expect(useTheme).toHaveBeenCalledTimes(1);
+
+    cleanupWidgets();
+    const second = await mount(four);
+    second.deleteTheme.mockImplementationOnce(() => new Promise(() => {}));
+    await choose(second.el, "t-summer", "delete");
+    await deleteDialog(second.el);
+    const press = () =>
+      new CustomEvent("wt-delete-confirm", {
+        detail: { id: "t-summer" },
+        bubbles: true,
+        composed: true,
+      });
+    deleteHost(second.el)!.dispatchEvent(press());
+    deleteHost(second.el)!.dispatchEvent(press());
+    expect(second.deleteTheme).toHaveBeenCalledTimes(1);
+    expect(deleteTheme).not.toHaveBeenCalled();
+  });
+
+  it("losing the right to edit closes every dialog without a request", async () => {
+    const { el, renameTheme, useTheme, deleteTheme, createTheme } = await mount(four);
+    const ask = vi.fn(async () => "keep" as const);
+    const coordinator = createLeaveCoordinator(ask, window);
+    el.parentElement!.addEventListener("wt-leave-coordinator", (event) => {
+      event.stopPropagation();
+      (event as CustomEvent<{ accept(value: unknown): void }>).detail.accept(coordinator);
+    });
+    const lose = async () => {
+      el.canEdit = false;
+      await el.updateComplete;
+      await table(el).updateComplete;
+      await settle(el);
+    };
+    const regain = async () => {
+      el.canEdit = true;
+      await el.updateComplete;
+      await table(el).updateComplete;
+      await settle(el);
+    };
+
+    await choose(el, "t-xmas", "rename");
+    const name = await nameDialog(el);
+    await type(el, name, "Holiday");
+    expect(coordinator.isDirty()).toBe(true);
+    await lose();
+    expect(el.shadowRoot!.querySelector("dashboard-theme-name-dialog")).toBeNull();
+    expect(coordinator.isDirty()).toBe(false);
+    expect(table(el).columns.map((column) => column.key)).not.toContain("actions");
+    expect(el.shadowRoot!.querySelector("[data-test=new-theme]")).toBeNull();
+    await regain();
+    const reopened = el.shadowRoot!.querySelector("dashboard-theme-name-dialog")!;
+    await reopened.updateComplete;
+    expect(reopened.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.open).toBe(false);
+
+    await choose(el, "t-xmas", "use");
+    await switchDialog(el);
+    await lose();
+    expect(switchHost(el)).toBeNull();
+    await regain();
+    await switchHost(el)!.updateComplete;
+    expect(switchHost(el)!.open).toBe(false);
+
+    await choose(el, "t-xmas", "delete");
+    await deleteDialog(el);
+    await lose();
+    expect(deleteHost(el)).toBeNull();
+    await regain();
+    expect(deleteHost(el)!.open).toBe(false);
+
+    expect(ask).not.toHaveBeenCalled();
+    expect(renameTheme).not.toHaveBeenCalled();
+    expect(useTheme).not.toHaveBeenCalled();
+    expect(deleteTheme).not.toHaveBeenCalled();
+    expect(createTheme).not.toHaveBeenCalled();
   });
 });

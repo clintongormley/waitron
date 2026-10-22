@@ -1,20 +1,24 @@
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
+import "@waitron/ui/src/components/wt-delete-dialog.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { BUILT_IN_THEME_NAME, WAITRON_CHOICES } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { countOf } from "../widgets/count-text.js";
 import { settingsCard, settingsCardStyles } from "../widgets/settings-card.js";
+import { themeDeleteCopy, themeDeleteImpact } from "../widgets/theme-delete.js";
 import "../widgets/theme-name-dialog.js";
 import type { ThemeNameDialog, ThemeNameRequest } from "../widgets/theme-name-dialog.js";
 import { copyName } from "../widgets/theme-names.js";
+import "../widgets/theme-switch-dialog.js";
 import { saveDialogLine } from "../widgets/theme-words.js";
 import { repaintVenueTheme } from "../widgets/venue-theme-repaint.js";
 
@@ -42,6 +46,13 @@ interface Row {
   warnings: number;
   /** null on Waitron's row. */
   view: ThemeView | null;
+}
+
+interface Switching {
+  /** null for Waitron's theme. */
+  id: string | null;
+  name: string;
+  lines: string[];
 }
 
 function coloursOf(view: ThemeView | null): [string, string, string] {
@@ -126,6 +137,10 @@ export class ThemesCard extends LitElement {
   @property({ attribute: false }) editingId: string | null = null;
   @state() private phone = false;
   @state() private submitting = false;
+  @state() private switching: Switching | null = null;
+  @state() private switchError = "";
+  @state() private deleting: { id: string; name: string } | null = null;
+  @state() private deleteError = "";
   readonly #phone = matchMedia(PHONE);
   readonly #onPhone = () => {
     this.phone = this.#phone.matches;
@@ -145,6 +160,13 @@ export class ThemesCard extends LitElement {
   override disconnectedCallback(): void {
     this.#phone.removeEventListener("change", this.#onPhone);
     super.disconnectedCallback();
+  }
+
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("canEdit") && !this.canEdit) {
+      this.switching = null;
+      this.deleting = null;
+    }
   }
 
   #columns(): DataTableColumn<Row>[] {
@@ -203,7 +225,7 @@ export class ThemesCard extends LitElement {
   #menu(row: Row): TemplateResult {
     const view = row.view;
     return html`<wt-row-actions label=${`${t("appearance.theme_actions")}: ${row.name}`}>
-      ${row.inUse ? nothing : this.#item(row, "use", t("appearance.use_everywhere"), () => {})}
+      ${row.inUse ? nothing : this.#item(row, "use", t("appearance.use_everywhere"), () => this.#askSwitch(row))}
       ${
         view === null
           ? nothing
@@ -214,7 +236,10 @@ export class ThemesCard extends LitElement {
       ${
         view === null || view.id === this.editingId
           ? nothing
-          : this.#item(row, "delete", t("action.delete"), () => {})
+          : this.#item(row, "delete", t("action.delete"), () => {
+              this.deleteError = "";
+              this.deleting = { id: view.id, name: view.name };
+            })
       }
     </wt-row-actions>`;
   }
@@ -282,6 +307,83 @@ export class ThemesCard extends LitElement {
     });
   }
 
+  #askSwitch(row: Row): void {
+    const choices = row.view?.choices ?? null;
+    this.switchError = "";
+    this.switching = {
+      id: row.view?.id ?? null,
+      name: row.name,
+      lines:
+        choices === null
+          ? []
+          : row.view!.warnings.map((warning) => saveDialogLine(warning, choices)),
+    };
+  }
+
+  async #switch(): Promise<void> {
+    const target = this.switching;
+    if (this.submitting || target === null || !this.canEdit) return;
+    this.switchError = "";
+    try {
+      const { inUse } = await this.#write(() => this.api.useTheme(target.id));
+      if (this.switching === target) this.switching = null;
+      this.#changed({ kind: "switched", inUse });
+      repaintVenueTheme(this.api);
+    } catch (error) {
+      if (this.switching === target) this.switchError = codeMessage(codeOf(error));
+    }
+  }
+
+  async #delete(id: string): Promise<void> {
+    const target = this.deleting;
+    if (this.submitting || target === null || target.id !== id || !this.canEdit) return;
+    this.deleteError = "";
+    try {
+      const { inUse } = await this.#write(() => this.api.deleteTheme(id));
+      if (this.deleting === target) this.deleting = null;
+      this.#changed({ kind: "deleted", id, inUse });
+      if (inUse === null) repaintVenueTheme(this.api);
+    } catch (error) {
+      if (this.deleting === target) this.deleteError = codeMessage(codeOf(error));
+    }
+  }
+
+  #dialogs(list: ThemeList): TemplateResult {
+    const switching = this.switching;
+    const deleting = this.deleting;
+    return html`<dashboard-theme-name-dialog></dashboard-theme-name-dialog>
+      <dashboard-theme-switch-dialog
+        .open=${switching !== null}
+        .name=${switching?.name ?? ""}
+        .lines=${switching?.lines ?? []}
+        .busy=${this.submitting}
+        .error=${this.switchError}
+        @theme-switch-confirm=${(event: Event) => {
+          event.stopPropagation();
+          void this.#switch();
+        }}
+        @theme-switch-back=${(event: Event) => {
+          event.stopPropagation();
+          this.switching = null;
+        }}
+      ></dashboard-theme-switch-dialog>
+      <wt-delete-dialog
+        .open=${deleting !== null}
+        .impact=${deleting === null ? null : themeDeleteImpact(deleting, list.inUse === deleting.id)}
+        .submitting=${this.submitting}
+        .actionError=${this.deleteError}
+        .copy=${themeDeleteCopy()}
+        @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) => {
+          event.stopPropagation();
+          void this.#delete(event.detail.id);
+        }}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          this.deleting = null;
+        }}
+      ></wt-delete-dialog>`;
+  }
+
   #status(row: Row): TemplateResult[] {
     const tags: TemplateResult[] = [];
     if (row.inUse) {
@@ -322,9 +424,7 @@ export class ThemesCard extends LitElement {
         .columns=${this.#columns()}
         .rowKey=${(row: Row) => row.key}
       ></wt-data-table>`,
-    })}${
-      this.canEdit ? html`<dashboard-theme-name-dialog></dashboard-theme-name-dialog>` : nothing
-    }`;
+    })}${this.canEdit ? this.#dialogs(this.list) : nothing}`;
   }
 }
 
