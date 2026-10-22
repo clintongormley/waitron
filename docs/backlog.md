@@ -2279,6 +2279,17 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   table's comp tests in `till-app-adjustments.test.ts` onto it.
   [Detail](backlog/till.md#a1007-the-tills-adjustment-window-keeps-a-give-away-and-a-line-discount-nothing-opens)
 
+- **A1011. The owner looks at the till's Comp words as built (left open by A758-5).** Each works as
+  built; the owner may want it different. The list, with the built pictures, is under "For the owner
+  to look at" in [PR #1976](https://github.com/clintongormley/waitron/pull/1976): one Comp… per
+  dish and per extra at the counter; Free on the bill only under a reason allowing Free and a
+  percentage; the bill's window opening on %; the words no picture drew; the "Comp…" heading where
+  picture 04 draws "Comp"; the confirm steps never saying "Free"; the two windows asking in opposite
+  orders; Comp… still offered on a line already at €0.00 (the server refuses it, 409
+  `adjustment.no_reduction`); and two English refusals the Comp windows can show still saying
+  "discount" (`adjustment.exceeds_amount`, `adjustment.no_reduction`).
+  [Pictures as built](backlog/mockups/a758-adjustment-reasons/built/)
+
 - **A924. Void and Comp lozenges are neutral, not red and green as picture 01 draws (left open by
   A758-2).** `wt-lozenge` takes only a hex colour and a screen may not write one, so the word
   carries the meaning. Owner to confirm, or `wt-lozenge` gains token colours.
