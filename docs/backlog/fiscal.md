@@ -235,30 +235,35 @@ Found by A231d's research. [Orden HAC/1028/2026](https://www.boe.es/buscar/doc.p
 
 ## A275. Invoice a bill paid later by transfer (full or simplified invoice) — DESIGN NOW (2026-10-17)
 
-**Minimal-scope design proposed, 2026-10-22; full owner approval remains due.** The owner's exact
-2026-10-21 02:40 decision keeps invoice-at-meal for F1/F2 and makes “to be paid by transfer” a FINAL
-bill closure, releasing the table through normal service checks. No awaiting-transfer balance,
-later money-received entry, partial receipts, reversals, receivables ledger/module or unpaid-debt
-list. The day's close gets its own transfer line, neither cash nor card; the accountant uses a
-dashboard invoice export under `report.export` to reconcile the bank outside Waitron.
+**Design approved; plan authored, build pending (2026-10-22).** Owner, 2026-10-22 15:55:
+“A275 looks fine”. This approves the revised minimal design and authorises plan authoring,
+separate fresh-context review and docs-only publication, not a build in this invocation.
 
-The [revised design](../superpowers/specs/2026-10-22-a275-final-transfer-close-design.md) and
-[16 synthetic pictures](mockups/a275-final-transfer-close/README.md) replace the
-[partial-receipts proposal](../superpowers/specs/2026-10-20-a275-invoice-now-transfer-later-design.md).
-That historical body, research, source receipts and 40 pictures remain unchanged apart from dated
-supersession pointers. Old question 1 is retired; questions 2–5 were explicitly withdrawn. The
-requirements settle the remaining product choices: ask only for approval of the complete revised
-design and pictures before any plan. The revised Spanish asesor confirmation is attached, not sent;
-it asks about meal-time invoicing, final classification/export and reconciliation outside Waitron.
+The [approved design](../superpowers/specs/2026-10-22-a275-final-transfer-close-design.md),
+[16 synthetic pictures](mockups/a275-final-transfer-close/README.md) and
+[implementation plan](../superpowers/plans/2026-10-22-a275-final-transfer-close.md) retain the
+owner's 2026-10-21 02:40 policy: invoice at the meal, then close the whole eligible bill finally
+as “to be paid by transfer”. Preserve split bills and release the party/table only through the
+normal all-bills/service/editor checks and clearing requirement. The transfer tender is final
+classification, not bank receipt. No awaiting-transfer balance, later receipt, reversal, debt list
+or receivables module. A separate daily-close transfer line and dashboard invoice CSV under
+`report.export` let the accountant reconcile outside Waitron.
 
-The fresh source table is **READ ONLY / runtime UNVERIFIED** at base
-`b1205498b60170a14204ad688c9ce035eb64d85f`. It traces deferred issuance, complete settlement,
-bill/party closure, transfer rendering, reports, daily close, export permission and device/zone
-admission. The transfer orchestration, explicit wording and invoice export are proposed work,
-not existing APIs or executed results. Public F1, A231/A741 and A555/A948 delivery/enablement
-gates remain. The €5,000 F1 example is a future enabled path; €220 F2 uses existing limits.
-In-flight A696/A739/A1003 are future integration dependencies, not blanket design blockers.
-No implementation plan, protected fiscal change or product-test run belongs to this revision.
+The plan's source observations are **READ ONLY / runtime UNVERIFIED** at
+`db7cddeb2d38984b284b23e8e391e7ebd7cb9156`. New orchestration/storage/export interfaces are
+proposals; no product test, renderer, fiscal or legal verification was run. A1003 is now landed
+(PR #1973); preserve its refusal/rollback boundary. Recheck released A696 clock, F/A739 Pay,
+A555/A948 delivery and A947 minute-allocation contracts before their dependent build steps.
+Public F1 and A231/A741/physical/manual-remedy/B2B gates remain separate. The €5,000 F1 example
+is a future enabled path; €220 F2 stays within existing limits. The plan places a precise
+RUNNER H2 approval gate before later work reaches protected fiscal behavior, and keeps golden
+huella/inmutabilidad unedited. Design approval does not waive that gate.
+
+The [partial-receipts proposal](../superpowers/specs/2026-10-20-a275-invoice-now-transfer-later-design.md),
+historical research/source receipts and pictures remain unchanged. Old question 1 is retired;
+questions 2–5 are withdrawn. The revised Spanish adviser confirmation remains attached, not sent.
+A275 stays open pending build and acceptance; the parent freezes this author candidate before
+separate fresh-context review and controls publication.
 
 ## Pin the clock's future-finished sample refusal
 

@@ -372,13 +372,16 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   structured message, and a PDF alone is not enough (the design's register, RD 238/2026 art. 7.1).
   [Detail](backlog/fiscal.md#when-the-business-e-invoicing-regime-starts)
 
-- **A275. Invoice a bill paid later by transfer (full or simplified invoice)** — DESIGN PROPOSED,
-  revised to the owner's 2026-10-21 02:40 minimal scope; full-design approval remains. Issue at the
-  meal, close finally as to be paid by transfer, release the table through normal service checks,
-  show a separate daily-close line and export invoices for accountant reconciliation outside
-  Waitron. No later receipts, debt list or receivables module. [Design](superpowers/specs/2026-10-22-a275-final-transfer-close-design.md)
-  and [pictures](backlog/mockups/a275-final-transfer-close/README.md); old questions retired,
-  questions 2–5 withdrawn. No plan or build; public F1 and A555/A948 gates remain.
+- **A275. Invoice a bill paid later by transfer (full or simplified invoice)** — DESIGN APPROVED,
+  owner 2026-10-22 15:55: “A275 looks fine”. The [minimal design](superpowers/specs/2026-10-22-a275-final-transfer-close-design.md)
+  and [pictures](backlog/mockups/a275-final-transfer-close/README.md) are approved; the
+  [implementation plan](superpowers/plans/2026-10-22-a275-final-transfer-close.md) is authored for
+  separate fresh-context review and docs-only publication. Build remains pending and is not
+  authorised by this plan-only invocation. Invoice at the meal, final transfer classification,
+  full bill closure, normal sibling/service checks before table release, separate daily-close
+  line and accountant CSV; no later receipts or debt. Public F1/A555/A948 and RUNNER H2 gates remain.
+  A1003 is landed; recheck released A696/F/A739 and A947 integration contracts before build.
+  Old questions retired, questions 2–5 withdrawn. A275 stays open.
   [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17)
 
 - **A679 follow-up: pin the clock's future-finished sample refusal.** A serial review fault
