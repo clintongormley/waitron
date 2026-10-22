@@ -21,12 +21,13 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 }));
 const internet = vi.hoisted(() => ({
   offline: false,
+  offsetMs: 0,
   clock: undefined as unknown as HourTestClock,
 }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: async () => {
     if (internet.offline) return { source: "internet", result: "unavailable", reason: "offline" };
-    const wall = internet.clock.wall(),
+    const wall = internet.clock.wall() + internet.offsetMs,
       monotonic = internet.clock.monotonic();
     return {
       source: "internet",
@@ -49,11 +50,16 @@ vi.mock("node:fs/promises", { spy: true });
 const dirs: string[] = [];
 afterEach(async () => {
   internet.offline = false;
+  internet.offsetMs = 0;
   vi.restoreAllMocks();
   vi.useRealTimers();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
-async function fixture(sendEmailTest?: SetupDeps["sendEmailTest"], extra: Partial<SetupDeps> = {}) {
+async function fixture(
+  sendEmailTest?: SetupDeps["sendEmailTest"],
+  extra: Partial<SetupDeps> = {},
+  grantClock?: () => number,
+) {
   const root = await mkdtemp(join(tmpdir(), "first-route-"));
   dirs.push(root);
   const stateDir = join(root, "state"),
@@ -64,6 +70,7 @@ async function fixture(sendEmailTest?: SetupDeps["sendEmailTest"], extra: Partia
     venueDir,
     modules: ALL_MODULES,
     database: () => database.db,
+    grantClock,
   });
   const app = new Hono();
   mountSetup(
@@ -128,27 +135,57 @@ async function fixture(sendEmailTest?: SetupDeps["sendEmailTest"], extra: Partia
     return ((await comparison.json()) as { preparation: { id: string } }).preparation.id;
   };
   let comparisonId = claimed.status === 200 ? await compareClocks() : "";
-  /** Records the setup's settle wait, moves the clock past it, and returns a fresh comparison. */
-  const settle = async () => {
+  const reconfirm = async () => {
     const token = await post(
       "/setup-api/first-setup/reconfirm",
       { password: PASSWORD, purpose: "block-use" },
       headers(),
     );
-    const waiting = await post(
+    expect(token.status).toBe(200);
+    return ((await token.json()) as { reconfirmation: string }).reconfirmation;
+  };
+  const candidates = (reconfirmation: string, id = comparisonId) =>
+    post(
       "/setup-api/first-setup/candidates",
-      { module: MODULE, proposal: { comparisonId }, ...(await token.json()) },
+      { module: MODULE, proposal: { comparisonId: id }, reconfirmation },
       headers(),
     );
+  /**
+   * Records the setup's settle wait with a fresh grant, moves the clock past it, and returns a
+   * fresh comparison and the grant, which the wait did not spend.
+   */
+  const settle = async () => {
+    const reconfirmation = await reconfirm();
+    const waiting = await candidates(reconfirmation);
     const { preparation } = (await waiting.json()) as {
       preparation: { status: string; targetMs: number };
     };
     expect(preparation.status).toBe("waiting");
     internet.clock.set(preparation.targetMs + 1);
     comparisonId = await compareClocks();
-    return comparisonId;
+    return { comparisonId, reconfirmation };
   };
-  return { root, host, app, post, claim, claimed, nonce, headers, stateDir, settle };
+  return {
+    root,
+    host,
+    app,
+    post,
+    claim,
+    claimed,
+    nonce,
+    headers,
+    stateDir,
+    settle,
+    reconfirm,
+    candidates,
+    compareClocks,
+    get comparisonId() {
+      return comparisonId;
+    },
+    set comparisonId(id: string) {
+      comparisonId = id;
+    },
+  };
 }
 async function recoveryDocument(
   f: Awaited<ReturnType<typeof fixture>>,
@@ -270,14 +307,7 @@ it("never counts a browser on the box itself as the second clock", async () => {
 it("durably selects one hour before export and preserves its IDs after outside use becomes possible", async () => {
   const f = await fixture();
   expect(f.claimed.status).toBe(200);
-  const comparisonId = await f.settle();
-  const reconfirm = await f.post(
-    "/setup-api/first-setup/reconfirm",
-    { password: PASSWORD, purpose: "block-use" },
-    f.headers(),
-  );
-  expect(reconfirm.status).toBe(200);
-  const { reconfirmation } = await reconfirm.json();
+  const { comparisonId, reconfirmation } = await f.settle();
   const candidates = await f.post(
     "/setup-api/first-setup/candidates",
     { module: MODULE, proposal: { comparisonId }, reconfirmation },
@@ -337,15 +367,10 @@ it("rejects over-limit streaming bodies before any claim or import side effect",
 it("imports only the frozen hour and demands a freshly confirmed kept recovery document", async () => {
   const f = await fixture();
   expect(f.claimed.status).toBe(200);
-  const comparisonId = await f.settle();
-  const reconfirm = await f.post(
-    "/setup-api/first-setup/reconfirm",
-    { password: PASSWORD, purpose: "block-use" },
-    f.headers(),
-  );
+  const { comparisonId, reconfirmation } = await f.settle();
   const candidates = await f.post(
     "/setup-api/first-setup/candidates",
-    { module: MODULE, proposal: { comparisonId }, ...(await reconfirm.json()) },
+    { module: MODULE, proposal: { comparisonId }, reconfirmation },
     f.headers(),
   );
   let { state } = await candidates.json();
@@ -461,7 +486,7 @@ it("rejects a missing reconfirmation and an invalid answer before any outside-us
   );
   expect(invalid.status).toBe(400);
   expect((await f.host.store.read())?.consumptionIntent).toBe(false);
-  const comparisonId = await f.settle();
+  const { comparisonId } = await f.settle();
   const missing = await f.post(
     "/setup-api/first-setup/candidates",
     { module: MODULE, proposal: { comparisonId }, reconfirmation: "x" },
@@ -531,15 +556,10 @@ it("returns the locked public venue and selected module versions only to its own
 it("refuses same-generation stale revisions and forged capabilities before abandonment", async () => {
   const f = await fixture();
   expect(f.claimed.status).toBe(200);
-  const comparisonId = await f.settle();
-  const token = await f.post(
-    "/setup-api/first-setup/reconfirm",
-    { password: PASSWORD, purpose: "block-use" },
-    f.headers(),
-  );
+  const { comparisonId, reconfirmation } = await f.settle();
   const chosen = await f.post(
     "/setup-api/first-setup/candidates",
-    { module: MODULE, proposal: { comparisonId }, ...(await token.json()) },
+    { module: MODULE, proposal: { comparisonId }, reconfirmation },
     f.headers(),
   );
   expect(chosen.status).toBe(200);
@@ -557,15 +577,10 @@ it.each(["input", "document"])(
   async (point) => {
     const f = await fixture();
     expect(f.claimed.status).toBe(200);
-    const comparisonId = await f.settle();
-    const token = await f.post(
-      "/setup-api/first-setup/reconfirm",
-      { password: PASSWORD, purpose: "block-use" },
-      f.headers(),
-    );
+    const { comparisonId, reconfirmation } = await f.settle();
     const chosen = await f.post(
       "/setup-api/first-setup/candidates",
-      { module: MODULE, proposal: { comparisonId }, ...(await token.json()) },
+      { module: MODULE, proposal: { comparisonId }, reconfirmation },
       f.headers(),
     );
     expect(chosen.status).toBe(200);
@@ -751,4 +766,89 @@ it("keeps email testing inside the claimed owner and uses its frozen administrat
     });
   }
   expect(sent).toEqual([request.admin.email]);
+});
+
+type Preparation = { preparation: { status: string; targetMs: number } };
+const ledger = (f: Awaited<ReturnType<typeof fixture>>) =>
+  join(f.stateDir, "module-preparation-state.json");
+
+it("keeps one password grant through two waits, spends it on taking the name, and refuses it after", async () => {
+  const f = await fixture();
+  const reconfirmation = await f.reconfirm();
+  const first = await f.candidates(reconfirmation);
+  expect(first.status).toBe(200);
+  const { preparation } = (await first.json()) as Preparation;
+  expect(preparation.status).toBe("waiting");
+  internet.clock.advance(30_000);
+  f.comparisonId = await f.compareClocks();
+  const second = await f.candidates(reconfirmation);
+  expect(second.status).toBe(200);
+  expect(((await second.json()) as Preparation).preparation).toMatchObject({
+    status: "waiting",
+    targetMs: preparation.targetMs,
+  });
+  internet.clock.set(preparation.targetMs + 1);
+  f.comparisonId = await f.compareClocks();
+  const taken = await f.candidates(reconfirmation);
+  expect(taken.status).toBe(200);
+  const { state } = await taken.json();
+  expect(state.status).toBe("consumption-intent");
+  const again = await f.post(
+    "/setup-api/first-setup/candidates",
+    { module: MODULE, proposal: { comparisonId: f.comparisonId }, reconfirmation },
+    f.headers(state),
+  );
+  expect(again.status).toBe(409);
+  expect((await again.json()).error.code).toBe("setup.attempt_conflict");
+});
+
+it("leaves the grant unspent when the clocks disagree", async () => {
+  const f = await fixture();
+  const reconfirmation = await f.reconfirm();
+  internet.offsetMs = 60_000;
+  const refused = await f.candidates(reconfirmation, await f.compareClocks());
+  internet.offsetMs = 0;
+  expect((await refused.json()).error).toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "clock_disagreement" },
+  });
+  const waiting = await f.candidates(reconfirmation, await f.compareClocks());
+  expect(waiting.status).toBe(200);
+  expect(((await waiting.json()) as Preparation).preparation.status).toBe("waiting");
+});
+
+it("refuses a wait with a garbage grant and records no wait", async () => {
+  const f = await fixture();
+  const refused = await f.candidates("x".repeat(43));
+  expect(refused.status).toBe(403);
+  expect((await refused.json()).error.code).toBe("setup.owner_required");
+  await expect(readFile(ledger(f))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("refuses a take with an expired grant, spending nothing, and takes the name with a fresh one", async () => {
+  let grantAgeMs = 0;
+  const f = await fixture(undefined, {}, () => performance.now() + grantAgeMs);
+  const reconfirmation = await f.reconfirm();
+  const first = await f.candidates(reconfirmation);
+  const { preparation } = (await first.json()) as Preparation;
+  expect(preparation.status).toBe("waiting");
+  internet.clock.advance(30_000);
+  f.comparisonId = await f.compareClocks();
+  expect(
+    ((await (await f.candidates(reconfirmation)).json()) as Preparation).preparation.status,
+  ).toBe("waiting");
+  internet.clock.set(preparation.targetMs + 1);
+  f.comparisonId = await f.compareClocks();
+  grantAgeMs = 300_001;
+  const expired = await f.candidates(reconfirmation);
+  expect(expired.status).toBe(403);
+  expect((await expired.json()).error.code).toBe("setup.owner_required");
+  expect((await f.host.store.read())?.status).toBe("claimed");
+  const entries = JSON.parse(await readFile(ledger(f), "utf8")).revisions.flatMap(
+    (row: { value: { entries: { kind: string }[] } }) => row.value.entries.map((e) => e.kind),
+  );
+  expect(entries).not.toContain("intent");
+  const taken = await f.candidates(await f.reconfirm());
+  expect(taken.status).toBe(200);
+  expect((await taken.json()).state.status).toBe("consumption-intent");
 });

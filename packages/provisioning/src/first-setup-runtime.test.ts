@@ -230,7 +230,11 @@ async function selectThroughHost(
     const reconfirmation = await f.host.owner.reconfirm(owner, PASSWORD, "block-use");
     const result = await f.host.coordinator.run((hold) =>
       f.host.withPreparationAuthorization(
-        () => f.host.owner.consumeReconfirmation(owner, reconfirmation, "block-use", hold),
+        {
+          intent: () =>
+            f.host.owner.consumeReconfirmation(owner, reconfirmation, "block-use", hold),
+          wait: () => f.host.owner.checkReconfirmation(owner, reconfirmation, "block-use", hold),
+        },
         () =>
           withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
             preparation.select({

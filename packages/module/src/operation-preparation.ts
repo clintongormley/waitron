@@ -38,7 +38,8 @@ export interface ModuleOperationHost {
     run: (state: {
       readonly value: unknown;
       readonly history: readonly unknown[];
-      replace(value: unknown): Promise<void>;
+      /** A `"wait"` write is checked against the owner's grant without spending it. */
+      replace(value: unknown, purpose?: "wait" | "intent"): Promise<void>;
     }) => Promise<T>,
   ): Promise<T>;
   readonly environment: Readonly<Record<string, string | undefined>>;

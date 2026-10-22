@@ -121,6 +121,7 @@ export class FirstSetupSession {
   #releases = new Set<() => void>();
   #lockTasks: Promise<void>[] = [];
   #attemptLock?: string;
+  readonly #waitGrants = new Map<string, string>();
 
   constructor(api: SetupApi, options: { storage?: SessionStorage; locks?: LockManager } = {}) {
     this.#api = api;
@@ -190,6 +191,7 @@ export class FirstSetupSession {
     this.#opened = false;
     ++this.#generation;
     this.#state = undefined;
+    this.#waitGrants.clear();
     return this.#releaseLocks();
   }
   async #run<T>(body: (current: () => void) => Promise<T>): Promise<T> {
@@ -461,25 +463,43 @@ export class FirstSetupSession {
       if (result.accepted !== true) failure("setup.attempt_conflict");
     });
   }
-  candidates(module: string, proposal: unknown, password: string): Promise<unknown> {
+  /**
+   * A waiting answer leaves the password grant unspent, so it is kept in memory for the next call;
+   * `password` is asked only when no grant is held, or once more when the server refuses a held one.
+   */
+  candidates(module: string, proposal: unknown, password: () => Promise<string>): Promise<unknown> {
     return this.#run(async (current) => {
       this.#module(module);
       const owner = this.#owner();
-      try {
-        const { reconfirmation } = await this.#api.reconfirmFirstSetup(
-          owner,
-          password,
-          "block-use",
-        );
+      const reconfirm = async () => {
+        const typed = await password();
         current();
-        const result = await this.#api.firstSetupCandidates(
-          owner,
-          module,
-          proposal,
-          reconfirmation,
-        );
+        const { reconfirmation } = await this.#api.reconfirmFirstSetup(owner, typed, "block-use");
+        current();
+        return reconfirmation;
+      };
+      const held = this.#waitGrants.get(module);
+      this.#waitGrants.delete(module);
+      let reconfirmation = held ?? (await reconfirm());
+      const send = () => this.#api.firstSetupCandidates(owner, module, proposal, reconfirmation);
+      try {
+        let result: Awaited<ReturnType<typeof send>>;
+        try {
+          result = await send();
+        } catch (error) {
+          if ((error as { code?: unknown }).code !== "setup.owner_required") {
+            this.#waitGrants.set(module, reconfirmation);
+            throw error;
+          }
+          if (held === undefined) throw error;
+          current();
+          reconfirmation = await reconfirm();
+          result = await send();
+        }
         current();
         this.#acceptState(result.state);
+        if ((result.preparation as { status?: unknown } | undefined)?.status === "waiting")
+          this.#waitGrants.set(module, reconfirmation);
         return result.preparation;
       } catch (error) {
         this.#needsRefresh = true;

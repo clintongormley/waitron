@@ -187,10 +187,11 @@ async function fixture(
       await oldHost.owner.consumeReconfirmation(owner, grant, "block-use");
       const candidates = await selectPastWaits(clock, async () => {
         const comparisonId = await compare(oldHost, old, oldClaim.capability);
+        const authorize = async () => {
+          await oldHost.owner.authorize(owner);
+        };
         return oldHost.withPreparationAuthorization(
-          async () => {
-            await oldHost.owner.authorize(owner);
-          },
+          { intent: authorize, wait: authorize },
           async () => seat.candidates(context, { comparisonId }),
         );
       });

@@ -453,7 +453,10 @@ export function createHourSelection(options: {
         return refuse("minute_not_later");
       const write = async (entry: Entry) => {
         authorize();
-        await state.replace({ version: 1, entries: structuredClone([...entries, entry]) });
+        await state.replace(
+          { version: 1, entries: structuredClone([...entries, entry]) },
+          entry.kind === "wait" ? "wait" : "intent",
+        );
         authorize();
         entries.push(entry);
       };

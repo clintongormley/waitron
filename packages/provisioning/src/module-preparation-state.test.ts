@@ -346,3 +346,38 @@ it("retains every module revision when a caller restores an older module value",
     ]);
   });
 });
+it("checks a wait's grant without spending it, and spends it on any other write", async () => {
+  const f = await fixture();
+  const spent: string[] = [];
+  const store = createModulePreparationState({
+    ...f.options,
+    authorizeReplacement: async () => {
+      spent.push("spend");
+    },
+    authorizeWait: async () => {
+      spent.push("check");
+    },
+  });
+  await store.withState(binding, async (state) => {
+    await state.replace({ entries: [{ kind: "wait" }] }, "wait");
+  });
+  expect(spent).toEqual(["check"]);
+  await store.withState(binding, async (state) => {
+    await state.replace({ entries: [{ kind: "wait" }, { kind: "intent" }] });
+  });
+  expect(spent).toEqual(["check", "spend"]);
+  expect(JSON.parse(await fs.readFile(f.path, "utf8")).revisions).toHaveLength(2);
+});
+it("writes no wait when the grant check refuses", async () => {
+  const f = await fixture();
+  const store = createModulePreparationState({
+    ...f.options,
+    authorizeWait: async () => {
+      throw new Error("no grant");
+    },
+  });
+  await expect(
+    store.withState(binding, (state) => state.replace({ entries: [] }, "wait")),
+  ).rejects.toThrow("no grant");
+  await expect(fs.readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
+});

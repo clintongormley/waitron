@@ -530,3 +530,55 @@ it.each(["keys", "positions"])("serves a module that declares only assignment %s
   await f.select();
   expect((await f.host.store.read())!.status).toBe("consumption-intent");
 });
+
+it("keeps one password grant through every wait and spends it only on taking the name", async () => {
+  const f = await fixture();
+  const proof = await f.host.owner.reconfirm(f.owner, PASSWORD, "block-use");
+  await f.compare();
+  const first = await f.select(proof);
+  expect(first.preparation).toMatchObject({ status: "waiting" });
+  vi.advanceTimersByTime(30_000);
+  await f.compare();
+  expect((await f.select(proof)).preparation).toMatchObject({ status: "waiting" });
+  moveFakeClockPast((first.preparation as { targetMs: number }).targetMs);
+  await f.compare();
+  await f.select(proof);
+  expect((await f.host.store.read())!.status).toBe("consumption-intent");
+});
+
+it("refuses a wait with a garbage grant and records no wait", async () => {
+  const f = await fixture();
+  await f.compare();
+  await expect(f.select("x".repeat(43))).rejects.toMatchObject({
+    code: "setup.owner_required",
+  });
+  await expect(readFile(join(f.root, "state/module-preparation-state.json"))).rejects.toMatchObject(
+    { code: "ENOENT" },
+  );
+});
+
+it("refuses a take with an expired grant, spending nothing, and takes the name with a fresh one", async () => {
+  const f = await fixture();
+  const proof = await f.host.owner.reconfirm(f.owner, PASSWORD, "block-use");
+  await f.compare();
+  const first = await f.select(proof);
+  await f.compare();
+  expect((await f.select(proof)).preparation).toMatchObject({ status: "waiting" });
+  vi.advanceTimersByTime(300_001);
+  expect(Date.now()).toBeGreaterThan((first.preparation as { targetMs: number }).targetMs);
+  await f.compare();
+  await expect(f.select(proof)).rejects.toMatchObject({ code: "setup.owner_required" });
+  const state = (await f.host.store.read())!;
+  expect(state.status).toBe("claimed");
+  expect(firstSetupModuleContext(state, MODULE).request).toBeNull();
+  const journal = JSON.parse(
+    await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
+  );
+  expect(
+    journal.revisions.flatMap((row: { value: { entries: { kind: string }[] } }) =>
+      row.value.entries.map((entry) => entry.kind),
+    ),
+  ).not.toContain("intent");
+  await f.selectPastWaits();
+  expect((await f.host.store.read())!.status).toBe("consumption-intent");
+});

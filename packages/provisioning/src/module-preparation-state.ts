@@ -21,6 +21,7 @@ interface Options {
   coordinator: FirstSetupCoordinator;
   authorize(binding: OperationBinding): Promise<void>;
   authorizeReplacement?(): Promise<void>;
+  authorizeWait?(): Promise<void>;
   withVenueExclusion<T>(run: () => Promise<T>): Promise<T>;
 }
 const LIMIT = 1024 * 1024;
@@ -87,7 +88,7 @@ export function createModulePreparationState(options: Options) {
       run: (state: {
         readonly value: unknown;
         readonly history: readonly unknown[];
-        replace(value: unknown): Promise<void>;
+        replace(value: unknown, purpose?: "wait" | "intent"): Promise<void>;
       }) => Promise<T>,
       hold?: FirstSetupHold,
     ): Promise<T> {
@@ -121,13 +122,14 @@ export function createModulePreparationState(options: Options) {
                     .map((row) => row.value),
                 );
               },
-              async replace(next) {
+              async replace(next, purpose = "intent") {
                 check();
                 const supplied = snapshot(next);
                 writes = writes.then(async () => {
                   check();
                   await options.authorize({ ...binding });
-                  await options.authorizeReplacement?.();
+                  if (purpose === "wait") await options.authorizeWait?.();
+                  else await options.authorizeReplacement?.();
                   const candidate: File = {
                     version: 1,
                     revisions: [...file.revisions, { binding: { ...binding }, value: supplied }],

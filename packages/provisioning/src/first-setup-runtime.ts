@@ -24,7 +24,10 @@ import { venueFiscalSelection } from "./venue-fiscal.js";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
 import { firstSetupModuleContext } from "./first-setup-module-context.js";
-import { createFirstSetupPreparation } from "./first-setup-preparation.js";
+import {
+  createFirstSetupPreparation,
+  type PreparationAuthority,
+} from "./first-setup-preparation.js";
 import { readFirstSetupRetirements } from "./first-setup-workspace.js";
 import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
 import { createFirstSetupRecoveryDelivery } from "./first-setup-recovery-delivery.js";
@@ -76,6 +79,8 @@ export function createFirstSetupRuntime(options: {
   readRetiredSetup?: ModuleOperationHost["readRetiredSetup"];
   onOwnershipRecovered?: (attemptId: string) => void;
   testClock?: ModuleOperationHost["testClock"];
+  /** Set only by a test: the clock that expires the owner's password grants. */
+  grantClock?: () => number;
 }) {
   const readRetiredSetup: NonNullable<ModuleOperationHost["readRetiredSetup"]> =
     options.readRetiredSetup ??
@@ -86,7 +91,15 @@ export function createFirstSetupRuntime(options: {
     });
   const sharedCoordinator = createFirstSetupCoordinator();
   const holds = new AsyncLocalStorage<FirstSetupHold>();
-  const replacementAuthority = new AsyncLocalStorage<() => Promise<void>>();
+  const replacementAuthority = new AsyncLocalStorage<PreparationAuthority>();
+  const authorizeWrite = async (purpose: keyof PreparationAuthority) => {
+    const state = await store.read();
+    if (state === null || !["claimed", "consumption-intent"].includes(state.status))
+      throw new AppError("setup.attempt_conflict", {});
+    const authority = replacementAuthority.getStore();
+    if (authority === undefined) throw new AppError("setup.owner_required", {});
+    await authority[purpose]();
+  };
   const coordinator: FirstSetupCoordinator = {
     run: (body) => sharedCoordinator.run((hold) => holds.run(hold, () => body(hold))),
     held: (hold, body) => sharedCoordinator.held(hold, () => holds.run(hold, body)),
@@ -122,6 +135,7 @@ export function createFirstSetupRuntime(options: {
   const bootId = randomUUID();
   const owner = createFirstSetupOwner({
     ...options,
+    now: options.grantClock,
     store,
     coordinator,
     bootId,
@@ -232,14 +246,8 @@ export function createFirstSetupRuntime(options: {
     },
     coordinator,
     withVenueExclusion: (body) => resolution.withVenueExclusion(body),
-    authorizeReplacement: async () => {
-      const state = await store.read();
-      if (state === null || !["claimed", "consumption-intent"].includes(state.status))
-        throw new AppError("setup.attempt_conflict", {});
-      const authorize = replacementAuthority.getStore();
-      if (authorize === undefined) throw new AppError("setup.owner_required", {});
-      await authorize();
-    },
+    authorizeReplacement: () => authorizeWrite("intent"),
+    authorizeWait: () => authorizeWrite("wait"),
     authorize: async (binding) => {
       const state = await store.read();
       const module = state?.frozen.modules.find((entry) => entry.module === binding.module);
@@ -259,7 +267,7 @@ export function createFirstSetupRuntime(options: {
   });
   const authorization = {
     withPreparationAuthorization<T>(
-      authorize: () => Promise<void>,
+      authorize: PreparationAuthority,
       run: () => Promise<T>,
     ): Promise<T> {
       return replacementAuthority.run(authorize, run);

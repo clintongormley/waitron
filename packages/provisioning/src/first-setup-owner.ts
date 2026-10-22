@@ -147,10 +147,24 @@ export function createFirstSetupOwner(options: OwnerOptions) {
   const now = options.now ?? (() => performance.now());
   const throttle = {};
   const passwordThrottle = createPasswordThrottle(now);
-  const grants = new Map<
-    string,
-    FirstSetupOwnerAttempt & { purpose: ReconfirmationPurpose; bootId: string; expires: number }
-  >();
+  type Grant = FirstSetupOwnerAttempt & {
+    purpose: ReconfirmationPurpose;
+    bootId: string;
+    expires: number;
+  };
+  const grants = new Map<string, Grant>();
+  const grantMatches = (
+    grant: Grant | undefined,
+    owner: FirstSetupOwnerAttempt,
+    purpose: ReconfirmationPurpose,
+  ) =>
+    grant !== undefined &&
+    grant.attemptId === owner.attemptId &&
+    grant.revision === owner.revision &&
+    grant.ownerGeneration === owner.ownerGeneration &&
+    grant.purpose === purpose &&
+    grant.bootId === options.bootId &&
+    now() < grant.expires;
   const invalidate = (attemptId: string) => {
     for (const [key, grant] of grants) if (grant.attemptId === attemptId) grants.delete(key);
   };
@@ -470,18 +484,21 @@ export function createFirstSetupOwner(options: OwnerOptions) {
         if (!validToken(nonce)) refuse();
         const grant = grants.get(hash(nonce));
         grants.delete(hash(nonce));
-        if (
-          grant === undefined ||
-          grant.attemptId !== owner.attemptId ||
-          grant.revision !== owner.revision ||
-          grant.ownerGeneration !== owner.ownerGeneration ||
-          grant.purpose !== purpose ||
-          grant.bootId !== options.bootId ||
-          now() >= grant.expires
-        )
-          refuse();
+        if (!grantMatches(grant, owner, purpose)) refuse();
       };
       return hold === undefined ? coordinator.run(consume) : coordinator.held(hold, consume);
+    },
+    checkReconfirmation(
+      owner: FirstSetupOwnerAttempt,
+      nonce: string,
+      purpose: ReconfirmationPurpose,
+      hold?: FirstSetupHold,
+    ): Promise<void> {
+      const check = async () => {
+        await authorize(owner);
+        if (!validToken(nonce) || !grantMatches(grants.get(hash(nonce)), owner, purpose)) refuse();
+      };
+      return hold === undefined ? coordinator.run(check) : coordinator.held(hold, check);
     },
   };
 }

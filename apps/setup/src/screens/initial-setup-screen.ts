@@ -150,9 +150,11 @@ export class InitialSetupScreen extends LitElement {
             preparation: (proposal) => run(() => this.session.preparation(module, proposal)),
             candidates: (proposal) =>
               run(async () => {
-                const password = await this.#password("block-use");
-                current();
-                const pending = await this.session.candidates(module, proposal, password);
+                const pending = await this.session.candidates(module, proposal, async () => {
+                  const password = await this.#password("block-use");
+                  current();
+                  return password;
+                });
                 current();
                 return pending === undefined ? request() : pending;
               }),

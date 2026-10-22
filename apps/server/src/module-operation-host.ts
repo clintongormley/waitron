@@ -41,6 +41,7 @@ export function createFirstSetupModuleHost(options: {
   >;
   assertClaimAllowed?: (hold: import("@waitron/provisioning").FirstSetupHold) => Promise<void>;
   testClock?: ModuleOperationHost["testClock"];
+  grantClock?: () => number;
 }) {
   const evidence: {
     current?: {
