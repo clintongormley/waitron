@@ -115,6 +115,22 @@ function lineTops(name: HTMLElement): number {
   return new Set([...range.getClientRects()].map((line) => Math.round(line.top))).size;
 }
 
+/** The words of a step's name that are split across two lines. */
+function brokenWords(name: HTMLElement): string[] {
+  const text = [...name.childNodes].find(
+    (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
+  )!;
+  const broken: string[] = [];
+  for (const word of text.textContent!.matchAll(/\S+/g)) {
+    const range = document.createRange();
+    range.setStart(text, word.index);
+    range.setEnd(text, word.index + word[0].length);
+    const tops = new Set([...range.getClientRects()].map((line) => Math.round(line.top)));
+    if (tops.size > 1) broken.push(word[0]);
+  }
+  return broken;
+}
+
 function record(el: TillFloorScreen, type: string): unknown[] {
   const seen: unknown[] = [];
   el.addEventListener(type, (event) => seen.push((event as CustomEvent).detail));
@@ -260,15 +276,22 @@ describe("till-floor-screen: a table's due service step", () => {
       }
     });
 
-    it("keeps Done beside the name on a phone's wider card", async () => {
+    // Whether a short name wraps here depends on the font (CI's is wider than macOS's), so the long
+    // name makes sure a wrapped name is checked on every font.
+    it("keeps Done beside the name on a phone's wider card, breaking a name only between words", async () => {
       await page.viewport(390, 720);
-      const el = await mount(fourCards());
-      for (const id of ["t1", "t2", "t3"]) {
+      const el = await mount([
+        ...fourCards(),
+        seated({ id: "t5", label: "T5", signals: [dueStepSignal("Bring the dessert menu")] }),
+      ]);
+      const longName = stepChipOf(el, "t5")!.querySelector<HTMLElement>(".step-name")!;
+      expect(lineTops(longName)).toBeGreaterThanOrEqual(2);
+      for (const id of ["t1", "t2", "t3", "t5"]) {
         expect(cardOf(el, id).getBoundingClientRect().width).toBeGreaterThan(180);
         const name = stepChipOf(el, id)!.querySelector<HTMLElement>(".step-name")!;
         const nameBox = name.getBoundingClientRect();
         const done = doneOf(el, id)!.getBoundingClientRect();
-        expect(lineTops(name)).toBe(1);
+        expect(brokenWords(name)).toEqual([]);
         expect(done.top).toBe(nameBox.top);
         expect(done.left).toBeGreaterThanOrEqual(nameBox.right - 1);
       }
