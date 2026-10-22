@@ -917,4 +917,83 @@ describe("module preparation in the owned tab", () => {
         .map(({ body }) => (body as { reconfirmation: string }).reconfirmation),
     ).toEqual(["first", "first", "second"]);
   });
+  it("does not ask again when the server refuses a grant it has just given", async () => {
+    let prompts = 0;
+    const password = async () => {
+      prompts++;
+      return "administrator password";
+    };
+    const { session, requests } = create((path) =>
+      ends(path, "claim")
+        ? claim()
+        : ends(path, "reconfirm")
+          ? json({ reconfirmation: "fresh" })
+          : Response.json({ error: { code: "setup.owner_required", params: {} } }, { status: 403 }),
+    );
+    await session.open();
+    await session.claim(venue);
+    await expect(session.candidates("example-module", {}, password)).rejects.toMatchObject({
+      code: "setup.owner_required",
+    });
+    expect(prompts).toBe(1);
+    expect(requests.map(({ path }) => path)).toEqual([
+      "/setup-api/first-setup/claim",
+      "/setup-api/first-setup/reconfirm",
+      "/setup-api/first-setup/candidates",
+    ]);
+    expect(session.recoveryRequired).toBe(true);
+  });
+  it.each([
+    ["registered", "recovery-document"],
+    ["kept", "recovery-document-kept"],
+  ])("refuses a recovery document the box did not report as %s", async (_, route) => {
+    const { session, requests } = create((path) =>
+      ends(path, "claim")
+        ? claim()
+        : ends(path, "reconfirm")
+          ? json({ reconfirmation: "proof" })
+          : json({ accepted: false }),
+    );
+    await session.open();
+    await session.claim(venue);
+    const reference = {
+      stageId: "stage",
+      inputDigest: "a".repeat(64),
+      bindingDigest: "b".repeat(64),
+      documentDigest: "c".repeat(64),
+    };
+    await expect(
+      route === "recovery-document"
+        ? session.registerRecoveryDocument("example-module", { ...reference, statement: {} })
+        : session.confirmRecoveryDocument("example-module", reference, "administrator password"),
+    ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    expect(requests.at(-1)!.path).toBe(`/setup-api/first-setup/${route}`);
+  });
+  it("sends no confirmation after the tab's session is disposed during its password check", async () => {
+    const reconfirmed = deferred<Response>(),
+      started = deferred<void>();
+    const { session, requests } = create((path) => {
+      if (ends(path, "claim")) return claim();
+      if (ends(path, "reconfirm")) {
+        started.resolve();
+        return reconfirmed.promise;
+      }
+      return json({ state: initial });
+    });
+    await session.open();
+    await session.claim(venue);
+    const pending = session.confirm(
+      "example-module",
+      { statement: true },
+      "administrator password",
+    );
+    await started.promise;
+    await session.dispose();
+    reconfirmed.resolve(json({ reconfirmation: "proof" }));
+    await expect(pending).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    expect(requests.map(({ path }) => path)).toEqual([
+      "/setup-api/first-setup/claim",
+      "/setup-api/first-setup/reconfirm",
+    ]);
+  });
 });
