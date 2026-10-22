@@ -21,6 +21,8 @@ export interface SoftwareIdentity {
 
 export const SOFTWARE_IDENTITY: SoftwareIdentity = Object.freeze({
   name: "Waitron",
+  // Not what a record files: `IdSistemaInformatico` comes from the node's `registro_sif` row
+  // (`currentSif`).
   code: WAITRON_ID_SISTEMA,
   onlyVerifactu: "S",
   multipleTaxpayersPossible: "N",

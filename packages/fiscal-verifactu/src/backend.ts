@@ -634,7 +634,6 @@ export class VerifactuBackend implements FiscalBackend {
     };
   }
 
-  // The flags are the owner's answers (A940 design §11).
   private buildSistemaInformatico(
     sif: SifRegistration,
     taxpayer: { legalName: string; nif: string },
