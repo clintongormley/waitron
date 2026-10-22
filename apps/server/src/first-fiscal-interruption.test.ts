@@ -23,6 +23,7 @@ import { keepHourRecoveryDocument } from "../test/hour-recovery-delivery.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { PASSWORD, MODULE } from "../test/first-fiscal.js";
+import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
 
 vi.mock("./module-config.js", { spy: true });
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -69,7 +70,11 @@ async function fixture(fault?: string) {
             },
           },
   );
-  const f = await hourFirstFiscalFixture({ database: () => suite.db, modules: available });
+  const f = await hourFirstFiscalFixture({
+    clock: createFakeTimersHourClock(),
+    database: () => suite.db,
+    modules: available,
+  });
   let server: Awaited<ReturnType<typeof serveRecovery>> | undefined;
   let agent: Agent | undefined;
   fixtures.push({

@@ -16,12 +16,14 @@ import { AppError } from "@waitron/shared";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { mountSetup } from "./setup-api.js";
 import { request, PASSWORD, MODULE } from "../test/first-fiscal.js";
+import { createHourTestClock, selectPastWaits } from "./testing/hour-test-clock.js";
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 async function fixture(withStore = false) {
   let captured!: ModuleOperationHost;
+  const clock = createHourTestClock(Date.parse("2026-10-16T11:40:00Z"));
   const root = await mkdtemp(join(tmpdir(), "first-hour-route-"));
   roots.push(root);
   const modules = ALL_MODULES.map((module) =>
@@ -44,7 +46,7 @@ async function fixture(withStore = false) {
                     if (!withStore) return { ready: true };
                     const engine = createHourSelection({
                       withState: bound.withPreparationState!,
-                      monotonicNow: () => 0,
+                      monotonicNow: () => clock.monotonic(),
                       read: async () => ({
                         scope: { taxpayerNif: context.taxId, environment: context.environment },
                         bases: context.bases,
@@ -54,26 +56,28 @@ async function fixture(withStore = false) {
                           ["box", "browser"].map((source) => ({
                             source: source as "box" | "browser",
                             result: "usable" as const,
-                            instantMs: Date.parse("2026-10-16T11:40:00Z"),
+                            instantMs: clock.wall(),
                             uncertaintyMs: 0,
-                            wallStartedMs: 0,
-                            wallFinishedMs: 0,
-                            monotonicStartedMs: 0,
-                            monotonicFinishedMs: 0,
+                            wallStartedMs: clock.wall(),
+                            wallFinishedMs: clock.wall(),
+                            monotonicStartedMs: clock.monotonic(),
+                            monotonicFinishedMs: clock.monotonic(),
                           })),
                           Date.parse("2026-10-15T00:00:00Z"),
                         ),
                       }),
                     });
-                    const selection = await withOperationAuthority(
-                      context.binding,
-                      context.administratorId,
-                      (authority) =>
-                        engine.select({
-                          binding: context.binding,
-                          authority,
-                          comparisonId: "comparison",
-                        }),
+                    const selection = await selectPastWaits(clock, () =>
+                      withOperationAuthority(
+                        context.binding,
+                        context.administratorId,
+                        (authority) =>
+                          engine.select({
+                            binding: context.binding,
+                            authority,
+                            comparisonId: "comparison",
+                          }),
+                      ),
                     );
                     return { ready: true, selection };
                   },
@@ -159,13 +163,14 @@ it("real candidate routing reuses the shared hold and persists an owned hour bef
   const selected = state.frozen.modules.find((entry) => entry.module === MODULE)!.request as {
     selection: { identity: string; binding: unknown };
   };
-  expect(selected.selection.identity).toBe("0CNNW");
+  expect(selected.selection.identity).toBe("0CNNY");
   const ledger = JSON.parse(
     await readFile(join(f.options.stateDir, "module-preparation-state.json"), "utf8"),
   );
-  expect(ledger.revisions).toHaveLength(1);
-  expect(ledger.revisions[0].binding).toEqual(selected.selection.binding);
-  expect(ledger.revisions[0].value.entries[0].identity).toBe("0CNNW");
+  expect(ledger.revisions).toHaveLength(2);
+  expect(ledger.revisions[0].value.entries[0].kind).toBe("wait");
+  expect(ledger.revisions[1].binding).toEqual(selected.selection.binding);
+  expect(ledger.revisions[1].value.entries.at(-1).identity).toBe("0CNNY");
 }, 5000);
 it("the real host refuses foreign preparation bindings under the shared lock", async () => {
   const f = await fixture(true);

@@ -11,6 +11,11 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { MODULE, PASSWORD, request } from "../test/first-fiscal.js";
+import {
+  createFakeTimersHourClock,
+  selectPastWaits,
+  type HourTestClock,
+} from "./testing/hour-test-clock.js";
 
 const NOW = Date.parse("2026-10-16T11:40:00Z");
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
@@ -22,22 +27,21 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 }));
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
 const roots: string[] = [];
+let clock: HourTestClock;
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(NOW);
-  external.internet.mockImplementation(async () => {
-    const mono = performance.now();
-    return {
-      source: "internet",
-      result: "usable",
-      instantMs: Date.now(),
-      uncertaintyMs: 500,
-      wallStartedMs: Date.now(),
-      wallFinishedMs: Date.now(),
-      monotonicStartedMs: mono,
-      monotonicFinishedMs: mono,
-    };
-  });
+  clock = createFakeTimersHourClock();
+  external.internet.mockImplementation(async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: clock.wall(),
+    uncertaintyMs: 500,
+    wallStartedMs: clock.wall(),
+    wallFinishedMs: clock.wall(),
+    monotonicStartedMs: clock.monotonic(),
+    monotonicFinishedMs: clock.monotonic(),
+  }));
 });
 afterEach(async () => {
   vi.useRealTimers();
@@ -101,30 +105,32 @@ it.each(["production", "preproduction"] as const)(
   "real %s host selects using the timed browser, actual box and internet observer",
   async (environment) => {
     const f = await fixture(environment);
-    const challenge = await f.prepared.clockChallenge(f.context.binding);
-    const comparison = await f.prepared.compareClocks(
-      f.context.binding,
-      { challengeId: challenge.id, instantMs: NOW },
-      { onBox: false },
-    );
-    expect(comparison.clock.usable.map((value) => value.source)).toEqual([
-      "browser",
-      "internet",
-      "box",
-    ]);
-    const selected = await f.select(comparison.id);
+    const selected = await selectPastWaits(clock, async () => {
+      const challenge = await f.prepared.clockChallenge(f.context.binding);
+      const comparison = await f.prepared.compareClocks(
+        f.context.binding,
+        { challengeId: challenge.id, instantMs: clock.wall() },
+        { onBox: false },
+      );
+      expect(comparison.clock.usable.map((value) => value.source)).toEqual([
+        "browser",
+        "internet",
+        "box",
+      ]);
+      return f.select(comparison.id);
+    });
     expect(selected).toMatchObject({
       status: "selected",
-      identity: "0CNNW",
+      identity: "0CNNY",
       input: {
         allocation: {
           environment,
           source: "hour",
           reservationEvidence: null,
           series: [
-            { code: "A-0CNNW", purpose: "standard" },
-            { code: "FF-0CNNW", purpose: "full" },
-            { code: "R-0CNNW", purpose: "rectificative" },
+            { code: "A-0CNNY", purpose: "standard" },
+            { code: "FF-0CNNY", purpose: "full" },
+            { code: "R-0CNNY", purpose: "rectificative" },
           ],
         },
       },
@@ -132,7 +138,8 @@ it.each(["production", "preproduction"] as const)(
     const journal = JSON.parse(
       await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8"),
     );
-    expect(journal.revisions[0].value.entries[0].identity).toBe("0CNNW");
+    expect(journal.revisions[0].value.entries[0].kind).toBe("wait");
+    expect(journal.revisions.at(-1).value.entries.at(-1).identity).toBe("0CNNY");
     expect(external.internet).toHaveBeenCalledWith(environment);
   },
 );

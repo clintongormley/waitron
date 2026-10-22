@@ -33,6 +33,7 @@ import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 import { mountSetup } from "./setup-api.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
+import { createHourTestClock, type HourTestClock } from "./testing/hour-test-clock.js";
 
 vi.mock("@waitron/composition", async (original) => {
   const actual = await original<typeof import("@waitron/composition")>();
@@ -56,21 +57,18 @@ vi.mock("@waitron/composition", async (original) => {
     ),
   };
 });
+const time = vi.hoisted(() => ({ clock: undefined as unknown as HourTestClock }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => {
-    const now = Date.now(),
-      mono = performance.now();
-    return {
-      source: "internet",
-      result: "usable",
-      instantMs: now,
-      uncertaintyMs: 500,
-      wallStartedMs: now,
-      wallFinishedMs: now,
-      monotonicStartedMs: mono,
-      monotonicFinishedMs: mono,
-    };
-  },
+  observeInternetHourClock: async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: time.clock.wall(),
+    uncertaintyMs: 500,
+    wallStartedMs: time.clock.wall(),
+    wallFinishedMs: time.clock.wall(),
+    monotonicStartedMs: time.clock.monotonic(),
+    monotonicFinishedMs: time.clock.monotonic(),
+  }),
 }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
@@ -79,8 +77,16 @@ const source = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null
 const roots: string[] = [];
 let clockInstant = 0;
 let clockMonotonic = 0;
+/** The fiscal module's clock: whichever test clock the last `setClock` started. */
+const testClock: HourTestClock = {
+  wall: () => time.clock.wall(),
+  monotonic: () => time.clock.monotonic(),
+  advance: (ms) => time.clock.advance(ms),
+  set: (ms) => time.clock.set(ms),
+};
 function setClock(instant: string) {
   clockInstant = Date.parse(instant);
+  time.clock = createHourTestClock(clockInstant);
   clockMonotonic = performance.now();
   vi.setSystemTime(clockInstant);
 }
@@ -107,6 +113,7 @@ async function configurationArtifact() {
     modules: ALL_MODULES,
     environment: {},
     database: () => source.db,
+    testClock,
   });
   const app = new Hono();
   mountSetup(app, { environment: "preproduction", devMode: true, firstFiscal: host }, () => {});
@@ -115,6 +122,8 @@ async function configurationArtifact() {
     "https://source.test",
     request,
     PASSWORD,
+    undefined,
+    testClock,
   );
   const state = (await host.store.read())!;
   const selected = enabledModules(
@@ -147,9 +156,9 @@ async function configurationArtifact() {
       nextNumber,
     })),
   ).toEqual([
-    { code: "A-0CNM0", nextNumber: 42 },
-    { code: "FF-0CNM0", nextNumber: 42 },
-    { code: "R-0CNM0", nextNumber: 42 },
+    { code: "A-0CNM2", nextNumber: 42 },
+    { code: "FF-0CNM2", nextNumber: 42 },
+    { code: "R-0CNM2", nextNumber: 42 },
   ]);
   setClock("2026-10-16T11:40:00Z");
   const bundle = await buildConfigurationBundle(
@@ -209,7 +218,7 @@ it.each([
     let server: StartedServer | undefined, agent: Agent | undefined;
     vi.spyOn(process, "kill").mockReturnValue(true);
     try {
-      server = await startServer(env);
+      server = await startServer(env, {}, { testClock });
       agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
       const base = `https://127.0.0.1:${port}`;
       const transport: typeof fetch = (input, init) =>
@@ -230,10 +239,14 @@ it.each([
         ...request,
         ...(newTaxpayer ? { taxId: "B12345674", legalName: "New Olivo SL" } : {}),
       };
-      const owned = await ownedHourSetup(transport, base, target, PASSWORD, {
-        configurationImport: true,
-        newTaxpayer,
-      });
+      const owned = await ownedHourSetup(
+        transport,
+        base,
+        target,
+        PASSWORD,
+        { configurationImport: true, newTaxpayer },
+        testClock,
+      );
       const preparation = await readFile(join(stateDir, "module-preparation-state.json"), "utf8");
       const live = {
         mode: "live",
@@ -315,9 +328,9 @@ it.each([
               )
               .all(),
           ).toEqual([
-            { code: "FF-0CNNW", purpose: "full", nextNumber: 1 },
-            { code: "R-0CNNW", purpose: "rectificative", nextNumber: 1 },
-            { code: "A-0CNNW", purpose: "standard", nextNumber: 1 },
+            { code: "FF-0CNNY", purpose: "full", nextNumber: 1 },
+            { code: "R-0CNNY", purpose: "rectificative", nextNumber: 1 },
+            { code: "A-0CNNY", purpose: "standard", nextNumber: 1 },
           ]);
           expect(
             disk
@@ -325,7 +338,7 @@ it.each([
                 "select environment, installation_identity as identity from fiscal_allocations",
               )
               .all(),
-          ).toEqual([{ environment, identity: "0CNNW" }]);
+          ).toEqual([{ environment, identity: "0CNNY" }]);
           expect(disk.prepare("select count(*) as n from registros_facturacion").get()?.n).toBe(0);
           expect(disk.prepare("select id from nodes").all()).not.toContainEqual({
             id: sourceNodeId,
@@ -347,7 +360,7 @@ it.each([
         await expect(readFile(join(stateDir, "configuration-import.json"))).rejects.toMatchObject({
           code: "ENOENT",
         });
-        server = await startServer(await loadBoxEnv(env, stateDir), env);
+        server = await startServer(await loadBoxEnv(env, stateDir), env, { testClock });
         expect((await transport(`${base}/health`)).status).toBe(200);
         expect((await transport(`${base}/setup-api/first-setup/status`)).status).toBe(404);
         await server.close();

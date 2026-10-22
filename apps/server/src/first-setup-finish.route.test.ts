@@ -22,6 +22,7 @@ import { ensureBoxSecrets } from "./box-secrets.js";
 import { serveRecovery, startServerOrFirstSetupResolution } from "./node-entry.js";
 import { freePorts } from "./testing/free-ports.js";
 import type { SetupDeps } from "./setup-api.js";
+import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
 
 vi.mock("@waitron/composition", async (original) => {
   const actual = await original<typeof import("@waitron/composition")>();
@@ -82,6 +83,7 @@ const publication = {
 
 async function fixture(realEntry = false, withoutBookings = false) {
   const f = await hourFirstFiscalFixture({
+    clock: createFakeTimersHourClock(),
     database: () => suite.db,
     modules: ALL_MODULES,
     ...(withoutBookings

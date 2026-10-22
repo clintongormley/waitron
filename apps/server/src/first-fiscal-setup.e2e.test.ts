@@ -29,6 +29,11 @@ import {
   decodeConfigurationBundle,
 } from "./configuration-transfer.js";
 import { request, PASSWORD, MODULE } from "../test/first-fiscal.js";
+import {
+  createHourTestClock,
+  selectPastWaits,
+  type HourTestClock,
+} from "./testing/hour-test-clock.js";
 
 vi.mock("@waitron/composition", async (original) => {
   const actual = await original<typeof import("@waitron/composition")>();
@@ -52,21 +57,18 @@ vi.mock("@waitron/composition", async (original) => {
     ),
   };
 });
+const time = vi.hoisted(() => ({ clock: undefined as unknown as HourTestClock }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => {
-    const now = Date.now(),
-      mono = performance.now();
-    return {
-      source: "internet",
-      result: "usable",
-      instantMs: now,
-      uncertaintyMs: 500,
-      wallStartedMs: now,
-      wallFinishedMs: now,
-      monotonicStartedMs: mono,
-      monotonicFinishedMs: mono,
-    };
-  },
+  observeInternetHourClock: async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: time.clock.wall(),
+    uncertaintyMs: 500,
+    wallStartedMs: time.clock.wall(),
+    wallFinishedMs: time.clock.wall(),
+    monotonicStartedMs: time.clock.monotonic(),
+    monotonicFinishedMs: time.clock.monotonic(),
+  }),
 }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
@@ -76,6 +78,7 @@ beforeEach(() => {
   const instant = Date.parse("2026-10-16T11:40:00Z"),
     monotonic = performance.now();
   vi.setSystemTime(instant);
+  time.clock = createHourTestClock(instant);
   vi.spyOn(Date, "now").mockImplementation(
     () => instant + Math.trunc(performance.now() - monotonic),
   );
@@ -157,7 +160,7 @@ it.each([
     let server: StartedServer | undefined, agent: Agent | undefined;
     vi.spyOn(process, "kill").mockReturnValue(true);
     try {
-      if (launch === "direct") server = await startServer(env);
+      if (launch === "direct") server = await startServer(env, {}, { testClock: time.clock });
       else
         await runEntry({
           args: [],
@@ -168,7 +171,8 @@ it.each([
           loadBoxEnv,
           readRecoveryState,
           writeRecoveryState,
-          startServer: async (merged, base) => (server = await startServer(merged, base)),
+          startServer: async (merged, base) =>
+            (server = await startServer(merged, base, { testClock: time.clock })),
           serveRecovery: async () => {
             throw new Error("unexpected recovery mode");
           },
@@ -291,28 +295,32 @@ it.each([
         expect(response.status).toBe(200);
         return response.body;
       };
-      const challenge = await post("/setup-api/first-setup/preparation", {
-        module: MODULE,
-        proposal: { action: "clock-challenge" },
-      });
-      expect(challenge.status).toBe(200);
-      const comparison = await post("/setup-api/first-setup/preparation", {
-        module: MODULE,
-        proposal: {
-          action: "compare-clocks",
-          browser: {
-            challengeId: challenge.body.preparation.id,
-            instantMs: Date.now(),
+      const candidates = await selectPastWaits(time.clock, async () => {
+        const challenge = await post("/setup-api/first-setup/preparation", {
+          module: MODULE,
+          proposal: { action: "clock-challenge" },
+        });
+        expect(challenge.status).toBe(200);
+        const comparison = await post("/setup-api/first-setup/preparation", {
+          module: MODULE,
+          proposal: {
+            action: "compare-clocks",
+            browser: {
+              challengeId: challenge.body.preparation.id,
+              instantMs: time.clock.wall(),
+            },
           },
-        },
-      });
-      expect(comparison.status).toBe(200);
-      const candidates = await post("/setup-api/first-setup/candidates", {
-        module: MODULE,
-        proposal: { answer: "no" },
-        ...(await reconfirm("block-use")),
+        });
+        expect(comparison.status).toBe(200);
+        const answer = await post("/setup-api/first-setup/candidates", {
+          module: MODULE,
+          proposal: { comparisonId: comparison.body.preparation.id },
+          ...(await reconfirm("block-use")),
+        });
+        return { ...answer, preparation: answer.body.preparation };
       });
       expect(candidates.status).toBe(200);
+      expect(candidates.preparation).toBeUndefined();
       state = candidates.body.state;
       const exported = await fetch(url + "/setup-api/first-setup/request", {
         dispatcher: agent,
@@ -323,7 +331,7 @@ it.each([
       expect(prepared).toMatchObject({
         kind: "waitron-hour-setup",
         status: "selected",
-        identity: "0CNNW",
+        identity: "0CNNY",
       });
       const imported = await post("/setup-api/first-setup/input", {
         module: MODULE,
@@ -335,7 +343,7 @@ it.each([
       expect(keyStage.status).toBe(200);
       const statement = {
         kind: "waitron-recovery-document",
-        installationCodes: ["0CNNW"],
+        installationCodes: ["0CNNY"],
         version: 1,
         scope: { taxpayerNif: venue.taxId, softwareId: "W1", environment: "production" },
         taxpayerName: venue.legalName,
@@ -470,7 +478,7 @@ it.each([
         code: "ENOENT",
       });
       const merged = await loadBoxEnv(env, stateDir);
-      server = await startServer(merged, env);
+      server = await startServer(merged, env, { testClock: time.clock });
       const health = await fetch(url + "/health", { dispatcher: agent } as RequestInit);
       expect(health.status).toBe(200);
       const setup = await fetch(url + "/setup-api/first-setup/status", {

@@ -8,6 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
 import { historicalFirstFiscalDocuments } from "../test/historical-first-fiscal.js";
+import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: async () => {
     const now = Date.now(),
@@ -267,7 +268,10 @@ describe("configured hour delivery", () => {
   it("the configured host routes the kept-document grant into real module preparation", async () => {
     vi.useFakeTimers({ toFake: ["Date", "performance"] });
     vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
-    const f = await hourFirstFiscalFixture({ database: () => venue.db });
+    const f = await hourFirstFiscalFixture({
+      clock: createFakeTimersHourClock(),
+      database: () => venue.db,
+    });
     fixtures.push(f);
     const { withOperationAuthority, withPreparedModuleOperations } =
       await import("@waitron/module");

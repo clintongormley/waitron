@@ -58,7 +58,7 @@ export async function ownedHourSetup(
     ...claim,
   });
   const module = "fiscal-verifactu";
-  await selectPastWaits(clock, async () => {
+  const chosen = await selectPastWaits(clock, async () => {
     const challenge = await send("preparation", {
       module,
       proposal: { action: "clock-challenge" },
@@ -76,10 +76,11 @@ export async function ownedHourSetup(
     const grant = await send("reconfirm", { password, purpose: "block-use" });
     return send("candidates", {
       module,
-      proposal: { answer: "no", comparisonId: compared.preparation.id },
+      proposal: { comparisonId: compared.preparation.id },
       reconfirmation: grant.reconfirmation,
     });
   });
+  expect(chosen.preparation, "the setup's minute was never selected").toBeUndefined();
   const prepared = (await send("request")).modules.find((entry) => entry.module === module)!.request
     .input;
   const initialOperations: InitialVenueInput = {

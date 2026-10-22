@@ -24,17 +24,23 @@ import { mountSetup } from "./setup-api.js";
 import { Hono } from "hono";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { collectStateSecrets } from "./state-secrets.js";
+import {
+  createFakeTimersHourClock,
+  selectPastWaits,
+  type HourTestClock,
+} from "./testing/hour-test-clock.js";
 
+const time = vi.hoisted(() => ({ clock: undefined as unknown as HourTestClock }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: async () => ({
     source: "internet",
     result: "usable",
-    instantMs: Date.now(),
+    instantMs: time.clock.wall(),
     uncertaintyMs: 500,
-    wallStartedMs: Date.now(),
-    wallFinishedMs: Date.now(),
-    monotonicStartedMs: performance.now(),
-    monotonicFinishedMs: performance.now(),
+    wallStartedMs: time.clock.wall(),
+    wallFinishedMs: time.clock.wall(),
+    monotonicStartedMs: time.clock.monotonic(),
+    monotonicFinishedMs: time.clock.monotonic(),
   }),
 }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
@@ -45,6 +51,7 @@ const roots: string[] = [];
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime("2026-10-16T11:40:00Z");
+  time.clock = createFakeTimersHourClock();
 });
 afterEach(async () => {
   vi.useRealTimers();
@@ -94,18 +101,20 @@ async function fixture(publicDocumentSeat = true) {
     randomBytes(32).toString("base64url"),
   );
   let owner = { ...claim.state, capability: claim.capability };
-  await host.preparation.prepare(
-    owner,
-    MODULE,
-    { action: "compare-clocks", browser: null },
-    { onBox: true },
-  );
-  const selected = await host.preparation.select(
-    owner,
-    MODULE,
-    { answer: "no" },
-    await host.owner.reconfirm(owner, PASSWORD, "block-use"),
-  );
+  const selected = await selectPastWaits(time.clock, async () => {
+    const compared = (await host.preparation.prepare(
+      owner,
+      MODULE,
+      { action: "compare-clocks", browser: null },
+      { onBox: true },
+    )) as { id: string };
+    return host.preparation.select(
+      owner,
+      MODULE,
+      { comparisonId: compared.id },
+      await host.owner.reconfirm(owner, PASSWORD, "block-use"),
+    );
+  });
   owner = { ...owner, revision: selected.state.revision };
   const input = (firstSetupModuleContext(selected.state, MODULE).request as { input: unknown })
     .input;
@@ -182,7 +191,7 @@ async function documentFixture() {
   );
   const statement = {
     kind: "waitron-recovery-document",
-    installationCodes: ["0CNNW"],
+    installationCodes: ["0CNNY"],
     version: 1,
     scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "preproduction" },
     taxpayerName: request.legalName,

@@ -92,6 +92,7 @@ import { loadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { createHourTestClock } from "./testing/hour-test-clock.js";
 import { DEV_DEVICE_HEADER } from "./device-session.js";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { Turns } from "./backup-turns.js";
@@ -1627,33 +1628,34 @@ describe("startServer, against a migrated venue directory", () => {
         generator: "scripts/generate-hour-release.mjs:v1",
         generatorSha256: "b".repeat(64),
       });
+      const testClock = createHourTestClock(Date.now());
       const clocks = await import("@waitron/fiscal-verifactu/src/hour-clock-internet.js");
-      vi.spyOn(clocks, "observeInternetHourClock").mockImplementation(async () => {
-        const mono = performance.now(),
-          now = Date.now();
-        return {
-          source: "internet",
-          result: "usable",
-          instantMs: now,
-          uncertaintyMs: 500,
-          wallStartedMs: now,
-          wallFinishedMs: now,
-          monotonicStartedMs: mono,
-          monotonicFinishedMs: mono,
-        };
-      });
+      vi.spyOn(clocks, "observeInternetHourClock").mockImplementation(async () => ({
+        source: "internet",
+        result: "usable",
+        instantMs: testClock.wall(),
+        uncertaintyMs: 500,
+        wallStartedMs: testClock.wall(),
+        wallFinishedMs: testClock.wall(),
+        monotonicStartedMs: testClock.monotonic(),
+        monotonicFinishedMs: testClock.monotonic(),
+      }));
       await withMockedKill(async (kills) => {
-        const server = await startServer({
-          WAITRON_FISCAL_CUSTODIAN_FILE: process.env.WAITRON_FISCAL_CUSTODIAN_FILE,
-          WAITRON_FISCAL_CONFIRMATION_FILE: process.env.WAITRON_FISCAL_CONFIRMATION_FILE,
-          WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: process.env.WAITRON_FISCAL_CUSTODIAN_FINGERPRINT,
-          WAITRON_VENUE_DIR: venue.directory,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_STATE_DIR: stateDir,
-          WAITRON_ENV: "preproduction",
-          WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
-        });
+        const server = await startServer(
+          {
+            WAITRON_FISCAL_CUSTODIAN_FILE: process.env.WAITRON_FISCAL_CUSTODIAN_FILE,
+            WAITRON_FISCAL_CONFIRMATION_FILE: process.env.WAITRON_FISCAL_CONFIRMATION_FILE,
+            WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: process.env.WAITRON_FISCAL_CUSTODIAN_FINGERPRINT,
+            WAITRON_VENUE_DIR: venue.directory,
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_STATE_DIR: stateDir,
+            WAITRON_ENV: "preproduction",
+            WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
+          },
+          {},
+          { testClock },
+        );
         const ca = await readFile(join(stateDir, "tls", "ca.crt"));
         const { via, close } = httpsVia(ca);
         try {
@@ -1663,6 +1665,8 @@ describe("startServer, against a migrated venue directory", () => {
             `https://127.0.0.1:${port}`,
             draft,
             draft.admin.password,
+            undefined,
+            testClock,
           );
           const body = {
             mode: "live",

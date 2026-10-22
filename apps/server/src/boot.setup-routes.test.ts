@@ -71,6 +71,7 @@ import {
   seedTradingVenue,
   fetchHealthOk,
 } from "./testing/boot-harness.js";
+import { createHourTestClock } from "./testing/hour-test-clock.js";
 
 const { beforeServerStarts, startServer } = serverFixture();
 
@@ -410,32 +411,35 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       generator: "scripts/generate-hour-release.mjs:v1",
       generatorSha256: "b".repeat(64),
     });
-    const clock = await import("@waitron/fiscal-verifactu/src/hour-clock-internet.js");
-    const internetSpy = vi.spyOn(clock, "observeInternetHourClock").mockImplementation(async () => {
-      const now = Date.now(),
-        mono = performance.now();
-      return {
+    const testClock = createHourTestClock(Date.parse("2026-10-16T11:40:00Z"));
+    const internet = await import("@waitron/fiscal-verifactu/src/hour-clock-internet.js");
+    const internetSpy = vi
+      .spyOn(internet, "observeInternetHourClock")
+      .mockImplementation(async () => ({
         source: "internet",
         result: "usable",
-        instantMs: now,
+        instantMs: testClock.wall(),
         uncertaintyMs: 500,
-        wallStartedMs: now,
-        wallFinishedMs: now,
-        monotonicStartedMs: mono,
-        monotonicFinishedMs: mono,
-      };
-    });
+        wallStartedMs: testClock.wall(),
+        wallFinishedMs: testClock.wall(),
+        monotonicStartedMs: testClock.monotonic(),
+        monotonicFinishedMs: testClock.monotonic(),
+      }));
     try {
       await withMockedKill(async (kills) => {
-        const server = await startServer({
-          WAITRON_VENUE_DIR: directory,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_STATE_DIR: stateDir,
-          WAITRON_ENV: "preproduction",
-          WAITRON_HTTP_LANDING_PORT: "0",
-          ...env,
-        });
+        const server = await startServer(
+          {
+            WAITRON_VENUE_DIR: directory,
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_STATE_DIR: stateDir,
+            WAITRON_ENV: "preproduction",
+            WAITRON_HTTP_LANDING_PORT: "0",
+            ...env,
+          },
+          {},
+          { testClock },
+        );
         const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
         try {
           await use({
@@ -451,6 +455,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
                     body.configurationImport === true
                       ? { configurationImport: true, newTaxpayer: body.newTaxpayer === true }
                       : undefined,
+                    testClock,
                   );
                   const {
                     venue: _,
@@ -1546,7 +1551,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         target.store.venue.all(
           sql`select code from invoice_series where retired_at is null order by code`,
         ),
-      ).toEqual([{ code: "B-0CNNW" }, { code: "FB-0CNNW" }, { code: "RB-0CNNW" }]);
+      ).toEqual([{ code: "B-0CNNY" }, { code: "FB-0CNNY" }, { code: "RB-0CNNY" }]);
       expect(
         target.store.venue.all(sql`select operation_description, invoice_locales from locations`),
       ).toEqual([{ operation_description: "Comida para llevar", invoice_locales: '["es-ES"]' }]);

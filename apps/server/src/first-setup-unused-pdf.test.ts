@@ -23,6 +23,7 @@ import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { startServerOrFirstSetupResolution } from "./node-entry.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { freePorts } from "./testing/free-ports.js";
+import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
 
 vi.mock("node:fs/promises", { spy: true });
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -54,6 +55,7 @@ afterEach(async () => {
 async function fixture(workspace?: { root: string; stateDir: string; venueDir: string }) {
   if (workspace !== undefined) vi.setSystemTime(new Date(Date.now() + 3_600_000));
   const f = await hourFirstFiscalFixture({
+    clock: createFakeTimersHourClock(),
     database: () => suite.db,
     ...(workspace === undefined ? {} : { workspace }),
   });

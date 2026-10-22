@@ -14,16 +14,20 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { withOperationAuthority, withPreparedModuleOperations } from "@waitron/module";
 import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
+import { createFakeTimersHourClock, type HourTestClock } from "./testing/hour-test-clock.js";
 const database = useVenueDb({ migrations: TEST_MIGRATIONS });
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
-const internet = vi.hoisted(() => ({ offline: false }));
+const internet = vi.hoisted(() => ({
+  offline: false,
+  clock: undefined as unknown as HourTestClock,
+}));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: async () => {
     if (internet.offline) return { source: "internet", result: "unavailable", reason: "offline" };
-    const wall = Date.now(),
-      monotonic = performance.now();
+    const wall = internet.clock.wall(),
+      monotonic = internet.clock.monotonic();
     return {
       source: "internet",
       result: "usable",
@@ -39,6 +43,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
+  internet.clock = createFakeTimersHourClock();
 });
 vi.mock("node:fs/promises", { spy: true });
 const dirs: string[] = [];
@@ -100,7 +105,7 @@ async function fixture(sendEmailTest?: SetupDeps["sendEmailTest"], extra: Partia
     "X-Waitron-Setup-Revision": String(state.revision),
     "X-Waitron-Setup-Generation": String(state.ownerGeneration),
   });
-  if (claimed.status === 200) {
+  const compareClocks = async () => {
     const challenge = await post(
       "/setup-api/first-setup/preparation",
       { module: MODULE, proposal: { action: "clock-challenge" } },
@@ -114,14 +119,36 @@ async function fixture(sendEmailTest?: SetupDeps["sendEmailTest"], extra: Partia
         module: MODULE,
         proposal: {
           action: "compare-clocks",
-          browser: { challengeId: sample.preparation.id, instantMs: Date.now() },
+          browser: { challengeId: sample.preparation.id, instantMs: internet.clock.wall() },
         },
       },
       headers(),
     );
     expect(comparison.status).toBe(200);
-  }
-  return { root, host, app, post, claim, claimed, nonce, headers, stateDir };
+    return ((await comparison.json()) as { preparation: { id: string } }).preparation.id;
+  };
+  let comparisonId = claimed.status === 200 ? await compareClocks() : "";
+  /** Records the setup's settle wait, moves the clock past it, and returns a fresh comparison. */
+  const settle = async () => {
+    const token = await post(
+      "/setup-api/first-setup/reconfirm",
+      { password: PASSWORD, purpose: "block-use" },
+      headers(),
+    );
+    const waiting = await post(
+      "/setup-api/first-setup/candidates",
+      { module: MODULE, proposal: { comparisonId }, ...(await token.json()) },
+      headers(),
+    );
+    const { preparation } = (await waiting.json()) as {
+      preparation: { status: string; targetMs: number };
+    };
+    expect(preparation.status).toBe("waiting");
+    internet.clock.set(preparation.targetMs + 1);
+    comparisonId = await compareClocks();
+    return comparisonId;
+  };
+  return { root, host, app, post, claim, claimed, nonce, headers, stateDir, settle };
 }
 async function recoveryDocument(
   f: Awaited<ReturnType<typeof fixture>>,
@@ -243,6 +270,7 @@ it("never counts a browser on the box itself as the second clock", async () => {
 it("durably selects one hour before export and preserves its IDs after outside use becomes possible", async () => {
   const f = await fixture();
   expect(f.claimed.status).toBe(200);
+  const comparisonId = await f.settle();
   const reconfirm = await f.post(
     "/setup-api/first-setup/reconfirm",
     { password: PASSWORD, purpose: "block-use" },
@@ -252,7 +280,7 @@ it("durably selects one hour before export and preserves its IDs after outside u
   const { reconfirmation } = await reconfirm.json();
   const candidates = await f.post(
     "/setup-api/first-setup/candidates",
-    { module: MODULE, proposal: { answer: "no" }, reconfirmation },
+    { module: MODULE, proposal: { comparisonId }, reconfirmation },
     f.headers(),
   );
   expect(candidates.status).toBe(200);
@@ -266,12 +294,12 @@ it("durably selects one hour before export and preserves its IDs after outside u
   expect(value.modules).toHaveLength(1);
   expect(value.modules[0].request.input.approval.targetNodeId).toBe(f.claim.state.nodeId);
   expect(value.modules[0].request.input.approval.operatorId).toBe(f.claim.state.administratorId);
-  expect([value.modules[0].request.input.allocation.installationIdentity]).toEqual(["0CNNW"]);
+  expect([value.modules[0].request.input.allocation.installationIdentity]).toEqual(["0CNNY"]);
   expect(JSON.stringify(value)).not.toContain("passwordHash");
   expect(JSON.stringify(value)).not.toContain("pinHash");
   const edited = await f.post(
     "/setup-api/first-setup/candidates",
-    { module: MODULE, proposal: { answer: "yes" }, reconfirmation },
+    { module: MODULE, proposal: { comparisonId }, reconfirmation },
     f.headers(state),
   );
   expect(edited.status).toBe(409);
@@ -309,6 +337,7 @@ it("rejects over-limit streaming bodies before any claim or import side effect",
 it("imports only the frozen hour and demands a freshly confirmed kept recovery document", async () => {
   const f = await fixture();
   expect(f.claimed.status).toBe(200);
+  const comparisonId = await f.settle();
   const reconfirm = await f.post(
     "/setup-api/first-setup/reconfirm",
     { password: PASSWORD, purpose: "block-use" },
@@ -316,7 +345,7 @@ it("imports only the frozen hour and demands a freshly confirmed kept recovery d
   );
   const candidates = await f.post(
     "/setup-api/first-setup/candidates",
-    { module: MODULE, proposal: { answer: "no" }, ...(await reconfirm.json()) },
+    { module: MODULE, proposal: { comparisonId }, ...(await reconfirm.json()) },
     f.headers(),
   );
   let { state } = await candidates.json();
@@ -432,9 +461,10 @@ it("rejects a missing reconfirmation and an invalid answer before any outside-us
   );
   expect(invalid.status).toBe(400);
   expect((await f.host.store.read())?.consumptionIntent).toBe(false);
+  const comparisonId = await f.settle();
   const missing = await f.post(
     "/setup-api/first-setup/candidates",
-    { module: MODULE, proposal: { answer: "no" }, reconfirmation: "x" },
+    { module: MODULE, proposal: { comparisonId }, reconfirmation: "x" },
     f.headers(),
   );
   expect(missing.status).toBe(403);
@@ -467,7 +497,11 @@ it("rejects a delayed old-tab request after the owner resumes in another tab", a
   expect(resumed.status).toBe(200);
   controller.enqueue(
     new TextEncoder().encode(
-      JSON.stringify({ module: MODULE, proposal: { answer: "no" }, reconfirmation: "old" }),
+      JSON.stringify({
+        module: MODULE,
+        proposal: { comparisonId: "old" },
+        reconfirmation: "old",
+      }),
     ),
   );
   controller.close();
@@ -497,6 +531,7 @@ it("returns the locked public venue and selected module versions only to its own
 it("refuses same-generation stale revisions and forged capabilities before abandonment", async () => {
   const f = await fixture();
   expect(f.claimed.status).toBe(200);
+  const comparisonId = await f.settle();
   const token = await f.post(
     "/setup-api/first-setup/reconfirm",
     { password: PASSWORD, purpose: "block-use" },
@@ -504,7 +539,7 @@ it("refuses same-generation stale revisions and forged capabilities before aband
   );
   const chosen = await f.post(
     "/setup-api/first-setup/candidates",
-    { module: MODULE, proposal: { answer: "no" }, ...(await token.json()) },
+    { module: MODULE, proposal: { comparisonId }, ...(await token.json()) },
     f.headers(),
   );
   expect(chosen.status).toBe(200);
@@ -522,6 +557,7 @@ it.each(["input", "document"])(
   async (point) => {
     const f = await fixture();
     expect(f.claimed.status).toBe(200);
+    const comparisonId = await f.settle();
     const token = await f.post(
       "/setup-api/first-setup/reconfirm",
       { password: PASSWORD, purpose: "block-use" },
@@ -529,7 +565,7 @@ it.each(["input", "document"])(
     );
     const chosen = await f.post(
       "/setup-api/first-setup/candidates",
-      { module: MODULE, proposal: { answer: "no" }, ...(await token.json()) },
+      { module: MODULE, proposal: { comparisonId }, ...(await token.json()) },
       f.headers(),
     );
     expect(chosen.status).toBe(200);
@@ -605,7 +641,7 @@ it("refuses changed operator module selection before any outside-use export whil
   expect(reconfirm.status).toBe(200);
   const rejected = await post("/setup-api/first-setup/candidates", {
     module: MODULE,
-    proposal: { answer: "no" },
+    proposal: { comparisonId: "unused" },
     ...(await reconfirm.json()),
   });
   expect(rejected.status).toBe(409);
