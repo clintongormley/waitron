@@ -2,8 +2,9 @@ import { eq, isNull, ne, or } from "drizzle-orm";
 import { tableExists } from "@waitron/db";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
-import type { FiscalContribution } from "@waitron/fiscal";
+import type { FiscalBackendDeps, FiscalContribution } from "@waitron/fiscal";
 import { VerifactuBackend } from "./backend.js";
+import { BUILD_COMMIT, refuseUnsetProducer } from "./software-identity.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { certificateAlerts } from "./certificate-alerts.js";
 import { claimReminder, reportReminder } from "./certificate-reminders.js";
@@ -24,6 +25,20 @@ import {
  */
 export function rejectResolveClient(): Promise<never> {
   return Promise.reject(new Error("fiscal slot: resolveClient must never be called by recordSale"));
+}
+
+export function makeVerifactuBackend(
+  { db, clock, environment }: FiscalBackendDeps,
+  published: boolean,
+): VerifactuBackend {
+  refuseUnsetProducer(environment, published);
+  return new VerifactuBackend({
+    clock,
+    db,
+    environment,
+    deploymentEnvironment: environment,
+    resolveClient: rejectResolveClient,
+  });
 }
 
 /** The fiscal module's slot contribution: the Veri*Factu sale-path backend. Both `environment`
@@ -51,14 +66,9 @@ export const FISCAL_SLOT: FiscalContribution = {
       .from(envios)
       .where(eq(envios.estado, "rechazado"))
       .orderBy(envios.registroId),
-  makeBackend: ({ db, clock, environment }) =>
-    new VerifactuBackend({
-      clock,
-      db,
-      environment,
-      deploymentEnvironment: environment,
-      resolveClient: rejectResolveClient,
-    }),
+  // The stamp is read directly, not through readHourRelease(): test suites hand that function a
+  // stamp (A940 slice 1 plan, "The placeholder").
+  makeBackend: (deps) => makeVerifactuBackend(deps, BUILD_COMMIT !== null),
   // The runtime submission pass. The regime OWNS its transport: it builds a per-pass mTLS resolver
   // (one TLS pool per pass with due work, released in `finally`) and hands `runDrain` only the
   // vault-scoped `resolveClient`. `environment` doubles as `runDrain`'s `Entorno` guard and

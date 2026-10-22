@@ -324,6 +324,33 @@ describe("the page's language", () => {
   });
 });
 
+describe("the producer the build does not yet name", () => {
+  const code = "sif.producer_unset";
+
+  it("names the missing producer, in each language", async () => {
+    const english = await pageFor(code, undefined, "en-GB");
+    expect(english).toContain(
+      escapeHtml(
+        "This version of Waitron does not yet name its producer, so it cannot be used for real sales.",
+      ),
+    );
+    expect(english).toContain(
+      escapeHtml("Ask whoever installed this box to install a version that names its producer."),
+    );
+    const spanish = await pageFor(code, undefined, SPANISH);
+    expect(spanish).toContain(
+      escapeHtml(
+        "Esta versión de Waitron todavía no indica quién la produce, así que no puede usarse para ventas reales.",
+      ),
+    );
+    expect(spanish).toContain(
+      escapeHtml(
+        "Pide a quien instaló este equipo que instale una versión que indique quién la produce.",
+      ),
+    );
+  });
+});
+
 describe("curated operator text", () => {
   // Through `escapeHtml`: curated strings are escaped too, so an apostrophe renders as `&#39;`.
   it("renders the title and action for every code in the table, in each language", async () => {

@@ -327,6 +327,19 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
       action: "Pide a quien instaló este equipo que revise su configuración.",
     },
   },
+  "sif.producer_unset": {
+    "en-GB": {
+      title:
+        "This version of Waitron does not yet name its producer, so it cannot be used for real sales.",
+      action: "Ask whoever installed this box to install a version that names its producer.",
+    },
+    "es-ES": {
+      title:
+        "Esta versión de Waitron todavía no indica quién la produce, así que no puede usarse para ventas reales.",
+      action:
+        "Pide a quien instaló este equipo que instale una versión que indique quién la produce.",
+    },
+  },
   "server.config_missing": {
     "en-GB": {
       title: "The box's configuration is incomplete.",
