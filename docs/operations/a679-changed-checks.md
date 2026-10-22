@@ -2,6 +2,8 @@
 
 _2026-10-22, A973: the invoice-first settlement operator script and its test are retired by owner decision. References to that command below record the earlier tree; current build plans omit it._
 
+> 2026-10-22: historical; series names are now five-symbol UTC minutes ([A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md) §6.5).
+
 Use this inventory to review changes to checks that existed before the replacement setup flow.
 It records changes on the candidate branch, not acceptance of the finished product.
 

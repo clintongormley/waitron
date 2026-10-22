@@ -12,6 +12,55 @@ rewritten, and carries a dated pointer here.
 
 **Mock-ups:** [`docs/backlog/mockups/a947-two-box-failover/`](../../backlog/mockups/a947-two-box-failover/README.md).
 
+> **Decisions made while building slice 4a (2026-10-22).** Where slice 4a's code does more, or
+> other, than the text below says, it is recorded here and the text below is narrowed to match:
+>
+> 1. **A clock a little behind a backup's floor waits rather than being refused** (§6.7, "The extra
+>    check", item 1). The name is the first minute that begins at or after the floor — the
+>    backup's newest record, its creation time, or the minute after its newest name — and the
+>    90-to-150-second wait, whichever is later. When that minute begins at most 150 seconds ahead
+>    of the box's clock the box waits for it; further ahead it refuses `minute_not_later` with the
+>    minute as `allowedFromMs`. It never takes a minute that begins before the floor.
+>    Tests: `packages/fiscal-verifactu/src/hour-selection.test.ts`, "a backup floor at %s rounds up
+>    to a minute start: %s" (a floor at 09:01:59 waits until 09:02:00; one at 09:02:10.5 is
+>    refused, allowed from 09:03:00); `apps/server/src/hour-recovery-host.test.ts`, "a backup's
+>    own floors".
+> 2. **Only taking the name needs the page's own comparison.** The reads that carry no comparison
+>    id — the preview, prepare and resume — use this box's newest clock reading that itself admits
+>    a name and is no more than 30 seconds old; a select must name its comparison.
+>    Tests: `packages/fiscal-verifactu/src/hour-setup-clock.test.ts`, "a read with no comparison id
+>    uses the newest reading that admits a name" and "a read with no comparison id does not use a
+>    passing reading older than thirty seconds"; `hour-selection.test.ts`, "refuses a select that
+>    names no clock comparison".
+> 3. **A restore checks its backup once, and the newest page wins.** The page uploads the backup
+>    once (`POST /setup-api/recovery/stage`) and the clock requests that follow carry only the
+>    staged copy's id. A newer restore page's upload that passes its check replaces the staged copy,
+>    and the older page's id is then refused. A reloaded restore page starts a new 90-to-150-second
+>    wait, because the setup app makes a new restore event id each time it builds the page
+>    (`apps/setup/src/screens/recovery-allocation.ts`, `eventId: crypto.randomUUID()`) and waits are
+>    kept per event (`packages/fiscal-verifactu/src/hour-selection.ts`, `sameEvent`).
+>    Tests: `apps/server/src/hour-recovery-staged.test.ts`, "lets the newest restore event's checked
+>    upload replace the copy, and keeps it when an upload fails its check" and "refuses a staged id
+>    from another restore event, after a discard, and after an hour unused". No test reloads a
+>    restore page end to end.
+> 4. **When each page explains a clock refusal.** On the restore page, pressing «Comparar relojes»
+>    / "Compare clocks" and getting a refusal shows the restore row's explanation (§6.5 tables);
+>    for no second clock it also starts the quiet 15-second re-check, and for clocks that differ it
+>    waits for «Comprobar otra vez». The setup page compares clocks by itself when it opens, and
+>    shows no explanation and retries nothing until **Make the series** is pressed.
+>    Tests: `packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts`, "Compare clocks
+>    with no second clock explains the wait and checks again by itself" and "Compare clocks with
+>    clocks that differ explains the refusal, not a failure";
+>    `packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "a preview refused for %s on
+>    load shows the readings with no failure and no explanation".
+> 5. **The setup and restore pages' refusal for a later minute in use** (`minute_not_later`), which
+>    §6.5 words only for the switch dialog: «Todavía no se pueden crear las series: ya se usó un
+>    minuto posterior a la hora de este equipo. Podrás seguir a partir de las 22:04.» / "The series
+>    cannot be made yet: a later minute is already in use. You can carry on from 22:04." — «se
+>    pueden», agreeing with «las series». Tests: `first-hour.browser.test.ts`, "says in Spanish that
+>    the series cannot be made yet, with the plural verb"; `recovery-hour.browser.test.ts`, "says in
+>    Spanish that the series cannot be made yet".
+
 > **Amendment 2026-10-22 — every clock wait explains itself, with a countdown.** The owner, at
 > about 03:12: "But explain that on the screen and provide a countdown for the user to see." What
 > changed:
@@ -1221,8 +1270,12 @@ it flags, and a confirmation passes it.
   the same wrong date is the disclosed limit below).
 - **At a first setup and a restore** — the two that cannot see every name already used:
   1. **The time floor also counts the backup's newest invoice record and the moment the backup was
-     made**, not only its allocations, so a clock between the backup's last allocation and its last
-     sale is refused by the backup itself. This reads records; it changes none.
+     made**, not only its allocations, so a box whose clock is behind the backup's last sale never
+     takes a minute that begins before that floor. (Amended 2026-10-22, slice 4a as built: when the
+     first minute starting at or after the floor begins at most 150 seconds ahead of the box's
+     clock, the box waits for it rather than refusing; further ahead it refuses `minute_not_later`
+     and names that minute — the decisions list at the top, item 1.) This reads records; it changes
+     none.
   2. **The name is taken 90 to 150 seconds after the check.** The box waits until its own clock has
      passed its checked reading by 90 seconds, then waits for the next minute to begin on its own
      clock, and takes that minute as the current one — it never takes a minute ahead of its own

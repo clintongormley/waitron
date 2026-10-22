@@ -907,9 +907,15 @@ browser test** — most of these rules exist because a test passed while proving
 - **Re-registering a filing node activates a supplied signed identity and starts a new chain.** Correct
   for a reimaged box, destructive for a working one. A cold restore (`waitron-restore`) and a rebuild
   from the bucket require the recovery operation and node key before activating that outside
-  allocation; the box does not mint an installation number from its clock or a counter. One restore
-  takes one source, never both; the restore command refuses combined archive and bucket inputs before
-  either restore runs. The working-time chain continues from the backup's head. Guard:
+  allocation; a setup, switch, hand-over, restore or re-registration names its installation from
+  the box's clock — five symbols for the UTC minute — only after a check against a clock on another
+  machine (within 30 seconds, no confirmation) and strictly later than every name in the history it
+  can read; a setup or restore waits 90 to 150 seconds first. The one exception is the test-only
+  preproduction throwaway (`hour-throwaway-allocation.ts`), refused outside preproduction. Guard:
+  `minute-selection-unknown-name.test.ts`, weaker than its name — it covers the cases it lists, not
+  a reference clock more than 15 seconds wrong. One restore takes one source, never both; the
+  restore command refuses combined archive and bucket inputs before either restore runs. The
+  working-time chain continues from the backup's head. Guard:
   `packages/workforce/src/restore-continuation.test.ts`. Restore inputs and the selected backup's
   recovery-key warning: [conventions-data.md](docs/developers/conventions-data.md).
 - **On a node that files, every start puts each sale left "being sent" back to waiting before its
