@@ -128,6 +128,7 @@ it.each(
     emit(screen, event, detail);
     await flush(el);
     expect(write).toHaveBeenCalledTimes(2);
+    expect(write.mock.calls[1]).toEqual(write.mock.calls[0]);
     expectRefused(el);
   },
 );

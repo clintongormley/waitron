@@ -4541,6 +4541,38 @@ describe("till-app: a bill payment on the card reader", () => {
     }
   });
 
+  it.each(["en-GB", "es-ES"])(
+    "replays the same reader payment after a fingerprint refusal in %s",
+    async (locale) => {
+      const takeBillPayment = vi
+        .fn()
+        .mockRejectedValue({ code: "fiscal.fingerprint_mismatch", status: 409 });
+      const el = await takeOnReader(takeBillPayment);
+      setLocale(locale);
+      try {
+        await flush(el);
+        expect(inDialog(el, "wt-form-actions")!.error).toBe(
+          codeMessage("fiscal.fingerprint_mismatch"),
+        );
+        expect(sent()).toHaveLength(1);
+        const original = structuredClone(sent()[0]);
+        expect(original).toMatchObject({
+          method: "card",
+          entry: "reader",
+          readerId: readers[1]!.id,
+          submissionId: expect.any(String),
+        });
+        expect(inDialog(el, "[data-pay-continue]")!.disabled).toBe(false);
+        await press(el, "[data-pay-continue]");
+        await press(el, "[data-pay-confirm]");
+        expect(sent()).toEqual([original, original]);
+        expect(el.shadowRoot!.querySelector("till-ticket-view, till-paid-view")).toBeNull();
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+
   it("charges the card on the reader picked, and shows the bill's new balance", async () => {
     const takeBillPayment = vi
       .fn()
