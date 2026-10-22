@@ -130,6 +130,12 @@ export class ThemesCard extends LitElement {
         flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-1) var(--wt-space-2);
+        min-width: 0;
+        max-width: 100%;
+      }
+      wt-data-table::part(name) {
+        min-width: 0;
+        overflow-wrap: anywhere;
       }
       wt-data-table::part(tags) {
         display: inline-flex;
@@ -210,7 +216,7 @@ export class ThemesCard extends LitElement {
         label: t("appearance.themes_name"),
         cell: (row) =>
           html`<span part="name-cell"
-            ><span data-test=${`theme-row-${row.key}`}>${row.name}</span>${
+            ><span part="name" data-test=${`theme-row-${row.key}`}>${row.name}</span>${
               row.builtIn
                 ? html`<span part="tag built-in" data-test="tag-built-in"
                     >${t("appearance.built_in")}</span

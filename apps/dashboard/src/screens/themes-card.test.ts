@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
-import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
+import { THEME_NAME_MAX_LENGTH, WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
 import { DashboardApi, type ThemeList, type ThemeView } from "../api/client.js";
 import { es } from "../i18n/strings.js";
@@ -234,6 +234,28 @@ describe("the Themes card fits its own width", () => {
           }
         });
       }
+    }
+  }
+
+  const longest = theme("t-long", "W".repeat(THEME_NAME_MAX_LENGTH), WAITRON_CHOICES);
+  for (const { window: width, card } of WIDTHS) {
+    for (const canEdit of [true, false]) {
+      it(`does not scroll sideways for a longest name with no spaces in a ${card}px card (${canEdit ? "editor" : "supervisor"})`, async () => {
+        await page.viewport(width, 800);
+        const el = await sized(
+          card,
+          { themes: [longest, ...four.themes], inUse: "t-long" },
+          canEdit,
+        );
+        const box = inTable(el, ".scroll")!;
+        expect(box.scrollWidth, `${box.scrollWidth} in ${box.clientWidth}`).toBeLessThanOrEqual(
+          box.clientWidth,
+        );
+        const name = row(el, "t-long")!.querySelector<HTMLElement>("[data-test=theme-row-t-long]")!;
+        expect(name.getBoundingClientRect().right).toBeLessThanOrEqual(
+          box.getBoundingClientRect().right,
+        );
+      });
     }
   }
 
