@@ -85,6 +85,9 @@ but keeps the saved text.
 Add the language again to resume using those translations. The default language's row has no
 **Delete**: choose another default first. A required language's row has none either.
 
+During setup, the receipt-language choices and review use the wizard's screen language for their
+names. Changing the wizard's screen language keeps your selected receipt language.
+
 Your receipt-language settings remain independent. A receipt prints in one language. Each
 location's default is chosen in the **Defaults** card of **Venue settings**, which fixes it to
 Catalan in Catalonia, and staff can choose another language for a sale, or for a copy, at the till.

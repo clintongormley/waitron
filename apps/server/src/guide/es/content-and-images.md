@@ -84,6 +84,9 @@ peticiones más pequeñas.
 Añade el idioma de nuevo para volver a usarlo. El predeterminado no tiene **Eliminar**: elige otro
 primero. Los idiomas obligatorios tampoco se pueden eliminar.
 
+Durante la configuración, las opciones del idioma del ticket y el resumen muestran sus nombres
+en el idioma de la pantalla. Cambiar el idioma de la pantalla conserva el idioma del ticket elegido.
+
 Los idiomas de los tickets son independientes. Cada ticket se imprime en un idioma. El
 predeterminado de la ubicación se elige en **Valores predeterminados**, en **Datos del local**, y se
 fija al catalán en Cataluña. El personal puede elegir otro idioma para una venta o una copia en la

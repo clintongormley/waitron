@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { VENUE_SETUP_COUNTRY_PACKS } from "@waitron/country-packs";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import "./review-screen.js";
 import type { SetupReviewScreen } from "./review-screen.js";
 import type { DeepPartial } from "../setup-app.js";
@@ -165,6 +165,64 @@ describe("setup-review-screen's explanations", () => {
     } finally {
       await page.viewport(original.width, original.height);
     }
+  });
+});
+
+describe("setup-review-screen receipt language labels", () => {
+  afterEach(() => setLocale("en-GB"));
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "uses the selection screen's translated labels in the review (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const draft = fullDraft();
+      draft.venue!.location!.invoiceLocales = [
+        "es-ES",
+        "ca-ES",
+        "gl-ES",
+        "eu-ES",
+        "unknown-language",
+      ];
+      const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
+      expect(text(el, "[data-test=summary-invoiceLocales]")).toBe(
+        [
+          t("venue.locale.es_es"),
+          t("venue.locale.ca_es"),
+          t("venue.locale.gl_es"),
+          t("venue.locale.eu_es"),
+          "unknown-language",
+        ].join(", "),
+      );
+      expect(draft.venue!.location!.invoiceLocales).toEqual([
+        "es-ES",
+        "ca-ES",
+        "gl-ES",
+        "eu-ES",
+        "unknown-language",
+      ]);
+    },
+  );
+
+  it.each(["constructor", "toString", "__proto__"])(
+    "keeps an unknown receipt-language code that names an inherited property (%s)",
+    async (code) => {
+      const draft = fullDraft();
+      draft.venue!.location!.invoiceLocales = [code];
+      const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
+      expect(text(el, "[data-test=summary-invoiceLocales]")).toBe(code);
+      expect(draft.venue!.location!.invoiceLocales).toEqual([code]);
+    },
+  );
+
+  it("updates a mounted review's language names when the wizard language changes", async () => {
+    setLocale("en-GB");
+    const draft = fullDraft();
+    const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
+    expect(text(el, "[data-test=summary-invoiceLocales]")).toBe(t("venue.locale.es_es", "en-GB"));
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(text(el, "[data-test=summary-invoiceLocales]")).toBe(t("venue.locale.es_es", "es-ES"));
+    expect(draft.venue!.location!.invoiceLocales).toEqual(["es-ES"]);
   });
 });
 
