@@ -4022,7 +4022,7 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   slice 13, D6): a stored theme (the Look card's Edit while it is in use, or a Themes row's Edit),
   headed "Look" while it is in use and "Edit theme: {name}" otherwise; Waitron's theme while it is
   in use (the Look card's Edit), opening on Waitron's choices and headed "Look"; and a new theme
-  (the Themes card's New theme), opening on Waitron's choices and headed "New theme". The line
+  (the Themes card's Add theme), opening on Waitron's choices and headed "Add theme". The line
   above the choices reads "Theme in use: {name}. Saving changes every screen." or "Not in use.
   Saving changes no screen until you use it." For Waitron's theme and a new theme, Save opens the
   name dialog (switch on for Waitron's theme in use, off for a new one), since Waitron's theme is
@@ -4046,9 +4046,9 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
 - **The preview's Light and Dark panels are painted from the draft inside the card and nowhere
   else** (`apps/dashboard/src/widgets/theme-preview.ts`). Each panel is a theme root inside the
   preview's shadow root, painted by a constructed sheet adopted into that shadow root only. The draft
-  never reaches the page itself; the page repaints after a write that changes the theme in use: a
-  save of it, a theme created with its switch on, a switch, or a delete that leaves Waitron's theme
-  in use.
+  never reaches the page itself; the page repaints after a save of the theme in use, a theme
+  created with its switch on, a switch, and any delete whose answer has Waitron's theme in use
+  (including one that changed nothing, because Waitron's theme was already in use).
 - **A readability warning is drawn with the warning icon in `--wt-color-warning`, never as a field
   error**, and never disables Save. A brand-colour warning with a fix carries the fix as a button
   below it, and a fix taken shows its shade with Undo; two or more warnings with fixes add a Fix all
@@ -4069,10 +4069,10 @@ The Themes card lists Waitron's theme first, then the venue's own, in a `wt-data
   `(max-width: 48rem)` breakpoint, the literal `DRAWER_BREAKPOINT` uses. Status carries "In use"
   and "{count} hard to read" tags. Chips and tags are styled through `::part()`, never a class
   (Primitives, above).
-- **The Actions column and New theme are for `layout.configure` only**; a person without it sees
+- **The Actions column and Add theme are for `layout.configure` only**; a person without it sees
   the list alone. The row menu offers Use on every screen (not on the row in use), Edit and Rename
   (not on Waitron's row), Make a copy, and Delete in the danger colour (not on Waitron's row, and
-  not on the row of the theme open in the editor). New theme sits in the card's action slot as
+  not on the row of the theme open in the editor). Add theme sits in the card's action slot as
   `secondary`.
 - **The name dialog** (`apps/dashboard/src/widgets/theme-name-dialog.ts`) serves the first save,
   Save as new theme…, Make a copy and Rename. It takes a draft scope; Make a copy and Save as new

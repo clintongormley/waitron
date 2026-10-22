@@ -234,7 +234,7 @@ describe("dashboard-themes-card actions", () => {
     expect(menu(el, "t-xmas").querySelector("[data-test=delete-t-xmas]")).not.toBeNull();
   });
 
-  it("Edit and New theme ask the page to open the editor", async () => {
+  it("Edit and Add theme ask the page to open the editor", async () => {
     const { el, edits, createTheme, renameTheme, getVenueTheme } = await mount(four);
     await choose(el, "t-xmas", "edit");
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-theme]")!);

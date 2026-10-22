@@ -668,13 +668,13 @@ export class LookCard extends LitElement {
 
   #name(editing: Editing): string {
     if (editing.id === null) {
-      return editing.from === "in-use" ? BUILT_IN_THEME_NAME : t("appearance.new_theme");
+      return editing.from === "in-use" ? BUILT_IN_THEME_NAME : t("appearance.add_theme");
     }
     return this.list?.themes.find((theme) => theme.id === editing.id)?.name ?? editing.name;
   }
   #heading(editing: Editing): string {
     if (this.#inUse(editing)) return t("appearance.look");
-    if (editing.id === null) return t("appearance.new_theme");
+    if (editing.id === null) return t("appearance.add_theme");
     return fill("appearance.edit_theme_heading", { name: this.#name(editing) });
   }
 

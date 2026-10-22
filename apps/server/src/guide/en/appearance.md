@@ -41,7 +41,7 @@ how a venue makes its first theme.
 A line at the top of the editor says what saving does. Editing the theme in use, it reads "Theme
 in use:" with the theme's name, and "Saving changes every screen." Editing any other theme, it
 reads "Not in use. Saving changes no screen until you use it.", and the card's heading names the
-theme, or reads **New theme**.
+theme, or reads **Add theme**.
 
 The editor opens the theme's three choices in place:
 
@@ -92,11 +92,12 @@ editing.
 
 Editing one of the venue's own themes, Save stores your changes to it and closes the editor.
 
-Editing Waitron's theme, or a **New theme**, Save first opens the **Name this theme** dialog,
-because your choices are about to become a theme of their own. Its **Use it on every screen now**
-switch starts on when you are editing Waitron's theme in use, and off for a new theme. **Save** in
-the dialog stores the new theme and closes the editor. **Back** leaves you in the editor with
-nothing saved. The rules for a name are under "Name a theme" below.
+Editing Waitron's theme, or a theme you started with **Add theme**, Save opens the **Name this
+theme** dialog, after the **Hard to read** dialog when that appears, because your choices are about
+to become a theme of their own. Its **Use it on every screen now** switch starts on when you are
+editing Waitron's theme in use, and off for a new theme. **Save** in the dialog stores the new theme
+and closes the editor. **Back** leaves you in the editor with nothing saved, asking first if you
+typed a name. The rules for a name are under "Name a theme" below.
 
 When something is still hard to read, Save first opens the **Hard to read** dialog, with one line
 for each colour that is. It offers three choices:
@@ -122,10 +123,11 @@ so the next person who opens the page sees it too.
 
 While you edit one of the venue's own themes, the editor also offers **Save as new theme…**. It
 opens the name dialog with the theme's name followed by "(copy)", stores your choices under the name
-you give, and leaves the theme you were editing as it was last saved. Its **Use it on every screen
-now** switch starts on when the theme you are editing is in use. When a colour is still hard to
-read, the **Hard to read** dialog comes first, as it does for Save. Like Save, it tells you under
-the field when a colour code you typed is not valid, and saves nothing until you fix it.
+you give, leaves the theme you were editing as it was last saved, and closes the editor. Its **Use
+it on every screen now** switch starts on when the theme you are editing is in use. When a colour is
+still hard to read, the **Hard to read** dialog comes first, as it does for Save. Like Save, it
+tells you under the field when a colour code you typed is not valid, and saves nothing until you fix
+it.
 
 ## The venue's themes {#themes}
 
@@ -135,7 +137,7 @@ the page colour of the light version and of the dark version. On a phone-sized s
 leaves the colours out. The status tags say which theme is **In use** and how many of a theme's
 colours are hard to read, such as "2 hard to read". Waitron's theme carries the tag **built in**.
 
-A **Manager** or an **Admin** sees **New theme** on the card, which opens the editor on Waitron's
+A **Manager** or an **Admin** sees **Add theme** on the card, which opens the editor on Waitron's
 choices for a theme that is not yet stored, and a menu on each row:
 
 - **Edit** opens that theme in the Look card's editor. A theme that is not in use opens with the
@@ -149,7 +151,7 @@ choices for a theme that is not yet stored, and a menu on each row:
 
 Waitron's row offers only **Make a copy**, and **Use on every screen** while another theme is in
 use, because Waitron's theme cannot be edited, renamed or deleted. A **Supervisor** sees the list,
-without New theme and without the menus.
+without Add theme and without the menus.
 
 ## Name a theme {#names}
 

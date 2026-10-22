@@ -154,17 +154,17 @@ describe("dashboard-themes-card", () => {
     expect(chips(el, "t-lemon")[0]).toBe(rgb("#f2d300"));
   });
 
-  it("a supervisor sees no New theme and no row menus", async () => {
+  it("a supervisor sees no Add theme and no row menus", async () => {
     const el = await mount(four, false);
     expect(el.shadowRoot!.querySelector("[data-test=new-theme]")).toBeNull();
     expect(table(el).shadowRoot!.querySelector("wt-row-actions")).toBeNull();
     expect(columnKeys(el)).toEqual(["name", "colours", "status"]);
   });
 
-  it("an editor gets New theme and an actions column pinned to the end", async () => {
+  it("an editor gets Add theme and an actions column pinned to the end", async () => {
     const el = await mount(four);
     const button = el.shadowRoot!.querySelector("[data-test=new-theme]")!;
-    expect(text(button)).toBe("New theme");
+    expect(text(button)).toBe("Add theme");
     expect(button.getAttribute("variant")).toBe("secondary");
     const columns = table(el).columns;
     expect(columns.map((column) => column.key)).toEqual(["name", "colours", "status", "actions"]);

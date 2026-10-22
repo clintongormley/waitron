@@ -245,13 +245,13 @@ describe("the editor's three ways in", () => {
     });
   });
 
-  it("New theme opens on Waitron's choices, not in use", async () => {
+  it("Add theme opens on Waitron's choices, not in use", async () => {
     setLocale("en-GB");
     const { el, changes, createTheme, getVenueTheme, editing } = await mount(luciaInUse);
     el.edit({ kind: "new" });
     await el.updateComplete;
     expect(isEditing(el)).toBe(true);
-    expect(heading(el)).toBe("New theme");
+    expect(heading(el)).toBe("Add theme");
     expect(line(el)).toBe(t("appearance.editing_not_in_use"));
     expect(codeField(el).value).toBe("");
     expect(button(el, "save").disabled).toBe(true);
@@ -484,7 +484,7 @@ describe("opening the editor from the Themes card", () => {
     await el.updateComplete;
     el.edit({ kind: "new" });
     await settle(el);
-    expect(heading(el)).toBe("New theme");
+    expect(heading(el)).toBe("Add theme");
     expect(ask).not.toHaveBeenCalled();
   });
 
@@ -582,7 +582,7 @@ describe("opening the editor from the Themes card", () => {
     await openWaitronEditor(el);
     el.list = { ...waitronInUse, inUse: "t-xmas" };
     await el.updateComplete;
-    expect(heading(el)).toBe("New theme");
+    expect(heading(el)).toBe("Add theme");
     expect(line(el)).toBe(t("appearance.editing_not_in_use"));
     await pickSwatch(el, "#dd5f5f");
     await userEvent.click(button(el, "save"));
@@ -608,7 +608,7 @@ describe("Save as new theme…", () => {
 
     el.edit({ kind: "new" });
     await el.updateComplete;
-    expect(heading(el)).toBe("New theme");
+    expect(heading(el)).toBe("Add theme");
     expect(button(el, "save-as-new")).toBeNull();
 
     const waitron = await mount(waitronInUse);

@@ -314,7 +314,7 @@ describe("the page opens the Look card's editor from the Themes card", () => {
     return { el, scroll, ...stub };
   }
 
-  it("a row's Edit and New theme open the Look card's editor", async () => {
+  it("a row's Edit and Add theme open the Look card's editor", async () => {
     const { el, scroll } = await mountBoth();
     await choose(el, "t-xmas", "edit");
     expect(heading(el)).toBe("Edit theme: Christmas");
@@ -325,7 +325,7 @@ describe("the page opens the Look card's editor from the Themes card", () => {
       themesCard(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=new-theme]")!,
     );
     await settle(el);
-    expect(heading(el)).toBe("New theme");
+    expect(heading(el)).toBe("Add theme");
     expect(themesCard(el)!.editingId).toBeNull();
     expect(scroll).toHaveBeenCalledTimes(2);
   });

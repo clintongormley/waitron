@@ -42,7 +42,7 @@ elecciones como un tema nuevo. Así es como un local crea su primer tema.
 Una línea en la parte superior del editor dice qué hace guardar. Si editas el tema en uso, dice
 «Tema en uso:» con el nombre del tema, y «Al guardar cambian todas las pantallas.» Si editas
 cualquier otro tema, dice «No está en uso. Al guardar no cambia ninguna pantalla hasta que lo
-uses.», y el título de la tarjeta nombra el tema, o dice **Nuevo tema**.
+uses.», y el título de la tarjeta nombra el tema, o dice **Añadir tema**.
 
 El editor abre las tres elecciones del tema en el mismo sitio:
 
@@ -95,12 +95,13 @@ estás editando.
 
 Si editas uno de los temas propios del local, Guardar guarda tus cambios en él y cierra el editor.
 
-Si editas el tema de Waitron, o un **Nuevo tema**, Guardar abre primero el diálogo **Pon nombre a
-este tema**, porque tus elecciones van a convertirse en un tema propio. Su interruptor **Usarlo ya
-en todas las pantallas** empieza activado cuando editas el tema de Waitron en uso, y desactivado
-para un tema nuevo. **Guardar** en el diálogo guarda el tema nuevo y cierra el editor. **Volver**
-te deja en el editor sin guardar nada. Las reglas de un nombre están en «Pon nombre a un tema», más
-abajo.
+Si editas el tema de Waitron, o un tema que empezaste con **Añadir tema**, Guardar abre el diálogo
+**Pon nombre a este tema**, después del diálogo **Difícil de leer** cuando aparece, porque tus
+elecciones van a convertirse en un tema propio. Su interruptor **Usarlo ya en todas las pantallas**
+empieza activado cuando editas el tema de Waitron en uso, y desactivado para un tema nuevo.
+**Guardar** en el diálogo guarda el tema nuevo y cierra el editor. **Volver** te deja en el editor
+sin guardar nada, y antes te lo pregunta si escribiste un nombre. Las reglas de un nombre están en
+«Pon nombre a un tema», más abajo.
 
 Si algo sigue leyéndose mal, Guardar abre primero el diálogo **Difícil de leer**, con una línea por
 cada color afectado. Ofrece tres opciones:
@@ -128,11 +129,11 @@ sigue leyéndose mal, para que también lo vea la próxima persona que abra la p
 
 Mientras editas uno de los temas propios del local, el editor ofrece también **Guardar como tema
 nuevo…**. Abre el diálogo del nombre con el nombre del tema seguido de «(copia)», guarda tus
-elecciones con el nombre que le des y deja el tema que estabas editando tal como se guardó por
-última vez. Su interruptor **Usarlo ya en todas las pantallas** empieza activado cuando el tema que
-editas está en uso. Si algún color sigue leyéndose mal, primero aparece el diálogo **Difícil de
-leer**, igual que con Guardar. Como Guardar, te indica debajo del campo si un código de color que
-escribiste no es válido, y no guarda nada hasta que lo corriges.
+elecciones con el nombre que le des, deja el tema que estabas editando tal como se guardó por última
+vez y cierra el editor. Su interruptor **Usarlo ya en todas las pantallas** empieza activado cuando
+el tema que editas está en uso. Si algún color sigue leyéndose mal, primero aparece el diálogo
+**Difícil de leer**, igual que con Guardar. Como Guardar, te indica debajo del campo si un código de
+color que escribiste no es válido, y no guarda nada hasta que lo corriges.
 
 ## Los temas del local {#themes}
 
@@ -143,7 +144,7 @@ del tamaño de un teléfono, la tarjeta no muestra los colores. Las etiquetas de
 tema está **En uso** y cuántos de los colores de un tema se leen mal, por ejemplo «2 se leen mal».
 El tema de Waitron lleva la etiqueta **integrado**.
 
-Un **Encargado** o un **Administrador** ve **Nuevo tema** en la tarjeta, que abre el editor con las
+Un **Encargado** o un **Administrador** ve **Añadir tema** en la tarjeta, que abre el editor con las
 elecciones de Waitron para un tema que aún no está guardado, y un menú en cada fila:
 
 - **Editar** abre ese tema en el editor de la tarjeta Aspecto. Un tema que no está en uso se abre
@@ -157,7 +158,7 @@ elecciones de Waitron para un tema que aún no está guardado, y un menú en cad
 
 La fila de Waitron solo ofrece **Hacer una copia**, y **Usar en todas las pantallas** mientras está
 en uso otro tema, porque el tema de Waitron no se puede editar, cambiar de nombre ni eliminar. Un
-**Supervisor** ve la lista, sin Nuevo tema y sin los menús.
+**Supervisor** ve la lista, sin Añadir tema y sin los menús.
 
 ## Pon nombre a un tema {#names}
 

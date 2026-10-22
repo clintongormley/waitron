@@ -415,7 +415,7 @@ export class ThemesCard extends LitElement {
             data-test="new-theme"
             variant="secondary"
             @click=${() => this.#edit({ kind: "new" })}
-            >${t("appearance.new_theme")}</wt-button
+            >${t("appearance.add_theme")}</wt-button
           >`
         : nothing,
       body: html`<wt-data-table
