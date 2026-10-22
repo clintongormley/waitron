@@ -43,6 +43,11 @@ note should become its own document type.
 
 ## Decisions and deliberate limits
 
+- **Supplier invoice numbers are unique within their issue year (owner, 2026-10-21, A981).**
+  The same supplier may reuse a number in another calendar year; the purchase form names the
+  other recorded year before saving. Reporting continues to use the receipt date for its period.
+  Adviser confirmation remains open in [Q18(b)](../compliance/asesor-questions.md).
+
 - **A negative purchase-invoice total is a supplier credit note (owner 2026-09-21, task N1).**
   The purchase-invoice routes accept and store a negative gross total by design.
 

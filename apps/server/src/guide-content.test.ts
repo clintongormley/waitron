@@ -30,6 +30,20 @@ function isPage(name: string): name is Page {
 
 describe("the user guides", () => {
   it.each(GUIDE_LANGUAGES)(
+    "serves the purchase invoice guide and its year section in %s",
+    (lang) => {
+      expect(GUIDE_PAGES).toContain("purchases");
+      const markdown = readGuide(root, lang, "purchases");
+      expect(markdown).toBeDefined();
+      expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
+        "enter-invoice",
+        "invoice-numbers",
+        "deduction-period",
+      ]);
+    },
+  );
+
+  it.each(GUIDE_LANGUAGES)(
     "the kitchen guide in %s registers its allergy and service sections",
     (lang) => {
       expect(GUIDE_PAGES).toContain("kitchen-service");

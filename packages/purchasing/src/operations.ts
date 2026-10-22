@@ -185,13 +185,6 @@ async function selectLines(tx: Transaction, invoiceId: string): Promise<Purchase
   return rows.map(mapLine);
 }
 
-/**
- * Insert a received invoice and its VAT lines in the caller's transaction. Validates the header's
- * prorrata seam and the lines (≥1 line, non-negative base/VAT amount, rate 0–100 → `purchase.invalid`)
- * BEFORE any write; a collision on the `(supplier, supplier's number)` unique index becomes
- * `purchase.duplicate` (the VAT record-book no-duplicate rule). `regime`/`deductibleProportion`/`kind`
- * omitted fall to their column defaults.
- */
 export async function createPurchaseInvoice(
   tx: Transaction,
   input: CreatePurchaseInvoiceInput,
@@ -288,12 +281,6 @@ export async function listPurchaseInvoices(
   return headerRows.map((h) => ({ ...mapHeader(h), lines: byInvoice.get(h.id)! }));
 }
 
-/**
- * Patch a received invoice: any subset of header fields, and optionally a full REPLACEMENT of its
- * VAT lines (validated like create). Throws `purchase.not_found` when no invoice with `id` is
- * visible, and `purchase.duplicate` when the resulting supplier pair is another invoice's.
- * `updated_at` is always bumped.
- */
 export async function updatePurchaseInvoice(
   tx: Transaction,
   id: string,

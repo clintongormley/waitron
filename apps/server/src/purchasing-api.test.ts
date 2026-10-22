@@ -94,6 +94,40 @@ async function createVia(app: Hono, overrides: { supplierInvoiceNumber?: string 
 }
 
 describe("mountPurchasingApi — create", () => {
+  it("accepts a supplier number in another issue year and refuses moving it into the occupied year", async () => {
+    const app = mountApp();
+    const ids: string[] = [];
+    for (const issuedOn of ["2025-12-31", "2026-01-01"]) {
+      const result = await send(app, "POST", "/management-api/purchase-invoices", {
+        body: {
+          header: {
+            supplierTaxId: "B12345678",
+            supplierName: "Supplier Ltd",
+            supplierInvoiceNumber: "YEAR-001",
+            issuedOn,
+            receivedOn: "2026-02-01",
+            total: "121.00",
+          },
+          lines: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
+        },
+      });
+      expect(result.status).toBe(201);
+      ids.push(((await result.json()) as { id: string }).id);
+    }
+    const refused = await send(app, "PATCH", `/management-api/purchase-invoices/${ids[1]}`, {
+      body: { header: { issuedOn: "2025-01-01" } },
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({ error: { code: "purchase.duplicate" } });
+    const kept = await send(app, "GET", `/management-api/purchase-invoices/${ids[1]}`);
+    expect(kept.status).toBe(200);
+    expect(await kept.json()).toMatchObject({
+      issuedOn: "2026-01-01",
+      total: "121.00",
+      lines: [{ rate: "21.00", base: "100.00", tax: "21.00", kind: "ordinary" }],
+    });
+  });
+
   it("POST /management-api/purchase-invoices creates one (201 → the PurchaseInvoice shape)", async () => {
     const res = await send(mountApp(), "POST", "/management-api/purchase-invoices", {
       body: validBody(),

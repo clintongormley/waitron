@@ -217,6 +217,7 @@ export class PurchasesScreen extends LitElement {
       <dashboard-purchase-form
         .open=${this.formOpen}
         .invoice=${this.editingInvoice}
+        .invoices=${this.invoices}
         .busy=${this.busy}
         .fieldErrors=${this.formErrors}
         @create-purchase=${(e: CustomEvent<PurchaseInvoiceInput>) => void this.#onCreate(e)}

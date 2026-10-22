@@ -2578,6 +2578,18 @@ first real F3 is filed:
 
 ### Q18. *Modelo 303* — IVA soportado deducible: prorrata and duplicate-invoice key (added 2026-08-26)
 
+**2026-10-22 amendment to (b), A981.** The owner chose uniqueness on supplier tax ID, supplier
+invoice number and the calendar year of the supplier's **issue date**. A number used in another
+issue year is accepted with a warning naming that year. The receipt date continues to determine
+the input-VAT reporting period. Please confirm this rule, including which date should determine
+the year. The original question below records the earlier forever-unique implementation.
+
+> **Actualización de (b), 22-10-2026.** Hemos elegido rechazar una factura recibida duplicada por
+> NIF del proveedor, número de factura y año natural de su **fecha de expedición**. Si el mismo
+> proveedor repite el número en otro año, permitimos registrarla con un aviso que indica el año
+> ya registrado. La fecha de recepción sigue determinando el periodo del IVA soportado. ¿Puede
+> confirmar este criterio y que el año debe ser el de expedición, no el de recepción?
+
 **Why it matters.** We generate the *modelo 303* from issued invoices (IVA repercutido) and captured
 received invoices (IVA soportado deducible), and emit the DR303 file for the AEAT "por fichero"
 uploader (#91/#98, design).
