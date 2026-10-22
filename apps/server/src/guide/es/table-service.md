@@ -2,10 +2,10 @@
 
 ## Confía en el servidor antes de abrir la caja {#certificate-trust}
 
-Si la caja te pide instalar el certificado del servidor, elige **Abre la página de configuración
-para ver las instrucciones**. Instala el certificado en este dispositivo y vuelve a abrir la caja.
-La página para confiar en el certificado usa el idioma compatible preferido de tu navegador; si
-no encuentra ninguno, usa el inglés.
+La página de la caja **Este dispositivo todavía no confía en la caja** usa el idioma compatible
+preferido de tu navegador; si no encuentra ninguno, usa el inglés. Elige **Abre la página de
+configuración para ver las instrucciones** para instalar el certificado del servidor en este
+dispositivo y vuelve a abrir la caja.
 
 ## Devolver un pago entero o una parte {#refund-payment}
 
