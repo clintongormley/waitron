@@ -1009,6 +1009,7 @@ export class TillShell extends LitElement {
                   </div>
                   ${this.formFactor !== "till" && (this.phone || moved.has("transfers")) ? this.#transferStatus() : nothing}
                 </header>
+                <slot name="notices"></slot>
               `
         }
         <div class="region">

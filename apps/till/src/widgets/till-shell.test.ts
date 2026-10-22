@@ -2025,3 +2025,41 @@ it("the KDS form factor keeps operator controls out and retains its language cho
   expect(el.shadowRoot!.querySelector(".logout")).toBeNull();
   expect(el.shadowRoot!.querySelector("wt-language-chooser")).not.toBeNull();
 });
+
+describe("the notices slot", () => {
+  async function withNotices(props: Partial<TillShell>) {
+    const { el } = await mountWidget<TillShell>("till-shell", { operatorName: "Ana", ...props });
+    const child = document.createElement("div");
+    child.slot = "notices";
+    child.style.blockSize = "20px";
+    child.textContent = "A notice";
+    el.appendChild(child);
+    await el.updateComplete;
+    return { el, child };
+  }
+
+  it.each(["till", "phone-portrait"] as const)(
+    "puts the notices between the top bar and the screen on a %s",
+    async (formFactor) => {
+      const { el, child } = await withNotices({ formFactor, activeScreen: "floor" });
+      const slot = child.assignedSlot;
+      expect(slot).not.toBeNull();
+      expect(slot!.parentElement?.classList.contains("shell")).toBe(true);
+      const head = el.shadowRoot!.querySelector("header")!.getBoundingClientRect();
+      const region = el.shadowRoot!.querySelector(".region")!.getBoundingClientRect();
+      const box = child.getBoundingClientRect();
+      expect(box.height).toBeGreaterThan(0);
+      expect(box.top).toBeGreaterThanOrEqual(head.bottom);
+      expect(box.bottom).toBeLessThanOrEqual(region.top);
+    },
+  );
+
+  // Pins: a kiosk or kitchen display already draws no slot for notices.
+  it.each([
+    ["a kiosk", { kiosk: true }],
+    ["a kitchen display", { formFactor: "kds" }],
+  ] as const)("has no notices slot on %s (pin)", async (_name, props) => {
+    const { child } = await withNotices(props as Partial<TillShell>);
+    expect(child.assignedSlot).toBeNull();
+  });
+});

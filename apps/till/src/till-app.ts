@@ -16,6 +16,7 @@ import { billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./state/zone-menu-memory.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import "./widgets/device-zones-dialog.js";
+import "./widgets/notice-strip.js";
 import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
 import { deviceZoneNavigation } from "./state/device-zones.js";
 import { heldViews, placeFor } from "./state/draft-place.js";
@@ -18502,6 +18503,14 @@ export class TillApp extends LitElement {
                             this.#requestLeave(() => this.#onTabSelect(e.detail.screen));
                           }}
                         >
+                          ${
+                            this.deviceMode
+                              ? nothing
+                              : html`<till-notice-strip
+                                  slot="notices"
+                                  .notices=${this.staffNotices}
+                                ></till-notice-strip>`
+                          }
                           ${
                             this.transferSnapshot === undefined
                               ? nothing
