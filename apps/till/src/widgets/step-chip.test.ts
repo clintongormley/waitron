@@ -59,6 +59,11 @@ describe("stepChip", () => {
     expect(done.getAttribute("aria-label")).toBe("Done: Dessert?");
   });
 
+  it("names the Done button after a step whose name holds a replacement pattern, as written", async () => {
+    const { done } = await mount({ ...dessert, name: "Ask $& or $1" });
+    expect(done.getAttribute("aria-label")).toBe("Done: Ask $& or $1");
+  });
+
   it("calls onDone when Done is clicked", async () => {
     const onDone = vi.fn();
     const { done } = await mount(dessert, onDone);

@@ -11,7 +11,7 @@ export function stepChip(step: ServiceStepDue, options: { onDone: () => void }):
       type="button"
       class="step-done"
       data-step-done=${step.stepId}
-      aria-label=${t("floor.step_done_label").replace("{step}", step.name)}
+      aria-label=${t("floor.step_done_label").replace("{step}", () => step.name)}
       @click=${(event: Event) => {
         event.stopPropagation();
         options.onDone();
