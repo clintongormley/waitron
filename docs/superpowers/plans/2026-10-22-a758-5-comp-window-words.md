@@ -21,8 +21,8 @@ says "Give away" or «Invitar»; "Discount the bill" becomes **Comp the bill**, 
 beside % and €.
 
 **Architecture:** the till only. The basket's two line buttons (Give away, Discount) become one that
-opens the existing Comp window (`combined` mode of `till-adjustment-dialog`), so a counter order
-works as a table's does. The words change in the till's two string files. The bill's window gains a
+opens the existing Comp window (`combined` mode of `till-adjustment-dialog`), so a counter order's
+dishes and extras each open the Comp window. The words change in the till's two string files. The bill's window gains a
 third choice, Free, which it sends as `discount_percent` at 10000 basis points — the stored shape
 design §3.4 names for a free whole bill.
 
@@ -332,7 +332,7 @@ unless it names a command that was run. A773-1 (#1897) and A758-1 to A758-4 are 
      driver 2026-10-22): a future till string inviting a person to an account, or giving a shift
      away, is not refused. The English half takes the same keys for the shift reason. A comment says
      the guard is weaker than its name, as the siblings' do (`:42-45`): it reads those keys of the
-     catalogue in `strings.ts` only; `codes.ts`'s messages are pinned in `codes.test.ts`.
+     catalogue in `strings.ts` only; `codes.ts` is not read.
   2. `codes.test.ts:394-399`: the new English and Spanish `adjustment.weighed_partial` texts of
      Decision 6 (check 6).
   3. `adjustment-dialog.combined.test.ts`, new case "asks for approval when the server needs a PIN"
@@ -403,7 +403,7 @@ target (`target.lineId === null`) Free sends
      `api.previewAdjustment` called with `("wo-9", { expectedEdit: null, expectedRevision: 4, lineId: null, reasonId: "r-complaint", note: null, action: "discount_percent", percentBp: 10000 })`.
   7. `strings.test.ts`, Task 2's D10 describe gains "titles the bill's comp with the Comp window's
      word": `table.discount_bill` and `adjust.discount_bill_title` start with `word` in both
-     languages; and `adjust.kind`, `adjust.kind_percent`, `adjust.kind_amount` are not keys of `en`.
+     languages; and `adjust.kind`, `adjust.kind_percent`, `adjust.kind_amount` are not keys of `en` or `es`, in their own test.
 - [ ] **Step 2: Run and watch 1–7 fail.**
   `pnpm --filter @waitron/till exec vitest run src/widgets/adjustment-dialog.test.ts src/widgets/adjustment-dialog.a11y.test.ts src/widgets/adjustment-dialog.unsaved.test.ts src/till-app-counter-adjustments.test.ts src/i18n/strings.test.ts`
   — expected: no `free` radio (1, 2, 3, 5, 6), a11y finds no Free to choose (4), the words (7).
@@ -445,8 +445,7 @@ lists, no limits, no note), created by `reasonIdOf` (`:45-52`) as `GIVE_AWAY_REA
      `post(billId, { action: "discount_percent", percentBp: 10000 }, { cookie: venue.cookie.staff })`
      answers 200; `recordedOn(billId)` is one row with `lineId: null`, `action: "discount_percent"`,
      `percentBp: 10000`, `afterAmount: 0`, `reduction` equal to `beforeAmount` and above 0.
-  2. `pay-owing-nothing.test.ts`, in "Pay on a bill whose every line was given away" (`:155`), beside
-     its cash cases (`:167-181`): "closes a bill comped free as a whole on a cash Pay of 0, with an
+  2. `pay-owing-nothing.test.ts`, in "other ways a bill owing nothing is paid": "closes a bill comped free as a whole on a cash Pay of 0, with an
      invoice of 0.00, no tender and no drawer": `seatedWith(venue, "Caña")`,
      `compWholeBill(venue, tabId, 10000)`, `pay(tabId, { method: "cash", amount: "0" })` answers 200
      with `answer.json` matching `{ total: "0.00", tender: { method: "unpaid" } }`, then
@@ -459,7 +458,7 @@ lists, no limits, no note), created by `reasonIdOf` (`:45-52`) as `GIVE_AWAY_REA
   — both pass, with a `Tests` count that includes them. Controls, each restored after: change
   `value <= 10000` to `value < 10000` in `packages/adjustments/src/policy.ts:21` — test 1 fails with
   400 `percentBp` and test 2 fails inside `compWholeBill`; then make `compWholeBill` send
-  `percentBp - 1` — test 2 fails on the 400 `sale.tender_shortfall`, not on a closed bill.
+  `percentBp - 100` — test 2 fails on the 400 `sale.tender_shortfall`, not on a closed bill.
 - [ ] **Step 3: Run** `pnpm --filter @waitron/server exec vitest run src/adjustments-api.test.ts src/pay-owing-nothing.test.ts`
   — all pass; `pnpm --filter @waitron/server typecheck`.
 - [ ] **Step 4: Commit** — "Server tests: a whole bill comped free is recorded, paid and filed at 0.00 (A758-5)".
@@ -503,7 +502,7 @@ entry only when it finishes it (CLAUDE.md §6), so the entry stays and says only
 
 - [ ] **A758** (`docs/backlog.md`): after A758-4's sentence add "**A758-5 built the till's words**
   ([plan](superpowers/plans/2026-10-22-a758-5-comp-window-words.md)): a counter order's dishes offer
-  one Comp… that opens the Comp window, as a table's do; "Comp the bill" offers Free beside % and €;
+  one Comp… that opens the Comp window; "Comp the bill" offers Free beside % and €;
   no till word says "Give away" or «Invitar»; A1007 is what it left open." Replace "Left: A758-5
   (the till's Comp words), and the §3.8 and "collect it at the counter" slices." with "Left: the
   §3.8 slice and the "collect it at the counter" slice." Never mark the entry done.
@@ -511,7 +510,8 @@ entry only when it finishes it (CLAUDE.md §6), so the entry stays and says only
   "A758-5 and the §3.8 and "collect it at the counter" slices follow." becomes "The §3.8 and
   "collect it at the counter" slices follow."
 - [ ] **New entry A1007** (reserved 2026-10-22: `~/waitron-campaign-shared/next-item-number` read
-  A1007 and was written back as A1008), placed after A923: "**A1007. The till's adjustment window keeps a
+  A1007 and was written back as A1008), placed after A923 as a short entry with a `[Detail]` link to a `## A1007. …` section at the end
+  of `docs/backlog/till.md`, which holds: "**A1007. The till's adjustment window keeps a
   give-away and a line discount nothing opens (left open by A758-5).** Since A758-5 a dish or extra
   is comped only through the Comp window (`combined`), on the table and at the counter; the window's
   separate `kind: "comp"` mode and its line `kind: "discount"` mode remain, with their titles
