@@ -128,7 +128,7 @@ come after the list above:
   upgrades and recovery_): upgrade testing with rows the product itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
   installer (B3); what the box does when a part fails but it can still sell (A798-B, the build:
   [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md) revision 6; every owner
-  question answered; slices 1 to 4 of 10 built).
+  question answered; slices 1 to 7 of 10 built).
 - **The displays and the printers walked at the real box** (_The till, devices and table service_;
   _Printers, the print agent and receipts_) — till, handheld and KDS through
   [ui-review.md](ui-review.md), and the first physical print since #327.
@@ -5519,26 +5519,63 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   2026-10-20). It adds a module seat for staff notices and one
   migration in the Veri*Factu module's set. Slice 1 of 10 (a full disk reported as
   `storage.disk_full`; nothing a body writes through the write queue after one that ended its
-  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) landed in #1950; slice 4 (a module seat for staff notices, with the Veri*Factu module's notice for a clock before 28-10-2024; nothing shows notices yet) landed in #1958; slice 5 (a free-space watch every minute: the bell warns below 2 GiB and shows a full disk, and a full-disk stop lifts once space is back with no write) landed in #1963; slice 6 (the strip on every signed-in till and handheld: a full or nearly full disk, a clock before 28-10-2024, and the sales not yet sent to the tax agency; and the equipment read and the till's session checks answer on a full disk) landed in #1977; slice 7 is next. Open asesor questions:
+  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) landed in #1950; slice 4 (a module seat for staff notices, with the Veri*Factu module's notice for a clock before 28-10-2024; nothing shows notices yet) landed in #1958; slice 5 (a free-space watch every minute: the bell warns below 2 GiB and shows a full disk, and a full-disk stop lifts once space is back with no write) landed in #1963; slice 6 (the strip on every signed-in till and handheld: a full or nearly full disk, a clock before 28-10-2024, and the sales not yet sent to the tax agency; and the equipment read and the till's session checks answer on a full disk) landed in #1977; slice 7 (the Box status page under Settings for people who manage the system, showing each part of the box with what to do, and Liberar, which frees only what the box can make again and works on a full disk) landed in #<this pull request>; slice 7b (Reintentar ahora, parked for the owner) and slice 8 are next. Open asesor questions:
   [Q51](compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21)
   and
   [Q52](compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21).
 
-- **The disk warning does not point at the Box status page yet.** `storage.space_low`'s sentence
-  leaves out the design's 'See what is using it on the Box status page.' / 'Mira qué ocupa espacio
-  en Estado del equipo.' and carries no Go-to, because the page does not exist. Slice 7 adds both,
-  and deletes the two-sentence test in `apps/dashboard/src/i18n/alerts.test.ts` that keeps the
-  sentence out. Left open by A798-B slice 5 (#1963) for slice 7.
-
 - **'Equipo' names two things in the Spanish dashboard.** The bell's new area for the box is
   'Equipo' (design §4.3), and so is the sidebar's staff group (`nav.group.team`,
-  `apps/dashboard/src/i18n/strings.ts`). The owner's picture 3 shows both. Not yet put to the owner.
-  Raised by A798-B slice 5's plan.
+  `apps/dashboard/src/i18n/strings.ts`); since A798-B slice 7 the Box status page is «Estado del
+  equipo» too (`nav.box_status`). The owner's picture 3 shows the first two. Not yet put to the
+  owner. Raised by A798-B slice 5's plan.
 
-- **The Box status page's rows from a module are not in the staff-notice seat.** Slice 4 built only
-  the notices; slice 7 adds the Hacienda row, and its plan decides whether the page reads the staff
-  notices at all. Left open by A798-B slice 4 (#1958) for slice 7.
-  [Detail](backlog/box.md#the-box-status-pages-rows-from-a-module-are-not-in-the-staff-notice-seat)
+- **Slice 7b: Reintentar ahora, and the Hacienda row's last accepted record.** The page's Hacienda
+  row reads the staff notices and the bell (slice 7 decision 1); 7b adds the Veri\*Factu module's
+  own route for Reintentar ahora — which changes when records reach AEAT, so it is parked for the
+  owner — and, with it, the last accepted record's time. Left open by A798-B slice 7 (#…).
+  [Detail](backlog/box.md#slice-7b-reintentar-ahora-and-the-hacienda-rows-last-accepted-record)
+
+- **The card readers row does not say whether a reader is switched on.** It lists the readers set
+  up and shows the bell's reader alerts; `reader.offline` is slice 10's. Left open by A798-B slice 7
+  (#…).
+
+- **Liberar cannot be pressed on a mirror or a fenced node.** The read-only gate refuses every
+  POST there, so the page draws it quiet and says why; a mirror's disk can fill too. Left open by
+  A798-B slice 7 (#…).
+
+- **On a box with card payments off, the card-reader battery check may raise
+  `alert.source_unavailable` on every bell read.** `batteryAlertSource` is registered whatever the
+  module and reads `card_readers`, which does not exist then; read, not run on a booted box. Left
+  open by A798-B slice 7 (#…).
+  [Detail](backlog/box.md#on-a-box-with-card-payments-off-the-card-reader-battery-check-may-raise-alertsource_unavailable-on-every-bell-read)
+
+- **The disk line's remainder is 'the rest of the disk', not 'outside Waitron'.** It includes the
+  state folder's other files; measuring them separately would let the page name what is not
+  Waitron's. Left open by A798-B slice 7 (#…).
+
+- **The start's clean-up can reach a linked log folder's target given a trailing separator.**
+  `start-space.ts` builds the log folder's paths without the `resolve()` that `free-space-now.ts`
+  gained, so a log folder configured as a link with a trailing separator defeats its link check;
+  read, not run. Left open by A798-B slice 7 (#…).
+
+- **The Box status page's Clock row drops the drift's sign, and an open clock-drift alert's seconds
+  can differ from the latest read.** Ahead and behind matter past a minute (design §4.8); the
+  alert's sentence can say 3600 s while the row's comparison says 90 s. For slice 9. Left open by
+  A798-B slice 7 (#…).
+
+- **The dashboard shell's other first reads were not checked on a full disk.** Slice 7 made the
+  Box status read and the bell's alert reads answer there; the shell's other reads at sign-in were
+  not tried. Left open by A798-B slice 7 (#…).
+
+- **Alert sources added by modules were not checked for writes under the bell's full-disk retry.**
+  The retry reads the sources that run in the request's transaction in a `withWriteLock` turn with
+  no drain; what a module's source that writes does to the bell's read on a full disk was not
+  tried. Left open by A798-B slice 7 (#…).
+
+- **The recovery page says the start "deleted what it could make again"; the Box status page says
+  "files the box no longer needs".** One wording for the same set. Left open by A798-B slice 7
+  (#…).
 
 - **Till write surfaces other than the draft save, the unpaid departure and the station screen were
   not checked for a full-disk refusal's words** (design §4.6 item 2). The draft save and the
@@ -5553,9 +5590,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   (#1977).
   [Detail](backlog/box.md#on-a-full-disk-a-till-read-whose-route-opens-a-withtransaction-is-refused-while-a-change-waits)
 
-- **A failed staff-notice check is seen only in the log.** A bell alert (slice 7's page could
-  carry it) would tell the manager when the unsent count cannot be worked out. Left open by A798-B
-  slice 6 (#1977).
+- **A failed staff-notice check is seen in the log and as a note on the Box status page; the bell
+  does not show it.** A bell alert would tell the manager when the unsent count cannot be worked
+  out. Left open by A798-B slice 6 (#1977).
 
 - **The strip draws no tinted background and no coloured words, unlike picture 2.** No token is
   named for the tints and `color-mix()` is refused; tint tokens with their contrast checks would let

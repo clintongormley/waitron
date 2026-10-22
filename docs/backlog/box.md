@@ -820,13 +820,22 @@ drain's refusal; for `GET /api/till` it was not isolated
 ([conventions-data.md](../developers/conventions-data.md#a-read-on-a-full-disk-must-not-fail-on-its-own-housekeeping-write)). PIN sign-in is refused on a full disk in every case, with no session
 written.
 
-## The Box status page's rows from a module are not in the staff-notice seat
+## Slice 7b: Reintentar ahora, and the Hacienda row's last accepted record
 
-Left open by A798-B slice 4 (#1958) for slice 7. Design §5's seat was to return
-"plus a row for the Box status page"; slice 4 built only the notices. Slice 7 adds the row (the
-Hacienda row's unsent count, last accepted record and the Reintentar ahora route) as an optional
-member of `StaffNoticeSource` or a seat of its own, and its plan decides whether the page reads the staff
-notices at all.
+Left open by A798-B slice 7 (#…). The page's Hacienda row reads the staff notices and the bell
+(slice 7 decision 1): it shows the unsent count (`fiscal.records_unsent`) and the bell's submission
+alerts, and slice 7 added no seat to the module contract. 7b adds the Veri\*Factu module's own
+route for Reintentar ahora — which changes when records reach AEAT, so it is parked for the owner —
+and, with it, the last accepted record's time, as the module's own row on the page.
+
+## On a box with card payments off, the card-reader battery check may raise alert.source_unavailable on every bell read
+
+Left open by A798-B slice 7 (#…). `batteryAlertSource` is registered in `bootServer`'s alert
+sources whatever the module (`apps/server/src/boot.ts`), and reads `card_readers`, which does not
+exist when the payments module is off (A798-B slice 7 plan, M9: `select … from card_readers` threw
+`no such table` with the payments set left out); the registry turns a failing source into that
+alert (design §5). Read, not run on a booted box. The Box status page leaves its card readers row
+out in that case.
 
 ## A box whose first setup was retired into a new workspace keeps that workspace's backup staging through the clean-up before the count
 
@@ -838,6 +847,10 @@ failed on a full disk runs inside `runAdmittedEntry` with the workspace's folder
 check uses them too. Accepted for A798-B slice 2 (its plan's decision 15). Since A978
 (2026-10-21) this also means a cut-off backup run's plaintext copy in that workspace survives every
 ordinary start; only a start that fails on a full disk deletes it. Not yet put to the owner.
+Since A798-B slice 7, the Box status page's Liberar deletes a cut-off backup's leftovers in the
+running server's own state folder, which on such a box is the workspace's (`runEntry` starts the
+server with `WAITRON_STATE_DIR` set to the workspace's state folder, `apps/server/src/node-entry.ts`;
+read, not run).
 
 
 
