@@ -2625,3 +2625,14 @@ query-close case in the full eight-case file; restoring it passes all eight.
 Run `pnpm --filter @waitron/server exec vitest run src/backup-verification.permission.test.ts`
 for the full-file check. The additional valid-verification case guards this file; it does not
 check other suites' teardown.
+
+## Keep a positional script's usage header before its imports
+
+Keep the leading `//` usage block first in `record-one-sale.ts` and `settle-invoice-first.ts`.
+Guard: `apps/server/scripts/script-arguments.test.ts`, weaker than its name: it reads source counts,
+not argument order or an executed command. Its header reader stops at the first non-comment line.
+
+A1003 ([PR #1973](https://github.com/clintongormley/waitron/pull/1973), 2026-10-22) put a helper
+import above each header. CI run `39759743880` and the local unchanged guard both reported two
+failures: the headers appeared to have zero arguments. Moving the helper into each existing import
+block left the guard unchanged; the argument and affected script suites then passed 23 cases.

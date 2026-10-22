@@ -1,4 +1,3 @@
-import { withIssuanceTransaction } from "@waitron/core";
 // Records exactly one sale through the real Veri*Factu backend, then exits. It never contacts
 // AEAT: the running server's drain submits the record later.
 //
@@ -14,7 +13,7 @@ import { withIssuanceTransaction } from "@waitron/core";
 //
 // `WAITRON_ENV` is required here rather than defaulted: it stamps `entorno` onto an append-only
 // fiscal record (CLAUDE.md §5), so a wrong default cannot be corrected afterwards.
-import { recordSale } from "@waitron/core";
+import { recordSale, withIssuanceTransaction } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
