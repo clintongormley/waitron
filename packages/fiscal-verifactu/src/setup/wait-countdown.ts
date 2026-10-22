@@ -36,8 +36,9 @@ export function createWaitCountdown(
       remainingMs = Math.max(0, duration);
       host.requestUpdate();
       timer = setInterval(() => {
+        const shown = formatRemaining(remainingMs!);
         remainingMs = Math.max(0, duration - Math.max(0, performance.now() - started));
-        host.requestUpdate();
+        if (formatRemaining(remainingMs) !== shown) host.requestUpdate();
         if (remainingMs === 0) {
           clearInterval(timer);
           timer = undefined;

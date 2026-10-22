@@ -39,6 +39,25 @@ it("counts down on a faked interval and performance clock", () => {
   }
 });
 
+it("asks its page to redraw only when the shown second changes", () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
+  try {
+    const { value } = host();
+    const countdown = createWaitCountdown(value, () => undefined);
+    countdown.start(3_500);
+    const started = value.updates;
+    vi.advanceTimersByTime(250);
+    expect(value.updates).toBe(started);
+    vi.advanceTimersByTime(250);
+    expect(formatRemaining(countdown.remainingMs!)).toBe("0:03");
+    expect(value.updates).toBe(started + 1);
+    vi.advanceTimersByTime(3_000);
+    expect(countdown.remainingMs).toBe(0);
+    expect(value.updates).toBe(started + 4);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("stops without calling back, and stops when the host disconnects", () => {
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
   try {
