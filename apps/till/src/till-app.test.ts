@@ -7879,6 +7879,34 @@ describe("till-app", () => {
           }
         });
 
+  it("retrieve-order: drops a line whose product is null beside an offered line", async () => {
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-null" },
+          note: null,
+          revision: 0,
+          ownerRevision: 0,
+        },
+        id: "wo-null",
+        orderNumber: 5,
+        label: null,
+        revision: 0,
+        lines: [
+          { menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "1.000" },
+          { productId: null, quantity: "1.000", makeAt: null, optionSnapshots: [] },
+        ],
+      }),
+    });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-null" });
+    await flush(el);
+    expect(c.store.lines.map((line) => line.quantity)).toEqual(["1"]);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+      t("held.product_gone"),
+    );
+  });
+
   it("retrieve-order: refreshes the held-orders list after loading", async () => {
     const { el } = await mountApp({
       listWorkingOrders: vi

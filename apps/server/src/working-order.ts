@@ -4713,8 +4713,7 @@ export interface HeldOrder {
   /** The receipt language staff chose for the order; absent while the location's own applies. */
   receiptLanguage?: string;
   /**
-   * PARENT rows only, each dish's child lines nested as `extras`. A row carries its stored offer and
-   * display snapshot, so retrieval does not depend on the offer still being active.
+   * PARENT rows only, each dish's child lines nested as `extras`.
    */
   lines: {
     /** The dish's frozen options answers: names, no ids. */

@@ -1504,6 +1504,34 @@ describe("getHeldOrder", () => {
     },
   );
 
+  it.each(["open", "placed"] as const)(
+    "refuses a %s order when one line lacks its stored menu offer",
+    async (status) => {
+      const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
+      const id = randomUUID();
+      await parkOrder({ db }, cfg, {
+        id,
+        zoneId,
+        lines: [
+          { menuItemId: premiumCafeOfferId, quantity: "1" },
+          { menuItemId: premiumCafeOfferId, quantity: "2" },
+        ],
+      });
+      await db.execute(sql`update working_orders set status = ${status} where id = ${id}`);
+      const read = status === "open" ? getHeldOrder : getPlacedCounterOrder;
+      expect((await read({ db }, cfg, id)).lines.map((l) => l.quantity)).toEqual([
+        "1.000",
+        "2.000",
+      ]);
+      await db.execute(sql`delete from working_line_contexts where working_order_line_id in
+      (select id from working_order_lines where working_order_id = ${id} and quantity = 2000)`);
+      await expect(read({ db }, cfg, id)).rejects.toMatchObject({
+        code: "order.service_context_missing",
+        params: { workingOrderId: id },
+      });
+    },
+  );
+
   it("keeps a missing product unresolved when its stored offer context remains", async () => {
     const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
     const id = randomUUID();

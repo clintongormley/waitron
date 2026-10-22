@@ -3542,9 +3542,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Next: reproduce through the form whether equivalent tip spellings ask to discard a change.
 
 - **Reopening a held order still removes a sold-out extra on the first edit.** The till now keeps
-  such a line marked "Not offered now"; a line with no stored snapshot whose menu offer the till no
-  longer lists is still dropped with `held.product_gone`, and the first edit of the order removes
-  such an extra.
+  such a line marked "Not offered now", and the first edit of the order removes such an extra.
   [Detail](backlog/till.md#reopening-a-held-order-still-removes-a-sold-out-extra-on-the-first-edit)
 
 - **No kept test pins the refusal of a raise for an Unavailable size or an inactive menu** — left

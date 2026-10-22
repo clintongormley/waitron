@@ -1278,8 +1278,7 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 - **Reopening a held order still removes a sold-out extra on the first edit.** The owner chose
   option A on 2026-09-23 (lane B question Q1): keep a sold-out line in held work, flag it on the
   till, and refuse only a quantity increase. The till now keeps such a line marked "Not offered
-  now"; a line with no stored snapshot whose menu offer the till no longer lists is still dropped with
-  `held.product_gone`, and the first edit of the order removes such an extra.
+  now", and the first edit of the order removes such an extra.
 
 ## A893. Owner review of every table state and its look, after A757 lands
 
