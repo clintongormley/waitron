@@ -99,3 +99,9 @@ Once released, a dish can move through preparation to Ready at its station.
 Confirm allergy instructions in the table's allergy window before requesting cooking. At a
 station or the pass, read the copy already attached to each dish. The kitchen screens do not open
 the table's allergy editor. At the station, acknowledge any corrections.
+
+## Delete a prep station {#delete-prep-station}
+
+Choose **Delete** from the station's row menu. The window shows **Checking what changes…**
+while it reads the impact. Review **Work that ends** and **Settings that are removed**
+when those sections appear, then decide whether to delete the station.

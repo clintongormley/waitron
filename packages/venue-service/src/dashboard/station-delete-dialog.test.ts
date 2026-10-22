@@ -19,7 +19,7 @@ async function ready(dialog: HTMLElementTagNameMap["wt-delete-dialog"]) {
   await dialog.updateComplete;
 }
 
-it("permanent delete renders every canonical removal under Settings removed with no work-ended group", async () => {
+it("permanent delete renders every canonical removal under Settings that are removed with no work-ended group", async () => {
   const counted = (key: string, count: number) => ({ key, count, targets: [] });
   const named = (key: string, name: string) => ({
     key,
@@ -51,7 +51,7 @@ it("permanent delete renders every canonical removal under Settings removed with
   expect(dialog.impact).toEqual(impact);
   expect(dialog.shadowRoot!.querySelector('[data-group="ends"]')).toBeNull();
   const group = dialog.shadowRoot!.querySelector('[data-group="removes"]')!;
-  expect(group.querySelector("h3")!.textContent).toBe("Settings removed");
+  expect(group.querySelector("h3")!.textContent).toBe("Settings that are removed");
   expect([...group.querySelectorAll("li")].map((line) => line.textContent?.trim())).toEqual([
     "3 unsent order lines return to normal routing.",
     "2 draft lines return to normal routing.",

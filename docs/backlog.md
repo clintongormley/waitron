@@ -4953,15 +4953,6 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 
 **Left open, for the owner, by A477 (#1530, delete windows in the present tense):**
 
-- **A831. The prep station and staff role delete windows take the device windows' words (owner,
-  2026-10-17).** Both say "Trabajo que termina", "Settings removed" / "Ajustes eliminados" and a
-  loading line in the conditional ("…would change…" / "…cambiaría…") (`prep.delete_*` in
-  `packages/venue-service/src/dashboard/strings.ts`, `staffing.role.delete_*` in
-  `packages/staffing/src/dashboard/strings.ts`). Use the device, printer and card reader windows'
-  "Work that ends" / "Trabajo que finaliza", "Settings that are removed" / "Configuración que se
-  elimina" and "Checking what changes…" / "Comprobando qué cambia…". Done when both windows' three
-  lines read as the device window's do, in both languages.
-
 - **Future-tense lines outside the delete windows were left alone**: the Remove-standby
   explanation (`servers.remove_explanation`, "It will be marked removed…"), the Spanish variant
   badge "Se archivará al guardar", and the Spanish PIN reset confirmation

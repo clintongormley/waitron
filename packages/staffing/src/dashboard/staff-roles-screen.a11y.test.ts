@@ -149,7 +149,7 @@ const states: Record<string, () => Promise<void>> = {
       impact: () => new Promise(() => undefined),
     });
     await press(el, "delete-role-grey");
-    expect(dialogText(el)).toContain("Checking what deleting this staff role would change…");
+    expect(dialogText(el)).toContain("Checking what changes…");
   },
   "the delete question when its impact cannot be read": async () => {
     const el = await screen(async () => ({ staffRoles: staffRoleList }), {

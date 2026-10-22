@@ -1,5 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 import { stationDeleteCopy, stationDeleteError } from "./station-delete-copy.js";
 afterEach(() => setLocale("en"));
 it.each([
@@ -147,5 +148,22 @@ it.each([
       work,
     );
     expect(stationDeleteError(new Error("private diagnostic"))).toBe(fallback);
+  },
+);
+
+it.each(["en", "es"] as const)(
+  "uses the present-tense delete headings and loading line in %s",
+  (locale) => {
+    setLocale(locale);
+    const copy = stationDeleteCopy();
+    expect([copy.ends, copy.removes, copy.loading]).toEqual(
+      locale === "en"
+        ? ["Work that ends", "Settings that are removed", "Checking what changes…"]
+        : [
+            VENUE_SERVICE_STRINGS.es["prep.delete_ends"],
+            VENUE_SERVICE_STRINGS.es["prep.delete_removes"],
+            VENUE_SERVICE_STRINGS.es["prep.delete_loading"],
+          ],
+    );
   },
 );
