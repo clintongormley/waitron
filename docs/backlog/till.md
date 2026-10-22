@@ -814,8 +814,6 @@ observations against that design; the original observations below are not fresh 
     credit note reaches it today (read, not run). **Next action:** decide whether those read
     `amountDue` too, which W26 (#1136) left out because other screens and the floor read
     `outstanding`.
-  - **A 0.00 simplified invoice:** B17's departure, and since B28 (#1005) Pay on a bill whose
-    total is zero, file one; whether AEAT accepts it was not tested.
   - **Left by B28's review (#1005), neither acted on.** (1) The reader pay's `tipOf`
     (`apps/server/src/till-sale.ts`) treats a `null` tip as no tip, against CLAUDE.md §3's rule
     that a default applies only when the field is absent; it predates B28, and paying a non-zero

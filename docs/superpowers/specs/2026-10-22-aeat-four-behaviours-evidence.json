@@ -1,0 +1,659 @@
+{
+  "item": "A985",
+  "service": "AEAT preproduction; main-only aeat-preproduction workflow",
+  "repository": "waitron-io/verifactu",
+  "sourceCommit": "28a987963a69e3faa08814481b013d2982fa95b0",
+  "libraryPullRequest": "https://github.com/waitron-io/verifactu/pull/146",
+  "workflowRun": 39721604913,
+  "workflowUrl": "https://github.com/waitron-io/verifactu/actions/runs/39721604913",
+  "jobId": 119636097377,
+  "jobStartedAt": "2026-10-22T04:18:08Z",
+  "jobCompletedAt": "2026-10-22T04:23:27Z",
+  "workflowConclusion": "failure",
+  "dispatchCount": 1,
+  "expectationPrintedBeforeSending": "original and cancellation Correcto; identical cancellation retry duplicate 3000/Anulada; zero F2 and valid-hash control Correcto; corrupted fingerprint AceptadoConErrores/2000. Cancellation replies expected to name the cancelled invoice. Test service only; no production inference or Waitron policy change.",
+  "summary": [
+    {
+      "stage": "original",
+      "sentAt": "2026-10-22T04:18:21.426Z",
+      "batch": "Correcto",
+      "record": "Correcto",
+      "code": null,
+      "matchesPrediction": true
+    },
+    {
+      "stage": "cancellation",
+      "sentAt": "2026-10-22T04:19:22.772Z",
+      "batch": "Correcto",
+      "record": "Correcto",
+      "code": null,
+      "matchesPrediction": true
+    },
+    {
+      "stage": "cancellationRetry",
+      "sentAt": "2026-10-22T04:20:23.207Z",
+      "batch": "Correcto",
+      "record": "Correcto",
+      "code": null,
+      "matchesPrediction": false,
+      "lookupState": "Anulado",
+      "storedFingerprint": "B5823466E738F9325C9FECC98F8CB779E1F472D2F7F7342A76EB98B8ED909CC2",
+      "sentFingerprint": "B5823466E738F9325C9FECC98F8CB779E1F472D2F7F7342A76EB98B8ED909CC2"
+    },
+    {
+      "stage": "zero",
+      "sentAt": "2026-10-22T04:21:23.861Z",
+      "batch": "Correcto",
+      "record": "Correcto",
+      "code": null,
+      "matchesPrediction": true,
+      "lookupState": "Correcto",
+      "storedFingerprint": "6AE66289D489B08165DA0B201C336E7DF2E27121ADC08D8AAF043A1CA38FF7E6",
+      "sentFingerprint": "6AE66289D489B08165DA0B201C336E7DF2E27121ADC08D8AAF043A1CA38FF7E6"
+    },
+    {
+      "stage": "validHash",
+      "sentAt": "2026-10-22T04:22:24.913Z",
+      "batch": "Correcto",
+      "record": "Correcto",
+      "code": null,
+      "matchesPrediction": true,
+      "lookupState": "Correcto",
+      "storedFingerprint": "2F83AB7B03A5A1E6DBAC51B8CCD50CA029820932C10B7B79BC90717E6CEFDB09",
+      "sentFingerprint": "2F83AB7B03A5A1E6DBAC51B8CCD50CA029820932C10B7B79BC90717E6CEFDB09"
+    },
+    {
+      "stage": "wrongHash",
+      "sentAt": "2026-10-22T04:23:25.520Z",
+      "batch": "ParcialmenteCorrecto",
+      "record": "AceptadoConErrores",
+      "code": 2000,
+      "matchesPrediction": true,
+      "lookupState": "AceptadoConErrores",
+      "storedFingerprint": "02C420EB5409F2B2535715F04487C3ACD69703875CE7799514576E66E0F450C1",
+      "sentFingerprint": "02C420EB5409F2B2535715F04487C3ACD69703875CE7799514576E66E0F450C1"
+    }
+  ],
+  "evidence": {
+    "incomplete": false,
+    "incompleteStages": [],
+    "original": {
+      "sentAt": "2026-10-22T04:18:21.426Z",
+      "record": {
+        "IDVersion": "1.0",
+        "IDFactura": {
+          "IDEmisorFactura": "[identity]",
+          "NumSerieFactura": "CI/20261022/39721604913-FOUR-original",
+          "FechaExpedicionFactura": "22-10-2026"
+        },
+        "RefExterna": "CI-39721604913-FOUR-original",
+        "NombreRazonEmisor": "[identity]",
+        "TipoFactura": "F2",
+        "DescripcionOperacion": "Prueba de integración en preproducción",
+        "Desglose": [
+          {
+            "ClaveRegimen": "01",
+            "TipoImpositivo": "21.00",
+            "BaseImponibleOimporteNoSujeto": "1.00",
+            "CuotaRepercutida": "0.21",
+            "CalificacionOperacion": "S1"
+          }
+        ],
+        "CuotaTotal": "0.21",
+        "ImporteTotal": "1.21",
+        "Encadenamiento": {
+          "PrimerRegistro": "S"
+        },
+        "SistemaInformatico": {
+          "NombreRazon": "[identity]",
+          "NIF": "[identity]",
+          "NombreSistemaInformatico": "Waitron VeriFactu test",
+          "IdSistemaInformatico": "WT",
+          "Version": "0.1.0",
+          "NumeroInstalacion": "CI-39721604913-FOUR-original",
+          "TipoUsoPosibleSoloVerifactu": "S",
+          "TipoUsoPosibleMultiOT": "N",
+          "IndicadorMultiplesOT": "N"
+        },
+        "FechaHoraHusoGenRegistro": "2026-10-22T06:18:21+02:00",
+        "TipoHuella": "01",
+        "Huella": "B010B9778526B535F303D91646E51CF1F5F89074228604F6101F18BF7744A237"
+      },
+      "response": {
+        "CSV": "A-U8EXTK8FLH9G97",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-22T06:18:22+02:00"
+        },
+        "EstadoEnvio": "Correcto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI/20261022/39721604913-FOUR-original",
+              "FechaExpedicionFactura": "22-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Alta"
+            },
+            "RefExterna": "CI-39721604913-FOUR-original",
+            "EstadoRegistro": "Correcto"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-U8EXTK8FLH9G97</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-22T06:18:22+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Correcto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI/20261022/39721604913-FOUR-original</tik:NumSerieFactura><tik:FechaExpedicionFactura>22-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion><tikR:RefExterna>CI-39721604913-FOUR-original</tikR:RefExterna><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": true
+    },
+    "cancellation": {
+      "sentAt": "2026-10-22T04:19:22.772Z",
+      "record": {
+        "IDVersion": "1.0",
+        "IDFactura": {
+          "IDEmisorFacturaAnulada": "[identity]",
+          "NumSerieFacturaAnulada": "CI/20261022/39721604913-FOUR-original",
+          "FechaExpedicionFacturaAnulada": "22-10-2026"
+        },
+        "Encadenamiento": {
+          "RegistroAnterior": {
+            "IDEmisorFactura": "[identity]",
+            "NumSerieFactura": "CI/20261022/39721604913-FOUR-original",
+            "FechaExpedicionFactura": "22-10-2026",
+            "Huella": "B010B9778526B535F303D91646E51CF1F5F89074228604F6101F18BF7744A237"
+          }
+        },
+        "SistemaInformatico": {
+          "NombreRazon": "[identity]",
+          "NIF": "[identity]",
+          "NombreSistemaInformatico": "Waitron VeriFactu test",
+          "IdSistemaInformatico": "WT",
+          "Version": "0.1.0",
+          "NumeroInstalacion": "CI-39721604913-FOUR-original",
+          "TipoUsoPosibleSoloVerifactu": "S",
+          "TipoUsoPosibleMultiOT": "N",
+          "IndicadorMultiplesOT": "N"
+        },
+        "FechaHoraHusoGenRegistro": "2026-10-22T06:19:22+02:00",
+        "TipoHuella": "01",
+        "Huella": "B5823466E738F9325C9FECC98F8CB779E1F472D2F7F7342A76EB98B8ED909CC2"
+      },
+      "response": {
+        "CSV": "A-SS68NGUBSRAUES",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-22T06:19:23+02:00"
+        },
+        "EstadoEnvio": "Correcto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI/20261022/39721604913-FOUR-original",
+              "FechaExpedicionFactura": "22-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Anulacion"
+            },
+            "EstadoRegistro": "Correcto"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-SS68NGUBSRAUES</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-22T06:19:23+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Correcto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI/20261022/39721604913-FOUR-original</tik:NumSerieFactura><tik:FechaExpedicionFactura>22-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Anulacion</tik:TipoOperacion></tikR:Operacion><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": true
+    },
+    "cancellationRetry": {
+      "sentAt": "2026-10-22T04:20:23.207Z",
+      "record": {
+        "IDVersion": "1.0",
+        "IDFactura": {
+          "IDEmisorFacturaAnulada": "[identity]",
+          "NumSerieFacturaAnulada": "CI/20261022/39721604913-FOUR-original",
+          "FechaExpedicionFacturaAnulada": "22-10-2026"
+        },
+        "Encadenamiento": {
+          "RegistroAnterior": {
+            "IDEmisorFactura": "[identity]",
+            "NumSerieFactura": "CI/20261022/39721604913-FOUR-original",
+            "FechaExpedicionFactura": "22-10-2026",
+            "Huella": "B010B9778526B535F303D91646E51CF1F5F89074228604F6101F18BF7744A237"
+          }
+        },
+        "SistemaInformatico": {
+          "NombreRazon": "[identity]",
+          "NIF": "[identity]",
+          "NombreSistemaInformatico": "Waitron VeriFactu test",
+          "IdSistemaInformatico": "WT",
+          "Version": "0.1.0",
+          "NumeroInstalacion": "CI-39721604913-FOUR-original",
+          "TipoUsoPosibleSoloVerifactu": "S",
+          "TipoUsoPosibleMultiOT": "N",
+          "IndicadorMultiplesOT": "N"
+        },
+        "FechaHoraHusoGenRegistro": "2026-10-22T06:19:22+02:00",
+        "TipoHuella": "01",
+        "Huella": "B5823466E738F9325C9FECC98F8CB779E1F472D2F7F7342A76EB98B8ED909CC2"
+      },
+      "response": {
+        "CSV": "A-HYQK63U68K53AA",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-22T06:20:23+02:00"
+        },
+        "EstadoEnvio": "Correcto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI/20261022/39721604913-FOUR-original",
+              "FechaExpedicionFactura": "22-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Anulacion"
+            },
+            "EstadoRegistro": "Correcto"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-HYQK63U68K53AA</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-22T06:20:23+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Correcto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI/20261022/39721604913-FOUR-original</tik:NumSerieFactura><tik:FechaExpedicionFactura>22-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Anulacion</tik:TipoOperacion></tikR:Operacion><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": false,
+      "consultation": {
+        "ResultadoConsulta": "ConDatos",
+        "IndicadorPaginacion": "N",
+        "registros": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI/20261022/39721604913-FOUR-original",
+              "FechaExpedicionFactura": "22-10-2026"
+            },
+            "DatosRegistroFacturacion": {
+              "TipoFactura": "F2",
+              "DescripcionOperacion": "Prueba de integración en preproducción",
+              "Desglose": {
+                "DetalleDesglose": {
+                  "ClaveRegimen": "01",
+                  "CalificacionOperacion": "S1",
+                  "TipoImpositivo": "21",
+                  "BaseImponibleOimporteNoSujeto": "1",
+                  "CuotaRepercutida": "0.21"
+                }
+              },
+              "CuotaTotal": "0.21",
+              "ImporteTotal": "1.21",
+              "Encadenamiento": {
+                "RegistroAnterior": {
+                  "IDEmisorFactura": "[identity]",
+                  "NumSerieFactura": "CI/20261022/39721604913-FOUR-original",
+                  "FechaExpedicionFactura": "22-10-2026",
+                  "Huella": "B010B9778526B535F303D91646E51CF1F5F89074228604F6101F18BF7744A237"
+                }
+              },
+              "FechaHoraHusoGenRegistro": "2026-10-22T06:19:22+02:00",
+              "TipoHuella": "01",
+              "Huella": "B5823466E738F9325C9FECC98F8CB779E1F472D2F7F7342A76EB98B8ED909CC2"
+            },
+            "TimestampUltimaModificacion": "2026-10-22T06:20:23+02:00",
+            "EstadoRegistro": "Anulado",
+            "DatosPresentacion": {
+              "NIFPresentador": "[identity]",
+              "TimestampPresentacion": "2026-10-22T06:18:22+02:00",
+              "IdPeticion": "20261022062023488032"
+            }
+          }
+        ]
+      },
+      "consultationRawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikLRRC:RespuestaConsultaFactuSistemaFacturacion xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\" xmlns:tikLRRC=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaConsultaLR.xsd\"><tikLRRC:Cabecera><tik:IDVersion>1.0</tik:IDVersion><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikLRRC:Cabecera><tikLRRC:PeriodoImputacion><tikLRRC:Ejercicio>2026</tikLRRC:Ejercicio><tikLRRC:Periodo>10</tikLRRC:Periodo></tikLRRC:PeriodoImputacion><tikLRRC:IndicadorPaginacion>N</tikLRRC:IndicadorPaginacion><tikLRRC:ResultadoConsulta>ConDatos</tikLRRC:ResultadoConsulta><tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion><tikLRRC:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI/20261022/39721604913-FOUR-original</tik:NumSerieFactura><tik:FechaExpedicionFactura>22-10-2026</tik:FechaExpedicionFactura></tikLRRC:IDFactura><tikLRRC:DatosRegistroFacturacion><tikLRRC:TipoFactura>F2</tikLRRC:TipoFactura><tikLRRC:DescripcionOperacion>Prueba de integración en preproducción</tikLRRC:DescripcionOperacion><tikLRRC:Desglose><tik:DetalleDesglose><tik:ClaveRegimen>01</tik:ClaveRegimen><tik:CalificacionOperacion>S1</tik:CalificacionOperacion><tik:TipoImpositivo>21</tik:TipoImpositivo><tik:BaseImponibleOimporteNoSujeto>1</tik:BaseImponibleOimporteNoSujeto><tik:CuotaRepercutida>0.21</tik:CuotaRepercutida></tik:DetalleDesglose></tikLRRC:Desglose><tikLRRC:CuotaTotal>0.21</tikLRRC:CuotaTotal><tikLRRC:ImporteTotal>1.21</tikLRRC:ImporteTotal><tikLRRC:Encadenamiento><tikLRRC:RegistroAnterior><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI/20261022/39721604913-FOUR-original</tik:NumSerieFactura><tik:FechaExpedicionFactura>22-10-2026</tik:FechaExpedicionFactura><tik:Huella>B010B9778526B535F303D91646E51CF1F5F89074228604F6101F18BF7744A237</tik:Huella></tikLRRC:RegistroAnterior></tikLRRC:Encadenamiento><tikLRRC:FechaHoraHusoGenRegistro>2026-10-22T06:19:22+02:00</tikLRRC:FechaHoraHusoGenRegistro><tikLRRC:TipoHuella>01</tikLRRC:TipoHuella><tikLRRC:Huella>B5823466E738F9325C9FECC98F8CB779E1F472D2F7F7342A76EB98B8ED909CC2</tikLRRC:Huella></tikLRRC:DatosRegistroFacturacion><tikLRRC:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-22T06:18:22+02:00</tik:TimestampPresentacion><tik:IdPeticion>20261022062023488032</tik:IdPeticion></tikLRRC:DatosPresentacion><tikLRRC:EstadoRegistro><tikLRRC:TimestampUltimaModificacion>2026-10-22T06:20:23+02:00</tikLRRC:TimestampUltimaModificacion><tikLRRC:EstadoRegistro>Anulado</tikLRRC:EstadoRegistro></tikLRRC:EstadoRegistro></tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion></tikLRRC:RespuestaConsultaFactuSistemaFacturacion>\n</env:Body></env:Envelope>"
+    },
+    "zero": {
+      "sentAt": "2026-10-22T04:21:23.861Z",
+      "record": {
+        "IDVersion": "1.0",
+        "IDFactura": {
+          "IDEmisorFactura": "[identity]",
+          "NumSerieFactura": "CI/20261022/39721604913-FOUR-zero",
+          "FechaExpedicionFactura": "22-10-2026"
+        },
+        "RefExterna": "CI-39721604913-FOUR-zero",
+        "NombreRazonEmisor": "[identity]",
+        "TipoFactura": "F2",
+        "DescripcionOperacion": "Prueba de integración en preproducción",
+        "Desglose": [
+          {
+            "ClaveRegimen": "01",
+            "TipoImpositivo": "21.00",
+            "BaseImponibleOimporteNoSujeto": "0.00",
+            "CuotaRepercutida": "0.00",
+            "CalificacionOperacion": "S1"
+          }
+        ],
+        "CuotaTotal": "0.00",
+        "ImporteTotal": "0.00",
+        "Encadenamiento": {
+          "PrimerRegistro": "S"
+        },
+        "SistemaInformatico": {
+          "NombreRazon": "[identity]",
+          "NIF": "[identity]",
+          "NombreSistemaInformatico": "Waitron VeriFactu test",
+          "IdSistemaInformatico": "WT",
+          "Version": "0.1.0",
+          "NumeroInstalacion": "CI-39721604913-FOUR-zero",
+          "TipoUsoPosibleSoloVerifactu": "S",
+          "TipoUsoPosibleMultiOT": "N",
+          "IndicadorMultiplesOT": "N"
+        },
+        "FechaHoraHusoGenRegistro": "2026-10-22T06:21:23+02:00",
+        "TipoHuella": "01",
+        "Huella": "6AE66289D489B08165DA0B201C336E7DF2E27121ADC08D8AAF043A1CA38FF7E6"
+      },
+      "response": {
+        "CSV": "A-UKNGY8QFML9JTR",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-22T06:21:24+02:00"
+        },
+        "EstadoEnvio": "Correcto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI/20261022/39721604913-FOUR-zero",
+              "FechaExpedicionFactura": "22-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Alta"
+            },
+            "RefExterna": "CI-39721604913-FOUR-zero",
+            "EstadoRegistro": "Correcto"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-UKNGY8QFML9JTR</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-22T06:21:24+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Correcto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI/20261022/39721604913-FOUR-zero</tik:NumSerieFactura><tik:FechaExpedicionFactura>22-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion><tikR:RefExterna>CI-39721604913-FOUR-zero</tikR:RefExterna><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": true,
+      "consultation": {
+        "ResultadoConsulta": "ConDatos",
+        "IndicadorPaginacion": "N",
+        "registros": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI/20261022/39721604913-FOUR-zero",
+              "FechaExpedicionFactura": "22-10-2026"
+            },
+            "DatosRegistroFacturacion": {
+              "RefExterna": "CI-39721604913-FOUR-zero",
+              "TipoFactura": "F2",
+              "DescripcionOperacion": "Prueba de integración en preproducción",
+              "Desglose": {
+                "DetalleDesglose": {
+                  "ClaveRegimen": "01",
+                  "CalificacionOperacion": "S1",
+                  "TipoImpositivo": "21",
+                  "BaseImponibleOimporteNoSujeto": "0",
+                  "CuotaRepercutida": "0"
+                }
+              },
+              "CuotaTotal": "0",
+              "ImporteTotal": "0",
+              "Encadenamiento": {
+                "PrimerRegistro": "S"
+              },
+              "FechaHoraHusoGenRegistro": "2026-10-22T06:21:23+02:00",
+              "TipoHuella": "01",
+              "Huella": "6AE66289D489B08165DA0B201C336E7DF2E27121ADC08D8AAF043A1CA38FF7E6"
+            },
+            "TimestampUltimaModificacion": "2026-10-22T06:21:24+02:00",
+            "EstadoRegistro": "Correcto",
+            "DatosPresentacion": {
+              "NIFPresentador": "[identity]",
+              "TimestampPresentacion": "2026-10-22T06:21:24+02:00",
+              "IdPeticion": "20261022062124148197"
+            }
+          }
+        ]
+      },
+      "consultationRawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikLRRC:RespuestaConsultaFactuSistemaFacturacion xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\" xmlns:tikLRRC=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaConsultaLR.xsd\"><tikLRRC:Cabecera><tik:IDVersion>1.0</tik:IDVersion><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikLRRC:Cabecera><tikLRRC:PeriodoImputacion><tikLRRC:Ejercicio>2026</tikLRRC:Ejercicio><tikLRRC:Periodo>10</tikLRRC:Periodo></tikLRRC:PeriodoImputacion><tikLRRC:IndicadorPaginacion>N</tikLRRC:IndicadorPaginacion><tikLRRC:ResultadoConsulta>ConDatos</tikLRRC:ResultadoConsulta><tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion><tikLRRC:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI/20261022/39721604913-FOUR-zero</tik:NumSerieFactura><tik:FechaExpedicionFactura>22-10-2026</tik:FechaExpedicionFactura></tikLRRC:IDFactura><tikLRRC:DatosRegistroFacturacion><tikLRRC:RefExterna>CI-39721604913-FOUR-zero</tikLRRC:RefExterna><tikLRRC:TipoFactura>F2</tikLRRC:TipoFactura><tikLRRC:DescripcionOperacion>Prueba de integración en preproducción</tikLRRC:DescripcionOperacion><tikLRRC:Desglose><tik:DetalleDesglose><tik:ClaveRegimen>01</tik:ClaveRegimen><tik:CalificacionOperacion>S1</tik:CalificacionOperacion><tik:TipoImpositivo>21</tik:TipoImpositivo><tik:BaseImponibleOimporteNoSujeto>0</tik:BaseImponibleOimporteNoSujeto><tik:CuotaRepercutida>0</tik:CuotaRepercutida></tik:DetalleDesglose></tikLRRC:Desglose><tikLRRC:CuotaTotal>0</tikLRRC:CuotaTotal><tikLRRC:ImporteTotal>0</tikLRRC:ImporteTotal><tikLRRC:Encadenamiento><tikLRRC:PrimerRegistro>S</tikLRRC:PrimerRegistro></tikLRRC:Encadenamiento><tikLRRC:FechaHoraHusoGenRegistro>2026-10-22T06:21:23+02:00</tikLRRC:FechaHoraHusoGenRegistro><tikLRRC:TipoHuella>01</tikLRRC:TipoHuella><tikLRRC:Huella>6AE66289D489B08165DA0B201C336E7DF2E27121ADC08D8AAF043A1CA38FF7E6</tikLRRC:Huella></tikLRRC:DatosRegistroFacturacion><tikLRRC:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-22T06:21:24+02:00</tik:TimestampPresentacion><tik:IdPeticion>20261022062124148197</tik:IdPeticion></tikLRRC:DatosPresentacion><tikLRRC:EstadoRegistro><tikLRRC:TimestampUltimaModificacion>2026-10-22T06:21:24+02:00</tikLRRC:TimestampUltimaModificacion><tikLRRC:EstadoRegistro>Correcto</tikLRRC:EstadoRegistro></tikLRRC:EstadoRegistro></tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion></tikLRRC:RespuestaConsultaFactuSistemaFacturacion>\n</env:Body></env:Envelope>"
+    },
+    "validHash": {
+      "sentAt": "2026-10-22T04:22:24.913Z",
+      "record": {
+        "IDVersion": "1.0",
+        "IDFactura": {
+          "IDEmisorFactura": "[identity]",
+          "NumSerieFactura": "CI/20261022/39721604913-FOUR-validHash",
+          "FechaExpedicionFactura": "22-10-2026"
+        },
+        "RefExterna": "CI-39721604913-FOUR-validHash",
+        "NombreRazonEmisor": "[identity]",
+        "TipoFactura": "F2",
+        "DescripcionOperacion": "Prueba de integración en preproducción",
+        "Desglose": [
+          {
+            "ClaveRegimen": "01",
+            "TipoImpositivo": "21.00",
+            "BaseImponibleOimporteNoSujeto": "1.00",
+            "CuotaRepercutida": "0.21",
+            "CalificacionOperacion": "S1"
+          }
+        ],
+        "CuotaTotal": "0.21",
+        "ImporteTotal": "1.21",
+        "Encadenamiento": {
+          "PrimerRegistro": "S"
+        },
+        "SistemaInformatico": {
+          "NombreRazon": "[identity]",
+          "NIF": "[identity]",
+          "NombreSistemaInformatico": "Waitron VeriFactu test",
+          "IdSistemaInformatico": "WT",
+          "Version": "0.1.0",
+          "NumeroInstalacion": "CI-39721604913-FOUR-validHash",
+          "TipoUsoPosibleSoloVerifactu": "S",
+          "TipoUsoPosibleMultiOT": "N",
+          "IndicadorMultiplesOT": "N"
+        },
+        "FechaHoraHusoGenRegistro": "2026-10-22T06:22:24+02:00",
+        "TipoHuella": "01",
+        "Huella": "2F83AB7B03A5A1E6DBAC51B8CCD50CA029820932C10B7B79BC90717E6CEFDB09"
+      },
+      "response": {
+        "CSV": "A-CENAQ257EL3YYY",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-22T06:22:25+02:00"
+        },
+        "EstadoEnvio": "Correcto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI/20261022/39721604913-FOUR-validHash",
+              "FechaExpedicionFactura": "22-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Alta"
+            },
+            "RefExterna": "CI-39721604913-FOUR-validHash",
+            "EstadoRegistro": "Correcto"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-CENAQ257EL3YYY</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-22T06:22:25+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Correcto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI/20261022/39721604913-FOUR-validHash</tik:NumSerieFactura><tik:FechaExpedicionFactura>22-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion><tikR:RefExterna>CI-39721604913-FOUR-validHash</tikR:RefExterna><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": true,
+      "consultation": {
+        "ResultadoConsulta": "ConDatos",
+        "IndicadorPaginacion": "N",
+        "registros": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI/20261022/39721604913-FOUR-validHash",
+              "FechaExpedicionFactura": "22-10-2026"
+            },
+            "DatosRegistroFacturacion": {
+              "RefExterna": "CI-39721604913-FOUR-validHash",
+              "TipoFactura": "F2",
+              "DescripcionOperacion": "Prueba de integración en preproducción",
+              "Desglose": {
+                "DetalleDesglose": {
+                  "ClaveRegimen": "01",
+                  "CalificacionOperacion": "S1",
+                  "TipoImpositivo": "21",
+                  "BaseImponibleOimporteNoSujeto": "1",
+                  "CuotaRepercutida": "0.21"
+                }
+              },
+              "CuotaTotal": "0.21",
+              "ImporteTotal": "1.21",
+              "Encadenamiento": {
+                "PrimerRegistro": "S"
+              },
+              "FechaHoraHusoGenRegistro": "2026-10-22T06:22:24+02:00",
+              "TipoHuella": "01",
+              "Huella": "2F83AB7B03A5A1E6DBAC51B8CCD50CA029820932C10B7B79BC90717E6CEFDB09"
+            },
+            "TimestampUltimaModificacion": "2026-10-22T06:22:25+02:00",
+            "EstadoRegistro": "Correcto",
+            "DatosPresentacion": {
+              "NIFPresentador": "[identity]",
+              "TimestampPresentacion": "2026-10-22T06:22:25+02:00",
+              "IdPeticion": "20261022062225168010"
+            }
+          }
+        ]
+      },
+      "consultationRawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikLRRC:RespuestaConsultaFactuSistemaFacturacion xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\" xmlns:tikLRRC=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaConsultaLR.xsd\"><tikLRRC:Cabecera><tik:IDVersion>1.0</tik:IDVersion><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikLRRC:Cabecera><tikLRRC:PeriodoImputacion><tikLRRC:Ejercicio>2026</tikLRRC:Ejercicio><tikLRRC:Periodo>10</tikLRRC:Periodo></tikLRRC:PeriodoImputacion><tikLRRC:IndicadorPaginacion>N</tikLRRC:IndicadorPaginacion><tikLRRC:ResultadoConsulta>ConDatos</tikLRRC:ResultadoConsulta><tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion><tikLRRC:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI/20261022/39721604913-FOUR-validHash</tik:NumSerieFactura><tik:FechaExpedicionFactura>22-10-2026</tik:FechaExpedicionFactura></tikLRRC:IDFactura><tikLRRC:DatosRegistroFacturacion><tikLRRC:RefExterna>CI-39721604913-FOUR-validHash</tikLRRC:RefExterna><tikLRRC:TipoFactura>F2</tikLRRC:TipoFactura><tikLRRC:DescripcionOperacion>Prueba de integración en preproducción</tikLRRC:DescripcionOperacion><tikLRRC:Desglose><tik:DetalleDesglose><tik:ClaveRegimen>01</tik:ClaveRegimen><tik:CalificacionOperacion>S1</tik:CalificacionOperacion><tik:TipoImpositivo>21</tik:TipoImpositivo><tik:BaseImponibleOimporteNoSujeto>1</tik:BaseImponibleOimporteNoSujeto><tik:CuotaRepercutida>0.21</tik:CuotaRepercutida></tik:DetalleDesglose></tikLRRC:Desglose><tikLRRC:CuotaTotal>0.21</tikLRRC:CuotaTotal><tikLRRC:ImporteTotal>1.21</tikLRRC:ImporteTotal><tikLRRC:Encadenamiento><tikLRRC:PrimerRegistro>S</tikLRRC:PrimerRegistro></tikLRRC:Encadenamiento><tikLRRC:FechaHoraHusoGenRegistro>2026-10-22T06:22:24+02:00</tikLRRC:FechaHoraHusoGenRegistro><tikLRRC:TipoHuella>01</tikLRRC:TipoHuella><tikLRRC:Huella>2F83AB7B03A5A1E6DBAC51B8CCD50CA029820932C10B7B79BC90717E6CEFDB09</tikLRRC:Huella></tikLRRC:DatosRegistroFacturacion><tikLRRC:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-22T06:22:25+02:00</tik:TimestampPresentacion><tik:IdPeticion>20261022062225168010</tik:IdPeticion></tikLRRC:DatosPresentacion><tikLRRC:EstadoRegistro><tikLRRC:TimestampUltimaModificacion>2026-10-22T06:22:25+02:00</tikLRRC:TimestampUltimaModificacion><tikLRRC:EstadoRegistro>Correcto</tikLRRC:EstadoRegistro></tikLRRC:EstadoRegistro></tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion></tikLRRC:RespuestaConsultaFactuSistemaFacturacion>\n</env:Body></env:Envelope>"
+    },
+    "wrongHash": {
+      "sentAt": "2026-10-22T04:23:25.520Z",
+      "record": {
+        "IDVersion": "1.0",
+        "IDFactura": {
+          "IDEmisorFactura": "[identity]",
+          "NumSerieFactura": "CI/20261022/39721604913-FOUR-wrongHash",
+          "FechaExpedicionFactura": "22-10-2026"
+        },
+        "RefExterna": "CI-39721604913-FOUR-wrongHash",
+        "NombreRazonEmisor": "[identity]",
+        "TipoFactura": "F2",
+        "DescripcionOperacion": "Prueba de integración en preproducción",
+        "Desglose": [
+          {
+            "ClaveRegimen": "01",
+            "TipoImpositivo": "21.00",
+            "BaseImponibleOimporteNoSujeto": "1.00",
+            "CuotaRepercutida": "0.21",
+            "CalificacionOperacion": "S1"
+          }
+        ],
+        "CuotaTotal": "0.21",
+        "ImporteTotal": "1.21",
+        "Encadenamiento": {
+          "PrimerRegistro": "S"
+        },
+        "SistemaInformatico": {
+          "NombreRazon": "[identity]",
+          "NIF": "[identity]",
+          "NombreSistemaInformatico": "Waitron VeriFactu test",
+          "IdSistemaInformatico": "WT",
+          "Version": "0.1.0",
+          "NumeroInstalacion": "CI-39721604913-FOUR-wrongHash",
+          "TipoUsoPosibleSoloVerifactu": "S",
+          "TipoUsoPosibleMultiOT": "N",
+          "IndicadorMultiplesOT": "N"
+        },
+        "FechaHoraHusoGenRegistro": "2026-10-22T06:23:25+02:00",
+        "TipoHuella": "01",
+        "Huella": "02C420EB5409F2B2535715F04487C3ACD69703875CE7799514576E66E0F450C1"
+      },
+      "response": {
+        "CSV": "A-8QGF8CEETQM8BK",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-22T06:23:25+02:00"
+        },
+        "EstadoEnvio": "ParcialmenteCorrecto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI/20261022/39721604913-FOUR-wrongHash",
+              "FechaExpedicionFactura": "22-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Alta"
+            },
+            "RefExterna": "CI-39721604913-FOUR-wrongHash",
+            "EstadoRegistro": "AceptadoConErrores",
+            "CodigoErrorRegistro": 2000,
+            "DescripcionErrorRegistro": "El cálculo de la huella suministrada es incorrecta.  \n Datos de entrada cálculo huella: \nIDEmisorFactura=[identity]&NumSerieFactura=CI/20261022/39721604913-FOUR-wrongHash&FechaExpedicionFactura=22-10-2026&TipoFactura=F2&CuotaTotal=0.21&ImporteTotal=1.21&Huella=&FechaHoraHusoGenRegistro=2026-10-22T06:23:25+02:00\n Huella calculada: D2C420EB5409F2B2535715F04487C3ACD69703875CE7799514576E66E0F450C1"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-8QGF8CEETQM8BK</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-22T06:23:25+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>ParcialmenteCorrecto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI/20261022/39721604913-FOUR-wrongHash</tik:NumSerieFactura><tik:FechaExpedicionFactura>22-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion><tikR:RefExterna>CI-39721604913-FOUR-wrongHash</tikR:RefExterna><tikR:EstadoRegistro>AceptadoConErrores</tikR:EstadoRegistro><tikR:CodigoErrorRegistro>2000</tikR:CodigoErrorRegistro><tikR:DescripcionErrorRegistro>El cálculo de la huella suministrada es incorrecta.  \n Datos de entrada cálculo huella: \nIDEmisorFactura=[identity]&amp;NumSerieFactura=CI/20261022/39721604913-FOUR-wrongHash&amp;FechaExpedicionFactura=22-10-2026&amp;TipoFactura=F2&amp;CuotaTotal=0.21&amp;ImporteTotal=1.21&amp;Huella=&amp;FechaHoraHusoGenRegistro=2026-10-22T06:23:25+02:00\n Huella calculada: D2C420EB5409F2B2535715F04487C3ACD69703875CE7799514576E66E0F450C1</tikR:DescripcionErrorRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": true,
+      "consultation": {
+        "ResultadoConsulta": "ConDatos",
+        "IndicadorPaginacion": "N",
+        "registros": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI/20261022/39721604913-FOUR-wrongHash",
+              "FechaExpedicionFactura": "22-10-2026"
+            },
+            "DatosRegistroFacturacion": {
+              "RefExterna": "CI-39721604913-FOUR-wrongHash",
+              "TipoFactura": "F2",
+              "DescripcionOperacion": "Prueba de integración en preproducción",
+              "Desglose": {
+                "DetalleDesglose": {
+                  "ClaveRegimen": "01",
+                  "CalificacionOperacion": "S1",
+                  "TipoImpositivo": "21",
+                  "BaseImponibleOimporteNoSujeto": "1",
+                  "CuotaRepercutida": "0.21"
+                }
+              },
+              "CuotaTotal": "0.21",
+              "ImporteTotal": "1.21",
+              "Encadenamiento": {
+                "PrimerRegistro": "S"
+              },
+              "FechaHoraHusoGenRegistro": "2026-10-22T06:23:25+02:00",
+              "TipoHuella": "01",
+              "Huella": "02C420EB5409F2B2535715F04487C3ACD69703875CE7799514576E66E0F450C1"
+            },
+            "TimestampUltimaModificacion": "2026-10-22T06:23:25+02:00",
+            "EstadoRegistro": "AceptadoConErrores",
+            "CodigoErrorRegistro": 2000,
+            "DescripcionErrorRegistro": "El cálculo de la huella suministrada es incorrecta.",
+            "DatosPresentacion": {
+              "NIFPresentador": "[identity]",
+              "TimestampPresentacion": "2026-10-22T06:23:25+02:00",
+              "IdPeticion": "20261022062325783033"
+            }
+          }
+        ]
+      },
+      "consultationRawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikLRRC:RespuestaConsultaFactuSistemaFacturacion xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\" xmlns:tikLRRC=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaConsultaLR.xsd\"><tikLRRC:Cabecera><tik:IDVersion>1.0</tik:IDVersion><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikLRRC:Cabecera><tikLRRC:PeriodoImputacion><tikLRRC:Ejercicio>2026</tikLRRC:Ejercicio><tikLRRC:Periodo>10</tikLRRC:Periodo></tikLRRC:PeriodoImputacion><tikLRRC:IndicadorPaginacion>N</tikLRRC:IndicadorPaginacion><tikLRRC:ResultadoConsulta>ConDatos</tikLRRC:ResultadoConsulta><tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion><tikLRRC:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI/20261022/39721604913-FOUR-wrongHash</tik:NumSerieFactura><tik:FechaExpedicionFactura>22-10-2026</tik:FechaExpedicionFactura></tikLRRC:IDFactura><tikLRRC:DatosRegistroFacturacion><tikLRRC:RefExterna>CI-39721604913-FOUR-wrongHash</tikLRRC:RefExterna><tikLRRC:TipoFactura>F2</tikLRRC:TipoFactura><tikLRRC:DescripcionOperacion>Prueba de integración en preproducción</tikLRRC:DescripcionOperacion><tikLRRC:Desglose><tik:DetalleDesglose><tik:ClaveRegimen>01</tik:ClaveRegimen><tik:CalificacionOperacion>S1</tik:CalificacionOperacion><tik:TipoImpositivo>21</tik:TipoImpositivo><tik:BaseImponibleOimporteNoSujeto>1</tik:BaseImponibleOimporteNoSujeto><tik:CuotaRepercutida>0.21</tik:CuotaRepercutida></tik:DetalleDesglose></tikLRRC:Desglose><tikLRRC:CuotaTotal>0.21</tikLRRC:CuotaTotal><tikLRRC:ImporteTotal>1.21</tikLRRC:ImporteTotal><tikLRRC:Encadenamiento><tikLRRC:PrimerRegistro>S</tikLRRC:PrimerRegistro></tikLRRC:Encadenamiento><tikLRRC:FechaHoraHusoGenRegistro>2026-10-22T06:23:25+02:00</tikLRRC:FechaHoraHusoGenRegistro><tikLRRC:TipoHuella>01</tikLRRC:TipoHuella><tikLRRC:Huella>02C420EB5409F2B2535715F04487C3ACD69703875CE7799514576E66E0F450C1</tikLRRC:Huella></tikLRRC:DatosRegistroFacturacion><tikLRRC:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-22T06:23:25+02:00</tik:TimestampPresentacion><tik:IdPeticion>20261022062325783033</tik:IdPeticion></tikLRRC:DatosPresentacion><tikLRRC:EstadoRegistro><tikLRRC:TimestampUltimaModificacion>2026-10-22T06:23:25+02:00</tikLRRC:TimestampUltimaModificacion><tikLRRC:EstadoRegistro>AceptadoConErrores</tikLRRC:EstadoRegistro><tikLRRC:CodigoErrorRegistro>2000</tikLRRC:CodigoErrorRegistro><tikLRRC:DescripcionErrorRegistro>El cálculo de la huella suministrada es incorrecta.</tikLRRC:DescripcionErrorRegistro></tikLRRC:EstadoRegistro></tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion></tikLRRC:RespuestaConsultaFactuSistemaFacturacion>\n</env:Body></env:Envelope>"
+    }
+  },
+  "redaction": "Configured taxpayer, software producer and recipient identities are replaced by [identity]. Request records are projections, not captured request SOAP. Redaction changes hash inputs; do not recompute fingerprints from these projections. Raw reply text is preserved apart from identity redaction.",
+  "limits": [
+    "Synthetic single-record submissions and four lookups, not Waitron outbox execution.",
+    "No production observation, legal conclusion or automatic filing-policy change.",
+    "Cancellation retry returned Correcto rather than duplicate 3000; that duplicate-response path remains unobserved in this run."
+  ]
+}

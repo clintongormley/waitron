@@ -1,5 +1,30 @@
 # Four AEAT test-service observations (A985)
 
+## Completed run, 2026-10-22
+
+The owner approved library PR #146. It merged as
+`28a987963a69e3faa08814481b013d2982fa95b0`; package CI 39721481538 and Documentation
+39721481488 passed before the single `four-behaviours` dispatch,
+[run 39721604913](https://github.com/waitron-io/verifactu/actions/runs/39721604913).
+Do not dispatch another run under A985.
+
+The cancellation and its unchanged retry both returned `Correcto` and named the original invoice.
+The following lookup returned `Anulado` with the cancellation's fingerprint. The €0.00 F2 returned
+`Correcto`, as did its lookup. The corrupted fingerprint returned `AceptadoConErrores`/`2000`;
+the lookup retained that warning and the supplied wrong fingerprint. The valid-fingerprint
+control returned `Correcto`. The workflow failed because it predicted a duplicate response for
+the cancellation retry. All six submissions and four lookups were collected; no rerun was sent.
+
+Read the [dated findings and limits](verifactu-findings.md#19-cancellation-replay-zero-total-and-wrong-fingerprint-added-2026-10-22-a985)
+and [full redacted evidence](../superpowers/specs/2026-10-22-aeat-four-behaviours-evidence.json).
+The owner's fingerprint refuse-versus-file-and-flag choice remains open. No Waitron behaviour
+changed, and the unobserved cancellation duplicate-response path remains open.
+
+## Preparation record, before the run
+
+The instructions below record the predictions and authorisation procedure used for this run.
+Their pending language describes preparation, not work still to execute.
+
 You need real test-service replies before treating four behaviours as established: cancellation
 replay, the invoice identity in a cancellation reply, a zero-total simplified invoice, and a
 corrupted fingerprint. The library's local fake cannot answer those questions.

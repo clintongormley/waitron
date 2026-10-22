@@ -1348,10 +1348,67 @@ these observations to production. The results do not call for an inline A942 cha
 
 ---
 
+## 19. Cancellation replay, zero total and wrong fingerprint (added 2026-10-22, A985)
+
+You can inspect the [redacted request records, parsed replies and raw SOAP replies](../superpowers/specs/2026-10-22-aeat-four-behaviours-evidence.json).
+The owner approved [library PR #146](https://github.com/waitron-io/verifactu/pull/146), merged as
+`28a987963a69e3faa08814481b013d2982fa95b0`. Its package and documentation workflows passed on
+that merge before the single dispatch of
+[run 39721604913](https://github.com/waitron-io/verifactu/actions/runs/39721604913).
+The `four-behaviours` job ran on `main`, in `aeat-preproduction`, from 04:18:08 to 04:23:27 UTC.
+
+Before sending, the script predicted `Correcto` for the original, cancellation, zero-total F2
+and valid-fingerprint control; duplicate `3000` with stored state `Anulada` for the unchanged
+cancellation retry; and `AceptadoConErrores` with `2000` for the corrupted fingerprint.
+
+| Submission | Sent, UTC | AEAT batch / record status | Error code | Subsequent lookup |
+| --- | --- | --- | --- | --- |
+| Original €1.21 F2 | 04:18:21.426 | `Correcto` / `Correcto` | Absent | Not requested separately |
+| Cancellation of that invoice | 04:19:22.772 | `Correcto` / `Correcto` | Absent | See retry |
+| Same cancellation again | 04:20:23.207 | `Correcto` / `Correcto` | Absent | `Anulado`, with the cancellation's fingerprint |
+| F2 with base, tax and total `0.00` | 04:21:23.861 | `Correcto` / `Correcto` | Absent | `Correcto`; base, tax and total rendered as `0` |
+| Fresh €1.21 F2, calculated fingerprint | 04:22:24.913 | `Correcto` / `Correcto` | Absent | `Correcto`, same fingerprint |
+| Fresh €1.21 F2, one fingerprint character changed | 04:23:25.520 | `ParcialmenteCorrecto` / `AceptadoConErrores` | `2000` | `AceptadoConErrores`, `2000`, same supplied wrong fingerprint |
+
+Both cancellation replies name the original invoice: number
+`CI/20261022/39721604913-FOUR-original`, issue date `22-10-2026` and the same redacted issuer.
+Their operation is `Anulacion`. The cancellation and retry request records are equal, including
+generation time and fingerprint. The lookup after the retry names that invoice and reports
+`Anulado`; its fingerprint equals the cancellation's, rather than the original alta's.
+This run did **not** return a duplicate response, so it does not exercise Waitron's
+`3000`/`Anulada` handling. No Waitron outbox was run.
+
+For the wrong fingerprint AEAT says: “El cálculo de la huella suministrada es incorrecta.”
+Its reply gives a calculated fingerprint beginning `D2C420EB`; the supplied and subsequently
+stored fingerprint begins `02C420EB`. The remaining 63 characters match. The valid-fingerprint
+control is a separate fresh invoice, not a correction or resend of this invoice.
+
+All six submission replies and four lookups were collected. The workflow conclusion is
+**failure**, solely because the repeated cancellation returned `Correcto` instead of the
+predicted duplicate. The six per-stage log entries equal the final evidence entries. The
+retained raw SOAP was separately parsed to compare invoice identities, states, error codes
+and stored fingerprints with the parsed replies. No prediction was changed and no second run
+was dispatched.
+
+The fingerprint policy remains the owner's choice: refuse a locally detected mismatch before
+the immutable write, or keep filing and flagging it. The recommendation is to refuse before
+that write, because this experiment retained the supplied wrong fingerprint even after AEAT
+flagged it. Such a change would block that issuance and needs its own authorised fiscal work;
+A985 changes no writer, stored record or filing policy.
+
+These are observations of synthetic single-record submissions at the TEST service. They do not
+establish production behaviour, every cancellation or zero-total invoice shape, or a legal
+remedy. Request records are projections, not captured request SOAP. Configured identities are
+redacted in both projections and replies, so you cannot recompute the original fingerprints
+from the published projections.
+
+---
+
 ## Sources
 
 | Source | Type |
 | --- | --- |
+| [A985 full evidence](../superpowers/specs/2026-10-22-aeat-four-behaviours-evidence.json), [run 39721604913](https://github.com/waitron-io/verifactu/actions/runs/39721604913), 2026-10-22 | primary TEST-service replies: cancellation retry `Correcto`, zero F2 `Correcto`, wrong fingerprint `AceptadoConErrores`/`2000`; six submission replies and four lookups, with the limits in §19 |
 | [A946 full outage-header evidence](../superpowers/specs/2026-10-21-aeat-outage-flag-evidence.json), [run 39560851006](https://github.com/waitron-io/verifactu/actions/runs/39560851006), 2026-10-21 | primary test-service replies: all four `Correcto`; workflow failed its expected delayed-record warning; limits in §18 |
 | [W41s-1 saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json), 2026-10-05 | synthetic AEAT preproduction observations — request projections and parsed replies, not raw SOAP bytes; limits in §16 |
 | BOE-A-2023-24840 — RD 1007/2023 (RRSIF), arts. 8, 12, 14, 15, 16 | primary |

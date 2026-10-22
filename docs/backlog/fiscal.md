@@ -621,6 +621,15 @@ library's parser, which backs off the whole envío; that back-off raises no inci
 CSV, and every resend would meet the same refusal, so those records would wait until the four-hour
 delayed-submission alert (`fiscal.submission_delayed`,
 `packages/fiscal-verifactu/src/submission-alerts.ts`).
+
+**2026-10-22, A985 observation:** the “Still open” cancellation-reply identity question above is
+answered for the two synthetic cancellation submissions in
+[run 39721604913](https://github.com/waitron-io/verifactu/actions/runs/39721604913): both replies
+named the cancelled invoice and operation `Anulacion`. The unchanged retry returned `Correcto`,
+not duplicate `3000`; its lookup returned `Anulado` with the cancellation's fingerprint.
+The duplicate-response path remains unobserved in this run. See the
+[dated findings and limits](../compliance/verifactu-findings.md#19-cancellation-replay-zero-total-and-wrong-fingerprint-added-2026-10-22-a985).
+
 **Re-examine the hold behind an unknown outcome once the asesor answers — OPEN (waiting on the
 asesor; owner 2026-10-06).** `claimBatch` in `packages/fiscal-verifactu/src/drain.ts` does not send a
 record while an earlier record of its chain is `enviando` or waits for a retry (W41s-2, #1213,

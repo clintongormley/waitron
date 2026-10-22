@@ -234,15 +234,16 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   and how consent is withdrawn._
 
 - **Loose ends left by A230 (`@waitron/verifactu` 0.2.1, #1099).**
-  A985 prepares the real-service probes; the library owner gate and live observations remain
-  open. [Execution handoff](compliance/aeat-four-behaviours-probe-handoff.md).
   - A resent cancellation AEAT already holds now counts as accepted when AEAT's stored fingerprint
     matches the cancellation's (`drain.ts`'s `handleDuplicate`; a mismatch is refused with
-    `fiscal.duplicado_anulado`). Shown against the library's fake only; what real AEAT answers to a
-    resent cancellation is not established. The owner may want to confirm this choice.
-  - `HUELLA_MISMATCH` is filed and flagged, not refused. It is not expected to occur, since
-    Waitron's own builder computes the fingerprint; nothing tests that it cannot. Refusing it may
-    be preferred since a wrong fingerprint is permanent.
+    `fiscal.duplicado_anulado`). The TEST-service retry in A985 returned `Correcto`, with a
+    subsequent lookup `Anulado` and the matching cancellation fingerprint. A real
+    `3000`/`Anulada` response and Waitron's handling of it remain unobserved in that run.
+    [Findings](compliance/verifactu-findings.md#19-cancellation-replay-zero-total-and-wrong-fingerprint-added-2026-10-22-a985).
+  - **Owner choice: refuse a locally detected `HUELLA_MISMATCH` before the immutable write,
+    or keep filing and flagging it.** A985's TEST reply was `AceptadoConErrores`/`2000`, and
+    lookup retained the supplied wrong fingerprint. Recommendation: refuse before the write;
+    any change needs its own authorised fiscal item. Production behaviour remains unmeasured.
   - A voided sale whose lookup AEAT answers under the sale's own reference is not handled; not
     shown to happen either way.
   - An unusable `TiempoEsperaEnvio` is not recorded anywhere (the raw value is dropped).
@@ -433,10 +434,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   an accept or a different-code refusal. A manual release remains Task 8.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
-- **Still open after W41s-3c (#1304)** — no run against real AEAT has shown that a cancellation's
-  reply line names the cancelled invoice.
-  [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
-
 - **Re-examine the hold behind an unknown outcome once the asesor answers** — OPEN (waiting on the
   asesor; owner 2026-10-06). The decision is put to the asesor as
   [Q47](compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12)
@@ -462,12 +459,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   (`packages/fiscal-verifactu/src/drain.test.ts`) still reads like the old hold. It is true for the
   first pass it checks, but since #1596 a cancellation of a refused original is set aside and holds
   nothing: retitle it on the next touch.
-
-- **A 0.00 simplified invoice:** B17's departure, and since B28 (#1005) Pay on a bill whose total is
-  zero, file one; whether AEAT accepts it was not tested. Left open by service Task 17 (#991, a
-  table that leaves without paying).
-  A985's [probe handoff](compliance/aeat-four-behaviours-probe-handoff.md) keeps this open until the
-  library owner gate and actual AEAT test-service run are complete.
 
 - **Loose ends left by C126 (cancelling an order whose invoice was issued credits it, #1030).**
   [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
