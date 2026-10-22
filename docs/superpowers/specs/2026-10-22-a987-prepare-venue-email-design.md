@@ -1,4 +1,119 @@
+# A987: approved venue email amendment
+
+## Dated amendment: approved delivery routes and build boundary, 2026-10-22
+
+This amendment governs implementation. The complete earlier design follows unchanged, including
+its earlier A998 note, status, questions, experiments and source references. Those are historical;
+neither their line numbers nor their descriptions of today's permissions are current evidence.
+Read this amendment together with the [implementation plan](../plans/2026-10-22-a987-prepare-venue-email.md).
+This milestone changes documentation only and claims no activated Cloud feature or runtime qualification.
+
+### Approved answers and the part that can be built now
+
+The owner answered on 2026-10-22 at approximately 03:30–03:35.
+The first answer says, "We need to be able to use the waitron cloud email service, or to configure
+the SMTP server of the user so that cloud user not required." The second says, "Once we have cloud,
+the demo can use that instead (if the user creates an account, otherwise the demo mailbox)."
+The subsequent answer, "Approve the rest of the mail setup", approves O1A through O5A with those
+two requirements folded in. No further O1–O5 approval is needed.
+
+- You can use **Waitron Cloud or your own SMTP server**. A Cloud account is never required for
+  Prepare or Live. Build SMTP and the Demo mailbox first; retain a dormant Cloud integration
+  boundary. Do not invent a Cloud URL, credential purpose, sender address, enrolment flow or API.
+- Once the Cloud route is released and usable, Demo with a Cloud account uses Cloud for real mail;
+  Demo without an account uses the demo mailbox. Until then, the local slice implements the
+  unlinked Demo mailbox branch only. It must neither present a linked Demo as working nor silently
+  capture messages selected for Cloud. A Cloud account alone is not a usable configured route.
+- **O1A:** outside development, Prepare needs a usable delivery route before setup completes.
+  With Cloud dormant, that means valid SMTP settings and the wizard's accepted test. Prepare
+  never falls back to capture. After an admin removes the route, it reports unavailable mail and
+  stops offering invoice email; it does not stop trading. Live keeps the same distinction between
+  its initial setup requirement and later operation without a route.
+- **O2A:** a fresh Live setup asks again. Configuration export carries no email secrets or SMTP
+  settings; no transfer or backward-data migration is added.
+- **O3A:** no untrusted office certificate support and no insecure bypass. Keep required STARTTLS
+  or implicit TLS and certificate verification. A test-only trust anchor never becomes an HTTP,
+  wizard, credential or deployment setting. The office-certificate case remains in the backlog.
+- **O4A:** Settings → Email in Prepare and Live, visible to managers and admins. Reading is distinct
+  from changing the saved route. Demo retains the capture link for admins when capture is active.
+- **O5A:** use the venue location's name as the sender display name, with the configured sender
+  mailbox, through nodemailer's address object. The session's `venueName` is the legal name
+  (`me-api.ts:284-287` at the source baseline below), so it is not this value. Extend this to invoice
+  email envelopes only after the A739 reservation is released. Receipt text, invoice PDF contents,
+  subjects and message bodies are outside this naming change.
+
+Lane D's D102 is blocked on the owner's production SES account, sender and test authority, with
+hands-on work on **3 November** (runner-supplied dependency status, not independently qualified
+here). Cloud activation remains blocked until D102 releases its actual contract and both lanes
+pass joint tests, including account-linked Demo. That blocks Cloud activation only. It does not
+block independent SMTP work. No code may label unavailable Cloud `smtp`, treat it as configured,
+accept it in a setup requirement, or fall through from selected Cloud to the mailbox.
+
+### Preserve the security fixes already landed
+
+Runner records A998 #1957 and A1000 #1961 as landed. Read-only inspection at
+`7ffef131a8e18cfc9b3634460518ca732a81e0b6` found these current boundaries:
+
+| Operation                        | Current source boundary to preserve                                                                                                                                                                                                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Read redacted relay settings     | `system.manage`; `email-settings-api.ts:35-73`. Managers get `editable: false`. No password or user is returned.                                                                                                                                                                     |
+| Save the relay                   | `person.admin`; `email-settings-api.ts:74-87`. Demo and Prepare currently refuse changes. A987 opens Prepare, preserving admin authority.                                                                                                                                            |
+| Test a proposed relay            | `system.manage`, only to the actor's own stored address; `email-settings-api.ts:88-107`. Preserve this scope when opening Prepare tests. Testing does not save the relay.                                                                                                            |
+| Captured-message list            | `person.manage` for route access; only `person.admin` gets messages. A manager gets `{ mode, count: 0, messages: [] }` and Mailpit is not queried; `email-inbox-api.ts:35-44`.                                                                                                       |
+| Captured-message body            | `person.admin`; `email-inbox-api.ts:46-54`. No direct-link exception.                                                                                                                                                                                                                |
+| Another person's sign-in changes | Identity's `authorizePersonLoginChange` and `requireAdminAuthority` in `packages/identity/src/staff.ts`, used again by invitation/resend/reset/reactivation routes. `updatePersonDetails` separately guards changed login email/status. Preserve A1000's non-admin-target cases too. |
+
+The original decisions 2–3, slice 2, manager-edit controls, and takeover/unread findings are
+superseded wherever they conflict with these boundaries. There is currently no dashboard relay
+DELETE route; A987 adds one with `person.admin`, the same authority as PUT. Do not describe this
+as restoring a manager capability. Existing tests to retain include `email-settings-api.test.ts`,
+`email-inbox-api.test.ts`, `management-api.accounts-and-receipt-config.test.ts`, identity's
+`staff-authority.test.ts` and the dashboard's `staff-authority.test.ts`. An inbox-only test cannot
+establish that changing somebody's sign-in is protected. Do not reimplement those fixes.
+
+### Requirements retained and clarified for the plan
+
+Use §6.5's exact classifier codes and conditions; do not classify by provider message text or by
+`ETLS`/`EAUTH` alone. An explicit send deadline takes precedence; otherwise apply the table's row
+order, with its encryption, command, reply and absent-user predicates. Unknown structured errors
+stay `email.test_refused`. Add real SMTP/TLS fixture cases and omission controls as well as pure
+classifier tests. Do not interpret a classified diagnostic as proof of delivery or non-delivery.
+
+The account send's **30-second deadline includes destroying its socket and closing its transport**.
+Handle success, refusal, lost acknowledgement, timeout and late completion. Keep public password
+reset's immediate empty 202 and account privacy, and never add automatic account-mail retries.
+Preserve invoice and reminder outcome/retry rules, primary-only workers and the separate outboxes.
+For a lost acknowledgement, retain uncertainty. Alongside §6.6's three `problem` codes, an
+`uncertain` boolean lets the UI say "may not have been sent" without inventing a fourth code or
+calling an unknown send a definitive refusal. Do not put raw provider errors, passwords, action
+URLs or connection URLs in logs, returned errors or diagnostic callbacks.
+
+A server change may land before a screen only when that screen still works with it. In particular,
+requiring Prepare email before the existing wizard can submit it would strand setup, so switch
+that requirement, stage routing and the matching wizard in one independently green PR. Existing
+Live owner-held setup and publication recovery are separate current paths; preserve their current
+state/ownership guards, and apply the accepted-test rule to the normal initial Email step without
+redesigning fiscal publication. Full fiscal writer/hash/numbering/immutable-record/AEAT,
+registration, restore and golden code stays untouched. No migrations or new dependencies by default.
+
+Refresh cross-lane edit eligibility before each cut; the plan records the source overlaps found on
+2026-10-22.
+A696 reserves boot/setup/configuration integration; A739 reserves invoice email/worker and receipt
+files; A947 reserves setup/fiscal-owner flows; A798-7 reserves boot and box-status sources.
+Their snapshot also lists shared dashboard client, shell, strings, help and guide-catalogue files.
+The plan identifies the affected tasks; execution must refresh eligibility and wait for an actual
+release or explicit scoped handoff on each overlap. A date or a green unrelated PR is not release.
+A966 F, blocked behind A964, owns the later server-email wording move into i18n. A987 leaves
+existing body wording in place and adds no new Spanish in general code; any change to that ownership
+needs an explicit handoff, not an edit to F's questions.
+
+The full original design starts below. Its experiments have not been re-run for this amendment.
+Current-source observations above are readings, not executed behavioral tests.
+
+---
+
 # A987: a venue preparing to go live sends real email
+
 
 > 2026-10-22: A998 supersedes the account-takeover paths described below. Admin sign-in changes,
 > admin invitations and saved SMTP relay changes require `person.admin`; captured messages are

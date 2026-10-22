@@ -408,19 +408,28 @@ today); generalise archive entry routing off declared source ids when a second n
 
 ## A venue preparing to go live sends real email through SMTP (owner 2026-10-03) — OPEN
 
-**A venue preparing to go live sends real email through SMTP (owner 2026-10-03) — OPEN.** "Later
-prepare should use a real SMTP server": a prepare venue would send invitations and password resets
-through SMTP instead of capturing them on the box, and the top bar's inbox link (A227) would become
-demo-only again. Not built.
-(2026-10-03: the owner keeps this item open. A231d's design, below, sends a prepare venue's invoice
-email through its mail server when one is set, and adds no way to set one there.)
-(2026-10-12: A231q lets the till and the dashboard email a full invoice. In a prepare venue it
-still goes through a mail server only when one is set, otherwise to the box's captured inbox
-(`resolveInvoiceEmailDelivery`, `apps/server/src/email-delivery.ts`); the setup wizard and the
-dashboard's Account email page still cannot set one there (`apps/server/src/email-settings-api.ts`), so
-this item stays open.)
-(2026-10-22, A987: design on main, waiting on the owner's decisions:
-[2026-10-22-a987-prepare-venue-email-design.md](../superpowers/specs/2026-10-22-a987-prepare-venue-email-design.md).)
+**A987: build the approved local email route.** The owner approved the two-route design on
+2026-10-22: use Waitron Cloud or your own SMTP server, with no Cloud account required for SMTP.
+The [dated design amendment](../superpowers/specs/2026-10-22-a987-prepare-venue-email-design.md)
+and [implementation plan](../superpowers/plans/2026-10-22-a987-prepare-venue-email.md) govern the
+build; the original design's unanswered questions and earlier permission descriptions are historical.
+
+Prepare requires a usable route before setup completes outside development. Live asks again;
+configuration export carries no mail settings or secrets. Settings → Email serves Prepare and
+Live; saved-relay changes and captured messages remain admin-only. The sender display uses the
+venue location's name. Keep current invoice documents, outbox outcomes and public reset privacy.
+
+Build SMTP and the unlinked Demo mailbox first, checking source reservations before each cut.
+Cloud delivery, including Demo with a Cloud account, waits for D102's released interface and
+joint tests. An unavailable Cloud route cannot satisfy setup or silently fall back to capture.
+The setup-test network-target issue below remains separate open work.
+
+## Support an office SMTP server's own certificate authority
+
+**OPEN.** Owner decision O3A, 2026-10-22: A987 does not add support for an office SMTP server whose
+certificate the box does not trust. Keep certificate verification and encrypted submission on.
+A later design must specify how an admin supplies trust and how it is stored and replaced;
+no insecure bypass is approved.
 
 ## The setup wizard's email test connects wherever an unauthenticated caller points it (A987 review, 2026-10-22) — OPEN
 

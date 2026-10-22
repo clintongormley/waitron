@@ -5818,12 +5818,17 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
     `backup.stream_request_failed`, 403 and `AccessDenied` (A538-10).
     [Detail](backlog/box.md#the-status-and-errorname-on-the-streams-log-lines-other-than-the-pause-checks-403-were-shown-by-reading)
 
-- **A venue preparing to go live sends real email through SMTP (owner 2026-10-03) — OPEN.** "Later
-  prepare should use a real SMTP server": a prepare venue would send invitations and password resets
-  through SMTP instead of capturing them on the box, and the top bar's inbox link (A227) would become
-  demo-only again. Not built. A987: design on main, waiting on the owner's decisions
-  ([design](superpowers/specs/2026-10-22-a987-prepare-venue-email-design.md)).
+- **A venue preparing to go live sends real email through SMTP (A987) — BUILD.** The owner approved
+  Cloud email or your own SMTP server; Cloud is optional. Build the local SMTP route from the
+  [reviewed plan](superpowers/plans/2026-10-22-a987-prepare-venue-email.md); Cloud and linked-Demo
+  delivery wait for D102's released contract and joint tests.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
+
+- **Support an office SMTP server's own certificate authority — OPEN.** A987 keeps certificate
+  verification on and defers this case. Design how an admin supplies trust before adding support;
+  provide no switch that disables verification.
+  [Detail](backlog/box.md#support-an-office-smtp-servers-own-certificate-authority)
+
 
 - **The setup wizard's email test connects wherever an unauthenticated caller points it (A987
   review, 2026-10-22) — OPEN.** In setup mode, `POST /setup-api/email-test` checks no sign-in and
