@@ -104,7 +104,7 @@ async function walk(query: BackupQuery): Promise<boolean> {
       const sif = identities.get(row.sif_id);
       if (
         sif === undefined ||
-        row.sistema_informatico.NIF !== sif.nif ||
+        row.id_emisor_factura !== sif.nif ||
         row.sistema_informatico.IdSistemaInformatico !== sif.id_sistema_informatico ||
         row.sistema_informatico.NumeroInstalacion !== sif.numero_instalacion
       )
