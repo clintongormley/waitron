@@ -1,3 +1,4 @@
+import { TLSSocket } from "node:tls";
 import * as filesystem from "node:fs/promises";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -850,4 +851,71 @@ it("refuses a take with an expired grant, spending nothing, and takes the name w
   const taken = await f.candidates(await f.reconfirm());
   expect(taken.status).toBe(200);
   expect((await taken.json()).state.status).toBe("consumption-intent");
+});
+
+it("a takeover in the middle of a wait keeps the recorded wait, and the first browser's grant dies", async () => {
+  const f = await fixture();
+  const grantA = await f.reconfirm();
+  const first = await f.candidates(grantA);
+  const { preparation } = (await first.json()) as Preparation;
+  expect(preparation.status).toBe("waiting");
+  const snapshot = await (await f.app.request("/setup-api/first-setup/resolution")).json();
+  const recovered = await f.post(
+    "/setup-api/first-setup/resolution/recover",
+    {
+      inspectionId: snapshot.inspectionId,
+      revision: snapshot.revision,
+      ownerGeneration: snapshot.ownerGeneration,
+      clientClaimNonce: randomBytes(32).toString("base64url"),
+      password: PASSWORD,
+    },
+    {},
+    // The route accepts only a TLS socket; this stands in for the HTTPS listener.
+    {
+      incoming: { socket: Object.assign(Object.create(TLSSocket.prototype), { encrypted: true }) },
+    },
+  );
+  expect(recovered.status).toBe(200);
+  const owner = (await recovered.json()) as {
+    state: Parameters<typeof f.headers>[0];
+    capability: string;
+  };
+  const headersB = f.headers(owner.state, owner.capability);
+  internet.clock.set(preparation.targetMs + 1);
+  const challenge = await f.post(
+    "/setup-api/first-setup/preparation",
+    { module: MODULE, proposal: { action: "clock-challenge" } },
+    headersB,
+  );
+  const compared = await f.post(
+    "/setup-api/first-setup/preparation",
+    {
+      module: MODULE,
+      proposal: {
+        action: "compare-clocks",
+        browser: {
+          challengeId: (await challenge.json()).preparation.id,
+          instantMs: internet.clock.wall(),
+        },
+      },
+    },
+    headersB,
+  );
+  const comparisonB = ((await compared.json()) as { preparation: { id: string } }).preparation.id;
+  const token = await f.post(
+    "/setup-api/first-setup/reconfirm",
+    { password: PASSWORD, purpose: "block-use" },
+    headersB,
+  );
+  const grantB = ((await token.json()) as { reconfirmation: string }).reconfirmation;
+  const taken = await f.post(
+    "/setup-api/first-setup/candidates",
+    { module: MODULE, proposal: { comparisonId: comparisonB }, reconfirmation: grantB },
+    headersB,
+  );
+  expect(taken.status).toBe(200);
+  expect((await taken.json()).state.status).toBe("consumption-intent");
+  const late = await f.candidates(grantA);
+  expect(late.status).toBe(403);
+  expect((await late.json()).error.code).toBe("setup.owner_required");
 });
