@@ -443,7 +443,6 @@ The ten-second paired-listing reuse in `resolve()` (`PAIRED_REUSE_MS`,
 `apps/print-agent/src/linux-devices.ts`) is a chosen window, not a measured one. A printer
 unpaired outside the agent can resolve as attached for up to ten seconds.
 
-
 ## A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN
 
 - **A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN.**

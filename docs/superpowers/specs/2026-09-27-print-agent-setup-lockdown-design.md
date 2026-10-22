@@ -4,7 +4,6 @@
 > are retired. Linux job resolution uses the paired printer's Bluetooth address; the shipped
 > RFCOMM sender remains. The earlier implementation names below are historical.
 
-
 Status: design approved by the owner in conversation, 2026-09-27 (revised the same day after the
 owner's questions on failover, restores, printers-only lists and unpairing). Written spec awaiting
 the owner's review.

@@ -3180,7 +3180,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
     });
   });
 
-  it("leaves a bluetooth printer's job waiting when the box that cannot print over Bluetooth does not have it paired", async () => {
+  it("keeps an unseen Bluetooth printer queued when the box reports a different pairing", async () => {
     const app = mountApp();
     const { token } = await joinAndAccept(app);
     const { jobId } = await bluetoothPrinterWithJob(app);
@@ -3193,7 +3193,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
     expect(await jobRow(jobId)).toMatchObject({ status: "queued", attempts: 0, last_error: null });
   });
 
-  it("claims, and does not end, a paired bluetooth printer's job when the box says it can print over Bluetooth", async () => {
+  it("claims a paired Bluetooth printer job when the box reports it visible", async () => {
     const app = mountApp();
     const { token } = await joinAndAccept(app);
     const { mac, jobId } = await bluetoothPrinterWithJob(app);

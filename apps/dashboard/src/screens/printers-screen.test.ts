@@ -9316,17 +9316,15 @@ describe("Bluetooth calibration transport outcomes", () => {
           try {
             const { el } = await mountWith(
               {
-                listRecentJobs: vi
-                  .fn()
-                  .mockResolvedValue([
-                    ended,
-                    job({
-                      id: "j12",
-                      status: "failed",
-                      attempts: 5,
-                      lastError: "printer.unpaired",
-                    }),
-                  ]),
+                listRecentJobs: vi.fn().mockResolvedValue([
+                  ended,
+                  job({
+                    id: "j12",
+                    status: "failed",
+                    attempts: 5,
+                    lastError: "printer.unpaired",
+                  }),
+                ]),
               },
               theme,
             );

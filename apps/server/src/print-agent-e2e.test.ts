@@ -457,7 +457,6 @@ describe("print-agent end to end", () => {
         }),
         visibleDevices: () => devices.visibleDevices(),
         pairedBluetooth: () => devices.pairedBluetooth(),
-
         resolve: (job) => devices.resolve(job),
         fetch: (input, init) => Promise.resolve(app.request(input, init)),
       });
@@ -561,7 +560,6 @@ describe("print-agent end to end", () => {
         }),
         visibleDevices: () => devices.visibleDevices(),
         pairedBluetooth: () => devices.pairedBluetooth(),
-
         resolve: (job) => devices.resolve(job),
         fetch: (input, init) => Promise.resolve(app.request(input, init)),
       });
@@ -715,7 +713,6 @@ describe("a printer deleted while its agent is sending", () => {
           },
           visibleDevices: () => devices.visibleDevices(),
           pairedBluetooth: () => devices.pairedBluetooth(),
-
           resolve: (job) => devices.resolve(job),
           fetch: async (input, init) => {
             const response = await app.request(input, init);
