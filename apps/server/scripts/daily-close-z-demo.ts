@@ -1,3 +1,4 @@
+import { withIssuanceTransaction } from "@waitron/core";
 // Exercises the frozen daily close (cierre Z): `recordDailyClose` snapshots a day rung up through the
 // real write path, reconciles the per-device cash counts and appends a hash-chained `daily_closes` row;
 // `verifyDailyCloseChain` re-walks the chain. Runs in a throwaway venue directory against the fake
@@ -177,7 +178,7 @@ async function ringSale(
       tenders: [{ method: spec.method, amount: spec.total, tipAmount: "0.00", settledAt: spec.at }],
     },
   };
-  await withTransaction(db, async (tx) => {
+  await withIssuanceTransaction(db, async (tx) => {
     await recordSale(tx, backend, input);
   });
 }

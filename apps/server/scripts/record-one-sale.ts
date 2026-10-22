@@ -1,3 +1,4 @@
+import { withIssuanceTransaction } from "@waitron/core";
 // Records exactly one sale through the real Veri*Factu backend, then exits. It never contacts
 // AEAT: the running server's drain submits the record later.
 //
@@ -19,7 +20,7 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { openVenueDatabase, withTransaction } from "@waitron/db";
+import { openVenueDatabase } from "@waitron/db";
 import { deploymentEnvironment } from "../src/config.js";
 import { resolveScriptVenueDir } from "./venue-dir.js";
 import {
@@ -140,7 +141,7 @@ export async function recordOneSale(
       clock,
     };
 
-    return await withTransaction(db, (tx) => recordSale(tx, backend, input));
+    return await withIssuanceTransaction(db, (tx) => recordSale(tx, backend, input));
   } finally {
     await store.close();
   }

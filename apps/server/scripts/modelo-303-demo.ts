@@ -1,3 +1,4 @@
+import { withIssuanceTransaction } from "@waitron/core";
 import { resolveVenueClock } from "@waitron/reporting";
 // Demonstrates `@waitron/reporting`'s VAT roll-ups and the DR303 "por fichero" file over a month of
 // sales rung up through the real write path against the fake `FiscalBackend`, in a throwaway venue
@@ -490,7 +491,7 @@ async function main(): Promise<void> {
         clock: clockAt(instant, offsetMinutes),
         settlement: { kind: "deferred" },
       };
-      const { saleId } = await withTransaction(db, async (tx) => {
+      const { saleId } = await withIssuanceTransaction(db, async (tx) => {
         return recordSale(tx, backend, input);
       });
       saleIds.push(saleId);
@@ -528,7 +529,7 @@ async function main(): Promise<void> {
       clock: clockAt(rect.instant, rect.offsetMinutes),
       authz: { sessionId: authorizerSession.id },
     };
-    await withTransaction(db, async (tx) => {
+    await withIssuanceTransaction(db, async (tx) => {
       await recordCorrection(tx, backend, correctionInput);
     });
 
