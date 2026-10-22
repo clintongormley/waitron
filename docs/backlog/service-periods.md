@@ -368,6 +368,9 @@ code, not run again here.
 
 ## Decisions and deliberate limits
 
+- **One legal seller for the first venue (owner, 2026-10-21, A898).** Every department
+  sells under the same company and tax identity. A different legal seller needs its own venue.
+
 - **`seasons.colour` has no CHECK and no trigger (A721 plan, Decision 1; plan default).** A CHECK
   makes drizzle-kit rebuild `seasons`, whose `DROP TABLE` empties every season's weeks; a wrong value
   only paints grey. `saveSeasons` and the configuration transfer refuse one

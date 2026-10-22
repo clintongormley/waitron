@@ -903,6 +903,9 @@ plans to retire the editor.
 
 ## Decisions and deliberate limits
 
+- **A human account keeps its email (owner, 2026-10-21).** Keep the existing rule:
+  there is no remove-email action.
+
 - **Long top-seller names on the overview (A829, owner, 2026-10-17).** Wrap between words;
   truncate a word wider than its column with an ellipsis and show the full name on hover through
   `title`, as A784 does for a day's name in the Calendar.

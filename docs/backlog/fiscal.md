@@ -789,17 +789,6 @@ job count as a physical exactly-once printing guarantee.
 - If any of them answers differently from the design, the affected part is redesigned in a
   follow-up.
 
-## A889. A box set up before A795 shows "Installed: not recorded"
-
-- **Left open by A795** (design §3.7). A box set up before A795 has a certificate in the vault and
-  no row in `fiscal_certificate_installs`, so the card shows only "Installed: not recorded" with
-  its button, and the expiry alerts and reminder emails, which read the latest install row, cannot
-  see that certificate's expiry date. Until a venue is live such a box is reset, or its certificate
-  is installed again on the card. There is no migration code (CLAUDE.md §3, "No
-  backwards-compatibility or data-migration code until Waitron is in production"). The same holds
-  for a certificate written with `waitron-credentials set --purpose fiscal.aeat`, which records no
-  install.
-
 ## A853. The box makes a company seal's private key itself
 
 - **Decided out of A795 (2026-10-18), design §2.7 and §3.9.** FNMT's seal procedure: «Esta operación
@@ -887,6 +876,22 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
 
 ## Decisions and deliberate limits
 
+- **Pre-squash certificate metadata (A889).** Until a pre-A795 test box is reset under
+  [A760](../operations/a760-migration-squash.md), reinstall its certificate through the
+  certificate card if it shows **Installed: not recorded**. The card's expiry alerts and
+  reminder emails use an install record. A direct `waitron-credentials set --purpose fiscal.aeat`
+  write still creates no install record; use the card when you need that metadata. Removing
+  A889 from open work does not mean the planned A760 reset has run.
+
+- **Lost credentials use reinstallation, not A732's recovery desk (owner, 2026-10-21).**
+  A732's fresh-workspace action, taxpayer-proof routes and recovery desk are withdrawn.
+  If you have lost both the administrator password and recovery sheet, reinstall and set up
+  the box again. This loses its local data and starts a fresh fiscal identity and chain.
+  Copies held separately remain separate recovery sources, requiring their own recovery keys;
+  reinstalling does not recover access to them. See [first Live setup](../operations/first-live-fiscal-setup.md#when-both-credentials-are-lost).
+
+- **A €0 fully comped sale settles when it is comped (owner, 2026-10-21).** Keep the
+  settlement-time behaviour; do not backdate it to the invoice's issue time.
 
 ### A venue without Cloud needs a usable paper-custodian route
 
@@ -1474,22 +1479,3 @@ selected backup’s named node recovery key, archive encryption key where applic
 outside recovery evidence. Follow [the offline restore procedure](../developers/offline-fiscal-restore.md).
 Unresolved first-setup guards currently block restore; the page must say this path is not yet
 available until this item lands. Do not expose retained business records without proof.
-
-## A732. Keep old data and start fresh on this box
-
-Required before any venue goes live. The owner's 16 October 12:20 direction supersedes the
-15 October custodian-only proposal: the active country/fiscal module supplies its proof seat,
-Spain offers taxpayer-certificate signing with a retained NIF match, and at least one route
-must work in every country without an offline computer ceremony.
-
-The [21 October proposed design](../superpowers/specs/2026-10-21-a732-start-fresh-owner-proof-design.md)
-awaits full owner approval before planning or building. It recommends a narrow direct-taxpayer
-certificate route and a new subscription-free recovery desk with independently verified mandates.
-Representative certificates alone would not suffice initially. The desk, its staffing and issuer
-operation, and runtime isolation are proposals requiring approval and later qualification.
-
-Both routes authorise only a separate empty workspace. Preserve the old workspace offline and
-unreadable by the new account; grant no old login, decryption, restore or fiscal activation.
-Missing or contradictory retained module identity stays unresolved; hardware-only isolation
-cannot clear the later activation hold. Retain used/uncertain hour floors and replacement
-declarations. Until implementation lands, this action remains unavailable from repair.

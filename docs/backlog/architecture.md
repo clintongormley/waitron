@@ -583,6 +583,25 @@ until A977).
   `packages/reporting/src/dr303-layout.ts:14–16` and its generator
   (`reference/generate-dr303-layout.py:184–186, 274–275`), which say the guard scans `reporting`.
 
+## Go-live day steps
+
+On go-live day, make these changes together (owner, 2026-10-21 about 15:35–15:40):
+
+1. Replace `CLAUDE.md` §3's **No backwards-compatibility or data-migration code until Waitron
+   is in production** rule with the live-data policy: each release that changes stored data
+   ships a migration that rewrites the live venue's rows. Never reset a production box or
+   edit a shipped migration. Code reads the new form only. Read both forms only while
+   something outside the box, such as Cloud or a till page that has not reloaded, still
+   holds the old form; remove that support in a later release. You may still reset test boxes.
+2. After A979's [operator-procedure inventory](../operations/planning-procedure-audit.md),
+   sweep again for procedures added since its pin and retain them in permanent docs or user
+   guides. Then delete `docs/superpowers/` and `docs/handoffs/`, and gitignore both directories.
+   Check permanent docs for links to the deleted files and keep any instructions still needed.
+
+Keep the current `CLAUDE.md` rule, planning files and ignore settings until go-live day.
+The separate [A760 procedure](../operations/a760-migration-squash.md) retains its own freeze,
+reset and operator gates; this entry does not start that job.
+
 ## Decisions and deliberate limits
 
 **Operator procedures survive the go-live planning cleanup (owner, 2026-10-21).**

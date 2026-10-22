@@ -675,38 +675,6 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
 Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md) (owner, 2026-10-14); kept so older links resolve.
 
 
-## Translate all: the joint fault proof Cloud's release gate asks for
-
-Waitron's side of Translate all (A689) is on `main`, and A689-21 made the box fetch Cloud's results
-one page at a time ([its plan](../superpowers/plans/2026-10-19-translate-all-collect-pages.md)). Its
-part 2a, the Santet run against a local Cloud with Cloud's fake provider, ran on 2026-10-19 and
-passed: two pages per job, every item accounted for, release after the last page, Cloud's copy
-deleted. The record is under Task 21 of [the plan](../superpowers/plans/2026-10-14-translate-all.md).
-
-What is left is part 2b, the joint fault proof. The contract's words: "Do not go live until pinned
-Cloud and Waitron candidates jointly prove multi-page collection, crash/reply-loss retry,
-deduplication, bounded decoded reads and release only after durable completion." The owner chose
-on 2026-10-19 (open question 4) a Cloud script beside Cloud's `scripts/test-waitron-pairing.mjs`,
-built by lane D (D85): a lost page reply, a box restart between pages, a lost release reply, and
-expiry between pages.
-
-- **Cloud must support version 2 before any box built from `main` talks to it.** The box asks for
-  the service with `servicesVersion` 2, which a Cloud without version 2 refuses as an invalid
-  proof, and the box answers that by dropping its lease
-  ([cloud-connection.md](../developers/cloud-connection.md)).
-- **Where the design lives.** Waitron's side is in
-  [the Translate all design](../superpowers/specs/2026-10-14-translate-all-design.md) and
-  [the plan](../superpowers/plans/2026-10-14-translate-all.md). Cloud's side and the wire contract
-  are in the Cloud repository's `docs/superpowers/specs/2026-10-14-translate-all-design.md` and
-  `docs/waitron-integration-contract.md`. Cloud's plan is its
-  `docs/superpowers/plans/2026-10-14-translate-all.md` (24 tasks; 22 to 24 are owner-run
-  measurements with the real key), on waitron-cloud PR #131. The owner approved both specs and
-  both plans on 2026-10-14.
-- **The cap.** Translate all is meant to become a paid subscriber service in Waitron Cloud; for
-  now it is free for connected venues, capped per venue. The owner's approval covers the proposed
-  $5 per venue per month cap and Cloud's submit allowance (4 jobs in flight, 1 per address).
-  Cloud's spec still says "proposed" until its first implementation change updates it.
-
 ## Translate all: shared collect-page test vectors
 
 - **Translate all: shared collect-page test vectors.** The fake Cloud's paging
@@ -855,6 +823,21 @@ control (`apps/till/src/screens/till-table-order-screen.ts`), and the price labe
 (`apps/till/src/widgets/basket-refresh-dialog.ts`). Read, not run.
 
 ## Decisions and deliberate limits
+
+- **Translate all's joint fault proof is recorded on pinned candidates (D85, 2026-10-20).**
+  Cloud [PR #247](https://github.com/waitron-io/waitron-cloud/pull/247), commit
+  `99b041744c0c7ea787a42053cc4c847c8e766771`, recorded five passing cases against Waitron
+  `a3be14ba4e59bc8104087624171ddabec4978de2`: a lost page reply, restart between pages
+  through SIGTERM and SIGKILL separately, a lost release reply and expiry between pages.
+  The [pinned Cloud proof script](https://github.com/waitron-io/waitron-cloud/blob/99b041744c0c7ea787a42053cc4c847c8e766771/scripts/test-waitron-translation.mjs)
+  drives those cases. This closes the requested
+  joint proof for those pins, not qualification of later versions or a deployment.
+  Cloud must support `servicesVersion` 2 before a box requesting it connects; see
+  [Cloud connection](../developers/cloud-connection.md).
+
+- **Translate all's initial allowance (owner, 2026-10-14).** It is free for connected venues
+  for now, with the proposed $5 per venue per month cap and submit allowance of four jobs
+  in flight, one per address. Paid subscriber service remains future work.
 
 - **Products list columns (A655, owner 2026-10-14, 2026-10-16 and 2026-10-20).** Availability stays
   as it is, and the table may stay wider than its box at desktop width. Made at is deleted with its

@@ -55,9 +55,20 @@ reset counters or require a new hour because the clock has advanced. Starting ag
 to a positively empty, never-activated attempt; it retains the original evidence and spends the
 former hour. A missing database is a different condition.
 
-Repair-page recovery from backup, authorised fresh setup while keeping old data, and secure-
-connection repair remain separately queued as A731, A732 and A733 before go-live. This candidate
-does not add a promotion browser screen or complete venue-copy adoption.
+Repair-page recovery from backup remains queued as A731. Secure-connection repair is available:
+choose **Set up secure connection** on the repair page and follow the
+[connection repair procedure](../../apps/server/README.md#repairing-the-secure-connection).
+A732's proposed fresh-workspace action and recovery desk were withdrawn by the owner on
+21 October 2026. Promotion's browser screen and complete venue-copy adoption remain separate work.
+
+## When both credentials are lost
+
+If you have lost both the administrator password and recovery sheet, reinstall the box and set
+it up again (owner, 2026-10-21). Reinstallation loses the box's local data. The new setup starts a
+fresh fiscal identity and chain; it does not reopen the old account or continue its history.
+Keep any separately held archive, bucket or managed Cloud copy: recovering one still requires
+its named recovery key and the [ordinary restore checks](hour-recovery.md). Reinstalling cannot
+replace that key. This documentation change does not authorise a reset or reinstall now.
 
 ## Use the provisioning command
 

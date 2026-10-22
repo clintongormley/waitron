@@ -38,13 +38,12 @@ their full text.
   invoice, but art. 128-1.2.a also covers «els altres documents que hi facin referència o que
   en derivin», so a Catalan venue's slip is arguably covered.
 
-## The translations need a native or official check before go-live
+## The translations need a native or official check
 
-- **The translations need a native or official check before go-live.** Apart from the Catalan
-  «Factura» and «Propina», which the Consumer Code and the agency's pages use, no word in the
-  table was checked against a terminology source. The owner landed it as is on 2026-10-02
-  ("land, review words later"); the follow-up (C125, below) was then parked by the owner on
-  2026-10-02 ("save the full translations for much later").
+- **The translations need a native or official check.** Go live with the current words;
+  staff report anything that reads wrong (owner, 2026-10-21). A terminology review remains
+  future work, alongside the parked full-interface translations above. This is no longer a
+  condition for go-live.
 
 ## The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish way
 

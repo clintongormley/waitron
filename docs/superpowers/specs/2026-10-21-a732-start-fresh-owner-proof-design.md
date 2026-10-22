@@ -1,3 +1,9 @@
+> **Withdrawn by the owner, 21 October 2026.** Reinstall and set up again when both
+> credentials are lost. No fresh-workspace action or recovery desk is approved. Follow
+> the [current decision](../../backlog/fiscal.md#decisions-and-deliberate-limits) and
+> [operator guidance](../../operations/first-live-fiscal-setup.md#when-both-credentials-are-lost).
+> The proposal below is retained as history.
+
 # A732: start fresh without opening the old business
 
 **PROPOSED, 21 October 2026. Full owner approval is required before a plan or build.**

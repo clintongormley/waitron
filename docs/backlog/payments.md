@@ -30,7 +30,8 @@ their full text.
 
 ## Turn off Stripe's on-reader tip screen, or read the tip back
 
-- **Turn off Stripe's on-reader tip screen, or read the tip back.** Waitron takes the tip at the
+- **Turn off Stripe's on-reader tip screen, or read the tip back.** Backlog only; SumUp is
+  the go-live provider (owner, 2026-10-21). Waitron takes the tip at the
   till and adds it to the amount it charges (`tipOf`, `apps/server/src/till-sale.ts`). It creates
   no Stripe Terminal configuration and does not turn the reader's tip screen off:
   `processPaymentIntent` (`packages/payments-stripe/src/stripe-client.ts`) sends only the payment's

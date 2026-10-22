@@ -39,8 +39,8 @@ its first lines here and its whole text in its area's detail file under `docs/ba
 - **Soundness, not the calendar** (2026-08-02). Waitron will be finished before the deli must trade,
   so 1-Jan-2027 ranks nothing above anything. Order by dependency, correctness, and de-risking the
   most-reused or most-uncertain foundations first.
-- **Never autonomously land anything touching the unrepairable fiscal core** — hash-chained records,
-  never-reused invoice numbers. Fiscal-adjacent work in any area takes owner sign-off at land.
+- **A PR that changes invoices, the Veri\*Factu record chain, invoice series or AEAT filing waits
+  for the owner to land it; everything else lands itself** (owner, 2026-10-21).
 - **Docs land direct to `main`** (2026-08-02): the `main protection` ruleset grants Repository-admin a
   bypass, so a docs-only change is branched, `commit -s`, fast-forwarded and pushed — no PR, no CI
   wait. Feature and code changes still go through a PR.
@@ -292,9 +292,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   when either package is next touched; `insertNodeSeriesTx`'s held-code check is SELECT-then-INSERT.
   Fiscal: each behind its own review, owner sign-off at land.
 
-- **Product decision to take before production:** The €0 comped sale settles at the settlement
-  instant, not backdated to `issued_at` — is a comp ever finalised long after the invoice printed?
-
 - **Adviser confirmation: supplier invoice numbers by issue year.** Confirm the owner's A981
   rule in [Q18(b)](compliance/asesor-questions.md): the same supplier's number is refused within
   one issue year and accepted in another with a warning. The receipt date still sets the VAT
@@ -402,13 +399,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   with the selected backup’s recovery key and current outside evidence.
   [Detail](backlog/fiscal.md#a731-recover-from-backup-from-the-first-setup-repair-page).
 
-- **A732. Keep old data and start fresh on this box.** Required before go-live. The
-  [proposed design](superpowers/specs/2026-10-21-a732-start-fresh-owner-proof-design.md)
-  awaits approval: module-owned taxpayer proof plus independent recovery approval in every
-  country, preserving old data outside the new account's reach. The owner’s 16 October
-  direction supersedes the custodian-only proposal. No plan or build is approved.
-  [Detail](backlog/fiscal.md#a732-keep-old-data-and-start-fresh-on-this-box).
-
 - **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery,
   corrective-record resolution, filing investigation, outside evidence and fencing, and the complete
   old-backup/new-hardware operational exercise remain queued. Cloud allocation production
@@ -514,12 +504,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   the tax ID sits, RC2 in real exports, a non-ASCII passphrase, and where AEAT puts its error number.
   If any answers differently from the design, that part is redesigned in a follow-up.
   [Detail](backlog/fiscal.md#a888-after-a795-lands-the-owners-checks-with-real-certificates)
-
-- **A889. A box set up before A795 shows "Installed: not recorded"** (left open by A795). Its
-  certificate has no install record, so the card shows no details and the expiry alert and emails
-  cannot see its date until it is installed again on the card, or the box is reset. No migration
-  code, by the pre-production rule.
-  [Detail](backlog/fiscal.md#a889-a-box-set-up-before-a795-shows-installed-not-recorded)
 
 - **A853. The box makes a company seal's private key itself** (decided out of A795, 2026-10-18).
   FNMT issues a seal only for a key pair and certificate request made on the subscriber's machine,
@@ -1048,16 +1032,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   The Prepare-to-Live configuration copy (`packages/catalogue/src/configuration-transfer.ts`)
   copies the saved row as it is, unplanned. The demo seed
   (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
-
-- **Translate all: the joint fault proof Cloud's release gate asks for.** Cloud's contract: "Do not
-  go live until pinned Cloud and Waitron candidates jointly prove multi-page collection,
-  crash/reply-loss retry, deduplication, bounded decoded reads and release only after durable
-  completion." The Santet run (A689-21, 2026-10-19, recorded under Task 21 of
-  `docs/superpowers/plans/2026-10-14-translate-all.md`) proved multi-page collection and release
-  after the last page by hand, with no faults. Lane D is writing the fault script on Cloud's side
-  (D85). Cloud's `servicesVersion` 2 must be deployed before a box built from `main` talks to it
-  ([cloud-connection.md](developers/cloud-connection.md)).
-  [Detail](backlog/catalogue.md#translate-all-the-joint-fault-proof-clouds-release-gate-asks-for)
 
 - **Translate all: an Edit translations dialog left open anywhere clears the "Translations ready"
   notice.** The dialog's live reload reads the suggestions, and that read marks the run opened
@@ -1823,11 +1797,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   (`packages/reporting/src`). Decide whether a bill that mixes departments needs a department on
   each sold line, then add a department breakdown to the sales screen, showing sales with no
   department as "Unallocated" rather than guessing a split.
-
-- **A898. Confirm before go-live that every department sells under the venue's one legal entity
-  and tax identity** (the working assumption since #297's design). A database holds exactly one
-  taxpayer (the one row in `tenants`), so a department with a different legal seller would need
-  a venue of its own.
 
 - **Refresh service settings on an open till** — decide how changed department/zone policy
   reaches an empty till and preserves an existing basket's facts, then carry it through polling.
@@ -4021,7 +3990,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   an HTML page throws `SyntaxError`. Its one caller is `reverseViaSumUp`; fold it into the neutral
   reversal primitive. Left open by A632.
 
-- **Turn off Stripe's on-reader tip screen, or read the tip back.** If tipping is switched on in
+- **Turn off Stripe's on-reader tip screen, or read the tip back.** Backlog only; SumUp is the
+  go-live provider (owner, 2026-10-21). If tipping is switched on in
   Stripe's Dashboard, every tipped reader payment would be charged more than Waitron records. **Next
   action:** pass `process_config[skip_tipping]=true` from `processPaymentIntent`, tested against
   Stripe's sandbox. Left open by A846.
@@ -4473,9 +4443,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   Left open by W110c (#1271); A435-1 removes Enable and keeps Archive hidden for that selection.
 
 - The dashboard's `es-ES` module default still needs the flip the till got in #170.
-
-- **Product decision to take before production:** A human account always keeps an email (no
-  remove-email action; `setEmail` rejects clearing) — the rule now, rather than a missing UI path.
 
 - **Task 1b** (#554, session cookies stored only as hashes). Nothing fails when the UUID shape
   screens in `requireSession` and the till logout route are deleted — a non-UUID value hashes to no
@@ -4999,9 +4966,9 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
   `WAITRON_TILL_LOCALE` (`apps/server/src/payment-slip-print.ts`). See A964 and A965.
   [Detail](backlog/languages.md#the-payment-slip-was-left-alone)
 
-- **The translations need a native or official check before go-live.** Apart from the Catalan
-  «Factura» and «Propina», which the Consumer Code and the agency's pages use, no word in the table
-  was checked against a terminology source. [Detail](backlog/languages.md#the-translations-need-a-native-or-official-check-before-go-live)
+- **The translations need a native or official check.** Go live with the current words; staff
+  report anything that reads wrong (owner, 2026-10-21).
+  [Detail](backlog/languages.md#the-translations-need-a-native-or-official-check)
 
 - The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish way
   (`20,00 €`, `5 ago 2026`), while its words are Galician or Basque. The printed receipt is
@@ -6682,6 +6649,12 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
 ### Modules, data and code health
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
+
+- **Go-live day steps.** On go-live day, replace the pre-production migration rule in
+  `CLAUDE.md` with the owner's live-data policy, then delete and gitignore `docs/superpowers/`
+  and `docs/handoffs/` after the final operator-procedure sweep. These are future actions;
+  the current rule and planning files stay in place until then.
+  [Detail](backlog/architecture.md#go-live-day-steps).
 
 - **A760. Squash every migration set before go-live.** The [operator procedure](operations/a760-migration-squash.md)
   and [inventory](operations/a760-migration-squash-inventory.md) are approved
