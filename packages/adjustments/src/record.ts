@@ -42,6 +42,10 @@ export interface NewAdjustment {
   approvedBy: string | null;
   note: string | null;
   byGuest?: boolean;
+  chargeKept?: boolean;
+  preparationStarted?: boolean | null;
+  refundHandoff?: boolean;
+  refundValue?: Decimal | null;
 }
 
 /** Writes one adjustment row and returns its id. */
@@ -73,6 +77,10 @@ export async function recordAdjustment(tx: Transaction, row: NewAdjustment): Pro
       note: row.note,
       stage: line?.stage ?? null,
       byGuest: row.byGuest ?? false,
+      chargeKept: row.chargeKept ?? false,
+      preparationStarted: row.preparationStarted ?? null,
+      refundHandoff: row.refundHandoff ?? false,
+      refundValue: row.refundValue == null ? null : decimalToCents(row.refundValue),
     })
     .returning({ id: adjustments.id });
   return written!.id;

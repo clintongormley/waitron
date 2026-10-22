@@ -77,6 +77,10 @@ export const adjustments = table(
     note: label("note"),
     stage: adjustmentStage("stage"),
     byGuest: flag("by_guest").notNull().default(false),
+    chargeKept: flag("charge_kept").notNull().default(false),
+    preparationStarted: flag("preparation_started"),
+    refundHandoff: flag("refund_handoff").notNull().default(false),
+    refundValue: money("refund_value"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [

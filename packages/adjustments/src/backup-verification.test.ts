@@ -185,6 +185,25 @@ describe("adjustment backup evidence", () => {
     expect(await run()).toEqual(passed);
     expect(await run({ wrap: hideTable("working_orders") })).toEqual(passed);
   });
+  it("accepts a backup taken before the four columns, restored with their defaults", async () => {
+    const dropped = ["charge_kept", "preparation_started", "refund_handoff", "refund_value"];
+    for (const column of dropped)
+      original.db.run(sql.raw(`alter table adjustments drop column ${column}`));
+    try {
+      expect(await run()).toEqual(passed);
+      await corrupt(restored.db, "update adjustments set charge_kept=1");
+      expect((await run()).status).toBe("invalid");
+    } finally {
+      original.db.run(
+        sql`alter table adjustments add column charge_kept integer not null default 0`,
+      );
+      original.db.run(sql`alter table adjustments add column preparation_started integer`);
+      original.db.run(
+        sql`alter table adjustments add column refund_handoff integer not null default 0`,
+      );
+      original.db.run(sql`alter table adjustments add column refund_value integer`);
+    }
+  });
   it("keeps query failures distinct from corruption", async () => {
     const failure = new Error("private unavailable read");
     await expect(
