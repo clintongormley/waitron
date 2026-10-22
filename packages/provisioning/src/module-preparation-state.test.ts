@@ -372,6 +372,7 @@ it("writes no wait when the grant check refuses", async () => {
   const f = await fixture();
   const store = createModulePreparationState({
     ...f.options,
+    authorizeReplacement: async () => {},
     authorizeWait: async () => {
       throw new Error("no grant");
     },

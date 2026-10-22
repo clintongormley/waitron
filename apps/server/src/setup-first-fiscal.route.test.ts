@@ -772,7 +772,7 @@ type Preparation = { preparation: { status: string; targetMs: number } };
 const ledger = (f: Awaited<ReturnType<typeof fixture>>) =>
   join(f.stateDir, "module-preparation-state.json");
 
-it("keeps one password grant through two waits, spends it on taking the name, and refuses it after", async () => {
+it("keeps one password grant through two waits to taking the name, and refuses it once setup has moved on", async () => {
   const f = await fixture();
   const reconfirmation = await f.reconfirm();
   const first = await f.candidates(reconfirmation);

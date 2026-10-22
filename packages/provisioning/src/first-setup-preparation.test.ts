@@ -557,7 +557,7 @@ it("refuses a wait with a garbage grant and records no wait", async () => {
   );
 });
 
-it("refuses a take with an expired grant, spending nothing, and takes the name with a fresh one", async () => {
+it("refuses a new wait with an expired grant, recording nothing, and takes the name after it with fresh grants", async () => {
   const f = await fixture();
   const proof = await f.host.owner.reconfirm(f.owner, PASSWORD, "block-use");
   await f.compare();
@@ -581,4 +581,39 @@ it("refuses a take with an expired grant, spending nothing, and takes the name w
   ).not.toContain("intent");
   await f.selectPastWaits();
   expect((await f.host.store.read())!.status).toBe("consumption-intent");
+});
+
+it.each([
+  ["a garbage grant", async () => "x".repeat(43)],
+  [
+    "a grant for another purpose",
+    async (f: Awaited<ReturnType<typeof fixture>>) =>
+      f.host.owner.reconfirm(f.owner, PASSWORD, "activation"),
+  ],
+])(
+  "refuses %s on a retry inside a recorded wait and leaves the ledger as it was",
+  async (_, proof) => {
+    const f = await fixture();
+    await f.compare();
+    expect((await f.select()).preparation).toMatchObject({ status: "waiting" });
+    const ledger = join(f.root, "state/module-preparation-state.json");
+    const before = await readFile(ledger, "utf8");
+    vi.advanceTimersByTime(30_000);
+    await f.compare();
+    await expect(f.select(await proof(f))).rejects.toMatchObject({
+      code: "setup.owner_required",
+    });
+    expect(await readFile(ledger, "utf8")).toBe(before);
+  },
+);
+
+it("refuses a first wait with a grant for another purpose and records no wait", async () => {
+  const f = await fixture();
+  await f.compare();
+  await expect(
+    f.select(await f.host.owner.reconfirm(f.owner, PASSWORD, "activation")),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  await expect(readFile(join(f.root, "state/module-preparation-state.json"))).rejects.toMatchObject(
+    { code: "ENOENT" },
+  );
 });
