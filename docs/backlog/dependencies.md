@@ -14,10 +14,7 @@ review).** #1139 updated `scripts/journal-monotonic.test.ts` and one citation in
 `docs/backlog.md` (the 0.45.2 unnamed-`unique()` note under _CI, tests and developer tooling_), none of them re-checked against 0.45.3.
 Naming 0.45.3: `scripts/journal-monotonic.test.ts:12` and `docs/developers/conventions-data.md:2419`,
 `:2444` and `:2481`.
-0.45.4 arrived with #1760 (A775, 2026-10-16); its published package differs from 0.45.3 only in
-`postgres-js/session.*` and the version files — `sqlite-core/dialect.js` and `migrator.js` are
-byte-identical (`npm pack` of both, `cmp`), so the claims citing 0.45.3's dialect still describe the
-installed code, and only their number is stale.
+0.45.4 arrived with #1760 (A775, 2026-10-16).
 **Next action:** read each claim against the installed 0.45.4, then update the number or the claim.
 
 ## Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7
@@ -41,15 +38,14 @@ installed code, and only their number is stale.
 **Left behind by the Stryker upgrade (#447, 2026-09-19).**
 
 - **A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it.** Vitest 5 was
-  abandoned because Stryker 9.6.1 kills almost nothing under it: `packages/fiscal` scored 0.00% and
-  `packages/shared` 8.14% (stryker-js#6210). Stryker 10.0.0's release notes mention neither issue,
+  abandoned because Stryker 9.6.1 kills almost nothing under it in `packages/fiscal` and
+  `packages/shared` (stryker-js#6210). Stryker 10.0.0's release notes mention neither issue,
   and nothing here was run under Vitest 5, so the question is untouched rather than resolved. A
   retry removes the Vitest-major ignore in `.github/dependabot.yml` (A779, added when the Vitest 5
   PR #1179 was closed), and must also check whether #766's stored Dependabot ignore of
   `@vitest/browser-playwright` 5.x holds that package back, and clear it if so
-  (`docs/developers/workflow-guide.md` → Dependabot pull requests). Whether Dependabot obeys
-  A779's ignore stays open until its next Vitest-family pull request shows it (owner, 2026-10-17).
-  #1179, opened before A779's ignore, moved only `vitest`, so it answers neither.
+  (`docs/developers/workflow-guide.md` → Dependabot pull requests).
+  See the owner's ignore-qualification decision below.
 
 ## Whether a declared floor follows the installed version is undecided — one decision for every manifest
 
@@ -116,13 +112,10 @@ installed code, and only their number is stale.
   now used for dependency optimization instead of esbuild". Nobody re-checked that vite 8 still emits
   that warning, or that the `include` lists are still the fix.
 
-**Local observation, 2026-10-18 (A773-1).** After a temporary till browser config had been removed,
-`pnpm --filter @waitron/till exec vitest run` with the new Sent widget's two suites,
-`sent-panel.test.ts`, `draft-layout.test.ts` and five existing table-screen suites logged
-`dependency optimized: lit/directive.js`, then `optimized dependencies changed. reloading` and
-`Vite unexpectedly reloaded a test`. All nine files failed to import and the run reported
-`Tests no tests`. Repeating that selection after the cache had been populated ran 493 passing tests.
-No `include` change or controlled cold-cache comparison was made, so the fix remains unmeasured.
+A773-1 locally observed the reload warning followed by failed imports and no executed tests on
+2026-10-18. A later run with the optimizer cache populated passed; that does not measure an
+`include` fix. No `include` change or controlled cold-cache comparison was made, so the fix
+remains unmeasured.
 
 ## The till's QR pin compares the code against itself, not an authority
 
@@ -162,7 +155,19 @@ bump it when a fixed version is published, and run the certificate suites in tho
   `validateCertificatePath` — the only caller of `isCertRevoked` — do work. The cheap evidence leans
   towards reachable rather than away.
 
+## One esbuild copy older than ours stays in the tree: `drizzle-kit`'s own range holds it
+
+One esbuild copy older than ours stays in the tree: `drizzle-kit`'s own range holds it at
+0.25.12; since A107 a root `pnpm.overrides` entry moves `@esbuild-kit/core-utils`' copy onto the
+same 0.25.12. An install that re-resolves the lockfile still warns that the `@esbuild-kit`
+packages are deprecated. Left behind by the esbuild upgrade (#439, 2026-09-19).
+
 ## Decisions and deliberate limits
+
+**Vitest-family ignore qualification (owner, 2026-10-17).** Keep this open until Dependabot's next
+Vitest-family pull request shows whether A779's ignore holds, then close it
+(`docs/developers/workflow-guide.md` → Dependabot pull requests). #1179, opened before A779's ignore,
+moved only `vitest`, so it answers neither.
 
 **Left behind by the esbuild upgrade (#439, 2026-09-19).**
 
@@ -194,11 +199,7 @@ hook, which is bespoke code on a fiscal path and a decision rather than a bump.
 
 ## Npm notices and module-type-only manifests
 
-A776's 2026-10-17 probe ran `bundledNpmNotices([require.resolve("stripe")])` with a require rooted at
-`packages/payments-stripe/package.json`. Main was commit `3d72c051c86c7b174a4de0faeba5042395973bfb`.
-Both its installed 22.6.2 and the upgrade's 23.0.0 resolved to
-`cjs/stripe.cjs.node.js`; both returned `No bundled npm packages.`. Their nearest `cjs/package.json`
-contains only `{"type":"commonjs"}`; `esm/package.json` likewise declares only the module type.
+Stripe's CJS and ESM subdirectory manifests contain only the module type.
 The generator's `packageForModule` returns null at that first manifest
 (`scripts/npm-bundle-notices.mjs`), before reaching the package's name, version and licence.
 

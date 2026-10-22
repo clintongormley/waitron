@@ -6579,25 +6579,16 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
 _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/dependencies.md).
 
 - **A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it** — left
-  behind by the Stryker upgrade (#447, 2026-09-19). Stryker 10.0.0's release notes mention neither
-  issue, and nothing here was run under Vitest 5, so the question is untouched rather than resolved.
-  The retry removes the Vitest-major ignore in `.github/dependabot.yml` (A779; the Vitest 5 PR #1179
-  is closed). Closing #766 stored an ignore of `@vitest/browser-playwright` 5.x; #1179 moved only
-  `vitest`, so it did not show whether Dependabot obeys it. Owner, 2026-10-17: keep this open until
-  Dependabot's next Vitest-family pull request shows whether A779's ignore holds, then close it
-  (workflow-guide → Dependabot pull requests) — left open by Dependabot's switch-on (#760,
-  2026-09-27).
+  behind by the Stryker upgrade (#447, 2026-09-19). The retry removes the Vitest-major ignore in
+  `.github/dependabot.yml` (A779; the Vitest 5 PR #1179 is closed).
   [Detail](backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it)
 
-- **Bundled npm notices stop at a module-type-only package manifest.** Running
-  `bundledNpmNotices` on Stripe's installed `cjs/stripe.cjs.node.js` returns no packages on both
-  22.6.2 and 23.0.0. Stripe 23 carries a separate licence in `deploy/third-party/stripe/`; fix the
-  generator to continue to the owning package and test both module layouts and workspace exclusion.
+- **Bundled npm notices stop at a module-type-only package manifest.** Fix the generator to
+  continue to the owning package and test both module layouts and workspace exclusion.
   [Detail](backlog/dependencies.md#npm-notices-and-module-type-only-manifests)
 
-- **Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed** — OPEN (found
-  2026-10-03 by #1139's review). **Next action:** read each claim against the installed 0.45.4, then
-  update the number or the claim.
+- **Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed** — OPEN.
+  **Next action:** read each claim against the installed 0.45.4, then update the number or the claim.
   [Detail](backlog/dependencies.md#comments-and-docs-still-name-drizzle-orm-0452-and-0453-0454-is-installed)
 
 - **Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7** —
@@ -6611,64 +6602,57 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
   [Detail](backlog/dependencies.md#whether-a-declared-floor-follows-the-installed-version-is-undecided--one-decision-for-every-manifest)
 
 - **One esbuild copy older than ours stays in the tree: `drizzle-kit`'s own range holds it** at
-  0.25.12; since A107 a root `pnpm.overrides` entry moves `@esbuild-kit/core-utils`' copy onto the
-  same 0.25.12. An install that re-resolves the lockfile still warns that the `@esbuild-kit`
-  packages are deprecated.
-  Left behind by the esbuild upgrade (#439, 2026-09-19).
+  0.25.12. An install that re-resolves the lockfile still warns that the `@esbuild-kit` packages
+  are deprecated.
+  [Detail](backlog/dependencies.md#one-esbuild-copy-older-than-ours-stays-in-the-tree-drizzle-kits-own-range-holds-it)
 
-- **Loose ends left by the Node types upgrade (#441, 2026-09-19).**
-  - **The root `package.json` says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.** One
-    line either way; it needs an owner call on whether Node 24 is still supported.
+- **The root `package.json` says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.** One
+  line either way; it needs an owner call on whether Node 24 is still supported.
+  Left behind by the Node types upgrade (#441, 2026-09-19).
 
-- **Loose ends left by the Hono Node adapter upgrade (#444, 2026-09-19).** `apps/server` and
-  `apps/print-agent` moved from `@hono/node-server` 1.19.15 to 2.1.1.
-  - **Only the request side of that adapter was compared between the two versions.** The suites
-    pass, so nothing is known to be broken. Re-running the comparison needs a scratch install of
-    1.19.15.
-    [Detail](backlog/dependencies.md#only-the-request-side-of-that-adapter-was-compared-between-the-two-versions)
-  - **`apps/server/src/tls.ts`'s type guarantee is still untested.** It derives its options type
-    from the installed package (`Parameters<typeof serve>[0]`) so that an incompatible reshape
-    fails `tsc`; this upgrade did not exercise that, because the type was otherwise identical
-    across the two versions.
+- **Only the request side of that adapter was compared between the two versions** — left behind
+  by the Hono Node adapter upgrade (#444, 2026-09-19). Re-running the comparison needs a scratch
+  install of 1.19.15.
+  [Detail](backlog/dependencies.md#only-the-request-side-of-that-adapter-was-compared-between-the-two-versions)
 
-- **Loose ends left by the vite 8 upgrade (#450, 2026-09-19).**
-  - **The default browser floor rose, and no BROWSER floor is stated anywhere in the repo.** What
-    is missing is anywhere that states a browser floor, so the next bump moves it again silently.
-    [Detail](backlog/dependencies.md#the-default-browser-floor-rose-and-no-browser-floor-is-stated-anywhere-in-the-repo)
-  - **The browser-mode packages that declare no vite follow the others' by deduplication, not by
-    a declaration.** If a future change puts a second vite in the tree, they could land on a
-    different one silently.
-    [Detail](backlog/dependencies.md#the-browser-mode-packages-that-declare-no-vite-follow-the-others-by-deduplication-not-by-a-declaration)
-  - **The dependency-optimizer fix still needs a cold-cache check on Vite 8.** A773-1 locally
-    observed the reload warning followed by failed imports and no executed tests on 2026-10-18.
-    A later run with the optimizer cache populated passed; that does not measure an `include` fix.
-    [Detail](backlog/dependencies.md#a-dependency-optimizer-receipt-taken-on-vite-6-was-not-re-measured)
+- **`apps/server/src/tls.ts`'s type guarantee is still untested.** It derives its options type
+  from the installed package (`Parameters<typeof serve>[0]`) so that an incompatible reshape
+  fails `tsc`; the Hono Node adapter upgrade (#444) did not exercise that, because the type was
+  otherwise identical across the two versions.
 
-- **Loose ends left by the till QR library upgrade (qrcode-generator 1 -> 2, 2026-09-20).**
-  - **The till's QR pin compares the code against itself, not an authority.** Giving the till the
-    same reader needs a matrix accessor as well (`qrSvg` returns a string, never the library's
-    `qr` object) and a module-boundary decision about where the helper lives.
-    [Detail](backlog/dependencies.md#the-tills-qr-pin-compares-the-code-against-itself-not-an-authority)
-  - **There is no snapshot file anywhere in the repository**, so the till's byte pin is a SHA-256
-    of the output. A file snapshot would fail with a readable diff; whether this repo wants
-    snapshot files at all is an owner decision.
+- **The default browser floor rose, and no BROWSER floor is stated anywhere in the repo.** What
+  is missing is anywhere that states a browser floor, so the next bump moves it again silently.
+  [Detail](backlog/dependencies.md#the-default-browser-floor-rose-and-no-browser-floor-is-stated-anywhere-in-the-repo)
 
-- **`node-forge` has a high-severity security alert with no fixed version** — OPEN (Dependabot alert
-  #20, 2026-10-01; rechecked with `gh api repos/clintongormley/waitron/dependabot/alerts/20`
-  on 2026-10-22: still open, no patched version). Every version up to 1.4.0, the one in the lockfile,
-  accepts some RSA signatures
-  it should reject when checking them. It is a direct dependency of `packages/server-kit`,
-  `apps/server` and `apps/print-agent`. **Next action:** bump it when a fixed version is published,
-  and run the certificate suites in those three packages.
+- **The browser-mode packages that declare no vite follow the others' by deduplication, not by
+  a declaration.** If a future change puts a second vite in the tree, they could land on a
+  different one silently.
+  [Detail](backlog/dependencies.md#the-browser-mode-packages-that-declare-no-vite-follow-the-others-by-deduplication-not-by-a-declaration)
+
+- **The dependency-optimizer fix still needs a cold-cache check on Vite 8.**
+  [Detail](backlog/dependencies.md#a-dependency-optimizer-receipt-taken-on-vite-6-was-not-re-measured)
+
+- **The till's QR pin compares the code against itself, not an authority.** Giving the till the
+  same reader needs a matrix accessor as well (`qrSvg` returns a string, never the library's
+  `qr` object) and a module-boundary decision about where the helper lives.
+  [Detail](backlog/dependencies.md#the-tills-qr-pin-compares-the-code-against-itself-not-an-authority)
+
+- **There is no snapshot file anywhere in the repository**, so the till's byte pin is a SHA-256
+  of the output. A file snapshot would fail with a readable diff; whether this repo wants
+  snapshot files at all is an owner decision. Left behind by the till QR library upgrade
+  (qrcode-generator 1 -> 2, 2026-09-20).
+
+- **`node-forge` has a high-severity security alert with no fixed version** — OPEN (Dependabot
+  alert #20). **Next action:** bump it when a fixed version is published, and run the certificate
+  suites in `packages/server-kit`, `apps/server` and `apps/print-agent`.
   [Detail](backlog/dependencies.md#node-forge-has-a-high-severity-security-alert-with-no-fixed-version)
 
-- **Loose ends left by the passkey library upgrade (#453, 2026-09-19).** `@simplewebauthn/server`
-  and `@simplewebauthn/browser` moved to 14.
-  - **Whether the vulnerability the upgrade fixes is reachable in this product is open.** The
-    cheap evidence leans towards reachable rather than away.
-    [Detail](backlog/dependencies.md#whether-the-vulnerability-the-upgrade-fixes-is-reachable-in-this-product-is-open)
-  - **The version-14 browser helpers are unused.** Whether `browserSupportsPasskeys()` would
-    improve the login screen's `browserSupportsWebAuthnAutofill()` gate has not been assessed.
+- **Whether the vulnerability the upgrade fixes is reachable in this product is open** — left
+  behind by the passkey library upgrade (#453, 2026-09-19).
+  [Detail](backlog/dependencies.md#whether-the-vulnerability-the-upgrade-fixes-is-reachable-in-this-product-is-open)
+
+- **The version-14 browser helpers are unused.** Whether `browserSupportsPasskeys()` would
+  improve the login screen's `browserSupportsWebAuthnAutofill()` gate has not been assessed.
 
 ### Modules, data and code health
 
