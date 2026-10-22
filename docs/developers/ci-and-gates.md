@@ -914,6 +914,40 @@ nothing red anywhere, so check after a merge that its own run exists.
 **What the guard does not see.** The concurrency cases of `scripts/ci-workflow.test.mjs` read ci.yml
 alone, as TEXT, so another workflow's group is not seen.
 
+### Recover a main commit whose CI run was never created
+
+On 2026-10-22, PR #1989 merged at `e7ce92a7c45e9b79a91e3737a07bf1b66b9eed3b`.
+`gh api 'repos/clintongormley/waitron/actions/runs?head_sha=e7ce92a7c45e9b79a91e3737a07bf1b66b9eed3b'`
+returned `total_count: 0`. The following docs commit `5ca72a619` had CI run `39832519623`,
+which skipped the server suite and image. Why GitHub created no run is unverified. This differs
+from the cancellation above: there is no run to rerun.
+
+Main pushes now compare against a successful ancestral CI run instead of the preceding push.
+`scripts/ci-diff-paths.sh` reads the latest 100 successful main CI runs, accepts only completed
+push or manual runs on main, and checks ancestry locally. A missing baseline or failed API read
+selects the full suite and image. The API call has a 30-second deadline and a five-second kill
+grace. A docs push can therefore run the packages when earlier code has not completed CI.
+Pull requests retain their merge-base scope; release tags and manual dispatches run everything.
+
+If a main run is missing, start a full validation of current main:
+
+```sh
+gh workflow run ci.yml --ref main
+gh run list --workflow ci.yml --branch main --event workflow_dispatch \
+  --json databaseId,headSha,status,conclusion
+```
+
+Record the dispatched SHA and run ID, check that the missing commit is its ancestor, and read
+back the required result. This qualifies the current tree, not a historical exact-SHA run.
+Manual recovery runs the image smoke but does not publish. Push publishing retains its existing
+`main-tag-guard.sh` check. Keep checking that each merge gets its own run: with no later push,
+the baseline mechanism has no event on which to recover a dropped run.
+
+`scripts/ci-main-recovery.test.mjs` runs the extracted classification step against a real Git
+history and the real package classifier, with the runs API replaced by fixtures. It checks a
+missing code run followed by docs, failed baseline reads, ancestry, manual recovery and PR scope.
+Its trigger, token wiring and publishing assertions read workflow text; they do not run Actions.
+
 ### Separated pushes overlap, so publishing asks before it takes `:main`
 
 Two `main` runs now build at the same time, and the one that finishes LAST is not always the one
