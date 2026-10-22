@@ -8903,6 +8903,23 @@ describe("till-app: recording an unpaid departure", () => {
     expect(tableOrder(el)).not.toBeNull();
   });
 
+  it("keeps the dialog open saying the box is out of disk space when refused storage.disk_full", async () => {
+    const { el } = await openDeparture({
+      recordUnpaidDeparture: vi.fn().mockRejectedValue({
+        code: "storage.disk_full",
+        status: 507,
+      }),
+    });
+    await typeReason(el, "Ran off");
+    await confirmDeparture(el);
+
+    const bottom = dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      "wt-form-actions",
+    )!;
+    expect(bottom.error).toBe(codeMessage("storage.disk_full"));
+    expect(tableOrder(el)).not.toBeNull();
+  });
+
   it("sends a fresh request on each press, with what the dialog holds then", async () => {
     const recordUnpaidDeparture = vi
       .fn()

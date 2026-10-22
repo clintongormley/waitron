@@ -450,6 +450,71 @@ describe("till-station-screen", () => {
     expect(api.getStationQueue).toHaveBeenCalledTimes(2);
   });
 
+  const alertText = (el: TillStationScreen) =>
+    [...el.shadowRoot!.querySelectorAll('[role="alert"]')]
+      .map((node) => node.textContent!.trim())
+      .filter(Boolean);
+
+  const bump = (el: TillStationScreen) =>
+    queueWidget(el)!.dispatchEvent(
+      new CustomEvent("advance-ticket-item", {
+        detail: { itemId: "ti-1", stationId: "st-1", to: "preparing" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+
+  const diskFull = { code: "storage.disk_full", status: 507 };
+
+  it("a bump refused on a full disk says so and still reloads the queue", async () => {
+    const api = stubApi({ advanceTicketItem: vi.fn().mockRejectedValue(diskFull) });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    bump(el);
+    await flush(el);
+    expect(alertText(el)).toEqual([codeMessage("storage.disk_full")]);
+    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
+  });
+
+  it("the next bump clears the full-disk line", async () => {
+    const advanceTicketItem = vi
+      .fn()
+      .mockRejectedValueOnce(diskFull)
+      .mockResolvedValueOnce(undefined);
+    const api = stubApi({ advanceTicketItem });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    bump(el);
+    await flush(el);
+    expect(alertText(el)).toEqual([codeMessage("storage.disk_full")]);
+    bump(el);
+    await flush(el);
+    expect(alertText(el)).toEqual([]);
+  });
+
+  it("picking another station clears the full-disk line", async () => {
+    const api = stubApi({ advanceTicketItem: vi.fn().mockRejectedValue(diskFull) });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    bump(el);
+    await flush(el);
+    expect(alertText(el)).toEqual([codeMessage("storage.disk_full")]);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-2"]')!.click();
+    await flush(el);
+    expect(alertText(el)).toEqual([]);
+  });
+
+  it("a bump refused for any other reason shows no line", async () => {
+    const api = stubApi({
+      advanceTicketItem: vi.fn().mockRejectedValue({ code: "ticket.invalid_transition" }),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    bump(el);
+    await flush(el);
+    expect(alertText(el)).toEqual([]);
+  });
+
   it("the Back control emits back-to-counter", async () => {
     const api = stubApi();
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
@@ -841,6 +906,30 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     await flush(el);
     expect(api.deviceAdvance).toHaveBeenCalledWith("ti-1", "preparing");
     expect(api.advanceTicketItem).not.toHaveBeenCalled();
+    expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2);
+  });
+
+  it("a kitchen display's bump refused on a full disk says so", async () => {
+    const api = deviceApi({
+      deviceAdvance: vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 }),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceMode: true,
+    });
+    await flush(el);
+    queueWidget(el)!.dispatchEvent(
+      new CustomEvent("advance-ticket-item", {
+        detail: { itemId: "ti-1", stationId: "st-dev", to: "preparing" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    const lines = [...el.shadowRoot!.querySelectorAll('[role="alert"]')]
+      .map((node) => node.textContent!.trim())
+      .filter(Boolean);
+    expect(lines).toEqual([codeMessage("storage.disk_full")]);
     expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2);
   });
 

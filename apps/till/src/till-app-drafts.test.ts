@@ -1902,6 +1902,18 @@ describe("till-app: a save the server refuses", () => {
     expect(banner(el)!.textContent).toContain(codeMessage("party.not_open"));
   });
 
+  it("says a full disk in its own words", async () => {
+    const { el } = await mountApp({
+      saveDraft: vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 }),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+
+    await back(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("storage.disk_full"));
+  });
+
   it("says nothing when the session had already ended", async () => {
     const { el } = await mountApp({
       saveDraft: vi.fn().mockRejectedValue({ code: "session.required", status: 401 }),
@@ -2771,6 +2783,19 @@ describe("till-app: sending the draft", () => {
 
     expect(api.submitDraft).not.toHaveBeenCalled();
     expect(banner(el)!.textContent).toContain(codeMessage("party.not_open"));
+  });
+
+  it("says a save refused on a full disk and sends nothing", async () => {
+    const { el } = await mountApp({
+      saveDraft: vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 }),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+
+    await act(el, "fire-all");
+
+    expect(api.submitDraft).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(codeMessage("storage.disk_full"));
   });
 });
 
