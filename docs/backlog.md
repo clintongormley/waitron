@@ -168,7 +168,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   owner lands it. The owner approved the second revision on 2026-10-22 (about 02:45) and chose
   A993's offline behaviour (about 02:55); the third revision folds those answers in. Slice 1 is
   built from its [plan](superpowers/plans/2026-10-22-a940-1-software-identity.md) (pull request
-  number added when opened), parked for the owner: every record kind's software block, built in
+  #2000), parked for the owner: every record kind's software block, built in
   `buildSistemaInformatico` (`packages/fiscal-verifactu/src/backend.ts`), names "Waitron", the
   build's version (`0.0.0-dev`, plus the build's commit on a published build) instead of `0.0.0`,
   and `TipoUsoPosibleMultiOT = N`. The producer is a marked placeholder until the owner supplies

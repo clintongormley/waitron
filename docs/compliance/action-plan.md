@@ -192,9 +192,9 @@ We offered reciprocity in the message. Send it.
 > invoice records name the producer, has its
 > [plan](../superpowers/plans/2026-10-22-a940-1-software-identity.md).
 >
-> **2026-10-23:** slice 1 is built — slice 1's pull request (number added when opened), parked for
-> the owner. Until he supplies his name and NIF, records keep the taxpayer's there and a published
-> production build will not trade.
+> **2026-10-23:** slice 1 is built — pull request #2000, parked for the owner. Until he supplies
+> his name and NIF, records keep the taxpayer's there and a published production build will not
+> trade.
 
 Needed before anyone else uses the software; already overdue in principle, since the producer
 deadline passed on 29 July 2025.
