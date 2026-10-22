@@ -127,3 +127,16 @@ it("offers only editing in a manager's staff row menu", async () => {
     ),
   ).toEqual(["edit-other"]);
 });
+
+it("preserves a manager's own role control", async () => {
+  const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+    person: { ...people[0]!, role: "manager", status: "active" },
+    currentPersonId: "other",
+    canAdminister: false,
+    open: true,
+  });
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[data-test=edit-role]")!
+      .disabled,
+  ).toBe(false);
+});

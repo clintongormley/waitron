@@ -522,3 +522,63 @@ it.each(["role", "status"] as const)(
     expect(await row(target)).toEqual(before);
   },
 );
+
+it.each(["details", "setRole"] as const)(
+  "preserves a manager's own non-admin role change through %s",
+  async (method) => {
+    const actor = await openManagementSession(suite.db, "manager");
+    const before = await row(actor.personId);
+    await run((tx) =>
+      method === "setRole"
+        ? setRole(tx, {
+            managementSessionId: actor.token,
+            personId: actor.personId,
+            role: "supervisor",
+          })
+        : updatePersonDetails(tx, {
+            managementSessionId: actor.token,
+            personId: actor.personId,
+            displayName: before.displayName,
+            firstNames: "Own",
+            lastNames: "Account",
+            telephone: null,
+            email: before.email!,
+            role: "supervisor",
+            status: "active",
+          }),
+    );
+    expect((await row(actor.personId)).role).toBe("supervisor");
+  },
+);
+it.each(["details", "setRole"] as const)(
+  "refuses a manager promoting themselves through %s",
+  async (method) => {
+    const actor = await openManagementSession(suite.db, "manager");
+    const before = await row(actor.personId);
+    await expect(
+      run((tx) =>
+        method === "setRole"
+          ? setRole(tx, {
+              managementSessionId: actor.token,
+              personId: actor.personId,
+              role: "admin",
+            })
+          : updatePersonDetails(tx, {
+              managementSessionId: actor.token,
+              personId: actor.personId,
+              displayName: before.displayName,
+              firstNames: "Own",
+              lastNames: "Account",
+              telephone: null,
+              email: before.email!,
+              role: "admin",
+              status: "active",
+            }),
+      ),
+    ).rejects.toMatchObject({
+      code: "authorization.not_permitted",
+      params: { permission: "person.admin" },
+    });
+    expect(await row(actor.personId)).toEqual(before);
+  },
+);

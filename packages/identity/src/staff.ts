@@ -206,7 +206,10 @@ export async function updatePersonDetails(
   if (input.status !== person.status && input.status !== "suspended") {
     throw new AppError("person.transition_invalid", {});
   }
-  if (input.role !== person.role) {
+  if (
+    input.role !== person.role &&
+    (authorizedBy !== person.id || input.role === "admin" || person.role === "admin")
+  ) {
     if (!roleHasPermission(actorRole, "person.admin")) {
       throw new AppError("authorization.not_permitted", { permission: "person.admin" });
     }
@@ -496,7 +499,7 @@ export async function setRole(
   input: { managementSessionId: string; personId: string; role: PersonRoleValue },
 ): Promise<void> {
   const { role: actorRole, targetRole } = await authorizePersonLoginChange(tx, input);
-  requireAdminAuthority(actorRole);
+  if (input.role === "admin") requireAdminAuthority(actorRole);
   await tx
     .update(persons)
     .set({ role: input.role })

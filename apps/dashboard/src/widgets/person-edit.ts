@@ -338,7 +338,7 @@ export class PersonEdit extends LitElement {
                     noResultsLabel=${t("categories.combobox_no_results")}
                     .options=${rolesByName().map((role) => ({ value: role, label: roleName(role) }))}
                     .value=${this.details.role}
-                    ?disabled=${this.busy || !this.canAdminister}
+                    ?disabled=${this.busy || (!this.canAdminister && person.personId !== this.currentPersonId)}
                     @wt-change=${(event: CustomEvent<{ value: string }>) => {
                       event.stopPropagation();
                       this.details = { ...this.details, role: event.detail.value as PersonRole };
