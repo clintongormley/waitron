@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { AppError, isUuid } from "@waitron/shared";
+import { AppError, diskFullIn, isUuid } from "@waitron/shared";
 import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { profileAllows } from "@waitron/layouts";
@@ -243,14 +243,22 @@ async function readDeviceProof(
   const seenAt = nowIso();
   if (sightingDue(row.lastSeenAt, seenAt)) {
     const checkedHash = row.tokenHash;
-    const locked = await withTransaction(deps.db, async (tx) => {
-      // A revocation, a new token or a new binding committed while this request waited for the
-      // lock wins.
-      const current = await readRow(tx);
-      if (current === undefined || current.tokenHash !== checkedHash) return undefined;
-      await recordSighting(tx, deviceId, seenAt);
-      return current;
-    });
+    // A revocation, a new token or a new binding committed while this request waited for the
+    // lock wins.
+    const stillCurrent = (current: typeof row | undefined) =>
+      current === undefined || current.tokenHash !== checkedHash ? undefined : current;
+    let locked: typeof row | undefined;
+    try {
+      locked = await withTransaction(deps.db, async (tx) => {
+        const current = stillCurrent(await readRow(tx));
+        if (current !== undefined) await recordSighting(tx, deviceId, seenAt);
+        return current;
+      });
+    } catch (error) {
+      // A full disk refuses the stamp, not the device: the same checks run again, unstamped.
+      if (!diskFullIn(error)) throw error;
+      locked = stillCurrent(await readRow());
+    }
     if (locked === undefined) {
       verifiedTokens.delete(deviceId);
       return null;

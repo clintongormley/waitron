@@ -16,17 +16,23 @@ import { get as httpsGet } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { sql } from "drizzle-orm";
-import type { Hono } from "hono";
+import { eq, sql } from "drizzle-orm";
+import { Hono } from "hono";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { openVenueDatabase } from "@waitron/db";
+import { devices, locations, openVenueDatabase } from "@waitron/db";
+import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { hashSecret } from "@waitron/identity";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { openVenueStore } from "@waitron/store";
 import { firstFiscalFixture } from "../test/first-fiscal.js";
 import { dumpFileName } from "./backup-keys.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { loadBoxEnv } from "./box-env.js";
+import { mountDeviceApi } from "./device-api.js";
 import { runEntry, serveRecovery, type RecoveryServeOptions } from "./node-entry.js";
 import { FRESH, readRecoveryState, writeRecoveryState } from "./recovery-state.js";
+import { createPairingMode } from "./pairing-mode.js";
 import { escapeHtml } from "./recovery-surface.js";
 import { freePorts } from "./testing/free-ports.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
@@ -328,6 +334,73 @@ describe("a start on a real full disk", () => {
         db.run(sql`insert into sale (body) values ('after freeing')`);
       });
       expect(bodies()).toEqual(["committed before", "after freeing"]);
+    } finally {
+      small.unfill();
+      await store.close();
+    }
+  });
+
+  it("the equipment read answers on a full disk with a stamp due", async (ctx) => {
+    const small = needDisk(ctx);
+    const dir = realpathSync(small.folder("equipment"));
+    await applyMigrations(dir, migrationOptionsFor(manifestSets(), null));
+    const store = await openVenueDatabase(dir);
+    const db = store.venue;
+    try {
+      await seedTenant(db);
+      const [location] = await db
+        .insert(locations)
+        .values({ name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Sale" })
+        .returning({ id: locations.id });
+      const { deviceId } = await seedDevice(db, {
+        locationId: brandLocationId(location!.id),
+        label: "Till 1",
+      });
+      const token = "equipment-token";
+      await db
+        .update(devices)
+        .set({ tokenHash: hashSecret(token) })
+        .where(eq(devices.id, deviceId));
+      const app = new Hono();
+      mountDeviceApi(
+        app,
+        { db, cfg: {} as never, secureCookies: false, pairingMode: createPairingMode() },
+        () => {},
+      );
+      const status = async () =>
+        (
+          await app.request("/api/device/equipment", {
+            headers: { cookie: `waitron_device=${deviceId}.${token}` },
+          })
+        ).status;
+      const lastSeen = async () => {
+        const [row] = await db
+          .select({ lastSeenAt: devices.lastSeenAt })
+          .from(devices)
+          .where(eq(devices.id, deviceId));
+        return row!.lastSeenAt;
+      };
+      const seenWhileFull = async (lastSeenAt: string) => {
+        small.unfill();
+        await db.update(devices).set({ lastSeenAt }).where(eq(devices.id, deviceId));
+        db.all(sql`pragma wal_checkpoint(truncate)`);
+        small.fill(0);
+      };
+
+      expect(await status()).toBe(200);
+
+      await seenWhileFull(new Date().toISOString());
+      expect(await status()).toBe(200);
+
+      const longAgo = "2020-01-01T00:00:00.000Z";
+      await seenWhileFull(longAgo);
+      expect(await status()).toBe(200);
+      expect(await status()).toBe(200);
+      expect(await lastSeen()).toBe(longAgo);
+
+      small.unfill();
+      expect(await status()).toBe(200);
+      expect(await lastSeen()).not.toBe(longAgo);
     } finally {
       small.unfill();
       await store.close();
