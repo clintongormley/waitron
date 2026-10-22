@@ -356,9 +356,6 @@ export class LookCard extends LitElement {
     this.draft = next;
     this.#scope?.commit(next);
   }
-  #repaint(): void {
-    repaintVenueTheme(this.api);
-  }
   #registerDraft(): void {
     if (!this.isConnected || !this.draft || !this.#expected || this.#scope) return;
     const { coordinator, scope } = draftScopeFor<LookDraft>(this, {
@@ -510,7 +507,7 @@ export class LookCard extends LitElement {
     try {
       const answer = await this.api.saveTheme(editing.id, normaliseChoices(draft.choices));
       if (generation !== this.#generation) return;
-      if (this.list?.inUse === editing.id) this.#repaint();
+      if (this.list?.inUse === editing.id) repaintVenueTheme(this.api);
       this.#changed({ kind: "saved", theme: answer });
       if (scope === this.#scope) this.#cancel();
     } catch (error) {
@@ -544,7 +541,7 @@ export class LookCard extends LitElement {
         try {
           const created = await this.api.createTheme({ name, theme: choices, inUse });
           if (generation !== this.#generation) return;
-          if (inUse) this.#repaint();
+          if (inUse) repaintVenueTheme(this.api);
           this.#changed({ kind: "created", theme: created, inUse });
           if (scope === this.#scope) this.#cancel();
         } finally {

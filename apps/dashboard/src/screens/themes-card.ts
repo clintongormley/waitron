@@ -40,7 +40,6 @@ const BG = "--wt-color-bg";
 const COLOURS_FROM = 480;
 const STATUS_COLUMN_FROM = 400;
 
-/** Which columns the card's width allows. */
 type Band = "colours" | "status" | "narrow";
 
 function bandOf(width: number): Band {
@@ -94,6 +93,13 @@ function rowsOf(list: ThemeList): Row[] {
       view,
     })),
   ];
+}
+
+function warningLinesOf(row: Row): string[] {
+  const choices = row.view?.choices ?? null;
+  return choices === null
+    ? []
+    : row.view!.warnings.map((warning) => saveDialogLine(warning, choices));
 }
 
 @customElement("dashboard-themes-card")
@@ -162,7 +168,6 @@ export class ThemesCard extends LitElement {
   @property({ attribute: false }) canEdit = false;
   /** The stored theme the Look card's editor has open. */
   @property({ attribute: false }) editingId: string | null = null;
-  /** Null until the card's width is first read. */
   @state() private band: Band | null = null;
   @state() private submitting = false;
   @state() private switching: Switching | null = null;
@@ -350,10 +355,7 @@ export class ThemesCard extends LitElement {
       kind: "copy",
       name: copyName(row.name),
       inUse: false,
-      warningLines:
-        choices === null
-          ? []
-          : row.view!.warnings.map((warning) => saveDialogLine(warning, choices)),
+      warningLines: warningLinesOf(row),
       opener,
       submit: async ({ name, inUse }) => {
         const created = await this.#write(() =>
@@ -366,16 +368,12 @@ export class ThemesCard extends LitElement {
   }
 
   #askSwitch(row: Row, opener: HTMLElement | null): void {
-    const choices = row.view?.choices ?? null;
     this.#opener = opener;
     this.switchError = "";
     this.switching = {
       id: row.view?.id ?? null,
       name: row.name,
-      lines:
-        choices === null
-          ? []
-          : row.view!.warnings.map((warning) => saveDialogLine(warning, choices)),
+      lines: warningLinesOf(row),
     };
   }
 
