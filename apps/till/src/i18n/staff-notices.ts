@@ -35,7 +35,7 @@ export function staffNoticeText(notice: Pick<StaffNotice, "code" | "params">): {
         "staff_notice.fiscal.records_unsent_one",
       ),
       // A held record waits for a person to resolve its filing case, so it is not retried.
-      hint: t(typeof held === "number" && held > 0 ? TELL_MANAGER : "staff_notice.retried"),
+      hint: t(held === 0 ? "staff_notice.retried" : TELL_MANAGER),
     };
   }
   return unknownText();

@@ -10,6 +10,25 @@ export function emit(source: Element, name: string, detail?: unknown): void {
   source.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
 }
 
+/** The till read `mountEquipmentApp` answers unless a test overrides it. */
+export const till = {
+  locale: "en-GB",
+  invoiceLocale: "en-GB",
+  venueName: "Terrace restaurant",
+  nif: "B12345678",
+  orderFlow: "prepay",
+  bumpMode: "line",
+  fireControl: "waiter",
+  courses: [],
+  cardProvider: "none",
+  tipsEnabled: false,
+  inactivityTimeoutSeconds: null,
+  nodeId: "n1",
+  servers: [],
+  capabilities: ["show-schedule", "show-station", "show-expo", "take-orders"],
+  formFactor: "till",
+};
+
 export async function mountEquipmentApp(
   overrides: Record<string, unknown> = {},
   theme?: "light" | "dark",
@@ -31,23 +50,7 @@ export async function mountEquipmentApp(
       venueDefault: "en-GB",
       loginDefault: "en-GB",
     }),
-    getTill: vi.fn().mockResolvedValue({
-      locale: "en-GB",
-      invoiceLocale: "en-GB",
-      venueName: "Terrace restaurant",
-      nif: "B12345678",
-      orderFlow: "prepay",
-      bumpMode: "line",
-      fireControl: "waiter",
-      courses: [],
-      cardProvider: "none",
-      tipsEnabled: false,
-      inactivityTimeoutSeconds: null,
-      nodeId: "n1",
-      servers: [],
-      capabilities: ["show-schedule", "show-station", "show-expo", "take-orders"],
-      formFactor: "till",
-    }),
+    getTill: vi.fn().mockResolvedValue(till),
     getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
     getDeviceIdentity: vi.fn().mockResolvedValue({
       deviceId: "nfc-till",
@@ -95,6 +98,34 @@ export async function mountEquipmentApp(
     expect(mounted.el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull(),
   );
   return { ...mounted, api, requests };
+}
+
+export async function mountEquipmentAppAsKitchen(
+  getDeviceEquipment: TillApi["getDeviceEquipment"],
+) {
+  const api = {
+    getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "en", languages: ["en"] }),
+    getLocales: vi.fn().mockResolvedValue({
+      locales: [{ code: "en-GB", label: "English" }],
+      venueDefault: "en-GB",
+      loginDefault: "en-GB",
+    }),
+    getTill: vi
+      .fn()
+      .mockResolvedValue({ ...till, capabilities: ["act-as-kds"], formFactor: "kds" }),
+    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    getDeviceIdentity: vi.fn().mockResolvedValue({
+      deviceId: "kd-1",
+      name: "Kitchen screen",
+      formFactor: "kds",
+      kitchenScreens: [{ kind: "station", available: true, stations: [], zones: null }],
+    }),
+    getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [] }),
+    listStaff: vi.fn().mockResolvedValue([]),
+    getDeviceEquipment,
+  } as unknown as TillApi & { getDeviceStationScreen: ReturnType<typeof vi.fn> };
+  const mounted = await mountWidget<TillApp>("till-app", { api });
+  return { ...mounted, api };
 }
 
 export async function signIn(el: TillApp, locale = "en-GB"): Promise<void> {

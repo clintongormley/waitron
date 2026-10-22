@@ -4,13 +4,27 @@ import type {
   DeviceEquipmentRead,
   EquipmentChange,
   StaffNotice,
-  TillApi,
 } from "./api/client.js";
 import type { TillApp } from "./till-app.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
-import { emit, mountEquipmentApp, openEquipment, signIn } from "../test/equipment-app.js";
+import {
+  emit,
+  mountEquipmentApp,
+  mountEquipmentAppAsKitchen,
+  openEquipment,
+  signIn,
+  till,
+} from "../test/equipment-app.js";
 import { NFC_EQUIPMENT } from "../test/equipment-nfc.js";
 import { openTable, resetBillPayDrafts, stubApi, tableOrder } from "../test/bill-pay-app.js";
+import {
+  addDish,
+  draft,
+  mountApp as mountOrderApp,
+  openTable as openOrderTable,
+  resetAllergyFixture,
+  tableOrder as orderScreen,
+} from "../test/allergy-app-fixture.js";
 import { en, es } from "./i18n/strings.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 
@@ -156,6 +170,35 @@ describe("the staff notices an open till keeps", () => {
   });
 });
 
+describe("a poll beside an open order", () => {
+  beforeEach(() => {
+    resetAllergyFixture();
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanupWidgets();
+  });
+
+  it("brings changed notices and leaves the order screen and its draft line in place", async () => {
+    const getDeviceEquipment = vi
+      .fn()
+      .mockResolvedValueOnce(withNotices([A]))
+      .mockResolvedValue(withNotices([B]));
+    const { el } = await mountOrderApp({ getDeviceEquipment });
+    const order = await openOrderTable(el);
+    await addDish(el);
+    const lines = draft(el).lines;
+    expect(lines).toHaveLength(1);
+    await vi.waitFor(() => expect(seen(el).staffNotices).toEqual([A]));
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
+    expect(seen(el).staffNotices).toEqual([B]);
+    expect(orderScreen(el)).toBe(order);
+    expect(draft(el).lines).toEqual(lines);
+  });
+});
+
 const DISK: StaffNotice = {
   owner: "box",
   key: "storage.disk_full",
@@ -216,23 +259,7 @@ describe("the staff notice strip on a signed-in till or handheld", () => {
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "h1", name: "Handheld", formFactor: "phone-portrait" }),
-      getTill: vi.fn().mockResolvedValue({
-        locale: "en-GB",
-        invoiceLocale: "en-GB",
-        venueName: "Terrace restaurant",
-        nif: "B12345678",
-        orderFlow: "prepay",
-        bumpMode: "line",
-        fireControl: "waiter",
-        courses: [],
-        cardProvider: "none",
-        tipsEnabled: false,
-        inactivityTimeoutSeconds: null,
-        nodeId: "n1",
-        servers: [],
-        capabilities: ["take-orders"],
-        formFactor: "phone-portrait",
-      }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "phone-portrait" }),
       getDeviceEquipment: vi.fn().mockResolvedValue(withNotices([DISK])),
     });
     await signIn(el);
@@ -299,43 +326,3 @@ describe("the open notice list beside an open order", () => {
     expect(order.getBoundingClientRect().top).toBeGreaterThanOrEqual(listBox.bottom);
   });
 });
-
-async function mountEquipmentAppAsKitchen(getDeviceEquipment: TillApi["getDeviceEquipment"]) {
-  const api = {
-    getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "en", languages: ["en"] }),
-    getLocales: vi.fn().mockResolvedValue({
-      locales: [{ code: "en-GB", label: "English" }],
-      venueDefault: "en-GB",
-      loginDefault: "en-GB",
-    }),
-    getTill: vi.fn().mockResolvedValue({
-      locale: "en-GB",
-      invoiceLocale: "en-GB",
-      venueName: "Terrace restaurant",
-      nif: "B12345678",
-      orderFlow: "prepay",
-      bumpMode: "line",
-      fireControl: "waiter",
-      courses: [],
-      cardProvider: "none",
-      tipsEnabled: false,
-      inactivityTimeoutSeconds: null,
-      nodeId: "n1",
-      servers: [],
-      capabilities: ["act-as-kds"],
-      formFactor: "kds",
-    }),
-    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
-    getDeviceIdentity: vi.fn().mockResolvedValue({
-      deviceId: "kd-1",
-      name: "Kitchen screen",
-      formFactor: "kds",
-      kitchenScreens: [{ kind: "station", available: true, stations: [], zones: null }],
-    }),
-    getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [] }),
-    listStaff: vi.fn().mockResolvedValue([]),
-    getDeviceEquipment,
-  } as unknown as TillApi & { getDeviceStationScreen: ReturnType<typeof vi.fn> };
-  const mounted = await mountWidget<TillApp>("till-app", { api });
-  return { ...mounted, api };
-}

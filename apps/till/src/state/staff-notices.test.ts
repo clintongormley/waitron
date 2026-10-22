@@ -35,6 +35,14 @@ describe("the notices an equipment read leaves shown", () => {
     ).toEqual([kept]);
   });
 
+  it("lists a notice once when the read sends it fresh from an owner it also names unavailable", () => {
+    const clock = notice("fiscal", "clock");
+    const unsent = notice("fiscal", "unsent");
+    expect(
+      nextNotices([clock, unsent], read({ notices: [clock], noticesUnavailable: ["fiscal"] })),
+    ).toEqual([clock, unsent]);
+  });
+
   it("keeps nothing for an unavailable owner that had nothing before", () => {
     expect(
       nextNotices([notice("box", "disk")], read({ notices: [], noticesUnavailable: ["fiscal"] })),

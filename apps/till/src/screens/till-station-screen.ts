@@ -485,6 +485,9 @@ export class TillStationScreen extends LitElement {
   }
 
   #adoptDeviceStation({ stations }: DeviceStationScreen): void {
+    // A refused bump's own reload lands here too, so the line clears only when the stations change.
+    const ids = (list: readonly { id: string }[]) => list.map((station) => station.id).join("\n");
+    if (ids(stations) !== ids(this.deviceStations)) this.bumpErrorCode = undefined;
     this.#forgetUnlisted(stations.flatMap((station) => (worked(station) ? station.notices : [])));
     this.deviceStations = stations.map((station) =>
       worked(station)

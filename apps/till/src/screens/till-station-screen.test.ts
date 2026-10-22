@@ -504,6 +504,22 @@ describe("till-station-screen", () => {
     expect(alertText(el)).toEqual([]);
   });
 
+  it("a Collect refused on a full disk says so and still reloads the queue", async () => {
+    const api = stubApi({ markCollected: vi.fn().mockRejectedValue(diskFull) });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    queueWidget(el)!.dispatchEvent(
+      new CustomEvent("mark-collected", {
+        detail: { orderId: "wo-1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(alertText(el)).toEqual([codeMessage("storage.disk_full")]);
+    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
+  });
+
   it("a bump refused for any other reason shows no line", async () => {
     const api = stubApi({
       advanceTicketItem: vi.fn().mockRejectedValue({ code: "ticket.invalid_transition" }),
@@ -931,6 +947,39 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       .filter(Boolean);
     expect(lines).toEqual([codeMessage("storage.disk_full")]);
     expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2);
+  });
+
+  it("a kitchen display's full-disk line clears when the device's stations change", async () => {
+    const api = deviceApi({
+      deviceAdvance: vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 }),
+    });
+    const { el, host } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceMode: true,
+    });
+    await flush(el);
+    queueWidget(el)!.dispatchEvent(
+      new CustomEvent("advance-ticket-item", {
+        detail: { itemId: "ti-1", stationId: "st-dev", to: "preparing" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    const lines = () =>
+      [...el.shadowRoot!.querySelectorAll('[role="alert"]')]
+        .map((node) => node.textContent!.trim())
+        .filter(Boolean);
+    expect(lines()).toEqual([codeMessage("storage.disk_full")]);
+    vi.mocked(api.getDeviceStationScreen).mockResolvedValue({
+      stations: [{ ...boundStation, id: "st-bar", name: "Barra" }],
+    });
+    // Reconnecting reads the device's stations again, as a refresh does.
+    host.removeChild(el);
+    host.appendChild(el);
+    await flush(el);
+    expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(3);
+    expect(lines()).toEqual([]);
   });
 
   it("threads advanceOnly=true to the widget so it hides the collect/fire buttons (device has no such route)", async () => {

@@ -44,6 +44,17 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
     });
   });
 
+  it.each([
+    ["missing", { count: 12 }],
+    ["a string", { count: 12, held: "0" }],
+  ])("gives the unsent count the tell-a-manager hint when the held count is %s", (_, params) => {
+    setLocale(locale);
+    expect(staffNoticeText({ code: "fiscal.records_unsent", params })).toEqual({
+      main: words["staff_notice.fiscal.records_unsent"].replace("{n}", "12"),
+      hint: words["staff_notice.tell_manager"],
+    });
+  });
+
   it("words a count of one with the singular", () => {
     setLocale(locale);
     expect(
