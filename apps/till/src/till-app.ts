@@ -15082,6 +15082,7 @@ export class TillApp extends LitElement {
       this.finishingTable = { ...open, busy: false, refusal: codeMessage("draft.out_of_date") };
       return;
     }
+    if (open.command !== undefined && "collect" in open.command) return;
     const choices = event.detail.cancellations;
     if (
       choices.length !== open.dishes.length ||
@@ -15420,6 +15421,7 @@ export class TillApp extends LitElement {
               .busy=${open.busy || open.approval !== undefined}
               .refusal=${open.refusal}
               .confirmationLocked=${open.unconfirmed === true}
+              .collectPending=${open.unconfirmed === true && open.command !== undefined && "collect" in open.command}
               .refusalField=${open.refusalField ?? null}
               @finish-table-choice=${(event: CustomEvent<FinishTableChoice>) => void this.#confirmFinishTable(event)}
               @finish-table-collect=${(event: Event) => void this.#collectFinishTable(event)}

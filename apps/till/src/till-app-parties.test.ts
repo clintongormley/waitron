@@ -12099,6 +12099,108 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
     });
 
+    const lost = () => [1, 2, 3].map(() => new TypeError("Failed to fetch"));
+    function lostThenClosed() {
+      const finish = vi.fn().mockRejectedValueOnce(refusal(rows));
+      for (const error of lost()) finish.mockRejectedValueOnce(error);
+      return finish.mockResolvedValue({ state: "closed" });
+    }
+    const choice = () => ({
+      cancellations: rows.map((row) => ({
+        lineId: row.lineId,
+        quantity: row.quantity,
+        expectedBillRevision: row.billRevision,
+        expectedContext: structuredClone(row.context),
+        reasonId: "r-cancel",
+      })),
+    });
+
+    it("re-reads the dishes when the set changed", async () => {
+      const changed = { ...dish("line-4", "wo-check"), billRevision: 6 };
+      const finish = vi
+        .fn()
+        .mockRejectedValueOnce(refusal(rows))
+        .mockRejectedValueOnce(refusal([changed]))
+        .mockResolvedValue({ state: "closed" });
+      const { el } = await mountCollect({
+        finishTable: finish,
+        getCancellation: vi.fn(async (_p: string, id: string) =>
+          consent([...rows, changed].find((row) => row.lineId === id)!),
+        ),
+      });
+      await openFinish(el);
+      await collect(el);
+      expect(finish).toHaveBeenCalledTimes(2);
+      expect(tableOrder(el)).not.toBeNull();
+      expect(finishDialog(el)!.dishes).toEqual([changed]);
+      expect(finishDialog(el)!.collectPending).toBe(false);
+      expect(toast(el)?.open ?? false).toBe(false);
+    });
+
+    it("shows a refusal in the dialog", async () => {
+      const { el } = await mountCollect({
+        finishTable: vi
+          .fn()
+          .mockRejectedValueOnce(refusal(rows))
+          .mockRejectedValue({ code: "station.no_default", locationId: "l1" }),
+      });
+      await openFinish(el);
+      await collect(el);
+      expect(api.finishTable).toHaveBeenCalledTimes(2);
+      expect(finishDialog(el)!.refusal).toBe(codeMessage("station.no_default"));
+      expect(finishDialog(el)!.busy).toBe(false);
+      expect(finishDialog(el)!.collectPending).toBe(false);
+      expect(finishDialog(el)!.confirmationLocked).toBe(false);
+      expect(tableOrder(el)).not.toBeNull();
+    });
+
+    it("resends the same collection after a lost answer, and only the collection", async () => {
+      const finish = lostThenClosed();
+      const { el } = await mountCollect({ finishTable: finish });
+      await openFinish(el);
+      await collect(el);
+      await expect
+        .poll(() => finishDialog(el)?.refusal, { timeout: 5000 })
+        .toBe(t("adjust.unconfirmed"));
+      expect(finish).toHaveBeenCalledTimes(4);
+      const dialog = finishDialog(el)!;
+      expect(dialog.collectPending).toBe(true);
+      expect(dialog.confirmationLocked).toBe(true);
+      emit(dialog, "finish-table-choice", choice());
+      await flush(el, 8);
+      expect(finish).toHaveBeenCalledTimes(4);
+      await dialog.updateComplete;
+      await userEvent.click(dialog.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!);
+      await flush(el, 10);
+      expect(finish).toHaveBeenCalledTimes(5);
+      expect(finish.mock.calls[4]![3]).toEqual(finish.mock.calls[1]![3]);
+      expect(finish.mock.calls[4]![3]).toHaveProperty("collect");
+      expect(tableOrder(el)).toBeNull();
+    });
+
+    it("a cancel left unconfirmed cannot be turned into a collection", async () => {
+      const finish = lostThenClosed();
+      const { el } = await mountCollect({ finishTable: finish });
+      await openFinish(el);
+      await choose(el);
+      await expect
+        .poll(() => finishDialog(el)?.refusal, { timeout: 5000 })
+        .toBe(t("adjust.unconfirmed"));
+      expect(finish).toHaveBeenCalledTimes(4);
+      const dialog = finishDialog(el)!;
+      expect(dialog.collectPending).toBe(false);
+      expect(dialog.confirmationLocked).toBe(true);
+      emit(dialog, "finish-table-collect", {});
+      await flush(el, 8);
+      expect(finish).toHaveBeenCalledTimes(4);
+      await userEvent.click(dialog.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!);
+      await flush(el, 10);
+      expect(finish).toHaveBeenCalledTimes(5);
+      expect(finish.mock.calls[4]![3]).toEqual(finish.mock.calls[1]![3]);
+      expect(finish.mock.calls[4]![3]).toHaveProperty("cancellations");
+      expect(tableOrder(el)).toBeNull();
+    });
+
     it("opens no refund and asks no PIN", async () => {
       const { el } = await mountCollect();
       const dialog = await openFinish(el);
