@@ -32,6 +32,7 @@ import type { ModuleOperationPreparation } from "./operation-preparation.js";
 import type { RestoreHook } from "./restore.js";
 import type { BackupVerificationContribution } from "./backup-verification.js";
 import type { ModuleAlerts } from "./alerts.js";
+import type { StaffNoticeSource } from "./staff-notices.js";
 import "./errors.js";
 
 /**
@@ -1586,6 +1587,9 @@ export interface WaitronModule {
    * read from every module; sources only from enabled modules, since a disabled module's tables are
    * not migrated. */
   readonly alerts?: ModuleAlerts;
+  /** Checks whose notices are for the staff on every device that sells. Ask only enabled
+   * modules' sources: a disabled module's tables are not migrated. */
+  readonly staffNotices?: readonly StaffNoticeSource[];
   readonly backup?: ModuleBackupContribution;
   readonly configurationTransfer?: ModuleConfigurationTransfer;
   readonly contentTranslations?: {

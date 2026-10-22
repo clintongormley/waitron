@@ -21,6 +21,7 @@ import {
   FISCAL_MIGRATIONS,
   FISCAL_VOCABULARY,
   FISCAL_ALERTS,
+  FISCAL_STAFF_NOTICES,
 } from "@waitron/fiscal-verifactu";
 import {
   IDENTITY_MIGRATIONS,
@@ -317,6 +318,20 @@ describe("ALL_MODULES alerts seat", () => {
 
   it("venue-service carries its route. claim, by reference", () => {
     expect(ALL_MODULES.find((m) => m.name === "venue-service")?.alerts).toBe(VENUE_SERVICE_ALERTS);
+  });
+});
+
+describe("ALL_MODULES staff-notices seat", () => {
+  it("fiscal-verifactu carries its notices, by reference", () => {
+    expect(ALL_MODULES.find((m) => m.name === "fiscal-verifactu")?.staffNotices).toBe(
+      FISCAL_STAFF_NOTICES,
+    );
+  });
+
+  it("no other module carries the seat", () => {
+    expect(ALL_MODULES.filter((m) => m.staffNotices !== undefined).map((m) => m.name)).toEqual([
+      "fiscal-verifactu",
+    ]);
   });
 });
 

@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { BOOKINGS_TABLE_REMOVAL } from "@waitron/bookings";
-import type { AlertSource, WaitronModule } from "@waitron/module";
+import type { AlertSource, StaffNoticeSource, WaitronModule } from "@waitron/module";
 import {
   ALL_ALERT_CLAIMS,
   ALL_CLASSIFICATIONS,
   ALL_MODULES,
   VENUE_SERVICE,
   enabledAlertSources,
+  enabledStaffNoticeSources,
   enabledTableRemovals,
 } from "./modules.js";
 
@@ -47,5 +48,21 @@ describe("alert assembly", () => {
     const withSource = { ...ALL_MODULES[0]!, alerts: { sources: [source] } } as WaitronModule;
     expect(enabledAlertSources([withSource])).toEqual([source]);
     expect(enabledAlertSources([ALL_MODULES[0]!])).toEqual([]);
+  });
+});
+
+describe("staff-notice assembly", () => {
+  it("collects the sources of the modules it is given only, named by their module", () => {
+    const a: StaffNoticeSource = { read: () => Promise.resolve([]) };
+    const b: StaffNoticeSource = { read: () => Promise.resolve([]) };
+    const probe = { ...ALL_MODULES[0]!, name: "probe", staffNotices: [a, b] } as WaitronModule;
+    const sources = enabledStaffNoticeSources([probe]);
+    expect(sources).toEqual([
+      { owner: "probe", source: a },
+      { owner: "probe", source: b },
+    ]);
+    expect(sources[0]!.source).toBe(a);
+    expect(sources[1]!.source).toBe(b);
+    expect(enabledStaffNoticeSources([ALL_MODULES[0]!])).toEqual([]);
   });
 });

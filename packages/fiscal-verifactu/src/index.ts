@@ -1,6 +1,7 @@
 export { VerifactuBackend } from "./backend.js";
 export type { VerifactuBackendOptions } from "./backend.js";
 export { FISCAL_ALERTS } from "./alerts.js";
+export { FISCAL_STAFF_NOTICES } from "./staff-notices.js";
 export { FISCAL_MIGRATIONS } from "./migrations.js";
 export { FISCAL_VOCABULARY } from "./vocabulary.js";
 export { FISCAL_PROVISIONING, WAITRON_ID_SISTEMA } from "./provisioning.js";
