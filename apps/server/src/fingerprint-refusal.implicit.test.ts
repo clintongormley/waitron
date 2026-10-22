@@ -75,22 +75,20 @@ function snapshot() {
 }
 
 async function paid(billId: string, amount: number) {
-  await suite.db
-    .insert(billPayments)
-    .values({
-      workingOrderId: billId,
-      submissionId: randomUUID(),
-      fingerprint: "fixture",
-      kind: "contribution",
-      method: "cash",
-      applied: amount,
-      tendered: amount,
-      state: "received",
-      requestedBy: venue.operatorId,
-      source: "device",
-      deviceId: venue.deviceId,
-      receivedAt: new Date().toISOString(),
-    });
+  await suite.db.insert(billPayments).values({
+    workingOrderId: billId,
+    submissionId: randomUUID(),
+    fingerprint: "fixture",
+    kind: "contribution",
+    method: "cash",
+    applied: amount,
+    tendered: amount,
+    state: "received",
+    requestedBy: venue.operatorId,
+    source: "device",
+    deviceId: venue.deviceId,
+    receivedAt: new Date().toISOString(),
+  });
 }
 
 describe("late issuance rolls back its initiating command", () => {
