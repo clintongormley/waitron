@@ -172,6 +172,7 @@ export class TillPartyAllergyDialog extends LitElement {
   #opening?: { key: string; partyId: string | null; revision: number | null };
   #baseline!: Draft;
   #submitted?: Draft;
+  #handledFieldRefusal?: AllergyFieldRefusal;
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> => {
@@ -200,8 +201,13 @@ export class TillPartyAllergyDialog extends LitElement {
       this.fieldRefusal &&
       this.draft.guests[this.fieldRefusal.guestIndex]
     ) {
-      this.editingGuest = this.fieldRefusal.guestIndex;
-      this.page = this.mode === "edit" ? "editor" : "guests";
+      // A parent render may repeat a refusal object after its field was corrected.
+      if (this.fieldRefusal === this.#handledFieldRefusal) this.fieldRefusal = null;
+      else {
+        this.#handledFieldRefusal = this.fieldRefusal;
+        this.editingGuest = this.fieldRefusal.guestIndex;
+        this.page = this.mode === "edit" ? "editor" : "guests";
+      }
     }
   }
   #load(): void {
@@ -233,6 +239,7 @@ export class TillPartyAllergyDialog extends LitElement {
     this.#scope?.dispose();
     this.#opening = { key: this.scopeKey, partyId: this.view.partyId, revision: null };
     this.#submitted = undefined;
+    this.#handledFieldRefusal = undefined;
     this.active = true;
     this.attempted = false;
     this.confirmation = null;

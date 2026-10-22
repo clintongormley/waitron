@@ -325,6 +325,10 @@ Al pasar una cuenta del mostrador a una mesa, también se comprueba la respuesta
 ofrecen los platos que llegan. Cancelar deja la cuenta donde está. Si la mesa cambia mientras
 respondes, revisa la información actualizada y vuelve a confirmar antes de completar el traslado.
 
+Si el traslado marca un dato de una persona, corrígelo y continúa con la asignación de platos. La
+corrección se mantiene durante las actualizaciones en segundo plano; un nuevo rechazo puede
+volver a marcarla.
+
 Cocina conserva su primera copia de alergias con cada plato. Un cambio posterior llega en un
 aviso aparte que debe confirmarse. Consulta cómo las
 [copias de alergias y sus correcciones](kitchen-service.md#allergy-copies) acompañan al trabajo.

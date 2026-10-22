@@ -494,6 +494,35 @@ describe("A669 allergy dialog", () => {
     await fill(el, "guest-0-who", "Fixed guest");
     expect(el.shadowRoot!.querySelector<WtInput>('wt-input[name="guest-0-who"]')!.error).toBe("");
   });
+  it("keeps a corrected field clear when its parent repeats the same refusal, but shows a new refusal", async () => {
+    const el = await mount("allergies", "edit");
+    const refusal = { guestIndex: 0, field: "who" as const, message: "Check this guest" };
+    el.fieldRefusal = refusal;
+    await el.updateComplete;
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector<WtInput>('wt-input[name="guest-0-who"]')!.error).toBe(
+      "Check this guest",
+    );
+    await fill(el, "guest-0-who", "Corrected guest");
+    el.fieldRefusal = refusal;
+    await el.updateComplete;
+    const who = el.shadowRoot!.querySelector<WtInput>('wt-input[name="guest-0-who"]')!;
+    expect(who.value).toBe("Corrected guest");
+    expect(who.error).toBe("");
+    expect(el.fieldRefusal).toBeNull();
+    const nextRefusal = { ...refusal };
+    el.fieldRefusal = nextRefusal;
+    await el.updateComplete;
+    expect(who.error).toBe("Check this guest");
+    await fill(el, "guest-0-who", "Another correction");
+    el.scopeKey = "opening-b";
+    el.fieldRefusal = nextRefusal;
+    await el.updateComplete;
+    const reopened = el.shadowRoot!.querySelector<WtInput>('wt-input[name="guest-0-who"]');
+    expect(reopened).not.toBeNull();
+    expect(reopened!.error).toBe("Check this guest");
+  });
   it("focuses the first guest on the guest page and Enter advances only a valid form", async () => {
     const el = await mount();
     await click(el, "[data-allergies]");

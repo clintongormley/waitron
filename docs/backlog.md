@@ -6161,6 +6161,12 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   is not seen by them. Export one function from `@waitron/ui` that both the shell and the tests
   use. Left open by A719 (#1838).
 
+- **A999 residual: retain the other allergy-move failure if it recurs.** The original loaded
+  run reported two failing cases without their names or assertion output. The 2026-10-22
+  reproduction identified the corrected-guest case, where a parent render restored a cleared
+  refusal. Capture the exact case and output on any further recurrence before attributing it
+  to the same mechanism. [Receipt](developers/conventions-ui.md#a-parent-render-must-not-restore-a-corrected-request-refusal).
+
 - **Retain failure screenshots for long browser test names.** A failed waiting-list refresh case
   in `apps/till/src/till-app.test.ts` logged `locator.screenshot: ENAMETOOLONG` during A743's
   fixture checks. Bound the generated screenshot filename and keep the complete test name in
@@ -6195,6 +6201,11 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   created later fails there. Next: teach the walk to apply a first migration dated after its floor
   at its own date (a change to how the guard walks, so the owner decides).
   [Detail](backlog/ci.md#a624-the-upgrade-walk-cannot-step-a-new-set-whose-first-migration-names-another-sets-later-table)
+
+- **The step-watch no-progress callback can reject before the limit.** A999's CI reported
+  `999` ms against its unchanged `1000` ms assertion. An injected early callback reproduces
+  that rejection; check the elapsed gap and re-arm for the remainder before refusing the body.
+  Keep the existing assertion. [Receipt](backlog/ci.md#the-step-watch-no-progress-callback-can-reject-before-the-limit).
 
 - **The step-watch case's A544 pre-push failure is fixed at a likely cause, not a confirmed
   one.** The failure's message was not kept. On 2026-10-16 (A770) it failed in a third shape,
