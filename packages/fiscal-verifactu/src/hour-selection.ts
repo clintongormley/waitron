@@ -13,7 +13,7 @@ import { projectHourHistory, type HourHistorySource, type HourScope } from "./ho
 import {
   decodeMinuteIdentity,
   encodeMinuteIdentity,
-  isMinuteAllocatedSeries,
+  isMinuteSeriesBases,
   isMinuteIdentity,
 } from "./hour-identity.js";
 
@@ -96,11 +96,7 @@ function validBases(value: unknown): value is HourSelectionFacts["bases"] {
     value.every(
       (base) => record(base) && typeof base.code === "string" && typeof base.purpose === "string",
     ) &&
-    isMinuteAllocatedSeries(
-      value.map((base) => ({ code: `${base.code}-00000`, purpose: base.purpose })),
-      "00000",
-      value,
-    )
+    isMinuteSeriesBases(value)
   );
 }
 function validScope(value: unknown): value is HourScope {

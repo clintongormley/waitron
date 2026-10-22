@@ -39,3 +39,13 @@ export function isMinuteAllocatedSeries(
 ): boolean {
   return isMinuteIdentity(identity) && seriesMatchBases(value, identity, bases);
 }
+
+/** Whether these bases, each followed by a minute name, make a complete series set. */
+export function isMinuteSeriesBases(bases: readonly { code: string; purpose: string }[]): boolean {
+  const first = encodeMinuteIdentity(EPOCH_MS);
+  return isMinuteAllocatedSeries(
+    bases.map(({ code, purpose }) => ({ code: `${code}-${first}`, purpose })),
+    first,
+    bases,
+  );
+}

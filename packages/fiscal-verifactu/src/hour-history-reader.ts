@@ -6,7 +6,7 @@ import {
 } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import type { HourHistorySource } from "./hour-history.js";
-import { isMinuteAllocatedSeries } from "./hour-identity.js";
+import { isMinuteAllocatedSeries, isMinuteSeriesBases } from "./hour-identity.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -22,11 +22,7 @@ function validBases(value: unknown): value is { code: string; purpose: string }[
         typeof base.code === "string" &&
         typeof base.purpose === "string",
     ) &&
-    isMinuteAllocatedSeries(
-      value.map((base) => ({ code: `${base.code}-00000`, purpose: base.purpose })),
-      "00000",
-      value,
-    )
+    isMinuteSeriesBases(value)
   );
 }
 function time(...values: (Date | string | null | undefined)[]): number | null {

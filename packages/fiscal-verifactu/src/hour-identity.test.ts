@@ -4,6 +4,7 @@ import {
   encodeMinuteIdentity,
   isMinuteAllocatedSeries,
   isMinuteIdentity,
+  isMinuteSeriesBases,
 } from "./hour-identity.js";
 
 const EPOCH_MS = Date.parse("2026-01-01T00:00:00.000Z");
@@ -163,4 +164,29 @@ describe("complete configured minute series", () => {
       ).toBe(false);
     },
   );
+});
+
+describe("series bases a minute name can complete", () => {
+  it("accepts the bases of a complete set", () => {
+    expect(isMinuteSeriesBases(bases)).toBe(true);
+    expect(isMinuteSeriesBases([{ code: "ABCDEFGHIJKLMNOPQRSTU", purpose: "standard" }])).toBe(
+      true,
+    );
+  });
+
+  it.each([
+    [[]],
+    [[{ code: "FF", purpose: "full" }]],
+    [[{ code: "A".repeat(22), purpose: "standard" }]],
+    [[{ code: "A B", purpose: "standard" }]],
+    [[{ code: "A", purpose: "other" }]],
+    [
+      [
+        { code: "A", purpose: "standard" },
+        { code: "A", purpose: "full" },
+      ],
+    ],
+  ])("refuses %j", (value) => {
+    expect(isMinuteSeriesBases(value)).toBe(false);
+  });
 });
