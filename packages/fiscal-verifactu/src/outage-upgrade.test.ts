@@ -19,13 +19,19 @@ const suite = useVenueDb({
     const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
       entries: { tag: string }[];
     };
-    journal.entries = journal.entries.filter((entry) => entry.tag !== "0009_aeat_outage_flag");
+    journal.entries = journal.entries.filter((entry) => entry.tag < "0009_aeat_outage_flag");
     await writeFile(journalPath, JSON.stringify(journal));
     for (const set of TEST_MIGRATIONS) {
       await applyMigrationSet(
         db,
         set.migrationsTable === FISCAL_MIGRATIONS.migrationsTable
-          ? { ...set, migrationsFolder: directory }
+          ? {
+              ...set,
+              migrationsFolder: directory,
+              appendOnlyTables: set.appendOnlyTables?.filter(
+                (table) => table !== "clock_stop_restarts",
+              ),
+            }
           : set,
       );
     }

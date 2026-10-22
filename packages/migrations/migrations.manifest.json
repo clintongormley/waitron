@@ -87,6 +87,7 @@
       "filing_case_events",
       "fiscal_allocations",
       "fiscal_reservations",
+      "clock_stop_restarts",
       "fiscal_certificate_installs"
     ]
   },
