@@ -1,5 +1,12 @@
 # A275: Invoice now, receive a transfer later
 
+> **Superseded 2026-10-22:** the owner's 2026-10-21 02:40 decision replaces this partial-receipts
+> proposal with [invoice at the meal and final transfer closure](2026-10-22-a275-final-transfer-close-design.md).
+> No later receipts, reversals, debt list or receivables module. All old policy questions are retired;
+> questions 2–5 were explicitly withdrawn. The body, source audit, research and pictures below are
+> historical, not current policy or runtime evidence. The new design includes the replacement,
+> unsent adviser confirmation and asks only for full-design approval before any plan.
+
 **PROPOSED, 2026-10-20. Full owner approval is required before a plan or build.**
 This is a documentation milestone. Recommendations below are author proposals unless labelled
 **Owner decision**. It authorises no product change or exception to fiscal invariants. Design illustrations accompany the proposal. Fresh builder review resolved one bank-identity

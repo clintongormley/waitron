@@ -235,27 +235,30 @@ Found by A231d's research. [Orden HAC/1028/2026](https://www.boe.es/buscar/doc.p
 
 ## A275. Invoice a bill paid later by transfer (full or simplified invoice) — DESIGN NOW (2026-10-17)
 
-**Design proposed, 2026-10-20; owner answers and full approval remain due.** The owner chose invoice
-at the meal on 2026-10-17 from Q42's recorded research. The bill remains awaiting transfer until
-money is recorded; no consumer proforma-first path is proposed. The
-[design](../superpowers/specs/2026-10-20-a275-invoice-now-transfer-later-design.md) and
-[pictures](mockups/a275-invoice-now-transfer-later/README.md) cover F1/F2, debtor/contact details,
-delivery, due dates, dashboard reconciliation, reports and never-paid debts. One short asesor
-confirmation is attached to the design, not sent.
+**Minimal-scope design proposed, 2026-10-22; full owner approval remains due.** The owner's exact
+2026-10-21 02:40 decision keeps invoice-at-meal for F1/F2 and makes “to be paid by transfer” a FINAL
+bill closure, releasing the table through normal service checks. No awaiting-transfer balance,
+later money-received entry, partial receipts, reversals, receivables ledger/module or unpaid-debt
+list. The day's close gets its own transfer line, neither cash nor card; the accountant uses a
+dashboard invoice export under `report.export` to reconcile the bank outside Waitron.
 
-The recommendation supports partial bank receipts and explicit recording reversals through a new
-module ledger. That is a proposed cross-component scope choice, not existing incremental settlement.
-The first owner question compares it with a smaller, single-complete-balance version. Subsequent
-questions cover roles, delivery exceptions, terms/limits and operational writeoff; ask one at a time,
-then obtain approval of the entire revised design before planning or building. No protected fiscal
-writer, assertion or invariant change is authorised.
+The [revised design](../superpowers/specs/2026-10-22-a275-final-transfer-close-design.md) and
+[16 synthetic pictures](mockups/a275-final-transfer-close/README.md) replace the
+[partial-receipts proposal](../superpowers/specs/2026-10-20-a275-invoice-now-transfer-later-design.md).
+That historical body, research, source receipts and 40 pictures remain unchanged apart from dated
+supersession pointers. Old question 1 is retired; questions 2–5 were explicitly withdrawn. The
+requirements settle the remaining product choices: ask only for approval of the complete revised
+design and pictures before any plan. The revised Spanish asesor confirmation is attached, not sent;
+it asks about meal-time invoicing, final classification/export and reconciliation outside Waitron.
 
-Current-source audit: `issueUnpaidInvoice` already selects/snapshots the invoice and reserves delivery;
-`settleSale` requires the complete balance and refuses another settlement. The current daily close
-separates issued invoices from money recorded. Full F1 implementation landed in A231, but public F1
-is still disabled and its enablement gates remain. The historical Q42 software description predates
-that implementation; the design cites current call chains and labels runtime behavior unverified.
-This publication does not enable F1 or claim the proposed partial-receipt/reporting behavior is built.
+The fresh source table is **READ ONLY / runtime UNVERIFIED** at base
+`b1205498b60170a14204ad688c9ce035eb64d85f`. It traces deferred issuance, complete settlement,
+bill/party closure, transfer rendering, reports, daily close, export permission and device/zone
+admission. The transfer orchestration, explicit wording and invoice export are proposed work,
+not existing APIs or executed results. Public F1, A231/A741 and A555/A948 delivery/enablement
+gates remain. The €5,000 F1 example is a future enabled path; €220 F2 uses existing limits.
+In-flight A696/A739/A1003 are future integration dependencies, not blanket design blockers.
+No implementation plan, protected fiscal change or product-test run belongs to this revision.
 
 ## Pin the clock's future-finished sample refusal
 

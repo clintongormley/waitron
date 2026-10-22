@@ -378,11 +378,13 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#when-the-business-e-invoicing-regime-starts)
 
 - **A275. Invoice a bill paid later by transfer (full or simplified invoice)** — DESIGN PROPOSED,
-  awaiting owner policy answers and full approval. Issue at the meal, track the debt and record
-  later bank receipts. The [proposal](superpowers/specs/2026-10-20-a275-invoice-now-transfer-later-design.md)
-  recommends partial receipts and audited recording reversals; question 1 asks about that scope.
-  [Pictures](backlog/mockups/a275-invoice-now-transfer-later/README.md) accompany it. No plan or build;
-  public F1 still needs A231 enablement. [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17)
+  revised to the owner's 2026-10-21 02:40 minimal scope; full-design approval remains. Issue at the
+  meal, close finally as to be paid by transfer, release the table through normal service checks,
+  show a separate daily-close line and export invoices for accountant reconciliation outside
+  Waitron. No later receipts, debt list or receivables module. [Design](superpowers/specs/2026-10-22-a275-final-transfer-close-design.md)
+  and [pictures](backlog/mockups/a275-final-transfer-close/README.md); old questions retired,
+  questions 2–5 withdrawn. No plan or build; public F1 and A555/A948 gates remain.
+  [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17)
 
 - **A679 follow-up: pin the clock's future-finished sample refusal.** A serial review fault
   bypassing that internal stale-reading check survived the hour suites. Add both the refusal

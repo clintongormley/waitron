@@ -1,5 +1,12 @@
 # A275: invoice now, receive a transfer later
 
+> **SUPERSEDED 2026-10-22.** These 40 pictures and `question.txt` are historical. The owner's
+> 2026-10-21 02:40 decision drops later receipts, partial receipts, reversals and debt tracking;
+> questions 2–5 are withdrawn and the old question 1 no longer applies. Use the
+> [final-transfer-close design](../../../superpowers/specs/2026-10-22-a275-final-transfer-close-design.md)
+> and [16 replacement pictures](../a275-final-transfer-close/README.md). Only full-design approval
+> remains before a plan. The old images and historical guide below are retained unchanged.
+
 These are proposed design illustrations with synthetic names, accounts and invoices. They are not
 screenshots of implemented behavior. They show the recommended partial-transfer scope; the owner
 has not approved it. The F1 example needs A231's separate public-enablement gates.
