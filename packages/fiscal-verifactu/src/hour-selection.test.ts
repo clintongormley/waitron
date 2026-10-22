@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
-import { compareHourClocks, confirmHourClock, type HourClockObservation } from "./hour-clock.js";
+import { compareHourClocks, type HourClockObservation } from "./hour-clock.js";
 import {
   createHourSelection,
   type HourSelectionFacts,
@@ -98,9 +98,9 @@ function fixture() {
       mono = 0;
       engine = create();
     },
-    run(answer: "no" | "yes" | "unknown" = "no", selected = binding, confirmation?: object) {
+    run(answer: "no" | "yes" | "unknown" = "no", selected = binding) {
       return withOperationAuthority(selected, "administrator", (authority) =>
-        engine.select({ binding: selected, authority, answer, confirmation }),
+        engine.select({ binding: selected, authority, answer }),
       );
     },
     preview() {
@@ -247,18 +247,13 @@ it("compares a changed clock again before returning an existing intent", async (
   const f = fixture();
   await f.run();
   f.at(instant, 1, instant + 300_000);
-  await expect(f.run()).rejects.toMatchObject(refusal("clock_unconfirmed"));
+  await expect(f.run()).rejects.toMatchObject(refusal("clock_disagreement"));
 });
-it("requires authentic fresh clock decisions and bound confirmations", async () => {
+it("refuses disagreeing clocks with no way to confirm them", async () => {
   const f = fixture();
   f.at(instant, 0, instant + 300_000);
-  await expect(f.run()).rejects.toMatchObject(refusal("clock_unconfirmed"));
-  await expect(f.run("no", binding, {})).rejects.toMatchObject(refusal("clock_unconfirmed"));
-  const confirmation = confirmHourClock(f.facts.clock);
-  expect(await f.run("no", binding, confirmation)).toMatchObject({
-    status: "selected",
-    identity: "0CNNW",
-  });
+  await expect(f.run()).rejects.toMatchObject(refusal("clock_disagreement"));
+  expect(f.writes).toEqual([]);
 });
 it.each(["yes", "unknown"] as const)(
   "persists %s's original UTC wait target and reconnects to it",
@@ -315,10 +310,6 @@ it("an unresolved restart comparison retains the wait instead of completing it",
   f.at(Date.parse("2026-10-16T12:10:00Z"), 0, Date.parse("2026-10-16T11:10:00Z"));
   expect(await f.run("yes")).toMatchObject({ status: "waiting", requiresClockConfirmation: true });
   expect(f.writes).toHaveLength(1);
-  expect(await f.run("yes", binding, confirmHourClock(f.facts.clock))).toMatchObject({
-    status: "selected",
-    identity: "0CNPT",
-  });
 });
 it("a backward clock refuses existing material and retains its spent hour", async () => {
   const f = fixture();
@@ -575,17 +566,6 @@ it("a host that omits retained revisions cannot authorise a fresh hour", async (
     );
   });
   expect(f.writes).toEqual([]);
-});
-
-it("accepts only a matching clock confirmation from the trusted facts reader", async () => {
-  const f = fixture();
-  f.at(instant, 0, instant + 300_000);
-  f.facts = Object.assign({}, f.facts, { confirmation: confirmHourClock(f.facts.clock) });
-  expect(await f.run()).toMatchObject({ status: "selected", identity: "0CNNW" });
-  const before = f.writes.length;
-  f.at(instant, 1, instant + 400_000);
-  await expect(f.run()).rejects.toMatchObject(refusal("clock_unconfirmed"));
-  expect(f.writes).toHaveLength(before);
 });
 
 it("keeps an unspent wait's target and monotonic progress when ownership changes", async () => {

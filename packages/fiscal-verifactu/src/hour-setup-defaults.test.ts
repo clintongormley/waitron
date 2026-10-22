@@ -100,10 +100,11 @@ function fixture() {
 it("the default host clock provider reaches the unchanged real activation writer", async () => {
   const f = fixture();
   const challenge = await f.preparation.clockChallenge(binding);
-  const comparison = await f.preparation.compareClocks(binding, {
-    challengeId: challenge.id,
-    instantMs: NOW,
-  });
+  const comparison = await f.preparation.compareClocks(
+    binding,
+    { challengeId: challenge.id, instantMs: NOW },
+    { onBox: false },
+  );
   expect(comparison.clock.usable.map((row) => row.source)).toEqual(["browser", "internet", "box"]);
   const selected = await f.select();
   expect(selected).toMatchObject({ status: "selected", identity: "0CNNW" });
@@ -131,37 +132,19 @@ it("the default host clock provider reaches the unchanged real activation writer
 it("the default release provider refuses when the artifact has no embedded floor", async () => {
   const f = fixture();
   outside.release.mockReturnValue(null);
-  const displayed = await f.preparation.compareClocks(binding, null);
-  await f.preparation.confirmClock(binding, displayed.id);
+  await f.preparation.compareClocks(binding, null, { onBox: true });
   await expect(f.select()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "clock_unconfirmed" },
   });
   expect(f.history).toEqual([]);
 });
-it("a new browser comparison invalidates the old operator confirmation", async () => {
-  const f = fixture();
-  outside.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
-  const displayed = await f.preparation.compareClocks(binding, null);
-  await f.preparation.confirmClock(binding, displayed.id);
-  const challenge = await f.preparation.clockChallenge(binding);
-  await f.preparation.compareClocks(binding, {
-    challengeId: challenge.id,
-    instantMs: NOW + 300_000,
-  });
-  await expect(f.select()).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "clock_unconfirmed" },
-  });
-  expect(f.history).toEqual([]);
-});
-it("evicted frozen scopes cannot reuse their old displayed-clock confirmation", async () => {
+it("evicted frozen scopes cannot reuse their old clock reading", async () => {
   const f = fixture();
   outside.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
   for (let index = 0; index < 65; index++) {
     f.context(`scope-${index}`);
-    const displayed = await f.preparation.compareClocks(binding, null);
-    await f.preparation.confirmClock(binding, displayed.id);
+    await f.preparation.compareClocks(binding, null, { onBox: true });
   }
   f.context("scope-0");
   await expect(f.select()).rejects.toMatchObject({

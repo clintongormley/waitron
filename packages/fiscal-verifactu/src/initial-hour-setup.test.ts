@@ -279,6 +279,21 @@ afterEach(() => {
   vi.useRealTimers();
   source.internet.mockReset();
 });
+function internetAgrees() {
+  source.internet.mockImplementation(async () => {
+    const monotonic = performance.now();
+    return {
+      source: "internet",
+      result: "usable",
+      instantMs: Date.now(),
+      uncertaintyMs: 500,
+      wallStartedMs: Date.now(),
+      wallFinishedMs: Date.now(),
+      monotonicStartedMs: monotonic,
+      monotonicFinishedMs: monotonic,
+    };
+  });
+}
 function configured() {
   let value: unknown = null;
   const history: unknown[] = [];
@@ -308,14 +323,18 @@ function configured() {
   };
   const seat = FISCAL_INITIAL_SETUP.configure!(host);
   const prepare = (proposal: unknown) => seat.preparation!(context, proposal);
+  let comparisonId = "none";
   const select = async (answer = "no") =>
-    seat.request(context, await seat.candidates(context, { answer }));
+    seat.request(context, await seat.candidates(context, { answer, comparisonId }));
   const clock = async () => {
+    internetAgrees();
     const challenge = (await prepare({ action: "clock-challenge" })) as { id: string };
-    return prepare({
+    const compared = (await prepare({
       action: "compare-clocks",
       browser: { challengeId: challenge.id, instantMs: Date.now() },
-    });
+    })) as { id: string };
+    comparisonId = compared.id;
+    return compared;
   };
   return { seat, host, prepare, select, clock, history };
 }
@@ -358,15 +377,24 @@ it("a configured declaration can persist a wait and preview it without activatio
   expect(preview).not.toHaveProperty("input");
   expect(f.history).toHaveLength(1);
 });
-it("the configured module binds manual confirmation to the displayed comparison", async () => {
+it("the configured module takes a browser reading as the box's own until the route says otherwise", async () => {
   const f = configured();
-  const compared = (await f.prepare({ action: "compare-clocks", browser: null })) as { id: string };
-  await expect(f.select()).rejects.toMatchObject({
+  const challenge = (await f.prepare({ action: "clock-challenge" })) as { id: string };
+  const compared = (await f.prepare({
+    action: "compare-clocks",
+    browser: { challengeId: challenge.id, instantMs: Date.now() },
+  })) as { id: string; clock: { secondClock: boolean; unavailable: { reason: string }[] } };
+  expect(compared.clock.secondClock).toBe(false);
+  expect(compared.clock.unavailable).toContainEqual(
+    expect.objectContaining({ source: "browser", reason: "same_machine" }),
+  );
+  await expect(
+    f.seat.candidates(context, { answer: "no", comparisonId: compared.id }),
+  ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "clock_unconfirmed" },
+    params: { reason: "second_clock_missing" },
   });
-  await f.prepare({ action: "confirm-clock", comparisonId: compared.id });
-  expect(await f.select()).toMatchObject({ status: "selected", identity: "0CNNW" });
+  expect(f.history).toEqual([]);
 });
 it.each([
   null,
@@ -376,25 +404,30 @@ it.each([
   { action: "compare-clocks", browser: [] },
   { action: "compare-clocks", browser: { challengeId: "challenge", instantMs: 1.5 } },
   { action: "confirm-clock", comparisonId: 1 },
+  { action: "confirm-clock", comparisonId: "comparison" },
 ])("refuses an unsupported clock proposal %j", async (proposal) => {
   await expect(configured().prepare(proposal)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "malformed_allocation" },
   });
 });
-it.each([null, {}, { answer: "maybe" }, { answer: "no", taxpayerNif: "injected" }])(
-  "refuses an unsupported taxpayer declaration %j",
-  async (proposal) => {
-    await expect(configured().seat.candidates(context, proposal)).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "malformed_allocation" },
-    });
-  },
-);
+it.each([
+  null,
+  {},
+  { answer: "maybe", comparisonId: "comparison" },
+  { answer: "no" },
+  { answer: "no", comparisonId: 1 },
+  { answer: "no", comparisonId: "comparison", taxpayerNif: "injected" },
+])("refuses an unsupported taxpayer declaration %j", async (proposal) => {
+  await expect(configured().seat.candidates(context, proposal)).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "malformed_allocation" },
+  });
+});
 it("requires the module's fresh candidate rather than a copied or reused candidate", async () => {
   const f = configured();
-  await f.clock();
-  const candidate = await f.seat.candidates(context, { answer: "no" });
+  const compared = await f.clock();
+  const candidate = await f.seat.candidates(context, { answer: "no", comparisonId: compared.id });
   expect(() => f.seat.request(context, structuredClone(candidate))).toThrowError(
     expect.objectContaining(refusal),
   );
@@ -440,23 +473,55 @@ function terminal(f: ReturnType<typeof configured>, answers: string[]) {
   return { actions, output, prompts };
 }
 
-it("the terminal's unavailable-clock confirmation prepares the exact complete hour input", async () => {
+it("the terminal with only the box's clock explains and cancels without a question", async () => {
   const f = configured();
-  const t = terminal(f, [" YES ", " NO "]);
-  const result = await f.seat.command!(context, t.actions);
-  expect(result).toEqual({ status: "ready", input });
+  const t = terminal(f, []);
+  expect(await f.seat.command!(context, t.actions)).toEqual({ status: "cancelled" });
   expect(t.output.join("\n")).toContain("box: 2026-10-16T11:40:00.000Z");
   expect(t.output.join("\n")).toContain("internet: unavailable");
-  expect(t.output.join("\n")).toContain("every venue using this taxpayer's NIF");
-  expect(t.prompts).toHaveLength(2);
-  expect(f.history).toHaveLength(1);
+  expect(t.output).toContain(
+    "No series is made without a confirmed time, so none is ever repeated.",
+  );
+  expect(t.output).toContain(
+    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+  );
+  expect(t.prompts).toEqual([]);
+  expect(f.history).toEqual([]);
+});
+
+it("the terminal explains and cancels when the internet's clock disagrees", async () => {
+  const f = configured();
+  source.internet.mockImplementation(async () => {
+    const monotonic = performance.now();
+    return {
+      source: "internet",
+      result: "usable",
+      instantMs: Date.now() + 31_000,
+      uncertaintyMs: 0,
+      wallStartedMs: Date.now(),
+      wallFinishedMs: Date.now(),
+      monotonicStartedMs: monotonic,
+      monotonicFinishedMs: monotonic,
+    };
+  });
+  const t = terminal(f, []);
+  expect(await f.seat.command!(context, t.actions)).toEqual({ status: "cancelled" });
+  expect(t.output).toContain(
+    "No series is made without a confirmed time, so none is ever repeated.",
+  );
+  expect(t.output).not.toContain(
+    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+  );
+  expect(t.prompts).toEqual([]);
+  expect(f.history).toEqual([]);
 });
 
 it.each(["yes", "unknown"])(
   "terminal %s retains a wait without returning a usable input",
   async (answer) => {
     const f = configured();
-    const t = terminal(f, ["yes", answer]);
+    internetAgrees();
+    const t = terminal(f, [answer]);
     expect(await f.seat.command!(context, t.actions)).toEqual({ status: "waiting" });
     expect(t.output.join("\n")).toContain("2026-10-16T12:00:00.000Z");
     expect(t.output.join("\n")).toContain("does not reserve a separate hour");
@@ -464,10 +529,11 @@ it.each(["yes", "unknown"])(
   },
 );
 
-it.each([[""], ["no"], ["yes", ""], ["yes", "maybe"]])(
+it.each([[""], ["maybe"]])(
   "terminal cancellation %j records no hour",
   async (...answers: string[]) => {
     const f = configured();
+    internetAgrees();
     const t = terminal(f, answers);
     expect(await f.seat.command!(context, t.actions)).toEqual({ status: "cancelled" });
     expect(f.history).toEqual([]);
@@ -485,53 +551,29 @@ it("the terminal keeps an already selected request without another comparison or
 
 it("the terminal uses automatic agreement without a manual clock question", async () => {
   const f = configured();
-  source.internet.mockImplementation(async () => {
-    const monotonic = performance.now();
-    return {
-      source: "internet",
-      result: "usable",
-      instantMs: Date.now(),
-      uncertaintyMs: 500,
-      wallStartedMs: Date.now(),
-      wallFinishedMs: Date.now(),
-      monotonicStartedMs: monotonic,
-      monotonicFinishedMs: monotonic,
-    };
-  });
+  internetAgrees();
   const t = terminal(f, ["no"]);
   expect(await f.seat.command!(context, t.actions)).toEqual({ status: "ready", input });
   expect(t.prompts).toHaveLength(1);
   expect(t.output.join("\n")).not.toContain("wrong time");
 });
 
-it("the terminal waits when clock uncertainty spans the hour boundary", async () => {
+it("the terminal does not wait at the UTC hour boundary", async () => {
   const f = configured();
   vi.setSystemTime(new Date("2026-10-16T11:59:59.900Z"));
-  source.internet.mockImplementation(async () => {
-    const monotonic = performance.now();
-    return {
-      source: "internet",
-      result: "usable",
-      instantMs: Date.now(),
-      uncertaintyMs: 500,
-      wallStartedMs: Date.now(),
-      wallFinishedMs: Date.now(),
-      monotonicStartedMs: monotonic,
-      monotonicFinishedMs: monotonic,
-    };
-  });
-  const t = terminal(f, []);
-  expect(await f.seat.command!(context, t.actions)).toEqual({ status: "waiting" });
-  expect(t.prompts).toEqual([]);
-  expect(t.output.join("\n")).toContain("UTC-hour boundary");
-  expect(f.history).toEqual([]);
+  internetAgrees();
+  const t = terminal(f, ["no"]);
+  expect(await f.seat.command!(context, t.actions)).toMatchObject({ status: "ready" });
+  expect(t.output.join("\n")).not.toContain("UTC-hour boundary");
+  expect(f.history).toHaveLength(1);
 });
 
 it.each([null, { status: "invalid" }])(
   "the terminal rejects an unusable selection response %j",
   async (selected) => {
     const f = configured();
-    const t = terminal(f, ["yes", "no"]);
+    internetAgrees();
+    const t = terminal(f, ["no"]);
     await expect(
       f.seat.command!(context, { ...t.actions, select: async () => selected }),
     ).rejects.toMatchObject(refusal);
@@ -541,13 +583,14 @@ it.each([null, { status: "invalid" }])(
 
 it("the terminal reconnects to the same wait without asking the taxpayer question again", async () => {
   const f = configured();
-  expect(await f.seat.command!(context, terminal(f, ["yes", "unknown"]).actions)).toEqual({
+  internetAgrees();
+  expect(await f.seat.command!(context, terminal(f, ["unknown"]).actions)).toEqual({
     status: "waiting",
   });
   const before = structuredClone(f.history);
-  const again = terminal(f, ["yes"]);
+  const again = terminal(f, []);
   expect(await f.seat.command!(context, again.actions)).toEqual({ status: "waiting" });
-  expect(again.prompts).toEqual(["The box's displayed date and time are correct? [y/N]: "]);
+  expect(again.prompts).toEqual([]);
   expect(again.output.join("\n")).toContain("2026-10-16T12:00:00.000Z");
   expect(f.history).toEqual(before);
 });
@@ -557,18 +600,19 @@ it("the terminal retains the original unknown answer when its monotonic wait has
   const clock = vi.spyOn(performance, "now").mockImplementation(() => monotonic);
   try {
     const f = configured();
-    expect(await f.seat.command!(context, terminal(f, ["yes", "unknown"]).actions)).toEqual({
+    internetAgrees();
+    expect(await f.seat.command!(context, terminal(f, ["unknown"]).actions)).toEqual({
       status: "waiting",
     });
     monotonic += 1_200_000;
     vi.setSystemTime(new Date("2026-10-16T12:00:00Z"));
-    const resumed = terminal(f, ["yes"]);
+    const resumed = terminal(f, []);
     const result = await f.seat.command!(context, resumed.actions);
     expect(result).toMatchObject({
       status: "ready",
       input: { allocation: { installationIdentity: "0CNPG" } },
     });
-    expect(resumed.prompts).toEqual(["The box's displayed date and time are correct? [y/N]: "]);
+    expect(resumed.prompts).toEqual([]);
     expect(f.history).toHaveLength(2);
   } finally {
     clock.mockRestore();
@@ -649,15 +693,16 @@ it.each(["standard", "rectificative", "unknown"])(
   },
 );
 
-it.each(["yes", "no"])(
-  "terminal resume with clock answer %s never selects a replacement hour",
-  async (answer) => {
+it.each([true, false])(
+  "terminal resume with a second clock %s never selects a replacement hour",
+  async (agrees) => {
     const f = configured();
-    const t = terminal(f, [answer]);
+    if (agrees) internetAgrees();
+    const t = terminal(f, []);
     expect(await f.seat.commandResume!(fixture(), t.actions)).toEqual(
-      answer === "yes" ? { status: "ready", input } : { status: "cancelled" },
+      agrees ? { status: "ready", input } : { status: "cancelled" },
     );
-    expect(t.prompts).toEqual(["The box's displayed date and time are correct? [y/N]: "]);
+    expect(t.prompts).toEqual([]);
     expect(f.history).toEqual([]);
   },
 );
@@ -677,7 +722,8 @@ it.each([null, { status: "other", answer: "no" }, { status: "preview", answer: "
   "terminal refuses malformed preview %j before requesting an allocation",
   async (preview) => {
     const f = configured();
-    const t = terminal(f, ["yes", "no"]);
+    internetAgrees();
+    const t = terminal(f, ["no"]);
     await expect(
       f.seat.command!(context, {
         ...t.actions,
@@ -688,7 +734,7 @@ it.each([null, { status: "other", answer: "no" }, { status: "preview", answer: "
       }),
     ).rejects.toMatchObject(refusal);
     expect(f.history).toEqual([]);
-    expect(t.prompts).toEqual(["The box's displayed date and time are correct? [y/N]: "]);
+    expect(t.prompts).toEqual([]);
   },
 );
 

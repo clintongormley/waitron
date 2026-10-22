@@ -116,12 +116,27 @@ async function compare(operations: Operations, operation: Operation, browser = f
   return (await operations.recovery!(operation, {
     action: "compare-clocks",
     browser: browser ? { challengeId: challenge.id, instantMs: Date.now() } : null,
-  })) as { id: string; clock: { requiresConfirmation: boolean; usable: { source: string }[] } };
+  })) as {
+    id: string;
+    clock: {
+      secondClock: boolean;
+      usable: { source: string }[];
+      unavailable: { source: string; reason: string }[];
+    };
+  };
 }
-async function confirmed(operations: Operations, operation: Operation) {
-  const displayed = await compare(operations, operation);
-  await operations.recovery!(operation, { action: "confirm-clock", comparisonId: displayed.id });
-  return displayed;
+async function agreed(operations: Operations, operation: Operation) {
+  vi.mocked(internet.observeInternetHourClock).mockImplementation(async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: Date.now(),
+    uncertaintyMs: 0,
+    wallStartedMs: Date.now(),
+    wallFinishedMs: Date.now(),
+    monotonicStartedMs: monotonic,
+    monotonicFinishedMs: monotonic,
+  }));
+  return compare(operations, operation);
 }
 
 it.each(["restore", "re-register", "promote"])(
@@ -133,10 +148,11 @@ it.each(["restore", "re-register", "promote"])(
     const operator = action === "promote" ? "authenticated-manager" : key;
     await withOperationAuthority(selectedBinding, operator, async (authority) => {
       const operation = { binding: selectedBinding, authority };
-      await confirmed(operations, operation);
+      const comparison = await agreed(operations, operation);
       const selected = (await operations.recovery!(operation, {
         action: "select",
         answer: "no",
+        comparisonId: comparison.id,
         installationCodes: ["0cnJR"],
       })) as { status: string; identity: string; input: unknown };
       expect(selected).toMatchObject({
@@ -172,26 +188,25 @@ it.each(["restore", "re-register", "promote"])(
   },
 );
 
-it("uses the challenge's browser reading without inventing a confirmation requirement", async () => {
+it("takes a browser reading as the box's own until the route says where it came from", async () => {
   const f = fixture();
   const operations = FISCAL_OPERATIONS.configure!(f.host);
   await withOperationAuthority(binding, key, async (authority) => {
     const operation = { binding, authority };
     const displayed = await compare(operations, operation, true);
-    expect(displayed.clock.requiresConfirmation).toBe(false);
-    expect(displayed.clock.usable.map((sample) => sample.source)).toEqual(["browser", "box"]);
-    expect(await operations.recovery!(operation, { action: "preview" })).toMatchObject({
-      status: "preview",
-      identity: "0CNNW",
-    });
-    expect(f.history).toEqual([]);
-    expect(
-      await operations.recovery!(operation, {
+    expect(displayed.clock.secondClock).toBe(false);
+    expect(displayed.clock.unavailable).toContainEqual(
+      expect.objectContaining({ source: "browser", reason: "same_machine" }),
+    );
+    await expect(
+      operations.recovery!(operation, {
         action: "select",
         answer: "no",
+        comparisonId: displayed.id,
         installationCodes: ["0CNJR"],
       }),
-    ).toMatchObject({ status: "selected", identity: "0CNNW" });
+    ).rejects.toMatchObject(refusal("second_clock_missing"));
+    expect(f.history).toEqual([]);
   });
 });
 
@@ -201,16 +216,21 @@ it.each(["yes", "unknown"])(
     const f = fixture();
     await withOperationAuthority(binding, key, async (authority) => {
       const operation = { binding, authority };
-      await confirmed(FISCAL_OPERATIONS.configure!(f.host), operation);
-      const proposal = { action: "select", answer, installationCodes: ["0CNJR"] };
+      const proposal = (comparisonId: string) => ({
+        action: "select",
+        answer,
+        comparisonId,
+        installationCodes: ["0CNJR"],
+      });
+      const first = await agreed(FISCAL_OPERATIONS.configure!(f.host), operation);
       expect(
-        await FISCAL_OPERATIONS.configure!(f.host).recovery!(operation, proposal),
+        await FISCAL_OPERATIONS.configure!(f.host).recovery!(operation, proposal(first.id)),
       ).toMatchObject({ status: "waiting", remainingMs: 1_200_000 });
       vi.setSystemTime(NOW + 1_200_000);
       monotonic += 1_200_000;
-      await confirmed(FISCAL_OPERATIONS.configure!(f.host), operation);
+      const second = await agreed(FISCAL_OPERATIONS.configure!(f.host), operation);
       expect(
-        await FISCAL_OPERATIONS.configure!(f.host).recovery!(operation, proposal),
+        await FISCAL_OPERATIONS.configure!(f.host).recovery!(operation, proposal(second.id)),
       ).toMatchObject({ status: "selected", identity: "0CNPG" });
       expect(f.history).toHaveLength(2);
     });
@@ -218,29 +238,27 @@ it.each(["yes", "unknown"])(
 );
 
 it.each(["clock-challenge", "compare-clocks", "resume"])(
-  "%s invalidates an earlier manual clock confirmation",
+  "a later %s leaves an earlier page's reading usable",
   async (action) => {
     const f = fixture();
     const operations = FISCAL_OPERATIONS.configure!(f.host);
     await withOperationAuthority(binding, key, async (authority) => {
       const operation = { binding, authority };
-      await confirmed(operations, operation);
+      const earlier = await agreed(operations, operation);
       if (action === "resume") await operations.resumeRecovery!(operation);
       else
         await operations.recovery!(
           operation,
           action === "clock-challenge" ? { action } : { action, browser: null },
         );
-      await expect(
-        operations.recovery!(operation, {
+      expect(
+        await operations.recovery!(operation, {
           action: "select",
           answer: "no",
+          comparisonId: earlier.id,
           installationCodes: ["0CNJR"],
         }),
-      ).rejects.toMatchObject(
-        refusal(action === "clock-challenge" ? "clock_stale" : "clock_unconfirmed"),
-      );
-      expect(f.history).toEqual([]);
+      ).toMatchObject({ status: "selected" });
     });
   },
 );
@@ -250,10 +268,11 @@ it("resumes committed work without collecting fresh clocks or rewriting the jour
   const operations = FISCAL_OPERATIONS.configure!(f.host);
   await withOperationAuthority(binding, key, async (authority) => {
     const operation = { binding, authority };
-    await confirmed(operations, operation);
+    const comparison = await agreed(operations, operation);
     const selected = (await operations.recovery!(operation, {
       action: "select",
       answer: "no",
+      comparisonId: comparison.id,
       installationCodes: ["0CNJR"],
     })) as { input: unknown };
     Object.assign(f.facts, { priorActivation: "committed" });
@@ -276,15 +295,16 @@ it.each([
   {},
   { action: "unknown" },
   { action: "preview", extra: true },
-  { action: "select", answer: "maybe", installationCodes: ["0CNJR"] },
-  { action: "select", answer: "no" },
+  { action: "select", answer: "maybe", comparisonId: "x", installationCodes: ["0CNJR"] },
+  { action: "select", answer: "no", comparisonId: "x" },
+  { action: "select", answer: "no", installationCodes: ["0CNJR"] },
+  { action: "select", answer: "no", comparisonId: 42, installationCodes: ["0CNJR"] },
   { action: "compare-clocks" },
   { action: "compare-clocks", browser: {} },
   { action: "compare-clocks", browser: { challengeId: 1, instantMs: NOW } },
   { action: "compare-clocks", browser: { challengeId: "x", instantMs: NOW + 0.5 } },
   { action: "compare-clocks", browser: { challengeId: "x", instantMs: NOW, extra: true } },
-  { action: "confirm-clock", comparisonId: 42 },
-  { action: "confirm-clock", comparisonId: "x", extra: true },
+  { action: "confirm-clock", comparisonId: "x" },
 ])("refuses malformed recovery proposal %j without saving an hour", async (proposal) => {
   const f = fixture();
   await withOperationAuthority(binding, key, async (authority) => {
@@ -430,22 +450,24 @@ it("rejects a comparison identifier from another host context", async () => {
     await compare(operations, operation);
     await expect(
       operations.recovery!(operation, {
-        action: "confirm-clock",
+        action: "select",
+        answer: "no",
         comparisonId: first.id,
+        installationCodes: ["0CNJR"],
       }),
-    ).rejects.toMatchObject(refusal("clock_confirmation_required"));
+    ).rejects.toMatchObject(refusal("clock_stale"));
     expect(f.history).toEqual([]);
   });
 });
 
-it("evicts old confirmations while retaining the next host context", async () => {
+it("evicts old clock sessions while retaining the next host context", async () => {
   const f = fixture();
   const operations = FISCAL_OPERATIONS.configure!(f.host);
   await withOperationAuthority(binding, key, async (authority) => {
     const operation = { binding, authority };
     for (let index = 0; index < 65; index++) {
       Object.assign(f.facts, { contextKey: `context/${index}` });
-      await confirmed(operations, operation);
+      await agreed(operations, operation);
     }
     Object.assign(f.facts, { contextKey: "context/1" });
     expect(await operations.recovery!(operation, { action: "preview" })).toMatchObject({
@@ -470,11 +492,12 @@ it.each([
   const operations = FISCAL_OPERATIONS.configure!(f.host);
   await withOperationAuthority(binding, key, async (authority) => {
     const operation = { binding, authority };
-    await confirmed(operations, operation);
+    const comparison = await agreed(operations, operation);
     await expect(
       operations.recovery!(operation, {
         action: "select",
         answer: "no",
+        comparisonId: comparison.id,
         installationCodes: ["0CNJR"],
       }),
     ).rejects.toMatchObject(refusal(reason));
@@ -487,11 +510,12 @@ it("uses reported installations as a floor before saving an hour", async () => {
   const operations = FISCAL_OPERATIONS.configure!(f.host);
   await withOperationAuthority(binding, key, async (authority) => {
     const operation = { binding, authority };
-    await confirmed(operations, operation);
+    const comparison = await agreed(operations, operation);
     await expect(
       operations.recovery!(operation, {
         action: "select",
         answer: "no",
+        comparisonId: comparison.id,
         installationCodes: ["0cnpg"],
       }),
     ).rejects.toMatchObject(refusal("hour_not_later"));

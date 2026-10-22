@@ -82,7 +82,7 @@ export function readHourSetupInput(context: InitialSetupContext, input: unknown)
 
 async function reviewCommandClock(
   actions: InitialSetupCommandActions,
-): Promise<{ status: "ready" } | { status: "waiting" } | { status: "cancelled" }> {
+): Promise<{ status: "ready"; comparisonId: string } | { status: "cancelled" }> {
   const comparison = (await actions.prepare({
     action: "compare-clocks",
     browser: null,
@@ -93,21 +93,15 @@ async function reviewCommandClock(
     );
   for (const sample of comparison.clock.unavailable)
     actions.output(`${sample.source}: unavailable`);
-  if (comparison.clock.boundaryWait) {
-    actions.output("Clocks span a UTC-hour boundary. Check again before choosing an hour.");
-    return { status: "waiting" };
+  if (!comparison.clock.secondClock || comparison.clock.disagreement) {
+    actions.output("No series is made without a confirmed time, so none is ever repeated.");
+    if (!comparison.clock.secondClock)
+      actions.output(
+        "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+      );
+    return { status: "cancelled" };
   }
-  if (comparison.clock.requiresConfirmation) {
-    actions.output("Accepting a wrong time can reuse invoice names or date invoices incorrectly.");
-    const confirmed = (
-      await actions.prompt("The box's displayed date and time are correct? [y/N]: ")
-    )
-      .trim()
-      .toLowerCase();
-    if (confirmed !== "y" && confirmed !== "yes") return { status: "cancelled" };
-    await actions.prepare({ action: "confirm-clock", comparisonId: comparison.id });
-  }
-  return { status: "ready" as const };
+  return { status: "ready", comparisonId: comparison.id };
 }
 
 export function createHourInitialSetup(
@@ -189,7 +183,7 @@ export function createHourInitialSetup(
               .trim()
               .toLowerCase();
       if (!["no", "yes", "unknown"].includes(answer)) return { status: "cancelled" };
-      const selected = await actions.select({ answer });
+      const selected = await actions.select({ answer, comparisonId: reviewed.comparisonId });
       if (record(selected) && selected.status === "waiting") return waiting(selected.targetMs);
       if (!record(selected) || selected.status !== "selected") return refuse();
       return { status: "ready", input: selected.input };
@@ -213,25 +207,22 @@ export function createHourInitialSetup(
             !Number.isSafeInteger(proposal.browser.instantMs))
         )
           return refuse("malformed_allocation");
+        // Until the route says where the request came from, a browser is taken to be the box's own.
         return session.compareClocks(
           context.binding,
           proposal.browser as { challengeId: string; instantMs: number } | null,
+          { onBox: true },
         );
       }
-      if (
-        proposal.action === "confirm-clock" &&
-        exact(proposal, ["action", "comparisonId"]) &&
-        typeof proposal.comparisonId === "string"
-      )
-        return session.confirmClock(context.binding, proposal.comparisonId);
       return refuse("malformed_allocation");
     },
     async candidates(context, proposal) {
       contextBinding(context);
       if (
         !record(proposal) ||
-        !exact(proposal, ["answer"]) ||
-        !["no", "yes", "unknown"].includes(proposal.answer as string)
+        !exact(proposal, ["answer", "comparisonId"]) ||
+        !["no", "yes", "unknown"].includes(proposal.answer as string) ||
+        typeof proposal.comparisonId !== "string"
       )
         return refuse("malformed_allocation");
       const result = await withOperationAuthority(
@@ -242,6 +233,7 @@ export function createHourInitialSetup(
             binding: context.binding,
             authority,
             answer: proposal.answer as "no" | "yes" | "unknown",
+            comparisonId: proposal.comparisonId as string,
           }),
       );
       const value =

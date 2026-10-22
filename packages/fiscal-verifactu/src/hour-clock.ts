@@ -25,16 +25,14 @@ export type HourClockObservation =
 export interface HourClockDecision {
   readonly usable: readonly { source: HourClockSource; lowerMs: number; upperMs: number }[];
   readonly unavailable: readonly Extract<HourClockObservation, { result: "unavailable" }>[];
+  readonly secondClock: boolean;
   readonly disagreement: boolean;
-  readonly requiresConfirmation: boolean;
-  readonly boundaryWait: boolean;
   readonly releaseBlocked: boolean;
   readonly rangeBlocked: boolean;
 }
 
-const decisions = new WeakMap<HourClockDecision, string>();
-const confirmations = new WeakMap<object, string>();
-const HOUR_MS = 3_600_000;
+const decisions = new WeakSet<HourClockDecision>();
+const AGREEMENT_MS = 30_000;
 const MINUTE_MS = 60_000;
 const EPOCH_MS = Date.parse("2026-01-01T00:00:00.000Z");
 const END_MS = EPOCH_MS + 32 ** 5 * MINUTE_MS;
@@ -109,17 +107,17 @@ export function compareHourClocks(
       );
     }
   }
-  const lower = Math.min(...usable.map((sample) => sample.lowerMs));
-  const upper = Math.max(...usable.map((sample) => sample.upperMs));
   const boxRange = usable.find((sample) => sample.source === "box");
-  const disagreement = upper - lower > 120_000;
+  const middle = (sample: { lowerMs: number; upperMs: number }) =>
+    (sample.lowerMs + sample.upperMs) / 2;
+  const others = usable.filter((sample) => sample.source !== "box");
   const decision: HourClockDecision = Object.freeze({
     usable: Object.freeze(usable),
     unavailable: Object.freeze(unavailable),
-    disagreement,
-    requiresConfirmation: disagreement || !usable.some((sample) => sample.source !== "box"),
-    boundaryWait:
-      usable.length === 0 || Math.floor(lower / HOUR_MS) !== Math.floor(upper / HOUR_MS),
+    secondClock: others.length > 0,
+    disagreement:
+      boxRange !== undefined &&
+      others.some((sample) => Math.abs(middle(sample) - middle(boxRange)) > AGREEMENT_MS),
     releaseBlocked:
       boxRange === undefined ||
       releaseInstantMs === null ||
@@ -128,33 +126,23 @@ export function compareHourClocks(
     rangeBlocked:
       boxRange === undefined || boxRange.lowerMs < EPOCH_MS || boxRange.upperMs >= END_MS,
   });
-  decisions.set(decision, JSON.stringify([observations, releaseInstantMs]));
+  decisions.add(decision);
   return decision;
 }
 
-export function confirmHourClock(decision: HourClockDecision): object {
-  const confirmation = Object.freeze({ confirmed: true });
-  const binding = decisions.get(decision);
-  if (binding !== undefined) confirmations.set(confirmation, binding);
-  return confirmation;
+export function clockRefusal(decision: HourClockDecision): string {
+  if (!decisions.has(decision) || decision.releaseBlocked || decision.rangeBlocked)
+    return "clock_unconfirmed";
+  if (!decision.secondClock) return "second_clock_missing";
+  return decision.disagreement ? "clock_disagreement" : "clock_unconfirmed";
 }
 
-export function canSelectHour(decision: HourClockDecision, confirmation?: object): boolean {
-  const binding = decisions.get(decision);
-  const confirmed =
-    binding !== undefined &&
-    confirmation !== undefined &&
-    confirmations.get(confirmation) === binding;
-  const box = decision.usable.find((sample) => sample.source === "box");
-  const acceptedBoundaryWait =
-    confirmed && decision.disagreement && box !== undefined
-      ? Math.floor(box.lowerMs / HOUR_MS) !== Math.floor(box.upperMs / HOUR_MS)
-      : decision.boundaryWait;
+export function canSelectHour(decision: HourClockDecision): boolean {
   return (
-    binding !== undefined &&
+    decisions.has(decision) &&
     !decision.releaseBlocked &&
     !decision.rangeBlocked &&
-    !acceptedBoundaryWait &&
-    (!decision.requiresConfirmation || confirmed)
+    decision.secondClock &&
+    !decision.disagreement
   );
 }

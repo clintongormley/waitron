@@ -102,10 +102,11 @@ it.each(["production", "preproduction"] as const)(
   async (environment) => {
     const f = await fixture(environment);
     const challenge = await f.prepared.clockChallenge(f.context.binding);
-    const comparison = await f.prepared.compareClocks(f.context.binding, {
-      challengeId: challenge.id,
-      instantMs: NOW,
-    });
+    const comparison = await f.prepared.compareClocks(
+      f.context.binding,
+      { challengeId: challenge.id, instantMs: NOW },
+      { onBox: false },
+    );
     expect(comparison.clock.usable.map((value) => value.source)).toEqual([
       "browser",
       "internet",
@@ -138,7 +139,7 @@ it.each(["production", "preproduction"] as const)(
 it("an unavailable browser and TLS comparison need the owner's exact displayed-clock confirmation", async () => {
   const f = await fixture();
   external.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
-  const displayed = await f.prepared.compareClocks(f.context.binding, null);
+  await f.prepared.compareClocks(f.context.binding, null, { onBox: true });
   await expect(f.select()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "clock_unconfirmed" },
@@ -146,9 +147,4 @@ it("an unavailable browser and TLS comparison need the owner's exact displayed-c
   await expect(readFile(join(f.stateDir, "module-preparation-state.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });
-  await expect(f.prepared.confirmClock(f.context.binding, "forged")).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-  });
-  await f.prepared.confirmClock(f.context.binding, displayed.id);
-  expect(await f.select()).toMatchObject({ status: "selected", identity: "0CNNW" });
 });

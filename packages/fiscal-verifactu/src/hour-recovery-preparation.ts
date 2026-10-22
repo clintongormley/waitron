@@ -23,7 +23,7 @@ export interface HourRecoveryFacts extends HourSelectionFacts {
   readonly noParallelRecovery: boolean;
   readonly priorActivation: "none" | "committed";
 }
-type RecoveryContext = Omit<HourRecoveryFacts, "clock" | "confirmation">;
+type RecoveryContext = Omit<HourRecoveryFacts, "clock">;
 type Selector = ReturnType<typeof createHourSelection>;
 type Selection = Awaited<ReturnType<Selector["selected"]>>;
 type Request = Parameters<Selector["select"]>[0];
@@ -97,7 +97,7 @@ function inputFor(selected: Selection, operatorId: OperationOperator) {
 }
 interface PreparationOptions {
   withState: HourSelectionStore;
-  read(binding: ModuleOperationInput["binding"]): Promise<HourRecoveryFacts>;
+  read(binding: ModuleOperationInput["binding"], comparisonId?: string): Promise<HourRecoveryFacts>;
   readContext?(binding: ModuleOperationInput["binding"]): Promise<RecoveryContext>;
   monotonicNow(): number;
 }
@@ -115,7 +115,8 @@ function createPreparation(options: PreparationOptions, operatorFor: typeof reco
     if (!["none", "committed"].includes(current.priorActivation)) return refuse("event_mismatch");
     return current;
   };
-  const read = async (binding: OperationBinding) => checked({ ...(await options.read(binding)) });
+  const read = async (binding: OperationBinding, comparisonId?: string) =>
+    checked({ ...(await options.read(binding, comparisonId)) });
   const engine = createHourSelection({ ...options, read });
   const within = async <T>(
     request: Pick<Request, "binding" | "authority">,

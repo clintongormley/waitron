@@ -73,7 +73,8 @@ export function createHourPreparation(
   options: Omit<SelectionOptions, "read"> & {
     read: (
       binding: ModuleOperationInput["binding"],
-    ) => Promise<HourSelectionFacts & { confirmation?: object }>;
+      comparisonId?: string,
+    ) => Promise<HourSelectionFacts>;
   },
 ) {
   const engine = createHourSelection(options);
@@ -96,7 +97,6 @@ export function createHourPreparation(
         const selected = await selector.selected({
           binding: held.binding,
           authority: held.authority,
-          confirmation: facts.confirmation,
         });
         if (!isDeepStrictEqual(hourSetupInput(selected, initialOperator(held)), held.input))
           return refuse("event_mismatch");
@@ -144,24 +144,21 @@ export function createHourPreparation(
 export function createHostedHourPreparation(
   host: ModuleOperationHost,
   options: {
-    readClock?(
-      context: InitialSetupContext,
-    ): Promise<{ clock: HourClockDecision; confirmation?: object }>;
+    readClock?(context: InitialSetupContext): Promise<{ clock: HourClockDecision }>;
     monotonicNow?(): number;
   } = {},
 ) {
   if (host.readSetupFacts === undefined || host.withPreparationState === undefined)
     return refuse("outside_confirmation_missing");
   const clocks = createSetupHourClock();
-  const confirmed = new Map<string, string>();
   const preparation = createHourPreparation({
     withState: host.withPreparationState,
     monotonicNow: options.monotonicNow ?? (() => performance.now()),
-    read: async (binding) => {
+    read: async (binding, comparisonId) => {
       const facts = await host.readSetupFacts!(binding);
       const clock =
         options.readClock === undefined
-          ? clocks.read(facts.contextKey, confirmed.get(facts.contextKey))
+          ? clocks.read(facts.contextKey, comparisonId)
           : await options.readClock(structuredClone(facts.context));
       return {
         scope: { taxpayerNif: facts.context.taxId, environment: facts.context.environment },
@@ -170,7 +167,6 @@ export function createHostedHourPreparation(
         ...(facts.continuationKey === undefined ? {} : { waitKey: facts.continuationKey }),
         history: [facts.localHistory as HourHistorySource],
         clock: clock.clock,
-        ...(clock.confirmation === undefined ? {} : { confirmation: clock.confirmation }),
       };
     },
   });
@@ -183,27 +179,16 @@ export function createHostedHourPreparation(
   return {
     ...preparation,
     clockChallenge(binding: ModuleOperationInput["binding"]) {
-      return withFacts(binding, (facts) => {
-        confirmed.delete(facts.contextKey);
-        return clocks.challenge(facts.contextKey);
-      });
+      return withFacts(binding, (facts) => clocks.challenge(facts.contextKey));
     },
     compareClocks(
       binding: ModuleOperationInput["binding"],
       browser: Parameters<typeof clocks.compare>[2],
+      client: Parameters<typeof clocks.compare>[3],
     ) {
-      return withFacts(binding, (facts) => {
-        confirmed.delete(facts.contextKey);
-        return clocks.compare(facts.contextKey, facts.context.environment, browser);
-      });
-    },
-    confirmClock(binding: ModuleOperationInput["binding"], comparisonId: string) {
-      return withFacts(binding, (facts) => {
-        const reading = clocks.read(facts.contextKey, comparisonId);
-        if (confirmed.size === 64) confirmed.delete(confirmed.keys().next().value!);
-        confirmed.set(facts.contextKey, comparisonId);
-        return reading.clock;
-      });
+      return withFacts(binding, (facts) =>
+        clocks.compare(facts.contextKey, facts.context.environment, browser, client),
+      );
     },
   };
 }

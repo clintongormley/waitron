@@ -11,7 +11,7 @@ import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
-import { compareHourClocks, confirmHourClock } from "./hour-clock.js";
+import { compareHourClocks } from "./hour-clock.js";
 import {
   createHourSelection,
   type HourSelectionFacts,
@@ -56,7 +56,7 @@ function fixture() {
   let value: unknown = null;
   const revisions: unknown[] = [];
   let held = false;
-  let facts: HourSelectionFacts & { confirmation?: object } = {
+  let facts: HourSelectionFacts = {
     scope: { taxpayerNif: "89890001K", environment: "preproduction" },
     bases,
     contextKey: "ES/ES-common/Europe-Madrid/module-v1/owner-1",
@@ -287,15 +287,13 @@ it("keeps the shared exclusion held through the complete prepared callback", asy
   ).rejects.toMatchObject(refuse("outside_confirmation_missing"));
 });
 
-it("requires a fresh trusted clock confirmation when preparation sees disagreement", async () => {
+it("refuses preparation when the clocks now disagree", async () => {
   const f = fixture();
   const selected = await f.select();
   if (selected.status !== "selected") throw new Error("selection did not finish");
   f.facts = { ...f.facts, clock: clock(instant, instant + 121_000) };
-  await expect(f.activate(selected.input)).rejects.toMatchObject(refuse("clock_unconfirmed"));
-  f.facts = { ...f.facts, confirmation: confirmHourClock(f.facts.clock) };
-  await f.activate(selected.input);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  await expect(f.activate(selected.input)).rejects.toMatchObject(refuse("clock_disagreement"));
+  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(0);
   expect(f.revisions).toHaveLength(1);
 });
 
@@ -513,7 +511,7 @@ it.each([false, true])(
         Object.assign(context, { taxId: "changed" });
         return {
           clock: f.facts.clock,
-          ...(confirmed ? { confirmation: confirmHourClock(f.facts.clock) } : {}),
+          ...(confirmed ? { confirmation: {} } : {}),
           scope: { taxpayerNif: "changed", environment: "production" },
         };
       },

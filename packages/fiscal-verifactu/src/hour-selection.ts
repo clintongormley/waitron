@@ -9,7 +9,7 @@ import {
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import { canSelectHour, type HourClockDecision } from "./hour-clock.js";
+import { canSelectHour, clockRefusal, type HourClockDecision } from "./hour-clock.js";
 import { projectHourHistory, type HourHistorySource, type HourScope } from "./hour-history.js";
 import {
   decodeMinuteIdentity,
@@ -24,7 +24,6 @@ export interface HourSelectionFacts {
   readonly contextKey: string;
   readonly waitKey?: string;
   readonly clock: HourClockDecision;
-  readonly confirmation?: object;
   readonly history: readonly HourHistorySource[];
 }
 export type HourSelectionStore = NonNullable<ModuleOperationHost["withPreparationState"]>;
@@ -33,7 +32,7 @@ interface SelectionRequest {
   binding: OperationBinding;
   authority: OperationAuthority;
   answer: Answer;
-  confirmation?: object;
+  comparisonId?: string;
   reportedIdentities?: readonly string[];
 }
 interface EntryBase {
@@ -270,10 +269,8 @@ function resumedIntent(entries: readonly Entry[]) {
 
 export function createHourSelection(options: {
   withState: HourSelectionStore;
-  read(binding: OperationBinding): Promise<HourSelectionFacts>;
-  readCommitted?(
-    binding: OperationBinding,
-  ): Promise<Omit<HourSelectionFacts, "clock" | "confirmation">>;
+  read(binding: OperationBinding, comparisonId?: string): Promise<HourSelectionFacts>;
+  readCommitted?(binding: OperationBinding): Promise<Omit<HourSelectionFacts, "clock">>;
   monotonicNow(): number;
 }) {
   // Monotonic readings are process-local; persisted waits carry only their original UTC target.
@@ -308,11 +305,10 @@ export function createHourSelection(options: {
       refuse("event_mismatch");
     return options.withState(request.binding, async (state) => {
       authorize();
-      const fresh: Omit<HourSelectionFacts, "clock" | "confirmation"> &
-        Partial<Pick<HourSelectionFacts, "clock" | "confirmation">> =
+      const fresh: Omit<HourSelectionFacts, "clock"> & Partial<Pick<HourSelectionFacts, "clock">> =
         mode === "committed" && options.readCommitted !== undefined
           ? await options.readCommitted({ ...request.binding })
-          : await options.read({ ...request.binding });
+          : await options.read({ ...request.binding }, request.comparisonId);
       authorize();
       if (
         !validScope(fresh.scope) ||
@@ -425,8 +421,7 @@ export function createHourSelection(options: {
       }
       let wait = sameEvent.find((entry): entry is Wait => entry.kind === "wait");
       if (facts.clock === undefined) return refuse("clock_unconfirmed");
-      const permitted = canSelectHour(facts.clock, request.confirmation ?? facts.confirmation);
-      if (!permitted) {
+      if (!canSelectHour(facts.clock)) {
         if (wait !== undefined && intent === undefined)
           return {
             status: "waiting" as const,
@@ -434,7 +429,7 @@ export function createHourSelection(options: {
             remainingMs: null,
             requiresClockConfirmation: true,
           };
-        return refuse("clock_unconfirmed");
+        return refuse(clockRefusal(facts.clock));
       }
       const now = facts.clock.usable.find((sample) => sample.source === "box")!.lowerMs;
       const history = projectHourHistory({

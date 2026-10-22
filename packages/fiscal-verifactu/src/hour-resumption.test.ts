@@ -150,7 +150,7 @@ it.each([
   expect(f.history).toHaveLength(1);
 });
 
-it("fresh clock confirmation is still required for resumption", async () => {
+it("a second clock is still required for resumption", async () => {
   const f = fixture();
   const selected = await f.select();
   if (selected.status !== "selected") throw new Error("expected selection");
@@ -173,7 +173,7 @@ it("fresh clock confirmation is still required for resumption", async () => {
       Date.parse("2026-10-15T00:00:00Z"),
     ),
   };
-  await expect(f.resume(selected.input)).rejects.toMatchObject(refused("clock_unconfirmed"));
+  await expect(f.resume(selected.input)).rejects.toMatchObject(refused("second_clock_missing"));
   expect(f.history).toHaveLength(1);
 });
 
