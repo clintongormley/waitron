@@ -653,7 +653,9 @@ describe("working_orders state machine (enforce_transition)", () => {
     return id;
   }
 
-  async function rowOf(id: string): Promise<typeof workingOrders.$inferSelect> {
+  type Row = typeof workingOrders.$inferSelect;
+
+  async function rowOf(id: string): Promise<Row> {
     const [row] = await inTx((tx) =>
       tx.select().from(workingOrders).where(eq(workingOrders.id, id)),
     );
@@ -671,8 +673,13 @@ describe("working_orders state machine (enforce_transition)", () => {
 
   it.each([
     { change: "label", set: () => ({ label: "x" }) },
-    { change: "revision", set: (old: number) => ({ revision: old + 1 }) },
-    { change: "settledAt", set: () => ({ settledAt: now() }) },
+    { change: "revision", set: (old: Row) => ({ revision: old.revision + 1 }) },
+    {
+      change: "settledAt",
+      set: (old: Row) => ({
+        settledAt: new Date(Date.parse(old.settledAt!) + 1000).toISOString(),
+      }),
+    },
     { change: "status", set: () => ({ status: "abandoned" as const }) },
   ])(
     "refuses a settled order leaving its party with any other change ($change)",
@@ -683,7 +690,7 @@ describe("working_orders state machine (enforce_transition)", () => {
         inTx((tx) =>
           tx
             .update(workingOrders)
-            .set({ ...set(before.revision), partyId: null })
+            .set({ ...set(before), partyId: null })
             .where(eq(workingOrders.id, id)),
         ),
       );
