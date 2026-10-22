@@ -6129,6 +6129,7 @@ the tree. What remains, largest first:
   (`Operation too slow`) means a transfer stall; a step timeout says only that the attempt ran
   out of time, not in which phase.
 
+
 - **Profile provisioning's busiest shard after the A679 split.** All six shards and merged
   coverage pass in run `39380412391`, but shard 1 takes 297 s in Vitest and 330 s overall.
   Find the slow files or setup cost before changing its distribution; keep every check and
