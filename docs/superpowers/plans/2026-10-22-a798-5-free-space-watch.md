@@ -39,6 +39,10 @@
 > claim check (`…/a798-5-plan-review/claim-check.md`, 0 Critical, 1 Important, 10 Minor), as the
 > runner ruled: every finding applied; the tasks reordered so the wording lands before the alert
 > source; the declared assertion change allowed under the owner's standing exception.
+>
+> **Revision 3 (2026-10-22)** folds in the round-3 check (`…/a798-5-plan-review/round3-check.md`,
+> 0 Critical, 0 Important, 8 Minor): every Step 5 prediction now lists every failing case, the log
+> and citation sentences are narrowed, and the Codex seat's experiment says how to hold one reading.
 
 **Words used in this plan.**
 - The **watch** is the new duty that reads the venue folder's free space once at start and then
@@ -83,7 +87,7 @@ freed, instead of waiting for the next till write (the bell catches up on its ne
 **Spec:** [A798 — Degraded but trading](../specs/2026-10-19-a798-degraded-trading-design.md),
 revision 6: §2.6 (the disk today), §4.3 (the bell's new alerts and their wording, `:476-484`; the
 email to `system.manage`, `:508-509`), §4.6 item 4 (the watch, `:583-589`) and item 5 (no reserve,
-`:590-594`), §4.8 c (the box alerts are seen by `system.manage`, `:816-817`), §8 slice 5. Build
+`:590-594`), §8 slice 5. Build
 plan: [2026-10-21-a798-b-degraded-trading-build.md](2026-10-21-a798-b-degraded-trading-build.md)
 Part 1, row 5 (risk triggers: none; LIGHT; no migration; lands itself; depends on slice 1).
 Backlog: A798-B (`docs/backlog.md:5491-5508`) and "A full-disk stop on a box nobody writes to
@@ -136,10 +140,9 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
    Task 6 records that in the backlog. Every other word is the design's.
 5. **The area is `"box"`, labelled "Box" in English and "Equipo" in Spanish** (design §4.3), shown
    for `system.manage`: design §4.3 sends the 2 GB warning's email to "everyone with
-   `system.manage`" (`:508-509`), and §4.8 c says the box alerts are "seen by holders of
-   `system.manage`" (`:816-817`); the backup alerts use the same permission
-   (`alert-sources.ts:166-167`). The clock stop's alert, in the same area, uses it too (§6,
-   revision 5 decision 12, `:1153`). No alert screen yet (decision 4).
+   `system.manage`" (`:508-509`), and the backup alerts use the same permission
+   (`alert-sources.ts:166-167`). The clock stop's alert, in the same area, is given to
+   `system.manage` too (§4.8 c, `:816-817`; §6, revision 5 decision 12, `:1153`). No alert screen yet (decision 4).
 6. **The free space is written by the dashboard, not the server: a new `{name:bytes}` placeholder**
    in `alertMessage` (`packages/dashboard-kit/src/alert-messages.ts:64-91`). The server sends
    `freeBytes` as a whole number of bytes; the dashboard writes it in the reader's language —
@@ -154,7 +157,8 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
    comes on below 2 GiB (2.147 GB) and writes decimal gigabytes, so for its first stretch under the
    line the bell reads "The box has 2.1 GB of disk space left…" (or "2 GB"), beside the owner's
    "a warning at 2 GB"; the alternative is to divide by 1024³ for display.
-7. **Logging: one line when something changes, never one per minute.** `storage.free_space_read`
+7. **Logging: one line for each thing that changes, never one per minute** (a single reading can
+   log two, as state case 5 shows). `storage.free_space_read`
    (info, `{ freeBytes }`) on the first readable reading after start or after unreadable ones;
    `storage.space_low` (warn, `{ freeBytes }`) when the warning comes on; `storage.space_ok` (info,
    `{ freeBytes }`) when it goes off; `storage.free_space_unread` (warn, `{}`) on the first unreadable
@@ -180,7 +184,7 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
     `bootServer`'s duties) and added to the started server's `stopWork` beside the append-only watch
     (`boot.ts:2724`). Setup mode (`boot.ts:1010-1331`) and an adoption-pending start
     (`:1367-1392`) return before the alert registry is mounted and pass the stop to no till route
-    **(read)**, so a watch there would serve nothing; the state made at `:935` simply goes unused
+    **(read)**, so a watch there would serve nothing; the state made after `:938` simply goes unused
     there. Every node past those — primary, standby, mirror — gets the watch (`boot.ts:2097`,
     "Reached by every boot past setup and adoption").
 11. **`storage.space_low` is registered** in `apps/server/src/errors.ts` beside the backup alert
@@ -207,7 +211,10 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
   space was freed. Today the stop lifts only on a till write, a sale route or a card payment (P5 A).
   This is the only change to what a till is refused: a till write that arrives first still clears it
   as before.
-- At most one new log line per change of state (decision 7). Nothing else.
+- New log lines only when something changes, never one per minute: one line for each thing that
+  changes, so a single reading can log two — `storage.free_space_read` and `storage.space_ok` when
+  readings come back into the clearing zone (state case 5), or `storage.free_space_read` and
+  `storage.space_low` on a first reading under 2 GiB (decision 7). Nothing else.
 
 ---
 
@@ -221,7 +228,7 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
 - **No change to `apps/server/src/alerts.ts`**: the new source is an ordinary ongoing source.
 - General code is English only (CLAUDE.md §3). Spanish appears only in
   `apps/dashboard/src/i18n/alert-messages.ts` and `apps/dashboard/src/i18n/strings.ts`; no test
-  writes a Spanish literal — a dashboard test of Spanish text reads its expected text from those
+  this plan adds writes a Spanish literal — a dashboard test of Spanish text reads its expected text from those
   files. `packages/dashboard-kit` tests use the package's "ES …" placeholders
   (`packages/dashboard-kit/src/alert-messages.test.ts:10-19`).
 - `apps/dashboard/src/i18n/alert-messages.ts` stays free of imports (its header, `:1-3`), because the
@@ -263,10 +270,16 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
    and outside the write queue, so it cannot put a transaction ahead of a payment's first one (the
    ordering concern of `docs/developers/conventions-data.md:2426-2433`). Task 1 case 7 shows the
    watch's re-check goes through the stop's in-flight rule. **For the Codex run-it seat:** test the
-   race through a real watch beside a real gate request, not a stand-in — boot (or mount the gate
-   with a real `DiskFullState`), turn the stop on, send a till write and hold the gate's disk
-   reading, let a watch reading clear the stop, note a new refusal, release the gate's reading, and
-   expect the gate to answer 507 `storage.disk_full`.
+   race through the real watch beside a real gate request. In a booted server the stop takes no
+   `statfs` (`boot.ts:935` passes `{ dir, now, log }`), and the gate and the watch reach the disk
+   through the same stop, so hold one reading this way: mount a till route behind
+   `mountGatedWhileDiskFull` (`disk-full-gate.ts:15-32`) with a real
+   `createDiskFullState({ …, statfs })` whose stub holds its FIRST call and answers every later call
+   at once with room, and start the real `startFreeSpaceWatch` on the same stop with a manual timer.
+   Turn the stop on; send a till write (the gate's `full()` makes the held first call); tick the
+   watch (its `full()` answers at once and clears the stop); `noteRefused()` again; release the
+   gate's reading; expect the gate to answer 507 `storage.disk_full`. The same race was run against
+   the real `createDiskFullState` without the gate by the claim check (its case D, P5).
 3. **Stopped means stopped.** A failed start after the watch began, and `close()`, each stop it once
    (Task 5). A reading whose free-space read is in flight when `stop()` is called records nothing,
    and no reading arms a timer after `stop()` (Task 1 case 6). A stop re-check (`disk.full()`)
@@ -289,8 +302,9 @@ ACL or auth change (the source uses the existing `system.manage` permission thro
 registry); no new cross-package contract beyond a dashboard-internal placeholder kind. The one
 place a reviewer could argue **concurrency** is decision 2: a background duty now calls the stop's
 existing `full()`. It adds no new shape — the same call, from outside any request and outside the
-write queue, that every till write already makes concurrently (Review focus 2). Both plan reviews
-agreed it stays LIGHT, and the runner ruled so.
+write queue, that every till write already makes concurrently (Review focus 2). The round-1
+review judged it LIGHT; the claim check's race probes found no order of events that breaks it
+(P5); the runner ruled LIGHT.
 
 ---
 
@@ -398,8 +412,7 @@ import { unrefTimer, type Timer } from "./unref-timer.js";
 
 /** Below this the box warns that its disk is running out (design §4.6 item 4). */
 export const SPACE_LOW_BYTES = 2 * 1024 ** 3;
-/** The warning goes off only at this much free, so space that comes and goes in normal running
- * does not turn it off and on. */
+/** The warning goes off only at this much free, so it does not toggle at the line. */
 export const SPACE_OK_BYTES = 2.5 * 1024 ** 3;
 export const FREE_SPACE_CHECK_MS = 60_000;
 
@@ -515,14 +528,17 @@ first timer is armed at 0 ms. `stop()` sets `stopped` and cancels the armed time
   `pnpm exec prettier --check apps/server/src/free-space-watch.ts apps/server/src/free-space-watch.test.ts`
   exits 0.
 - [ ] **Step 5: Proofs by deletion**, each restored and re-run to PASS before the next. The expected
-  failures below come from reading the cases (the claim check ran the first on a stand-in, P7);
-  if a different case fails, report it rather than adjusting the case.
+  failures below were run on a stand-in built from the Interfaces by the round-3 check
+  (`~/waitron-campaign-b/a798-5-plan-check3/t1-mutations.log`), every case listed; if a different
+  case fails, report it rather than adjusting the case.
   - `SPACE_OK_BYTES` set to `SPACE_LOW_BYTES`: state cases 4 and 7 FAIL; case 3 passes, because it
     is written with the constant.
   - `SPACE_LOW_BYTES` set to `2 * 1000 ** 3`: only state case 7 FAILS.
-  - The `if (disk.noted()) await disk.full()` line removed: watch cases 3 and 4 FAIL, and case 7
-    times out.
-  - The re-arm removed: watch case 1 FAILS on the timer count.
+  - The `if (disk.noted()) await disk.full()` line removed: watch cases 3, 4 and 8 FAIL (case 8's
+    double throws only from `full()`), and case 7 times out.
+  - The re-arm removed: every watch case but 6 FAILS — cases 1, 2, 3, 4, 5, 7 and 8, each `tick`
+    waiting about a second for a re-arm that never comes; case 1 names the cause (the round-3
+    check's run of this deletion on a stand-in: `Tests 7 failed | 8 passed (15)`).
   - The `stopped` check after the reading removed: watch case 6 FAILS.
   - The `catch` removed: watch case 8 FAILS (with an unhandled rejection or no armed timer).
 - [ ] **Step 6: Commit.**
@@ -898,7 +914,7 @@ The pull request description says, in plain words:
   it lift without a write (decision 2, Task 1 case 4, Task 5 sub-step 3).
 - §4.3 (a new area "Equipo"/"Box"; the two codes, their severities and wording): Tasks 3 and 4;
   decision 4 is the one departure from the wording, recorded for slice 7.
-- §4.3 and §4.8 c (`system.manage`): Task 4 case 1, decision 5.
+- §4.3 (`system.manage`, by the email line `:508-509`): Task 4 case 1, decision 5.
 - §8 slice 5, risk "none": Review path (LIGHT, with decision 2 named and the Codex seat's experiment).
 - Build plan Part 1 row 5 (no migration, lands itself, depends on slice 1): Global constraints,
   decision 14.
