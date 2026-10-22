@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { FloorMapTable, WtFloorMap } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
@@ -105,6 +105,16 @@ const stepChipOf = (el: TillFloorScreen, id = "t9") =>
 const doneOf = (el: TillFloorScreen, id = "t9") =>
   cardOf(el, id).querySelector<HTMLButtonElement>("[data-step-done]");
 
+/** How many lines a step's name takes: the text alone, since the bell sits on its own baseline. */
+function lineTops(name: HTMLElement): number {
+  const text = [...name.childNodes].find(
+    (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
+  )!;
+  const range = document.createRange();
+  range.selectNodeContents(text);
+  return new Set([...range.getClientRects()].map((line) => Math.round(line.top))).size;
+}
+
 function record(el: TillFloorScreen, type: string): unknown[] {
   const seen: unknown[] = [];
   el.addEventListener(type, (event) => seen.push((event as CustomEvent).detail));
@@ -201,9 +211,66 @@ describe("till-floor-screen: a table's due service step", () => {
     expect(done.scrollWidth).toBeLessThanOrEqual(done.clientWidth);
     const name = stepChipOf(el)!.querySelector<HTMLElement>(".step-name")!;
     expect(card.width).toBeLessThan(160);
-    expect(name.getBoundingClientRect().height).toBeGreaterThan(
-      3 * parseFloat(getComputedStyle(done).minHeight),
-    );
+    expect(name.getBoundingClientRect().right).toBeLessThanOrEqual(card.right);
+    expect(lineTops(name)).toBeGreaterThanOrEqual(3);
+  });
+
+  describe("at a till's width", () => {
+    const fourCards = () => [
+      seated({ id: "t1", label: "T1", signals: [dueStepSignal("Set up")] }),
+      seated({ id: "t2", label: "T2", signals: [dueStepSignal("Take order")] }),
+      seated({ id: "t3", label: "T3", signals: [dueStepSignal("Dessert?")] }),
+      seated({ id: "t4", label: "T4" }),
+    ];
+    afterEach(async () => {
+      await page.viewport(1280, 768);
+    });
+
+    it("keeps each step's name on one line on a narrow card, with a whole Done beneath it", async () => {
+      await page.viewport(1280, 720);
+      const el = await mount(fourCards());
+      for (const id of ["t1", "t2", "t3"]) {
+        const card = cardOf(el, id).getBoundingClientRect();
+        expect(card.width).toBeLessThan(150);
+        const name = stepChipOf(el, id)!.querySelector<HTMLElement>(".step-name")!;
+        expect(lineTops(name)).toBe(1);
+        const done = doneOf(el, id)!.getBoundingClientRect();
+        const tap = parseFloat(getComputedStyle(doneOf(el, id)!).minHeight);
+        expect(tap).toBeGreaterThanOrEqual(44);
+        expect(done.width).toBeGreaterThanOrEqual(tap);
+        expect(done.height).toBeGreaterThanOrEqual(tap);
+        expect(done.top).toBeGreaterThanOrEqual(name.getBoundingClientRect().bottom - 1);
+        expect(done.left).toBeGreaterThanOrEqual(card.left);
+        expect(done.right).toBeLessThanOrEqual(card.right);
+        const cardStyle = getComputedStyle(cardOf(el, id));
+        const contentWidth =
+          cardOf(el, id).clientWidth -
+          parseFloat(cardStyle.paddingLeft) -
+          parseFloat(cardStyle.paddingRight);
+        const chip = stepChipOf(el, id)!;
+        // clientWidth rounds to whole pixels.
+        expect(Math.abs(chip.getBoundingClientRect().width - contentWidth)).toBeLessThanOrEqual(1);
+        expect(Math.abs(done.width - chip.clientWidth)).toBeLessThanOrEqual(1);
+        expect(Math.abs(name.getBoundingClientRect().width - chip.clientWidth)).toBeLessThanOrEqual(
+          1,
+        );
+        expect(done.bottom).toBeLessThanOrEqual(card.bottom);
+      }
+    });
+
+    it("keeps Done beside the name on a phone's wider card", async () => {
+      await page.viewport(390, 720);
+      const el = await mount(fourCards());
+      for (const id of ["t1", "t2", "t3"]) {
+        expect(cardOf(el, id).getBoundingClientRect().width).toBeGreaterThan(180);
+        const name = stepChipOf(el, id)!.querySelector<HTMLElement>(".step-name")!;
+        const nameBox = name.getBoundingClientRect();
+        const done = doneOf(el, id)!.getBoundingClientRect();
+        expect(lineTops(name)).toBe(1);
+        expect(done.top).toBe(nameBox.top);
+        expect(done.left).toBeGreaterThanOrEqual(nameBox.right - 1);
+      }
+    });
   });
 
   it("keeps the plain chip on a button card when the device cannot mark steps", async () => {

@@ -579,6 +579,36 @@ export class TillFloorScreen extends LitElement {
         z-index: 1;
       }
 
+      .step-card {
+        container: step-card / inline-size;
+      }
+
+      /* A card too narrow for a step's name beside Done puts Done under it, so the name has the full width. */
+      @container step-card (width < 150px) {
+        .step-card .badges {
+          align-self: stretch;
+        }
+
+        .step-card .step-chip {
+          flex-direction: column;
+          width: 100%;
+        }
+
+        .step-card .step-name {
+          border-radius: inherit;
+          border-bottom-left-radius: 0;
+          border-bottom-right-radius: 0;
+        }
+
+        .step-card .step-done {
+          border-left: none;
+          border-top: 1px solid var(--wt-color-primary);
+          border-radius: inherit;
+          border-top-left-radius: 0;
+          border-top-right-radius: 0;
+        }
+      }
+
       .card.state-free {
         border-left-color: var(--wt-color-success);
       }
