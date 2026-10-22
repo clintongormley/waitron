@@ -285,6 +285,12 @@ server without changing their deployed same-origin paths; this also affects setu
 
 ## At a load average near 60, more root guard files fail on time
 
+2026-10-22: A994 adds a root worker limit calculated from startup processor and memory headroom.
+Its simultaneous-hook experiment is described in
+[CI and gates](../developers/ci-and-gates.md#root-workers-start-from-available-headroom).
+The historical experiment below also adds eight spinning loops; repeat that workload before
+closing this entry. Its retained results describe the earlier configuration.
+
 Measured 2026-10-16 on the 18-core Mac (64 GB, 58–60% of memory free), Node v26.11.1, Vitest
 4.1.11: three root projects at once (`pnpm vitest run`, one with `--coverage`) and eight shell
 loops that only spin; the one-minute load average peaked at 72 before the change and 102 on the

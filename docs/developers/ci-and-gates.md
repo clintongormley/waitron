@@ -43,6 +43,45 @@ from its merge base with `origin/main`. Package tests and coverage run in CI; th
 local because they check the machinery that decides what runs. CI also runs mutation testing and
 `bundle-smoke`.
 
+### Root workers start from available headroom
+
+A hook can exhaust processor time while the machine still has plenty of free memory. The root
+project now reads the host at startup through `scripts/root-test-budget.mjs`. Its worker limit is
+the smaller of half the estimated unused processor capacity and one worker per GiB of free
+memory, rounded down, with one worker as the minimum. Processor capacity is
+`availableParallelism() - loadavg()[0]`; the latter is the operating system's one-minute load
+average. On an 18-processor host at load 10 with 16 GiB free, the limit is four workers. At load
+24 it is one; with 2.5 GiB free on an otherwise idle 64-processor host it is two.
+
+The allowance includes children started by the guards. In A994's two simultaneous unchanged
+root coverage runs on the 18-core, 64 GiB Mac, process snapshots captured 34 Vitest workers,
+63 runnable processes and a peak combined resident size of 12,073 MiB for the two runs and their
+descendants. These peaks occurred at different snapshots. Half the unused processor capacity
+allows for a child beside a worker; the GiB allowance is above the measured aggregate memory per
+worker, including descendants. These are estimates for scheduling, not process reservations.
+
+Use the normal `pnpm vitest run --coverage`; the root configuration supplies the limit. An explicit
+Vitest worker option or `VITEST_MAX_WORKERS` still overrides the configuration. Package configurations
+are unchanged. The choice is a startup snapshot: it does not coordinate separate processes, and
+later work or simultaneous starts can consume the same estimated headroom. Keep the existing
+per-test and child deadlines, and retain a process snapshot if another deadline fails.
+
+A994 measurements (2026-10-22, Node v26.11.1, Vitest 4.1.11): two unchanged root coverage commands
+in separate worktrees both exceeded the primary-colour scan's 60-second limit, taking 81.6 and
+82.5 seconds for that file. The same scan alone passed in 1.74 seconds without coverage and about
+5.74 seconds with it. The paired diagnostic run used a child-tracing preload; its separate
+`comments-only` failure came from that preload meeting a deliberately invalid package fixture,
+so it is not counted as a repository defect. Two subsequent complete root coverage runs without
+the preload, limited experimentally to four workers each, passed all 7,956 cases apiece. No test
+assertion or deadline changed. Commands, JSON reports, CPU profiles and process snapshots are
+retained in lane G's `receipts/a994-20261022-022554/`.
+
+The bundle tests also reach a backup-qualification child with a 60-second timeout from a parent
+with a 20-second timeout. The paired run measured their first real bundle at 17.2 and 18.2 seconds;
+the four-worker control measured about 5.8 seconds. A994 leaves both limits unchanged. If that path
+fails again, identify whether it is still computing its qualification target before changing a
+bound; the nested child limit is not evidence that a healthy run needs all 60 seconds.
+
 ### Why the sign-off check leaves out main's commits, and why only a refreshed main
 
 An existing remote ref makes the hook use its remote tip as the range base. After a rebase onto

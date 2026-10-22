@@ -6101,10 +6101,10 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   On recurrence, retain separate install and version-check statuses before assigning a cause.
   [Detail](backlog/ci.md#identify-which-pnpm-setup-command-failed).
 
-- **At a load average near 60, five more root guard files fail on time (left open by A751).**
-  With three root projects and eight spinning shell loops on the 18-core Mac, A751's branch passed
-  the four files it fixed and still failed `fiscal-allocation-migration`, `guarded-teardowns`,
-  `menu-sections-upgrade`, `mutation-shard` and `pre-push`.
+- **Root guard deadlines under extreme external load (left open by A751).** A994 now selects
+  root workers from a startup estimate of processor and memory headroom. Recheck A751's three-root,
+  eight-spinning-loop workload before closing its five historical failures; A994's simultaneous
+  hook measurements do not cover that added external load.
   [Detail](backlog/ci.md#at-a-load-average-near-60-more-root-guard-files-fail-on-time).
 
 - **The installer's timeout-diagnostic test expired before reaching Docker.** During A668-5's

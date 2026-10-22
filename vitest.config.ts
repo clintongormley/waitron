@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { rootGuardWorkers } from "./scripts/root-test-budget.mjs";
 
 // The repo-level test project — the one gate that is never narrowed away. It holds the work that
 // belongs to no package, which since 2026-08-01 is three kinds:
@@ -63,6 +64,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     globals: true,
+    maxWorkers: rootGuardWorkers(),
     clearMocks: false,
     // Scoped deliberately. Vitest's default include is `**/*.{test,spec}.?(c|m)[jt]s?(x)`, which
     // from the repo root sweeps up every package's suite and would run the whole workspace twice —
