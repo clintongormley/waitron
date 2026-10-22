@@ -496,7 +496,7 @@ describe("waitron.sh image provenance", () => {
     ["status", ""],
     ["status", "up-build-pull-"],
   ])(
-    "reports running image IDs and local build times after %s with path suffix %s",
+    "reports running image IDs and local build times after %s with path suffix %j",
     (verb, directorySuffix) => {
       const sb = sandbox({ directorySuffix });
       writeFileSync(join(sb.boxDir, "compose.yml"), "stub\n");
@@ -511,10 +511,14 @@ describe("waitron.sh image provenance", () => {
       const calls = readFileSync(sb.log, "utf8");
       expect(calls).toContain("sha256:running-app");
       expect(calls).toContain("sha256:running-agent");
-      if (verb === "status")
-        expect(loggedCalls(sb).join("\n")).not.toMatch(
-          /^(docker (build|pull)\b|compose (build|pull|up)\b|curl )/m,
-        );
+      if (verb === "status") {
+        expect(calls).not.toMatch(/docker (build|pull)|curl /);
+        expect(
+          composeCalls(sb).filter((call) =>
+            call.split(/\s+/).some((word) => ["up", "build", "pull"].includes(word)),
+          ),
+        ).toEqual([]);
+      }
     },
   );
 
