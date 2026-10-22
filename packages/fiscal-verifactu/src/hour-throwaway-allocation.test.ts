@@ -174,7 +174,7 @@ it("detaches caller base values before returning its operation", async () => {
   ]);
 });
 
-it.each(["2025-12-31T23:59:59.999Z", "2145-08-15T16:00:00.000Z", "not-a-date"])(
+it.each(["2025-12-31T23:59:59.999Z", "2089-10-18T16:32:00.000Z", "not-a-date"])(
   "refuses an unrepresentable disposable clock at %s before producing activation material",
   (instant) => {
     const seat = createHourThrowawayAllocation({ now: () => new Date(instant) });
@@ -186,6 +186,13 @@ it.each(["2025-12-31T23:59:59.999Z", "2145-08-15T16:00:00.000Z", "not-a-date"])(
     );
   },
 );
+it("names a disposable clock in the last nameable minute", () => {
+  const seat = createHourThrowawayAllocation({
+    now: () => new Date("2089-10-18T16:31:59.999Z"),
+  });
+  const value = seat.prepare(input()).input as { allocation: { installationIdentity: string } };
+  expect(value.allocation.installationIdentity).toBe("ZZZZZ");
+});
 it("the default clock records the actual preparation time in its disposable input", () => {
   const before = Date.now();
   const prepared = createHourThrowawayAllocation().prepare(input());

@@ -249,7 +249,7 @@ it("rejects paper protocol names from the new hour admission boundary", async ()
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
 });
 
-it.each(["2025-12-31T23:59:59.999Z", "2145-08-15T16:00:00.000Z"])(
+it.each(["2025-12-31T23:59:59.999Z", "2089-10-18T16:32:00.000Z"])(
   "reports a domain refusal for selection outside the hour range at %s",
   async (issuedAt) => {
     const f = fixture();

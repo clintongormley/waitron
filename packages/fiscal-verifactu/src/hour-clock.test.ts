@@ -148,7 +148,7 @@ describe("a name needs a second clock within 30 seconds of the box", () => {
     },
   );
 
-  it.each(["2025-12-31T23:59:59.999Z", "2145-08-15T16:00:00.000Z"])(
+  it.each(["2025-12-31T23:59:59.999Z", "2089-10-18T16:32:00.000Z"])(
     "an out-of-range clock %s is refused",
     (time) => {
       const decision = compareHourClocks(
@@ -160,6 +160,11 @@ describe("a name needs a second clock within 30 seconds of the box", () => {
       expect(clockRefusal(decision)).toBe("clock_unconfirmed");
     },
   );
+  it("a clock in the last nameable minute is in range", () => {
+    const time = Date.parse("2089-10-18T16:31:59.999Z");
+    const decision = compareHourClocks([sample("box", time), sample("browser", time)], 0);
+    expect(decision.rangeBlocked).toBe(false);
+  });
 
   it.each([
     { instantMs: NaN },

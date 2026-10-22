@@ -241,7 +241,7 @@ it.each([
   "invalid",
   "2026-10-16T11:40:00Z",
   "2025-12-31T23:59:59.000Z",
-  "2145-08-15T16:00:00.000Z",
+  "2089-10-18T16:32:00.000Z",
 ])("refuses a noncanonical or out-of-range request instant %s", (issuedAt) => {
   const saved = fixture();
   saved.request.input.allocation.issuedAt = issuedAt;

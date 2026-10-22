@@ -392,6 +392,26 @@ it("refuses an out-of-range persisted intent with the domain error", async () =>
   f.value = value;
   await expect(f.run()).rejects.toMatchObject(refusal("history_invalid"));
 });
+it("refuses a persisted intent at the first instant no minute code names", async () => {
+  const f = fixture();
+  await f.run();
+  const value = structuredClone(f.value) as { entries: { issuedAt: string; identity: string }[] };
+  value.entries[0]!.issuedAt = "2089-10-18T16:32:00.000Z";
+  value.entries[0]!.identity = "ZZZZZ";
+  f.value = value;
+  f.writes.splice(0, f.writes.length, structuredClone(value));
+  await expect(f.run()).rejects.toMatchObject(refusal("history_invalid"));
+});
+it("reads a persisted intent in the last nameable minute as valid history", async () => {
+  const f = fixture();
+  await f.run();
+  const value = structuredClone(f.value) as { entries: { issuedAt: string; identity: string }[] };
+  value.entries[0]!.issuedAt = "2089-10-18T16:31:00.000Z";
+  value.entries[0]!.identity = "ZZZZZ";
+  f.value = value;
+  f.writes.splice(0, f.writes.length, structuredClone(value));
+  await expect(f.run()).rejects.toMatchObject(refusal("hour_not_later"));
+});
 it("expiry while awaiting durable persistence leaves a spent hour but returns no usable material", async () => {
   const f = fixture();
   let entered!: () => void, release!: () => void;
