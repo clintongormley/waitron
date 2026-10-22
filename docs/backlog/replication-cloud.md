@@ -5,28 +5,43 @@ their full text.
 
 ## A1018. Agree and build the hosted writer stop-proof contract
 
-**Proposed for bilateral agreement, 2026-10-22.** The
-[Waitron-side design](../superpowers/specs/2026-10-22-a1018-cloud-stop-proof-design.md)
-separates application quiescence from externally enforced runtime termination and lasting
-restart denial. It proposes stable operation intent, one durable country writer authority,
-exact runtime identity, increasing writer generations, final-data receipts and refusals for
-restart, move, machine loss and cross-cell/region failure. Source inspection is read-only;
-runtime and provider guarantees remain unverified.
+**Contract direction agreed, 2026-10-22; owner design approval pending.** Lane G, acting for
+Cloud under the explicit D118 transfer, accepted the
+[Waitron proposal](../superpowers/specs/2026-10-22-a1018-cloud-stop-proof-design.md) at
+`db7cddeb2d38984b284b23e8e391e7ebd7cb9156` against Cloud production pin
+`35af2d396d916223ff4f319d8f44093685d62da5`. Cloud's literal reply says “Cloud accepts the
+pinned proposal's direction” and “no qualified enforcement profile”. Source:
+`/Users/clintongormley/waitron-campaign-e/receipts/reorient-20261022-180435/cloud-agreement.txt`,
+“A1018 / D118”, dated 2026-10-22. This is design-level agreement, with no runtime/provider
+qualification or build approval.
 
-Next, Lane E and Cloud's Lane D must agree pinned receipt/trust/data bindings, the authority's
-cross-region failure rule and an enforcement profile that survives old disk/key clones and
-controller restart. If no provider profile can establish retirement and restart denial, refuse
-hosted continuation replacement and ask. After agreement, take the design's single worked-example
-question to the owner. Bilateral acceptance has not occurred.
+Lane E may now ask the owner the design's single question using Harbour Kitchen's worked
+example. Approval would accept the requirement and its availability trade-off: continuation
+waits if retirement or the final data cannot be established. Owner approval remains pending;
+it would not qualify a provider or grant build authority.
+
+Cloud's canonical entry in its existing
+[hosted lifecycle and promotion section](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/waitron-integration-contract.md#hosted-lifecycle-and-promotion-proposed)
+and Lane D's two wording corrections remain pending because of Lane D's D79 file reservation.
+The corrections clarify that restart/machine-replacement permission exceptions do not waive
+continuation proof, and distinguish continuation from explicitly authorised cold restore in
+the hosting recovery prose and table. Lane G retains the canonical entry follow-up; Lane D
+owns the corrections. Pin the eventual Cloud publication SHA here when available; the Cloud
+pin above identifies the reviewed design, not a new contract publication. Keep the protocol
+in that shared home rather than maintaining two drifting copies.
 
 Cold restore remains the owner-accepted separate fresh-chain/data-loss path with no A1018 stop
 proof; preserve its existing recovery operation, key and source/sole-recovery gates. Never silently
-convert failed continuation to cold restore. Reconcile the older Cloud hosting wording explicitly.
-On-prem A947 slices 4e/5a and tail/return work remain separate integration dependencies.
+convert failed continuation to cold restore. On-prem A947 slices 4e/5a and tail/return work remain
+separate integration dependencies.
 
-Publishing this design is only the documentation milestone. Owner design approval, executable
-planning, separate build authority, implementation with adversarial/deletion controls and actual
-provider qualification remain open; neither publication nor Cloud PR #294 completes this entry.
+Keep this item open. Canonical publication/corrections, owner design approval, wire schema,
+executable planning, separate build authority, implementations and joint adverse/deletion controls
+remain pending. Runtime and provider qualification are separate acceptance gates; no enforcement
+profile is qualified. The Cloud reply's candidate mechanisms and future requirements supply no
+qualification evidence. If retirement, lasting restart denial or the final data cannot be
+established, refuse hosted continuation and ask. Neither agreement nor publication completes
+implementation or authorises provider work.
 
 ## A completed provision or adopt operation replayed on a later request still answers 200 without restarting and keeps the setup lock set
 

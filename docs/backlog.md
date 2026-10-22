@@ -5883,10 +5883,13 @@ _Formerly _Afterwards_ and _Cloud connection integration_._ Detail: [backlog/rep
 
 Not in any track until the standalone primary is done.
 
-- **A1018. Agree and build the hosted writer stop-proof contract.** [Design proposed](superpowers/specs/2026-10-22-a1018-cloud-stop-proof-design.md);
-  Lane D agreement and subsequent owner approval remain open. Publication does not complete
-  the build: continuation needs enforced runtime retirement and final-data proof; cold restore
-  stays a separate accepted path. [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
+- **A1018. Agree and build the hosted writer stop-proof contract.** [Contract direction agreed](superpowers/specs/2026-10-22-a1018-cloud-stop-proof-design.md)
+  by Lane G for Cloud under the explicit D118 transfer on 2026-10-22. The single worked-example
+  owner question is now eligible; approval remains pending. Cloud's canonical publication and
+  Lane D's two wording corrections await release of Lane D's D79 file reservation. Build authority,
+  implementation and provider qualification remain separate gates; no enforcement profile is qualified.
+  Continuation still requires runtime retirement and final-data proof; explicit cold restore
+  stays separate. [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
 - **The till's theme fetch does not follow a server move (A841 slice 3).** The till fetches
   `/api/theme` from the page's own address, not through `ServerRouter`; moved to another server, it

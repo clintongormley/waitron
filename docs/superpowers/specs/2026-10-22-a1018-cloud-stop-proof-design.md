@@ -1,5 +1,16 @@
 # A1018: prove a hosted writer stopped before its successor starts
 
+> **2026-10-22 update: the status below is historical.** Lane G, acting for Cloud under
+> the explicit D118 transfer, accepted Waitron proposal
+> `db7cddeb2d38984b284b23e8e391e7ebd7cb9156` against Cloud pin
+> `35af2d396d916223ff4f319d8f44093685d62da5`. Agreement covers the contract direction;
+> no enforcement profile is qualified. Cloud's canonical integration-contract publication
+> and Lane D's two wording corrections remain pending because of Lane D's D79 file reservation.
+> The single Harbour Kitchen worked-example owner question is now eligible; owner design
+> approval remains pending. This agreement supplies no runtime/provider qualification or build
+> approval. See [A1018's current record](../../backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
+> for the literal Cloud reply and remaining gates.
+
 **2026-10-22 · PROPOSED for bilateral agreement. Lane D acceptance: pending.
 Owner design approval: pending after that agreement. Publication grants no build authority.**
 
