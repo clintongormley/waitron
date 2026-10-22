@@ -123,7 +123,11 @@ the owner points at the end.
    the trigger is on `working_orders`, the bill; the sale `recordSale` wrote at payment is in `sales`
    and the filed record in `registros_facturacion`, neither of which the move writes (Task 5
    compares them). The receipt reads an issued sale's label from the bill's frozen `label`
-   (`apps/server/src/receipt-order.ts:42-45`), which the exception keeps fixed. **Venue reset:**
+   (`apps/server/src/receipt-order.ts:42-45`), which the exception keeps fixed. **The exception is
+   wider than this flow:** the database allows it for every paid table bill not yet handed over,
+   whatever the state of its party — a party closed days ago included. Only the server code (the
+   collection in Task 4, the one writer of it) limits it to a finishing party's bills with kitchen
+   work to come. **Venue reset:**
    none expected, because the migration drops and re-creates a trigger and rebuilds no table; Task 1
    measures it with `scripts/migration-upgrade.test.ts` and, if that fails, records the failure and
    stops. *The other way:* keep the bill in its closed party and mark it "at the counter" in a new
@@ -136,6 +140,20 @@ the owner points at the end.
    own counter order under its own number. A bill whose dishes were all served stays with the closed
    party, as today. The bills come from the server's own list, not the till's: the request names
    them only so a change since the dialog opened is refused (Decision 7).
+   **A bill whose dishes still to come have no kitchen ticket is not moved either.** A dish that
+   goes to no station leaves no ticket item (a no-preparation dish is stamped sent instead,
+   `apps/server/src/working-order.ts:1858-1860`), yet `finish` lists it while it is unserved
+   (`finish-party-service.ts:129-145` reads only quantities). Moved, such a bill would be stranded:
+   Waiting orders leaves out a paid order with nothing fired (`listCounterWaiting`'s
+   `inArray(workingOrders.id, firedOrders)`, `working-order.ts:6966-6970`; pinned by
+   `apps/server/src/counter-handover.test.ts:962`) and hand-over refuses it `ticket.not_fired`
+   (`working-order.ts:6866-6874`; `counter-handover.test.ts:582`). It has nothing coming from the
+   kitchen, so it stays with the closed party, as a bill all served does. **Kitchen work** here is a
+   `ticket_items` row — any, made here included, as Waiting orders and hand-over count them — on a
+   line of the bill with something unserved. When no named bill has kitchen work, the request is
+   refused `management.request_invalid` naming `collect`, nothing changed; the till offers the
+   button only when a listed dish has a component with a ticket (`context.components[].id !==
+   null`, `apps/server/src/line-cancel-context.ts:14-24`, filled at `:83-94`), so it never sends one.
 4. **A held dish is fired on the way** (the design's likely answer). Held work cannot leave its party
    (measured, above), and the guests are waiting for it. **Default:** before any bill moves, while the
    party is still open, every held group holding a line of a moving bill is released through the
@@ -162,7 +180,17 @@ the owner points at the end.
    "Moved to the counter" («Pasado al mostrador», `apps/till/src/widgets/station-queue.ts:805-810`),
    both from `enqueueMovedSlips` (`apps/server/src/kitchen-print.ts:1229-1243`; the counter place is
    `apps/server/src/order-places.ts:116-117`). Nothing is reprinted otherwise. `before` is read after
-   the fire and before the party changes, so the slip lists the just-fired work.
+   the fire and before the party changes, so the slip lists the just-fired work. **Only work still
+   to come is listed.** `readSentWork` gives every ticket item the kitchen has on paper, served ones
+   included (`apps/server/src/kitchen-print.ts:1161-1194`), and `movedItems` leaves out only made-here
+   items (`:1382-1394`) **(read)**; the plan review reported a run of a scratch copy of
+   `party-move-bill.test.ts` in which a served dish got a `moved` notice (not re-run while revising).
+   So the move narrows `before`'s `ticketItemIds` and `heldItemIds` to items whose line still has
+   something unserved — fired quantity above served, the test `liveKitchenDish` makes
+   (`working-order.ts:7786`) — and passes `null` when none is left (`SentWork` is "never empty",
+   `kitchen-print.ts:1149-1158`; `enqueueMovedSlips` returns on `null`, `:1236`). A station whose
+   only dish on the bill was served gets no MOVED slip and no notice. A partly served line is listed,
+   with the ticket's quantity, as every MOVED slip prints it today.
 7. **The request.** `collect: { bills: [{ billId, expectedBillRevision }] }` — the distinct bills of
    the dialog's dishes with the revision each was read at (`UnservedDish.billRevision`) — with a
    `submissionId` (required, as for cancellations), never with `cancellations` or `approver`
@@ -181,13 +209,20 @@ the owner points at the end.
    (`partySubjectZones`, `zone-access.ts:40-62`). No person permission is added: nothing is refunded.
    Handing the order over later needs `hand-over-orders` (`till-api.ts:2279-2281`), as for any counter
    order.
-9. **The till.** The third button, `data-collect`, goes in `wt-form-actions`' `secondary` slot
-   (design-system.md → Forms: "A secondary action that belongs beside the primary action goes in the
-   `secondary` slot"), variant `secondary`, label `finish_table.collect` — "They'll collect it at the
-   counter" / «Lo recogerán en el mostrador» (§3.9). It needs no reason and no answers, so it is
-   enabled whenever the dialog is not busy; it emits `finish-table-collect` (`bubbles`,
-   `composed`). Picture 06 draws it full width on a row of its own; where it lands at 1280 and 390
-   px is the LOOK's (Task 9). **After it succeeds** the table leaves the screen as Finish leaves it
+9. **The till.** The third button, `data-collect`, is built as picture 06 draws it: full width, on a
+   second footer row under Back and the main button, variant `secondary`, label
+   `finish_table.collect` — "They'll collect it at the counter" / «Lo recogerán en el mostrador»
+   (§3.9). `wt-dialog` lays its `footer` slot out as one flex row (`.footer-row`,
+   `packages/ui/src/components/wt-dialog.ts:121-125`, the slot at `:511-519`), so the dialog puts one
+   `<div slot="footer" class="finish-footer">` there — a column, `flex: 1 1 auto` — holding today's
+   `wt-form-actions` and, under it, the collect button at full width; footers holding more than one
+   element already exist (`apps/till/src/screens/till-floor-screen.ts:2676-2699`, and a wrapping
+   `div` at `apps/till/src/screens/till-table-order-screen.ts:2797`). A `wt-form-actions` wrapped in
+   another element shows its own message above its own buttons rather than on the dialog's footer
+   line (design-system.md, `:1947-1948`), which keeps the form's one message directly above Back and
+   the main button. The collect button needs no reason and no answers, so it is enabled whenever the
+   dialog is not busy; it emits `finish-table-collect` (`bubbles`, `composed`). It is offered only
+   when a listed dish has kitchen work (Decision 3). **After it succeeds** the table leaves the screen as Finish leaves it
    (`#onTableClosed`, `apps/till/src/till-app.ts:15421-15433`), the toast says "Moved to the counter"
    («Pasado al mostrador») — the existing `station.notice.moved_to_counter`
    (`apps/till/src/i18n/strings.ts:693`, `:2422`), shown through the submitted toast as
@@ -195,9 +230,13 @@ the owner points at the end.
    (`#refreshAfterWrite("waiting", "refresh.waiting_after_move")`, the existing words "The dishes
    were moved, but the list of waiting orders could not refresh", `strings.ts:1416-1417`). The one
    new string is `finish_table.collect`.
-10. **A full invoice's later copies lose the guests line.** A full invoice prints the guests read
-    from the bill's party each time (measured, above); once the bill has no party, a later copy
-    prints none, and no amount per person. A simplified receipt keeps its stored count. **Default:**
+10. **A full invoice's later copies change their guests line, both ways.** A full invoice prints the
+    guests read from the bill's party each time (measured, above); once the bill has no party, a
+    later copy prints none, and no amount per person. The mirror: the party's count prints only while
+    its family holds exactly one bill that is not abandoned (`guestsOfParty`,
+    `apps/server/src/receipt-guests.ts:115-126`), so when one of two paid bills moves, a full
+    invoice of the bill left behind **gains** a guests line on its later copies. A simplified receipt
+    keeps its stored count either way. **Default:**
     accept, pinned by a test in Task 5 so the change is seen, and backlog **A1025**. *The other way:*
     store a full invoice's guests too, which changes `recordReceiptGuests`
     (`receipt-guests.ts:41-49`, which skips a full invoice) and its two readers.
@@ -243,7 +282,7 @@ the owner points at the end.
 | §3.9: «El mostrador», `table.to_counter`, `strings.ts:2885` | `strings.ts:1446` (English) and `:3153` (Spanish) |
 | §3.8 "Who may": a finished party's zone reads as none | A758-6 changed it: a closed party is checked against its family's bills' zones (`partySubjectZones`, `zone-access.ts:40-62`). The collect runs while the party is open, so Decision 8 checks the moving bills' own zones |
 | §3.8 item 5 (Table finished on the pass card) | Not built (A758-6's Decision 1); nothing here changes that |
-| Picture 06: the third button full width on its own row | Built in the `secondary` slot (Decision 9); the LOOK says where it lands |
+| Picture 06: the third button full width on its own row | Built so (Decision 9); the LOOK compares |
 
 ## Global constraints
 
@@ -312,16 +351,19 @@ The inputs most likely to break what the design promises, each pinned by a test 
    are all refused; leaving alone is accepted (Task 1). The handover stamp alone is still accepted
    (the existing case, `orders.transition.test.ts:612`).
 2. **Nothing filed changes.** Every `registros_facturacion`, `sales`, `sale_lines`, `tenders` and
-   `sale_receipt_guests` row, and the receipt answer for the sale, are deep-equal before and after
-   (Task 5). The control: a full invoice's live guests read changes (Decision 10), so the comparison
-   can see a change when there is one.
+   `sale_receipt_guests` row, and the receipt answer for the sale, are deep-equal before and after,
+   with at least one `registros_facturacion` and one `sale_receipt_guests` row there before (Task 5).
+   The control: a full invoice's live guests read changes, both ways (Decision 10), so the
+   comparison can see a change when there is one.
 3. **Held work.** A held dish fires before its bill leaves (a FIRE slip where a HOLD ticket was
    printed, `fired_at` set), then the MOVED slip names the counter; a group shared by two moving
    bills fires once; a bill holding a held dish already cancelled with its charge kept, beside a
-   fired unserved dish, still moves, its emptied group removed (Tasks 2 and 3).
+   fired unserved dish, still moves, its emptied group removed (Tasks 2 and 3). A station whose only
+   dish on a moving bill was served gets no MOVED slip and no notice (Task 3).
 4. **Which bills.** Two paid bills, one with a dish to come and one all served: only the first moves;
    the second stays with the closed party and is not in Waiting orders (Task 4). A merged-in party's
-   paid bill with a dish to come moves too (Task 4).
+   paid bill with a dish to come moves too (Task 4). A bill whose only dish to come has no kitchen
+   ticket stays with the closed party, and a collection naming only such bills is refused (Task 4).
 5. **A race.** A dish served after the dialog read, leaving its bill with nothing to come: the
    request still names that bill, and is refused `party.unserved_dishes` with the new list, nothing
    moved or closed (Task 4).
@@ -336,7 +378,7 @@ The inputs most likely to break what the design promises, each pinned by a test 
    zones, and from one with no zone limit, is served (Task 5).
 9. **The till never sends the wrong command.** While an unconfirmed collect waits, the main button
    cannot send a cancel; while an unconfirmed cancel waits, the collect button cannot send (Tasks 6
-   and 7).
+   and 7b).
 
 ---
 
@@ -344,17 +386,18 @@ The inputs most likely to break what the design promises, each pinned by a test 
 
 | File | Tasks |
 |---|---|
-| `packages/db/drizzle/0185_settled_order_to_counter.sql` (number as generated), `packages/db/drizzle/meta/_journal.json`, `meta/<n>_snapshot.json` (generated); `packages/db/src/schema/orders.transition.test.ts` | 1 |
+| `packages/db/drizzle/0185_settled_order_to_counter.sql` (number as generated), `packages/db/drizzle/meta/_journal.json`, `meta/<n>_snapshot.json` (generated); `packages/db/src/schema/orders.ts` (the comment `:51-58`); `packages/db/README.md` (Migrations, `:72-112`); `packages/db/src/schema/orders.transition.test.ts` | 1 |
 | `apps/server/src/order-groups.ts` (a new exported helper beside `releaseGroup`); new `apps/server/src/collect-at-counter.test.ts` | 2 |
 | `apps/server/src/move-bill.ts` (a new exported function); `collect-at-counter.test.ts` | 3 |
 | `apps/server/src/finish-party-service.ts`, `finish-party-input.ts`; new `apps/server/src/finish-party-collect.test.ts` | 4 |
 | `apps/server/src/till-api.ts` (finish route `:2855-2929`), `till-api.profile-zones.test.ts` (map row `:157`); `finish-party-collect.test.ts` | 5 |
-| `apps/till/src/api/finish-table-types.ts`, `widgets/finish-table-dialog.ts`, `i18n/strings.ts`; `finish-table-dialog.test.ts`, `.a11y.test.ts`, `.unsaved.test.ts` | 6 |
-| `apps/till/src/till-app.ts` (`FinishingTable` `:1020-1036`, `#confirmFinishTable` `:15039-15077`, `#sendFinishTable` `:15079-15210`, `#renderFinishTable` `:15335-15418`); `till-app-parties.test.ts` | 7 |
+| `apps/till/src/api/finish-table-types.ts`, `api/client.ts` (`finishTable`'s parameter), `widgets/finish-table-dialog.ts`, `i18n/strings.ts`; `finish-table-dialog.test.ts`, `.a11y.test.ts`, `.unsaved.test.ts` | 6 |
+| `apps/till/src/till-app.ts` (`FinishingTable` `:1020-1036`, `#confirmFinishTable` `:15039-15077`, `#sendFinishTable` `:15079-15210`, `#finishRefundFill` `:15221-15246`, `#renderFinishTable` `:15335-15418`); `till-app-parties.test.ts` | 7a, 7b |
 | `apps/server/src/guide/en/table-service.md`, `es/table-service.md`, `en/kitchen-service.md`, `es/kitchen-service.md`; `docs/backlog.md`; `docs/backlog/till.md`; the design (a dated note) | 8 |
 | none committed (pictures outside the repository) | 9 |
 
-Each task is sized for one implementer well under about 100 tool calls. Tasks 1–5 run in order;
+Each task is sized for one implementer well under about 100 tool calls, and each leaves the tree
+green, typecheck included. Tasks 1–5 run in order, then 6, 7a and 7b;
 Task 6 may run before Task 5 but not beside another task in the same worktree (CLAUDE.md §6: agents
 take turns).
 
@@ -362,7 +405,8 @@ take turns).
 
 ## Task 1: a paid bill may leave its party for the counter, once (database)
 
-**Files:** the generated migration in `packages/db/drizzle/`; tests in
+**Files:** the generated migration in `packages/db/drizzle/`; `packages/db/src/schema/orders.ts`
+(the comment `:45-62`); `packages/db/README.md` (Migrations, `:72-112`); tests in
 `packages/db/src/schema/orders.transition.test.ts`.
 
 The trigger's latest body is `packages/db/drizzle/0143_working_order_receipt_locale_transition.sql`
@@ -399,6 +443,15 @@ are `TRANSITION_REFUSAL` from `packages/db/src/trigger-refusals.ts`, already imp
   included). One SQL comment line above the branch: "A paid bill a finished table sends to the
   counter leaves its party once, before handover (A758-7)." Read the generated snapshot: it must equal
   the previous one apart from its id and `prevId` (a custom migration changes no schema).
+- [ ] **Prose that the exception makes false.** `packages/db/src/schema/orders.ts:51-58` says
+  "`settled` and `abandoned` are terminal, save the handover stamp on a settled order": add the one
+  other change, a settled order not yet handed over leaving its party (naming the new migration).
+  `packages/db/README.md`'s Migrations section lists each re-creation of this trigger (`0015`,
+  `0019`, `0042`, `0056`, `0128`, at `:77-80`, `:91-93`, `:100-105`): add a sentence for the new
+  migration and what it allows — and, since `0143_working_order_receipt_locale_transition.sql`,
+  which the new file copies, is missing from that list, name it in the same sentence as the body
+  copied. `pnpm exec prettier --file-info packages/db/README.md` says whether the README is
+  format-checked; if it is, `pnpm exec prettier --check packages/db/README.md` passes.
 - [ ] **Run** the suite (every case green, the count up by the new cases), then the migration guard
   suites, reading `migration-upgrade.test.ts`'s summary: passed → the PR needs no venue reset;
   failed → record the failure and stop. `scripts/behavioural-triggers.test.ts` must stay at 363
@@ -417,8 +470,12 @@ above its cancelled quantity, read as `releaseGroup` reads it, `:718-722`) is re
 `releaseGroup` with firer `{ personId: operatorId }` and `detail: {}`, as `fireGroup` calls it
 (`:447-457`); one with none has its lines' group cleared (`clearGroups`,
 `apps/server/src/working-order.ts:4585-4597`) and is marked removed
-(`removeEmptiedHeldGroups(tx, partyId, [groupId], operatorId)`). It does not check or bump the
-party's revision (the caller has).
+(`removeEmptiedHeldGroups(tx, partyId, [groupId], operatorId, attendanceAt)`). It does not check or
+bump the party's revision (the caller has). **Attendance:** it converts `OrderAttendance` as
+`fireGroup` does (`:454-456`: `{ recorder: attendance.recorder, at:
+attendance.clock.now().instant.toISOString() }`) and passes that to both `releaseGroup` and
+`removeEmptiedHeldGroups`; `recordGroupEvent` records a work-time fact only when given one, and
+finds the location through the party's bills (`:2172-2196`), which the bills still are at this point.
 
 - [ ] **Failing tests** (`collect-at-counter.test.ts`, `useVenueDb` with
   `migrationOptionsFor(manifestSets(), null)` and the adjustment venue, as
@@ -436,7 +493,11 @@ party's revision (the caller has).
   state `removed`; (d) the control: a fired group is left alone; (e) "refuses with the release's own
   refusal": a held group whose party's allergy question is unanswered, if one can be made (seat
   without `seatWithNoAllergies`); if a held group cannot exist with the question unanswered, write
-  that in the task's report and drop (e). Run
+  that in the task's report and drop (e); (f) "records the release in the working-time facts": with
+  `recordAttendanceFact` as the recorder (`apps/server/src/attendance-capture.ts`, as
+  `apps/server/src/attendance-edit-group-events.test.ts:25`, `:136` pass it), an
+  `attendance_operation_facts` row exists with key `group:<the fired event's id>` (read as
+  `attendance-edit-group-events.test.ts:183` reads them), and one for the removed group of (c). Run
   `pnpm --filter @waitron/server exec vitest run src/collect-at-counter.test.ts`. Expected: the
   import is missing.
 - [ ] **Code.** If firing a settled bill's held group is refused by the freeze trigger, stop and
@@ -454,7 +515,9 @@ party's revision (the caller has).
 **Interfaces:** `moveSettledBillToCounter(tx, cfg: OriginConfig, billId: string, from: { partyId:
 string }, expectedEdit: BillEditExpected): Promise<void>` — in this order: refuse unless the bill is
 `settled`, not collected and in a party (`management.request_invalid` `{ field: "billId" }`; the
-caller has checked, so this is a guard); `const before = await readSentWork(tx, billId)`;
+caller has checked, so this is a guard); `before` = `readSentWork(tx, billId)` narrowed to the
+items whose line still has something unserved (Decision 6: both id sets filtered; `null` when none is
+left);
 `inheritKitchenNote(tx, cfg, from, { workingOrderId: billId }, "copy")`; `leaveParty(tx, billId)`;
 `update working_orders set party_id = null` and nothing else; `relocateBillEditor(tx, billId,
 expectedEdit)`; `VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId])`;
@@ -464,16 +527,21 @@ bill's own (Decision 5).
 - [ ] **Failing tests** (`collect-at-counter.test.ts`): (a) "moves a paid bill to the counter,
   changing only its party": the `working_orders` row differs only in `partyId` (null); `label`,
   `revision`, `status`, `collectedAt` and the order's zone (`VENUE_SERVICE.findOrderZones`) unchanged;
-  (b) "tells each station it went to the counter": a MOVED print job per station with work, and a
-  `moved` kitchen notice whose `movedTo` is null (read the notices as
-  `apps/server/src/kitchen-print.ts:1361` writes them); (c) "copies the party's kitchen note" onto the
+  (b) "tells each station with food still to come that it went to the counter": a MOVED print job
+  per such station, and a `moved` kitchen notice whose `movedTo` is null for each dish still to come
+  (read the notices as `apps/server/src/kitchen-print.ts:1361` writes them); (b2) "tells nothing
+  about a served dish": a bill with an unserved dish at one station and a served dish at another
+  station → no MOVED job and no notice for the second station, and the first station's slip and
+  notices do not name the served dish; with every dish of the bill served except one at station A,
+  the job count is exactly one; (c) "copies the party's kitchen note" onto the
   order; (d) "refuses held work" — called without Task 2 first → `group.held_leaves_party`, nothing
   changed (the order matters, Decision 4); (e) refusals: an open bill, a collected bill → the guard's
   code; (f) **"Move this bill → The counter still refuses a paid bill"**: `moveBill(…, { counter: {
   zoneId: null } }, …)` on a settled bill → `bill.paid`, nothing changed (Decision 1; the existing
   cases pin it for a table target only, `apps/server/src/till-api.move-bill.test.ts:876-887` and
   `apps/server/src/party-move-bill.test.ts:426-433`). Run the file. Expected:
-  (a)–(e) fail on the missing export; (f) passes.
+  (a)–(e) and (b2) fail on the missing export; (f) passes. (b) must assert exact jobs and notices
+  per station, not "at least one", so it cannot pass with a served dish listed.
 - [ ] **Code.** Do not call `refuseMainBillLeaving` (`move-bill.ts:457-476`): a paid bill is not a
   main bill (the release trigger clears one when it leaves `open`,
   `packages/db/drizzle/0038_main_bill_release.sql:5-11`), and the party closes in the same request.
@@ -498,8 +566,10 @@ bill's own (Decision 5).
 - `finishPartyService` fingerprints `collect` with its bills sorted by `billId`.
 - In `finish`, after the dish list (`:129-145`), when `collect` is present: the bills of `dishes`
   with their `billRevision`, distinct and sorted, must equal the request's, else `refused()`
-  (`:146`); then `releaseHeldWorkOf` (Task 2) over those bills, then `moveSettledBillToCounter`
-  (Task 3) for each, in `billId` order, with `{ partyId: args.partyId }` and that bill's
+  (`:146`); the bills that move are those of them with kitchen work to come (Decision 3: a
+  `ticket_items` row on a line with something unserved), and none refuses `management.request_invalid`
+  `{ field: "collect" }`; then `releaseHeldWorkOf` (Task 2) over the moving bills, then
+  `moveSettledBillToCounter` (Task 3) for each, in `billId` order, with `{ partyId: args.partyId }` and that bill's
   `expectedEdit`; then `finishTable` (`:195-201`) with `expectedEdits` **less the moved bills'**,
   because `closeParty` checks the edits of exactly the family's bills
   (`readExpectedBillEdits`, `apps/server/src/bill-editing.ts:223-235`) and the moved bills have left
@@ -523,10 +593,16 @@ bill's own (Decision 5).
   `submission.id_reused` (Review Focus 6); (g) refusals of the body: `collect` with `cancellations`,
   with `approver`, without `submissionId`, with an empty or repeated `bills` → 400
   `management.request_invalid` naming the field, nothing changed; (h) "keeps the outstanding bill
-  refusal first": a bill still owing → `party.bill_outstanding`, as the cancel path does (`:221-229`).
+  refusal first": a bill still owing → `party.bill_outstanding`, as the cancel path does (`:221-229`);
+  (i) "leaves a bill whose food to come has no kitchen ticket with the party": two paid bills, one
+  with a fired dish to come, the other whose only unserved dish has no `ticket_items` row (a product
+  routed to no station, as `counter-handover.test.ts:582-596` pays a "Caña" and checks it has no
+  ticket item; or delete the line's ticket item in the test, saying so) → only the first moves, and the second keeps the party and is
+  not in Waiting orders; (j) "refuses a collection with no kitchen work": the second bill alone →
+  400 `management.request_invalid` naming `collect`, nothing changed.
   Run `pnpm --filter @waitron/server exec vitest run src/finish-party-collect.test.ts`. Expected:
   (a)–(f) fail (the body is ignored and the table is refused `party.unserved_dishes`, or the
-  collection not made); (g) fails where the field is accepted; (h) passes.
+  collection not made); (g) fails where the field is accepted; (h) passes; (i) and (j) fail.
 - [ ] **Code.**
 - [ ] **Run** the file, `src/finish-party-service.test.ts src/till-api.parties.test.ts
   src/pass-lifetime.test.ts` (A758-6's cancel path and its answers unchanged), and
@@ -556,11 +632,18 @@ bill's own (Decision 5).
   collect, every `registros_facturacion` row (import as
   `apps/server/src/cancel-invoiced-order.test.ts` does), and the `sales`, `sale_lines`, `tenders` and
   `sale_receipt_guests` rows, are deep-equal, and so is `GET /api/transactions/:saleId/receipt`'s
-  JSON. (d) **The control** (Decision 10): for a sale issued as a full invoice (the venue's full
-  invoice path, as the receipt guest tests do — find one with
-  `git grep -ln "readReceiptGuests\|guests" -- apps/server/src/*receipt*.test.ts`),
-  `readReceiptGuests` answers the party's count before and `undefined` after: the case is named
-  "a full invoice's later copies print no guests once its bill moves to the counter (A1025)". Run
+  JSON — with the test first asserting that at least one `registros_facturacion` row and one
+  `sale_receipt_guests` row exist before the collect, so the comparison is not of two empty lists.
+  (d) **The control, both ways** (Decision 10). (d1) A party seated with a guest count and one paid
+  bill issued as a full invoice: `readReceiptGuests` answers the count before the collect and nothing
+  after. (d2) A party seated with a guest count and two paid bills,
+  each issued as a full invoice (the venue's full invoice path, as the receipt guest tests do — find
+  one with `git grep -ln "readReceiptGuests\|guests" -- apps/server/src/*receipt*.test.ts`); one
+  bill with a dish to come, the other all served. Before: `readReceiptGuests` answers nothing for
+  either (two bills in the family, `receipt-guests.ts:115-126`). After the collect: nothing for the
+  moved bill, the party's count for the bill left behind. The cases are named "a full invoice's later
+  copies lose their guests line when the bill moves to the counter (A1025)" and "…and the bill left
+  behind gains one (A1025)". Run
   the file. Expected: (a)'s refusing case answers 200 (the route checks the party's zone only); (b)–(d)
   pass already, Task 4 having landed — they pin the promise end to end, and one that fails is a
   defect in Tasks 1–4 to report, not a check to change.
@@ -579,29 +662,38 @@ bill's own (Decision 5).
 
 ## Task 6: the third button (till widget)
 
-**Files:** `apps/till/src/api/finish-table-types.ts` (`FinishTableResolution`, the client's request
-type); `apps/till/src/widgets/finish-table-dialog.ts` (properties `:76-85`, the footer `:410-439`);
-`apps/till/src/i18n/strings.ts` (beside `finish_table.unserved`, `:48-49` and `:1793-1794`);
-`finish-table-dialog.test.ts`, `.a11y.test.ts`, `.unsaved.test.ts`.
+**Files:** `apps/till/src/api/finish-table-types.ts` (a new type beside `FinishTableResolution`);
+`apps/till/src/api/client.ts` (`finishTable`'s parameter, `:3629-3646`);
+`apps/till/src/widgets/finish-table-dialog.ts` (properties `:76-85`, styles `:33-75`, the footer
+`:410-439`); `apps/till/src/i18n/strings.ts` (beside `finish_table.unserved`, `:48-49` and
+`:1793-1794`); `finish-table-dialog.test.ts`, `.a11y.test.ts`, `.unsaved.test.ts`.
 
 **Interfaces:**
-- `export interface CounterCollection { bills: { billId: string; expectedBillRevision: number }[] }`;
-  `FinishTableResolution` becomes `{ submissionId: string; cancellations: FinishCancellation[];
-  approver?: … } | { submissionId: string; collect: CounterCollection }`. `api.finishTable`
-  (`apps/till/src/api/client.ts:3629-3646`) needs no change beyond the type.
+- `export interface FinishTableCollect { submissionId: string; collect: { bills: { billId: string;
+  expectedBillRevision: number }[] } }`, a type of its own. **`FinishTableResolution` does not
+  change**, because `till-app.ts` reads it as the cancel command (`:1032`
+  `Omit<FinishTableResolution, "approver">`, `:15224` `FinishTableResolution["cancellations"]`, and
+  `.cancellations` at `:15112`, `:15183`, `:15201`); only `api.finishTable`'s `resolution`
+  parameter widens to `FinishTableResolution | FinishTableCollect`. So this task leaves
+  `@waitron/till` typechecking; Task 7a uses the new type.
 - New string `finish_table.collect`: "They'll collect it at the counter" / «Lo recogerán en el
   mostrador».
 - New property `collectPending: boolean` (default false). New event `finish-table-collect`
   (`bubbles`, `composed`, `detail: {}`).
-- The footer, in template order: Back (`slot="cancel"`), `wt-button[data-collect]`
-  (`slot="secondary"`, `variant="secondary"`), the main button (default slot). The collect button is
-  disabled while busy, or while `confirmationLocked && !collectPending` (an unconfirmed cancel); the
-  main button is also disabled while `collectPending`. A collect click ignores a stale observation as
-  `#confirm` does (`:237-241`), sets `sending`, and emits; it needs no reason and no answers.
+- The footer (Decision 9): one `<div slot="footer" class="finish-footer">` holding, in template
+  order, today's `wt-form-actions` (Back in `slot="cancel"`, the main button in its default slot)
+  and then `wt-button[data-collect]`, `variant="secondary"`, full width. `.finish-footer` is a column
+  (`display: flex; flex-direction: column; gap: var(--wt-space-2); flex: 1 1 auto`) and the collect
+  button's host takes `width: 100%`, with `--wt-*` tokens only. The collect button is drawn only
+  when a dish has a component with a ticket (`components.some((c) => c.id !== null)`, Decision 3);
+  it is disabled while busy, or while `confirmationLocked && !collectPending` (an unconfirmed
+  cancel); the main button is also disabled while `collectPending`. A collect click ignores a stale
+  observation as `#confirm` does (`:237-241`), sets `sending`, and emits; it needs no reason and no
+  answers.
 
 - [ ] **Change the pinned check first** (row 1): "offers no counter collection…" (`:129-140`)
-  becomes "offers the counter collection beside Back and the main action" with
-  `["back", "collect", "main"]` for both `refundAtTill` values. Then the new cases
+  becomes "offers the counter collection under Back and the main action" with
+  `["back", "main", "collect"]` (template order) for both `refundAtTill` values. Then the new cases
   (`finish-table-dialog.test.ts`): (a) "emits a collection with no reason chosen and no answer
   given": a dish asking Yes / No left unanswered, no reason → the collect click emits
   `finish-table-collect` once and no `finish-table-choice`; (b) "words the collection in Spanish"
@@ -609,60 +701,80 @@ type); `apps/till/src/widgets/finish-table-dialog.ts` (properties `:76-85`, the 
   a closed or detached dialog" (as `:410-427` and `:439-454` do for the main button); (d) "while an
   unconfirmed collection waits, only the collection can resend": `collectPending` and
   `confirmationLocked` → main disabled, collect enabled; (e) "while an unconfirmed cancel waits, the
-  collection cannot send": `confirmationLocked` alone → collect disabled. `.unsaved.test.ts`: a changed
-  draft then a collect click opens no leave prompt (the dialog emits; the app closes it).
+  collection cannot send": `confirmationLocked` alone → collect disabled; (f) "offers no collection
+  when no dish has a kitchen ticket": every component's `id` null → no `[data-collect]`; (g) "puts the
+  collection on its own row, under the form's message": the collect button's top is below the main
+  button's bottom (`getBoundingClientRect`), and with a refusal set the `wt-form-actions` message
+  sits above Back and the main button, not under the collect button. The existing reads of
+  `wt-form-actions`'s `error` (`:283`, `:333`; `.a11y.test.ts:89`) stay as they are. `.unsaved.test.ts`:
+  a changed draft then a collect click opens no leave prompt (the dialog emits; the app closes it).
   `.a11y.test.ts`: the dialog with the collect button, both themes, and with `collectPending`. Run
   (free memory checked) `pnpm --filter @waitron/till exec vitest run
   src/widgets/finish-table-dialog.test.ts src/widgets/finish-table-dialog.a11y.test.ts
-  src/widgets/finish-table-dialog.unsaved.test.ts`. Expected: row 1 and (a)–(e) fail; the a11y
-  cases fail to find the button.
+  src/widgets/finish-table-dialog.unsaved.test.ts`. Expected: row 1 and (a)–(e), (g) fail; (f)
+  passes (no button yet); the a11y cases fail to find the button.
 - [ ] **Code.**
-- [ ] **Run** the three files, `src/i18n/strings.test.ts`, the string guards; typecheck `@waitron/till`.
+- [ ] **Run** the three files, `src/i18n/strings.test.ts`, the string guards; typecheck
+  `@waitron/till` (it must pass: this task changes no type `till-app.ts` reads).
 - [ ] Commit — "Finish table offers They'll collect it at the counter".
 
-## Task 7: the till sends the collection and leaves the table (till app)
+## Task 7a: the till sends the collection and leaves the table (till app)
 
 **Files:** `apps/till/src/till-app.ts` — `FinishingTable` (`:1020-1036`: `command` becomes
-`FinishTableResolution` without `approver`), a new `#collectFinishTable` beside `#confirmFinishTable`
-(`:15039-15077`), `#sendFinishTable` (`:15079-15210`), the dialog's mount in `#renderFinishTable`
-(`:15335-15364`); tests in `apps/till/src/till-app-parties.test.ts`, in `describe("till-app: Finish
-table confirms paid unserved dishes")` (`:10745`), using its `mountFinish` and `openFinish`
-(`:10802-10830`).
+`Omit<FinishTableResolution, "approver"> | FinishTableCollect`), a new `#collectFinishTable` beside
+`#confirmFinishTable` (`:15039-15077`), `#sendFinishTable` (`:15079-15210`), the dialog's mount in
+`#renderFinishTable` (`:15335-15364`); tests in `apps/till/src/till-app-parties.test.ts`, in a new
+nested `describe("collect at the counter")` inside `describe("till-app: Finish table confirms paid
+unserved dishes")` (`:10745`), using its `mountFinish` and `openFinish` (`:10802-10830`). The filter
+is that describe's name: `-t "counter"` would also catch six older tests (`:3245`, `:3337`,
+`:3360`, `:3376`, `:3449`, `:10302`), and `git grep -n "collect at the counter" --
+apps/till/src/till-app-parties.test.ts` printed nothing on `9f4632719`.
 
-- [ ] **Failing tests:** (a) "sends the counter collection with each bill once and the revision it
-  read, and leaves the table": two dishes on `wo-4` and one on `wo-check` → `finishTable` called with
-  `{ submissionId, collect: { bills: [{ billId: "wo-4", expectedBillRevision: 0 }, { billId:
-  "wo-check", … }] } }` (sorted by `billId`), no `cancellations`; then the floor is shown as after
-  Finish (as "finishes the table at the revision it read and goes back to the floor", `:763`, checks);
-  (b) "says the order moved to the counter": the submitted toast (`wt-toast[data-submitted-toast]`,
-  read as `:6716` reads it) has the message `t("station.notice.moved_to_counter")`; (c) "re-reads the
-  waiting orders": `listCounterWaiting` is called after the answer; when it fails, the message is
-  `refresh.waiting_after_move`; (d) "opens no refund and asks no PIN": no `listRefundAuthorizers`,
-  no refund dialog, even with a dish ticked for refund in the dialog; (e) "re-reads the dishes when
-  the set changed": `finishTable` rejects with `party.unserved_dishes` and a new list → the dialog
-  shows the new list, as `:11144` "re-prompts a raced kitchen set…" checks for a cancel; (f) "shows a
-  refusal in the dialog": `station.no_default` → the dialog's `refusal` is its `codeMessage`, the
-  table stays open; (g) "resends the same collection after a lost answer, and only the collection":
-  every resend fails as in `:11545-11568` → the dialog has `collectPending` and `confirmationLocked`;
-  a main-button `finish-table-choice` then sends nothing; a second collect sends the same body;
-  (h) "a cancel left unconfirmed cannot be turned into a collection": the reverse → a collect sends
-  nothing. Run (free memory checked)
-  `pnpm --filter @waitron/till exec vitest run src/till-app-parties.test.ts -t "counter"`. Expected:
-  every case fails (no handler for `finish-table-collect`).
+- [ ] **Failing tests** (in the nested describe): (a) "sends the counter collection with each bill
+  once and the revision it read, and leaves the table": two dishes on `wo-4` and one on `wo-check`
+  → `finishTable` called with `{ submissionId, collect: { bills: [{ billId: "wo-4",
+  expectedBillRevision: 0 }, { billId: "wo-check", … }] } }` (sorted by `billId`), no
+  `cancellations`; then the floor is shown as after Finish (as "finishes the table at the revision
+  it read and goes back to the floor", `:763`, checks); (b) "says the order moved to the counter":
+  the submitted toast (`wt-toast[data-submitted-toast]`, read as `:6716` reads it) has the message
+  `t("station.notice.moved_to_counter")`; (c) "re-reads the waiting orders": `listCounterWaiting` is
+  called after the answer; when it fails, the message is `refresh.waiting_after_move`; (d) "opens no
+  refund and asks no PIN": no `listRefundAuthorizers`, no refund dialog, even with a dish ticked for
+  refund in the dialog. Run (free memory checked)
+  `pnpm --filter @waitron/till exec vitest run src/till-app-parties.test.ts -t "collect at the counter"`.
+  Expected: (a)–(d) fail (no handler for `finish-table-collect`).
 - [ ] **Code.** `#collectFinishTable(event)` follows `#confirmFinishTable`'s guards (`:15041-15048`,
-  the draft check `:15049-15052`); its command is `open.command` when that is an unconfirmed
-  collection, else `{ submissionId: crypto.randomUUID(), collect: { bills } }` from `open.dishes`;
-  it calls `#sendFinishTable`. In `#sendFinishTable`, a collection's answer closes the dialog, calls
-  `#onTableClosed(asked.partyId, asked.visit, asked.sent)`, then — while the session is still the
-  one that asked — sets `submittedNotice` and shows the toast, and calls
-  `void this.#refreshAfterWrite("waiting", "refresh.waiting_after_move")`; it builds no refund
+  the draft check `:15049-15052`); its command is `{ submissionId: crypto.randomUUID(), collect: {
+  bills } }` from `open.dishes`; it calls `#sendFinishTable`. In `#sendFinishTable`, a collection's
+  answer closes the dialog, calls `#onTableClosed(asked.partyId, asked.visit, asked.sent)`, then —
+  while the session is still the one that asked — sets `submittedNotice` and shows the toast, and
+  calls `void this.#refreshAfterWrite("waiting", "refresh.waiting_after_move")`; it builds no refund
   receipts. Every read of `open.command!.cancellations` (`:15112`, `:15183`, `:15201`) first checks
-  the command has `cancellations`. `#confirmFinishTable` ignores a click while an unconfirmed
-  collection waits. The mount passes `.collectPending=${open.unconfirmed === true && open.command !==
-  undefined && "collect" in open.command}` and listens for `finish-table-collect`.
+  the command has `cancellations`. The mount listens for `finish-table-collect`.
 - [ ] **Run** the file whole (A758-6's Finish cases unchanged), `src/widgets/finish-table-dialog*.test.ts`;
   typecheck `@waitron/till`.
 - [ ] Commit — "The till sends the food to the counter and leaves the table".
+
+## Task 7b: refusals and lost answers for the collection (till app)
+
+**Files:** as Task 7a; tests in the same nested describe.
+
+- [ ] **Failing tests:** (e) "re-reads the dishes when the set changed": `finishTable` rejects with
+  `party.unserved_dishes` and a new list → the dialog shows the new list, as `:11144` "re-prompts a
+  raced kitchen set…" checks for a cancel; (f) "shows a refusal in the dialog": `station.no_default`
+  → the dialog's `refusal` is its `codeMessage`, the table stays open; (g) "resends the same
+  collection after a lost answer, and only the collection": every resend fails as in `:11545-11568`
+  → the dialog has `collectPending` and `confirmationLocked`; a main-button `finish-table-choice`
+  then sends nothing; a second collect sends the same body; (h) "a cancel left unconfirmed cannot be
+  turned into a collection": the reverse → a collect sends nothing. Run
+  `pnpm --filter @waitron/till exec vitest run src/till-app-parties.test.ts -t "collect at the counter"`.
+  Expected: (e) may pass through 7a's shared path (say so if it does); (f)–(h) fail.
+- [ ] **Code.** `#collectFinishTable` reuses `open.command` when that is an unconfirmed collection and
+  ignores a click while an unconfirmed cancel waits; `#confirmFinishTable` ignores a click while an
+  unconfirmed collection waits. The mount passes `.collectPending=${open.unconfirmed === true &&
+  open.command !== undefined && "collect" in open.command}`.
+- [ ] **Run** the file whole, `src/widgets/finish-table-dialog*.test.ts`; typecheck `@waitron/till`.
+- [ ] Commit — "A lost or refused counter collection is retried as itself".
 
 ## Task 8: guides, backlog and the design's dated note
 
@@ -701,25 +813,30 @@ its header, beside the A758-6 one at `:3-5`).
   - "**A1023. The owner looks at A758-7's choices (left open by A758-7).** Each works as built; the
     owner may want it different: held dishes fired on the way to the counter; each bill with food
     still to come moved as its own counter order; the order keeping its table's zone, so a till or
-    pass limited to the counter's zone does not show it; the toast reusing "Moved to the counter";
-    the button beside the main one rather than on a row of its own as picture 06 draws; and the
-    settled-order freeze now letting a paid bill leave its party for the counter once, an exception
-    `scripts/behavioural-triggers.test.ts` does not yet hold. [Plan](superpowers/plans/2026-10-22-a758-7-collect-at-counter.md#owner-points-each-with-the-default-this-pr-builds)"
+    pass limited to the counter's zone does not show it; a bill whose food to come has no kitchen
+    ticket staying with the table; the toast reusing "Moved to the counter"; and the settled-order
+    freeze now letting any paid table bill not yet handed over leave its party — only the server
+    limits that to Finish table — an exception `scripts/behavioural-triggers.test.ts` does not yet
+    hold. [Plan](superpowers/plans/2026-10-22-a758-7-collect-at-counter.md#owner-points-each-with-the-default-this-pr-builds)"
   - "**A1024. Nothing on the pass says an order waits at the counter (left open by A758-7).** A paid
     order a finished table sent to the counter is named on the pass and in Waiting orders by its
     number and the table it was paid at ("#12 Mesa 4"), as Move this bill → The counter names one
     today; only the MOVED slip and the station notice say "counter"."
-  - "**A1025. A full invoice's later copies lose the guests line once its bill moves to the counter
-    (left open by A758-7).** A full invoice reads its guests from the bill's party each time it
-    prints (`readReceiptGuests`, `apps/server/src/receipt-guests.ts`); a simplified receipt keeps
-    the count stored at payment."
+  - "**A1025. A full invoice's later copies change their guests line when a bill moves to the
+    counter (left open by A758-7).** A full invoice reads its guests from the bill's party each time
+    it prints, and only while the party's family holds exactly one bill (`readReceiptGuests`,
+    `apps/server/src/receipt-guests.ts`): the moved bill's copies lose the line, and when one of two
+    paid bills moves, the copies of the bill left behind gain one. A simplified receipt keeps the
+    count stored at payment."
 - [ ] **`docs/backlog/till.md`:** delete `## A758. Adjustment reasons: review the rules, then a page
   of their own` (to the next `## `, `:1528`). First check nothing cites it besides the design and
   `docs/backlog.md` (`git grep -n "a758-adjustment-reasons-review" -- .` listed only those two on
   `9f4632719`), and that no code comment cites the backlog detail (`git grep -n "backlog/till.md" --
   apps packages`). Add under `## Decisions and deliberate limits`: "### A paid bill may leave its
   party for the counter once (A758-7, 2026-10-22)" — the trigger exception in Decision 2, the
-  migration's name, that nothing else about a paid bill may change, and the
+  migration's name, that nothing else about a paid bill may change, that the database allows it for
+  every paid table bill not yet handed over (a party closed days ago included) and only the server
+  code limits it to Finish table's collection, and the
   [plan](../superpowers/plans/2026-10-22-a758-7-collect-at-counter.md).
 - [ ] **The design:** a dated note under its header: "> **2026-10-22 A758-7 update:** §3.8 item 4 is
   built as Finish table's counter collection ([plan](../plans/2026-10-22-a758-7-collect-at-counter.md));
@@ -741,8 +858,9 @@ Tests read text; nobody has seen these screens.
   `window.innerWidth`).
 - [ ] Save the pictures **outside the repository**, in `~/waitron-campaign-c/a758-7-shots/`, named
   `<screen>-<lang>-<theme>-<width>.png`; delete the harness; `git status --short` shows nothing.
-  Compare the dialog with picture 06 (`06-finish-table-asks.png` and `-dark`): where the collect
-  button lands at each width, and whether the footer wraps cleanly at 390. Fix a defect test-first;
+  Compare the dialog with picture 06 (`06-finish-table-asks.png` and `-dark`): the collect button
+  full width on its own row under Back and the main button at both widths, the form's message above
+  Back, and the footer's divider and padding unchanged. Fix a defect test-first;
   list a judgement call as an owner point. Nothing to commit unless a fix was made.
 
 **PR description** (plain English): first line — the review path, "No venue reset needed" if Task
@@ -760,7 +878,7 @@ implementer who finds one moved records the new line.
 
 | # | Task | Where | Old → new | Design |
 |---|---|---|---|---|
-| 1 | 6 | `apps/till/src/widgets/finish-table-dialog.test.ts:129-140` "offers no counter collection: Back and the main action are its only buttons" (`toEqual(["back", "main"])`) | "offers the counter collection beside Back and the main action", `toEqual(["back", "collect", "main"])` for both `refundAtTill` values | D17, §3.8 item 4 |
+| 1 | 6 | `apps/till/src/widgets/finish-table-dialog.test.ts:129-140` "offers no counter collection: Back and the main action are its only buttons" (`toEqual(["back", "main"])`) | "offers the counter collection under Back and the main action", `toEqual(["back", "main", "collect"])` for both `refundAtTill` values | D17, §3.8 item 4, picture 06 |
 | 2 | 1 | `packages/db/src/schema/orders.transition.test.ts:252` (name) and `:253` (comment "The relaxation permits the collected_at stamp and NOTHING ELSE.") | renamed to name the two allowed changes, the handover stamp and leaving a party for the counter; every check in the case unchanged | §3.8 item 4, Decision 2 |
 | 3 | 5 | `apps/server/src/till-api.profile-zones.test.ts:157`, a row of the route-to-zone map (a comment, not a check) | "party" → "party; each bill a counter collection names", with the new case | §3.8 "Who may", Decision 8 |
 
@@ -779,13 +897,15 @@ If a suite turns red on a check not in this table, it is a stop and a report, th
   them unless both need it, in which case it goes in `apps/server/src/testing/adjustment-venue.ts`,
   listed here with its signature.
 - `till-app-parties.test.ts`'s Finish block may need `listCounterWaiting` in `mountFinish`'s stubs
-  (Task 7 (c)); listed with its line if added.
+  (Task 7a (c)); listed with its line if added.
 - The look harness of Task 9 is not committed.
 
 ## Owner points (each with the default this PR builds)
 
 1. **The settled-order freeze gains one exception** (Decision 2): a paid bill may leave its party for
-   the counter once, before it is handed over, changing nothing else. It touches no filed record,
+   the counter once, before it is handed over, changing nothing else. The database allows it for any
+   paid table bill not yet handed over, whatever its party's state; only the server limits it to
+   Finish table's collection. It touches no filed record,
    sale or payment (Task 5 compares them), so it is not a fiscal change; it is the one database rule
    this slice loosens. `scripts/behavioural-triggers.test.ts` does not hold its cases yet; they are in
    `packages/db`'s own trigger suite (Decision 14).
@@ -795,7 +915,8 @@ If a suite turns red on a check not in this table, it is a stop and a report, th
 4. **The order keeps its table's zone** (Decisions 5 and 12): a till or pass limited to the counter's
    zone does not show it; one with the table's zone, or no zone limit, does.
 5. **The words after:** the toast reuses "Moved to the counter" («Pasado al mostrador») (Decision 9).
-6. **The button sits beside the main one**, in the form's secondary place, where picture 06 draws a
-   row of its own (Decision 9; Task 9's pictures show it).
-7. **Nothing on the pass says "counter"** (Decision 11, A1024).
-8. **A full invoice's later copies lose the guests line** (Decision 10, A1025).
+6. **Nothing on the pass says "counter"** (Decision 11, A1024).
+7. **A full invoice's later copies change their guests line** — lost on the moved bill's, gained on
+   the bill left behind when one of two moves (Decision 10, A1025).
+8. **A bill whose food to come has no kitchen ticket stays with the table** (Decision 3), and the
+   button is not offered when no dish has one.
