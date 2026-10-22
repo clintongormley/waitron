@@ -155,9 +155,10 @@ export function createHourInitialSetup(
       const reviewed = await reviewCommandClock(actions);
       if (reviewed.status !== "ready") return reviewed;
       const waiting = (targetMs: unknown) => {
-        actions.output(`Wait until ${new Date(targetMs as number).toISOString()}.`);
+        if (!Number.isSafeInteger(targetMs)) return refuse();
+        actions.output("Waiting to confirm the time, so no invoice series is ever repeated.");
         actions.output(
-          "This countdown does not reserve a separate hour. Coordinate setups one at a time.",
+          `Continues at ${new Date(targetMs as number).toISOString()}; run the command again within a minute after that time (later, it waits again).`,
         );
         return { status: "waiting" as const };
       };

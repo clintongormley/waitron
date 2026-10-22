@@ -45,7 +45,7 @@ afterAll(async () => {
   if (directory !== undefined) await rm(directory, { recursive: true, force: true });
 });
 
-it("the built venue command reaches the owned terminal wait with no network or activation", async () => {
+it("with no network the built venue command explains, asks nothing and spends no name", async () => {
   const target = join(directory!, "venue");
   const stateDir = join(directory!, "state");
   await mkdir(target);
@@ -107,11 +107,7 @@ syncBuiltinESMExports();\n`,
   );
   let output = "";
   let errors = "";
-  const questions = [
-    "The box's displayed date and time are correct? [y/N]: ",
-    "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
-    "Confirm setup password: ",
-  ];
+  const questions = ["Confirm setup password: "];
   const answered = new Set<string>();
   child.stdout.on("data", (chunk: Buffer) => {
     output += chunk.toString();
@@ -135,15 +131,18 @@ syncBuiltinESMExports();\n`,
   });
   expect(code, JSON.stringify({ output, errors, childError, answered: [...answered] })).toBe(1);
   expect({ code, errors }).toEqual({ code: 1, errors: "" });
-  expect(output).toContain("Wait until ");
-  expect(answered.size).toBe(3);
+  expect(output).toContain("No series is made without a confirmed time, so none is ever repeated.");
+  expect(output).toContain(
+    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+  );
+  expect(output).not.toContain("[no/yes/unknown]");
+  expect(answered.size).toBe(0);
   expect(output).not.toContain("SYNTHETIC-owner-password");
   const state = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
   expect(state).toMatchObject({ status: "claimed", consumptionIntent: false, inputs: {} });
-  const journal = JSON.parse(
-    await readFile(join(stateDir, "module-preparation-state.json"), "utf8"),
-  );
-  expect(journal.revisions.at(-1).value.entries).toMatchObject([{ kind: "wait", answer: "yes" }]);
+  await expect(readFile(join(stateDir, "module-preparation-state.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
   const stored = await openVenueDatabase(target);
   try {
     expect(await readTenantIdentities(stored.venue)).toEqual([]);

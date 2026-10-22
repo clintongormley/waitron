@@ -47,6 +47,7 @@ async function fixture(
   password = PASSWORD,
   modules: readonly WaitronModule[] = ALL_MODULES,
   readRetiredSetup?: ModuleOperationHost["readRetiredSetup"],
+  testClock?: ModuleOperationHost["testClock"],
 ) {
   const root = await mkdtemp(join(tmpdir(), "setup-command-"));
   roots.push(root);
@@ -57,6 +58,7 @@ async function fixture(
     modules,
     database: () => venue.db,
     readRetiredSetup,
+    testClock,
   });
   const claim = await runtime.owner.claimFirstSetup(
     { environment: "preproduction", request },
@@ -85,9 +87,34 @@ async function fixture(
   return { root, runtime, owner, output, prompts, io };
 }
 
-it("prepares a real owned hour from terminal answers without activating a venue", async () => {
-  const f = await fixture();
-  const result = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
+it("prepares a real owned name after the terminal's wait, asking no question, without activating a venue", async () => {
+  let wall = Date.parse("2026-10-16T11:38:00Z");
+  let monotonic = 1_000_000;
+  vi.setSystemTime(wall);
+  external.internet.mockImplementation(async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: wall,
+    uncertaintyMs: 500,
+    wallStartedMs: wall,
+    wallFinishedMs: wall,
+    monotonicStartedMs: monotonic,
+    monotonicFinishedMs: monotonic,
+  }));
+  const f = await fixture("no", PASSWORD, ALL_MODULES, undefined, {
+    wall: () => wall,
+    monotonic: () => monotonic,
+  });
+  const waiting = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
+  expect(waiting.status).toBe("waiting");
+  expect(f.output).toContain("Waiting to confirm the time, so no invoice series is ever repeated.");
+  expect(f.output).toContain(
+    "Continues at 2026-10-16T11:40:00.000Z; run the command again within a minute after that time (later, it waits again).",
+  );
+  wall = Date.parse("2026-10-16T11:40:00Z");
+  monotonic += 120_000;
+  vi.setSystemTime(wall);
+  const result = await prepareFirstSetupCommand(f.runtime, waiting.owner, f.io);
   expect(result.status).toBe("ready");
   const state = (await f.runtime.store.read())!;
   expect(state.status).toBe("consumption-intent");
@@ -109,95 +136,86 @@ it("prepares a real owned hour from terminal answers without activating a venue"
   const journal = JSON.parse(
     await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
   );
-  expect(journal.revisions.at(-1).value.entries[0].identity).toBe("0CNNW");
+  expect(journal.revisions.at(-1).value.entries).toMatchObject([
+    { kind: "wait", targetMs: Date.parse("2026-10-16T11:40:00Z") },
+    { kind: "intent", identity: "0CNNW" },
+  ]);
   expect(await venue.db.execute("select count(*) as count from registro_sif")).toMatchObject({
     rows: [{ count: 0 }],
   });
   expect(await venue.db.execute("select count(*) as count from tenants")).toMatchObject({
     rows: [{ count: 0 }],
   });
-  expect(f.prompts).toEqual([
-    "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
-    "Confirm setup password: ",
-  ]);
-  expect(f.output.join("\n")).toContain("every venue using this taxpayer's NIF");
+  expect(f.prompts.length).toBeGreaterThan(0);
+  expect(f.prompts.every((question) => question === "Confirm setup password: ")).toBe(true);
   expect(f.output.join("\n")).not.toContain(PASSWORD);
 });
 
-it.each(["yes", "unknown"])(
-  "retains a %s wait without exposing an activation input",
-  async (answer) => {
-    const f = await fixture(answer);
-    const result = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
-    expect(result.status).toBe("waiting");
-    expect(result.state.status).toBe("claimed");
-    expect(result.state.inputs).toEqual({});
-    expect(
-      result.state.frozen.modules.find((entry) => entry.module === MODULE)!.request,
-    ).toBeNull();
-    const journal = JSON.parse(
-      await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
-    );
-    expect(journal.revisions.at(-1).value.entries).toMatchObject([
-      { kind: "wait", answer, targetMs: Date.parse("2026-10-16T12:00:00Z") },
-    ]);
-    expect(f.output.join("\n")).toContain("2026-10-16T12:00:00.000Z");
-    expect(f.output.join("\n")).toContain("does not reserve a separate hour");
-  },
-);
-
-it("requires an explicit check of the displayed clock when internet comparison is unavailable", async () => {
+it("retains its settle wait, says why and until when, and exposes no activation input", async () => {
   const f = await fixture();
-  external.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
-  f.io.prompt = async (question) => {
-    f.prompts.push(question);
-    return question.startsWith("The box") ? "yes" : "no";
-  };
   const result = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
-  expect(result.status).toBe("ready");
-  expect(result.state.inputs[MODULE]).toMatchObject({
-    allocation: { installationIdentity: "0CNNW" },
-  });
-  expect(f.output.join("\n")).toContain("2026-10-16T11:40:00.000Z");
-  expect(f.output.join("\n")).toContain("internet: unavailable");
-  expect(f.output.join("\n")).toContain("wrong time can reuse invoice names");
-  expect(f.prompts[0]).toBe("The box's displayed date and time are correct? [y/N]: ");
+  expect(result.status).toBe("waiting");
+  expect(result.state.status).toBe("claimed");
+  expect(result.state.inputs).toEqual({});
+  expect(result.state.frozen.modules.find((entry) => entry.module === MODULE)!.request).toBeNull();
+  const journal = JSON.parse(
+    await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
+  );
+  const entries = journal.revisions.at(-1).value.entries;
+  expect(entries).toMatchObject([{ kind: "wait", targetMs: Date.parse("2026-10-16T11:42:00Z") }]);
+  expect(entries[0]).not.toHaveProperty("answer");
+  expect(f.output).toContain("Waiting to confirm the time, so no invoice series is ever repeated.");
+  expect(f.output).toContain(
+    "Continues at 2026-10-16T11:42:00.000Z; run the command again within a minute after that time (later, it waits again).",
+  );
+  expect(f.prompts.every((question) => question === "Confirm setup password: ")).toBe(true);
 });
 
-it("stops before spending an hour when the clock confirmation is declined", async () => {
-  const f = await fixture("no");
+it("with only the box's clock the terminal explains and cancels without a question or a spent name", async () => {
+  const f = await fixture();
   external.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
   const result = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
   expect(result.status).toBe("cancelled");
   expect(result.state.status).toBe("claimed");
   expect(result.state.inputs).toEqual({});
-  expect(f.prompts).toEqual(["The box's displayed date and time are correct? [y/N]: "]);
+  expect(f.output.join("\n")).toContain("2026-10-16T11:40:00.000Z");
+  expect(f.output.join("\n")).toContain("internet: unavailable");
+  expect(f.output).toContain(
+    "No series is made without a confirmed time, so none is ever repeated.",
+  );
+  expect(f.output).toContain(
+    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+  );
+  expect(f.prompts).toEqual([]);
   await expect(readFile(join(f.root, "state/module-preparation-state.json"))).rejects.toMatchObject(
     { code: "ENOENT" },
   );
 });
 
-it.each(["", "maybe"])(
-  "cancels an absent or unrecognised taxpayer answer (%j) without spending",
-  async (answer) => {
-    const f = await fixture(answer);
-    const result = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
-    expect(result.status).toBe("cancelled");
-    expect(result.state.status).toBe("claimed");
-    expect(f.prompts).toHaveLength(1);
-    await expect(
-      readFile(join(f.root, "state/module-preparation-state.json")),
-    ).rejects.toMatchObject({ code: "ENOENT" });
-  },
-);
-
-it("accepts the explicitly entered taxpayer answer independent of whitespace or case", async () => {
-  const f = await fixture(" NO ");
+it("when the internet's clock disagrees the terminal explains and cancels without a question", async () => {
+  const f = await fixture();
+  external.internet.mockImplementation(async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: NOW + 31_000,
+    uncertaintyMs: 0,
+    wallStartedMs: NOW,
+    wallFinishedMs: NOW,
+    monotonicStartedMs: performance.now(),
+    monotonicFinishedMs: performance.now(),
+  }));
   const result = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
-  expect(result.status).toBe("ready");
-  expect(result.state.inputs[MODULE]).toMatchObject({
-    allocation: { installationIdentity: "0CNNW" },
-  });
+  expect(result.status).toBe("cancelled");
+  expect(f.output).toContain(
+    "No series is made without a confirmed time, so none is ever repeated.",
+  );
+  expect(f.output).not.toContain(
+    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+  );
+  expect(f.prompts).toEqual([]);
+  await expect(readFile(join(f.root, "state/module-preparation-state.json"))).rejects.toMatchObject(
+    { code: "ENOENT" },
+  );
 });
 
 it("rejects a wrong password before persisting a selected hour", async () => {
@@ -348,7 +366,7 @@ it("selects every contributing module before importing any activation input", as
   expect(f.prompts).toEqual(["Confirm setup password: ", "Confirm setup password: "]);
 });
 
-it("waits for a new comparison when valid observations straddle a UTC-hour boundary", async () => {
+it("near an hour's end the terminal waits for its settle point, not for the hour", async () => {
   const f = await fixture();
   vi.setSystemTime(Date.parse("2026-10-16T11:59:59.900Z"));
   external.internet.mockImplementation(async () => ({
@@ -364,11 +382,11 @@ it("waits for a new comparison when valid observations straddle a UTC-hour bound
   const result = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
   expect(result.status).toBe("waiting");
   expect(result.state.status).toBe("claimed");
-  expect(f.output.join("\n")).toContain("UTC-hour boundary");
-  expect(f.prompts).toEqual([]);
-  await expect(readFile(join(f.root, "state/module-preparation-state.json"))).rejects.toMatchObject(
-    { code: "ENOENT" },
+  expect(f.output).toContain(
+    "Continues at 2026-10-16T12:02:00.000Z; run the command again within a minute after that time (later, it waits again).",
   );
+  expect(f.output.join("\n")).not.toContain("UTC-hour boundary");
+  expect(f.prompts.every((question) => question === "Confirm setup password: ")).toBe(true);
 });
 
 it("preflights every command contribution before asking for any password or selecting material", async () => {

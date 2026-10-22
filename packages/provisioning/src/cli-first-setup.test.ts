@@ -145,7 +145,7 @@ async function fixture(answer = "yes") {
   return { root, args, deps, runtime, output, prompts };
 }
 
-it("the venue command claims ownership and retains an hour wait before any venue write", async () => {
+it("the venue command claims ownership, retains its settle wait and says why and until when, before any venue write", async () => {
   const f = await fixture();
   expect(await runCli(f.args, f.deps)).toBe(1);
   const state = await f.runtime.store.read();
@@ -155,9 +155,13 @@ it("the venue command claims ownership and retains an hour wait before any venue
     await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
   );
   expect(journal.revisions.at(-1).value.entries).toMatchObject([
-    { kind: "wait", answer: "yes", targetMs: Date.parse("2026-10-16T12:00:00Z") },
+    { kind: "wait", targetMs: Date.parse("2026-10-16T11:42:00Z") },
   ]);
-  expect(f.output.join("\n")).toContain("2026-10-16T12:00:00.000Z");
+  expect(journal.revisions.at(-1).value.entries[0]).not.toHaveProperty("answer");
+  expect(f.output).toContain("Waiting to confirm the time, so no invoice series is ever repeated.");
+  expect(f.output).toContain(
+    "Continues at 2026-10-16T11:42:00.000Z; run the command again within a minute after that time (later, it waits again).",
+  );
   expect(f.output.join("\n")).not.toContain(PASSWORD);
   expect(await readTenantIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
@@ -195,7 +199,13 @@ it("a restarted command recovers its original wait using the setup password", as
   expect(f.prompts).not.toContain(
     "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
   );
-  expect(f.output.join("\n")).toContain("2026-10-16T12:00:00.000Z");
+  expect(
+    f.output.filter(
+      (line) =>
+        line ===
+        "Continues at 2026-10-16T11:42:00.000Z; run the command again within a minute after that time (later, it waits again).",
+    ),
+  ).toHaveLength(2);
   expect(await readTenantIdentities(venue.db)).toEqual([]);
 });
 

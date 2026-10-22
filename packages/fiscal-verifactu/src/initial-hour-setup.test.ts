@@ -529,29 +529,18 @@ it("the terminal explains and cancels when the internet's clock disagrees", asyn
   expect(f.history).toEqual([]);
 });
 
-it.each(["yes", "unknown"])(
-  "terminal %s retains a wait without returning a usable input",
-  async (answer) => {
-    const f = configured();
-    internetAgrees();
-    const t = terminal(f, [answer]);
-    expect(await f.seat.command!(context, t.actions)).toEqual({ status: "waiting" });
-    expect(t.output.join("\n")).toContain("2026-10-16T12:00:00.000Z");
-    expect(t.output.join("\n")).toContain("does not reserve a separate hour");
-    expect(f.history).toHaveLength(1);
-  },
-);
-
-it.each([[""], ["maybe"]])(
-  "terminal cancellation %j records no hour",
-  async (...answers: string[]) => {
-    const f = configured();
-    internetAgrees();
-    const t = terminal(f, answers);
-    expect(await f.seat.command!(context, t.actions)).toEqual({ status: "cancelled" });
-    expect(f.history).toEqual([]);
-  },
-);
+it("the terminal asks nothing, prints why it waits and until when, and keeps the wait", async () => {
+  const f = configured();
+  internetAgrees();
+  const t = terminal(f, []);
+  expect(await f.seat.command!(context, t.actions)).toEqual({ status: "waiting" });
+  expect(t.output).toContain("Waiting to confirm the time, so no invoice series is ever repeated.");
+  expect(t.output).toContain(
+    "Continues at 2026-10-16T11:42:00.000Z; run the command again within a minute after that time (later, it waits again).",
+  );
+  expect(t.prompts).toEqual([]);
+  expect(f.history).toHaveLength(1);
+});
 
 it("the terminal keeps an already selected request without another comparison or declaration", async () => {
   const f = configured();
@@ -562,21 +551,33 @@ it("the terminal keeps an already selected request without another comparison or
   expect(f.history).toEqual([]);
 });
 
-it("the terminal uses automatic agreement without a manual clock question", async () => {
+it("the terminal run again after its wait's target selects that minute's name, asking nothing", async () => {
+  startEarly();
   const f = configured();
   internetAgrees();
-  const t = terminal(f, ["no"]);
-  expect(await f.seat.command!(context, t.actions)).toEqual({ status: "ready", input });
-  expect(t.prompts).toHaveLength(1);
-  expect(t.output.join("\n")).not.toContain("wrong time");
+  const first = terminal(f, []);
+  expect(await f.seat.command!(context, first.actions)).toEqual({ status: "waiting" });
+  expect(first.output).toContain(
+    "Continues at 2026-10-16T11:40:00.000Z; run the command again within a minute after that time (later, it waits again).",
+  );
+  vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
+  monotonicOffset += 120_000;
+  const again = terminal(f, []);
+  expect(await f.seat.command!(context, again.actions)).toEqual({ status: "ready", input });
+  expect([...first.prompts, ...again.prompts]).toEqual([]);
+  expect(again.output.join("\n")).not.toContain("wrong time");
+  expect(f.history).toHaveLength(2);
 });
 
-it("the terminal does not wait at the UTC hour boundary", async () => {
+it("the terminal near an hour's end waits for its settle point, not for the hour", async () => {
   const f = configured();
   vi.setSystemTime(new Date("2026-10-16T11:59:59.900Z"));
   internetAgrees();
-  const t = terminal(f, ["no"]);
-  expect(await f.seat.command!(context, t.actions)).toMatchObject({ status: "ready" });
+  const t = terminal(f, []);
+  expect(await f.seat.command!(context, t.actions)).toEqual({ status: "waiting" });
+  expect(t.output).toContain(
+    "Continues at 2026-10-16T12:02:00.000Z; run the command again within a minute after that time (later, it waits again).",
+  );
   expect(t.output.join("\n")).not.toContain("UTC-hour boundary");
   expect(f.history).toHaveLength(1);
 });
@@ -594,42 +595,33 @@ it.each([null, { status: "invalid" }])(
   },
 );
 
-it("the terminal reconnects to the same wait without asking the taxpayer question again", async () => {
+it("a terminal run again before the target prints the same wait and records nothing new", async () => {
   const f = configured();
   internetAgrees();
-  expect(await f.seat.command!(context, terminal(f, ["unknown"]).actions)).toEqual({
-    status: "waiting",
-  });
+  expect(await f.seat.command!(context, terminal(f, []).actions)).toEqual({ status: "waiting" });
   const before = structuredClone(f.history);
   const again = terminal(f, []);
   expect(await f.seat.command!(context, again.actions)).toEqual({ status: "waiting" });
   expect(again.prompts).toEqual([]);
-  expect(again.output.join("\n")).toContain("2026-10-16T12:00:00.000Z");
+  expect(again.output).toContain(
+    "Continues at 2026-10-16T11:42:00.000Z; run the command again within a minute after that time (later, it waits again).",
+  );
   expect(f.history).toEqual(before);
 });
 
-it("the terminal retains the original unknown answer when its monotonic wait has finished", async () => {
-  let monotonic = 1;
-  const clock = vi.spyOn(performance, "now").mockImplementation(() => monotonic);
-  try {
-    const f = configured();
-    internetAgrees();
-    expect(await f.seat.command!(context, terminal(f, ["unknown"]).actions)).toEqual({
-      status: "waiting",
-    });
-    monotonic += 1_200_000;
-    vi.setSystemTime(new Date("2026-10-16T12:00:00Z"));
-    const resumed = terminal(f, []);
-    const result = await f.seat.command!(context, resumed.actions);
-    expect(result).toMatchObject({
-      status: "ready",
-      input: { allocation: { installationIdentity: "0CNPG" } },
-    });
-    expect(resumed.prompts).toEqual([]);
-    expect(f.history).toHaveLength(2);
-  } finally {
-    clock.mockRestore();
-  }
+it("a terminal run more than a minute after its wait's target waits again", async () => {
+  const f = configured();
+  internetAgrees();
+  expect(await f.seat.command!(context, terminal(f, []).actions)).toEqual({ status: "waiting" });
+  vi.setSystemTime(new Date("2026-10-16T11:43:00.001Z"));
+  monotonicOffset += 180_001;
+  const later = terminal(f, []);
+  expect(await f.seat.command!(context, later.actions)).toEqual({ status: "waiting" });
+  expect(later.output).toContain(
+    "Continues at 2026-10-16T11:45:00.000Z; run the command again within a minute after that time (later, it waits again).",
+  );
+  expect(later.prompts).toEqual([]);
+  expect(f.history).toHaveLength(2);
 });
 
 it("refuses a delivered sheet whose installation code differs from its frozen activation", () => {
@@ -731,7 +723,7 @@ it("terminal resume refuses an altered retained request before comparing clocks"
   expect(f.history).toEqual([]);
 });
 
-it.each([null, { status: "other", answer: "no" }, { status: "preview", answer: "other" }])(
+it.each([null, { status: "other" }, { status: "waiting" }, { status: "waiting", targetMs: 1.5 }])(
   "terminal refuses malformed preview %j before requesting an allocation",
   async (preview) => {
     const f = configured();
