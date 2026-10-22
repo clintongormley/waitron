@@ -706,6 +706,8 @@ fixture command path changed between those probes.
 
 ## Deployment-status guard matches a temporary path
 
+**Update, 2026-10-22:** [A1010 (#1978)](https://github.com/clintongormley/waitron/pull/1978) landed as `f2d4c3ce97bce1f4c86856ac8a2ccb0638eb96d1`, changing the status assertions and removing the open root-backlog entry. The receipt below describes the earlier guard; its proposed follow-up is superseded by that change.
+
 A1003 ([PR #1973](https://github.com/clintongormley/waitron/pull/1973)), 2026-10-22: the normal
 pre-push root run at `3250e0c3` passed 8,026 cases and failed the status-provenance case at
 `scripts/waitron-sh.test.mjs:508`. The pattern `compose .*up` matched the path prefix
