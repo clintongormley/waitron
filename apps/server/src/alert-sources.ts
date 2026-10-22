@@ -324,6 +324,7 @@ export function storageAlertSource(deps: {
             params: {},
             severity: "error",
             since: stoppedSince.toISOString(),
+            screen: "box-status",
           },
         ];
       }
@@ -336,6 +337,7 @@ export function storageAlertSource(deps: {
           params: { freeBytes },
           severity: "warning",
           since: lowSince.toISOString(),
+          screen: "box-status",
         },
       ];
     },

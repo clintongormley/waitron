@@ -971,6 +971,7 @@ export const en = {
 
   "nav.device_profiles": "Device profiles",
   "nav.diagnostics": "Diagnostics",
+  "nav.box_status": "Box status",
   "nav.backup": "Backups",
   "nav.servers": "Servers",
   "nav.email_inbox": "Email inbox",
@@ -4121,6 +4122,7 @@ export const es: Record<StringKey, string> = {
 
   "nav.device_profiles": "Perfiles de dispositivo",
   "nav.diagnostics": "Diagnóstico",
+  "nav.box_status": "Estado del equipo",
   "nav.backup": "Copias de seguridad",
   "nav.servers": "Servidores",
   "nav.email_inbox": "Bandeja de correo",

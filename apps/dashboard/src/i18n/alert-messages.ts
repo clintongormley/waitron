@@ -110,8 +110,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "El equipo no ha podido actualizar la copia cifrada de sus propias claves y ajustes que guarda junto con tus datos. Un equipo reconstruido desde tu bucket podría volver con claves y ajustes desactualizados, o sin ellos si nunca se llegaron a guardar. Las ventas continúan. Contacta con soporte.",
   },
   "storage.space_low": {
-    en: "The box has {freeBytes:bytes} of disk space left. Everything still works, but if it fills up nothing can be saved.",
-    es: "Al equipo le quedan {freeBytes:bytes} de espacio en disco. Todo sigue funcionando, pero si se llena no se podrá guardar nada.",
+    en: "The box has {freeBytes:bytes} of disk space left. Everything still works, but if it fills up nothing can be saved. See what is using it on the Box status page.",
+    es: "Al equipo le quedan {freeBytes:bytes} de espacio en disco. Todo sigue funcionando, pero si se llena no se podrá guardar nada. Mira qué ocupa espacio en Estado del equipo.",
   },
   "storage.disk_full": {
     en: "The box is out of disk space: nothing can be saved.",
