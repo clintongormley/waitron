@@ -10,7 +10,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+
+// One case invokes the classifier twice, each with a 30-second child deadline.
+vi.setConfig({ testTimeout: 70_000 });
 
 const root = resolve(import.meta.dirname, "..");
 const temporary = mkdtempSync(join(tmpdir(), "ci-main-recovery-"));
