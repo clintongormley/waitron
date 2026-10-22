@@ -701,7 +701,6 @@ export function createAgent(opts: AgentOptions): Agent {
     const hostname = host.hostname?.();
     const setupUrl = host.setupUrl?.();
     const setupPort = host.setupPort?.();
-    const bluetoothPrinting = host.bluetoothPrinting?.();
     const sentOutcomes = bluetoothOutcomes;
     const pulled = await client.pullJobs(current, token, {
       visible,
@@ -711,7 +710,6 @@ export function createAgent(opts: AgentOptions): Agent {
       ...(hostname === undefined ? {} : { host: hostname }),
       ...(setupUrl === undefined ? {} : { setupUrl }),
       ...(setupPort === undefined ? {} : { setupPort }),
-      ...(bluetoothPrinting === undefined ? {} : { bluetoothPrinting }),
     });
     if (!pulled.ok) {
       if (pulled.failure.kind === "unauthorized") {

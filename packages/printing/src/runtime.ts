@@ -2,7 +2,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { claimRows, nowIso, type Transaction } from "@waitron/db";
 import type { PrintTransport, PrinterTarget, Transport } from "@waitron/print-agent";
 
-/** Jobs handled per bounded Bluetooth failure pass or demo delivery pass. */
+/** Jobs handled per demo delivery pass. */
 export const PULL_BATCH_LIMIT = 50;
 
 export const MAX_DELIVERY_ATTEMPTS = 5;
@@ -119,37 +119,6 @@ export async function claimPrintJobs(
   });
 }
 
-/** The `last_error` of a job {@link failUnprintableBluetoothJobs} ended: a code the dashboard
- * words, not a sentence. */
-export const BLUETOOTH_PRINTING_UNAVAILABLE = "printer.bluetooth_printing_unavailable";
-
-/**
- * Ends failed, with no attempts left, the due jobs of the active Bluetooth printers at `addresses`,
- * which the caller chooses (the job pull in `apps/server/src/print-api.ts`). One call ends at most
- * `PULL_BATCH_LIMIT` jobs; later pulls that report the same printers end the rest.
- */
-export async function failUnprintableBluetoothJobs(
-  tx: Transaction,
-  agentId: string,
-  addresses: string[],
-): Promise<string[]> {
-  if (addresses.length === 0) return [];
-  const { claimedAt, due } = dueNow();
-  const ended = await claimRows<{ id: string }>(tx, {
-    table: "print_jobs",
-    key: "id",
-    claimableJoin: sql`join printers p on p.id = j.printer_id`,
-    claimable: sql`p.active = true and p.deleted_at is null and p.transport = 'bluetooth'
-      and p.local_key in ${addresses} and ${due}`,
-    order: sql`j.created_at`,
-    limit: PULL_BATCH_LIMIT,
-    set: sql`status = 'failed', last_error = ${BLUETOOTH_PRINTING_UNAVAILABLE},
-      attempts = ${MAX_DELIVERY_ATTEMPTS}, claimed_at = ${claimedAt}, claimed_by = ${agentId}`,
-    returning: sql`print_jobs.id`,
-  });
-  return ended.map(({ id }) => id);
-}
-
 /** The `last_error` of a job {@link endUnpairedPrinterJobs} ended: a code the dashboard words, not
  * a sentence. */
 export const PRINTER_UNPAIRED = "printer.unpaired";
@@ -162,7 +131,7 @@ export const PRINTER_UNPAIRED = "printer.unpaired";
  * while it reports the unpairing (`tick`, `packages/print-agent/src/agent.ts`, pushes and reports
  * each pulled job before the next pull; ticks run one at a time). Drawer kicks end too, since one
  * left waiting would open the drawer on the re-add; `drawer_opens` holds no job id, so its audit
- * row is unchanged. Unbatched, unlike `failUnprintableBluetoothJobs`: the pull that carries an
+ * row is unchanged. The pull that carries an
  * Unpair's outcome acts on it once, so no later pull would end the rest (`accept`,
  * `apps/server/src/printer-bluetooth-commands.ts`, drops the command once its outcome arrives).
  */

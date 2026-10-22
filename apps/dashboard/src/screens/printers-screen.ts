@@ -83,13 +83,9 @@ interface PrinterDraft {
 }
 
 /** The `last_error` codes of a job the server ended itself, setting its attempts to the cap
- * (`BLUETOOTH_PRINTING_UNAVAILABLE` and `PRINTER_UNPAIRED`, packages/printing/src/runtime.ts;
+ * (`PRINTER_UNPAIRED`, packages/printing/src/runtime.ts;
  * `PRINTER_DELETED`, packages/printing/src/printer-delete-jobs.ts). */
-const ENDED_BY_SERVER = new Set([
-  "printer.bluetooth_printing_unavailable",
-  "printer.unpaired",
-  "printer.deleted",
-]);
+const ENDED_BY_SERVER = new Set(["printer.unpaired", "printer.deleted"]);
 
 const jobReason = (lastError: string): string =>
   ENDED_BY_SERVER.has(lastError) ? codeMessage(lastError) : lastError;

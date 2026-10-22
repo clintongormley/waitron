@@ -32,7 +32,6 @@ import {
   deactivatePrinter,
   endUnpairedPrinterJobs,
   enqueuePrintJob,
-  failUnprintableBluetoothJobs,
   listPrinters,
   MAX_DELIVERY_ATTEMPTS,
   updatePrinter,
@@ -590,13 +589,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         setupPort?: unknown;
         pairedBluetooth?: unknown;
         bluetoothOutcomes?: unknown;
-        bluetoothPrinting?: unknown;
       }>(c);
       const reportedHost = optionalString(body.host, "host");
       const host = reportedHost === undefined ? undefined : reportedHost.trim() || null;
       const setupUrl = optionalAgentSetupUrl(body.setupUrl);
       const setupPort = optionalAgentSetupPort(body.setupPort);
-      const bluetoothPrinting = optionalBool(body.bluetoothPrinting, "bluetoothPrinting");
       const visible = screenVisible(body.visible);
       const scanned = screenScanned(body.scanned);
       const pairedBluetooth = screenPairedBluetooth(body.pairedBluetooth);
@@ -701,16 +698,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             const ended = await endUnpairedPrinterJobs(tx, agentId, addresses);
             await endInvoicePrintDeliveries(tx, ended, deps.now?.());
           }
-        }
-        // Absent from an agent that predates the field, which then changes nothing.
-        if (bluetoothPrinting === false && pairedBluetooth.length > 0) {
-          const elsewhere = printableElsewhere();
-          const ended = await failUnprintableBluetoothJobs(
-            tx,
-            agentId,
-            pairedBluetooth.map((p) => p.localKey).filter((key) => !elsewhere.has(key)),
-          );
-          await endInvoicePrintDeliveries(tx, ended, deps.now?.());
         }
         return claimInvoicePrintJobs(
           tx,

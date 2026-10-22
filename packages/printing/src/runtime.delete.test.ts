@@ -17,7 +17,6 @@ import {
   PULL_BATCH_LIMIT,
   claimPrintJobs,
   endUnpairedPrinterJobs,
-  failUnprintableBluetoothJobs,
   reportPrintJob,
 } from "./runtime.js";
 import {
@@ -277,7 +276,7 @@ describe("a deleted printer's late work", () => {
     expect((await rows([seeded!.id]))[seeded!.id]).toMatchObject({ status: "queued" });
   });
 
-  it("leaves a deleted Bluetooth printer's jobs alone when its address is reported unprintable or unpaired", async () => {
+  it("leaves a deleted Bluetooth printer's jobs alone when its address is reported unpaired", async () => {
     const cfg = await setup();
     const agent = await seedAgent(cfg, "Box");
     const oldPrinter = await printer(cfg, MAC, "bluetooth");
@@ -292,12 +291,8 @@ describe("a deleted printer's late work", () => {
       })
       .returning({ id: printJobs.id });
     const newPrinter = await printer(cfg, MAC, "bluetooth");
-    const unprintable = await job(cfg, newPrinter);
     const before = await rows([seeded!.id]);
 
-    expect(
-      await withTransaction(suite.db, (tx) => failUnprintableBluetoothJobs(tx, agent, [MAC])),
-    ).toEqual([unprintable]);
     const unpaired = await job(cfg, newPrinter);
     expect(
       await withTransaction(suite.db, (tx) => endUnpairedPrinterJobs(tx, agent, [MAC])),

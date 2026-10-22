@@ -41,7 +41,7 @@ export const printJobs = table(
       .references(() => printers.id),
     /* v8 ignore stop */
     // The agent holding the latest claim, which alone may report the job, or the agent whose pull
-    // ended it through `failUnprintableBluetoothJobs` or `endUnpairedPrinterJobs` (runtime.ts).
+    // ended it through `endUnpairedPrinterJobs` (runtime.ts).
     /* v8 ignore start */
     claimedBy: id("claimed_by").references(() => printAgents.id),
     /* v8 ignore stop */

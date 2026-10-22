@@ -62,7 +62,6 @@ export type {
 export { Router } from "./router.js";
 export type { ProbeRound, RouterOptions, ServerState, TrackedServer } from "./router.js";
 export {
-  BluetoothTransport,
   DEFAULT_TCP_TIMEOUT_MS,
   FakeSink,
   NetworkTcpTransport,

@@ -106,7 +106,6 @@ describe("createLinuxDevices — visibleDevices()", () => {
       bluetooth: fakeBluetooth({
         paired: async () => [{ mac: "AA:BB:CC:DD:EE:FF", name: "Star TSP100" }],
       }),
-      btDevicePath: () => "/dev/rfcomm0",
     });
     expect(await devices.visibleDevices()).toEqual([
       {
@@ -128,7 +127,6 @@ describe("createLinuxDevices — visibleDevices()", () => {
           throw new Error("No default controller available");
         },
       }),
-      btDevicePath: () => "/dev/rfcomm0",
     });
     expect(await devices.visibleDevices()).toEqual([
       {
@@ -138,26 +136,6 @@ describe("createLinuxDevices — visibleDevices()", () => {
         model: "USB Portable Printer",
       },
     ]);
-  });
-});
-
-describe("createLinuxDevices — a paired printer with no device path", () => {
-  // The production path names only a Bluetooth address, so a paired entry that is not one has none.
-  it("leaves it out of the inventory while the radio still reads available", async () => {
-    const devices = createLinuxDevices({
-      sysfsRoot: root,
-      devRoot: "/dev",
-      bluetooth: fakeBluetooth({ paired: async () => [{ mac: "/dev/rfcomm0" }] }),
-    });
-    expect(await devices.visibleDevices()).toEqual([
-      {
-        transport: "usb",
-        localKey: "B120300001",
-        make: "YICHIP3121",
-        model: "USB Portable Printer",
-      },
-    ]);
-    expect(devices.bluetoothAvailability()).toEqual({ available: true });
   });
 });
 
@@ -190,7 +168,6 @@ describe("createLinuxDevices — devices that report no make or model", () => {
       // The Bluetooth entry does not fully pin `toLocal`'s no-name path: were it to set
       // `model: undefined`, `dropPath` would drop the key again and this would still pass.
       bluetooth: fakeBluetooth({ paired: async () => [{ mac: "AA:BB:CC:DD:EE:FF" }] }),
-      btDevicePath: () => "/dev/rfcomm0",
     });
     expect(await devices.visibleDevices()).toStrictEqual([
       { transport: "usb", localKey: "B120300001" },
@@ -393,7 +370,6 @@ describe("createLinuxDevices — pairedBluetooth()", () => {
       sysfsRoot: root,
       devRoot: "/dev",
       bluetooth: fakeBluetooth({ paired }),
-      btDevicePath: () => "/dev/rfcomm0",
     });
     // The agent's order: the paired listing first, then the visible read, both in one turn.
     const listed = devices.pairedBluetooth();
@@ -481,19 +457,26 @@ describe("createLinuxDevices — forgetBluetooth()", () => {
   });
 });
 
-describe("createLinuxDevices — bluetoothPrinting()", () => {
-  it("says it can print over Bluetooth with the production device path", () => {
-    const devices = createLinuxDevices({ sysfsRoot: root, bluetooth: fakeBluetooth() });
-    expect(devices.bluetoothPrinting()).toBe(true);
-  });
-
-  it("says it can print over Bluetooth once it is given a device path", () => {
+describe("malformed Bluetooth addresses", () => {
+  it("keeps a malformed paired address out of the visible inventory", async () => {
     const devices = createLinuxDevices({
       sysfsRoot: root,
-      bluetooth: fakeBluetooth(),
-      btDevicePath: (mac) => `/dev/rfcomm-${mac}`,
+      bluetooth: fakeBluetooth({ paired: async () => [{ mac: "invalid-address" }] }),
     });
-    expect(devices.bluetoothPrinting()).toBe(true);
+    expect(
+      (await devices.visibleDevices()).filter((device) => device.transport === "bluetooth"),
+    ).toEqual([]);
+    expect(devices.bluetoothAvailability()).toEqual({ available: true });
+  });
+
+  it("refuses to resolve a malformed paired address", async () => {
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      bluetooth: fakeBluetooth({ paired: async () => [{ mac: "invalid-address" }] }),
+    });
+    await expect(
+      devices.resolve(wireJob({ transport: "bluetooth", localKey: "invalid-address" })),
+    ).rejects.toThrow("device invalid-address not attached");
   });
 });
 
@@ -517,13 +500,12 @@ describe("createLinuxDevices — resolve()", () => {
     ).toMatchObject({ devicePath: "/dev/usb/lp0" });
   });
 
-  it("maps a paired Bluetooth job's MAC to its RFCOMM node", async () => {
+  it("maps a paired Bluetooth job to its address", async () => {
     const devices = createLinuxDevices({
       sysfsRoot: root,
       bluetooth: fakeBluetooth({
         paired: async () => [{ mac: "AA:BB:CC:DD:EE:FF", name: "Star" }],
       }),
-      btDevicePath: (mac) => `/dev/rfcomm-${mac}`,
     });
     expect(
       await devices.resolve(wireJob({ transport: "bluetooth", localKey: "AA:BB:CC:DD:EE:FF" })),
@@ -532,7 +514,7 @@ describe("createLinuxDevices — resolve()", () => {
       transport: "bluetooth",
       host: null,
       port: null,
-      devicePath: "/dev/rfcomm-AA:BB:CC:DD:EE:FF",
+      devicePath: "AA:BB:CC:DD:EE:FF",
     });
   });
 
@@ -552,16 +534,6 @@ describe("createLinuxDevices — resolve()", () => {
       port: null,
       devicePath: "AA:BB:CC:DD:EE:FF",
     });
-  });
-
-  it("refuses, with the production device path, a paired entry that is not a Bluetooth address", async () => {
-    const devices = createLinuxDevices({
-      sysfsRoot: root,
-      bluetooth: fakeBluetooth({ paired: async () => [{ mac: "/dev/rfcomm0" }] }),
-    });
-    await expect(
-      devices.resolve(wireJob({ transport: "bluetooth", localKey: "/dev/rfcomm0" })),
-    ).rejects.toThrow("bluetooth device /dev/rfcomm0 is not a Bluetooth address");
   });
 
   it("passes a network_tcp job's host/port through, with no device path", async () => {

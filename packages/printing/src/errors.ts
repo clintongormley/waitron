@@ -20,9 +20,6 @@ declare module "@waitron/shared" {
      * and jobs a later resend of the same job has printed. Not thrown; raised by the printing alert
      * source. */
     "printer.jobs_waiting": { printer: string; count: number };
-    /** A print job ended because the agent that has its Bluetooth printer paired cannot print over
-     * Bluetooth. Not thrown; stored as the job's `last_error` by `failUnprintableBluetoothJobs`. */
-    "printer.bluetooth_printing_unavailable": Record<string, never>;
     /** A print job ended because its Bluetooth printer was unpaired; it may already have printed, if
      * the agent had sent it and its report was lost. Not thrown; stored as the job's `last_error` by
      * `endUnpairedPrinterJobs`. */

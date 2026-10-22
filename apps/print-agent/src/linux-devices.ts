@@ -28,7 +28,6 @@ export interface LinuxDeviceOptions {
   sysfsRoot?: string;
   devRoot?: string;
   bluetooth?: BluetoothHost;
-  btDevicePath?: (mac: string) => string;
   scanNetwork?: () => Promise<DiscoveredDevice[]>;
   /** Kills a paired listing BlueZ has not answered; only used with the default `bluetooth`. */
   bluetoothListTimeoutMs?: number;
@@ -52,8 +51,7 @@ type LocalDevice = VisibleDevice & { devicePath: string };
 export type LinuxDevices = Pick<
   Host,
   "visibleDevices" | "scan" | "pair" | "pairedBluetooth" | "forgetBluetooth" | "resolve"
-> &
-  Required<Pick<Host, "bluetoothPrinting">>;
+>;
 
 export interface BluetoothStatusSource {
   /** Undefined until the first check. */
@@ -76,7 +74,6 @@ export function createLinuxDevices(
       listTimeoutMs: opts.bluetoothListTimeoutMs ?? LIST_TIMEOUT_MS,
       ...(opts.log !== undefined ? { log: opts.log } : {}),
     });
-  const btDevicePath = opts.btDevicePath ?? liveBtDevicePath;
   const scanNetwork = opts.scanNetwork ?? liveNetworkScan;
   const now = opts.now ?? Date.now;
   let availability: BluetoothAvailability | undefined;
@@ -119,12 +116,14 @@ export function createLinuxDevices(
   const usb = (): Promise<UsbPrinter[]> => readUsbPrinters(sysfsRoot, devRoot);
 
   const toLocal = (paired: BluetoothDevice[]): LocalDevice[] =>
-    paired.map((d) => ({
-      transport: "bluetooth",
-      localKey: d.mac,
-      ...(d.name !== undefined ? { model: d.name } : {}),
-      devicePath: btDevicePath(d.mac),
-    }));
+    paired
+      .filter((d) => isBluetoothAddress(d.mac))
+      .map((d) => ({
+        transport: "bluetooth",
+        localKey: d.mac,
+        ...(d.name !== undefined ? { model: d.name } : {}),
+        devicePath: d.mac,
+      }));
   // A listing that started before a forget finished may still hold the forgotten printer, and one
   // that started before a pairing may lack the new one, so a job the recent listing cannot serve
   // runs a listing of its own rather than joining one already running.
@@ -162,12 +161,7 @@ export function createLinuxDevices(
           : sharedListing().catch(() => []);
       const usbDevices = (await usb()).map(dropPath);
       const paired = await listing;
-      let btDevices: VisibleDevice[];
-      try {
-        btDevices = toLocal(paired).map(dropPath);
-      } catch {
-        btDevices = [];
-      }
+      const btDevices = toLocal(paired).map(dropPath);
       return [...usbDevices, ...btDevices];
     },
 
@@ -218,8 +212,6 @@ export function createLinuxDevices(
       }
     },
 
-    bluetoothPrinting: () => true,
-
     async resolve(job: WireJob): Promise<PrinterTarget> {
       if (job.transport === "network_tcp") {
         return {
@@ -247,14 +239,6 @@ export function createLinuxDevices(
       };
     },
   };
-}
-
-/** The host's Bluetooth transport sends to the printer's address itself. */
-function liveBtDevicePath(mac: string): string {
-  if (!isBluetoothAddress(mac)) {
-    throw new Error(`bluetooth device ${mac} is not a Bluetooth address`);
-  }
-  return mac;
 }
 
 /** A minimal mDNS query with one PTR/IN question for the PDL service and one for IPP. */

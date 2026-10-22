@@ -434,29 +434,15 @@ just a green typecheck.
 ## A Bluetooth printer no agent reports paired still waits with no reason on the job (A139's "not covered")
 
 - **A Bluetooth printer no agent reports paired still waits with no reason on the job (A139's "not
-  covered")**, as a USB printer no agent sees does. With two agents, one that cannot print over
-  Bluetooth leaves a paired printer's jobs alone while another agent has reported, within the last
-  15 seconds (`DISCOVERED_TTL_MS`, `apps/server/src/discovery-listing.ts`), that it can print to that
-  printer; that report is held only in the server's memory, so after a server restart, until the
-  other agent's first pull, the first agent still ends the job. A140 left this as it is: it needs
-  two agents, one of them older than A140.
+  covered")**, as a USB printer no agent sees does. If no agent currently reports that printer
+  as visible, its jobs remain waiting.
 
-## Follow-ups A140's review raised, not done (owner's call)
+## The paired-printer listing reuse window
 
-- **Follow-ups A140's review raised, not done (owner's call):**
-  - `BluetoothTransport` (`packages/print-agent/src/transport.ts`, with its export and tests) is
-    unused in production and still models a device-file path.
-  - `liveBtDevicePath`, the `btDevicePath` option and the try/catch in `visibleDevices`
-    (`apps/print-agent/src/linux-devices.ts`) can go; the `/dev/rfcomm…` fixtures in
-    `apps/print-agent/src/linux-devices.test.ts` model a shape production no longer has, and
-    changing them changes existing tests.
-  - A139's chain for an agent that cannot print to Bluetooth (`failUnprintableBluetoothJobs`, the
-    `bluetoothPrinting` wire field, the error code) has no shipped agent reporting `false` now: keep
-    it for an older agent, or delete it before go-live. The jobs list shows "—" in place of the
-    attempt count for a job ended with that code.
-  - The 10-second paired-listing reuse in `resolve()` (`PAIRED_REUSE_MS`,
-    `apps/print-agent/src/linux-devices.ts`) is a chosen window, not a measured one, and a printer
-    unpaired outside the agent resolves as attached for up to 10 seconds.
+The ten-second paired-listing reuse in `resolve()` (`PAIRED_REUSE_MS`,
+`apps/print-agent/src/linux-devices.ts`) is a chosen window, not a measured one. A printer
+unpaired outside the agent can resolve as attached for up to ten seconds.
+
 
 ## A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN
 

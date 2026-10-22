@@ -903,7 +903,7 @@ describe("invoice receipt terminal Bluetooth endings", () => {
     });
     expect(response.status).toBe(200);
     expect(((await response.json()) as { jobs: unknown[] }).jobs).toHaveLength(1);
-    expect((await bluetoothPull(ctx, { bluetoothPrinting: false })).jobs).toEqual([]);
+    expect((await bluetoothPull(ctx)).jobs).toEqual([]);
     expect(await ctx.row()).toMatchObject({
       status: "sending",
       failureCode: null,
@@ -953,7 +953,7 @@ describe("invoice receipt terminal Bluetooth endings", () => {
     expect(await emailRetry(ctx)).toMatchObject({ designation: "duplicate" });
   });
 
-  it("releases a queued invoice when Bluetooth printing is unavailable and leaves it ended after recovery", async () => {
+  it("releases an invoice after a Bluetooth send fails and leaves it ended after recovery", async () => {
     const ctx = await setup(true);
     const otherSale = await issue();
     const unrelated = await withTransaction(suite.db, async (tx) => {
@@ -981,7 +981,21 @@ describe("invoice receipt terminal Bluetooth endings", () => {
         printJobId: job.jobId,
       });
     });
-    expect((await bluetoothPull(ctx, { bluetoothPrinting: false })).jobs).toEqual([]);
+    const pulled = await bluetoothPull(ctx, {
+      visible: [{ transport: "bluetooth", localKey: MAC }],
+    });
+    expect(pulled.jobs).toHaveLength(1);
+    const acceptedClaim = (await ctx.row()).claimTokenHash;
+    expect(acceptedClaim).not.toBeNull();
+    expect(
+      (
+        await ctx.result({
+          status: "failed",
+          error: "Bluetooth send failed",
+          invoiceClaim: pulled.jobs[0]!.invoiceClaim,
+        })
+      ).status,
+    ).toBe(204);
     expect(
       (
         await suite.db
@@ -992,21 +1006,20 @@ describe("invoice receipt terminal Bluetooth endings", () => {
     ).toEqual(unrelated);
     expect(await ctx.jobRow()).toMatchObject({
       status: "failed",
-      lastError: "printer.bluetooth_printing_unavailable",
+      lastError: "transport_failed",
       attempts: MAX_DELIVERY_ATTEMPTS,
     });
     expect(await ctx.row()).toMatchObject({
       status: "failed",
       failureCode: "transport_failed",
       completedAt: null,
-      claimTokenHash: null,
+      claimTokenHash: acceptedClaim,
     });
     const retry = await emailRetry(ctx);
     expect(retry).toMatchObject({ status: "queued", designation: "original", generation: 2 });
     expect(
       (
         await bluetoothPull(ctx, {
-          bluetoothPrinting: true,
           visible: [{ transport: "bluetooth", localKey: MAC }],
         })
       ).jobs,
