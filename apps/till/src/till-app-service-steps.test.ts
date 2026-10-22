@@ -216,7 +216,12 @@ it("shows no error when Done succeeds and the floor read after it fails", async 
 
   expect(markServiceStepDone).toHaveBeenCalledOnce();
   await vi.waitFor(() => expect(api.getTablesState.mock.calls.length).toBe(reads + 1));
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await expect(api.getTablesState.mock.results[reads]!.value).rejects.toEqual({
+    code: "server.internal",
+  });
+  // A task turn runs every microtask the failed read set off; then the render they asked for.
+  await new Promise((resolve) => setTimeout(resolve));
+  await el.updateComplete;
   expect(el.shadowRoot!.querySelector(".error")).toBeNull();
 });
 

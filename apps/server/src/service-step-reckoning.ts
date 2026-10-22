@@ -65,13 +65,13 @@ function repeatShownAt(last: number, every: number, at: number): number {
 }
 
 /**
- * A step's trigger is the moment its start happened. For `since_last_order` it is the latest repeat
- * already reached, or the next one, which is ahead, while none has come yet or the step's own Done
- * is at or after the latest reached; a Done clears the repeat showing when it was tapped, or the
- * first one if none had come. It is due at its trigger plus its minutes, or at the repeat itself. A
- * triggered step stays live until its own Done is later than its trigger, an order is sent later
- * than its due time, the party's first order is later than its trigger, or — before the first
- * order — the party has an open draft. Live steps come soonest due first, ties in list order.
+ * A step's trigger is the moment its start happened. For `since_last_order` it is the repeat
+ * showing now — the latest reached, or the first, which is ahead, while none has come — or the one
+ * after it when the step's own Done was tapped while that same repeat was showing. It is due at its
+ * trigger plus its minutes, or at the repeat itself. A triggered step stays live until its own Done
+ * is later than its trigger, an order is sent later than its due time, the party's first order is
+ * later than its trigger, or — before the first order — the party has an open draft. Live steps
+ * come soonest due first, ties in list order.
  */
 export function liveSteps(rules: readonly StepRule[], facts: StepFacts, nowMs: number): LiveStep[] {
   const live: LiveStep[] = [];
