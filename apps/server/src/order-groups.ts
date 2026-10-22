@@ -63,6 +63,7 @@ import {
 import {
   advanceSet,
   bumpRevision,
+  clearGroups,
   fireLines,
   fireableLineColumns,
   fireOrderLines,
@@ -684,21 +685,8 @@ export async function moveGroupsToParty(
   }
 }
 
-/**
- * Release a held group's lines bill by bill, in the order the bills were opened, as
- * {@link fireOrderLines} releases them, and record it fired. The caller has moved the party's
- * revision on and checked the group is held.
- */
-async function releaseGroup(
-  tx: Transaction,
-  cfg: OriginConfig,
-  partyId: string,
-  groupId: string,
-  firer: Firer,
-  detail: Record<string, unknown>,
-  routing = routingOnce(tx, cfg, new Date()),
-  attendance?: { recorder: AttendanceRecorder; at: string },
-): Promise<void> {
+/** A group's dishes with a quantity left uncancelled, in the order {@link releaseGroup} fires them. */
+async function activeGroupLines(tx: Transaction, groupId: string) {
   const lines = await tx
     .select({
       id: workingOrderLines.id,
@@ -719,7 +707,88 @@ async function releaseGroup(
     tx,
     lines.map((line) => line.id),
   );
-  const active = lines.filter((line) => line.quantity > (cancellations.get(line.id) ?? 0));
+  return lines.filter((line) => line.quantity > (cancellations.get(line.id) ?? 0));
+}
+
+/**
+ * Before these bills leave the party: fire each held group holding one of their dishes, in the
+ * party's group order, and take apart one with no dish left to fire. The caller has moved the
+ * party's revision on.
+ */
+export async function releaseHeldWorkOf(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+  billIds: readonly string[],
+  operatorId: string,
+  attendance?: OrderAttendance,
+): Promise<void> {
+  if (billIds.length === 0) return;
+  const held = await tx
+    .selectDistinct({
+      id: orderGroups.id,
+      position: orderGroups.position,
+      createdAt: orderGroups.createdAt,
+    })
+    .from(orderGroups)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.groupId, orderGroups.id))
+    .where(
+      and(
+        eq(orderGroups.partyId, partyId),
+        eq(orderGroups.state, "held"),
+        inArray(workingOrderLines.workingOrderId, [...billIds]),
+        isNull(workingOrderLines.parentLineId),
+      ),
+    )
+    .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
+  if (held.length === 0) return;
+  const recorded =
+    attendance === undefined
+      ? undefined
+      : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() };
+  const routing = routingOnce(tx, cfg, new Date());
+  for (const group of held) {
+    if ((await activeGroupLines(tx, group.id)).length > 0) {
+      await releaseGroup(
+        tx,
+        cfg,
+        partyId,
+        group.id,
+        { personId: operatorId },
+        {},
+        routing,
+        recorded,
+      );
+      continue;
+    }
+    const lines = await tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(and(eq(workingOrderLines.groupId, group.id), isNull(workingOrderLines.parentLineId)));
+    await clearGroups(
+      tx,
+      lines.map((line) => line.id),
+    );
+    await removeEmptiedHeldGroups(tx, partyId, [group.id], operatorId, recorded);
+  }
+}
+
+/**
+ * Release a held group's lines bill by bill, in the order the bills were opened, as
+ * {@link fireOrderLines} releases them, and record it fired. The caller has moved the party's
+ * revision on and checked the group is held.
+ */
+async function releaseGroup(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+  groupId: string,
+  firer: Firer,
+  detail: Record<string, unknown>,
+  routing = routingOnce(tx, cfg, new Date()),
+  attendance?: { recorder: AttendanceRecorder; at: string },
+): Promise<void> {
+  const active = await activeGroupLines(tx, groupId);
   if (active.length === 0) throw new AppError("management.request_invalid", { field: "groupId" });
   await assertPartyAllergyAnswered(tx, partyId);
   const byOrder = new Map<string, string[]>();
