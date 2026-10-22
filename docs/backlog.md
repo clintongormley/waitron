@@ -6627,8 +6627,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   page must still load without the database. After A964. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 
-- **A970. Three `workforce-es` access-holder values get English labels.** [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
-
 - **A971. Spain's pack provides English for every word it shows** (holiday names, area labels,
   notices) — check first; a holiday with two names may need a schema change. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 

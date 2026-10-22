@@ -13,9 +13,19 @@ import {
   type TimeRecord,
   type WorkSession,
 } from "@waitron/workforce";
-import { exportTimeRecord, type EntradaJornada, type LineaJornada } from "./registro-jornada.js";
+import {
+  exportTimeRecord,
+  type EntradaJornada,
+  type LineaJornada,
+  type TitularAcceso,
+} from "./registro-jornada.js";
 
 type Cells = Record<string, RecordExportValue>;
+const ACCESS_HOLDER_LABELS: Record<TitularAcceso, string> = {
+  trabajador: "Worker",
+  representantes_legales: "Legal representatives",
+  inspeccion_trabajo: "Labour inspectorate",
+};
 const LABELS: Record<string, readonly [string, string]> = {
   locationId: ["Workplace reference", "Referencia del centro"],
   locationName: ["Workplace", "Centro de trabajo"],
@@ -338,7 +348,7 @@ export function formatTimeRecordExport(
         periodEnd: input.period.end,
         audience: input.audience,
         retainUntil: exported.conservarHasta,
-        accessHolder,
+        accessHolder: language === 0 ? ACCESS_HOLDER_LABELS[accessHolder] : accessHolder,
       })),
       "details",
     ),

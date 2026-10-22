@@ -549,11 +549,6 @@ until A977).
 - **A968 — point 2: the guide's frame and the recovery page.** `guide-pages.ts:73–85` and
   `recovery-surface.ts:107–425` (about 50 strings). The recovery page is served when the box cannot
   start, so its strings must load without the database. No visible change. After A964.
-- **A970 — point 5: `workforce-es`.** The access-holder values
-  `trabajador`, `representantes_legales`, `inspeccion_trabajo` (`registro-jornada.ts:26–31`) print
-  untranslated in the English export (from reading, `attendance-export-pdf.ts:120, 141`) — run the
-  export first, then give them labels. Spanish identifiers and the `convenio_config` table stay
-  (Spanish-specific terms are allowed there).
 - **A971 — point 5: Spain's pack provides English.** Check every word `country-es` shows on a screen:
   holiday names (`data/es-2026.ts`, one `name` per row, verbatim from the BOE and compared by a
   test), the area label «Lleida, fuera del territorio de Arán» (Waitron's wording), and the notices
