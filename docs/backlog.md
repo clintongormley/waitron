@@ -5012,25 +5012,17 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
 
 - **A851. Staffing reads the venue's first business-day start, not the one in force (found by A788's
-  design).** `currentCutover` (`packages/staffing/src/paint.ts`), the paint, route, rota and month
-  reads use `clock.dayCutover`, the venue's first start; since dated start changes landed (#1563)
-  a venue that changes its start sees staffing on the wrong boundary. Read the start in force for
-  each date instead, with a test that changes the start and checks the painter and the Staffing
-  month. Detail: A788's design, `docs/superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md`
-  ("The staffing painters read the venue's first start").
-- **A780. The staffing painters read holder names they never show (left open by #1828).** Both
-  staff-role feeds (`staff-roles` and `painter-staff-roles`, `packages/staffing/src/dashboard/client.ts`)
-  read `GET /management-api/staffing/staff-roles`, which always looks up every holder's name
-  (`listStaffRolesWithHolderNames`, `packages/staffing/src/staff-roles.ts`). The painters use only
-  each role's name, colour and holder ids. Give the painters a read without the names (a query
-  parameter or a second route), keeping the Staff roles list's.
+  design).** Read the start in force for each date instead, with a test that changes the start and
+  checks the painter and the Staffing month.
+  [Detail](backlog/workforce.md#a851-staffing-reads-the-venues-first-business-day-start-not-the-one-in-force-found-by-a788s-design).
+
+- **A780. The staffing painters read holder names they never show (left open by #1828).** Give the
+  painters a read without the names, keeping the Staff roles list's.
+  [Detail](backlog/workforce.md#a780-the-staffing-painters-read-holder-names-they-never-show-left-open-by-1828).
 
 - **A763 point 9. The Staffing month's Monday "Rota for this week" link goes, and the Rota tab
-  opens the week last picked (owner, 2026-10-16).** Waits for the second part of A724, which has not landed. Monday's box
-  becomes the height of the others; the day box's Rota for this week states where that week's rota
-  stands. A763's points 1–8 are built.
-  [Detail](backlog/workforce.md#a763-point-9-the-staffing-months-monday-rota-for-this-week-link-goes),
-  [mockup](backlog/mockups/a763-rota/06-staffing-month.png)
+  opens the week last picked (owner, 2026-10-16).** Waits for the second part of A724.
+  [Detail](backlog/workforce.md#a763-point-9-the-staffing-months-monday-rota-for-this-week-link-goes).
 
 - **A link look for `wt-button` (left open by #1841).** The Rota's picker and open-slots menu draw
   "Show everyone" and "Another shift…" as underlined links by restyling a `wt-button` locally
@@ -5068,12 +5060,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   should read in each language while preserving CSV scalars.
   [Detail](backlog/workforce.md#pdf-boolean-and-empty-values).
 
-- **Nothing in the product closes a pay period** (found by A793's design, read). The workforce
-  module's `closePayPeriod` (`packages/workforce/src/pay-period-close.ts:76`) is called only by test
-  files (among them the fixture `apps/server/test/attendance-export-fixture.ts:77`); no route,
-  scheduled duty or screen calls it. A793's slice 6 (tips frozen with the pay period) waits for one. Next: decide
-  with the owner who closes a period and when (a manager's button, or automatically once it is
-  due), then build it.
+- **Nothing in the product closes a pay period** (found by A793's design, read). A793's slice 6
+  (tips frozen with the pay period) waits for one. Decide with the owner who closes a period and when.
+  [Detail](backlog/workforce.md#nothing-in-the-product-closes-a-pay-period).
 
 - **Pay-period cadence changes need a rule after closure.** Changing monthly to weekly after
   January closes makes 1 February resolve to 26 January–2 February, which closure refuses
@@ -5086,24 +5075,16 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   summary-removal case that checks the retained subject and blocked draft.
 
 - **Workforce period reads still load complete history.** Narrow them without losing late or
-  cross-period corrections; retain the new latest-instant and person-scoped reads. A10-1’s
-  four-year synthetic measurement and the remaining query paths are in
+  cross-period corrections; retain the new latest-instant and person-scoped reads. The remaining query paths are in
   [workforce detail](backlog/workforce.md#a10-period-read-cost).
 
 - **Staffing paint in calendar delete confirmations.** Decide whether a shared deletion-impact
   seam should count staffing paint when you delete a season or special-day date. The approved
   A585 scope leaves that count out. [Detail](backlog/workforce.md#staffing-paint-in-calendar-delete-confirmations)
 
-- **Loose ends left by A585-7 (#1766).** Each comes from A585-7's review.
-  - Copy rota assignments in one read: `changeRotaWeek` reads an assignment per copied shift.
-    Measure a large week under the venue write queue, then batch that read while preserving the
-    shift-id map and rollback checks. Query cost is unmeasured.
-  - Reuse the rota picker's baseline labour checks: `candidateWarnings` validates the unchanged
-    week once per candidate on each redraw. Measure a large picker, then share that baseline across
-    its candidates without sharing candidate-specific warnings. Cost unmeasured.
-  - The dashboard live-query guard misses inline dependency lists: the review put an unknown name
-    inside `client.ts`; `scripts/live-subscriptions.test.ts` stayed green because it reads
-    `live-queries.ts` declarations. Add a guard that refuses inline lists and a failing control.
+- **Loose ends left by A585-7 (#1766).** Batch copied-shift assignment reads, reuse the rota
+  picker's baseline labour checks, and make the live-query guard refuse inline dependency lists.
+  [Detail](backlog/workforce.md#loose-ends-left-by-a585-7-1766).
 
 - **Rota warnings: pin the outer query's local-date boundaries.** The offset-aware in-week filter
   is covered, but replacing the unattached-shift query's local date with UTC leaves the warnings
@@ -5119,45 +5100,29 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   venue-service files and export them.
   [Detail](backlog/workforce.md#a699-the-staffing-month-keeps-its-own-copy-of-month-stepping-and-staffing-its-own-date-formatting)
 
-- **A700. A failed Opening hours read also hides the Calendar's other views.** A module view draws
-  only once the page's own model loads (`render` in
-  `packages/venue-service/src/dashboard/opening-hours-screen.ts`), so a person who only wanted the
-  Staffing view sees the switch and the Opening hours error instead (A585-3). Next: decide whether a
-  module view draws without that model.
+- **A700. A failed Opening hours read also hides the Calendar's other views.** Decide whether a
+  module view draws without the Opening hours model.
+  [Detail](backlog/workforce.md#a700-a-failed-opening-hours-read-also-hides-the-calendars-other-views).
 
 - **A701. Opening hours' month reads the holiday tables twice on a holiday-linked special day.**
-  `readOpeningHoursMonth` (`packages/venue-service/src/opening-hours-calendar.ts`) reads `tenants`
-  and `holiday_geographies` once in `readCalendarMonthPlan` and again in its own holiday read
-  (A585-3's review; `locations` is already read once). Next: hand the plan's holiday facts to the
-  second read.
+  Hand the plan's holiday facts to the second read.
+  [Detail](backlog/workforce.md#a701-opening-hours-month-reads-the-holiday-tables-twice-on-a-holiday-linked-special-day).
 
-- **A702. Opening hours' season chip is clipped on a season name that is one long word.** Measured
-  on the A721 branch at 390 px on 2026-10-18: the page does not scroll sideways (scrollWidth 390 =
-  innerWidth) and a name with spaces wraps, but one unbroken 46-letter word runs to x=402.9 and its
-  chip is cut off (`packages/venue-service/src/dashboard/season-chips.ts`). Next: wrap the chip's
-  text with `overflow-wrap: anywhere`.
+- **A702. Opening hours' season chip is clipped on a season name that is one long word.** Wrap
+  the chip's text with `overflow-wrap: anywhere`.
+  [Detail](backlog/workforce.md#a702-opening-hours-season-chip-is-clipped-on-a-season-name-that-is-one-long-word).
 
-- **At 390 px the staff role dialog's open colour panel covers its own Colour field.** Seen by
-  A783's look on 2026-10-18 at 390 × 844: the panel, now eight rows of two, is 462 px tall, too tall
-  to fit below the field, so it is moved up to top 374 (the window's height less its own and
-  8 px), over the field at about 376–432. Picking a colour still works. The period, station and
-  season choosers at 390 px still open below their field (`role-chooser-new-*-390*.png` and
-  `role-chooser-edit-host-*-390*.png` in `~/waitron-campaign-b/a783-shots/`; `positionPopup` in
-  `packages/ui/src/components/wt-colour-chooser.ts`). Left open by A783.
+- **At 390 px the staff role dialog's open colour panel covers its own Colour field.** Left open
+  by A783. Picking a colour still works.
+  [Detail](backlog/workforce.md#at-390-px-the-staff-role-dialogs-open-colour-panel-covers-its-own-colour-field).
 
-- **A colour chooser left open while its window narrows may hide the chosen colour.** Read from
-  the code by A783's finish-branch re-read on 2026-10-18, not measured: open on the last colour in a
-  wide window short enough that two columns would scroll but four do not, then narrow it until two
-  columns are needed; the resize re-places the panel at the same scroll position and nothing scrolls
-  the chosen tile into view (`positionPopup` in `packages/ui/src/components/wt-colour-chooser.ts`).
-  Next: try it, and if it shows, keep the focused tile in view after the columns change. Left open
-  by A783.
+- **A colour chooser left open while its window narrows may hide the chosen colour.** Read by
+  A783, not measured. Try it, and if it shows, keep the focused tile in view after the columns change.
+  [Detail](backlog/workforce.md#a-colour-chooser-left-open-while-its-window-narrows-may-hide-the-chosen-colour).
 
-- **A644. Staffing slots stop at minute 1440 on a business day longer than a day.** When the
-  changeover moves later between two days (02:00 one day, 04:00 the next), that business day runs 25
-  hours, but `slotsForDay` (`packages/staffing/src/slots.ts`) ends every slot by minute 1440, so no
-  block can ask for anyone in the last hour, while `placeShift` can place a shift there (#1686's
-  review). Next: decide whether a block may run to the day's real end.
+- **A644. Staffing slots stop at minute 1440 on a business day longer than a day.** Decide whether
+  a block may run to the day's real end.
+  [Detail](backlog/workforce.md#a644-staffing-slots-stop-at-minute-1440-on-a-business-day-longer-than-a-day).
 
 - **The Rota shift routes read a null or malformed JSON body as an empty object.**
   For no body, `{` and `null`, `POST …/rota/shifts` answered 400 with `field: "week"` and
@@ -5165,18 +5130,13 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   (A750's probe, 2026-10-16). Next: swap `readJsonBody` for `readRawJsonBody`, as change-week did.
 
 - **A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to.**
-  `placePopover` (`packages/venue-service/src/dashboard/paint-grid-parts.ts`) moves a menu that
-  does not fit below its trigger up over it. The staffing grid's block editor opens above its
-  block when it fits there and not below; with room on neither side it still covers the block, and
-  at 390 px the wide editor can cover blocks in the next column (A761's look, 2026-10-17). Opening
-  hours' block menu and the Copy to… chooser have no such placement. Next: place them above or
-  beside the block instead.
+  Place them above or beside the block instead.
+  [Detail](backlog/workforce.md#a707-on-a-phone-a-paint-grids-block-menu-or-copy-to-chooser-can-cover-the-block-it-belongs-to).
 
 - **A708. The special-day staffing painter draws every date on the location's baseline changeover,
-  while each date's opening hours and staffing slots use that date's own.** So when a changeover
-  change is scheduled, a block can be drawn longer than the slots it asks for. Needs a decision on
-  how one grid shows dates with different changeovers. Left open by A585-4.
-  [Detail](backlog/workforce.md#a708-special-day-staffing-on-a-date-with-its-own-changeover)
+  while each date's opening hours and staffing slots use that date's own.** Needs a decision on
+  how one grid shows dates with different changeovers.
+  [Detail](backlog/workforce.md#a708-special-day-staffing-on-a-date-with-its-own-changeover).
 
 - **A710. Readable initials in short staffing blocks** — a later zoom/readability design remains
   open. Keep the whole-day overview without vertical scrolling; use the tooltip and block menu
@@ -5194,30 +5154,18 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   an address, not replace one.
 
 - **A586. Each person's contract terms, from ready-made rule sets that warn and never refuse
-  (owner, 2026-10-22).** Waitron does not follow or enforce each country's or region's law. Terms
-  that are the same for staff anywhere are generic; rules that depend on the country (Spain's 10%
-  of the year's hours that may be moved) come with the country pack as ready-made rule sets, and
-  each person's contract takes one, because one venue can hold different contracts. Today the
-  rules are one `convenio_config` per location. A broken rule warns the manager and never stops
-  the rota. Per person: pay per hour, contracted hours, extra hours a week, the days-off pattern,
-  split shifts, the longest stretch, annual holiday, and a starting balance for someone who joins
-  mid-year. Then a running total of hours worked and rostered against hours due, holiday counted
-  ([spec open point 6](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md)), and the
-  owner's planning questions: hours spread unevenly across the year, overtime repaid as time off.
-  After A585. [Detail](backlog/workforce.md#a586-each-persons-contract-terms)
+  (owner, 2026-10-22).** Waitron does not follow or enforce each country's or region's law.
+  After A585.
+  [Detail](backlog/workforce.md#a586-each-persons-contract-terms).
 
 - **A587. Availability and personal preferences** — "can't work Wednesdays"; "Anna only works
   mornings, Monday to Thursday" (owner, 2026-10-22). A preference warns as a broken rule does, in
   words that say it is the person's preference, not their contract. The `availability` table
   exists unused. Shown in A585's picker and warnings. After A586.
 
-- **A588. A solver drafts the rota, as a paid Waitron Cloud feature (owner, 2026-10-22)** — fills
-  A585's open slots from each person's staff roles, contract terms (A586), availability and
-  preferences (A587), for the manager to adjust. It runs in Waitron Cloud, not on the box; the
-  owner's choice of engine is Google's OR-Tools (its CP-SAT solver, Apache 2.0 licence), which
-  takes rules that must hold and preferences to honour where it can. What the box sends is staff
-  personal data, so it belongs in A980's data map. Waitron Cloud's backlog needs the matching
-  entry. After A587.
+- **A588. A solver drafts the rota, as a paid Waitron Cloud feature (owner, 2026-10-22)** fills A585's open slots from each person's staff roles, contract terms (A586), availability and
+  preferences (A587), for the manager to adjust. After A587.
+  [Detail](backlog/workforce.md#a588-a-solver-drafts-the-rota-as-a-paid-waitron-cloud-feature-owner-2026-10-22).
 
 ### Purchasing, recipes, stock and reports
 

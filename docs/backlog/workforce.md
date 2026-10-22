@@ -28,15 +28,7 @@ ids, and own records to that person before projection. Period summaries, locatio
 and pay-period closure still load their scoped complete history; future bounded reads must retain
 late answers and corrections that move a session across period boundaries.
 
-Measured 2026-10-14 on Node v26.7.0, macOS, a temporary real venue store with ten synthetic workers
-and four years of weekday in/out events: 20,860 entries (2,086 per worker), with their real computed
-hashes verified by `verifyChain`. Current code took 2.8 ms to clock in, 22.1 ms for the person's
-September record, 16.9 ms for their summary, 99.4 ms for location planned-versus-actual and 354.2 ms
-for closure. September assertions checked 10,560 minutes per worker and 105,600 location minutes.
-This measures this fixture on this laptop, not a box, large venues or all possible corrections.
-The command was `pnpm --filter @waitron/workforce exec vitest run
-src/zz-read-performance-probe.test.ts --reporter=verbose` in an independently installed disposable
-checkout; the probe and log are retained with PR #1638’s review receipts. Optimise the remaining period paths with their cross-window
+Optimise the remaining period paths with their cross-window
 and frozen-history assertions intact; do not replace them with a bare event-time filter.
 
 ## A708. Special-day staffing on a date with its own changeover
@@ -79,27 +71,19 @@ Left open by A585-4.
 
 A January month closed with 480 minutes keeps that snapshot after the cadence changes to weekly.
 For 1 February, `resolvePayPeriod` then returns 26 January–2 February; `closePayPeriod` refuses
-that overlap with `pay_period.invalid`. The next whole week, 2–9 February, can close. This was
-run on base `580bf71e46b6803de525cceed39f04f28b34a4ac` on 2026-10-15, independently of the
-Hours implementation, through `pnpm --filter @waitron/workforce exec vitest run
-src/zz-a10-5-cadence-probe.test.ts --reporter=dot` (one passing case). The retained probe is
-`~/waitron-campaign-f/receipts/a10-5-base-cadence-probe.test.ts`.
+that overlap with `pay_period.invalid`. The next whole week, 2–9 February, can close.
 
-`setPayPeriodSettings` currently has no application caller: `rg -n setPayPeriodSettings apps
-packages --glob '!*.test.ts'` found only its workforce definition and export. Hours follows the
+`setPayPeriodSettings` currently has no application caller. Hours follows the
 approved read contract: a date inside a saved closure uses that stored period; otherwise it uses
 the configured cadence. Its totals describe the printed date range, and reading creates no closure.
 
 Before adding cadence editing, decide how the first partial period follows a closed period.
-Owner decision, 2026-10-15: a future cadence editor refuses a change after the first closed period
-until the owner approves a transition rule. Leave this work in the backlog until that editor is built. Keep saved periods and snapshots intact. This is separate from
-A10-5 and its read-only hours presentation.
-
+Keep saved periods and snapshots intact. The
+[owner's cadence rule](#pay-period-cadence-after-closure-owner-2026-10-15) applies to that editor.
 
 ## Frozen-summary name collection
 
-The A10-6 run-it review deleted the name collection for people named only in a frozen summary
-(`record-export.ts:161`) and all 12 provider cases still passed. The current closure writer derives
+The current closure writer derives
 summary subjects from frozen entries (`pay-period-close.ts:144`); no valid summary-only fixture
 was established in the review. Keep the defensive collection and qualify a supported snapshot
 shape before adding a case for it. This is a test gap, not an observed incorrect exported name.
@@ -112,8 +96,7 @@ wording separately, keeping CSV's scalar spellings stable; no legal-field or wri
 
 ## Rota warning query boundaries
 
-The A585-5 review replaced the unattached-shift SQL date with the UTC date and all nine warnings
-cases passed. Those cases exercise the separate JavaScript filter's local dates. Add fixtures at
+The warnings cases exercise the separate JavaScript filter's local dates. Add fixtures at
 the previous week's first local Monday and the next week's last local Sunday, where the SQL
 selection decides whether the neighboring week is represented for weekly rest. Retain the existing
 offset and location assertions; require the UTC-query mutation to fail. The route currently keeps
@@ -121,11 +104,8 @@ the offset-aware query. This is a test gap, not an observed wrong answer from th
 
 ## Roster browser-entry re-exports
 
-The A585-5 review added `export { readFileSync } from "node:fs"` to the browser entry in a
-disposable installed candidate; both browser-entry checks still passed. A direct Node import fails
-the source guard. Extend the guard to runtime re-exports and test that negative control. The current
-entry was separately bundled for a browser and executed in Chromium; this follow-up concerns what
-the text guard would fail to catch in a later edit.
+The browser-entry guard accepts runtime re-exports such as `export { readFileSync } from "node:fs"`.
+A direct Node import fails the source guard. Extend the guard to runtime re-exports and test that negative control. This follow-up concerns what the text guard would fail to catch in a later edit.
 
 ## Staffing paint in calendar delete confirmations
 
@@ -133,12 +113,10 @@ The A585 design left the count of staffing paint out of the season and special-d
 confirmations (open point 7); the Seasons window's delete note, which replaced the season
 confirmation in A721, leaves it out too. Decide whether to add a shared deletion-impact seam, so
 venue-service can ask contributing modules for that count, or deliberately keep both without it.
-The completed rota retirement does not depend on that choice.
 
 ## A763 point 9. The Staffing month's Monday "Rota for this week" link goes
 
-**A763 point 9 (owner, 2026-10-16).** Waits for the second part of [A724](#named-staffing-guide-bands-a724-owner-2026-10-15), which has not landed. A763's points 1–8 are
-built (the [plan](../superpowers/plans/2026-10-17-a763-rota-redesign.md)). The owner's point, as written:
+**A763 point 9 (owner, 2026-10-16).** Waits for the second part of [A724](#named-staffing-guide-bands-a724-owner-2026-10-15), which has not landed. The owner's point, as written:
 
 > **Staffing month: the Monday "Rota for this week" link goes**
 > ([board 6](mockups/a763-rota/06-staffing-month.png); today the `rota-week` button in
@@ -147,13 +125,9 @@ built (the [plan](../superpowers/plans/2026-10-17-a763-rota-redesign.md)). The o
 > rota stands. The Rota tab opens the week of the day last picked in the month, else the current
 > week.
 
-The button is drawn on a Monday at `packages/staffing/src/dashboard/staffing-month.ts:600`
-(`data-rota-week`).
-
 ## A699. The Staffing month keeps its own copy of month stepping, and staffing its own date formatting
 
-**A699. The Staffing month keeps its own copy of month stepping, and staffing its own date
-formatting.** `stepMonth` and the first and last month in
+`stepMonth` and the first and last month in
 `packages/staffing/src/dashboard/staffing-month.ts` are a third copy beside
 `add-dates-calendar.ts` and `opening-hours-month.ts` in `packages/venue-service/src/dashboard/`,
 and the cached `dateFormat` in `packages/staffing/src/dashboard/format.ts`, which the month and
@@ -192,6 +166,9 @@ moving them per person reaches every reader, so start from `packages/workforce/s
 grep `convenio`. Still to decide: whether the owner can change a ready-made set or only pick one,
 and which sets ship first.
 
+Then a running total of hours worked and rostered against hours due, holiday counted
+([spec open point 6](../superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md)).
+
 **The owner's planning questions, with what Spain's Workers' Statute says.** Quoted from the
 consolidated text (BOE-A-2015-11430, last updated 21/10/2026), fetched 2026-10-22. These are for
 the labour advisor to confirm: a collective agreement can change each of them.
@@ -216,7 +193,120 @@ the labour advisor to confirm: a collective agreement can change each of them.
   menos». So annual holiday can be planned into quiet seasons, but not moved shift by shift the way
   time off for overtime can.
 
+## A851. Staffing reads the venue's first business-day start, not the one in force (found by A788's design)
+
+`currentCutover` (`packages/staffing/src/paint.ts`), the paint, route, rota and month
+reads use `clock.dayCutover`, the venue's first start; since dated start changes landed (#1563)
+a venue that changes its start sees staffing on the wrong boundary. Read the start in force for
+each date instead, with a test that changes the start and checks the painter and the Staffing
+month. Detail: A788's design, `docs/superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md`
+("The staffing painters read the venue's first start").
+
+## A780. The staffing painters read holder names they never show (left open by #1828)
+
+Both
+staff-role feeds (`staff-roles` and `painter-staff-roles`, `packages/staffing/src/dashboard/client.ts`)
+read `GET /management-api/staffing/staff-roles`, which always looks up every holder's name
+(`listStaffRolesWithHolderNames`, `packages/staffing/src/staff-roles.ts`). The painters use only
+each role's name, colour and holder ids. Give the painters a read without the names (a query
+parameter or a second route), keeping the Staff roles list's.
+
+## Nothing in the product closes a pay period
+
+(found by A793's design, read). The workforce
+module's `closePayPeriod` (`packages/workforce/src/pay-period-close.ts:76`) is called only by test
+files (among them the fixture `apps/server/test/attendance-export-fixture.ts:77`); no route,
+scheduled duty or screen calls it. A793's slice 6 (tips frozen with the pay period) waits for one. Next: decide
+with the owner who closes a period and when (a manager's button, or automatically once it is
+due), then build it.
+
+## Loose ends left by A585-7 (#1766)
+
+- Copy rota assignments in one read: `changeRotaWeek` reads an assignment per copied shift.
+  Measure a large week under the venue write queue, then batch that read while preserving the
+  shift-id map and rollback checks. Query cost is unmeasured.
+- Reuse the rota picker's baseline labour checks: `candidateWarnings` validates the unchanged
+  week once per candidate on each redraw. Measure a large picker, then share that baseline across
+  its candidates without sharing candidate-specific warnings. Cost unmeasured.
+- The dashboard live-query guard misses inline dependency lists: `scripts/live-subscriptions.test.ts`
+  reads `live-queries.ts` declarations, not inline lists in `client.ts`. Add a guard that refuses inline lists and a failing control.
+
+## A700. A failed Opening hours read also hides the Calendar's other views
+
+A module view draws
+only once the page's own model loads (`render` in
+`packages/venue-service/src/dashboard/opening-hours-screen.ts`), so a person who only wanted the
+Staffing view sees the switch and the Opening hours error instead (A585-3). Next: decide whether a
+module view draws without that model.
+
+## A701. Opening hours' month reads the holiday tables twice on a holiday-linked special day
+
+`readOpeningHoursMonth` (`packages/venue-service/src/opening-hours-calendar.ts`) reads `tenants`
+and `holiday_geographies` once in `readCalendarMonthPlan` and again in its own holiday read
+(A585-3's review; `locations` is already read once). Next: hand the plan's holiday facts to the
+second read.
+
+## A702. Opening hours' season chip is clipped on a season name that is one long word
+
+Measured
+on the A721 branch at 390 px on 2026-10-18: the page does not scroll sideways (scrollWidth 390 =
+innerWidth) and a name with spaces wraps, but one unbroken 46-letter word runs to x=402.9 and its
+chip is cut off (`packages/venue-service/src/dashboard/season-chips.ts`). Next: wrap the chip's
+text with `overflow-wrap: anywhere`.
+
+## At 390 px the staff role dialog's open colour panel covers its own Colour field
+
+Seen by
+A783's look on 2026-10-18 at 390 × 844: the panel, now eight rows of two, is 462 px tall, too tall
+to fit below the field, so it is moved up to top 374 (the window's height less its own and
+8 px), over the field at about 376–432. Picking a colour still works. The period, station and
+season choosers at 390 px still open below their field (`role-chooser-new-*-390*.png` and
+`role-chooser-edit-host-*-390*.png` in `~/waitron-campaign-b/a783-shots/`; `positionPopup` in
+`packages/ui/src/components/wt-colour-chooser.ts`). Left open by A783.
+
+## A colour chooser left open while its window narrows may hide the chosen colour
+
+Read from
+the code by A783's finish-branch re-read on 2026-10-18, not measured: open on the last colour in a
+wide window short enough that two columns would scroll but four do not, then narrow it until two
+columns are needed; the resize re-places the panel at the same scroll position and nothing scrolls
+the chosen tile into view (`positionPopup` in `packages/ui/src/components/wt-colour-chooser.ts`).
+Next: try it, and if it shows, keep the focused tile in view after the columns change. Left open
+by A783.
+
+## A644. Staffing slots stop at minute 1440 on a business day longer than a day
+
+When the
+changeover moves later between two days (02:00 one day, 04:00 the next), that business day runs 25
+hours, but `slotsForDay` (`packages/staffing/src/slots.ts`) ends every slot by minute 1440, so no
+block can ask for anyone in the last hour, while `placeShift` can place a shift there (#1686's
+review). Next: decide whether a block may run to the day's real end.
+
+## A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to
+
+`placePopover` (`packages/venue-service/src/dashboard/paint-grid-parts.ts`) moves a menu that
+does not fit below its trigger up over it. The staffing grid's block editor opens above its
+block when it fits there and not below; with room on neither side it still covers the block, and
+at 390 px the wide editor can cover blocks in the next column (A761's look, 2026-10-17). Opening
+hours' block menu and the Copy to… chooser have no such placement. Next: place them above or
+beside the block instead.
+
+## A588. A solver drafts the rota, as a paid Waitron Cloud feature (owner, 2026-10-22)
+
+Fills
+A585's open slots from each person's staff roles, contract terms (A586), availability and
+preferences (A587), for the manager to adjust. It runs in Waitron Cloud, not on the box; the
+owner's choice of engine is Google's OR-Tools (its CP-SAT solver, Apache 2.0 licence), which
+takes rules that must hold and preferences to honour where it can. What the box sends is staff
+personal data, so it belongs in A980's data map. Waitron Cloud's backlog needs the matching
+entry. After A587.
+
 ## Decisions and deliberate limits
+
+### Pay-period cadence after closure (owner, 2026-10-15)
+
+A future cadence editor refuses a change after the first closed period until the owner approves
+a transition rule. Leave this work in the backlog until that editor is built.
 
 ### Labour rules are ready-made sets chosen per person, and they warn, never refuse (owner, 2026-10-22)
 
@@ -268,11 +358,7 @@ include them, and Everyone shows them under the name (A763, 2026-10-17). A rota 
 "Closed" when no active department opens that day, whichever area is shown, and the shown area (or
 Everyone) has no slot that day (`isClosed`, `packages/staffing/src/dashboard/rota-model.ts`; A763).
 The Rota's bar takes two rows when the view is narrower than its words: its end (the state, the
-counts, the labour line and Publish) wraps whole onto a second line. With the side menu open at a
-1280 px window the view is about 900 px wide and the bar needs about 1,200 px (measured at the
-A763 LOOK, 2026-10-17); the boards were drawn at about 1440 px with no side menu, and their words
-were kept rather than shortened (A763).
-
+counts, the labour line and Publish) wraps whole onto a second line. The words are kept rather than shortened (A763).
 
 ### A10. Clocking in and out — the working-time record
 
@@ -305,7 +391,6 @@ check above. Inspector remote access and payroll export remain separate work.
 Old workforce folders from before part 1 must be reset/reseeded for the nullable-recorder constraint
 migration (owner, 2026-10-13). No backwards conversion was added.
 
-
 ### A585. Pending swaps follow a copied draft
 
 The owner's 2026-10-13 decision is to warn that a request exists rather than block changing the
@@ -317,7 +402,6 @@ shift removes that side of the offer. The shift editor states those separate eff
 `changeRotaWeek` operation copies assignments in the same transaction as `copyPublishedToDraft`. See
 [Task 7.2](../superpowers/plans/2026-10-13-a585-staffing-and-rota.md#task-72-changing-a-published-week).
 
-
 ### A585. A rota version and its business-day overflow
 
 The approved [part 6 plan](../superpowers/plans/2026-10-13-a585-staffing-and-rota.md#task-61-the-rota-read)
@@ -326,6 +410,6 @@ shifts by local calendar date, then places each on its business day. An existing
 keeps that calendar week when edited. A local Monday 00:30 shift therefore appears under Not in a
 slot on Monday's week, labelled as belonging to the previous week; the preceding Sunday's slot
 remains unfilled. A shift filled from Sunday's slot instead attaches to that slot's authoring week.
-This limit was reproduced during part 6 review and retained from the approved plan. Part 7's editor
+The approved plan retains this limit. Part 7's editor
 must retain the overflow label; changing membership to the business week requires changing that
 agreed rule. Published-week edits and deletion remain refused even for an unattached shift.
