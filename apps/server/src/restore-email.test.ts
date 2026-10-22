@@ -331,9 +331,9 @@ describe.each(paths)("invoice email after %s", (path) => {
           const [person] = await tx
             .insert(persons)
             .values({
-              displayName: "Restore manager",
+              displayName: "Restore administrator",
               pinHash: hashPin("1234"),
-              role: "manager",
+              role: "admin",
               email: "owner@example.test",
             })
             .returning({ id: persons.id });
