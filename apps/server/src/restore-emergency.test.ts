@@ -23,7 +23,7 @@ it.each(["archive", "stream"] as const)(
     await expect(f.run(log)).resolves.toBe(true);
     const rows = await f.snapshot();
     expect(rows.allocations).toHaveLength(2);
-    expect(rows.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW", "0CNQR"]);
+    expect(rows.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNY", "0CNQT"]);
     expect(rows.allocations[1]?.approval.operatorId).toEqual({
       kind: "recovery-key",
       nodeId: TENANT_A.nodeId,
@@ -33,21 +33,21 @@ it.each(["archive", "stream"] as const)(
       rows.registrations
         .filter((row) => row.revocadoEn === null)
         .map((row) => row.numeroInstalacion),
-    ).toEqual(["0CNQR"]);
+    ).toEqual(["0CNQT"]);
     expect(
       rows.series
         .filter((row) => row.retiredAt === null)
         .map(({ code, nextNumber }) => ({ code, nextNumber })),
     ).toEqual([
-      { code: "A-0CNQR", nextNumber: 1 },
-      { code: "FF-0CNQR", nextNumber: 1 },
-      { code: "R-0CNQR", nextNumber: 1 },
+      { code: "A-0CNQT", nextNumber: 1 },
+      { code: "FF-0CNQT", nextNumber: 1 },
+      { code: "R-0CNQT", nextNumber: 1 },
     ]);
     expect(
       rows.series.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber),
     ).toEqual([123, 123, 123]);
     expect(f.journal()).toBe(before);
-    expect(before).toContain('"identity":"0CNQR"');
+    expect(before).toContain('"identity":"0CNQT"');
     expect(before).not.toContain(f.key.secret);
     expect(before).not.toContain(f.encryptionKey);
     expect(JSON.stringify(log.mock.calls)).not.toContain(f.key.secret);

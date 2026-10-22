@@ -426,11 +426,10 @@ for (const kind of ["archive", "stream"] as const)
         });
         expect(await f.snapshot()).toEqual(original);
       }
-      await expect(f.nextEvent()).rejects.toMatchObject({
-        code: "sif.allocation_invalid",
-        params: { reason: "hour_not_later" },
-      });
-      expect(f.journal()).toBe(journal);
+      const next = (await f.nextEvent()) as { status: string; identity: string };
+      expect(next.status).toBe("selected");
+      expect(next.identity > "0CNQR").toBe(true);
+      expect(f.journal()).not.toBe(journal);
       await f.freshStage();
       await expect(f.run()).resolves.toBe(true);
       expect(JSON.parse(f.journal()).revisions.slice(0, priorIntent.length)).toEqual(priorIntent);

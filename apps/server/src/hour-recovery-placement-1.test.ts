@@ -116,18 +116,18 @@ describe("selected-hour admission before archive placement", () => {
             .filter((row) => row.retiredAt !== null)
             .map(({ code, nextNumber }) => ({ code, nextNumber })),
         ).toEqual([
-          { code: "A-0CNNW", nextNumber: 123 },
-          { code: "FF-0CNNW", nextNumber: 123 },
-          { code: "R-0CNNW", nextNumber: 123 },
+          { code: "A-0CNNY", nextNumber: 123 },
+          { code: "FF-0CNNY", nextNumber: 123 },
+          { code: "R-0CNNY", nextNumber: 123 },
         ]);
         expect(
           rows
             .filter((row) => row.retiredAt === null)
             .map(({ code, nextNumber }) => ({ code, nextNumber })),
         ).toEqual([
-          { code: "A-0CNQR", nextNumber: 1 },
-          { code: "FF-0CNQR", nextNumber: 1 },
-          { code: "R-0CNQR", nextNumber: 1 },
+          { code: "A-0CNQT", nextNumber: 1 },
+          { code: "FF-0CNQT", nextNumber: 1 },
+          { code: "R-0CNQT", nextNumber: 1 },
         ]);
         expect(await result.venue.select().from(fiscalAllocations)).toHaveLength(2);
       } finally {
@@ -157,9 +157,9 @@ describe("selected-hour admission before archive placement", () => {
           .filter((row) => row.retiredAt === null)
           .map(({ code, nextNumber }) => ({ code, nextNumber })),
       ).toEqual([
-        { code: "A-0CNQR", nextNumber: 1 },
-        { code: "FF-0CNQR", nextNumber: 1 },
-        { code: "R-0CNQR", nextNumber: 1 },
+        { code: "A-0CNQT", nextNumber: 1 },
+        { code: "FF-0CNQT", nextNumber: 1 },
+        { code: "R-0CNQT", nextNumber: 1 },
       ]);
       expect(await placed.venue.select().from(fiscalAllocations)).toHaveLength(2);
     } finally {
@@ -180,7 +180,7 @@ describe("selected-hour admission before archive placement", () => {
       await placed.venue
         .update(invoiceSeries)
         .set({ nextNumber: 124 })
-        .where(eq(invoiceSeries.code, "A-0CNQR"));
+        .where(eq(invoiceSeries.code, "A-0CNQT"));
       before = await placed.venue.select().from(invoiceSeries);
     } finally {
       await placed.close();
@@ -201,7 +201,7 @@ describe("selected-hour admission before archive placement", () => {
       await result.close();
     }
     expect(external.internet).not.toHaveBeenCalled();
-    expect(await readModulePreparationHistory(f.roots, binding.module)).toHaveLength(1);
+    expect(await readModulePreparationHistory(f.roots, binding.module)).toHaveLength(2);
   });
 
   it.each(["archive", "file", "stream", "managed"] as const)(
@@ -241,7 +241,7 @@ describe("selected-hour admission before archive placement", () => {
       const [standard] = await suite.db
         .select()
         .from(invoiceSeries)
-        .where(eq(invoiceSeries.code, "A-0CNNW"));
+        .where(eq(invoiceSeries.code, "A-0CNNY"));
       const first = await sell(suite.db, standard!.id);
       const submitted = await drain(
         {
@@ -265,8 +265,8 @@ describe("selected-hour admission before archive placement", () => {
       });
       const before = await snapshot(suite.db);
       expect(before.records.map((row) => row.num_serie_factura)).toEqual([
-        "A-0CNNW/123",
-        "A-0CNNW/124",
+        "A-0CNNY/123",
+        "A-0CNNY/124",
       ]);
       expect(before.records[1]?.anterior_huella).toBe(before.records[0]?.huella);
       expect(
@@ -386,14 +386,14 @@ describe("selected-hour admission before archive placement", () => {
             .filter((row) => row.retiredAt === null)
             .map(({ code, nextNumber }) => ({ code, nextNumber })),
         ).toEqual([
-          { code: "A-0CNQR", nextNumber: 1 },
-          { code: "FF-0CNQR", nextNumber: 1 },
-          { code: "R-0CNQR", nextNumber: 1 },
+          { code: "A-0CNQT", nextNumber: 1 },
+          { code: "FF-0CNQT", nextNumber: 1 },
+          { code: "R-0CNQT", nextNumber: 1 },
         ]);
         await expect(sell(placed.venue, standard!.id)).rejects.toMatchObject({
           code: "sale.series_retired",
         });
-        const fresh = series.find((row) => row.code === "A-0CNQR")!;
+        const fresh = series.find((row) => row.code === "A-0CNQT")!;
         const resumed = await sell(placed.venue, fresh.id);
         const afterSale = await snapshot(placed.venue);
         expect(afterSale.sales.filter((row) => row.id !== resumed.saleId)).toEqual(before.sales);
@@ -418,7 +418,7 @@ describe("selected-hour admission before archive placement", () => {
           ),
         ).toEqual(before.submissions);
         expect(afterSale.records.find((row) => row.sale_id === resumed.saleId)).toMatchObject({
-          num_serie_factura: "A-0CNQR/1",
+          num_serie_factura: "A-0CNQT/1",
           primer_registro: 1,
           anterior_huella: null,
         });
@@ -467,7 +467,7 @@ describe("selected-hour admission before archive placement", () => {
         await reopened.close();
       }
       expect(external.internet).not.toHaveBeenCalled();
-      expect(await readModulePreparationHistory(f.roots, binding.module)).toHaveLength(1);
+      expect(await readModulePreparationHistory(f.roots, binding.module)).toHaveLength(2);
     },
   );
 
@@ -496,9 +496,9 @@ describe("selected-hour admission before archive placement", () => {
           .filter((row) => row.retiredAt === null)
           .map(({ code, nextNumber }) => ({ code, nextNumber })),
       ).toEqual([
-        { code: "A-0CNQR", nextNumber: 1 },
-        { code: "FF-0CNQR", nextNumber: 1 },
-        { code: "R-0CNQR", nextNumber: 1 },
+        { code: "A-0CNQT", nextNumber: 1 },
+        { code: "FF-0CNQT", nextNumber: 1 },
+        { code: "R-0CNQT", nextNumber: 1 },
       ]);
     } finally {
       await restored.close();
@@ -531,9 +531,9 @@ describe("selected-hour admission before archive placement", () => {
     try {
       const rows = await restored.venue.select().from(invoiceSeries);
       expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-        "A-0CNQR",
-        "FF-0CNQR",
-        "R-0CNQR",
+        "A-0CNQT",
+        "FF-0CNQT",
+        "R-0CNQT",
       ]);
       expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
         123, 123, 123,
@@ -569,9 +569,9 @@ describe("selected-hour admission before archive placement", () => {
     try {
       const rows = await restored.venue.select().from(invoiceSeries);
       expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-        "A-0CNSM",
-        "FF-0CNSM",
-        "R-0CNSM",
+        "A-0CNSP",
+        "FF-0CNSP",
+        "R-0CNSP",
       ]);
       expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
         123, 123, 123,
@@ -685,9 +685,9 @@ describe("selected-hour admission before archive placement", () => {
       expect(await recordedRecoveryRows(placed.venue)).toEqual(history);
       const rows = await placed.venue.select().from(invoiceSeries);
       expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-        "A-0CNQR",
-        "FF-0CNQR",
-        "R-0CNQR",
+        "A-0CNQT",
+        "FF-0CNQT",
+        "R-0CNQT",
       ]);
       expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
         125, 123, 123,
@@ -824,7 +824,7 @@ describe("selected-hour admission before archive placement", () => {
       const release = `export function readHourRelease() { return { instantMs: Date.parse("2026-10-15T00:00:00Z") }; }`;
       const source = `import { registerHooks } from "node:module";
       const RealDate = Date;
-      globalThis.Date = class extends RealDate { constructor(...args) { super(...(args.length ? args : ["2026-10-16T12:40:00Z"])); } static now() { return RealDate.parse("2026-10-16T12:40:00Z"); } };
+      globalThis.Date = class extends RealDate { constructor(...args) { super(...(args.length ? args : ["2026-10-16T12:42:01Z"])); } static now() { return RealDate.parse("2026-10-16T12:42:01Z"); } };
       registerHooks({ resolve(specifier, context, next) {
         const replacement = specifier.endsWith("/allocation-preparation.js") ? ${JSON.stringify(wrapper)} : specifier.endsWith("/hour-clock-internet.js") ? ${JSON.stringify(internet)} : specifier.endsWith("/hour-release.js") ? ${JSON.stringify(release)} : undefined;
         return replacement === undefined ? next(specifier, context) : { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(replacement) };
@@ -859,9 +859,9 @@ describe("selected-hour admission before archive placement", () => {
             .filter((row) => row.retiredAt === null)
             .map((row) => ({ code: row.code, nextNumber: row.nextNumber })),
         ).toEqual([
-          { code: "A-0CNNW", nextNumber: 123 },
-          { code: "FF-0CNNW", nextNumber: 123 },
-          { code: "R-0CNNW", nextNumber: 123 },
+          { code: "A-0CNNY", nextNumber: 123 },
+          { code: "FF-0CNNY", nextNumber: 123 },
+          { code: "R-0CNNY", nextNumber: 123 },
         ]);
         expect(allocations).toHaveLength(1);
       } finally {
@@ -888,47 +888,35 @@ describe("selected-hour admission before archive placement", () => {
     const f = await interactiveHost();
     await f.compare();
     const history = await readModulePreparationHistory(f.roots, binding.module);
-    await expect(
-      f.invoke(
-        { action: "select", answer: "no", installationCodes: ["0CNNW"] },
-        { nodeRecoverySecret: "wrong" },
-      ),
-    ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
+    await expect(f.select({ nodeRecoverySecret: "wrong" })).rejects.toMatchObject({
+      code: "promotion.break_glass_invalid",
+    });
     expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(history);
-    expect(
-      await f.invoke({ action: "select", answer: "no", installationCodes: ["0CNNW"] }),
-    ).toMatchObject({
+    expect(await f.selectPastWaits()).toMatchObject({
       status: "selected",
-      identity: "0CNSM",
+      identity: "0CNSP",
     });
   });
 
   it("interactive preparation loses transient clock grants across restart while retaining the spent hour", async () => {
     const f = await interactiveHost();
-    await f.compare();
-    const selected = await f.invoke({
-      action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
-    });
+    const selected = await f.selectPastWaits();
     const restarted = createInteractiveRecoveryPreparation(f.options);
-    await expect(
-      f.invoke({ action: "select", answer: "no", installationCodes: ["0CNNW"] }, {}, restarted),
-    ).rejects.toMatchObject({
+    await expect(f.select({}, restarted)).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "clock_stale" },
     });
     const challenge = (await f.invoke({ action: "clock-challenge" }, {}, restarted)) as {
       id: string;
     };
-    await f.invoke(
+    const compared = (await f.invoke(
       { action: "compare-clocks", browser: { challengeId: challenge.id, instantMs: Date.now() } },
       {},
       restarted,
-    );
+    )) as { id: string };
     expect(
       await f.invoke(
-        { action: "select", answer: "no", installationCodes: ["0CNNW"] },
+        { action: "select", comparisonId: compared.id, installationCodes: ["0CNNY"] },
         {},
         restarted,
       ),

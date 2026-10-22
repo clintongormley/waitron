@@ -190,8 +190,7 @@ it("refuses facts when another enabled module's frozen version changes", async (
   expect(f.database).not.toHaveBeenCalled();
 });
 
-function currentClock() {
-  const instantMs = Date.parse("2026-10-16T11:40:00Z");
+function currentClock(instantMs = Date.parse("2026-10-16T11:40:00Z")) {
   return compareHourClocks(
     ["box", "browser"].map((source) => ({
       source: source as "box" | "browser",
@@ -206,30 +205,46 @@ function currentClock() {
     Date.parse("2026-10-15T00:00:00Z"),
   );
 }
+type ReadClock = NonNullable<
+  NonNullable<Parameters<typeof hour.createHostedHourPreparation>[1]>["readClock"]
+>;
+/**
+ * Selects through the real host, each time with a fresh owner password grant, and while the
+ * selection waits, moves its clocks (wall and monotonic together) 1 ms past the target and asks
+ * again.
+ */
 async function selectThroughHost(
   f: Awaited<ReturnType<typeof fixture>>,
-  readClock = async () => ({ clock: currentClock() }),
+  readClock: (instantMs: number) => ReadClock = (instantMs) => async () => ({
+    clock: currentClock(instantMs),
+  }),
 ) {
   const owner = { ...f.claim.state, capability: f.claim.capability };
-  const reconfirmation = await f.host.owner.reconfirm(owner, PASSWORD, "block-use");
+  let instantMs = Date.parse("2026-10-16T11:40:00Z");
+  let monotonic = 0;
   const preparation = hour.createHostedHourPreparation(f.bound, {
-    monotonicNow: () => 0,
-    readClock,
+    monotonicNow: () => monotonic,
+    readClock: (context) => readClock(instantMs)(context),
   });
-  return f.host.coordinator.run((hold) =>
-    f.host.withPreparationAuthorization(
-      () => f.host.owner.consumeReconfirmation(owner, reconfirmation, "block-use", hold),
-      () =>
-        withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
-          preparation.select({
-            binding: f.context.binding,
-            authority,
-            answer: "no",
-            comparisonId: "comparison",
-          }),
-        ),
-    ),
-  );
+  for (let round = 0; ; round++) {
+    const reconfirmation = await f.host.owner.reconfirm(owner, PASSWORD, "block-use");
+    const result = await f.host.coordinator.run((hold) =>
+      f.host.withPreparationAuthorization(
+        () => f.host.owner.consumeReconfirmation(owner, reconfirmation, "block-use", hold),
+        () =>
+          withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
+            preparation.select({
+              binding: f.context.binding,
+              authority,
+              comparisonId: "comparison",
+            }),
+          ),
+      ),
+    );
+    if (result.status !== "waiting" || round === 3) return result;
+    monotonic += result.targetMs + 1 - instantMs;
+    instantMs = result.targetMs + 1;
+  }
 }
 
 it.each(["production", "preproduction"] as const)(
@@ -240,16 +255,16 @@ it.each(["production", "preproduction"] as const)(
     const selection = await selectThroughHost(f);
     expect(selection).toMatchObject({
       status: "selected",
-      identity: "0CNNW",
+      identity: "0CNNY",
       scope: { taxpayerNif: request.taxId, environment },
       input: {
         allocation: {
           environment,
-          installationIdentity: "0CNNW",
+          installationIdentity: "0CNNY",
           series: [
-            { code: "A-0CNNW", purpose: "standard" },
-            { code: "FF-0CNNW", purpose: "full" },
-            { code: "R-0CNNW", purpose: "rectificative" },
+            { code: "A-0CNNY", purpose: "standard" },
+            { code: "FF-0CNNY", purpose: "full" },
+            { code: "R-0CNNY", purpose: "rectificative" },
           ],
         },
       },
@@ -273,7 +288,7 @@ it("the hosted selector refuses an older hour than another node's revoked real i
   const f = await fixture();
   await expect(selectThroughHost(f)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "hour_not_later" },
+    params: { reason: "minute_not_later" },
   });
 });
 
@@ -285,12 +300,12 @@ it("an imported setup retains its fresh host identity and exact configured base 
     binding: f.context.binding,
     input: {
       allocation: {
-        installationIdentity: "0CNNW",
+        installationIdentity: "0CNNY",
         environment: "production",
         series: [
-          { code: "FF-0CNNW", purpose: "full" },
-          { code: "R-0CNNW", purpose: "rectificative" },
-          { code: "a/B_1.2-3-0CNNW", purpose: "standard" },
+          { code: "FF-0CNNY", purpose: "full" },
+          { code: "R-0CNNY", purpose: "rectificative" },
+          { code: "a/B_1.2-3-0CNNY", purpose: "standard" },
         ],
       },
     },
@@ -380,38 +395,19 @@ it("owner recovery invalidates the previously selected setup fingerprint", async
 
 it("a clock provider cannot replace the host's scope or bases", async () => {
   const f = await fixture();
-  const owner = { ...f.claim.state, capability: f.claim.capability };
-  const grant = await f.host.owner.reconfirm(owner, PASSWORD, "block-use");
-  const preparation = hour.createHostedHourPreparation(f.bound, {
-    monotonicNow: () => 0,
-    readClock: async (context) => {
-      Object.assign(context, { taxId: "89890001K", environment: "production" });
-      Object.assign(context.bases[0]!, { code: "changed" });
-      return {
-        clock: currentClock(),
-        scope: { taxpayerNif: "89890001K", environment: "production" },
-        bases: [
-          { code: "injected", purpose: "standard" },
-          { code: "FF", purpose: "full" },
-          { code: "R", purpose: "rectificative" },
-        ],
-      };
-    },
+  const selection = await selectThroughHost(f, (instantMs) => async (context) => {
+    Object.assign(context, { taxId: "89890001K", environment: "production" });
+    Object.assign(context.bases[0]!, { code: "changed" });
+    return {
+      clock: currentClock(instantMs),
+      scope: { taxpayerNif: "89890001K", environment: "production" },
+      bases: [
+        { code: "injected", purpose: "standard" },
+        { code: "FF", purpose: "full" },
+        { code: "R", purpose: "rectificative" },
+      ],
+    };
   });
-  const selection = await f.host.coordinator.run((hold) =>
-    f.host.withPreparationAuthorization(
-      () => f.host.owner.consumeReconfirmation(owner, grant, "block-use", hold),
-      () =>
-        withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
-          preparation.select({
-            binding: f.context.binding,
-            authority,
-            answer: "no",
-            comparisonId: "comparison",
-          }),
-        ),
-    ),
-  );
   expect(selection).toMatchObject({
     status: "selected",
     input: {
@@ -419,9 +415,9 @@ it("a clock provider cannot replace the host's scope or bases", async () => {
         taxpayerNif: request.taxId,
         environment: "preproduction",
         series: [
-          { code: "A-0CNNW", purpose: "standard" },
-          { code: "FF-0CNNW", purpose: "full" },
-          { code: "R-0CNNW", purpose: "rectificative" },
+          { code: "A-0CNNY", purpose: "standard" },
+          { code: "FF-0CNNY", purpose: "full" },
+          { code: "R-0CNNY", purpose: "rectificative" },
         ],
       },
     },
@@ -440,7 +436,6 @@ it("cannot retain an hour selection without a fresh owner password grant", async
         preparation.select({
           binding: f.context.binding,
           authority,
-          answer: "no",
           comparisonId: "comparison",
         }),
       ),

@@ -23,6 +23,7 @@ import { initialVenueApplyInput } from "./initial-venue-input.js";
 import { readTenantIdentities } from "./tenant-guard.js";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { MODULE, PASSWORD, request } from "../test/first-setup-request.js";
+import { moveFakeClockPast, printedWaitTarget } from "../test/settle-wait.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { createFirstSetupCoordinator } from "./first-setup-state.js";
 import { createFirstSetupResolutionStore } from "./first-setup-resolution.js";
@@ -44,10 +45,10 @@ beforeEach(() => {
   external.internet.mockImplementation(async () => ({
     source: "internet",
     result: "usable",
-    instantMs: NOW,
+    instantMs: Date.now(),
     uncertaintyMs: 500,
-    wallStartedMs: NOW,
-    wallFinishedMs: NOW,
+    wallStartedMs: Date.now(),
+    wallFinishedMs: Date.now(),
     monotonicStartedMs: performance.now(),
     monotonicFinishedMs: performance.now(),
   }));
@@ -145,6 +146,28 @@ async function fixture(answer = "yes") {
   return { root, args, deps, runtime, output, prompts };
 }
 
+/**
+ * Runs the command, and when it stops at its settle wait, moves the faked clock past the printed
+ * time and runs it again, as the operator is told to.
+ */
+async function runCliPastWait(args: string[], deps: Parameters<typeof runCli>[1]) {
+  const printed: string[] = [];
+  const stdout = deps.io.stdout;
+  deps.io.stdout = (line) => {
+    printed.push(line);
+    stdout(line);
+  };
+  try {
+    const code = await runCli(args, deps);
+    const targetMs = printedWaitTarget(printed);
+    if (code !== 1 || targetMs === undefined) return code;
+    moveFakeClockPast(targetMs);
+  } finally {
+    deps.io.stdout = stdout;
+  }
+  return runCli(args, deps);
+}
+
 it("the venue command claims ownership, retains its settle wait and says why and until when, before any venue write", async () => {
   const f = await fixture();
   expect(await runCli(f.args, f.deps)).toBe(1);
@@ -169,10 +192,10 @@ it("the venue command claims ownership, retains its settle wait and says why and
 
 it("the venue command imports selected module input but cannot skip unfinished publication", async () => {
   const f = await fixture("no");
-  expect(await runCli(f.args, f.deps)).toBe(1);
+  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   const state = await f.runtime.store.read();
   expect(state).toMatchObject({ status: "consumption-intent", consumptionIntent: true });
-  expect(state!.inputs[MODULE]).toMatchObject({ allocation: { installationIdentity: "0CNNW" } });
+  expect(state!.inputs[MODULE]).toMatchObject({ allocation: { installationIdentity: "0CNNY" } });
   expect(f.output, JSON.stringify(f.output)).toContain("setup.not_ready {}");
   expect(await readTenantIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
@@ -403,7 +426,7 @@ it("the actual venue command saves its selected recovery PDF and asks for kept d
     f.prompts.push(question);
     return question.startsWith("Have you kept") ? "yes" : "no";
   };
-  expect(await runCli([...f.args, "--recovery-pdf", path], f.deps)).toBe(1);
+  expect(await runCliPastWait([...f.args, "--recovery-pdf", path], f.deps)).toBe(1);
   await expect(readFile(path)).resolves.toBeInstanceOf(Buffer);
   const pdf = await readFile(path);
   expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
@@ -418,7 +441,7 @@ it("the actual venue command saves its selected recovery PDF and asks for kept d
 it("declining kept in the actual venue command preserves the saved PDF and leaves setup unactivated", async () => {
   const f = await fixture("no");
   const path = join(f.root, "declined-recovery.pdf");
-  expect(await runCli([...f.args, "--recovery-pdf", path], f.deps)).toBe(1);
+  expect(await runCliPastWait([...f.args, "--recovery-pdf", path], f.deps)).toBe(1);
   await expect(readFile(path)).resolves.toBeInstanceOf(Buffer);
   expect(f.prompts).toContain("Have you kept this recovery PDF? [y/N]: ");
   expect(f.output).not.toContain("setup.not_ready {}");
@@ -517,7 +540,7 @@ async function activationFixture() {
 
 it("the venue command activates its kept hour and completes checked publication", async () => {
   const f = await activationFixture();
-  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
   const state = (await f.runtime.store.read())!;
   expect(state.status).toBe("complete");
   expect(f.calls).toEqual([
@@ -533,7 +556,7 @@ it("the venue command activates its kept hour and completes checked publication"
   const series = await venue.db
     .select({ code: invoiceSeries.code, nextNumber: invoiceSeries.nextNumber })
     .from(invoiceSeries);
-  expect(series.map((row) => row.code).sort()).toEqual(["A-0CNNW", "FF-0CNNW", "R-0CNNW"]);
+  expect(series.map((row) => row.code).sort()).toEqual(["A-0CNNY", "FF-0CNNY", "R-0CNNY"]);
   expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
   expect(f.output).toContain(`node:     ${state.frozen.nodeId}`);
   expect(await readDeploymentEnvironment(venue.db)).toBe("preproduction");
@@ -542,7 +565,7 @@ it("the venue command activates its kept hour and completes checked publication"
 it("a restarted venue command finishes the exact commit without preparing or activating again", async () => {
   const f = await activationFixture();
   f.interrupt(true);
-  await expect(runCli(f.args, f.deps)).rejects.toThrow("synthetic publication interrupted");
+  await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow("synthetic publication interrupted");
   const before = (await f.runtime.store.read())!;
   expect(before.status).toBe("committed");
   const seriesBefore = await venue.db.select().from(invoiceSeries);
@@ -550,7 +573,7 @@ it("a restarted venue command finishes the exact commit without preparing or act
   f.calls.length = 0;
   f.prompts.length = 0;
   expect(
-    await runCli(
+    await runCliPastWait(
       f.args.filter(
         (arg, index, all) => arg !== "--recovery-pdf" && all[index - 1] !== "--recovery-pdf",
       ),
@@ -581,7 +604,7 @@ it("the real preproduction deployment adapter completes publication through the 
         WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
       },
     });
-  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
   expect((await f.runtime.store.read())!.status).toBe("complete");
 });
 
@@ -590,7 +613,7 @@ it("a configured deployment cannot activate without a kept recovery document", a
   const args = f.args.filter(
     (arg, index, all) => arg !== "--recovery-pdf" && all[index - 1] !== "--recovery-pdf",
   );
-  expect(await runCli(args, f.deps)).toBe(1);
+  expect(await runCliPastWait(args, f.deps)).toBe(1);
   expect(f.calls).toEqual([]);
   expect(f.output).toContain("setup.not_ready {}");
   expect(await readTenantIdentities(venue.db)).toEqual([]);
@@ -606,7 +629,7 @@ it("a deployment readiness refusal leaves the kept attempt unactivated", async (
       throw new AppError("setup.not_ready", {});
     },
   });
-  expect(await runCli(f.args, f.deps)).toBe(1);
+  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.calls).toEqual([]);
   expect(f.output).toContain("setup.not_ready {}");
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
@@ -617,7 +640,7 @@ it("a deployment readiness refusal leaves the kept attempt unactivated", async (
 it("changed publication settings cannot finish a committed command", async () => {
   const f = await activationFixture();
   f.interrupt(true);
-  await expect(runCli(f.args, f.deps)).rejects.toThrow("synthetic publication interrupted");
+  await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow("synthetic publication interrupted");
   const before = (await f.runtime.store.read())!;
   f.calls.length = 0;
   const factory = f.deps.firstSetupDeployment!;
@@ -629,7 +652,7 @@ it("changed publication settings cannot finish a committed command", async () =>
       publication: async (state) => ({ ...(await publication(state)), digest: "b".repeat(64) }),
     };
   };
-  expect(await runCli(f.args, f.deps)).toBe(1);
+  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain("setup.attempt_uncertain {}");
   expect(f.calls).toEqual([]);
   const after = (await f.runtime.store.read())!;
@@ -642,7 +665,7 @@ it("stale command ownership refuses before loading publication settings", async 
   const f = await activationFixture();
   const authorize = vi.spyOn(f.runtime.owner, "authorize");
   f.interrupt(true);
-  await expect(runCli(f.args, f.deps)).rejects.toThrow("synthetic publication interrupted");
+  await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow("synthetic publication interrupted");
   const state = (await f.runtime.store.read())!;
   const owner = { ...authorize.mock.calls.at(-1)![0], revision: state.revision };
   const recovered = await f.runtime.owner.recoverFirstSetup(randomBytes(32).toString("base64url"), {
@@ -665,7 +688,7 @@ it("the real command deployment refuses production before committing any venue",
   const { createFirstSetupCommandDeployment } = await import("./first-setup-command-deployment.js");
   f.deps.firstSetupDeployment = ({ runtime, db }) =>
     createFirstSetupCommandDeployment({ runtime, db, environment: {} });
-  expect(await runCli(f.args, f.deps)).toBe(1);
+  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain("setup.not_ready {}");
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
   expect(await readTenantIdentities(venue.db)).toEqual([]);
@@ -676,9 +699,10 @@ it("a command Finish checks recovered ownership before loading publication secre
   const f = await activationFixture();
   const authorize = vi.spyOn(f.runtime.owner, "authorize");
   f.interrupt(true);
-  await expect(runCli(f.args, f.deps)).rejects.toThrow("synthetic publication interrupted");
+  await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow("synthetic publication interrupted");
   const state = (await f.runtime.store.read())!;
-  const owner = { ...authorize.mock.calls.at(-1)![0], revision: state.revision };
+  // The rerun after the settle wait recovered ownership; the first run's claimed owner never did.
+  const owner = { ...authorize.mock.calls[0]![0], revision: state.revision };
   const deployment = f.deps.firstSetupDeployment!({ runtime: f.runtime, db: venue.db });
   const publication = vi.spyOn(deployment, "publication");
   const { completeFirstSetupCommand } = await import("./first-setup-command-activation.js");
@@ -737,7 +761,7 @@ it.each([
   "https://olivo.example.test/#fragment",
 ])("an unusable membership origin (%s) refuses before venue creation", async (origin) => {
   const f = await realActivationFixture({ WAITRON_ADVERTISED_ORIGIN: origin });
-  expect(await runCli(f.args, f.deps)).toBe(1);
+  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain("setup.not_ready {}");
   expect(await readTenantIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
@@ -745,7 +769,7 @@ it.each([
 
 it("an absent vault key refuses before venue creation", async () => {
   const f = await realActivationFixture({ WAITRON_CREDENTIALS_KEY: "" });
-  expect(await runCli(f.args, f.deps)).toBe(1);
+  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain('credentials.key_missing {"variable":"WAITRON_CREDENTIALS_KEY"}');
   expect(await readTenantIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
@@ -760,14 +784,16 @@ it("the command can load its existing vault key from the selected state director
     `WAITRON_CREDENTIALS_KEY=${f.env.WAITRON_CREDENTIALS_KEY}\nWAITRON_CREDENTIALS_KEY_VERSION=1\n`,
   );
   delete f.env.WAITRON_CREDENTIALS_KEY;
-  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
   expect((await f.runtime.store.read())!.status).toBe("complete");
 });
 
 it("a mismatched stored node key cannot finish interrupted command publication", async () => {
   const f = await realActivationFixture();
   f.interrupt(true);
-  await expect(runCli(f.args, f.deps)).rejects.toThrow("synthetic before trading publication");
+  await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow(
+    "synthetic before trading publication",
+  );
   const before = (await f.runtime.store.read())!;
   const series = await venue.db.select().from(invoiceSeries);
   const { setNodePublicKey, writeNodeMembership } = await import("@waitron/db");
@@ -790,7 +816,7 @@ it("a mismatched stored node key cannot finish interrupted command publication",
     }),
   );
   f.interrupt(false);
-  expect(await runCli(f.args, f.deps)).toBe(1);
+  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain("setup.attempt_uncertain {}");
   expect((await f.runtime.store.read())!.status).toBe("committed");
   expect(await venue.db.select().from(invoiceSeries)).toEqual(series);
@@ -802,7 +828,9 @@ it("a mismatched stored node key cannot finish interrupted command publication",
 it("an altered signed membership cannot finish interrupted command publication", async () => {
   const f = await realActivationFixture();
   f.interrupt(true);
-  await expect(runCli(f.args, f.deps)).rejects.toThrow("synthetic before trading publication");
+  await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow(
+    "synthetic before trading publication",
+  );
   const { readNodeMembershipRow, writeNodeMembership } = await import("@waitron/db");
   const { isMembershipDocument } = await import("@waitron/membership");
   const membership = (await readNodeMembershipRow(venue.db))!;
@@ -819,7 +847,7 @@ it("an altered signed membership cannot finish interrupted command publication",
   };
   await writeNodeMembership(venue.db, altered);
   f.interrupt(false);
-  expect(await runCli(f.args, f.deps)).toBe(1);
+  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain("setup.attempt_uncertain {}");
   expect((await f.runtime.store.read())!.status).toBe("committed");
   await expect(readFile(join(f.root, "state/trading.env"))).rejects.toMatchObject({
@@ -850,7 +878,7 @@ it("the command refuses a retained configuration import when its staged material
     },
     randomBytes(32).toString("base64url"),
   );
-  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
+  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
   expect(f.output).toContain("setup.not_ready {}");
   expect((await runtime.store.read())!.status).toBe("consumption-intent");
   expect(await readTenantIdentities(venue.db)).toEqual([]);
@@ -871,7 +899,7 @@ it("a refusal after stamping retains the environment without writing the venue",
         }),
     };
   };
-  expect(await runCli(f.args, f.deps)).toBe(1);
+  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain("setup.not_ready {}");
   expect(await readDeploymentEnvironment(venue.db)).toBe("preproduction");
   expect(await readTenantIdentities(venue.db)).toEqual([]);
@@ -942,12 +970,12 @@ async function productionFixture(accepted: boolean, certificate = productionCert
 
 it("the production venue command checks accepted readiness and seals its exact publication settings", async () => {
   const f = await productionFixture(true);
-  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
   const state = (await f.runtime.store.read())!;
   expect(state.status).toBe("complete");
   expect(await readDeploymentEnvironment(venue.db)).toBe("production");
   const series = await venue.db.select().from(invoiceSeries);
-  expect(series.map((row) => row.code).sort()).toEqual(["A-0CNNW", "FF-0CNNW", "R-0CNNW"]);
+  expect(series.map((row) => row.code).sort()).toEqual(["A-0CNNY", "FF-0CNNY", "R-0CNNY"]);
   expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
   const { loadKeyRing, tryGetCredential } = await import("@waitron/credentials");
   const { withTransaction } = await import("@waitron/db");
@@ -976,7 +1004,7 @@ it("the production venue command checks accepted readiness and seals its exact p
 
 it("the production venue command refuses missing readiness before stamping or activating", async () => {
   const f = await productionFixture(false);
-  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
+  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
   expect(f.output).toContain('setup.fiscal_test_required {"module":"verifactu"}');
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
   expect(await readTenantIdentities(venue.db)).toEqual([]);
@@ -1002,7 +1030,7 @@ it.each(["certificate", "build", "key"] as const)(
       );
     if (change === "build") f.env.WAITRON_BUILD_ID = "another-build";
     if (change === "key") f.env.WAITRON_CREDENTIALS_KEY = Buffer.alloc(32, 74).toString("base64");
-    expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
+    expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
     expect(f.output).toContain('setup.fiscal_test_required {"module":"verifactu"}');
     expect(await readDeploymentEnvironment(venue.db)).toBeNull();
     expect(await readTenantIdentities(venue.db)).toEqual([]);
@@ -1014,7 +1042,9 @@ it.each([false, true])(
   async (changed) => {
     const f = await productionFixture(true);
     f.interrupt(true);
-    await expect(runCli(f.args, f.deps)).rejects.toThrow("synthetic before trading publication");
+    await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow(
+      "synthetic before trading publication",
+    );
     const before = (await f.runtime.store.read())!;
     expect(before.status).toBe("committed");
     const counters = await venue.db.select().from(invoiceSeries);
@@ -1030,7 +1060,7 @@ it.each([false, true])(
       );
     f.interrupt(false);
     f.prompts.length = 0;
-    const result = await runCli(f.args, f.deps);
+    const result = await runCliPastWait(f.args, f.deps);
     expect(result, JSON.stringify(f.output)).toBe(changed ? 1 : 0);
     expect((await f.runtime.store.read())!.status).toBe(changed ? "committed" : "complete");
     if (changed) expect(f.output).toContain("setup.attempt_uncertain {}");
@@ -1063,7 +1093,7 @@ it("production activation seals the checked settings snapshot if its source file
       },
     };
   };
-  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
   const { tryGetCredential, loadKeyRing } = await import("@waitron/credentials");
   const { withTransaction } = await import("@waitron/db");
   expect(
@@ -1102,7 +1132,7 @@ it.each(["taxpayer", "schema", "target"] as const)(
       async () => ({ status: "accepted" }),
       Buffer.alloc(32, 73),
     ).run(altered);
-    expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
+    expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
     expect(f.output).toContain('setup.fiscal_test_required {"module":"verifactu"}');
     expect(await readDeploymentEnvironment(venue.db)).toBeNull();
     expect(await venue.db.select().from(invoiceSeries)).toEqual([]);
@@ -1126,7 +1156,7 @@ it.each([
     const f = await productionFixture(true);
     const { writeFile } = await import("node:fs/promises");
     await writeFile(f.settingsPath, JSON.stringify(settings));
-    expect(await runCli(f.args, f.deps)).toBe(1);
+    expect(await runCliPastWait(f.args, f.deps)).toBe(1);
     expect(f.output).toContain(message);
     expect(await readDeploymentEnvironment(venue.db)).toBeNull();
     expect(await readTenantIdentities(venue.db)).toEqual([]);
@@ -1153,14 +1183,14 @@ it("a refusal after stamping retains that environment and can retry the original
         }),
     };
   };
-  expect(await runCli(f.args, f.deps)).toBe(1);
+  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain("setup.not_ready {}");
   expect(await readDeploymentEnvironment(venue.db)).toBe("preproduction");
   expect(await readTenantIdentities(venue.db)).toEqual([]);
   const before = (await f.runtime.store.read())!;
   expect(before.status).toBe("consumption-intent");
   refused = false;
-  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
   const after = (await f.runtime.store.read())!;
   expect(after.status).toBe("complete");
   expect(after.frozen).toEqual(before.frozen);
@@ -1169,7 +1199,7 @@ it("a refusal after stamping retains that environment and can retry the original
     (await venue.db.select({ code: invoiceSeries.code }).from(invoiceSeries))
       .map((row) => row.code)
       .sort(),
-  ).toEqual(["A-0CNNW", "FF-0CNNW", "R-0CNNW"]);
+  ).toEqual(["A-0CNNY", "FF-0CNNY", "R-0CNNY"]);
 });
 
 async function commandReadinessFixture(answer = "yes") {
@@ -1194,7 +1224,10 @@ async function commandReadinessFixture(answer = "yes") {
 it("the owned production command runs an explicitly confirmed isolated readiness test before activation", async () => {
   const f = await commandReadinessFixture();
   try {
-    expect(await runCli([...f.args, "--test-fiscal"], f.deps), JSON.stringify(f.output)).toBe(0);
+    expect(
+      await runCliPastWait([...f.args, "--test-fiscal"], f.deps),
+      JSON.stringify(f.output),
+    ).toBe(0);
     expect(f.prompts).toContain("Send a preproduction fiscal test? [y/N]: ");
     expect((await f.runtime.store.read())!.status).toBe("complete");
     expect(await readDeploymentEnvironment(venue.db)).toBe("production");
@@ -1245,7 +1278,7 @@ it("an unreadable retained vault file refuses before command activation", async 
   const f = await realActivationFixture();
   const { mkdir } = await import("node:fs/promises");
   await mkdir(join(f.root, "state/secrets.env"), { recursive: true });
-  await expect(runCli(f.args, f.deps)).rejects.toMatchObject({ code: "EISDIR" });
+  await expect(runCliPastWait(f.args, f.deps)).rejects.toMatchObject({ code: "EISDIR" });
   expect(await readTenantIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
@@ -1257,7 +1290,9 @@ it("an unreadable retained vault file refuses before command activation", async 
 it("a missing private node key cannot finish interrupted command publication", async () => {
   const f = await realActivationFixture();
   f.interrupt(true);
-  await expect(runCli(f.args, f.deps)).rejects.toThrow("synthetic before trading publication");
+  await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow(
+    "synthetic before trading publication",
+  );
   const before = (await f.runtime.store.read())!;
   const counters = await venue.db.select().from(invoiceSeries);
   const { deleteCredential } = await import("@waitron/credentials");
@@ -1266,7 +1301,7 @@ it("a missing private node key cannot finish interrupted command publication", a
   const trust = await readMembershipTrustSet(venue.db);
   expect(trust[before.frozen.nodeId]).toEqual(expect.any(String));
   f.interrupt(false);
-  expect(await runCli(f.args, f.deps)).toBe(1);
+  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain("setup.attempt_uncertain {}");
   expect(await readMembershipTrustSet(venue.db)).toEqual(trust);
   expect(await venue.db.select().from(invoiceSeries)).toEqual(counters);
@@ -1342,7 +1377,7 @@ it("production readiness cannot run before publication has loaded its settings",
 
 it("command deployment refuses to provision over its already completed venue", async () => {
   const f = await realActivationFixture();
-  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
   const state = (await f.runtime.store.read())!;
   const before = await venue.db.select().from(invoiceSeries);
   const tenants = await readTenantIdentities(venue.db);
@@ -1362,7 +1397,7 @@ it("command deployment refuses to provision over its already completed venue", a
 it("--yes does not send a fiscal test when its separate confirmation is declined", async () => {
   const f = await commandReadinessFixture("no");
   try {
-    expect(await runCli([...f.args, "--test-fiscal"], f.deps)).toBe(1);
+    expect(await runCliPastWait([...f.args, "--test-fiscal"], f.deps)).toBe(1);
     expect(f.prompts).toContain("Send a preproduction fiscal test? [y/N]: ");
     expect(f.drain).not.toHaveBeenCalled();
     expect(await readDeploymentEnvironment(venue.db)).toBeNull();
@@ -1384,7 +1419,10 @@ it.each(["rejected", "uncertain"] as const)(
       ...(status === "rejected" ? { recordsHalted: 1 } : {}),
     });
     try {
-      expect(await runCli([...f.args, "--test-fiscal"], f.deps), JSON.stringify(f.output)).toBe(1);
+      expect(
+        await runCliPastWait([...f.args, "--test-fiscal"], f.deps),
+        JSON.stringify(f.output),
+      ).toBe(1);
       expect(f.output).toContain(`Fiscal test: ${status}`);
       expect(f.drain).toHaveBeenCalledOnce();
       expect(await readDeploymentEnvironment(venue.db)).toBeNull();
@@ -1401,7 +1439,7 @@ it.each(["rejected", "uncertain"] as const)(
 it("an ordinary production command never submits readiness without --test-fiscal", async () => {
   const f = await commandReadinessFixture();
   try {
-    expect(await runCli(f.args, f.deps)).toBe(1);
+    expect(await runCliPastWait(f.args, f.deps)).toBe(1);
     expect(f.output).toContain('setup.fiscal_test_required {"module":"verifactu"}');
     expect(f.drain).not.toHaveBeenCalled();
     expect(
@@ -1416,7 +1454,7 @@ it("the readiness option refuses an unowned command before opening the venue", a
   const f = await fixture();
   const deps: CliDeps = { ...f.deps };
   delete deps.configureFirstSetup;
-  expect(await runCli([...f.args, "--test-fiscal"], deps)).toBe(1);
+  expect(await runCliPastWait([...f.args, "--test-fiscal"], deps)).toBe(1);
   expect(f.output).toContain("setup.not_ready {}");
   expect(f.deps.openVenue).not.toHaveBeenCalled();
 });
@@ -1425,10 +1463,13 @@ it("an uncertain command readiness retry reuses its one isolated sample and then
   const f = await commandReadinessFixture();
   f.drain.mockResolvedValueOnce(f.emptyDrainResult());
   try {
-    expect(await runCli([...f.args, "--test-fiscal"], f.deps)).toBe(1);
+    expect(await runCliPastWait([...f.args, "--test-fiscal"], f.deps)).toBe(1);
     const before = (await f.runtime.store.read())!;
     const pdf = await readFile(join(f.root, "recovery.pdf"));
-    expect(await runCli([...f.args, "--test-fiscal"], f.deps), JSON.stringify(f.output)).toBe(0);
+    expect(
+      await runCliPastWait([...f.args, "--test-fiscal"], f.deps),
+      JSON.stringify(f.output),
+    ).toBe(0);
     const after = (await f.runtime.store.read())!;
     expect(after.inputs[MODULE]).toEqual(before.inputs[MODULE]);
     expect(Object.keys(after.inputs).sort()).toEqual(["$publication", MODULE]);
@@ -1462,14 +1503,17 @@ it("exact command Finish ignores --test-fiscal and preserves the accepted sample
   const f = await commandReadinessFixture();
   f.interrupt(true);
   try {
-    await expect(runCli([...f.args, "--test-fiscal"], f.deps)).rejects.toThrow(
+    await expect(runCliPastWait([...f.args, "--test-fiscal"], f.deps)).rejects.toThrow(
       "synthetic before trading publication",
     );
     const before = await venue.db.select().from(invoiceSeries);
     expect((await f.runtime.store.read())!.status).toBe("committed");
     f.interrupt(false);
     f.prompts.length = 0;
-    expect(await runCli([...f.args, "--test-fiscal"], f.deps), JSON.stringify(f.output)).toBe(0);
+    expect(
+      await runCliPastWait([...f.args, "--test-fiscal"], f.deps),
+      JSON.stringify(f.output),
+    ).toBe(0);
     expect(f.prompts).toEqual([]);
     expect(f.drain).toHaveBeenCalledOnce();
     expect(await venue.db.select().from(invoiceSeries)).toEqual(before);
@@ -1489,7 +1533,7 @@ it("the production command records a readable certificate against the committed 
     certKind: "sello",
   };
   const f = await productionFixture(true, certificate);
-  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
   const state = (await f.runtime.store.read())!;
   const rows = await venue.db.select().from(fiscalCertificateInstalls);
   expect(rows).toHaveLength(1);

@@ -20,11 +20,11 @@ import {
   createFirstSetupCommandDeployment,
   createFirstSetupRuntime,
   planVenue,
-  prepareFirstSetupCommand,
   venueFiscalSelection,
   type FirstSetupOwnerAttempt,
 } from "@waitron/provisioning";
 import { applyHistoricalTestVenue } from "../test/allocated-venue.js";
+import { prepareCommandPastWaits } from "../test/settle-wait.js";
 import { request, PASSWORD } from "../test/first-setup-request.js";
 import { stageConfigurationImport } from "./configuration-import.js";
 import {
@@ -159,7 +159,7 @@ async function fixture(newTaxpayer = false, change?: (bundle: ConfigurationBundl
     prompt: async (question: string) => (question.startsWith("Have you kept") ? "yes" : "no"),
     promptSecret: async () => PASSWORD,
   };
-  const prepared = await prepareFirstSetupCommand(runtime, owner, io);
+  const prepared = await prepareCommandPastWaits(runtime, owner, io);
   expect(prepared.status).toBe("ready");
   if (prepared.status !== "ready") throw new Error("hour not prepared");
   owner = prepared.owner;
@@ -189,9 +189,9 @@ it.each([false, true])(
           .from(invoiceSeries)
       ).sort((a, b) => a.code.localeCompare(b.code)),
     ).toEqual([
-      { code: "A-0CNNW", nextNumber: 1 },
-      { code: "FF-0CNNW", nextNumber: 1 },
-      { code: "R-0CNNW", nextNumber: 1 },
+      { code: "A-0CNNY", nextNumber: 1 },
+      { code: "FF-0CNNY", nextNumber: 1 },
+      { code: "R-0CNNY", nextNumber: 1 },
     ]);
     expect(result.nodeId).not.toBe(f.seeded.nodeId);
     expect((await target.db.execute("select id from nodes")).rows).toEqual([{ id: result.nodeId }]);
@@ -389,17 +389,23 @@ bundle([{ entry: "src/bin.ts", outfile: ${JSON.stringify(binary)} }], {
     timeout: 120_000,
     env: environment,
   });
-  const preload = join(f.root, "offline-clock.mjs");
+  const preload = join(f.root, "agreeing-clock.mjs");
   await writeFile(
     preload,
     `import https from "node:https";
+import { EventEmitter } from "node:events";
 import { syncBuiltinESMExports } from "node:module";
-https.request = () => { throw new Error("synthetic offline clock"); };
+const date = new Date("2026-10-18T11:43:00Z").toUTCString();
+https.request = (_url, _options, respond) => {
+  const request = new EventEmitter();
+  request.end = () => queueMicrotask(() => respond({ statusCode: 200, headers: { date }, destroy() {} }));
+  return request;
+};
 syncBuiltinESMExports();
 const OriginalDate = Date;
 globalThis.Date = class extends OriginalDate {
-  constructor(...args) { super(...(args.length ? args : ["2026-10-18T11:40:00Z"])); }
-  static now() { return OriginalDate.parse("2026-10-18T11:40:00Z"); }
+  constructor(...args) { super(...(args.length ? args : ["2026-10-18T11:43:00Z"])); }
+  static now() { return OriginalDate.parse("2026-10-18T11:43:00Z"); }
 };
 Object.defineProperty(performance, "now", { value: () => 0 });
 `,
@@ -498,9 +504,9 @@ Object.defineProperty(performance, "now", { value: () => 0 });
         .prepare("select code, next_number as nextNumber from invoice_series order by code")
         .all(),
     ).toEqual([
-      { code: "A-0CRFW", nextNumber: 1 },
-      { code: "FF-0CRFW", nextNumber: 1 },
-      { code: "R-0CRFW", nextNumber: 1 },
+      { code: "A-0CRFY", nextNumber: 1 },
+      { code: "FF-0CRFY", nextNumber: 1 },
+      { code: "R-0CRFY", nextNumber: 1 },
     ]);
   } finally {
     disk.close();

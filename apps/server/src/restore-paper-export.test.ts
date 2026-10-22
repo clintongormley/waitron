@@ -22,7 +22,7 @@ it.each(["archive", "stream"] as const)(
     const log = vi.fn();
     expect(await f.run(log)).toBe(true);
     const rows = await f.snapshot();
-    expect(rows.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW", "0CNQR"]);
+    expect(rows.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNY", "0CNQT"]);
     expect(rows.allocations[1]?.approval.operatorId).toEqual({
       kind: "recovery-key",
       nodeId: TENANT_A.nodeId,
@@ -32,15 +32,15 @@ it.each(["archive", "stream"] as const)(
       rows.registrations
         .filter((row) => row.revocadoEn === null)
         .map((row) => row.numeroInstalacion),
-    ).toEqual(["0CNQR"]);
+    ).toEqual(["0CNQT"]);
     expect(
       rows.series
         .filter((row) => row.retiredAt === null)
         .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber })),
     ).toEqual([
-      { code: "A-0CNQR", purpose: "standard", nextNumber: 1 },
-      { code: "FF-0CNQR", purpose: "full", nextNumber: 1 },
-      { code: "R-0CNQR", purpose: "rectificative", nextNumber: 1 },
+      { code: "A-0CNQT", purpose: "standard", nextNumber: 1 },
+      { code: "FF-0CNQT", purpose: "full", nextNumber: 1 },
+      { code: "R-0CNQT", purpose: "rectificative", nextNumber: 1 },
     ]);
     expect(
       rows.series.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber),

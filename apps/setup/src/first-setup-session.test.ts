@@ -791,7 +791,11 @@ describe("module preparation in the owned tab", () => {
     );
     await session.open();
     await session.claim(venue);
-    await session.candidates("example-module", { answer: "yes" }, "administrator password");
+    await session.candidates(
+      "example-module",
+      { comparisonId: "comparison" },
+      "administrator password",
+    );
     expect(await session.preparation("example-module", { action: "selection" })).toEqual({
       status: "waiting",
       targetMs: 1234,

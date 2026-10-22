@@ -64,6 +64,7 @@ import {
   createFakeTimersHourClock,
   recoverySelectPastWaits,
   selectPastWaits,
+  selectPastWaits as selectPastWaits_,
   type HourTestClock,
 } from "../src/testing/hour-test-clock.js";
 
@@ -228,14 +229,49 @@ export async function host() {
       ? service
       : createSelectedRecoveryPreparation({ ...options, secret })
     ).prepare(proposal, client());
+  let comparisonId = "no-comparison";
   const compare = async () => {
     const challenge = (await prepare({ action: "clock-challenge" })) as { id: string };
-    return prepare({
+    const compared = (await prepare({
       action: "compare-clocks",
       browser: { challengeId: challenge.id, instantMs: clock.wall() },
-    });
+    })) as { id: string };
+    comparisonId = compared.id;
+    return compared;
   };
-  return { configured, facts, prepare, compare, roots, service, selected, options };
+  /** One select naming the last comparison, with no wait. */
+  const select = (installationCodes: readonly string[] = ["0CNNY"]) =>
+    prepare({ action: "select", comparisonId, installationCodes });
+  /** Compares and selects, repeated past the restore's settle wait. */
+  const selectPastWaits = (installationCodes: readonly string[] = ["0CNNY"]) =>
+    recoverySelectPastWaits(clock, service, { installationCodes }, client());
+  return {
+    configured,
+    facts,
+    prepare,
+    compare,
+    select,
+    selectPastWaits,
+    roots,
+    service,
+    selected,
+    options,
+  };
+}
+/** A clock comparison through `service`, returning its id for the select that names it. */
+export async function compareWith(
+  service: { prepare(proposal: unknown, client: { onBox: boolean }): Promise<unknown> },
+  onBox = true,
+) {
+  const challenge = (await service.prepare({ action: "clock-challenge" }, { onBox })) as {
+    id: string;
+  };
+  return (
+    (await service.prepare(
+      { action: "compare-clocks", browser: { challengeId: challenge.id, instantMs: clock.wall() } },
+      { onBox },
+    )) as { id: string }
+  ).id;
 }
 export async function archiveHost(kind: "archive" | "stream" = "archive") {
   const f = await host();
@@ -310,7 +346,7 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
   const outcome = (await recoverySelectPastWaits(
     clock,
     service,
-    { installationCodes: ["0CNNW"] },
+    { installationCodes: ["0CNNY"] },
     client(),
   )) as {
     input: unknown;
@@ -416,7 +452,7 @@ export async function bucketCommand() {
   const outcome = (await recoverySelectPastWaits(
     clock,
     service,
-    { installationCodes: ["0CNNW"] },
+    { installationCodes: ["0CNNY"] },
     client(),
   )) as {
     input: unknown;
@@ -542,7 +578,7 @@ export async function recoveryInvoices() {
   const [standard] = await suite.db
     .select()
     .from(invoiceSeries)
-    .where(eq(invoiceSeries.code, "A-0CNNW"));
+    .where(eq(invoiceSeries.code, "A-0CNNY"));
   const sell = () =>
     withTransaction(suite.db, (tx) =>
       recordSale(
@@ -577,7 +613,7 @@ export async function recoveryInvoices() {
   ).toBe(1);
   await sell();
   const rows = await recordedRecoveryRows(suite.db);
-  expect(rows.records.map((row) => row.num_serie_factura)).toEqual(["A-0CNNW/123", "A-0CNNW/124"]);
+  expect(rows.records.map((row) => row.num_serie_factura)).toEqual(["A-0CNNY/123", "A-0CNNY/124"]);
   expect(rows.submissions.find((row) => row.registro_id === rows.records[0]?.id)).toMatchObject({
     estado: "aceptado",
     intentos: 1,
@@ -716,12 +752,24 @@ export async function interactiveHost() {
       await copy.discard();
     }
   };
+  let comparisonId = "no-comparison";
   const compare = async (override: Partial<typeof request> = {}) => {
     const challenge = (await invoke({ action: "clock-challenge" }, override)) as { id: string };
-    return invoke(
+    const compared = (await invoke(
       { action: "compare-clocks", browser: { challengeId: challenge.id, instantMs: clock.wall() } },
       override,
-    );
+    )) as { id: string };
+    comparisonId = compared.id;
+    return compared;
   };
-  return { ...f, session, options, request, invoke, compare };
+  /** One select naming the last comparison, with no wait. */
+  const select = (override: Partial<typeof request> = {}, current = session) =>
+    invoke({ action: "select", comparisonId, installationCodes: ["0CNNY"] }, override, current);
+  /** Compares and selects, repeated past the restore's settle wait. */
+  const selectPastWaits = (override: Partial<typeof request> = {}) =>
+    selectPastWaits_(clock, async () => {
+      await compare(override);
+      return select(override);
+    });
+  return { ...f, session, options, request, invoke, compare, select, selectPastWaits };
 }

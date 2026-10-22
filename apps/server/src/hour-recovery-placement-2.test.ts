@@ -9,7 +9,9 @@ import {
   bucketCommand,
   agreeInternet,
   interactiveHost,
+  clock,
 } from "../test/hour-recovery-host.js";
+import { selectPastWaits } from "./testing/hour-test-clock.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { copyFile, readFile, readdir, writeFile } from "node:fs/promises";
@@ -207,9 +209,9 @@ describe("selected-hour admission before archive placement", () => {
           .filter((row) => row.retiredAt === null)
           .map(({ code, nextNumber }) => ({ code, nextNumber })),
       ).toEqual([
-        { code: "A-0CNQR", nextNumber: 1 },
-        { code: "FF-0CNQR", nextNumber: 1 },
-        { code: "R-0CNQR", nextNumber: 1 },
+        { code: "A-0CNQT", nextNumber: 1 },
+        { code: "FF-0CNQT", nextNumber: 1 },
+        { code: "R-0CNQT", nextNumber: 1 },
       ]);
       expect(await placed.venue.select().from(fiscalAllocations)).toHaveLength(2);
     } finally {
@@ -257,7 +259,7 @@ describe("selected-hour admission before archive placement", () => {
       restoreFromArtifact({ ...f.restore, withModuleOperations: runner }),
     ).rejects.toMatchObject({
       code: "sif.allocation_invalid",
-      params: { reason: "clock_unconfirmed" },
+      params: { reason: "second_clock_missing" },
     });
     external.internet.mockImplementation(async () => ({
       source: "internet",
@@ -276,7 +278,7 @@ describe("selected-hour admission before archive placement", () => {
         (await restored.venue.select().from(invoiceSeries))
           .filter((row) => row.retiredAt === null)
           .map((row) => row.code),
-      ).toEqual(["A-0CNQR", "FF-0CNQR", "R-0CNQR"]);
+      ).toEqual(["A-0CNQT", "FF-0CNQT", "R-0CNQT"]);
       expect(await restored.venue.select().from(fiscalAllocations)).toHaveLength(2);
     } finally {
       await restored.close();
@@ -343,9 +345,9 @@ describe("selected-hour admission before archive placement", () => {
       try {
         const rows = await restored.venue.select().from(invoiceSeries);
         expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-          "A-0CNQR",
-          "FF-0CNQR",
-          "R-0CNQR",
+          "A-0CNQT",
+          "FF-0CNQT",
+          "R-0CNQT",
         ]);
         expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
           123, 123, 123,
@@ -486,8 +488,8 @@ describe("selected-hour admission before archive placement", () => {
         import { registerHooks } from "node:module";
         const realDate = Date;
         globalThis.Date = class extends realDate {
-          constructor(...args) { super(...(args.length ? args : ["2026-10-16T12:40:00Z"])); }
-          static now() { return realDate.parse("2026-10-16T12:40:00Z"); }
+          constructor(...args) { super(...(args.length ? args : ["2026-10-16T12:42:01Z"])); }
+          static now() { return realDate.parse("2026-10-16T12:42:01Z"); }
         };
         registerHooks({ resolve(specifier, context, next) {
           if (specifier.endsWith("/hour-clock-internet.js")) return { shortCircuit: true, url: ${JSON.stringify(`data:text/javascript,${encodeURIComponent(internetModule)}`)} };
@@ -526,7 +528,7 @@ describe("selected-hour admission before archive placement", () => {
           (await restored.venue.select().from(invoiceSeries))
             .filter((row) => row.retiredAt === null)
             .map((row) => row.code),
-        ).toEqual(["A-0CNQR", "FF-0CNQR", "R-0CNQR"]);
+        ).toEqual(["A-0CNQT", "FF-0CNQT", "R-0CNQT"]);
         await restored.venue.update(invoiceSeries).set({ nextNumber: 917 });
         rows = await restored.venue.select().from(invoiceSeries);
         allocations = await restored.venue.select().from(fiscalAllocations);
@@ -559,21 +561,17 @@ describe("selected-hour admission before archive placement", () => {
       status: "preview",
       identity: "0CNSM",
     });
-    const selected = (await f.invoke({
-      action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
-    })) as { input: unknown };
+    const selected = (await f.selectPastWaits()) as { input: unknown };
     expect(selected).toMatchObject({
       status: "selected",
-      identity: "0CNSM",
+      identity: "0CNSP",
       input: {
         allocation: {
-          installationIdentity: "0CNSM",
+          installationIdentity: "0CNSP",
           series: [
-            { code: "A-0CNSM", purpose: "standard" },
-            { code: "FF-0CNSM", purpose: "full" },
-            { code: "R-0CNSM", purpose: "rectificative" },
+            { code: "A-0CNSP", purpose: "standard" },
+            { code: "FF-0CNSP", purpose: "full" },
+            { code: "R-0CNSP", purpose: "rectificative" },
           ],
         },
       },
@@ -598,9 +596,9 @@ describe("selected-hour admission before archive placement", () => {
     try {
       const result = await restored.venue.select().from(invoiceSeries);
       expect(result.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-        "A-0CNSM",
-        "FF-0CNSM",
-        "R-0CNSM",
+        "A-0CNSP",
+        "FF-0CNSP",
+        "R-0CNSP",
       ]);
       expect(result.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
         123, 123, 123,
@@ -622,9 +620,7 @@ describe("selected-hour admission before archive placement", () => {
       if (fault === "isolation") changed.context.oldBoxGone = false;
       if (fault === "parallel") changed.context.soleRecovery = false;
       const history = await readModulePreparationHistory(f.roots, binding.module);
-      await expect(
-        f.invoke({ action: "select", answer: "no", installationCodes: ["0CNNW"] }, changed),
-      ).rejects.toMatchObject({
+      await expect(f.select(changed)).rejects.toMatchObject({
         code: "module.operation_invalid",
       });
       expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(history);
@@ -780,15 +776,18 @@ describe("selected-hour admission before archive placement", () => {
         }
       };
       const rows = await suite.db.select().from(invoiceSeries);
-      const challenge = await send({ action: "clock-challenge" });
-      await send({
-        action: "compare-clocks",
-        browser: { challengeId: challenge.id, instantMs: Date.now() },
+      agreeInternet();
+      const selected = await selectPastWaits(clock, async () => {
+        const challenge = await send({ action: "clock-challenge" });
+        const compared = await send({
+          action: "compare-clocks",
+          browser: { challengeId: challenge.id, instantMs: Date.now() },
+        });
+        return send({ action: "select", comparisonId: compared.id, installationCodes: ["0CNNY"] });
       });
-      const selected = await send({ action: "select", answer: "no", installationCodes: ["0CNNW"] });
       expect(selected).toMatchObject({
         status: "selected",
-        identity: kind === "bucket" ? "0CNVG" : "0CNSM",
+        identity: kind === "bucket" ? "0CNVJ" : "0CNSP",
         binding: request.binding,
       });
       expect(await suite.db.select().from(invoiceSeries)).toEqual(rows);

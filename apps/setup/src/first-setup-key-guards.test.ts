@@ -105,7 +105,7 @@ it("requires a fresh ownership read before replacing a key after a lost candidat
   await session.open();
   await session.claim(venue);
   await expect(
-    session.candidates("fiscal-verifactu", { answer: "no" }, venue.admin.password),
+    session.candidates("fiscal-verifactu", { comparisonId: "comparison" }, venue.admin.password),
   ).rejects.toThrow("lost candidate reply");
   expect(session.recoveryRequired).toBe(true);
   await expect(

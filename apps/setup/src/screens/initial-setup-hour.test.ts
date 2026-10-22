@@ -90,7 +90,7 @@ it("projects owned clock preparation without password or activation and removes 
 });
 it("returns a server wait without fetching an unfrozen request or enabling Review", async () => {
   const { el, actions, requests } = await mount(true);
-  const pending = actions.candidates({ answer: "yes" });
+  const pending = actions.candidates({ comparisonId: "comparison" });
   await el.updateComplete;
   el.shadowRoot!.querySelector("[data-test=owner-password]")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: venue.admin.password } }),

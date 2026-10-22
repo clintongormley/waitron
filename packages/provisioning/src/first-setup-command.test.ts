@@ -11,6 +11,7 @@ import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { firstSetupModuleContext } from "./first-setup-module-context.js";
 import { prepareFirstSetupCommand, resumeFirstSetupCommand } from "./first-setup-command.js";
 import { MODULE, PASSWORD, request } from "../test/first-setup-request.js";
+import { moveFakeClockPast, prepareCommandPastWaits } from "../test/settle-wait.js";
 
 const NOW = Date.parse("2026-10-16T11:40:00Z");
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
@@ -23,15 +24,15 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
 const roots: string[] = [];
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(NOW);
   external.internet.mockImplementation(async () => ({
     source: "internet",
     result: "usable",
-    instantMs: NOW,
+    instantMs: Date.now(),
     uncertaintyMs: 500,
-    wallStartedMs: NOW,
-    wallFinishedMs: NOW,
+    wallStartedMs: Date.now(),
+    wallFinishedMs: Date.now(),
     monotonicStartedMs: performance.now(),
     monotonicFinishedMs: performance.now(),
   }));
@@ -242,14 +243,27 @@ it("reuses the exact prepared state without another question or another spent ho
 
 it("imports an already selected request without selecting another hour", async () => {
   const f = await fixture();
-  await f.runtime.preparation.prepare(
-    f.owner,
-    MODULE,
-    { action: "compare-clocks", browser: null },
-    { onBox: true },
-  );
-  const proof = await f.runtime.owner.reconfirm(f.owner, PASSWORD, "block-use");
-  const selected = await f.runtime.preparation.select(f.owner, MODULE, { answer: "no" }, proof);
+  let selected;
+  for (let round = 0; ; round++) {
+    const comparison = (await f.runtime.preparation.prepare(
+      f.owner,
+      MODULE,
+      { action: "compare-clocks", browser: null },
+      { onBox: true },
+    )) as { id: string };
+    const proof = await f.runtime.owner.reconfirm(f.owner, PASSWORD, "block-use");
+    selected = await f.runtime.preparation.select(
+      f.owner,
+      MODULE,
+      { comparisonId: comparison.id },
+      proof,
+    );
+    const waiting = (selected as { preparation?: { status?: string; targetMs?: number } })
+      .preparation;
+    if (waiting?.status !== "waiting") break;
+    if (round === 3) throw new Error("still waiting after 3 clock moves");
+    moveFakeClockPast(waiting.targetMs!);
+  }
   const before = await readFile(join(f.root, "state/module-preparation-state.json"));
   const result = await prepareFirstSetupCommand(
     f.runtime,
@@ -258,7 +272,7 @@ it("imports an already selected request without selecting another hour", async (
   );
   expect(result.status).toBe("ready");
   expect(result.state.inputs[MODULE]).toMatchObject({
-    allocation: { installationIdentity: "0CNNW" },
+    allocation: { installationIdentity: "0CNNY" },
   });
   expect(f.prompts).toEqual([]);
   expect(await readFile(join(f.root, "state/module-preparation-state.json"))).toEqual(before);
@@ -284,7 +298,7 @@ it("rejects changed module versions even on an already imported request", async 
 
 it("does not report preparation ready after activation has started", async () => {
   const f = await fixture();
-  const first = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
+  const first = await prepareCommandPastWaits(f.runtime, f.owner, f.io);
   const state = await f.runtime.store.update(first.owner.attemptId, first.state.revision, {
     kind: "activation-started",
   });
@@ -296,11 +310,14 @@ it("does not report preparation ready after activation has started", async () =>
 
 it("does not return a stale cancelled owner after another password recovery", async () => {
   const f = await fixture("");
-  f.io.prompt = async () => {
+  external.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
+  const prepare = f.runtime.preparation.prepare;
+  f.runtime.preparation.prepare = async (...args) => {
+    const compared = await prepare(...args);
     await f.runtime.owner.recoverFirstSetup(randomBytes(32).toString("base64url"), {
       password: PASSWORD,
     });
-    return "";
+    return compared;
   };
   await expect(prepareFirstSetupCommand(f.runtime, f.owner, f.io)).rejects.toMatchObject({
     code: "setup.owner_required",
@@ -413,7 +430,7 @@ it("preflights every command contribution before asking for any password or sele
 it("rechecks retired assignment floors before returning an already imported request", async () => {
   let retired: Awaited<ReturnType<NonNullable<ModuleOperationHost["readRetiredSetup"]>>> = [];
   const f = await fixture("no", PASSWORD, ALL_MODULES, async () => retired);
-  const first = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
+  const first = await prepareCommandPastWaits(f.runtime, f.owner, f.io);
   retired = [
     {
       context: firstSetupModuleContext(first.state, MODULE),
@@ -476,7 +493,7 @@ it("retains the same hour wait after recovering ownership with the setup passwor
   expect(await readFile(join(f.root, "state/module-preparation-state.json"))).toEqual(before);
 });
 
-it("keeps clock confirmations tied to the old owner when a durable wait survives recovery", async () => {
+it("keeps a clock comparison tied to the old owner after recovery, with no confirmation to replay", async () => {
   const f = await fixture();
   const comparison = (await f.runtime.preparation.prepare(
     f.owner,
@@ -501,12 +518,23 @@ it("keeps clock confirmations tied to the old owner when a durable wait survives
       },
       { onBox: true },
     ),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "malformed_allocation" },
+  });
+  await expect(
+    f.runtime.preparation.select(
+      owner,
+      MODULE,
+      { comparisonId: comparison.id },
+      await f.runtime.owner.reconfirm(owner, PASSWORD, "block-use"),
+    ),
   ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "clock_stale" } });
 });
 
 async function recoveryDeliveryFixture() {
   const f = await fixture();
-  const prepared = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
+  const prepared = await prepareCommandPastWaits(f.runtime, f.owner, f.io);
   expect(prepared.status).toBe("ready");
   expect(f.runtime).toHaveProperty("keys.stageInitialNodeKey", expect.any(Function));
   expect(f.runtime).toHaveProperty("recoveryDelivery.consume", expect.any(Function));
@@ -517,12 +545,12 @@ async function recoveryDeliveryFixture() {
   );
   const statement = {
     kind: "waitron-recovery-document",
-    installationCodes: ["0CNNW"],
+    installationCodes: ["0CNNY"],
     version: 1,
     scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "preproduction" },
     taxpayerName: request.legalName,
     venueName: request.location.name,
-    createdAt: "2026-10-16T11:40:00.000Z",
+    createdAt: "2026-10-16T11:42:00.001Z",
     nodeKey: { nodeId: staged.key.nodeId, name: staged.key.name },
   };
   const { firstFiscalPublicDigest } = await import("./first-setup-public-digest.js");
@@ -643,7 +671,7 @@ async function resumptionFixture(kept = true) {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(NOW);
   const f = await fixture();
-  const prepared = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
+  const prepared = await prepareCommandPastWaits(f.runtime, f.owner, f.io);
   const io = { ...f.io, prompt: async () => "yes" };
   const path = join(f.root, "recovery.pdf");
   await f.runtime.commandDelivery.deliver(prepared.owner, io, path, "en");
@@ -683,7 +711,7 @@ it("an explicit command resume refreshes clocks and records the recovered owner 
   );
   expect(journal.revisions.at(-1).value.entries.at(-1)).toMatchObject({
     kind: "resume",
-    identity: "0CNNW",
+    identity: "0CNNY",
   });
   await expect(f.runtime.owner.authorize(f.prepared.owner)).rejects.toMatchObject({
     code: "setup.owner_required",
@@ -706,7 +734,7 @@ it("recovered ownership without a newly confirmed kept PDF cannot resume", async
   const journal = JSON.parse(
     await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
   );
-  expect(journal.revisions).toHaveLength(1);
+  expect(journal.revisions).toHaveLength(2);
 });
 
 it("a wrong resume confirmation password cannot record the owner transition", async () => {
@@ -717,7 +745,7 @@ it("a wrong resume confirmation password cannot record the owner transition", as
   const journal = JSON.parse(
     await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
   );
-  expect(journal.revisions).toHaveLength(1);
+  expect(journal.revisions).toHaveLength(2);
 });
 
 it("repeating an explicit resume keeps one owner transition and one PDF", async () => {
@@ -728,7 +756,7 @@ it("repeating an explicit resume keeps one owner transition and one PDF", async 
   const journal = JSON.parse(
     await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
   );
-  expect(journal.revisions).toHaveLength(2);
+  expect(journal.revisions).toHaveLength(3);
   expect(
     journal.revisions
       .at(-1)
@@ -754,10 +782,10 @@ it("the module cannot write a resume outside the host's password authorization s
   const journal = JSON.parse(
     await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
   );
-  expect(journal.revisions).toHaveLength(1);
+  expect(journal.revisions).toHaveLength(2);
 });
 
-it("an old clock confirmation cannot be replayed after recovered-owner resumption", async () => {
+it("an old clock comparison cannot be replayed after recovered-owner resumption", async () => {
   const f = await resumptionFixture();
   await resumeFirstSetupCommand(f.runtime, f.owner, f.io);
   await expect(
@@ -772,8 +800,16 @@ it("an old clock confirmation cannot be replayed after recovered-owner resumptio
     ),
   ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "clock_confirmation_required" },
+    params: { reason: "malformed_allocation" },
   });
+  await expect(
+    f.runtime.preparation.select(
+      f.owner,
+      MODULE,
+      { comparisonId: f.oldComparison.id },
+      await f.runtime.owner.reconfirm(f.owner, PASSWORD, "block-use"),
+    ),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
 });
 
 it("an expired kept grant cannot authorize resumption", async () => {
@@ -798,7 +834,7 @@ it("a changed staged key cannot authorize resumption with the original kept docu
 
 it("the shared host refuses direct resumption by an owner who has not recovered ownership", async () => {
   const f = await fixture();
-  const prepared = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
+  const prepared = await prepareCommandPastWaits(f.runtime, f.owner, f.io);
   await f.runtime.commandDelivery.deliver(
     prepared.owner,
     { ...f.io, prompt: async () => "yes" },

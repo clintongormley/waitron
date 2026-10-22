@@ -330,18 +330,17 @@ it("completes a real sale after current-hour recovery without calling fetch or r
     await copy.close();
   }
 });
-it("refuses a fresh recovery of the older backup in an already spent hour", async () => {
+it("gives a fresh recovery of the older backup a later name than the spent minute", async () => {
   const f = await stage("archive");
   await f.run();
   const committed = await f.snapshot();
   const retained = f.journal();
-  await expect(f.nextEvent()).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "hour_not_later" },
-  });
+  const next = (await f.nextEvent()) as { status: string; identity: string };
+  expect(next).toMatchObject({ status: "selected", identity: "0CNQT" });
+  expect(next.identity > "0CNQR").toBe(true);
   expect(await f.snapshot()).toEqual(committed);
   expect(committed.records).toEqual(f.original);
-  expect(f.journal()).toBe(retained);
+  expect(f.journal()).not.toBe(retained);
 });
 it("replays its exact committed result after trading-settings publication is interrupted", async () => {
   const f = await stage("archive");
