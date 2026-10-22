@@ -33,12 +33,12 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
-    "@vitest/browser-playwright": "^4.1.11",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/browser-playwright": "^4.1.12",
+    "@vitest/coverage-v8": "^4.1.12",
     "@waitron/migrations": "workspace:*",
     "drizzle-kit": "^0.31.11",
     "playwright": "^1.64.1",
     "typescript": "^7.0.0",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   }
 }
