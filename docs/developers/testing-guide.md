@@ -2572,9 +2572,9 @@ one-line correction; every assertion and the initial date stay unchanged.
 
 ## Run backup verification with worker threads denied
 
-`apps/server/src/backup-verification.permission.test.ts` builds the real private verifier and runs
-it under Node's `--permission` mode without worker, child-process or network permission. The test
-grants reads to its bundle, migrations and archive, and writes to its scratch and ordinary-open
+`apps/server/src/backup-verification.permission.test.ts` builds the private verifier separately and imports
+that bundle under Node's `--permission` mode without worker, child-process or network permission. The test
+grants reads to the checkout and its private fixture folder, and writes to its scratch and ordinary-open
 probe directories. It checks every installed owner, compares the source and migrated rows, and
 keeps the original archive bytes unchanged. A direct worker control and an ordinary venue open
 must both refuse with `WorkerThreads`; a permitted ordinary open must create a real watchdog.

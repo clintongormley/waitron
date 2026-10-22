@@ -16,7 +16,10 @@ import { copyMigrationsRoot } from "./testing/boot-harness.js";
 
 const realFs = await vi.importActual<typeof fs>("node:fs/promises");
 const suite = useBackupVerificationFixture();
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.mocked(fs.rm).mockImplementation(realFs.rm);
+});
 const cleanEnv = {
   ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
   NODE_OPTIONS: "",
@@ -28,22 +31,30 @@ it("real bundled verifier passes with workers denied while ordinary opens still 
   const root = await realpath(f.root);
   f.deps.artifactPath = f.deps.artifactPath.replace(f.root, root);
   f.deps.scratchRoot = f.deps.scratchRoot.replace(f.root, root);
-  const entry = join(root, "permission-runner.ts");
   const bundle = join(root, "permission-runner.mjs");
+  const verifier = join(root, "backup-verification.mjs");
+  const ordinarySource = join(root, "ordinary-controls.ts");
+  const ordinaryBundle = join(root, "ordinary-controls.mjs");
   const migrationsRoot = join(root, "drizzle");
   const input = join(root, "request.json");
   await copyMigrationsRoot(migrationsRoot);
   await symlink(resolve("node_modules"), join(root, "node_modules"));
   await writeFile(
-    entry,
+    ordinarySource,
+    `
+    export { openVenueDatabase } from "@waitron/db";
+    export { runningWatchdog } from ${JSON.stringify(resolve("../../packages/store/src/venue-liveness.ts"))};
+  `,
+  );
+  await writeFile(
+    bundle,
     `
     import assert from "node:assert/strict";
     import { readFile, readdir, mkdir } from "node:fs/promises";
     import { join } from "node:path";
     import { Worker } from "node:worker_threads";
-    import { BACKUP_VERIFICATION_MODULES, currentBackupVerificationTarget, verifyBackupArtifact } from ${JSON.stringify(resolve("src/backup-verification-entry.ts"))};
-    import { openVenueDatabase } from "@waitron/db";
-    import { runningWatchdog } from ${JSON.stringify(resolve("../../packages/store/src/venue-liveness.ts"))};
+    import { BACKUP_VERIFICATION_MODULES, currentBackupVerificationTarget, verifyBackupArtifact } from ${JSON.stringify(verifier)};
+    import { openVenueDatabase, runningWatchdog } from ${JSON.stringify(ordinaryBundle)};
     import { DatabaseSync } from "node:sqlite";
     async function snapshot(query) {
       const tables = [];
@@ -94,7 +105,11 @@ it("real bundled verifier passes with workers denied while ordinary opens still 
   );
   const built = spawnSync(
     process.execPath,
-    [resolve("../../scripts/bundle-node.mjs"), `${entry}=${bundle}`],
+    [
+      resolve("../../scripts/bundle-node.mjs"),
+      `src/backup-verification-entry.ts=${verifier}`,
+      `${ordinarySource}=${ordinaryBundle}`,
+    ],
     {
       encoding: "utf8",
       env: cleanEnv,
@@ -212,6 +227,16 @@ it.each(["directory removal", "query close"])(
     expect(logicalDatabase(f.databasePath)).toEqual(f.logical);
   },
 );
+
+it("an ordinary verification passes after the cleanup failure cases", async () => {
+  const f = await suite.create();
+  expect(await verifyBackupArtifact(f.request, f.deps)).toMatchObject({
+    status: "passed",
+    reason: "none",
+    activation: "not_attempted",
+  });
+  expect(await readdir(f.deps.scratchRoot)).toEqual([]);
+});
 
 it.each(["success", "owner refusal"])(
   "closes the placed query before removing its directory after %s",
