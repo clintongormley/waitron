@@ -1,6 +1,7 @@
 import { networkInterfaces } from "node:os";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import type { Context } from "hono";
+import { isLoopbackHost } from "./primary-url.js";
 
 export interface RequestSourceDeps {
   interfaces?: typeof networkInterfaces;
@@ -13,7 +14,7 @@ export interface RequestSourceDeps {
 export function addressIsBox(address: string | undefined, deps: RequestSourceDeps = {}): boolean {
   if (address === undefined) return true;
   const bare = address.replace(/%.*$/, "").replace(/^::ffff:/i, "");
-  if (bare === "::1" || /^127\.\d+\.\d+\.\d+$/.test(bare)) return true;
+  if (isLoopbackHost(bare)) return true;
   return Object.values((deps.interfaces ?? networkInterfaces)()).some((entries) =>
     (entries ?? []).some((entry) => entry.address.replace(/%.*$/, "") === bare),
   );
