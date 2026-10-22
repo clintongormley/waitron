@@ -218,7 +218,6 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const declarationType = requireDeclarationType(c.req.query("declarationType"));
 
       const record = await gated(sessionId, REPORT_EXPORT_PERMISSION, async (tx) => {
-        // The obligado is the database's one taxpayer row.
         const issuer = await readTenant(tx);
         /* v8 ignore start */
         if (issuer === null) {

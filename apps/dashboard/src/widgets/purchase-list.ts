@@ -9,7 +9,7 @@ import { regimeName } from "../i18n/domain.js";
 import type { PurchaseInvoice } from "../api/client.js";
 
 /**
- * DELETE IS A TWO-STEP CONFIRM. A factura recibida is re-keyable (not an immutable fiscal record), so a
+ * DELETE IS A TWO-STEP CONFIRM. A supplier invoice is re-keyable (not an immutable fiscal record), so a
  * heavyweight dialog is disproportionate — but an accidental single click still costs a full re-entry.
  */
 @customElement("dashboard-purchase-list")

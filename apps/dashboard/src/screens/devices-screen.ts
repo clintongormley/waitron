@@ -1110,7 +1110,6 @@ export class DevicesScreen extends LitElement {
     return this.deviceProfiles.find((p) => p.id === deviceProfileId)?.name ?? "";
   }
 
-  /** "Station screen: Cocina, Barra (Deli no longer available)", one per screen the read holds. */
   #screenLine(screen: ResolvedKitchenScreen): string {
     const kind = t(`device_profiles.kitchen_screen.${screen.kind}`);
     const gone = (names: string[]) =>

@@ -63,7 +63,6 @@ export function shownTableNames(ids: readonly string[], tables: readonly TableSt
   });
 }
 
-/** The shown names of the tables `ids` names that `tables` lists, "Mesa 4, 5". */
 export function tablesLabel(ids: readonly string[], tables: readonly TableState[]): string {
   return partyTablesName(shownTableNames(ids, tables));
 }
@@ -72,8 +71,6 @@ export function partyTablesLabel(party: TableParty, tables: readonly TableState[
   return tablesLabel(party.tableIds, tables);
 }
 
-/** The party's display name with its tables, "Ana (Mesa 4, 5)", or the tables alone for a party
- * with no name. */
 export function partyScope(party: TableParty, tables: readonly TableState[]): string {
   const labels = partyTablesLabel(party, tables);
   return party.name === null

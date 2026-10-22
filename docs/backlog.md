@@ -6743,8 +6743,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   pack already names its demo; the data set itself (`apps/server/scripts/demo-seed/data-sets/`)
   moves into `country-es`, plus region demos ("catalán demo in Catalunya"). After A918. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A974. Comments, identifiers and file names in general code to English** (Bucket E and F of the
-  audit). Low priority. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+- **A974. Remaining comments, identifiers and developer UI text in general code to English.**
+  The audit's remaining Bucket E/F sites and the owner-held core-comment PR are listed in the
+  [detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
 - **A975. Developer tools and demo scripts to English** (`dev-setup.ts`, the `*-demo.ts` scripts,
   README examples). Low priority; needed before A977 can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
