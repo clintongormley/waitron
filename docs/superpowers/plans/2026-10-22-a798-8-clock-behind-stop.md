@@ -1,5 +1,9 @@
 # A798-B slice 8 — payments stop while the box's clock reads earlier than its last record
 
+> **Revision 3 (2026-10-23).** Folds in round 3's narrow check of revision 2
+> (`~/waitron-campaign-b/a798-8-plan-review/round3.md`, logs in `r3/`: I1, M1–M3), marked
+> **[round 3 …]**. Nothing else changed.
+>
 > **Revision 2 (2026-10-23).** Folds in plan review round 1
 > (`~/waitron-campaign-b/a798-8-plan-review/round1.md`: C1, I1–I8, M1–M11) and its claim check
 > (`claim-check.md` beside it: findings 1–4) under the driver's rulings. Each change names its
@@ -294,7 +298,7 @@ their log names; their logs are in `~/waitron-campaign-b/a798-8-plan-review/`.
   exported interface `ClockBehindLatestRecord` with its four fields. Then
   `pnpm exec vitest run src/no-regime-vocabulary.test.ts` in `packages/fiscal`: `Tests 100 passed
   (100)`. Control, the first line renamed back to `clockBehindChain(`: `× ./backend.ts does not
-  mention "chain"`, `Failed Tests 1`. The guard's word list is `no-regime-vocabulary.test.ts:56-70`
+  mention "chain"`, `Failed Tests 1`. The guard's word list is `no-regime-vocabulary.test.ts:57-71`
   **(read)**; it strips comments but not strings, so the string `"clock.behind_chain"` must not
   appear in `packages/fiscal` either.
 - **R2 — the narrowed fiscal-core check ignores `packages/core` test files and still sees product
@@ -443,23 +447,32 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
    of its own. The route takes `const reading = deps.clock.now()` once, at the check, and:
    - where the same transaction then rates an invoice, it hands the issue a clock pinned to that
      reading, so the invoice is rated and dated from the reading the check judged:
-     `runPayWorkingOrder` → `fileImmediateSale`'s `issueMoment` (`till-sale.ts:964`), and
+     `runPayWorkingOrder` → `fileImmediateSale`'s `issueMoment` (`till-sale.ts:964`);
+     `runCollectOrder`'s branch for an order with no sale, which issues through `fileImmediateSale`
+     in the same transaction (`till-sale.ts:2214`); `payIntegrated`'s branch for an order that owes
+     nothing, which issues in its first transaction before any card reader (`:1284-1287`,
+     `fileImmediateSale` or `fireAndFileSale`) **[round 3 M1]**; and
      `recordUnpaidDeparture` → `priceForIssuance` (`unpaid-departure.ts:118`). The pinned clock is
      the one `issueMoment` already builds (`issue-moment.ts:22-30`), made an export (`pinnedAt`)
      with no change to what `issueMoment` does;
    - where the transaction issues nothing, the reading stamps the route's own write:
-     `runCollectOrder`'s `settledAt` (`till-sale.ts:2168`), `refundBillPayment`'s `createdAt`
+     `runCollectOrder`'s `settledAt` for an order whose invoice was already filed
+     (`till-sale.ts:2168`), `refundBillPayment`'s `createdAt`
      (`bill-refunds.ts:656`), `beginSettledTenderRefund`'s `createdAt` (`tender-refunds.ts:73`);
    - `beginBillPayment` uses its `reading` parameter;
-   - where the issue comes in a LATER transaction, after the card reader (`payIntegrated`), the
-     check judges its own reading in the first transaction, and the issue keeps its own later
-     reading, which the chain check judges again;
+   - where the issue comes in a LATER transaction, after the card reader (`payIntegrated`'s card
+     branches), the check judges its own reading in the first transaction, and the issue keeps its
+     own later reading, which the chain check judges again;
    - the retry route, the two pending-refund branches and the dashboard callbacks take one reading
      for the check. Whether a stamp later in those transactions should share it was not checked;
      Task 7 Step 0's whole-suite gate shows any existing case that pins one.
-   The existing case that pins this is `vat-rate-at-issue.test.ts:498-515` ("prices and dates the
-   invoice from one reading, even when the clock crosses midnight during the request"). With a
-   second reading for the check it failed (R6); it must pass unedited.
+   The existing case `vat-rate-at-issue.test.ts:498-515` ("prices and dates the invoice from one
+   reading, even when the clock crosses midnight during the request") pins only that the invoice
+   is dated from the request's FIRST reading; it must pass unedited. It does not pin that the check
+   judges that same reading: round 3 took the shared reading first and let the check take its own
+   later `deps.clock.now()`, and the file still gave `Tests 10 passed (10)`
+   (`r3/i6-mutation-own-reading-after.log`, beside `~/waitron-campaign-b/a798-8-plan-review/round3.md`). Task 7 case 9 pins
+   the check's reading **[round 3 I1]**.
 4. **The chain check is `attemptAppend`'s first statement, inside the savepoint**, not
    `appendToChain`'s, before its retry loop. E6: before the loop it breaks three `chain.test.ts`
    cases whose `tx` stubs only `transaction`; E9: inside the attempt they pass unedited. It runs
@@ -564,17 +577,21 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
       lookup's answer). The design's "it sends a refund" is false (Departure 6). But a completed
       outcome stamps `completed_at` from the box's clock, and the cash-up counts the refund in the
       window holding that time (`packages/reporting/src/cash-up.ts:59-61`), so a refund the
-      provider completed today would be counted in an earlier window. **Pauses.** It reads the stop
-      once with the reading it already takes (`:25`) and returns before its batch, touching no row
+      provider completed today would be counted in an earlier window. **Pauses.** Today it keeps only
+      the instant of its reading (`:25`, `const now = deps.clock.now().instant`), and the seat
+      needs the instant and the offset; so `:25` keeps the whole reading, hands it to the seat once,
+      and the rest of the loop reads its `instant` **[round 3 M2]**. On a stop it returns before its batch, touching no row
       and raising no "unresolved" alert, with `nextDueAt` a minute on (`RECHECK_MS`, `:14`).
     - **The refund half of the bill-payments pass** (`settlePendingBillRefunds`,
       `bill-payments-loop.ts:244-290`) acts the same way (`resumeCardRefund(…, "loop", …)`, `:268`;
       `bill-refunds.ts:442-445`, `:460-467`), and its completed outcome is counted by
-      `completed_at` too (`cash-up.ts:51-55`). **Pauses**, the same way: it returns before its
+      `completed_at` too (`cash-up.ts:51-55`). **Pauses**, the same way. It takes no reading at its
+      top today (it reads the clock per refund, `:266`), so it takes one full reading at its top
+      and hands that to the seat **[round 3 M2]**; it returns before its
       batch, touching no refund row and raising no `payment.refund_unresolved`. The pass's payment
       half still runs (decision 17).
 17. **What is not changed.** The Stripe webhook (`webhook.ts:122`, design §4.8 e): it stores the
-    provider's own `settledAt` (`webhook.ts:111-115`), takes no new money and writes no record.
+    provider's own `settledAt` (`webhook.ts:109`), takes no new money and writes no record.
     The payment half of the bill-payments pass (`settlePendingBillPayments`,
     `bill-payments-loop.ts:160-200`), by decision 16's rule: a completion that would file is refused
     by the chain check and retried, raising `payment.bill_settle_failed` (design §4.8 e's table); a
@@ -765,8 +782,9 @@ The conditions most likely to bite that no happy path exercises, each with its t
    is refused whole (Task 8b).
 8. **The fiscal core.** The golden test and `inmutabilidad` unedited and green; `chain.ts` changed
    by one import and one call.
-9. **One reading.** The named check judges the reading the route issues or stamps with; the
-   existing `vat-rate-at-issue.test.ts:498-515` passes unedited (Task 7) **[I6]**.
+9. **One reading.** The named check judges the reading the route issues or stamps with (Task 7
+   case 9); the existing `vat-rate-at-issue.test.ts:498-515`, which pins only that the invoice is
+   dated from the request's first reading, passes unedited (Task 7) **[I6, round 3 I1]**.
 10. **Loops.** Neither refund loop touches a row during the stop, and each settles it after (Task
     9 cases 4 and 4b) **[I3]**.
 
@@ -1066,7 +1084,7 @@ refuseWhileClockBehind(tx: Transaction, reading: Pick<TrustedReading, "instant" 
   and the fake's and none's files with their packages' filters.
 - [ ] **Step 3: Implement.** Give the three declared `packages/core` test sites the two methods
   (setup). Nothing in `packages/fiscal` (code or string) holds "chain" or another word of
-  `no-regime-vocabulary.test.ts:56-70`'s list; the module keeps `clockBehindChain` and the code
+  `no-regime-vocabulary.test.ts:57-71`'s list; the module keeps `clockBehindChain` and the code
   `clock.behind_chain` on its own side.
 - [ ] **Step 4: Typecheck every implementer and caller**:
   `pnpm --filter @waitron/fiscal --filter @waitron/fiscal-verifactu --filter @waitron/fiscal-none --filter @waitron/core --filter @waitron/provisioning --filter @waitron/module --filter @waitron/server typecheck`
@@ -1181,8 +1199,8 @@ ES `"No se puede cobrar: la hora del equipo es anterior a la última venta"`; th
     `backend`; fixed by setup only, in the task that adds that check;
   - **known load flake** — Task 3b Step 3's list and `first-fiscal-launch.test.ts`; rerun alone as
     that step says;
-  - **STOP** — anything else, including `vat-rate-at-issue.test.ts:498-515` (it must pass with one
-    reading) and any assertion that would need changing. Report and wait.
+  - **STOP** — anything else, including `vat-rate-at-issue.test.ts:498-515` (it must pass: the
+    invoice is dated from the request's first reading) and any assertion that would need changing. Report and wait.
   Write the list into the task report and the ledger, then remove the throwaway worktree. Tasks 8a
   onward start only when the list holds no STOP.
 - [ ] **Step 1: Write the failing tests** (each: status, the code, its four params, the
@@ -1206,6 +1224,19 @@ ES `"No se puede cobrar: la hora del equipo es anterior a la última venta"`; th
      `collect` once; NOW − 61 s → 409.
   8. "sells again once the clock passes the record": NOW + 1 min → 200. Every later case reads the
      new NOW (decision 13).
+  9. "judges the request's first reading" **[round 3 I1]**: a clock that moves on 2 minutes at
+     every reading, whose FIRST reading is NOW − 61 s. A counter card sale on `/api/pay` (through
+     `payIntegrated`) → 409 `clock.behind_chain`, `clockAt` the first reading, `collect` never
+     called, nothing written. If the check judged any later reading (NOW + 59 s or after) the
+     reader would be asked and the sale served. The same request as a cash sale on `/api/sales`
+     (through `runPayWorkingOrder`) → 409, nothing written. **Limit (read, not run):** on that
+     cash path a check that judged a later reading would still be refused, by the chain check,
+     because the invoice carries the pinned first reading; no outcome tells the two apart there, so
+     the proof by deletion (Step 5) runs against the card half. If the route reads the clock before
+     the check, so the check never sees the first reading, the case fails: report it as a STOP.
+     `vat-rate-at-issue.test.ts` does not
+     catch a check judging a later reading (round 3's mutation B,
+     `r3/i6-mutation-own-reading-after.log`: `10 passed (10)`).
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/server exec vitest run src/clock-behind-stop.pay.test.ts` → 1 fails with
   `collect` called and a 400 (E10 (a)); 2 and 4 answer 200; 3 and 5 are refused only after writing,
@@ -1219,8 +1250,10 @@ ES `"No se puede cobrar: la hora del equipo es anterior a la última venta"`; th
 - [ ] **Step 5: Proofs by deletion**: drop the call in `payIntegrated` → cases 1 and 2 FAIL with
   `collect` called; move it inside `if (locked !== undefined)` → case 1 FAILS; move it before the
   replay → case 6 and `till-pay.clock.test.ts:135-149` FAIL; drop it in `runCollectOrder` → case 4
-  FAILS; let the check in `runPayWorkingOrder` take its own `deps.clock.now()` instead of the shared
-  reading → `vat-rate-at-issue.test.ts`' "prices and dates the invoice from one reading…" FAILS.
+  FAILS; let the check in `payIntegrated` judge its own `deps.clock.now()` taken after a first
+  one → case 9's card half FAILS (served, `collect` called) **[round 3 I1]**. The same change in
+  `runPayWorkingOrder` is not caught by an outcome (case 9's limit); its one-reading rule is
+  checked by reading the diff.
 - [ ] **Step 6: Commit.**
   ```bash
   git add apps/server/src/till-sale.ts apps/server/src/issue-moment.ts apps/server/src/till-api.ts apps/server/src/clock-behind-stop.pay.test.ts apps/server/src/till-api.test.ts apps/server/src/till-api.zone-required.test.ts
@@ -1324,8 +1357,11 @@ tests prove it through the routes.
   `if (begun.replayed)` at `:85`, before a `pending` row is returned; and right after `:85` for
   every new refund), `apps/server/src/tender-refund-api.ts` (the retry callback after `:274`),
   `apps/server/src/tender-refund-recovery.ts` (decision 16, at the top of `recoverTenderRefunds`,
-  on the reading at `:25`), `apps/server/src/bill-payments-loop.ts` (decision 16, at the top of
-  `settlePendingBillRefunds`, `:244`) **[I3]**
+  on one full reading: `:25` keeps `deps.clock.now()` whole instead of only its `instant`, and
+  hands it to `clockBehindLatestRecord`), `apps/server/src/bill-payments-loop.ts` (decision 16, at
+  the top of `settlePendingBillRefunds`, `:244`, which takes no reading there today: it takes one
+  full `deps.clock.now()` at its top and hands it to the seat; its per-refund reading at `:266`
+  stays) **[I3, round 3 M2]**
 - Create: `apps/server/src/clock-behind-stop.refunds.test.ts` (under decision 13's rules); a case
   in `apps/server/src/webhook.test.ts`
 
@@ -1354,7 +1390,7 @@ tests prove it through the routes.
      same row.
   6. In `webhook.test.ts`: "records a hosted payment while the box's clock reads behind its last
      sale": a record seeded a day after the webhook's clock; the delivered payment is recorded with
-     the event's own `settledAt` (`webhook.ts:111-115`), and no `clock.*` refusal is raised (§8,
+     the event's own `settledAt` (`webhook.ts:109`), and no `clock.*` refusal is raised (§8,
      third bullet) **[M8]**.
   7. The control a minute inside for 1.
   8. "refuses the resend of a pending connected refund and sends nothing" **[C1]**: a connected
@@ -1802,3 +1838,19 @@ What each says, in the guides' own plain style (`~/.claude/docs-writing-style.md
 - Not changed: the golden test, `inmutabilidad`, `computeHuella`, the chain's code beyond Task 3's
   one call, numbering, `registros_facturacion`'s writer and the alta builders. `issueMoment`'s
   pinned clock becomes an export with no change to what it does.
+
+**Revision 3, finding by finding** (round 3; each applied as the driver ruled).
+- I1: decision 3 and Review focus 9 now say `vat-rate-at-issue.test.ts:498-515` pins only that the
+  invoice is dated from the request's first reading (round 3's mutation B passed it,
+  `r3/i6-mutation-own-reading-after.log`). Task 7 gains case 9, a clock moving 2 minutes per
+  reading whose first reading is 61 s behind → 409 `clock.behind_chain`, and Step 5's proof by
+  deletion points at it. One adjustment, stated at the case: on the cash path through
+  `runPayWorkingOrder` the chain check would still refuse a check that judged a later reading, so
+  the proof runs against the card half through `payIntegrated` (read, not run).
+- M1: decision 3 hands the pinned clock to `runCollectOrder`'s no-sale branch (`till-sale.ts:2214`)
+  and `payIntegrated`'s owes-nothing branch (`:1284-1287`); the "issues nothing" and "issues later"
+  lines are narrowed to the paths they fit.
+- M2: decision 16 and Task 9 say what reading each loop hands the seat: `tender-refund-recovery.ts:25`
+  keeps the whole reading; `settlePendingBillRefunds` takes one full reading at its top (its
+  per-refund reading is at `bill-payments-loop.ts:266`, not round 3's `:265`).
+- M3: `webhook.ts:109` and `no-regime-vocabulary.test.ts:57-71`.
