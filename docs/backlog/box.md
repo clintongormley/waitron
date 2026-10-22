@@ -590,6 +590,60 @@ moves the database into place, so a full disk at that move leaves the old databa
 active identity file; found by the finish-branch review's run-it seat with an injected ENOSPC,
 and it predates A538-5 too (`placeValidated`, `setAsideExistingIdentity`).
 
+## 2026-10-22 CURRENT A799 addendum: F answered; complete design for planning review
+
+This addendum takes precedence over the previous CURRENT A799 addendum and historical
+Upgrade testing area below. The entire earlier file remains unchanged apart from this
+insertion. **Only A–F's precise scopes are agreed; the full design, plan and build remain
+unapproved.** Earlier unanswered questions and alternatives are historical, not live choices.
+
+The owner answered F on 22 October at approximately 12:30 in Lane F's `questions.md`:
+every candidate runs from the oldest supported release and previous retained source release,
+counting equal endpoints once. The oldest stays required until the owner explicitly retires
+it and names its replacement. **No automatic rolling window.** Keep every original release
+bundle and expectation set, including retired sources.
+
+Imagine qualified R1/R2/R3/R4 sources and candidate R5 within one post-A760-reset history.
+Without an actual retirement, require **R1 to R5 and R4 to R5**. A hypothetical explicit
+owner decision retiring R1 and naming R2 as replacement effective for R5 would require
+**R2 to R5 and R4 to R5**. No specific retirement is approved. Retain every R1–R4 original
+and expectation set. Endpoint runs supply no passing result for unrun releases; retirement
+changes neither exact comparisons nor any published support guarantee.
+
+A–E remain unchanged: invented venue history written by the frozen older product through
+normal supported paths; B's required endpoints; each bundle/facts in its own Waitron GitHub
+Release with checksums in Git and private CI download verification through existing access
+still pending; required issued F1 preservation of its original recorded customer name/address;
+and exact old-product-assigned IDs, invoice numbers, dates and timestamps. A fresh capture
+with different values gets its own version and independently reviewed expectations. The
+candidate never supplies expectations. If the old product cannot issue F1 normally, identify
+the prerequisite from evidence and leave A799 open. No unpaid order, F2, restart, new sale,
+new writer or F1 enablement replaces that check.
+
+The [complete design for review](../superpowers/specs/2026-10-19-a799-real-database-upgrade-testing-design.md)
+keeps A760 execution/reset authority separate, requires a qualifying post-reset capture and
+a distinct later candidate applying pending migrations through normal boot in that same
+history. Same-image runs are restart-only. Keep optional-module-off cases, independently
+frozen expectations, exact raw fiscal bytes and node/SIF/series identity, whole stopped-state
+capture, isolated disposable copies, exact comparisons and a separate new-sale result.
+Missing required inputs or prerequisites block runtime work rather than loosen requirements.
+
+**One next question: do you approve this complete design for preparing the implementation
+plan, with all conditions preserved?** Recommend yes. That authorises **PLAN ONLY**, a
+documentation-only plan separately reviewed and landed before a later build decision.
+It approves no unwritten plan, build, capture, runtime probe, migration, reset, upload,
+release-bundle publication, fiscal change or F1 enablement. Landing the plan grants none
+of those authorities. The future plan must evaluate actual interfaces/identity seams,
+availability, budgets, containment and private CI access through existing permissions.
+
+[Static F/design boards](mockups/a799-real-database-upgrade-testing/revision-f-and-complete-design/README.md)
+were rendered and individually inspected in both languages, themes and widths. Native SVG
+text-bounds and overlap checks passed. Source observations at
+`87f19d4bc98d2fb7925e886228430cabfc490a9b` remain historical and **UNVERIFIED at runtime**.
+This documentation answer supplies no runtime, capture, upgrade, new-sale, size or access
+result and makes no A799 completion claim.
+
+---
 ## 2026-10-22 CURRENT A799 addendum: assigned values agreed; support boundary open
 
 This addendum takes precedence over the historical Upgrade testing area immediately

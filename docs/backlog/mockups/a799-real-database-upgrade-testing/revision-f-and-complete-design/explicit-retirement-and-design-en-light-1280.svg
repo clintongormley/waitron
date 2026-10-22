@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1929" viewBox="0 0 1280 1929" xml:lang="en">
+<title>A799 · Keep yesterday’s records exact</title>
+<desc>F is answered. The complete design, plan and build are not yet approved. These static boards support one planning-only approval question.</desc>
+<rect width="1280" height="1929" fill="#f7f7f8"/>
+<g font-family="Arial, sans-serif">
+<text x="32" y="38" font-size="22" fill="#16181d" font-weight="700">A799 · Keep yesterday’s records exact</text>
+<text x="32" y="70" font-size="14" fill="#1a5fd0" font-weight="700">22 OCT 2026 · A–F AGREED WITHIN PRECISE SCOPES</text>
+<text x="32" y="98" font-size="16" fill="#5c626e">F is answered. The complete design, plan and build are not yet approved. These static boards support one planning-only</text>
+<text x="32" y="122" font-size="16" fill="#5c626e">approval question.</text>
+<rect x="32" y="160" width="596" height="425" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="48" y="189" font-size="18" fill="#1a5fd0" font-weight="700">A / B / C · Agreed scope</text>
+<text x="48" y="223" font-size="16" fill="#16181d" font-weight="700">A · Let the old product write</text>
+<text x="48" y="249" font-size="16" fill="#5c626e">Use an invented venue written through an immutable older</text>
+<text x="48" y="273" font-size="16" fill="#5c626e">product’s normal paths. No private venue data, current</text>
+<text x="48" y="297" font-size="16" fill="#5c626e">writers or domain seed SQL.</text>
+<text x="48" y="335" font-size="16" fill="#16181d" font-weight="700">B · Two required sources</text>
+<text x="48" y="361" font-size="16" fill="#5c626e">Every candidate checks the oldest supported and previous</text>
+<text x="48" y="385" font-size="16" fill="#5c626e">retained source releases before publication. Count equal</text>
+<text x="48" y="409" font-size="16" fill="#5c626e">endpoints once.</text>
+<text x="48" y="447" font-size="16" fill="#16181d" font-weight="700">C · Keep originals retrievable</text>
+<text x="48" y="473" font-size="16" fill="#5c626e">Each release’s bundle and independent facts live in its own</text>
+<text x="48" y="497" font-size="16" fill="#5c626e">GitHub Release on the Waitron repository; checksums stay in</text>
+<text x="48" y="521" font-size="16" fill="#5c626e">Git. Verify private CI downloads later through existing</text>
+<text x="48" y="545" font-size="16" fill="#5c626e">access. No new token or permission expansion.</text>
+<rect x="652" y="160" width="596" height="489" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="668" y="189" font-size="18" fill="#1a5fd0" font-weight="700">F · Explicit retirement agreed</text>
+<text x="668" y="223" font-size="16" fill="#16181d" font-weight="700">One post-reset history</text>
+<text x="668" y="249" font-size="16" fill="#5c626e">Imagine qualified sources R1, R2, R3, R4 and candidate R5.</text>
+<text x="668" y="273" font-size="16" fill="#5c626e">R1 is oldest supported; R4 is previous retained. These are</text>
+<text x="668" y="297" font-size="16" fill="#5c626e">invented labels, not passing results.</text>
+<text x="668" y="335" font-size="16" fill="#16181d" font-weight="700">Required for R5: R1 and R4</text>
+<text x="668" y="361" font-size="16" fill="#5c626e">The oldest stays until the owner explicitly retires it and</text>
+<text x="668" y="385" font-size="16" fill="#5c626e">names its replacement. No automatic rolling window.</text>
+<text x="668" y="423" font-size="16" fill="#16181d" font-weight="700">Hypothetical only: R2 and R4</text>
+<text x="668" y="449" font-size="16" fill="#5c626e">An explicit R1 retirement naming R2 as replacement</text>
+<text x="668" y="473" font-size="16" fill="#5c626e">effective for R5 would change the required sources. No</text>
+<text x="668" y="497" font-size="16" fill="#5c626e">specific retirement is approved.</text>
+<text x="668" y="535" font-size="16" fill="#16181d" font-weight="700">Keep every R1–R4 original</text>
+<text x="668" y="561" font-size="16" fill="#5c626e">Keep every bundle and expectation set, even after</text>
+<text x="668" y="585" font-size="16" fill="#5c626e">retirement. Unrun releases get no passing result. No</text>
+<text x="668" y="609" font-size="16" fill="#5c626e">published support guarantee changes.</text>
+<rect x="32" y="673" width="596" height="497" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="48" y="702" font-size="18" fill="#1a5fd0" font-weight="700">D / E · Original facts stay exact</text>
+<text x="48" y="736" font-size="16" fill="#16181d" font-weight="700">D · Required issued F1</text>
+<text x="48" y="762" font-size="16" fill="#5c626e">F1 means a full customer invoice. Harbour’s invoice to Mara</text>
+<text x="48" y="786" font-size="16" fill="#5c626e">Soler, 18 Market Street, must keep its original recorded</text>
+<text x="48" y="810" font-size="16" fill="#5c626e">name/address even if live customer details later change.</text>
+<text x="48" y="834" font-size="16" fill="#5c626e">This example is invented.</text>
+<text x="48" y="872" font-size="16" fill="#16181d" font-weight="700">No substitute for issued F1</text>
+<text x="48" y="898" font-size="16" fill="#5c626e">Missing normal-path F1 needs an evidence-based</text>
+<text x="48" y="922" font-size="16" fill="#5c626e">prerequisite; A799 stays open. An unpaid order, F2 receipt,</text>
+<text x="48" y="946" font-size="16" fill="#5c626e">restart, new sale or new fiscal writer cannot fill the gap.</text>
+<text x="48" y="970" font-size="16" fill="#5c626e">No F1 enablement is authorised.</text>
+<text x="48" y="1008" font-size="16" fill="#16181d" font-weight="700">E · Keep assigned values</text>
+<text x="48" y="1034" font-size="16" fill="#5c626e">Keep the exact IDs, invoice numbers, dates and timestamps</text>
+<text x="48" y="1058" font-size="16" fill="#5c626e">the old product assigned. Freeze independent expectations</text>
+<text x="48" y="1082" font-size="16" fill="#5c626e">before candidate access. A fresh capture with different</text>
+<text x="48" y="1106" font-size="16" fill="#5c626e">values gets a new version and independent review; keep</text>
+<text x="48" y="1130" font-size="16" fill="#5c626e">every original.</text>
+<rect x="652" y="673" width="596" height="561" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="668" y="702" font-size="18" fill="#1a5fd0" font-weight="700">Proposed design · Capture and upgrade</text>
+<text x="668" y="736" font-size="16" fill="#16181d" font-weight="700">A760 authority stays separate</text>
+<text x="668" y="762" font-size="16" fill="#5c626e">Capture only after its separately authorised reset, within</text>
+<text x="668" y="786" font-size="16" fill="#5c626e">the same resulting migration history. A qualifying</text>
+<text x="668" y="810" font-size="16" fill="#5c626e">immutable source is still needed.</text>
+<text x="668" y="848" font-size="16" fill="#16181d" font-weight="700">Seal the whole stopped state</text>
+<text x="668" y="874" font-size="16" fill="#5c626e">Keep product transcripts, matching</text>
+<text x="668" y="898" font-size="16" fill="#5c626e">database/configuration/key files, historical triggers and</text>
+<text x="668" y="922" font-size="16" fill="#5c626e">independent expectations. Verify checksums. Candidate code</text>
+<text x="668" y="946" font-size="16" fill="#5c626e">cannot write the originals or expectations.</text>
+<text x="668" y="984" font-size="16" fill="#16181d" font-weight="700">Use the real candidate boot</text>
+<text x="668" y="1010" font-size="16" fill="#5c626e">Use an isolated disposable copy and normal packaged entry.</text>
+<text x="668" y="1034" font-size="16" fill="#5c626e">A distinct later candidate must apply actual pending</text>
+<text x="668" y="1058" font-size="16" fill="#5c626e">migrations. Same-image runs are restart-only. No reset,</text>
+<text x="668" y="1082" font-size="16" fill="#5c626e">restore or new identity.</text>
+<text x="668" y="1120" font-size="16" fill="#16181d" font-weight="700">Keep optional modules off</text>
+<text x="668" y="1146" font-size="16" fill="#5c626e">Retain disabled-module rows through a supported toggle.</text>
+<text x="668" y="1170" font-size="16" fill="#5c626e">Otherwise use a never-enabled fixture and report</text>
+<text x="668" y="1194" font-size="16" fill="#5c626e">retained-data coverage missing.</text>
+<rect x="32" y="1258" width="596" height="473" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="48" y="1287" font-size="18" fill="#1a5fd0" font-weight="700">Proposed design · Two results</text>
+<text x="48" y="1321" font-size="16" fill="#16181d" font-weight="700">First: preserve old history</text>
+<text x="48" y="1347" font-size="16" fill="#5c626e">Compare original IDs, relationships, exact scales, dates,</text>
+<text x="48" y="1371" font-size="16" fill="#5c626e">names, schema/protections and raw fiscal bytes. Keep</text>
+<text x="48" y="1395" font-size="16" fill="#5c626e">node/SIF installation/series identity, next number and</text>
+<text x="48" y="1419" font-size="16" fill="#5c626e">chain head. Candidate output never supplies expectations.</text>
+<text x="48" y="1457" font-size="16" fill="#16181d" font-weight="700">Then: a separate new sale</text>
+<text x="48" y="1483" font-size="16" fill="#5c626e">Yesterday’s 0.350 kg cheese line at €22.00/kg stays €7.70.</text>
+<text x="48" y="1507" font-size="16" fill="#5c626e">A new line at €24.00/kg is €8.40. Use another preserved</text>
+<text x="48" y="1531" font-size="16" fill="#5c626e">copy and the same identity/chain. These are illustrative</text>
+<text x="48" y="1555" font-size="16" fill="#5c626e">calculations.</text>
+<text x="48" y="1593" font-size="16" fill="#16181d" font-weight="700">Neither result fills the other</text>
+<text x="48" y="1619" font-size="16" fill="#5c626e">New-sale success cannot repair failed preservation or</text>
+<text x="48" y="1643" font-size="16" fill="#5c626e">missing issued F1. Keep fiscal writers, golden huella and</text>
+<text x="48" y="1667" font-size="16" fill="#5c626e">inmutabilidad unchanged. Missing/corrupt inputs and cleanup</text>
+<text x="48" y="1691" font-size="16" fill="#5c626e">failures block the run.</text>
+<rect x="652" y="1258" width="596" height="537" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="668" y="1287" font-size="18" fill="#1a5fd0" font-weight="700">One question · Planning only</text>
+<text x="668" y="1321" font-size="16" fill="#16181d" font-weight="700">Complete-design approval</text>
+<text x="668" y="1347" font-size="16" fill="#5c626e">Do you approve this complete design for preparing the</text>
+<text x="668" y="1371" font-size="16" fill="#5c626e">implementation plan, with all conditions preserved?</text>
+<text x="668" y="1409" font-size="16" fill="#16181d" font-weight="700">Recommendation: yes</text>
+<text x="668" y="1435" font-size="16" fill="#5c626e">This authorises PLAN ONLY: a documentation-only plan,</text>
+<text x="668" y="1459" font-size="16" fill="#5c626e">separately reviewed and landed before a later build</text>
+<text x="668" y="1483" font-size="16" fill="#5c626e">decision. It does not approve the unwritten plan.</text>
+<text x="668" y="1521" font-size="16" fill="#16181d" font-weight="700">No execution authority</text>
+<text x="668" y="1547" font-size="16" fill="#5c626e">No build, capture, runtime probe, migration, A760 reset,</text>
+<text x="668" y="1571" font-size="16" fill="#5c626e">upload, fiscal change or F1 enablement. Landing the plan</text>
+<text x="668" y="1595" font-size="16" fill="#5c626e">grants none of these authorities.</text>
+<text x="668" y="1633" font-size="16" fill="#16181d" font-weight="700">Plan must assess real prerequisites</text>
+<text x="668" y="1659" font-size="16" fill="#5c626e">Evaluate actual interfaces, safe identity seams,</text>
+<text x="668" y="1683" font-size="16" fill="#5c626e">image/platform availability, module paths, containment,</text>
+<text x="668" y="1707" font-size="16" fill="#5c626e">budgets and private downloads through existing access.</text>
+<text x="668" y="1731" font-size="16" fill="#5c626e">Missing prerequisites block runtime work; do not loosen</text>
+<text x="668" y="1755" font-size="16" fill="#5c626e">requirements.</text>
+<rect x="32" y="1819" width="1216" height="90" rx="8" fill="#e3ebfb"/>
+<text x="44" y="1847" font-size="14" fill="#5c626e">STATIC DESIGN ARTWORK · NO RUNTIME EVIDENCE. Historical source reads remain UNVERIFIED at runtime. No qualifying capture, migration, upgrade,</text>
+<text x="44" y="1871" font-size="14" fill="#5c626e">preservation, new-sale, size, timing or access result is shown.</text>
+</g>
+</svg>

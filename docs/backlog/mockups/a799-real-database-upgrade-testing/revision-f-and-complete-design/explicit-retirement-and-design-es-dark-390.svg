@@ -1,0 +1,207 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="5484" viewBox="0 0 390 5484" xml:lang="es">
+<title>A799 · Conserva exactos los registros</title>
+<desc>F está respondido. El diseño completo, el plan y la implementación aún no están aprobados. Estas láminas plantean una sola aprobación, únicamente para preparar el plan.</desc>
+<rect width="390" height="5484" fill="#101216"/>
+<g font-family="Arial, sans-serif">
+<text x="18" y="38" font-size="22" fill="#eceef2" font-weight="700">A799 · Conserva exactos los</text>
+<text x="18" y="62" font-size="22" fill="#eceef2" font-weight="700">registros</text>
+<text x="18" y="94" font-size="14" fill="#78a9ff" font-weight="700">22 OCT 2026 · A–F ACORDADOS EN SU</text>
+<text x="18" y="118" font-size="14" fill="#78a9ff" font-weight="700">ALCANCE PRECISO</text>
+<text x="18" y="146" font-size="16" fill="#a1a7b3">F está respondido. El diseño</text>
+<text x="18" y="170" font-size="16" fill="#a1a7b3">completo, el plan y la</text>
+<text x="18" y="194" font-size="16" fill="#a1a7b3">implementación aún no están</text>
+<text x="18" y="218" font-size="16" fill="#a1a7b3">aprobados. Estas láminas plantean</text>
+<text x="18" y="242" font-size="16" fill="#a1a7b3">una sola aprobación, únicamente para</text>
+<text x="18" y="266" font-size="16" fill="#a1a7b3">preparar el plan.</text>
+<rect x="18" y="304" width="354" height="665" rx="8" fill="#22262e" stroke="#333945"/>
+<text x="34" y="333" font-size="18" fill="#78a9ff" font-weight="700">A / B / C · Alcance acordado</text>
+<text x="34" y="367" font-size="16" fill="#eceef2" font-weight="700">A · Escribe el producto antiguo</text>
+<text x="34" y="393" font-size="16" fill="#a1a7b3">Usa un local inventado creado por</text>
+<text x="34" y="417" font-size="16" fill="#a1a7b3">las vías normales de un producto</text>
+<text x="34" y="441" font-size="16" fill="#a1a7b3">antiguo inmutable. Sin datos</text>
+<text x="34" y="465" font-size="16" fill="#a1a7b3">privados, escritores actuales ni</text>
+<text x="34" y="489" font-size="16" fill="#a1a7b3">SQL que inserte datos del</text>
+<text x="34" y="513" font-size="16" fill="#a1a7b3">negocio.</text>
+<text x="34" y="551" font-size="16" fill="#eceef2" font-weight="700">B · Dos versiones de origen</text>
+<text x="34" y="577" font-size="16" fill="#a1a7b3">Cada candidata comprueba la</text>
+<text x="34" y="601" font-size="16" fill="#a1a7b3">versión más antigua admitida y la</text>
+<text x="34" y="625" font-size="16" fill="#a1a7b3">anterior conservada antes de</text>
+<text x="34" y="649" font-size="16" fill="#a1a7b3">publicar. Si coinciden, ejecuta</text>
+<text x="34" y="673" font-size="16" fill="#a1a7b3">una sola comprobación.</text>
+<text x="34" y="711" font-size="16" fill="#eceef2" font-weight="700">C · Conserva los originales</text>
+<text x="34" y="737" font-size="16" fill="#a1a7b3">El paquete y los hechos</text>
+<text x="34" y="761" font-size="16" fill="#a1a7b3">independientes de cada versión</text>
+<text x="34" y="785" font-size="16" fill="#a1a7b3">van en su propia GitHub Release</text>
+<text x="34" y="809" font-size="16" fill="#a1a7b3">del repositorio Waitron; las</text>
+<text x="34" y="833" font-size="16" fill="#a1a7b3">sumas de comprobación quedan en</text>
+<text x="34" y="857" font-size="16" fill="#a1a7b3">Git. Verifica después las</text>
+<text x="34" y="881" font-size="16" fill="#a1a7b3">descargas privadas de CI con el</text>
+<text x="34" y="905" font-size="16" fill="#a1a7b3">acceso existente. Sin nuevos</text>
+<text x="34" y="929" font-size="16" fill="#a1a7b3">tokens ni ampliar permisos.</text>
+<rect x="18" y="993" width="354" height="777" rx="8" fill="#22262e" stroke="#333945"/>
+<text x="34" y="1022" font-size="18" fill="#78a9ff" font-weight="700">F · Retirada explícita</text>
+<text x="34" y="1046" font-size="18" fill="#78a9ff" font-weight="700">acordada</text>
+<text x="34" y="1080" font-size="16" fill="#eceef2" font-weight="700">Un historial tras el reinicio</text>
+<text x="34" y="1106" font-size="16" fill="#a1a7b3">Imagina R1, R2, R3 y R4 como</text>
+<text x="34" y="1130" font-size="16" fill="#a1a7b3">orígenes válidos, y R5 como</text>
+<text x="34" y="1154" font-size="16" fill="#a1a7b3">candidata. R1 es la más antigua</text>
+<text x="34" y="1178" font-size="16" fill="#a1a7b3">admitida; R4, la anterior</text>
+<text x="34" y="1202" font-size="16" fill="#a1a7b3">conservada. Son ejemplos</text>
+<text x="34" y="1226" font-size="16" fill="#a1a7b3">inventados, no resultados.</text>
+<text x="34" y="1264" font-size="16" fill="#eceef2" font-weight="700">Para R5 se exigen R1 y R4</text>
+<text x="34" y="1290" font-size="16" fill="#a1a7b3">La más antigua sigue hasta que el</text>
+<text x="34" y="1314" font-size="16" fill="#a1a7b3">propietario la retire</text>
+<text x="34" y="1338" font-size="16" fill="#a1a7b3">explícitamente y nombre su</text>
+<text x="34" y="1362" font-size="16" fill="#a1a7b3">sustituta. No hay ventana móvil</text>
+<text x="34" y="1386" font-size="16" fill="#a1a7b3">automática.</text>
+<text x="34" y="1424" font-size="16" fill="#eceef2" font-weight="700">Solo hipotético: R2 y R4</text>
+<text x="34" y="1450" font-size="16" fill="#a1a7b3">Retirar R1 explícitamente,</text>
+<text x="34" y="1474" font-size="16" fill="#a1a7b3">nombrando R2 como sustituta con</text>
+<text x="34" y="1498" font-size="16" fill="#a1a7b3">efecto desde R5, cambiaría los</text>
+<text x="34" y="1522" font-size="16" fill="#a1a7b3">orígenes exigidos. No se aprueba</text>
+<text x="34" y="1546" font-size="16" fill="#a1a7b3">ninguna retirada concreta.</text>
+<text x="34" y="1584" font-size="16" fill="#eceef2" font-weight="700">Conserva todos los R1–R4</text>
+<text x="34" y="1610" font-size="16" fill="#a1a7b3">Guarda cada paquete y conjunto de</text>
+<text x="34" y="1634" font-size="16" fill="#a1a7b3">expectativas, incluso tras</text>
+<text x="34" y="1658" font-size="16" fill="#a1a7b3">retirarlo. No atribuyas éxito a</text>
+<text x="34" y="1682" font-size="16" fill="#a1a7b3">versiones no ejecutadas. No</text>
+<text x="34" y="1706" font-size="16" fill="#a1a7b3">cambia ninguna garantía pública</text>
+<text x="34" y="1730" font-size="16" fill="#a1a7b3">de soporte.</text>
+<rect x="18" y="1794" width="354" height="809" rx="8" fill="#22262e" stroke="#333945"/>
+<text x="34" y="1823" font-size="18" fill="#78a9ff" font-weight="700">D / E · Hechos originales</text>
+<text x="34" y="1847" font-size="18" fill="#78a9ff" font-weight="700">exactos</text>
+<text x="34" y="1881" font-size="16" fill="#eceef2" font-weight="700">D · Se exige una F1 emitida</text>
+<text x="34" y="1907" font-size="16" fill="#a1a7b3">F1 es una factura completa a un</text>
+<text x="34" y="1931" font-size="16" fill="#a1a7b3">cliente. La factura de Harbour a</text>
+<text x="34" y="1955" font-size="16" fill="#a1a7b3">Mara Soler, 18 Market Street,</text>
+<text x="34" y="1979" font-size="16" fill="#a1a7b3">debe conservar su</text>
+<text x="34" y="2003" font-size="16" fill="#a1a7b3">nombre/dirección registrados</text>
+<text x="34" y="2027" font-size="16" fill="#a1a7b3">aunque cambien sus datos</text>
+<text x="34" y="2051" font-size="16" fill="#a1a7b3">actuales. El ejemplo es</text>
+<text x="34" y="2075" font-size="16" fill="#a1a7b3">inventado.</text>
+<text x="34" y="2113" font-size="16" fill="#eceef2" font-weight="700">Nada sustituye la F1 emitida</text>
+<text x="34" y="2139" font-size="16" fill="#a1a7b3">Si falta la vía normal de F1,</text>
+<text x="34" y="2163" font-size="16" fill="#a1a7b3">identifica con pruebas el</text>
+<text x="34" y="2187" font-size="16" fill="#a1a7b3">requisito previo; A799 sigue</text>
+<text x="34" y="2211" font-size="16" fill="#a1a7b3">abierto. Ni pedido sin pagar, F2,</text>
+<text x="34" y="2235" font-size="16" fill="#a1a7b3">reinicio, venta nueva ni nuevo</text>
+<text x="34" y="2259" font-size="16" fill="#a1a7b3">escritor fiscal cubren esa falta.</text>
+<text x="34" y="2283" font-size="16" fill="#a1a7b3">No se autoriza habilitar F1.</text>
+<text x="34" y="2321" font-size="16" fill="#eceef2" font-weight="700">E · Conserva los valores</text>
+<text x="34" y="2345" font-size="16" fill="#eceef2" font-weight="700">asignados</text>
+<text x="34" y="2371" font-size="16" fill="#a1a7b3">Conserva ID, números de factura,</text>
+<text x="34" y="2395" font-size="16" fill="#a1a7b3">fechas y horas exactos del</text>
+<text x="34" y="2419" font-size="16" fill="#a1a7b3">producto antiguo. Fija</text>
+<text x="34" y="2443" font-size="16" fill="#a1a7b3">expectativas independientes antes</text>
+<text x="34" y="2467" font-size="16" fill="#a1a7b3">del acceso de la candidata. Otra</text>
+<text x="34" y="2491" font-size="16" fill="#a1a7b3">captura con valores distintos</text>
+<text x="34" y="2515" font-size="16" fill="#a1a7b3">requiere nueva versión y revisión</text>
+<text x="34" y="2539" font-size="16" fill="#a1a7b3">independiente; conserva cada</text>
+<text x="34" y="2563" font-size="16" fill="#a1a7b3">original.</text>
+<rect x="18" y="2627" width="354" height="945" rx="8" fill="#22262e" stroke="#333945"/>
+<text x="34" y="2656" font-size="18" fill="#78a9ff" font-weight="700">Diseño propuesto · Captura y</text>
+<text x="34" y="2680" font-size="18" fill="#78a9ff" font-weight="700">cambio</text>
+<text x="34" y="2714" font-size="16" fill="#eceef2" font-weight="700">A760 mantiene su autorización</text>
+<text x="34" y="2738" font-size="16" fill="#eceef2" font-weight="700">aparte</text>
+<text x="34" y="2764" font-size="16" fill="#a1a7b3">Captura solo tras su reinicio</text>
+<text x="34" y="2788" font-size="16" fill="#a1a7b3">destructivo autorizado por</text>
+<text x="34" y="2812" font-size="16" fill="#a1a7b3">separado, en el mismo historial</text>
+<text x="34" y="2836" font-size="16" fill="#a1a7b3">resultante. Aún hace falta un</text>
+<text x="34" y="2860" font-size="16" fill="#a1a7b3">origen inmutable que cumpla los</text>
+<text x="34" y="2884" font-size="16" fill="#a1a7b3">requisitos.</text>
+<text x="34" y="2922" font-size="16" fill="#eceef2" font-weight="700">Sella todo el estado detenido</text>
+<text x="34" y="2948" font-size="16" fill="#a1a7b3">Conserva transcripciones,</text>
+<text x="34" y="2972" font-size="16" fill="#a1a7b3">archivos de bases de</text>
+<text x="34" y="2996" font-size="16" fill="#a1a7b3">datos/configuración/claves,</text>
+<text x="34" y="3020" font-size="16" fill="#a1a7b3">disparadores históricos y</text>
+<text x="34" y="3044" font-size="16" fill="#a1a7b3">expectativas independientes.</text>
+<text x="34" y="3068" font-size="16" fill="#a1a7b3">Verifica las sumas. La candidata</text>
+<text x="34" y="3092" font-size="16" fill="#a1a7b3">no puede escribir los originales</text>
+<text x="34" y="3116" font-size="16" fill="#a1a7b3">ni las expectativas.</text>
+<text x="34" y="3154" font-size="16" fill="#eceef2" font-weight="700">Arranque real de la candidata</text>
+<text x="34" y="3180" font-size="16" fill="#a1a7b3">Usa una copia desechable aislada</text>
+<text x="34" y="3204" font-size="16" fill="#a1a7b3">y la entrada normal de la imagen.</text>
+<text x="34" y="3228" font-size="16" fill="#a1a7b3">Una candidata posterior distinta</text>
+<text x="34" y="3252" font-size="16" fill="#a1a7b3">debe aplicar migraciones</text>
+<text x="34" y="3276" font-size="16" fill="#a1a7b3">pendientes reales. La misma</text>
+<text x="34" y="3300" font-size="16" fill="#a1a7b3">imagen solo comprueba reinicio.</text>
+<text x="34" y="3324" font-size="16" fill="#a1a7b3">Sin restaurar, reiniciar datos ni</text>
+<text x="34" y="3348" font-size="16" fill="#a1a7b3">crear identidad.</text>
+<text x="34" y="3386" font-size="16" fill="#eceef2" font-weight="700">Módulos opcionales desactivados</text>
+<text x="34" y="3412" font-size="16" fill="#a1a7b3">Conserva sus filas con una</text>
+<text x="34" y="3436" font-size="16" fill="#a1a7b3">desactivación admitida. Si no</text>
+<text x="34" y="3460" font-size="16" fill="#a1a7b3">existe, usa otra captura que</text>
+<text x="34" y="3484" font-size="16" fill="#a1a7b3">nunca los habilitó e indica que</text>
+<text x="34" y="3508" font-size="16" fill="#a1a7b3">falta la cobertura de datos</text>
+<text x="34" y="3532" font-size="16" fill="#a1a7b3">retenidos.</text>
+<rect x="18" y="3596" width="354" height="737" rx="8" fill="#22262e" stroke="#333945"/>
+<text x="34" y="3625" font-size="18" fill="#78a9ff" font-weight="700">Diseño propuesto · Dos</text>
+<text x="34" y="3649" font-size="18" fill="#78a9ff" font-weight="700">resultados</text>
+<text x="34" y="3683" font-size="16" fill="#eceef2" font-weight="700">Primero: conservar el historial</text>
+<text x="34" y="3709" font-size="16" fill="#a1a7b3">Compara ID, relaciones, escalas,</text>
+<text x="34" y="3733" font-size="16" fill="#a1a7b3">fechas, nombres,</text>
+<text x="34" y="3757" font-size="16" fill="#a1a7b3">esquema/protecciones y bytes</text>
+<text x="34" y="3781" font-size="16" fill="#a1a7b3">fiscales exactos. Conserva</text>
+<text x="34" y="3805" font-size="16" fill="#a1a7b3">identidad del nodo/instalación</text>
+<text x="34" y="3829" font-size="16" fill="#a1a7b3">SIF/serie, siguiente número y</text>
+<text x="34" y="3853" font-size="16" fill="#a1a7b3">cabecera de cadena. La candidata</text>
+<text x="34" y="3877" font-size="16" fill="#a1a7b3">no genera expectativas.</text>
+<text x="34" y="3915" font-size="16" fill="#eceef2" font-weight="700">Después: una venta nueva aparte</text>
+<text x="34" y="3941" font-size="16" fill="#a1a7b3">La línea antigua de 0,350 kg a</text>
+<text x="34" y="3965" font-size="16" fill="#a1a7b3">22,00 €/kg sigue en 7,70 €. Una</text>
+<text x="34" y="3989" font-size="16" fill="#a1a7b3">nueva a 24,00 €/kg da 8,40 €. Usa</text>
+<text x="34" y="4013" font-size="16" fill="#a1a7b3">otra copia conservada y la misma</text>
+<text x="34" y="4037" font-size="16" fill="#a1a7b3">identidad/cadena. Son cálculos</text>
+<text x="34" y="4061" font-size="16" fill="#a1a7b3">ilustrativos.</text>
+<text x="34" y="4099" font-size="16" fill="#eceef2" font-weight="700">Ninguno sustituye al otro</text>
+<text x="34" y="4125" font-size="16" fill="#a1a7b3">Una venta nueva no repara la</text>
+<text x="34" y="4149" font-size="16" fill="#a1a7b3">conservación fallida ni la falta</text>
+<text x="34" y="4173" font-size="16" fill="#a1a7b3">de F1 emitida. No cambies</text>
+<text x="34" y="4197" font-size="16" fill="#a1a7b3">escritores fiscales, huella de</text>
+<text x="34" y="4221" font-size="16" fill="#a1a7b3">referencia ni inmutabilidad.</text>
+<text x="34" y="4245" font-size="16" fill="#a1a7b3">Entradas ausentes/corruptas y</text>
+<text x="34" y="4269" font-size="16" fill="#a1a7b3">fallos de limpieza bloquean la</text>
+<text x="34" y="4293" font-size="16" fill="#a1a7b3">ejecución.</text>
+<rect x="18" y="4357" width="354" height="825" rx="8" fill="#22262e" stroke="#333945"/>
+<text x="34" y="4386" font-size="18" fill="#78a9ff" font-weight="700">Una pregunta · Solo preparar</text>
+<text x="34" y="4410" font-size="18" fill="#78a9ff" font-weight="700">el plan</text>
+<text x="34" y="4444" font-size="16" fill="#eceef2" font-weight="700">Aprobación del diseño completo</text>
+<text x="34" y="4470" font-size="16" fill="#a1a7b3">¿Apruebas este diseño completo</text>
+<text x="34" y="4494" font-size="16" fill="#a1a7b3">para preparar el plan de</text>
+<text x="34" y="4518" font-size="16" fill="#a1a7b3">implementación, manteniendo todas</text>
+<text x="34" y="4542" font-size="16" fill="#a1a7b3">las condiciones?</text>
+<text x="34" y="4580" font-size="16" fill="#eceef2" font-weight="700">Recomendación: sí</text>
+<text x="34" y="4606" font-size="16" fill="#a1a7b3">Autoriza SOLO EL PLAN:</text>
+<text x="34" y="4630" font-size="16" fill="#a1a7b3">documentación revisada e</text>
+<text x="34" y="4654" font-size="16" fill="#a1a7b3">incorporada por separado antes de</text>
+<text x="34" y="4678" font-size="16" fill="#a1a7b3">decidir la implementación. No</text>
+<text x="34" y="4702" font-size="16" fill="#a1a7b3">aprueba el plan aún no escrito.</text>
+<text x="34" y="4740" font-size="16" fill="#eceef2" font-weight="700">No autoriza ejecutar</text>
+<text x="34" y="4766" font-size="16" fill="#a1a7b3">Ni implementar, capturar, sondear</text>
+<text x="34" y="4790" font-size="16" fill="#a1a7b3">en ejecución, migrar, reiniciar</text>
+<text x="34" y="4814" font-size="16" fill="#a1a7b3">A760, subir archivos, cambiar lo</text>
+<text x="34" y="4838" font-size="16" fill="#a1a7b3">fiscal ni habilitar F1.</text>
+<text x="34" y="4862" font-size="16" fill="#a1a7b3">Incorporar el plan no concede</text>
+<text x="34" y="4886" font-size="16" fill="#a1a7b3">ninguna de estas autorizaciones.</text>
+<text x="34" y="4924" font-size="16" fill="#eceef2" font-weight="700">Evalúa los requisitos reales</text>
+<text x="34" y="4950" font-size="16" fill="#a1a7b3">El plan evalúa interfaces, vías</text>
+<text x="34" y="4974" font-size="16" fill="#a1a7b3">seguras de identidad,</text>
+<text x="34" y="4998" font-size="16" fill="#a1a7b3">imágenes/plataformas disponibles,</text>
+<text x="34" y="5022" font-size="16" fill="#a1a7b3">módulos, aislamiento,</text>
+<text x="34" y="5046" font-size="16" fill="#a1a7b3">tiempos/recursos y descargas</text>
+<text x="34" y="5070" font-size="16" fill="#a1a7b3">privadas con acceso existente. Si</text>
+<text x="34" y="5094" font-size="16" fill="#a1a7b3">faltan requisitos, bloquea la</text>
+<text x="34" y="5118" font-size="16" fill="#a1a7b3">ejecución sin rebajar las</text>
+<text x="34" y="5142" font-size="16" fill="#a1a7b3">condiciones.</text>
+<rect x="18" y="5206" width="354" height="258" rx="8" fill="#2f3a4d"/>
+<text x="30" y="5234" font-size="14" fill="#a1a7b3">LÁMINAS ESTÁTICAS · SIN PRUEBAS DE</text>
+<text x="30" y="5258" font-size="14" fill="#a1a7b3">EJECUCIÓN. Las lecturas históricas del</text>
+<text x="30" y="5282" font-size="14" fill="#a1a7b3">código siguen SIN VERIFICAR en</text>
+<text x="30" y="5306" font-size="14" fill="#a1a7b3">ejecución. No hay resultados de</text>
+<text x="30" y="5330" font-size="14" fill="#a1a7b3">captura válida, migración,</text>
+<text x="30" y="5354" font-size="14" fill="#a1a7b3">actualización, conservación, venta</text>
+<text x="30" y="5378" font-size="14" fill="#a1a7b3">nueva, tamaño, tiempo ni acceso.</text>
+
+
+</g>
+</svg>

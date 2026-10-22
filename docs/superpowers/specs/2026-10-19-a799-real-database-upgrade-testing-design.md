@@ -1,3 +1,155 @@
+## 2026-10-22 CURRENT precedence addendum: F answered; complete design for planning review
+
+You need an upgrade check that keeps yesterday's records exact without silently dropping
+its oldest required starting point. The owner answered F at approximately 12:30 on
+22 October 2026 in Lane F's `questions.md`, under **OWNER ANSWER — A799 F: keep testing
+from the OLDEST supported release until the owner explicitly retires it**. Every candidate
+must run upgrade checks from the oldest supported release and the previous retained source
+release, counting equal endpoints once. The oldest stays required until the owner explicitly
+retires it and names its replacement. **There is no automatic rolling window.** Keep every
+original release bundle and expectation set, including retired sources.
+
+**Only A–F's precise scopes are agreed. The complete design, implementation plan and build
+are not yet approved.** This is the current, self-contained design for the next approval
+question. It takes precedence over all conflicting wording below. Every earlier byte,
+including the previous CURRENT heading, remains an unchanged historical suffix. Earlier
+questions, alternatives, approval labels and review claims describe their dated revisions;
+they are not live choices or evidence for this revision. A–E are unchanged.
+
+### A–F: the decisions you have made
+
+| Decision                   | Agreed scope                                                                                                                                                                                                                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A: historical source       | Use an invented venue created and written by an immutable frozen older product through its normal supported paths. No private venue data, current writers, direct domain seed SQL or patched old source.                                                                                                           |
+| B: required endpoints      | Every candidate checks the oldest supported and previous retained source releases before publication. Count equal endpoints once. Keep intermediate originals without claiming their unrun checks passed.                                                                                                          |
+| C: storage                 | Keep each release's bundle and independently frozen expected facts in its own GitHub Release on the Waitron repository; keep checksums in Git. Design for private downloads through existing CI repository access, to be verified later. No other provider, new token setup or permission expansion is authorised. |
+| D: issued F1               | A799 cannot close until an issued F1, a full customer invoice, preserves its original recorded customer name and address through upgrade. An unpaid order, F2 simplified receipt, restart or new sale cannot replace it.                                                                                           |
+| E: original assigned facts | Keep the exact IDs, invoice numbers, dates and timestamps assigned by the old product. Compare every upgrade with that capture's independent original expectations. A fresh capture with different values is a new versioned bundle with independently recorded and reviewed expectations. Keep every original.    |
+| F: explicit retirement     | The oldest supported source stays required until the owner explicitly retires it and names its replacement. No automatic rolling window. Retirement removes a required starting point, never its original bundle or expectations.                                                                                  |
+
+### R1–R5: what F requires
+
+Imagine qualified frozen sources R1, R2, R3 and R4, then candidate R5, all within the
+same migration history after A760's separately authorised reset. R1 is the oldest supported
+source and R4 the previous retained source. These labels are invented; no qualifying capture
+or passing result is asserted.
+
+| Owner retirement decision                                                         | Required checks for R5                                                                                                                                            | Originals kept                                        |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| None                                                                              | **R1 to R5 and R4 to R5**. R1 cannot leave merely because R2/R3/R4 exist.                                                                                         | Every R1–R4 bundle and expectation set.               |
+| Hypothetical explicit retirement of R1, naming R2 as replacement effective for R5 | **R2 to R5 and R4 to R5**. Record the retired source, replacement and effective candidate before changing selection. **No specific retirement is approved here.** | Every R1–R4 bundle and expectation set, including R1. |
+
+Equal endpoints run once. Endpoint results give no passing result for unrun releases:
+R1/R4 results say nothing about R2/R3; hypothetical R2/R4 results say nothing about R1/R3.
+A failed required run stays failed under its applicable selection. This decision introduces,
+withdraws or changes no published support guarantee; any such guarantee needs its own explicit
+decision. It changes no exact comparison.
+
+### Complete proposed design, with the conditions preserved
+
+**Start in the supported history.** A760 execution and destructive reset authority remain
+separate. Admit only qualifying captures made after that separately authorised reset, within
+the same resulting migration history. Record the actual baseline identity; a convenient older
+image is not automatically eligible. A same-image control is restart-only. A distinct later
+candidate must apply actual pending migrations through its normal packaged entry and boot
+before the upgrade requirement can be met. A later candidate with no pending migrations
+supplies restart/preservation evidence only; it does not fill that required upgrade case.
+
+**Let the old product write its history once.** Use its normal setup, identity, authentication,
+permissions, catalogue, order, payment and history paths. Record the pinned source/image/platform,
+scenario, actual inputs, responses and returned IDs. Include staff attribution, distinct product
+names, exact money/tax/quantity scales, changed live catalogue values beside old sale snapshots,
+pending work, workforce/order history and optional-module-off cases. Where a release safely
+supports disabling a module, retain its rows while disabled. Otherwise use a separate never-enabled
+fixture and report retained-data coverage missing. Never enable every module to make boot easier.
+
+Harbour's issued F1 to **Mara Soler, 18 Market Street** is an invented example. Capture the
+actual old-product-assigned invoice number, IDs and issue time, and compare that same invoice's
+original recipient details even if the live customer later changes. If the qualifying old product
+cannot issue F1 through its normal supported path, identify the prerequisite from evidence and
+keep A799 open. Do not invent an existing item as the dependency. No unpaid recipient-bearing
+order, F2, restart, new sale, fabricated F1, workaround, new writer or F1 enablement fills that gap.
+Preserve fiscal writers, allocation/hash paths, golden huella and `inmutabilidad` assertions.
+
+**Seal the whole stopped state and independent expectations.** Require clean shutdown evidence,
+not exit zero alone. Coordinate all writers and the release's real venue hold; capture the whole
+matching database, side-file, configuration, node, vault/TLS and identity state with an explicit
+inventory. Check stopped integrity, relationships, journals and historical trigger definitions.
+Freeze independently reviewed product transcripts, typed facts, raw bytes, schema and checksums
+before candidate access. Generated values are kept exactly, not rewritten for repeatability.
+Corrections get new versions with independent review; originals and their expectation sets stay.
+A checksum compares downloaded bytes with a committed original; no platform immutability guarantee
+or setting is established here.
+
+**Give the candidate only a disposable copy.** The proposed isolated rig uses the actual image
+entry and packaged migrations, with no direct pre-migration, reset, restore, re-provisioning or
+new node/SIF identity. Reject pending reset/restore markers rather than deleting them. Keep the
+preproduction preparation/no-submission posture, test-only external inputs and isolated fake
+services. Contain both images from real filing, payments, hardware, Cloud, backups and host/LAN
+services. Do not run the real installer or alter host trust. The future plan must evaluate whether
+the selected old release's actual interfaces and identity seams can meet these conditions.
+
+**Compare preservation before attempting a new sale.** Match original IDs and full relationships
+in both directions, comparing exact scaled values, names, stored dates/timestamps, pending state,
+schema and full protection definitions. Preserve exact raw fiscal bytes and the captured node,
+SIF installation, series, next-number and chain identity. Candidate output never supplies expected
+facts. Any intentional schema transformation needs a small separately reviewed exact mapping;
+no wildcard exclusions, numeric/time tolerance or snapshot refresh hides a difference. Report
+allowed operational effects by field and cause. Counts and recomputed hashes cannot replace
+original facts or byte comparisons.
+
+Then use another isolated disposable copy of the preserved result for a separate normal sale,
+with the same node/SIF/series identity and chain, no intervening restore or allocation, and
+independently specified inputs and expected arithmetic. For example, yesterday's 0.350 kg cheese
+line at €22.00/kg stays €7.70; a new line at €24.00/kg is €8.40. Those are illustrative calculations,
+not observed output. Preservation and the new sale are two results; neither compensates for the
+other. The new sale must extend the captured chain and next invoice number without changing old
+bytes. It cannot substitute for issued-F1 preservation.
+
+**Keep custody and failures explicit.** The proposed trusted read-only fetch stage obtains required
+bundles/facts through existing CI repository access, checks committed checksums, then removes
+tokens and credential-bearing configuration before untrusted candidate execution. Candidate code
+gets no publication credentials or writable expectations. Private download access and credential
+isolation remain to be verified; the design claims neither. Missing, corrupt, inaccessible or unsafe
+inputs block required runs rather than skipping or substituting seeds. Bound fetch/build/start/read/
+stop/comparison/cleanup, retain exact differences and phase evidence, and stop only recorded owned
+resources. The historical numerical budgets are proposals, not measured timings. Preserve the
+existing synthetic/schema checks as complementary checks. Future failure controls must detect
+changed/deleted non-fiscal facts, changed protection definitions, corrupt bytes, wrong history and
+resource failures beside an accepting control, without editing protected fiscal history.
+
+### One next owner question: complete design for planning only
+
+**Do you approve this complete design for preparing the implementation plan, with all conditions
+above preserved?** Recommend **yes**, so the next step can assess and sequence the actual work
+without loosening the agreed preservation requirements.
+
+A yes authorises **PLAN ONLY**: prepare a documentation-only implementation plan, separately
+reviewed and landed before any later build decision. It does not approve that unwritten plan,
+implementation, capture, runtime probes, migration, A760 execution/reset, uploads, release-bundle
+publication, fiscal changes or F1 enablement. Landing the plan does not authorise those actions.
+A–F remain agreed only within their precise scopes; no full-design approval is recorded yet.
+
+The future plan must evaluate the actual historical and candidate interfaces, safe identity seams,
+qualifying image/digest/platform availability, optional-module paths, clocks, archive limits,
+resource/time budgets, containment and private CI downloads through existing access. These are
+execution risks to assess, not permission to expand access or change requirements. Missing
+prerequisites block runtime work. A genuine additional product decision must return explicitly
+to the owner rather than become assumed approval.
+
+### Evidence and review boundary
+
+All source observations below at `87f19d4bc98d2fb7925e886228430cabfc490a9b` remain
+historical source reads, **UNVERIFIED at runtime**. This answer adds no current-source
+re-verification and no capture, boot, migration, upgrade, preservation, new-sale, size, timing,
+containment or private-access result. No A799 completion or published support change is claimed.
+The [F and complete-design review boards](../../backlog/mockups/a799-real-database-upgrade-testing/revision-f-and-complete-design/README.md)
+are static native SVG artwork. All eight PNGs were rendered and individually inspected in
+English and Spanish, both themes and both widths. Native SVG text-bounds and overlap checks
+passed; these checks supply no product-runtime or accessibility evidence. Earlier boards
+stay historical and unchanged.
+
+---
 ## 2026-10-22 CURRENT precedence addendum: E agreed; support boundary F proposed
 
 **Only A–E's precise scopes are approved.** The owner answered **KEEP THE ASSIGNED
