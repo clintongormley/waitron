@@ -42,14 +42,26 @@ export async function readStaffNotices(
   const unavailable: string[] = [];
   for (const { owner, source } of sources) {
     try {
-      // A savepoint per source, so a failed source's own writes go with it.
-      const found = await tx.transaction(() => source.read({ tx, reading: deps.reading }));
+      // A savepoint per source, so a failed source's own writes go with it. Its answer is read
+      // inside it too, so an answer that throws while being read counts as a failed source.
+      const found = await tx.transaction(async () =>
+        Array.from(
+          await source.read({ tx, reading: deps.reading }),
+          (notice): OwnedStaffNotice => ({
+            key: notice.key,
+            code: notice.code,
+            severity: notice.severity,
+            params: notice.params,
+            owner,
+          }),
+        ),
+      );
       for (const notice of found) {
         if (notices.some((kept) => kept.owner === owner && kept.key === notice.key)) {
           deps.log("error", "staff_notice.duplicate_key", { owner, key: notice.key });
           continue;
         }
-        notices.push({ ...notice, owner });
+        notices.push(notice);
       }
     } catch (error) {
       deps.log("error", "staff_notice.source_unavailable", { owner, errorCode: codeOf(error) });

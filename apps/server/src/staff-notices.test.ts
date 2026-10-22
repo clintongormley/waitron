@@ -176,6 +176,81 @@ describe("readStaffNotices", () => {
     });
   });
 
+  it.each([
+    { shape: "a null after a valid notice", bad: () => null, errorCode: "unknown" },
+    {
+      shape: "a notice whose key throws when read",
+      bad: () => ({
+        get key(): string {
+          throw new AppError("server.internal", {});
+        },
+        code: "x.y",
+        severity: "notice",
+        params: {},
+      }),
+      errorCode: "server.internal",
+    },
+  ])(
+    "a source that writes and answers $shape keeps no notice and none of its writes; its neighbours keep theirs",
+    async ({ bad, errorCode }) => {
+      const { deviceId } = await seedVenue();
+      const log = vi.fn<Logger>();
+      const inside = await withTransaction(db, async (tx) => {
+        await record(tx, deviceId, "test.caller");
+        const out = await readStaffNotices(
+          tx,
+          [
+            {
+              owner: "a",
+              source: {
+                read: async (ctx) => {
+                  await record(ctx.tx, deviceId, "test.a");
+                  return [n("a-1", "notice")];
+                },
+              },
+            },
+            {
+              owner: "broken",
+              source: {
+                read: async (ctx) => {
+                  await record(ctx.tx, deviceId, "test.broken");
+                  return [n("broken-1", "error"), bad()] as unknown as StaffNotice[];
+                },
+              },
+            },
+            {
+              owner: "h",
+              source: {
+                read: async (ctx) => {
+                  await record(ctx.tx, deviceId, "test.h");
+                  return [n("h-1", "warning")];
+                },
+              },
+            },
+          ],
+          { reading: READING, log },
+        );
+        const open = (await listOpenIncidents(tx)).map((i) => i.code).sort();
+        return { out, open };
+      });
+      expect(inside.out.notices).toEqual([
+        { ...n("h-1", "warning"), owner: "h" },
+        { ...n("a-1", "notice"), owner: "a" },
+      ]);
+      expect(inside.out.unavailable).toEqual(["broken"]);
+      expect(inside.open).toEqual(["test.a", "test.caller", "test.h"]);
+      const committed = await withTransaction(db, async (tx) =>
+        (await listOpenIncidents(tx)).map((i) => i.code).sort(),
+      );
+      expect(committed).toEqual(["test.a", "test.caller", "test.h"]);
+      expect(log).toHaveBeenCalledTimes(1);
+      expect(log).toHaveBeenCalledWith("error", "staff_notice.source_unavailable", {
+        owner: "broken",
+        errorCode,
+      });
+    },
+  );
+
   it("a source that throws before returning a promise is reported, and the rest are asked", async () => {
     const log = vi.fn<Logger>();
     const result = await withTransaction(db, (tx) =>
