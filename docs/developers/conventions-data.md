@@ -2535,6 +2535,86 @@ reader for a new sale (`payIntegrated`); and on every bill payment, cash include
   cannot be written.
   Reasoned from the code, not run.
 
+### A read on a full disk must not fail on its own housekeeping write
+
+Since A798-B slice 6, reads that used to answer 507 `storage.disk_full` on a full disk once a
+last-seen stamp was due now answer: the equipment read (`GET /api/device/equipment`, which carries
+the till's staff notices, and answers with a change waiting too), and — when the route's own work
+writes nothing and no change waits — `GET /api/till`, the other device-checked reads and every
+non-passive session-checked read. Each had failed on a write it makes for itself, not on the work
+it was asked for. The measurements are the slice plan's M2, M6 and M10
+([plan](../superpowers/plans/2026-10-22-a798-6-device-strip.md#measured-for-this-plan)), taken on
+a small real filesystem; the cases that now pin them are in
+`apps/server/src/start-full-disk.e2e.test.ts`.
+
+**What refused them.**
+
+- **The last-seen stamp.** A device-checked request writes the device's `last_seen_at` when a
+  minute has passed since the last one (`sightingDue`, `apps/server/src/device-session.ts`). On a
+  full disk with a stamp due, the equipment read answered 507, and again on the next read (M6);
+  `GET /api/till`, a session-checked read (`GET /api/working-orders`) and PIN sign-in all answered
+  507 (M10). With no stamp due, the first two answered 200. Passive session checks skip the stamp,
+  and were never affected by it.
+- **The change-log drain.** `withTransaction` (`packages/db/src/tenancy.ts`) ends every body with
+  `drainChangeLog`, which deletes the waiting `change_log` rows. When a change is waiting — a
+  write made outside `withTransaction` leaves one, as the deployment-mode, singleton-role and
+  node-membership writes do under a bare `withWriteLock` — a read-only `withTransaction` is refused
+  `storage.disk_full` on a full disk. A write-lock turn holding the same read, with no drain,
+  answers (M2).
+- **A notice source that writes.** Inside one turn, a source that inserts anything takes the
+  whole read down on a full disk, even when its savepoint is rolled back; in a turn of its own it
+  takes down only itself (M2).
+
+**The two changes.**
+
+- **The stamp gives way to a full disk.** In `readDeviceProof` (`device-session.ts`), when the
+  stamp's `withTransaction` is refused `storage.disk_full`, the device row is read again outside
+  any turn under the same rule — a row now gone, or holding another token hash, is a miss — and the
+  request goes on unstamped. In `requireSession` (`apps/server/src/till-session.ts`), when its own
+  transaction (the stamp, or the change-log drain at its end; it writes nothing else) is refused
+  `storage.disk_full`, the same checks run again outside any transaction with no stamp: the session
+  lookup, the device's `active`, `authorize` and the profile's action. Every other error is thrown
+  as before. Never the route's own work: a refusal from the route's transaction is not caught.
+  Cases: "a stamp refused for a full disk still authenticates, and saves nothing" and its siblings
+  in `apps/server/src/device-session.test.ts`, and the cases from "a stamp refused for a full disk
+  still answers the session" to "with room, a stamp due is saved" in
+  `apps/server/src/till-api.test.ts`, through a stand-in database that refuses the stamp.
+- **The equipment read reads in turns.** Its own reads open no `withTransaction` (the device
+  check before them can, to stamp the last-seen time: `requireDevice`,
+  `apps/server/src/device-session.ts`): the equipment is read in one `withWriteLock` turn (`device-api.ts`), and each notice source in a turn
+  of its own (`readStaffNoticesInTurns`, `apps/server/src/staff-notices.ts`), with no drain; a
+  source whose turn changes a row (`total_changes()` moved) is failed and rolled back. This is a
+  stated exception to one `withTransaction` per route. Cost: one lock turn for the equipment and
+  one per source on every read.
+
+The real-disk cases: "the equipment read answers on a full disk with a stamp due" (200 twice,
+stamp unchanged; after freeing the disk, 200 and the stamp moves); "the till's reads answer on a
+full disk with a stamp due, and PIN sign-in still refuses" (`GET /api/till` and
+`GET /api/working-orders` 200, stamp unchanged; PIN sign-in 507 with no session written); "the
+notice reader answers on a full disk with a change waiting, and a source that writes fails alone";
+and "the equipment read answers with the red notice on a full disk with a change waiting". They run
+on macOS through `hdiutil` and in CI on a tmpfs, and skip on a Linux machine without
+`WAITRON_FULL_DISK_DIR` (see [testing-guide.md](testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem)).
+
+**Still refused.**
+
+- Every other route's own `withTransaction`, read-only or not, while a change waits: its drain is
+  refused. M10 measured it with no stamp due and one waiting change: `GET /api/till`, the
+  session-checked read and PIN sign-in each answered 507, before and after the stamp change (which
+  step refused was not isolated). That was the plan's prototype. On the shipped code,
+  a real-disk probe on macOS (`hdiutil`) with one waiting change and no stamp due answered 507 for
+  both `GET /api/till` and `GET /api/working-orders`. On the second, `requireSession` caught its
+  own drain's refusal and its re-check passed, and the 507 came from the route's own
+  `withTransaction` (`listHeldOrders`, `apps/server/src/working-order.ts`). `GET /api/till` takes
+  no session check and opens its own `withTransaction` around `readTillSetup` (`till-api.ts`), the
+  likely source of its 507 — read, not isolated. The control, with no waiting change, answered 200
+  for both.
+- PIN sign-in, from its own session write: a refused sign-in writes no session.
+- While the disk is full, no device's last-seen time moves, so anything that reads it as a sign of
+  life sees the device go quiet.
+- A full disk the engine reports as anything but result code 13 is not `storage.disk_full`
+  (`diskFullIn`, `packages/shared/src/engine-failure.ts`), so neither change catches it.
+
 ### A full disk is not one error code
 
 Slice 1 knows a full disk by result code 13, "database or disk is full". At start that is often

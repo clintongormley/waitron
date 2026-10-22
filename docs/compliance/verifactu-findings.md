@@ -540,6 +540,10 @@ incident either. No source resolved this.
 
 - Persistent on-screen unsent-record count (art. 16.4) — a UI requirement, not a background
   detail.
+  (2026-10-22, A798-B slice 6: shown on every signed-in till and handheld from the first send that
+  did not land, or a pass that could not send, until every record a failed pass marked has been
+  accepted or refused and the filing's technical incident is closed; not on a demo or prepare box;
+  refused records are not counted.)
 - Hourly retry scheduler surviving app restarts and long offline periods.
 - Installation-number minting, storage and reissue-on-reimage lifecycle.
 - One-minute clock accuracy on long-offline devices.

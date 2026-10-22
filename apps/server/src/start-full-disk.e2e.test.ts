@@ -16,18 +16,29 @@ import { get as httpsGet } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { sql } from "drizzle-orm";
-import type { Hono } from "hono";
+import { eq, sql } from "drizzle-orm";
+import { Hono } from "hono";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { openVenueDatabase } from "@waitron/db";
+import { devices, locations, openVenueDatabase } from "@waitron/db";
+import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { hashSecret } from "@waitron/identity";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { openVenueStore } from "@waitron/store";
 import { firstFiscalFixture } from "../test/first-fiscal.js";
 import { dumpFileName } from "./backup-keys.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { loadBoxEnv } from "./box-env.js";
+import { deviceNoticeSources } from "./box-staff-notices.js";
+import { mountDeviceApi } from "./device-api.js";
+import { createDiskFullState, watchForDiskFull } from "./disk-full-state.js";
+import { createFreeSpaceState } from "./free-space-watch.js";
 import { runEntry, serveRecovery, type RecoveryServeOptions } from "./node-entry.js";
 import { FRESH, readRecoveryState, writeRecoveryState } from "./recovery-state.js";
+import { createPairingMode } from "./pairing-mode.js";
 import { escapeHtml } from "./recovery-surface.js";
+import { readStaffNoticesInTurns, type OwnedStaffNoticeSource } from "./staff-notices.js";
+import { provisionBillVenue } from "./testing/bill-venue.js";
 import { freePorts } from "./testing/free-ports.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 
@@ -329,6 +340,287 @@ describe("a start on a real full disk", () => {
       });
       expect(bodies()).toEqual(["committed before", "after freeing"]);
     } finally {
+      small.unfill();
+      await store.close();
+    }
+  });
+
+  it("the equipment read answers on a full disk with a stamp due", async (ctx) => {
+    const small = needDisk(ctx);
+    const dir = realpathSync(small.folder("equipment"));
+    await applyMigrations(dir, migrationOptionsFor(manifestSets(), null));
+    const store = await openVenueDatabase(dir);
+    const db = store.venue;
+    try {
+      await seedTenant(db);
+      const [location] = await db
+        .insert(locations)
+        .values({ name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Sale" })
+        .returning({ id: locations.id });
+      const { deviceId } = await seedDevice(db, {
+        locationId: brandLocationId(location!.id),
+        label: "Till 1",
+      });
+      const token = "equipment-token";
+      await db
+        .update(devices)
+        .set({ tokenHash: hashSecret(token) })
+        .where(eq(devices.id, deviceId));
+      const app = new Hono();
+      mountDeviceApi(
+        app,
+        { db, cfg: {} as never, secureCookies: false, pairingMode: createPairingMode() },
+        () => {},
+      );
+      const status = async () =>
+        (
+          await app.request("/api/device/equipment", {
+            headers: { cookie: `waitron_device=${deviceId}.${token}` },
+          })
+        ).status;
+      const lastSeen = async () => {
+        const [row] = await db
+          .select({ lastSeenAt: devices.lastSeenAt })
+          .from(devices)
+          .where(eq(devices.id, deviceId));
+        return row!.lastSeenAt;
+      };
+      const seenWhileFull = async (lastSeenAt: string) => {
+        small.unfill();
+        await db.update(devices).set({ lastSeenAt }).where(eq(devices.id, deviceId));
+        db.all(sql`pragma wal_checkpoint(truncate)`);
+        small.fill(0);
+      };
+
+      expect(await status()).toBe(200);
+
+      await seenWhileFull(new Date().toISOString());
+      expect(await status()).toBe(200);
+
+      const longAgo = "2020-01-01T00:00:00.000Z";
+      await seenWhileFull(longAgo);
+      expect(await status()).toBe(200);
+      expect(await status()).toBe(200);
+      expect(await lastSeen()).toBe(longAgo);
+
+      small.unfill();
+      expect(await status()).toBe(200);
+      expect(await lastSeen()).not.toBe(longAgo);
+    } finally {
+      small.unfill();
+      await store.close();
+    }
+  });
+
+  it("the till's reads answer on a full disk with a stamp due, and PIN sign-in still refuses", async (ctx) => {
+    const small = needDisk(ctx);
+    const dir = realpathSync(small.folder("till-session"));
+    await applyMigrations(dir, migrationOptionsFor(manifestSets(), null));
+    const store = await openVenueDatabase(dir);
+    const db = store.venue;
+    try {
+      const venue = await provisionBillVenue(db);
+      const deviceCookie = venue.cookie
+        .split("; ")
+        .find((part) => part.startsWith("waitron_device"))!;
+      const request = (
+        path: string,
+        cookie: string,
+        init: { method?: string; body?: unknown } = {},
+      ) =>
+        venue.app.request(path, {
+          method: init.method ?? "GET",
+          headers: { cookie, "content-type": "application/json" },
+          ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+        });
+      const lastSeen = () =>
+        db.all<{ lastSeenAt: string | null }>(
+          sql`select last_seen_at as lastSeenAt from devices where id = ${venue.deviceId}`,
+        )[0]!.lastSeenAt;
+      const sessionCount = () =>
+        db.all<{ n: number }>(sql`select count(*) as n from sessions`)[0]!.n;
+
+      const longAgo = "2020-01-01T00:00:00.000Z";
+      small.unfill();
+      db.run(sql`update devices set last_seen_at = ${longAgo} where id = ${venue.deviceId}`);
+      db.all(sql`pragma wal_checkpoint(truncate)`);
+      small.fill(0);
+
+      expect((await request("/api/till", deviceCookie)).status).toBe(200);
+      expect((await request("/api/working-orders", venue.cookie)).status).toBe(200);
+      expect(lastSeen()).toBe(longAgo);
+      const before = sessionCount();
+      const signIn = await request("/api/session", deviceCookie, {
+        method: "POST",
+        body: { personId: venue.operatorId, pin: "5555" },
+      });
+      expect(signIn.status).toBe(507);
+      expect(await signIn.json()).toMatchObject({ error: { code: "storage.disk_full" } });
+      expect(sessionCount()).toBe(before);
+
+      small.unfill();
+      expect((await request("/api/working-orders", venue.cookie)).status).toBe(200);
+      expect(lastSeen()).not.toBe(longAgo);
+    } finally {
+      small.unfill();
+      await store.close();
+    }
+  });
+  it("the notice reader answers on a full disk with a change waiting, and a source that writes fails alone", async (ctx) => {
+    const small = needDisk(ctx);
+    const dir = realpathSync(small.folder("notices"));
+    await applyMigrations(dir, migrationOptionsFor(manifestSets(), null));
+    const store = await openVenueDatabase(dir);
+    const db = store.venue;
+    try {
+      db.run(sql`create table zz (id integer primary key, pad blob)`);
+      const sources: OwnedStaffNoticeSource[] = [
+        {
+          owner: "box",
+          source: {
+            read: () =>
+              Promise.resolve([
+                {
+                  key: "storage.disk_full",
+                  code: "storage.disk_full",
+                  severity: "error",
+                  params: {},
+                },
+              ]),
+          },
+        },
+        {
+          owner: "writer",
+          source: {
+            read: ({ tx }) => {
+              tx.run(sql`insert into zz (pad) values (zeroblob(16))`);
+              return Promise.resolve([{ key: "w", code: "w.w", severity: "error", params: {} }]);
+            },
+          },
+        },
+        {
+          owner: "count",
+          source: {
+            read: ({ tx }) => {
+              const [row] = tx.all<{ n: number }>(
+                sql`select count(*) as n from envios where estado in ('pendiente', 'enviando', 'detenido', 'retenido')`,
+              );
+              return Promise.resolve([
+                { key: "unsent", code: "x.unsent", severity: "notice", params: { count: row!.n } },
+              ]);
+            },
+          },
+        },
+      ];
+      db.run(
+        sql`insert into change_log (id, payload) values ('zz1', '{"resource":"zz","id":"1"}')`,
+      );
+      db.all(sql`pragma wal_checkpoint(truncate)`);
+      small.fill(0);
+
+      const read = () =>
+        readStaffNoticesInTurns(db, sources, {
+          reading: { instant: new Date(), offsetMinutes: 0 },
+          log: () => {},
+        });
+      for (let i = 0; i < 2; i += 1) {
+        const result = await read();
+        expect(result.notices.map((x) => `${x.owner}:${x.key}`)).toEqual([
+          "box:storage.disk_full",
+          "count:unsent",
+        ]);
+        expect(result.unavailable).toEqual(["writer"]);
+      }
+
+      small.unfill();
+      expect(db.all<{ n: number }>(sql`select count(*) as n from zz`)).toEqual([{ n: 0 }]);
+      expect(db.all<{ id: string }>(sql`select id from change_log`)).toEqual([{ id: "zz1" }]);
+    } finally {
+      small.unfill();
+      await store.close();
+    }
+  });
+
+  it("the equipment read answers with the red notice on a full disk with a change waiting", async (ctx) => {
+    const small = needDisk(ctx);
+    const dir = realpathSync(small.folder("equipment-notices"));
+    await applyMigrations(dir, migrationOptionsFor(manifestSets(), null));
+    const store = await openVenueDatabase(dir);
+    const db = store.venue;
+    const disk = createDiskFullState({ dir, now: () => new Date(), log: () => {} });
+    const unwatch = watchForDiskFull(disk, [store.venue, store.node]);
+    try {
+      await seedTenant(db);
+      const [location] = await db
+        .insert(locations)
+        .values({ name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Sale" })
+        .returning({ id: locations.id });
+      const { deviceId } = await seedDevice(db, {
+        locationId: brandLocationId(location!.id),
+        label: "Till 1",
+      });
+      const token = "equipment-notices-token";
+      await db
+        .update(devices)
+        .set({ tokenHash: hashSecret(token), lastSeenAt: "2020-01-01T00:00:00.000Z" })
+        .where(eq(devices.id, deviceId));
+      db.run(sql`create table zz (id integer primary key, pad blob)`);
+      // The full disk refuses this insert too, so this case shows the writer failing alone, not
+      // why; the changed-row rule is checked by `readStaffNoticesInTurns`' own cases.
+      const writer: OwnedStaffNoticeSource = {
+        owner: "writer",
+        source: {
+          read: ({ tx }) => {
+            tx.run(sql`insert into zz (pad) values (zeroblob(16))`);
+            return Promise.resolve([]);
+          },
+        },
+      };
+      const app = new Hono();
+      mountDeviceApi(
+        app,
+        {
+          db,
+          cfg: {} as never,
+          secureCookies: false,
+          pairingMode: createPairingMode(),
+          notices: {
+            sources: [
+              ...deviceNoticeSources({ disk, space: createFreeSpaceState({ log: () => {} }) }, []),
+              writer,
+            ],
+            clock: {
+              now: () => ({ instant: new Date(), offsetMinutes: 0, confident: true }) as never,
+            },
+            filing: () => ({ enabled: false }),
+          },
+        },
+        () => {},
+      );
+      db.run(
+        sql`insert into change_log (id, payload) values ('zz1', '{"resource":"zz","id":"1"}')`,
+      );
+      db.all(sql`pragma wal_checkpoint(truncate)`);
+      small.fill(0);
+
+      for (let i = 0; i < 2; i += 1) {
+        const res = await app.request("/api/device/equipment", {
+          headers: { cookie: `waitron_device=${deviceId}.${token}` },
+        });
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as {
+          roles: unknown;
+          notices: { key: string; owner: string }[];
+          noticesUnavailable: string[];
+        };
+        expect(Array.isArray(body.roles)).toBe(true);
+        expect(body.notices.map(({ key, owner }) => ({ key, owner }))).toEqual([
+          { key: "storage.disk_full", owner: "box" },
+        ]);
+        expect(body.noticesUnavailable).toEqual(["writer"]);
+      }
+    } finally {
+      unwatch();
       small.unfill();
       await store.close();
     }

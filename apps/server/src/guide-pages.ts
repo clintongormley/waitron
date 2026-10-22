@@ -9,6 +9,7 @@ import { escapeHtml } from "./recovery-surface.js";
 import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
 import { GUIDE_CERTIFICATE_TITLE } from "./i18n/guide-certificate.js";
 import { TABLE_SERVICE_GUIDE_TITLE } from "./i18n/table-service-guide.js";
+import { TILL_NOTICES_GUIDE_TITLE } from "./i18n/till-notices-guide.js";
 
 type GuideLanguage = (typeof GUIDE_LANGUAGES)[number];
 type GuidePage = (typeof GUIDE_PAGES)[number];
@@ -75,6 +76,7 @@ const GUIDE_TEXT: { en: GuideWords; es: GuideWords & { missingTwin: string } } =
       "table-service": TABLE_SERVICE_GUIDE_TITLE.en,
       staff: STAFF_GUIDE_TITLE.en,
       purchases: PURCHASES_GUIDE_TITLE.en,
+      "till-notices": TILL_NOTICES_GUIDE_TITLE.en,
     },
     notFoundTitle: "Page not found",
     notFound: "There is no guide page at this address.",
@@ -93,6 +95,7 @@ const GUIDE_TEXT: { en: GuideWords; es: GuideWords & { missingTwin: string } } =
       "table-service": TABLE_SERVICE_GUIDE_TITLE.es,
       staff: STAFF_GUIDE_TITLE.es,
       purchases: PURCHASES_GUIDE_TITLE.es,
+      "till-notices": TILL_NOTICES_GUIDE_TITLE.es,
     },
     missingTwin: "Esta página aún no está en español. Se muestra en inglés.",
     notFoundTitle: "Página no encontrada",

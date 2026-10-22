@@ -245,6 +245,8 @@ export class TillStationScreen extends LitElement {
    */
   @state() private reprintErrorCode?: string;
   @state() private acknowledgeFailed = false;
+  /** A bump the box could not save because its disk is full; any other refusal stays silent. */
+  @state() private bumpErrorCode?: string;
   @state() private stale = false;
   @state() private moving: DishMove | null = null;
   /** Why the last Move could not read the stations; its own field, so a queue read never clears it. */
@@ -483,6 +485,9 @@ export class TillStationScreen extends LitElement {
   }
 
   #adoptDeviceStation({ stations }: DeviceStationScreen): void {
+    // A refused bump's own reload lands here too, so the line clears only when the stations change.
+    const ids = (list: readonly { id: string }[]) => list.map((station) => station.id).join("\n");
+    if (ids(stations) !== ids(this.deviceStations)) this.bumpErrorCode = undefined;
     this.#forgetUnlisted(stations.flatMap((station) => (worked(station) ? station.notices : [])));
     this.deviceStations = stations.map((station) =>
       worked(station)
@@ -538,6 +543,7 @@ export class TillStationScreen extends LitElement {
       this.groups = [];
       this.notices = [];
       this.printersDown = [];
+      this.bumpErrorCode = undefined;
       // Reads still out are for the station being left.
       this.#appliedRequest = this.#queueRequest;
       this.#lastGoodAt = new Date();
@@ -557,10 +563,13 @@ export class TillStationScreen extends LitElement {
   }
 
   async #advance(call: () => Promise<void>): Promise<void> {
+    this.bumpErrorCode = undefined;
     try {
       await call();
     } catch (error) {
       if (this.#switched(error)) return;
+      if ((error as { code?: unknown } | null)?.code === "storage.disk_full")
+        this.bumpErrorCode = "storage.disk_full";
       // Any other refusal: the reload reconciles the queue to server truth.
     }
     await this.#reload();
@@ -1030,6 +1039,11 @@ export class TillStationScreen extends LitElement {
             }
           </p>
         </div>
+        ${
+          this.bumpErrorCode
+            ? html`<p class="error" role="alert">${codeMessage(this.bumpErrorCode)}</p>`
+            : nothing
+        }
         ${
           this.reprintErrorCode
             ? html`<p class="error" role="alert">${codeMessage(this.reprintErrorCode)}</p>`

@@ -90,6 +90,12 @@ import { moveDishesToStation } from "./station-move.js";
 import { listStationsToday } from "./kitchen.js";
 import { mountGatedWhileDiskFull } from "./disk-full-gate.js";
 import type { DiskFullState } from "./disk-full-state.js";
+import type { TrustedClock } from "@waitron/fiscal";
+import {
+  createStaffNoticeLog,
+  readStaffNoticesInTurns,
+  type OwnedStaffNoticeSource,
+} from "./staff-notices.js";
 
 /**
  * `cfg` is the FULL `TillConfig` because the verbs this surface calls are typed on it; the routes
@@ -123,6 +129,12 @@ export interface DeviceApiDeps {
   now?: () => Date;
   /** While the full-disk stop holds (`DiskFullState.full()`), every `/api/` write here but the device's own housekeeping answers 507. */
   disk?: DiskFullState;
+  /** What the equipment read tells staff about the box. Absent, it answers no notices. */
+  notices?: {
+    sources: readonly OwnedStaffNoticeSource[];
+    clock: Pick<TrustedClock, "now">;
+    filing: () => { enabled: boolean };
+  };
 }
 
 const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
@@ -205,6 +217,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   const app = new Hono();
   // Built ONCE here, so it is one bucket for the whole mounted API.
   const enrolLimiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
+  const noticeLog = createStaffNoticeLog(log);
 
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
@@ -382,9 +395,28 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   app.get("/api/device/equipment", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      return c.json(
-        await withTransaction(deps.db, (tx) => readDeviceEquipment(tx, device.deviceId)),
+      // Not `withTransaction`: its closing change-log drain is a write, which a full disk refuses
+      // even when this read changed nothing.
+      const equipment = await deps.db.withWriteLock(() =>
+        readDeviceEquipment(deps.db, device.deviceId),
       );
+      if (deps.notices === undefined) {
+        return c.json({ ...equipment, notices: [], noticesUnavailable: [] });
+      }
+      const { sources, clock } = deps.notices;
+      const reading = clock.now();
+      const filing = deps.notices.filing();
+      const noticeRead = noticeLog.begin();
+      const read = await readStaffNoticesInTurns(
+        deps.db,
+        sources.map(({ owner, source }) => ({
+          owner,
+          source: { read: (ctx) => source.read({ ...ctx, filing }) },
+        })),
+        { reading, log: noticeLog.log },
+      );
+      noticeRead.settle(read.unavailable);
+      return c.json({ ...equipment, notices: read.notices, noticesUnavailable: read.unavailable });
     }),
   );
 

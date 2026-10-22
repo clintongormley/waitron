@@ -18,9 +18,13 @@ export interface StaffNoticeReadContext {
   readonly tx: Transaction;
   /** One reading of the box's clock for the whole ask, so every source judges the same instant. */
   readonly reading: Pick<TrustedReading, "instant" | "offsetMinutes">;
+  /** Whether this box files records with the tax authority; absent, a source that needs it answers
+   * nothing. */
+  readonly filing?: { readonly enabled: boolean };
 }
 
-/** A check asked on each read of the notices. */
+/** A check asked on each read of the notices. A source only reads; the equipment read fails a
+ * source that changes a row. */
 export interface StaffNoticeSource {
   read(ctx: StaffNoticeReadContext): Promise<readonly StaffNotice[]>;
 }

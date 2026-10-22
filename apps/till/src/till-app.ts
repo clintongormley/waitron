@@ -16,6 +16,7 @@ import { billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./state/zone-menu-memory.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import "./widgets/device-zones-dialog.js";
+import "./widgets/notice-strip.js";
 import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
 import { deviceZoneNavigation } from "./state/device-zones.js";
 import { heldViews, placeFor } from "./state/draft-place.js";
@@ -360,6 +361,7 @@ import type { FormFactor, CapabilityFlag, DeviceKind, NavigationScreen } from ".
 import { SessionActivity } from "./session-activity.js";
 import { MenuStatePoll } from "./state/menu-state-poll.js";
 import { EquipmentPoll } from "./state/equipment-poll.js";
+import { nextNotices } from "./state/staff-notices.js";
 import { EquipmentNfc, type EquipmentCode } from "./state/equipment-nfc.js";
 import {
   type BasketRefresh,
@@ -378,6 +380,8 @@ import type { LoggedInDetail } from "./screens/till-lock-screen.js";
 import type {
   DevDeviceList,
   DeviceEquipment,
+  DeviceEquipmentRead,
+  StaffNotice,
   DeviceIdentity,
   EquipmentChange,
   ProfileChoice,
@@ -2649,7 +2653,7 @@ export class TillApp extends LitElement {
     // The count is taken before the read is sent, so an answer a change overtook is set aside.
     read: async (signal) => ({
       changed: this.#equipmentChanged,
-      equipment: await this.api.getDeviceEquipment({ signal }),
+      equipment: await this.#readDeviceEquipment(signal),
     }),
     onEquipment: ({ changed, equipment }) => {
       if (changed === this.#equipmentChanged && this.#equipmentWaiting === 0)
@@ -2951,6 +2955,11 @@ export class TillApp extends LitElement {
   /** The device's equipment as the server last said; `null` until it has been read, while the pay
    * screens offer the reader the boot read named. */
   @state() private deviceEquipment: DeviceEquipment | null = null;
+  @state() private staffNotices: readonly StaffNotice[] = [];
+  /** Numbers each equipment read when sent, so a slower earlier read cannot replace the notices a
+   * later one brought. */
+  #noticeReadsSent = 0;
+  #noticeReadApplied = 0;
   @state() private equipmentOpen = false;
   @state() private equipmentError: { code: string; field?: string } | null = null;
   /** What another device took from this one, said until dismissed. */
@@ -9154,12 +9163,24 @@ export class TillApp extends LitElement {
     }
   }
 
+  /** Every equipment read goes through here: its notices apply whatever becomes of its equipment. */
+  async #readDeviceEquipment(signal?: AbortSignal): Promise<DeviceEquipmentRead> {
+    const sent = ++this.#noticeReadsSent;
+    const session = this.#operatorSession;
+    const read = await this.api.getDeviceEquipment({ signal });
+    if (session === this.#operatorSession && sent > this.#noticeReadApplied) {
+      this.#noticeReadApplied = sent;
+      this.staffNotices = nextNotices(this.staffNotices, read);
+    }
+    return read;
+  }
+
   /** Whether the device answered; either way the equipment held is shown. */
   async #readEquipment(signal?: AbortSignal): Promise<boolean> {
     const changed = this.#equipmentChanged;
     let answered = true;
     try {
-      const read = await this.api.getDeviceEquipment({ signal });
+      const read = await this.#readDeviceEquipment(signal);
       if (changed === this.#equipmentChanged) {
         this.#holdEquipment(read);
       } else {
@@ -15944,6 +15965,7 @@ export class TillApp extends LitElement {
     this.editDeadEnds = null;
     this.#dismissStationChoices();
     this.#endReloadLock();
+    this.staffNotices = [];
     this.#menuPoll.stop();
     this.#equipmentPoll.stop();
     this.#stopFloorPoll();
@@ -18481,6 +18503,14 @@ export class TillApp extends LitElement {
                             this.#requestLeave(() => this.#onTabSelect(e.detail.screen));
                           }}
                         >
+                          ${
+                            this.deviceMode
+                              ? nothing
+                              : html`<till-notice-strip
+                                  slot="notices"
+                                  .notices=${this.staffNotices}
+                                ></till-notice-strip>`
+                          }
                           ${
                             this.transferSnapshot === undefined
                               ? nothing

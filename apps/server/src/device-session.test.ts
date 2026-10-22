@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { type Context, Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isAppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { hashSecret } from "@waitron/identity";
 import { deviceProfiles, devices, locations, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -195,9 +195,10 @@ type ProbeResult = { ok: true; binding: DeviceBinding } | { ok: false; code: str
 async function runProbe(
   cookieValue: string | null,
   handler: (deps: { db: Database }, c: Context) => Promise<Response>,
+  db: Database = suite.db,
 ): Promise<{ res: Response; thrown: unknown }> {
   const app = new Hono();
-  const deps = { db: suite.db };
+  const deps = { db };
   let thrown: unknown;
   app.get("/probe", (c) => handler(deps, c));
   app.onError((err, c) => {
@@ -213,9 +214,11 @@ async function runProbe(
 
 /** Run `requireDevice` behind the shared scaffold. Returns the binding on success or the thrown code on
  * failure. */
-async function probe(cookieValue: string | null): Promise<ProbeResult> {
-  const { res, thrown } = await runProbe(cookieValue, async (deps, c) =>
-    c.json(await requireDevice(deps, c)),
+async function probe(cookieValue: string | null, db: Database = suite.db): Promise<ProbeResult> {
+  const { res, thrown } = await runProbe(
+    cookieValue,
+    async (deps, c) => c.json(await requireDevice(deps, c)),
+    db,
   );
   if (res.status === 200) {
     return { ok: true, binding: (await res.json()) as DeviceBinding };
@@ -464,6 +467,55 @@ describe("requireDevice (venue database)", () => {
     await revoke(deviceId);
     const result = await probe(`${deviceId}.${token}`);
     expect(result).toEqual({ ok: false, code: "device.unauthorized" });
+  });
+
+  /** The venue database, except that every write turn runs `before` and then rejects with `error`. */
+  function stampRefused(error: Error, before: () => Promise<void> = async () => {}): Database {
+    return Object.create(suite.db, {
+      withWriteLock: {
+        value: async () => {
+          await before();
+          throw error;
+        },
+      },
+    }) as Database;
+  }
+
+  it("a stamp refused for a full disk still authenticates, and saves nothing", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    const db = stampRefused(new AppError("storage.disk_full", {}));
+    const result = await probe(`${deviceId}.${token}`, db);
+    expect(result).toMatchObject({ ok: true, binding: { deviceId } });
+    expect(await lastSeenAt(deviceId)).toBeNull();
+  });
+
+  it("…but a device revoked meanwhile is refused", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    const db = stampRefused(new AppError("storage.disk_full", {}), () => revoke(deviceId));
+    expect(await probe(`${deviceId}.${token}`, db)).toEqual({
+      ok: false,
+      code: "device.unauthorized",
+    });
+  });
+
+  it("…and a token changed meanwhile is refused", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    const db = stampRefused(new AppError("storage.disk_full", {}), async () => {
+      await suite.db.execute(
+        sql`update devices set token_hash = ${hashSecret("another-token")} where id = ${deviceId}`,
+      );
+    });
+    expect(await probe(`${deviceId}.${token}`, db)).toEqual({
+      ok: false,
+      code: "device.unauthorized",
+    });
+  });
+
+  it("any other failure of the stamp still fails the request", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    const db = stampRefused(new Error("boom"));
+    expect(await probe(`${deviceId}.${token}`, db)).toEqual({ ok: false, code: "Error: boom" });
+    expect(await lastSeenAt(deviceId)).toBeNull();
   });
 });
 

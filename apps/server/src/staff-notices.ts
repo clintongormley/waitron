@@ -1,4 +1,5 @@
-import type { Transaction } from "@waitron/db";
+import { sql } from "drizzle-orm";
+import type { Database, Transaction } from "@waitron/db";
 import type {
   StaffNotice,
   StaffNoticeReadContext,
@@ -38,19 +39,53 @@ export async function readStaffNotices(
   sources: readonly OwnedStaffNoticeSource[],
   deps: StaffNoticeReadDeps,
 ): Promise<StaffNoticesRead> {
+  // A savepoint per source, so a failed source's own writes go with it. Its answer is read inside
+  // it too, so an answer that throws while being read counts as a failed source.
+  return collect(sources, deps, ({ owner, source }) =>
+    tx.transaction(async () => stamped(await source.read({ tx, reading: deps.reading }), owner)),
+  );
+}
+
+const SOURCE_WROTE = new Error("a staff notice source changed rows");
+
+/** Asks each source in a write-lock turn of its own, with no change-log drain, so one source's
+ * failure — a full disk included — goes with its own turn. A source that changes any row fails,
+ * and the rows it changed go with its turn; a schema change changes no row, so it is not caught.
+ * Same order, owners, duplicate rule and log lines as `readStaffNotices`. */
+export async function readStaffNoticesInTurns(
+  db: Database,
+  sources: readonly OwnedStaffNoticeSource[],
+  deps: StaffNoticeReadDeps,
+): Promise<StaffNoticesRead> {
+  const changes = () => db.all<{ n: number }>(sql`select total_changes() as n`)[0]!.n;
+  return collect(sources, deps, ({ owner, source }) =>
+    // A source does database work only: a slow wait here holds the write lock, and nothing times
+    // a turn out.
+    db.withWriteLock(async () => {
+      const before = changes();
+      const found = stamped(await source.read({ tx: db, reading: deps.reading }), owner);
+      if (changes() !== before) throw SOURCE_WROTE;
+      return found;
+    }),
+  );
+}
+
+function stamped(answer: readonly StaffNotice[], owner: string): OwnedStaffNotice[] {
+  // `key` is named so that a null in the answer throws here; the spread keeps later fields.
+  return Array.from(answer, (notice): OwnedStaffNotice => ({ ...notice, key: notice.key, owner }));
+}
+
+async function collect(
+  sources: readonly OwnedStaffNoticeSource[],
+  deps: StaffNoticeReadDeps,
+  ask: (source: OwnedStaffNoticeSource) => Promise<OwnedStaffNotice[]>,
+): Promise<StaffNoticesRead> {
   const notices: OwnedStaffNotice[] = [];
   const unavailable: string[] = [];
-  for (const { owner, source } of sources) {
+  for (const entry of sources) {
+    const { owner } = entry;
     try {
-      // A savepoint per source, so a failed source's own writes go with it. Its answer is read
-      // inside it too, so an answer that throws while being read counts as a failed source.
-      const found = await tx.transaction(async () =>
-        Array.from(
-          await source.read({ tx, reading: deps.reading }),
-          // `key` is named so that a null in the answer throws here; the spread keeps later fields.
-          (notice): OwnedStaffNotice => ({ ...notice, key: notice.key, owner }),
-        ),
-      );
+      const found = await ask(entry);
       for (const notice of found) {
         if (notices.some((kept) => kept.owner === owner && kept.key === notice.key)) {
           deps.log("error", "staff_notice.duplicate_key", { owner, key: notice.key });
@@ -59,9 +94,63 @@ export async function readStaffNotices(
         notices.push(notice);
       }
     } catch (error) {
-      deps.log("error", "staff_notice.source_unavailable", { owner, errorCode: codeOf(error) });
+      const errorCode = error === SOURCE_WROTE ? "staff_notice.source_wrote" : codeOf(error);
+      deps.log("error", "staff_notice.source_unavailable", { owner, errorCode });
       if (!unavailable.includes(owner)) unavailable.push(owner);
     }
   }
   return { notices: notices.sort((a, b) => RANK[a.severity] - RANK[b.severity]), unavailable };
+}
+
+export interface StaffNoticeLog {
+  /** Hand this to a reader as its `log`. */
+  readonly log: Logger;
+  /** Call before each read starts, and settle what it returns once the read is done. */
+  begin(): StaffNoticeLogRead;
+}
+
+export interface StaffNoticeLogRead {
+  /** With the read's `unavailable`: notes each owner that has stopped failing. An owner whose
+   * last failure was logged after this read began is left failing, since the read may have
+   * checked it before that failure. */
+  settle(unavailable: readonly string[]): void;
+}
+
+/** Wraps `log` so a source that fails on every read is logged once per spell of failing, and each
+ * repeated key once. Other events pass through. */
+export function createStaffNoticeLog(log: Logger): StaffNoticeLog {
+  let begun = 0;
+  /** Each failing owner, with how many reads had begun when it last failed. */
+  const failing = new Map<string, number>();
+  const duplicates = new Set<string>();
+  return {
+    log(level, event, fields) {
+      if (event === "staff_notice.source_unavailable") {
+        const owner = fields?.owner;
+        if (typeof owner === "string") {
+          const known = failing.has(owner);
+          failing.set(owner, begun);
+          if (known) return;
+        }
+      } else if (event === "staff_notice.duplicate_key") {
+        const id = JSON.stringify([fields?.owner, fields?.key]);
+        if (duplicates.has(id)) return;
+        duplicates.add(id);
+      }
+      log(level, event, fields);
+    },
+    begin() {
+      begun += 1;
+      const started = begun;
+      return {
+        settle(unavailable) {
+          for (const [owner, failedAt] of failing) {
+            if (failedAt >= started || unavailable.includes(owner)) continue;
+            failing.delete(owner);
+            log("info", "staff_notice.source_recovered", { owner });
+          }
+        },
+      };
+    },
+  };
 }

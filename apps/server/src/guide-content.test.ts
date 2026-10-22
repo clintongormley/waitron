@@ -138,3 +138,13 @@ it.each(GUIDE_LANGUAGES)(
     ]);
   },
 );
+
+it.each(GUIDE_LANGUAGES)("serves the till notices guide in %s with its sections", (lang) => {
+  expect(GUIDE_PAGES).toContain("till-notices");
+  const markdown = readGuide(root, lang, "till-notices");
+  expect(markdown).toBeDefined();
+  expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
+    "notice-line",
+    "notices",
+  ]);
+});

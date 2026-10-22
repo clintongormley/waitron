@@ -15,7 +15,12 @@ import {
   type DeviceId,
 } from "@waitron/shared";
 import { ALL_MODULES, enabledStaffNoticeSources } from "./modules.js";
-import { readStaffNotices } from "./staff-notices.js";
+import {
+  createStaffNoticeLog,
+  readStaffNotices,
+  readStaffNoticesInTurns,
+  type OwnedStaffNoticeSource,
+} from "./staff-notices.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -362,5 +367,333 @@ describe("readStaffNotices", () => {
       owner: "d",
       key: "k",
     });
+  });
+});
+
+describe("createStaffNoticeLog", () => {
+  const UNAVAILABLE = "staff_notice.source_unavailable";
+
+  it("passes other events through unchanged", () => {
+    const spy = vi.fn<Logger>();
+    const { log } = createStaffNoticeLog(spy);
+    log("warn", "other.event", { a: 1 });
+    log("info", "other.event");
+    expect(spy.mock.calls).toEqual([
+      ["warn", "other.event", { a: 1 }],
+      ["info", "other.event", undefined],
+    ]);
+  });
+
+  it("logs an owner's failure once while it keeps failing", () => {
+    const spy = vi.fn<Logger>();
+    const notices = createStaffNoticeLog(spy);
+    const first = notices.begin();
+    notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "first.code" });
+    first.settle(["m"]);
+    const second = notices.begin();
+    notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "second.code" });
+    second.settle(["m"]);
+    expect(spy.mock.calls).toEqual([
+      ["error", UNAVAILABLE, { owner: "m", errorCode: "first.code" }],
+    ]);
+  });
+
+  it("logs every failure line that names no owner, and notes no recovery for it", () => {
+    const spy = vi.fn<Logger>();
+    const notices = createStaffNoticeLog(spy);
+    const read = notices.begin();
+    notices.log("error", UNAVAILABLE, { errorCode: "first.code" });
+    notices.log("error", UNAVAILABLE, { errorCode: "second.code" });
+    read.settle([]);
+    expect(spy.mock.calls).toEqual([
+      ["error", UNAVAILABLE, { errorCode: "first.code" }],
+      ["error", UNAVAILABLE, { errorCode: "second.code" }],
+    ]);
+  });
+
+  it("notes the recovery once, and logs a new failure after it", () => {
+    const spy = vi.fn<Logger>();
+    const notices = createStaffNoticeLog(spy);
+    const failed = notices.begin();
+    notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "first.code" });
+    failed.settle(["m"]);
+    spy.mockClear();
+    notices.begin().settle([]);
+    expect(spy.mock.calls).toEqual([["info", "staff_notice.source_recovered", { owner: "m" }]]);
+    spy.mockClear();
+    notices.begin().settle([]);
+    expect(spy).not.toHaveBeenCalled();
+    notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "again.code" });
+    expect(spy.mock.calls).toEqual([
+      ["error", UNAVAILABLE, { owner: "m", errorCode: "again.code" }],
+    ]);
+  });
+
+  it("notes the recovery only of the owners that stopped failing", () => {
+    const spy = vi.fn<Logger>();
+    const notices = createStaffNoticeLog(spy);
+    const failed = notices.begin();
+    notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "x" });
+    notices.log("error", UNAVAILABLE, { owner: "n", errorCode: "x" });
+    failed.settle(["m", "n"]);
+    spy.mockClear();
+    notices.begin().settle(["n"]);
+    expect(spy.mock.calls).toEqual([["info", "staff_notice.source_recovered", { owner: "m" }]]);
+  });
+
+  it("logs each repeated key once", () => {
+    const spy = vi.fn<Logger>();
+    const { log } = createStaffNoticeLog(spy);
+    for (let i = 0; i < 3; i += 1) {
+      log("error", "staff_notice.duplicate_key", { owner: "d", key: "k" });
+    }
+    log("error", "staff_notice.duplicate_key", { owner: "d", key: "j" });
+    expect(spy.mock.calls).toEqual([
+      ["error", "staff_notice.duplicate_key", { owner: "d", key: "k" }],
+      ["error", "staff_notice.duplicate_key", { owner: "d", key: "j" }],
+    ]);
+  });
+
+  it("through the reader, a source that fails on every read is logged once", async () => {
+    const spy = vi.fn<Logger>();
+    const notices = createStaffNoticeLog(spy);
+    for (let i = 0; i < 3; i += 1) {
+      const read = notices.begin();
+      const result = await withTransaction(db, (tx) =>
+        readStaffNotices(tx, [{ owner: "m", source: failing("boom") }], {
+          reading: READING,
+          log: notices.log,
+        }),
+      );
+      read.settle(result.unavailable);
+    }
+    expect(spy.mock.calls.filter(([, event]) => event === UNAVAILABLE)).toHaveLength(1);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not note a recovery from a read that checked the source before it failed", async () => {
+    const lines: string[] = [];
+    const logger = createStaffNoticeLog((_level, event) => lines.push(event));
+    let calls = 0;
+    const sources: OwnedStaffNoticeSource[] = [
+      {
+        owner: "m",
+        source: {
+          read: async () => {
+            calls += 1;
+            if (calls > 1) throw new Error("down");
+            return [];
+          },
+        },
+      },
+      { owner: "n", source: { read: async () => [] } },
+    ];
+    // The two reads take turns source by source: the first checks `m` while it still answers, the
+    // second sees it fail, and only then does the first finish.
+    const run = async () => {
+      const begun = logger.begin();
+      const read = await readStaffNoticesInTurns(db, sources, {
+        reading: READING,
+        log: logger.log,
+      });
+      begun.settle(read.unavailable);
+    };
+    await Promise.all([run(), run()]);
+    expect(lines).toEqual([UNAVAILABLE]);
+  });
+
+  it("does not note a recovery from a read begun before a repeated failure", () => {
+    const spy = vi.fn<Logger>();
+    const notices = createStaffNoticeLog(spy);
+    const first = notices.begin();
+    notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "x" });
+    first.settle(["m"]);
+    const earlier = notices.begin();
+    const later = notices.begin();
+    notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "x" });
+    earlier.settle([]);
+    later.settle(["m"]);
+    expect(spy.mock.calls).toEqual([["error", UNAVAILABLE, { owner: "m", errorCode: "x" }]]);
+  });
+
+  it("does not note a recovery from the latest read begun when the failure is logged", () => {
+    const spy = vi.fn<Logger>();
+    const notices = createStaffNoticeLog(spy);
+    const a = notices.begin();
+    const b = notices.begin();
+    notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "x" });
+    b.settle([]);
+    a.settle(["m"]);
+    expect(spy.mock.calls).toEqual([["error", UNAVAILABLE, { owner: "m", errorCode: "x" }]]);
+    notices.begin().settle([]);
+    expect(spy.mock.calls).toEqual([
+      ["error", UNAVAILABLE, { owner: "m", errorCode: "x" }],
+      ["info", "staff_notice.source_recovered", { owner: "m" }],
+    ]);
+  });
+
+  it("through the reader, reads one after another note a recovery once and a new failure", async () => {
+    const lines: string[] = [];
+    const logger = createStaffNoticeLog((_level, event) => lines.push(event));
+    let down = true;
+    const sources: OwnedStaffNoticeSource[] = [
+      {
+        owner: "m",
+        source: {
+          read: async () => {
+            if (down) throw new Error("down");
+            return [];
+          },
+        },
+      },
+    ];
+    const run = async () => {
+      const begun = logger.begin();
+      const read = await readStaffNoticesInTurns(db, sources, {
+        reading: READING,
+        log: logger.log,
+      });
+      begun.settle(read.unavailable);
+    };
+    await run();
+    await run();
+    down = false;
+    await run();
+    await run();
+    down = true;
+    await run();
+    expect(lines).toEqual([UNAVAILABLE, "staff_notice.source_recovered", UNAVAILABLE]);
+  });
+});
+
+describe("readStaffNoticesInTurns", () => {
+  it("orders errors, warnings, then notices, sources in the order given, one after another", async () => {
+    const order: string[] = [];
+    const seen: StaffNoticeReadContext[] = [];
+    const mk = (name: string, notices: StaffNotice[]): StaffNoticeSource => ({
+      read: async (ctx) => {
+        seen.push(ctx);
+        order.push(`${name} in`);
+        await ctx.tx.execute(sql`select 1`);
+        await new Promise((r) => setTimeout(r, 5));
+        order.push(`${name} out`);
+        return notices;
+      },
+    });
+    const result = await readStaffNoticesInTurns(
+      db,
+      [
+        { owner: "p", source: mk("p", [n("p-notice", "notice"), n("p-error", "error")]) },
+        { owner: "q", source: mk("q", [n("q-warning", "warning"), n("q-error", "error")]) },
+      ],
+      { reading: READING, log: noopLog },
+    );
+    expect(order).toEqual(["p in", "p out", "q in", "q out"]);
+    expect(result.notices.map((x) => x.key)).toEqual([
+      "p-error",
+      "q-error",
+      "q-warning",
+      "p-notice",
+    ]);
+    expect(result.notices.map((x) => x.owner)).toEqual(["p", "q", "q", "p"]);
+    expect(result.unavailable).toEqual([]);
+    expect(seen).toHaveLength(2);
+    for (const ctx of seen) {
+      expect(ctx.tx).toBe(db);
+      expect(ctx.reading).toBe(READING);
+    }
+  });
+
+  it("a source that changes a row fails, keeps nothing, and the rest are asked", async () => {
+    const { deviceId } = await seedVenue();
+    const log = vi.fn<Logger>();
+    const result = await readStaffNoticesInTurns(
+      db,
+      [
+        {
+          owner: "w",
+          source: {
+            read: async (ctx) => {
+              await record(ctx.tx, deviceId, "test.w");
+              return [n("w-1", "error")];
+            },
+          },
+        },
+        { owner: "h", source: { read: () => Promise.resolve([n("h-1", "notice")]) } },
+      ],
+      { reading: READING, log },
+    );
+    expect(result.notices).toEqual([{ ...n("h-1", "notice"), owner: "h" }]);
+    expect(result.unavailable).toEqual(["w"]);
+    const open = await withTransaction(db, async (tx) =>
+      (await listOpenIncidents(tx)).map((i) => i.code),
+    );
+    expect(open).toEqual([]);
+    expect(log).toHaveBeenCalledWith("error", "staff_notice.source_unavailable", {
+      owner: "w",
+      errorCode: "staff_notice.source_wrote",
+    });
+  });
+
+  it("a source that throws is reported by its code", async () => {
+    const log = vi.fn<Logger>();
+    const result = await readStaffNoticesInTurns(
+      db,
+      [
+        {
+          owner: "t",
+          source: { read: () => Promise.reject(new AppError("server.internal", {})) },
+        },
+      ],
+      { reading: READING, log },
+    );
+    expect(result).toEqual({ notices: [], unavailable: ["t"] });
+    expect(log).toHaveBeenCalledWith("error", "staff_notice.source_unavailable", {
+      owner: "t",
+      errorCode: "server.internal",
+    });
+  });
+
+  it("the duplicate rule holds across turns", async () => {
+    const log = vi.fn<Logger>();
+    const result = await readStaffNoticesInTurns(
+      db,
+      [
+        {
+          owner: "d",
+          source: {
+            read: () =>
+              Promise.resolve([{ key: "k", code: "first.code", severity: "warning", params: {} }]),
+          },
+        },
+        {
+          owner: "d",
+          source: {
+            read: () =>
+              Promise.resolve([{ key: "k", code: "second.code", severity: "error", params: {} }]),
+          },
+        },
+      ],
+      { reading: READING, log },
+    );
+    expect(result.notices).toEqual([
+      { key: "k", code: "first.code", severity: "warning", params: {}, owner: "d" },
+    ]);
+    expect(result.unavailable).toEqual([]);
+    expect(log).toHaveBeenCalledWith("error", "staff_notice.duplicate_key", {
+      owner: "d",
+      key: "k",
+    });
+  });
+
+  it("drains nothing", async () => {
+    db.run(sql`insert into change_log (id, payload) values ('zz1', '{"resource":"zz","id":"1"}')`);
+    const result = await readStaffNoticesInTurns(
+      db,
+      [{ owner: "h", source: { read: () => Promise.resolve([n("h-1", "notice")]) } }],
+      { reading: READING, log: noopLog },
+    );
+    expect(result.notices.map((x) => x.key)).toEqual(["h-1"]);
+    expect(db.all<{ id: string }>(sql`select id from change_log`)).toEqual([{ id: "zz1" }]);
   });
 });

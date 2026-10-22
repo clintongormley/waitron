@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Hono } from "hono";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,6 +20,7 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { startManagementSession } from "@waitron/identity";
 import { emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import type { ProfilePrinterLists } from "@waitron/layouts";
+import type { StaffNotice, StaffNoticeReadContext, WaitronModule } from "@waitron/module";
 import {
   cardReaderHolders,
   cardReaders,
@@ -27,14 +31,22 @@ import {
   type CardProviderContribution,
 } from "@waitron/payments";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import {
+  BOX_NOTICE_OWNER,
+  boxStaffNoticeSource,
+  deviceNoticeSources,
+} from "./box-staff-notices.js";
 import { prepareCardReaderDelete } from "./card-reader-delete.js";
-import { mountDeviceApi } from "./device-api.js";
+import { mountDeviceApi, type DeviceApiDeps } from "./device-api.js";
+import { createDiskFullState } from "./disk-full-state.js";
+import { createFreeSpaceState } from "./free-space-watch.js";
 import type { EquipmentRole, RoleEquipment, RoleSummary } from "./device-equipment.js";
 import type { Logger } from "./logger.js";
 import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { deletePrinter } from "./printer-delete.js";
+import type { OwnedStaffNoticeSource } from "./staff-notices.js";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 
 // Choosing equipment over HTTP: two tills A ("Barra") and B ("Terraza") on one profile, each with
@@ -1416,5 +1428,185 @@ describe("a deleted reader", () => {
       expect(venue.card.collectCalls.length).toBe(calls);
       expect(removed).toEqual([]);
     });
+  });
+});
+
+describe("GET /api/device/equipment's notices", () => {
+  const READING = { instant: new Date("2026-10-22T10:00:00.000Z"), offsetMinutes: 120 };
+  const notice = (key: string, severity: StaffNotice["severity"]): StaffNotice => ({
+    key,
+    code: `test.${key}`,
+    severity,
+    params: {},
+  });
+  const answering = (owner: string, ...notices: StaffNotice[]): OwnedStaffNoticeSource => ({
+    owner,
+    source: { read: () => Promise.resolve(notices) },
+  });
+
+  function noticeApp(
+    sources: readonly OwnedStaffNoticeSource[],
+    over: Partial<NonNullable<DeviceApiDeps["notices"]>> = {},
+    log: Logger = quiet,
+  ): Hono {
+    const app = new Hono();
+    mountDeviceApi(
+      app,
+      {
+        db: suite.db,
+        cfg: venue.cfg,
+        secureCookies: false,
+        pairingMode: createPairingMode(),
+        notices: {
+          sources,
+          clock: { now: () => ({ ...READING, confident: true }) as never },
+          filing: () => ({ enabled: false }),
+          ...over,
+        },
+      },
+      log,
+    );
+    return app;
+  }
+
+  async function read(app: Hono) {
+    const res = await send(app, venue.cookie, "GET", "/api/device/equipment");
+    expect(res.status).toBe(200);
+    return res.json as {
+      roles: RoleEquipment[];
+      notices: (StaffNotice & { owner: string })[];
+      noticesUnavailable: string[];
+    };
+  }
+
+  const diskFull = () => {
+    const disk = createDiskFullState({
+      dir: mkdtempSync(join(tmpdir(), "equipment-notices-")),
+      now: () => new Date(),
+      log: quiet,
+    });
+    disk.noteRefused();
+    return disk;
+  };
+
+  it("with no notice dependencies, answers none", async () => {
+    const roles = await equipmentOf(venue.cookie);
+    const body = await read(deviceApp);
+    expect(body.notices).toEqual([]);
+    expect(body.noticesUnavailable).toEqual([]);
+    expect(body.roles).toEqual(roles);
+  });
+
+  it("severity first, then the order of the sources", async () => {
+    const body = await read(
+      noticeApp([
+        answering("box", notice("box-warning", "warning")),
+        answering("m", notice("m-error", "error"), notice("m-notice", "notice")),
+      ]),
+    );
+    expect(body.notices.map(({ key, owner }) => ({ key, owner }))).toEqual([
+      { key: "m-error", owner: "m" },
+      { key: "box-warning", owner: "box" },
+      { key: "m-notice", owner: "m" },
+    ]);
+    expect(body.noticesUnavailable).toEqual([]);
+  });
+
+  it("every source is asked with one reading of the clock and the filing fact", async () => {
+    const seen: StaffNoticeReadContext[] = [];
+    const recording = (owner: string): OwnedStaffNoticeSource => ({
+      owner,
+      source: {
+        read: (ctx) => {
+          seen.push(ctx);
+          return Promise.resolve([]);
+        },
+      },
+    });
+    let calls = 0;
+    const app = noticeApp([recording("one"), recording("two")], {
+      clock: {
+        now: () => {
+          calls += 1;
+          return { instant: new Date(), offsetMinutes: 0, confident: true } as never;
+        },
+      },
+      filing: () => ({ enabled: true }),
+    });
+    await read(app);
+    expect(seen).toHaveLength(2);
+    expect(seen[0]!.reading).toBe(seen[1]!.reading);
+    expect(calls).toBe(1);
+    expect(seen.map((ctx) => ctx.filing)).toEqual([{ enabled: true }, { enabled: true }]);
+  });
+
+  it("a failing source is named, and logged once over three reads, and its recovery once", async () => {
+    const lines: string[] = [];
+    let reads = 0;
+    const app = noticeApp(
+      [
+        {
+          owner: "f",
+          source: {
+            read: () => {
+              reads += 1;
+              return reads <= 3 ? Promise.reject(new Error("down")) : Promise.resolve([]);
+            },
+          },
+        },
+      ],
+      {},
+      (_level, event) => lines.push(event),
+    );
+    for (let i = 0; i < 3; i += 1) expect((await read(app)).noticesUnavailable).toEqual(["f"]);
+    expect(lines.filter((event) => event === "staff_notice.source_unavailable")).toHaveLength(1);
+    expect((await read(app)).noticesUnavailable).toEqual([]);
+    expect(lines.filter((event) => event === "staff_notice.source_recovered")).toHaveLength(1);
+  });
+
+  it("the box's real source: red while the stop is noted", async () => {
+    const box = boxStaffNoticeSource({
+      disk: diskFull(),
+      space: createFreeSpaceState({ log: quiet }),
+    });
+    const body = await read(noticeApp([{ owner: BOX_NOTICE_OWNER, source: box }]));
+    expect(body.notices).toEqual([
+      {
+        key: "storage.disk_full",
+        code: "storage.disk_full",
+        severity: "error",
+        params: {},
+        owner: "box",
+      },
+    ]);
+  });
+
+  // A pin: the PUT already answers the equipment alone.
+  it("the PUT answers no notices", async () => {
+    const app = noticeApp([answering("box", notice("box-error", "error"))]);
+    const res = await send(app, venue.cookie, "PUT", "/api/device/equipment", {
+      role: "receipt",
+      selection: "default",
+      via: "list",
+    });
+    expect(res.status).toBe(200);
+    expect(res.json).not.toHaveProperty("notices");
+    expect(res.json).not.toHaveProperty("noticesUnavailable");
+  });
+
+  it("the box's red comes before a module's red", async () => {
+    const module = {
+      name: "m",
+      staffNotices: [{ read: () => Promise.resolve([notice("m-error", "error")]) }],
+    } as unknown as WaitronModule;
+    const sources = deviceNoticeSources(
+      { disk: diskFull(), space: createFreeSpaceState({ log: quiet }) },
+      [module],
+    );
+    const body = await read(noticeApp(sources));
+    expect(body.notices.map(({ key, owner }) => ({ key, owner }))).toEqual([
+      { key: "storage.disk_full", owner: "box" },
+      { key: "m-error", owner: "m" },
+    ]);
   });
 });

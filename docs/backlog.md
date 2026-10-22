@@ -5551,7 +5551,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   2026-10-20). It adds a module seat for staff notices and one
   migration in the Veri*Factu module's set. Slice 1 of 10 (a full disk reported as
   `storage.disk_full`; nothing a body writes through the write queue after one that ended its
-  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) landed in #1950; slice 4 (a module seat for staff notices, with the Veri*Factu module's notice for a clock before 28-10-2024; nothing shows notices yet) landed in #1958; slice 5 (a free-space watch every minute: the bell warns below 2 GiB and shows a full disk, and a full-disk stop lifts once space is back with no write) landed in #1963; slice 6 is next. Open asesor questions:
+  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) landed in #1950; slice 4 (a module seat for staff notices, with the Veri*Factu module's notice for a clock before 28-10-2024; nothing shows notices yet) landed in #1958; slice 5 (a free-space watch every minute: the bell warns below 2 GiB and shows a full disk, and a full-disk stop lifts once space is back with no write) landed in #1963; slice 6 (the strip on every signed-in till and handheld: a full or nearly full disk, a clock before 28-10-2024, and the sales not yet sent to the tax agency; and the equipment read and the till's session checks answer on a full disk) landed in #1977; slice 7 is next. Open asesor questions:
   [Q51](compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21)
   and
   [Q52](compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21).
@@ -5572,17 +5572,43 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   notices at all. Left open by A798-B slice 4 (#1958) for slice 7.
   [Detail](backlog/box.md#the-box-status-pages-rows-from-a-module-are-not-in-the-staff-notice-seat)
 
-- **What a device shows when a module's notice check fails, and how often it is logged.** Nothing
-  shows a failed check, and once slice 6 reads notices on every device's 15-second equipment read,
-  a check that keeps failing logs on every read from every device. Left open by A798-B slice 4
-  (#1958) for slice 6.
-  [Detail](backlog/box.md#what-a-device-shows-when-a-modules-notice-check-fails-and-how-often-it-is-logged)
+- **Till write surfaces other than the draft save, the unpaid departure and the station screen were
+  not checked for a full-disk refusal's words** (design §4.6 item 2). The draft save and the
+  departure already say 'Not saved…' (measured 2026-10-22); the station screen does since slice 6.
+  Audit the rest: catch sites in `apps/till/src` that do not fall back to `codeMessage(code)`. Left
+  open by A798-B slice 6 (#1977).
+  [Detail](backlog/box.md#till-write-surfaces-not-checked-for-a-full-disk-refusals-words)
 
-- **Till surfaces that still show their own message for a full disk, and the station screen's
-  silence.** Left open by A798-B slice 3 (#1950) for slice 6: the draft save's
-  refusals and the unpaid departure, among others, now meet a full disk whenever the stop holds, and
-  the station screen, on a kitchen display and on a till's Station tab, shows nothing for a refused bump.
-  [Detail](backlog/box.md#till-surfaces-that-still-show-their-own-message-for-a-full-disk-and-the-station-screens-silence)
+- **On a full disk, a till read whose route opens a `withTransaction` is refused while a change
+  waits.** The drain is a write (measured 2026-10-22); the equipment read reads in turns and
+  answers, `GET /api/till` and session-checked reads do not. Left open by A798-B slice 6
+  (#1977).
+  [Detail](backlog/box.md#on-a-full-disk-a-till-read-whose-route-opens-a-withtransaction-is-refused-while-a-change-waits)
+
+- **A failed staff-notice check is seen only in the log.** A bell alert (slice 7's page could
+  carry it) would tell the manager when the unsent count cannot be worked out. Left open by A798-B
+  slice 6 (#1977).
+
+- **The strip draws no tinted background and no coloured words, unlike picture 2.** No token is
+  named for the tints and `color-mix()` is refused; tint tokens with their contrast checks would let
+  it. Left open by A798-B slice 6 (#1977).
+
+- **No strip on the clock-in and attendance pages.** `till-app` draws them instead of the shell.
+  Left open by A798-B slice 6 (#1977).
+
+- **A till nobody has signed in to shows no strip on a full disk, and PIN sign-in is refused
+  then.** The sign-in page shows only the refusal's own sentence. Left open by A798-B slice 6
+  (#1977).
+
+- **A kitchen screen on a full disk can be reported dark while it works.** Since slice 6 its
+  requests are served on a full disk but its last-seen time is not saved, so the dark-screen check
+  (`SCREEN_DARK_MS`, `apps/server/src/station-outputs-down.ts`) raises it after three minutes,
+  beside the full disk's own alert. Left open by A798-B slice 6 (#1977).
+
+- **The open notice list cannot be scrolled from the keyboard once it overflows.** It takes no
+  focus; axe flags it only at about eight wrapped notices, and today's sources give at most three.
+  Add `tabindex="0"` and an overflowing-list accessibility case when per-printer notices land
+  (slice 10). Left open by A798-B slice 6 (#1977).
 
 - **The refund guide does not say that recording a separate-terminal refund is refused during a
   full-disk stop.** `apps/server/src/guide/en/table-service.md` `{#separate-terminal}` (and its

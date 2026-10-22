@@ -2770,6 +2770,36 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     });
   }, 60_000);
 
+  // Weaker than its name: a mount with no notice sources answers the same, so this proves the read
+  // answers both keys and no wired source fails, not that boot wires any source.
+  it("the equipment read carries the notice keys", async () => {
+    await withCapturedStdout(async () => {
+      const port = await freePort();
+      const server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_HTTP_HOST: "0.0.0.0",
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "dev",
+        WAITRON_MIN_TICK_MS: "50",
+        WAITRON_MAX_TICK_MS: "200",
+        WAITRON_SKIP_RETRY_MS: "100",
+      });
+      try {
+        const res = await fetch(`http://127.0.0.1:${port}/api/device/equipment`, {
+          headers: { [DEV_DEVICE_HEADER]: deviceId1 },
+        });
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { notices: unknown; noticesUnavailable: unknown };
+        expect(Array.isArray(body.notices)).toBe(true);
+        expect(body.noticesUnavailable).toEqual([]);
+      } finally {
+        await server.close();
+      }
+    });
+  }, 60_000);
+
   it("passes the development device identity to an Orders receipt-copy request", async () => {
     const [person] = await sharedDb
       .insert(persons)
