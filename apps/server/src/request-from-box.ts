@@ -8,8 +8,8 @@ export interface RequestSourceDeps {
 }
 
 /**
- * Every address any interface holds counts, internal ones and Docker bridges included: a browser
- * reaching the box over any of them runs on the box, so its clock is the box's own.
+ * A request whose source address is loopback or one of the box's own interface addresses
+ * (internal ones and Docker bridges included) came from the box.
  */
 export function addressIsBox(address: string | undefined, deps: RequestSourceDeps = {}): boolean {
   if (address === undefined) return true;
