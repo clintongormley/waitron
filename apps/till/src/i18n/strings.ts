@@ -116,6 +116,7 @@ export const en = {
   "tender_refund.pending_payment": "Check pending refund",
   "tender_refund.storage":
     "The refund request could not be saved or read on this device. Ask a manager to check its outcome before starting another refund.",
+  "tender_refund.left": "{amount} left to refund from another payment",
 
   "kitchen_note.changed": "Kitchen note changed",
   "kitchen_note.removed": "Kitchen note removed",
@@ -1862,6 +1863,7 @@ export const es: Record<StringKey, string> = {
   "tender_refund.pending_payment": "Consultar devolución pendiente",
   "tender_refund.storage":
     "No se ha podido guardar o leer la solicitud de devolución en este dispositivo. Pide a un responsable que compruebe el resultado antes de iniciar otra devolución.",
+  "tender_refund.left": "Quedan {amount} por devolver de otro pago",
 
   "kitchen_note.changed": "Nota para cocina cambiada",
   "kitchen_note.removed": "Nota para cocina eliminada",

@@ -4,6 +4,7 @@ import { setLocale } from "../i18n/t.js";
 import "./tender-refund-dialog.js";
 import type { TillTenderRefundDialog } from "./tender-refund-dialog.js";
 import type { RefundableTender, TenderRefundView } from "../api/tender-refund-types.js";
+import type { AdjustmentReason } from "../api/client.js";
 
 const card: RefundableTender = {
   tenderId: "card-1",
@@ -14,6 +15,19 @@ const card: RefundableTender = {
   manual: false,
   pendingRefundId: null,
 };
+const reason = (id: string, name: string, noteRequired = false) =>
+  ({
+    id,
+    name,
+    kind: "void",
+    actions: ["cancel"],
+    noteRequired,
+    maxPercentBp: null,
+    maxAmount: null,
+    applyRoles: [],
+    approverRoles: [],
+  }) as AdjustmentReason;
+const reasons = [reason("not-served", "No servido"), reason("other", "Otro", true)];
 const result: TenderRefundView = {
   id: "r1",
   saleId: "s1",
@@ -36,6 +50,27 @@ describe.each(["light", "dark"] as const)("settled-tender refund accessibility (
       { tenders: [card], invoiceNumber: "F/0012", ...over },
       theme,
     );
+  it("has no violations filled in from a cancel, with what is left to refund", async () => {
+    const { host } = await mount({
+      tenders: [{ ...card, method: "cash", last4: null, appliedRemaining: "5.50" }],
+      reasons,
+      startReasonId: "not-served",
+      dishes: "1 × Flan",
+      target: "7.50",
+      refundAtTill: true,
+    });
+    await expectNoA11yViolations(host);
+  });
+  it("has no violations with Other's note required and marked", async () => {
+    const { el, host } = await mount({ reasons, startReasonId: "other" });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+  it("has no violations when the reasons could not be read", async () => {
+    const { host } = await mount({ reasons: null });
+    await expectNoA11yViolations(host);
+  });
   it("has no violations with mixed original payments", async () => {
     const { host } = await mount({
       tenders: [card, { ...card, tenderId: "cash-1", method: "cash", last4: null }],
