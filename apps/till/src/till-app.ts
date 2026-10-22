@@ -16335,10 +16335,6 @@ export class TillApp extends LitElement {
     await this.#openBillPaying(way, lines, amount);
   }
 
-  /** "Give back" pressed on a move refused for leaving the bill owing less than it received: the
-   * bill payment dialog opens on the bill on screen, and when its payments, read again, have only
-   * one that can be given back, the refund of that one opens over it, offering the excess as the
-   * part to give back. */
   async #onRefundExcess(event: Event): Promise<void> {
     const { excess } = (event as CustomEvent<{ excess: string }>).detail;
     const open = await this.#openBillPaying("contribution", this.#payLinesOnScreen());

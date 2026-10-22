@@ -21,7 +21,10 @@ encargado introduce su PIN. En una devolución en efectivo, entrega el dinero al
 resultado te lo indique.
 
 Si un cambio deja la cuenta debiendo menos de lo que ya ha recibido, el mensaje ofrece **Devolver**
-con el importe que sobra. Se abre la ventana de devolución con ese importe seleccionado.
+con el importe que sobra. Elígelo para abrir los pagos de la cuenta. Si solo se puede devolver un
+pago, se abre su ventana de devolución con el importe que sobra seleccionado. Si se pueden
+devolver varios pagos, elige cuál quieres devolver. Si no se pueden consultar los pagos, la
+ventana explica el problema; ciérrala y vuelve a abrirla antes de elegir un pago.
 
 ## Devolver una tarjeta en un datáfono aparte {#separate-terminal}
 
