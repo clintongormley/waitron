@@ -23,7 +23,6 @@
   "scripts/register-till.test.ts": 7.9,
   "scripts/script-arguments.test.ts": 2.9,
   "scripts/script-device.test.ts": 2.2,
-  "scripts/settle-invoice-first.test.ts": 6.4,
   "scripts/throwaway-venue.test.ts": 6,
   "scripts/venue-dir.test.ts": 4,
   "src/account-email.test.ts": 0.2,

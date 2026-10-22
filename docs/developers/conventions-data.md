@@ -2825,7 +2825,7 @@ lock, not that every writer of the file takes it.
 | the dev server, `tsx watch` (`apps/server/scripts/dev-server.mjs`) | development | locks, as the server does. A restart waits for the old process's `exit` event before starting the new one: `killProcess` in `tsx@4.23.13`'s `dist/cli.mjs`, read, not run |
 | `apps/server/src/break-glass-command.ts` | beside the server (`deploy/README.md`) | `exclusive: false` |
 | `packages/credentials/src/bin.ts` | beside the server (`apps/server/README.md`: credentials are read fresh every pass, no restart) | `exclusive: false` |
-| `apps/server/scripts/record-one-sale.ts`, `settle-invoice-first.ts` | write sales for a running server to drain | `exclusive: false` |
+| `apps/server/scripts/record-one-sale.ts` | write sales for a running server to drain | `exclusive: false` |
 | `apps/server/scripts/cloud-backup-fixture.ts` `capture` | the Cloud repository's local-backups runner (`test-local-backups.mjs` in its scripts folder), while the fixture server on the same folder is still running (it stops the servers only after every capture: read, not run) | `exclusive: false` |
 | `apps/server/scripts/cloud-backup-fixture.ts` `restore` | the same runner, on a fresh folder with no server (read, not run) | locks (default), through `writeValidated`, then its own open |
 | `apps/server/scripts/cloud-capture-client-fixture.ts` (`schedule`), `cloud-recovery-client-fixture.ts` (`restore`, `prepareReplacement`, `statusReplacement`) | Cloud's integration runners, on a folder under the system's temporary directory; whether a server holds the same folder at that moment was not checked | locks (default); the recovery fixture's `restore` also locks through `runStagedRestore` first |

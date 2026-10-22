@@ -371,7 +371,7 @@ the 2026-09-30 folders design; what remains:
   refuses adding a line; whether the till's message for that refusal on the add paths is right is
   not checked. The demo seed
   (`apps/server/scripts/demo-seed/seed-sales.ts`), the other scripts that call `recordSale`
-  directly (`record-one-sale.ts`, `settle-invoice-first.ts`, `daily-close-demo.ts`,
+  directly (`record-one-sale.ts`, `daily-close-demo.ts`,
   `daily-close-z-demo.ts`, `modelo-303-demo.ts`) and `apps/server/src/fiscal-readiness-runner.ts`
   file sales without the issuance pass, so seeded demo lines carry no product id, classification or
   gross, and the Sales screen's category report shows every seeded line under Not recorded.

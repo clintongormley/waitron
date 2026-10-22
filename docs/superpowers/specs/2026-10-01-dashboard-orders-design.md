@@ -1,5 +1,7 @@
 # The dashboard's Orders screen — design
 
+_2026-10-22, A973: the invoice-first settlement operator script and its test are retired by owner decision. References to that command below record the earlier tree; current build plans omit it._
+
 > **2026-10-16, A737 Part 1:** [The page plan](../plans/2026-10-15-a737-find-bill-page.md) supersedes
 > the till's modal search and header placement described below. Find a bill stays in More and
 > opens Bills/Transactions with server paging; collection receives a fresh selected bill.

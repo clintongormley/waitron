@@ -1,5 +1,7 @@
 # A till is a device (A238) — Implementation Plan
 
+_2026-10-22, A973: the invoice-first settlement operator script and its test are retired by owner decision. References to that command below record the earlier tree; current build plans omit it._
+
 2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
 with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
 interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and

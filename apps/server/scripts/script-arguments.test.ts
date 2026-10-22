@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 
 // TypeScript cannot see the arity of a destructured `process.argv`, so an argument dropped from the
 // destructure but still counted by the `args.length` guard and the usage text shifts every argument
-// after it — and one of these scripts closes a fiscal chain (CLAUDE.md §5).
+// after it.
 //
 // WHAT THIS GUARD READS, AND THE GAP: it reads the SOURCE TEXT of each script and checks three
 // numbers agree — the counts `args.length` accepts, the names destructured out of `args`, and the
@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
 // names are in the right ORDER, only that there are the right number of them. Ordering is still
 // carried by review.
 // register-till has paired named flags; its parser cases below exercise that contract directly.
-const SCRIPTS = ["record-one-sale.ts", "settle-invoice-first.ts"] as const;
+const SCRIPTS = ["record-one-sale.ts"] as const;
 
 /** Placeholders a usage text spells for POSITIONAL arguments: everything after the `dist/<x>.js`
  * token, minus the ones that describe an environment variable (`<...>`, `<production|preproduction>`). */
