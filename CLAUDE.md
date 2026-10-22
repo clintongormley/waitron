@@ -702,9 +702,9 @@ browser test** — most of these rules exist because a test passed while proving
   image attached, and `pnpm reap` does not detach it.
   Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem).
-- **On Vitest 4.1.12 a browser's `connectTimeout` is read only from the OUTER config's
-  `test.browser` block**; the command-line flag and a project's own `browser` block are ignored
-  without a word. Nothing guards it. Cost: A527's first forced-failure control passed. Receipt:
+- **On Vitest 4.1.12 a browser configured inside a project reads `connectTimeout` only from the
+  OUTER config's `test.browser` block**; the command-line flag and that project's own `browser`
+  block are ignored without a word. Nothing guards it. Cost: A527's first forced-failure control passed. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#vitest-reads-a-browsers-connecttimeout-from-the-outer-config-only).
 - **Under an AI agent (`AI_AGENT` or `CLAUDECODE` set), Vitest hides a passing test's console
   output**; unset both to see it.

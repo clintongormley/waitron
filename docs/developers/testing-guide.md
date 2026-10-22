@@ -428,7 +428,10 @@ Four scratch test files each recorded its process id before and after a 700 ms w
 `node node_modules/vitest/vitest.mjs run --config <fixture>` with outer `maxWorkers: 4`
 and project `maxWorkers: 1` passed all four tests with peak concurrency 1; removing the
 project limit passed all four with peak concurrency 4. Each run recorded four distinct
-worker processes. This rechecks the two limit arrangements, not every pool or project shape.
+worker processes. Reversing the limits (outer 1, project 4) also passed four tests with peak
+concurrency 4; removing that project limit passed four with peak 1. The reversed pair distinguishes
+project precedence from choosing the smaller limit. These checks cover these arrangements, not
+every pool or project shape.
 
 This section came from Vitest 3, where moving `maxForks: 4`
 inside fiscal-verifactu's project in #286 started 17 workers on the local host, observed during a
@@ -527,6 +530,12 @@ with `--browser.connectTimeout=1`, and with `connectTimeout: 1` in the project's
 exit 1, `Tests no tests`, and `Failed to connect to the browser session … within the timeout`.
 Each run used `node node_modules/vitest/vitest.mjs run --config <fixture>`; the outer failure
 is the control for the other placements' passing result.
+
+The command-line result depends on the layout. With the same Chromium test in the top-level
+`test.browser` block, the baseline and `--browser.connectTimeout=60000` each passed one test;
+`--browser.connectTimeout=1` failed twice with the connection-timeout message and no tests.
+The command-line flag is therefore ignored in the measured project layout, and honoured in the
+measured top-level layout. The earlier receipt tested only the project layout.
 
 ## A disposable browser checkout keeps the lockfile's dependency versions
 
