@@ -82,6 +82,18 @@ Decision 7, what this slice owes), `docs/superpowers/plans/2026-10-20-a757-4-pre
   its own property, with the reason in Decision 8 (M8); owner point 7 says what a split-off party
   lacks (M9); citations corrected (M10).
 
+- **Round 3 (after the claim check, 08ce30a99):**
+  1. Decision 2's comments: the signal lists "steps whose trigger has happened and that are not
+     cleared" (it carries steps not yet due too); `dueAt` is "its trigger plus its minutes".
+  2. `chipState`'s `"take-order"` case (`apps/till/src/widgets/signal-chips.ts:110-111`) stays
+     through Task 6 and goes in Task 9 with the `take_order` member, so Task 9's grep finds only
+     the allowed `wt-table-token.a11y.test.ts:147`.
+  3. Task 10's guide says an order clears a step "once it is due", matching Decision 3 and the
+     Goal, an earlier-due step hidden behind a later one included.
+  4. A dish with nothing left to serve but no serving time (`serviceCompletedAt` returns null)
+     keeps its course unserved, as the fire reminder treats null (`order-groups.ts:1444`); Task 2's
+     `servedTimes` tests pin it.
+
 ## Sources the plan answers to (quoted)
 
 - §8: "A **service step** is a reminder to go to a table." "**What starts a step** — one of four,
@@ -324,13 +336,13 @@ sentences live in `apps/till/src/i18n/codes.ts`.
    removes it; Task 2 adds the new one beside it so every task stays green):
 
    ```ts
-   /** The table's department's steps that have started and are not cleared, soonest due first. */
+   /** The table's department's steps whose trigger has happened and that are not cleared, soonest due first. */
    | { kind: "service_step"; steps: ServiceStepDue[] }
 
    export interface ServiceStepDue {
      stepId: string;
      name: string;
-     /** When the step shows: its start plus its minutes. May still be ahead. */
+     /** When the step shows: its trigger plus its minutes. May still be ahead. */
      dueAt: string;
    }
    ```
@@ -693,7 +705,10 @@ re-exports `./service-steps.js`).
   - `"lists live steps soonest due first, ties in list order"`;
   - `servedTimes`: a dish whose remainder was cancelled gives the cancellation time when that is
     later than its serving; a dish cancelled whole gives its cancellation time; a part-served dish
-    keeps its course unserved; dishes with no course count only for everything served.
+    keeps its course unserved; a dish with nothing left to serve but no serving time
+    (`serviceCompletedAt` returns null) keeps its course, and everything served, unserved, as the
+    fire reminder treats a null serving time (`apps/server/src/order-groups.ts:1444`); dishes with
+    no course count only for everything served.
 - [ ] **Step 2: Run, watch them fail:**
   `pnpm --filter @waitron/server exec vitest run src/service-step-reckoning.test.ts`
 - [ ] **Step 3: Implement**; one doc comment on `liveSteps` naming trigger and due time and the
@@ -891,7 +906,8 @@ personId: string; nowMs: number }): Promise<{ cleared: string[] }>`; the route a
 - Modify: `apps/till/src/state/table-precedence.ts:47` (`step` from `currentStep`; `take_order`
   no longer ranks), `apps/till/src/widgets/signal-chips.ts` (the `service_step` chip with `now`;
   `chipState("service-step") → "step"`; `case "take_order"` returns `[]` — the switch has no
-  default, `:28-67`, so the case stays until Task 9 removes the member),
+  default, `:28-67`, so the case stays until Task 9 removes the member; `chipState`'s
+  `"take-order"` case, `:110-111`, also stays until Task 9),
   `apps/till/src/state/floor-look.ts` (`step` leaves `FIXED_CUE` and `FIXED_WORDS`; `kindWords`
   and `kindCue` read the step's name; `reminderClock` adds the current step id),
   `apps/till/src/screens/till-floor-screen.ts:178-184` (`tableChips` passes `now`),
@@ -1021,10 +1037,11 @@ tableId: string }`.
 
 **Files:**
 - Modify: `packages/shared/src/table-signals.ts` (the `take_order` member goes),
-  `apps/till/src/widgets/signal-chips.ts` (Task 6's `case "take_order"` goes),
+  `apps/till/src/widgets/signal-chips.ts` (Task 6's `case "take_order"` in `signalChips` and
+  `chipState`'s `"take-order"` case, `:110-111`, both go),
   `apps/till/src/i18n/strings.ts` (`signal.take_order` goes, both languages)
 
-- [ ] **Step 1:** Remove the member, the case and the strings; `pnpm --filter @waitron/shared
+- [ ] **Step 1:** Remove the member, both cases and the strings; `pnpm --filter @waitron/shared
   typecheck`, `pnpm --filter @waitron/server typecheck` and `pnpm --filter @waitron/till typecheck`
   must pass with no other change (Task 6 converted every till fixture; Task 4 every server one).
   Then `git grep -n "take_order\|take-order\"" -- apps packages` must name nothing but
@@ -1047,8 +1064,9 @@ tableId: string }`.
   — retitle (`# Table service` / `# Servicio en mesa`) and add `## Clear a service step
   {#service-steps}` / `## Marcar un paso de servicio como hecho {#service-steps}`: what a step is
   and where it shows (the card's chip with Done, the map's blue table with the bell and the step's
-  name, the table's details); one at a time, the latest due; what clears it (Done, an order sent
-  once it is showing, the party's first order, the party leaving) and that before the first order
+  name, the table's details); one at a time, the latest due; what clears it (Done; an order sent
+  once it is due, which also clears an earlier-due step hidden behind a later one; the party's
+  first order; the party leaving) and that before the first order
   it hides while an order is being taken; that it starts again when its start happens again; where a venue sets them (the department's Service
   tab, Service steps). Short, in `~/.claude/docs-writing-style.md`'s style.
 - Modify: `apps/server/src/i18n/table-service-guide.ts` ("Table service" / «Servicio en mesa»)
