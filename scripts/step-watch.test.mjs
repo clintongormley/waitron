@@ -357,6 +357,51 @@ const threadCpuMs = () => {
 };
 
 describe("reportStallAfter", () => {
+  it.each([0, 999])(
+    "re-arms an idle callback at %s ms and reports only when the 1000 ms limit is reached",
+    async (earlyAt) => {
+      let time = 0;
+      let release;
+      const timers = [];
+      const cleared = [];
+      const watch = createStepWatch({ now: () => time, resources: () => [] });
+      const result = reportStallAfter(
+        watch,
+        { workMs: 2000, idleMs: 1000 },
+        () => watch.phase("hangs", () => new Promise((resolve) => (release = resolve))),
+        {
+          now: () => time,
+          cpuNow: () => 0,
+          setTimer: (callback, ms) => {
+            const timer = { callback, ms };
+            timers.push(timer);
+            return timer;
+          },
+          clearTimer: (timer) => cleared.push(timer),
+        },
+      ).catch((error) => error);
+      try {
+        time = earlyAt;
+        timers.at(-1).callback();
+        expect(timers.map(({ ms }) => ms)).toEqual([1000, 1000, 1000 - earlyAt]);
+
+        time = 1000;
+        timers.at(-1).callback();
+        const error = await result;
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toContain(
+          "no phase started or finished for 1000 ms, past the 1000 ms no-progress limit",
+        );
+        expect(error.message).toContain("Stalled in phase hangs after 1000 ms.");
+        expect(timers).toHaveLength(3);
+        expect(cleared).toEqual([timers[0], timers[2]]);
+      } finally {
+        release();
+        await result;
+      }
+    },
+  );
+
   it("passes a body whose phases keep moving, however long it runs in all and however little work it does", async () => {
     const watch = createStepWatch();
     const result = await reportStallAfter(

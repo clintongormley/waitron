@@ -200,8 +200,13 @@ export async function reportStallAfter(
   // A body that throws before returning never reaches the race, which is what handles `failed`.
   failed.catch(() => undefined);
   const onIdle = () => {
+    const gap = now() - lastEventAt;
+    if (gap < idleMs) {
+      timer = setTimer(onIdle, idleMs - gap);
+      return;
+    }
     fail(
-      `Still running after ${took()} ms with no phase started or finished for ${Math.round(now() - lastEventAt)} ms, past the ${idleMs} ms no-progress limit. ${watch.stalled()}`,
+      `Still running after ${took()} ms with no phase started or finished for ${Math.round(gap)} ms, past the ${idleMs} ms no-progress limit. ${watch.stalled()}`,
     );
   };
   timer = setTimer(onIdle, idleMs);

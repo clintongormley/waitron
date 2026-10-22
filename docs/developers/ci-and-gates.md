@@ -2462,6 +2462,19 @@ lacked, at every step. Rows are counted, not compared, so a step that rewrites a
 after the final step it also checks the `products_*` triggers it lists, but a rebuild that drops any
 other trigger passes it (SQLite drops one silently: [conventions-data.md](conventions-data.md)).
 
+### An idle timer checks the elapsed gap before reporting a stall
+
+On 2026-10-22, A999's [CI run 39715628369](https://github.com/clintongormley/waitron/actions/runs/39715628369),
+root job `119616918051`, reported a gap of `999` ms against the existing `>= 1000` assertion in
+`scripts/step-watch.test.mjs`. A1001's injected callbacks at `0` and `999` ms both failed against
+that source: neither scheduled another callback. With the elapsed-gap check in `reportStallAfter`,
+those cases schedule the remaining `1000` and `1` ms, then reject at exactly `1000` ms with the
+held phase in the report. The existing real-timer lower-bound assertion is unchanged.
+
+Run `pnpm exec vitest run scripts/step-watch.test.mjs scripts/migration-upgrade-budget.test.mjs`.
+The controlled callbacks reproduce the early-callback path; they do not measure how often a real
+timer takes it.
+
 ### The upgrade test names the phase it stalled in
 
 `scripts/migration-upgrade.test.ts` times each migration step in five phases — migrate, open,
