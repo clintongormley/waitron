@@ -511,16 +511,17 @@ describe("A669 allergy dialog", () => {
     expect(who.value).toBe("Corrected guest");
     expect(who.error).toBe("");
     expect(el.fieldRefusal).toBeNull();
-    el.fieldRefusal = { ...refusal };
+    const nextRefusal = { ...refusal };
+    el.fieldRefusal = nextRefusal;
     await el.updateComplete;
     expect(who.error).toBe("Check this guest");
     await fill(el, "guest-0-who", "Another correction");
     el.scopeKey = "opening-b";
-    el.fieldRefusal = refusal;
+    el.fieldRefusal = nextRefusal;
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector<WtInput>('wt-input[name="guest-0-who"]')!.error).toBe(
-      "Check this guest",
-    );
+    const reopened = el.shadowRoot!.querySelector<WtInput>('wt-input[name="guest-0-who"]');
+    expect(reopened).not.toBeNull();
+    expect(reopened!.error).toBe("Check this guest");
   });
   it("focuses the first guest on the guest page and Enter advances only a valid form", async () => {
     const el = await mount();

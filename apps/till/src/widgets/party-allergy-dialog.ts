@@ -201,7 +201,7 @@ export class TillPartyAllergyDialog extends LitElement {
       this.fieldRefusal &&
       this.draft.guests[this.fieldRefusal.guestIndex]
     ) {
-      // A parent render may repeat the request object after a local correction cleared it.
+      // A parent render may repeat a refusal object after its field was corrected.
       if (this.fieldRefusal === this.#handledFieldRefusal) this.fieldRefusal = null;
       else {
         this.#handledFieldRefusal = this.fieldRefusal;

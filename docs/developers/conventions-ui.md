@@ -58,14 +58,14 @@ hangs over a far ancestor's corner unnoticed.
 ### A parent render must not restore a corrected request refusal
 
 A child that clears a request's field refusal locally can receive the same object again when
-its parent renders. Keep that request's identity within the opening, so a repeated binding does
+its parent renders. Keep the refusal object's identity within the opening, so a repeated binding does
 not undo the correction; a new request's refusal and a new opening must still show their errors.
 
 A999, measured 2026-10-22 in real Chromium with Vitest 4.1.11: a concurrent 62-file till run
 failed the corrected-guest move check (4,800 cases passed). Event traces then caught the field
 refusal returning between Next and the move confirmation. An explicit parent `requestUpdate()`
 reproduced the missing dish-assignment page in the unchanged behavioral assertion. The checks in
-`apps/till/src/till-app-allergy.move.test.ts` and `widgets/party-allergy-dialog.test.ts` cover that
+`apps/till/src/till-app-allergy.move.test.ts` and `apps/till/src/widgets/party-allergy-dialog.test.ts` cover that
 refresh, a new refusal and a new opening; they do not audit other forms.
 
 ### Dialog footer controls must occupy the primitive's real slots

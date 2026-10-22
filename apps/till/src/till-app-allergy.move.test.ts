@@ -134,6 +134,15 @@ describe("A669 counter move refusal recovery", () => {
     await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
     await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(form.refusal).toBe(codeMessage("allergy.invalid")));
+    await vi.waitFor(() => {
+      const marked = form.shadowRoot!.querySelector<WtInput>('wt-input[name="guest-0-who"]');
+      expect(marked).not.toBeNull();
+      expect(marked!.error).toBe(codeMessage("allergy.invalid"));
+      expect(marked!.value).toBe("Corrected guest");
+      const native = marked!.shadowRoot!.querySelector("input")!;
+      expect(native.value).toBe("Corrected guest");
+      expect(native.getAttribute("aria-invalid")).toBe("true");
+    });
     expect(dialog(el)).toBe(form);
     expect(who.value).toBe("Corrected guest");
   });
