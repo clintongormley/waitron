@@ -3988,6 +3988,48 @@ describe("till-app: service cancellation consent", () => {
         expect(sent()[1]).toMatchObject({ override: { personId: "m-1", pin: "1234" } });
       });
 
+      it("shows the lock-out in the PIN prompt on a carried pin.throttled", async () => {
+        const { el } = await mountApp(
+          pinMethods({
+            refundTransaction: vi
+              .fn()
+              .mockRejectedValueOnce({ code: "pin.throttled" })
+              .mockResolvedValue(refunded),
+          }),
+        );
+        await openMesa4(el);
+        await cancelWithPin(el);
+        await sendRefund(el);
+        expect(sent()[0]).toMatchObject({ override: { personId: "m-1", pin: "7777" } });
+        await expect.poll(() => refundPrompt(el)).not.toBeNull();
+        await expect
+          .poll(() => (refundPrompt(el) as TillSupervisorOverrideDialog).error)
+          .toBe("pin.throttled");
+      });
+
+      it("opens the PIN prompt when the carried approver may no longer refund", async () => {
+        const { el } = await mountApp(
+          pinMethods({
+            refundTransaction: vi
+              .fn()
+              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+              .mockResolvedValue(refunded),
+          }),
+        );
+        await openMesa4(el);
+        await cancelWithPin(el);
+        await sendRefund(el);
+        expect(sent()[0]).toMatchObject({ override: { personId: "m-1", pin: "7777" } });
+        await expect.poll(() => refundPrompt(el)).not.toBeNull();
+        expect((refundPrompt(el) as TillSupervisorOverrideDialog).error).toBeNull();
+        await pinPad(el, "1234");
+        await expect.poll(() => sent()).toHaveLength(2);
+        expect(sent()[1]).toMatchObject({
+          cancellationIds: [cancelId],
+          override: { personId: "m-1", pin: "1234" },
+        });
+      });
+
       it("opens the PIN prompt on a carried pin.invalid", async () => {
         const { el } = await mountApp(
           pinMethods({
@@ -4080,7 +4122,7 @@ describe("till-app: service cancellation consent", () => {
         expect(sent()[0]).not.toHaveProperty("override");
       });
 
-      it("drops it on sign-out", async () => {
+      it("closes the refund screen without sending a refund on sign-out", async () => {
         const { el } = await mountApp(pinMethods());
         await openMesa4(el);
         await cancelWithPin(el);

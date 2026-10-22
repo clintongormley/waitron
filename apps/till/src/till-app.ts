@@ -7739,6 +7739,13 @@ export class TillApp extends LitElement {
         ) {
           this.tenderRefunding = { ...this.tenderRefunding, busy: true };
           await this.#askTenderRefundApprover();
+          // The waiter typed no PIN, so only a lock-out is worth showing in the prompt.
+          if (
+            refusal.code === "pin.throttled" &&
+            this.tenderRefunding?.visit === open.visit &&
+            this.tenderRefunding.approvers !== undefined
+          )
+            this.tenderRefunding = { ...this.tenderRefunding, pinError: refusal.code };
         } else if (APPROVER_REFUSALS.has(refusal.code))
           this.tenderRefunding = { ...this.tenderRefunding, pinError: refusal.code };
         else this.tenderRefunding = { ...this.tenderRefunding, approvers: undefined };
