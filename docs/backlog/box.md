@@ -704,7 +704,7 @@ Not closed in slice 1, because product writes go through `withTransaction`, whic
 
 ## Till write surfaces not checked for a full-disk refusal's words
 
-Left open by A798-B slice 6 (#<this pull request>), from design §4.6 item 2. Since slice 3, once a
+Left open by A798-B slice 6 (#1977), from design §4.6 item 2. Since slice 3, once a
 save has failed for a full disk, or the box started with less than 16 MiB free, every till write
 except the open ones answers `507 storage.disk_full` until the venue folder has 16 MiB free
 ([conventions-data.md](../developers/conventions-data.md#a-full-disk-stops-the-tills-writes)). The
@@ -716,7 +716,7 @@ which has no strip, were not checked either.
 
 ## On a full disk, a till read whose route opens a withTransaction is refused while a change waits
 
-Left open by A798-B slice 6 (#<this pull request>). `withTransaction` ends every body with the
+Left open by A798-B slice 6 (#1977). `withTransaction` ends every body with the
 change-log drain (`delete from change_log returning payload`, `packages/db/src/change-log.ts`),
 which is a write. Measured 2026-10-22 on a migrated venue on a small full disk, with one
 `change_log` row waiting: a read-only `withTransaction` was refused `storage.disk_full`, a write-lock
