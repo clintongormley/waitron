@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="3224" viewBox="0 0 1280 3224" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="3352" viewBox="0 0 1280 3352" role="img" aria-labelledby="title desc">
   <title id="title">A739 flujo de cobro y documentos</title>
   <desc id="desc">Cuatro casos: mostrador, tres pagos en mesa, cambio que salda, factura posterior. Objetivo estático con dependencia fiscal. Valores técnicos propuestos.</desc>
-  <rect width="1280" height="3224" fill="#101216" />
+  <rect width="1280" height="3352" fill="#101216" />
   <g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
     <text x="24" y="36" font-size="12" font-weight="600" fill="#78a9ff">WAITRON / A739</text>
     <text x="24" y="70" font-size="22" font-weight="600" fill="#eceef2">Cobrar y después elegir</text>
@@ -15,7 +15,7 @@
       <rect x="24" y="232" width="400" height="548" rx="16" fill="#191c22" stroke="#333945" />
       <text x="40" y="260" font-size="12" font-weight="600" fill="#78a9ff">1A · ANTES DE TARJETA</text>
       <text x="40" y="290" font-size="18" font-weight="600" fill="#eceef2">Mostrador · EUR30,00</text>
-      <text x="40" y="314" font-size="12" font-weight="400" fill="#a1a7b3">Cobrar · Un cliente · Pedido 41</text>
+      <text x="40" y="314" font-size="12" font-weight="400" fill="#a1a7b3">Lector sin papel propio · Pedido 41</text>
       <text x="40" y="336" font-size="14" font-weight="400" fill="#eceef2">Un importe · A partes iguales · Artículos</text>
       <text x="40" y="358" font-size="14" font-weight="400" fill="#eceef2">● Toda la cuenta</text>
       <text x="40" y="388" font-size="18" font-weight="600" fill="#eceef2">A pagar ahora EUR30,00</text>
@@ -123,7 +123,7 @@
       <rect x="24" y="1492" width="400" height="424" rx="16" fill="#191c22" stroke="#333945" />
       <text x="40" y="1520" font-size="12" font-weight="600" fill="#78a9ff">2A · HISTORIAL DE PAGOS</text>
       <text x="40" y="1550" font-size="18" font-weight="600" fill="#eceef2">Mesa 12 · Tres clientes</text>
-      <text x="40" y="1574" font-size="12" font-weight="400" fill="#a1a7b3">Cuenta EUR30 · EUR10 por persona</text>
+      <text x="40" y="1574" font-size="12" font-weight="400" fill="#a1a7b3">EUR30 · Tres pagos de EUR10 con tarjeta</text>
       <text x="40" y="1596" font-size="18" font-weight="600" fill="#eceef2">Cliente 1 · EUR10 recibido</text>
       <text x="40" y="1626" font-size="12" font-weight="400" fill="#a1a7b3">Saldo del resguardo: EUR20,00</text>
       <text x="40" y="1648" font-size="12" font-weight="400" fill="#a1a7b3">No fiscal · Cuenta 12 · Saldo guardado</text>
@@ -146,14 +146,14 @@
       <rect x="456" y="1626" width="368" height="48" rx="8" fill="#4c8dff" />
       <text x="468" y="1656" font-size="14" font-weight="600" fill="#06101f">Efectivo · EUR10,00</text>
       <rect x="456" y="1686" width="368" height="48" rx="8" fill="#191c22" stroke="#333945" />
-      <text x="468" y="1716" font-size="14" font-weight="600" fill="#78a9ff">▸ Lector · Barra</text>
+      <text x="468" y="1716" font-size="14" font-weight="600" fill="#78a9ff">▸ Lector · Barra · Sin papel propio</text>
       <rect x="456" y="1746" width="368" height="52" rx="8" fill="#191c22" stroke="#333945" />
       <rect x="468" y="1762" width="20" height="20" rx="4" fill="#191c22" stroke="#7a8291" />
       <text x="498" y="1777" font-size="12" font-weight="600" fill="#eceef2">Imprimir resguardo de tarjeta</text>
       <rect x="456" y="1810" width="368" height="48" rx="8" fill="#4c8dff" />
       <text x="468" y="1840" font-size="14" font-weight="600" fill="#06101f">Tarjeta · EUR10,00</text>
-      <text x="456" y="1870" font-size="12" font-weight="400" fill="#f2b24c">Resguardo de efectivo: por decidir.</text>
-      <text x="456" y="1892" font-size="12" font-weight="400" fill="#f2b24c">Papel del lector: no duplicar.</text>
+      <text x="456" y="1870" font-size="12" font-weight="400" fill="#f2b24c">Efectivo: nunca imprime resguardo.</text>
+      <text x="456" y="1892" font-size="12" font-weight="400" fill="#f2b24c">EUR10 en efectivo salda estos EUR10.</text>
       <text x="456" y="1914" font-size="12" font-weight="400" fill="#f2b24c">Dinero sin confirmar no está cobrado.</text>
     </g>
     <g transform="translate(0 -156)" data-ui-card="2C">
@@ -168,8 +168,8 @@
       <text x="884" y="1706" font-size="14" font-weight="400" fill="#eceef2">○ Factura completa</text>
       <rect x="872" y="1730" width="368" height="44" rx="8" fill="#2f3a4d" stroke="#4c8dff" />
       <text x="884" y="1758" font-size="14" font-weight="600" fill="#78a9ff">● Ninguno</text>
-      <text x="872" y="1782" font-size="14" font-weight="400" fill="#4ac08d">Ninguno guardado · sin más campos.</text>
-      <text x="872" y="1804" font-size="14" font-weight="400" fill="#4ac08d">El resguardo pedido sigue en curso.</text>
+      <text x="872" y="1794" font-size="14" font-weight="400" fill="#4ac08d">Ninguno guardado · sin más campos.</text>
+      <text x="872" y="1816" font-size="14" font-weight="400" fill="#4ac08d">El resguardo pedido sigue en curso.</text>
       <rect x="872" y="1834" width="368" height="48" rx="8" fill="#191c22" stroke="#333945" />
       <text x="884" y="1864" font-size="14" font-weight="600" fill="#78a9ff">Volver a la mesa</text>
       <text x="872" y="1894" font-size="12" font-weight="400" fill="#f2b24c">La mesa sigue abierta. Cierre aparte.</text>
@@ -269,8 +269,8 @@
       <text x="468" y="3146" font-size="12" font-weight="400" fill="#a1a7b3">Continuación de datos del cliente</text>
       <text x="468" y="3170" font-size="14" font-weight="400" fill="#eceef2">Nombre · NIF · país · dirección</text>
       <path d="M 456 3183 h 368" stroke="#7a8291" />
-      <text x="456" y="3192" font-size="12" font-weight="400" fill="#a1a7b3">Usa los campos completos de 1C.</text>
-      <text x="456" y="3214" font-size="12" font-weight="400" fill="#a1a7b3">Los datos se piden después del cobro.</text>
+      <text x="456" y="3204" font-size="12" font-weight="400" fill="#a1a7b3">Usa los campos completos de 1C.</text>
+      <text x="456" y="3226" font-size="12" font-weight="400" fill="#a1a7b3">Los datos se piden después del cobro.</text>
       <rect x="456" y="3244" width="368" height="48" rx="8" fill="#262a33" stroke="#333945" />
       <text x="468" y="3274" font-size="14" font-weight="600" fill="#a1a7b3">Reemitir · no disponible (A556)</text>
       <g aria-label="Desactivado" />
@@ -302,7 +302,23 @@
       <text x="872" y="3424" font-size="12" font-weight="400" fill="#f2b24c">Respuesta perdida: recuperar petición.</text>
       <text x="872" y="3446" font-size="12" font-weight="400" fill="#f2b24c">No volver a enviar automáticamente.</text>
     </g>
-    <text x="24" y="3152" font-size="12" fill="#a1a7b3">SIGUIENTE: casilla de efectivo propuesta; tarjeta sin marcar es decisión técnica propuesta.</text>
-    <text x="24" y="3174" font-size="12" fill="#a1a7b3">Papel del lector y política sin respuesta pendientes. No reconstruir antes del acuerdo.</text>
+    <g data-design-section="reader-paper-proposal">
+      <text x="24" y="3152" font-size="14" font-weight="600" fill="#78a9ff">SIGUIENTE · Papel del lector (propuesta) · EUR10 tarjeta de EUR30 deja EUR20</text>
+      <rect x="24" y="3176" width="400" height="96" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="40" y="3200" font-size="12" font-weight="600" fill="#eceef2">Lector con papel propio confirmado</text>
+      <text x="40" y="3224" font-size="14" fill="#eceef2">El lector da su resguardo</text>
+      <text x="40" y="3248" font-size="12" fill="#a1a7b3">Sin casilla ni resguardo extra de Waitron.</text>
+      <rect x="440" y="3176" width="400" height="96" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="456" y="3200" font-size="12" font-weight="600" fill="#eceef2">Sin papel confirmado · Antes de Tarjeta</text>
+      <rect x="456" y="3210" width="20" height="20" rx="4" fill="#191c22" stroke="#7a8291" />
+      <text x="486" y="3226" font-size="12" fill="#eceef2">Imprimir resguardo de tarjeta</text>
+      <text x="456" y="3248" font-size="12" fill="#a1a7b3">Resguardo de EUR10: conserva EUR20.</text>
+      <rect x="856" y="3176" width="400" height="96" rx="8" fill="#262a33" stroke="#333945" />
+      <text x="872" y="3200" font-size="12" font-weight="600" fill="#eceef2">Papel del lector desconocido</text>
+      <text x="872" y="3224" font-size="14" fill="#a1a7b3">Resguardo Waitron no disponible</text>
+      <text x="872" y="3248" font-size="12" fill="#a1a7b3">Nunca suponer que no tiene papel.</text>
+      <text x="24" y="3296" font-size="12" fill="#a1a7b3">El papel del lector no cambia; interfaz propuesta. Efectivo EUR10 de EUR30: EUR20; sin resguardo.</text>
+      <text x="24" y="3318" font-size="12" fill="#a1a7b3">Después: pendiente/sin temporizador/sin entrega automática y acuerdo completo, por aprobar aparte. No reconstruir antes del acuerdo.</text>
+    </g>
   </g>
 </svg>

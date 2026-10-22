@@ -2504,11 +2504,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   catalogue, reports and invoice-line identity before building an arbitrary-price path.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
-- **A739 — Park · Pay and one payment window; owner-flow revision, 2026-10-22.** Before card,
+- **A739 — Park · Pay and one payment window; owner-flow revision, 2026-10-22 ~11:55.** No
+  cash slips: EUR10 cash on EUR30 leaves EUR20, no slip. Only card has Print card slip. Before card,
   optionally request its slip; after a part, show what remains and ask the next tender; after
   final payment or a settling edit, offer Receipt / Full invoice / None with separate Print/Email.
-  Cash's new slip trigger is next; reader-owned paper, no-answer policy and full revision
-  agreement remain open. Full invoice after an F2 needs A556's separate fiscal integration;
+  Reader-paper checkbox display is next, preserving the answered no-duplicate policy and native
+  paper independence. No-answer/no-timer/no-zone-fallback policy and full revision agreement
+  remain separately open. Full invoice after an F2 needs A556's separate fiscal integration;
   public F1 stays gated. Preserve A790/A796 settings and A582's help-mode badges in the build.
   No rebuild before agreement; product integration and acceptance remain open.
   [Current revision](superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md),
@@ -3778,8 +3780,9 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   Preserve fixed print intent, sale-location/permission checks, original/copy and the common F1
   guard; public F1 stays closed. No product code or migration built.
   [A739 owner-flow revision](superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
-  now answers timing A; cash trigger, reader-owned paper, no-answer policy and integration
-  remain scoped there. Its postsettlement Print/Email form preserves A790's answered settings.
+  now answers timing A and, at ~11:55, no cash slips; the card-checkbox reader-paper display,
+  no-answer policy and integration remain scoped there. Its postsettlement Print/Email form
+  preserves A790's answered settings.
   Next: owner approves the complete routing description and builder calls, or requests changes;
   then write the concrete plan. Dependent build waits the accepted A739 contract.
 

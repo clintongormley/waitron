@@ -1,12 +1,17 @@
-# 2026-10-22 precedence: the owner has supplied the flow
+# 2026-10-22 precedence: owner flow, then no cash slips at ~11:55
 
 The owner's ~09:05 direction replaces the A/B question and post-payment slip proposal 1
 below. [Current A739 owner-flow revision](2026-10-22-a739-owner-payment-and-receipt-flow.md):
 pre-card slip checkbox, next tender after each part, immediate Receipt / Full invoice / None
 after settlement or a settling edit, then separate Print and Email. Timing A is answered;
-the edit owns its new decision. Cash's replacement trigger, reader-owned paper and unanswered
-choice policy remain explicitly scoped there. No rebuild before owner agreement. The complete
+the edit owns its new decision. The ~11:55 answer supersedes cash-yes and the cash-checkbox
+proposal: EUR10 cash on EUR30 leaves EUR20 and prints no slip. Only card has Print card slip.
+The next question there concerns the checkbox display for reader-owned paper, preserving the
+answered no-duplicate policy. The no-answer/no-timer/no-zone-fallback policy and full revision
+agreement remain separately unapproved. No rebuild before owner agreement. The complete
 old body follows unchanged as history, including its former questions and estimate.
+
+
 
 ---
 

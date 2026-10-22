@@ -2318,18 +2318,22 @@ Board 1 is the target; board 2 the windows.
 
 ### A739. Paying: Hold · Pay, and one payment window
 
-**2026-10-22 ~09:05 owner-direction addendum.** The [current revision](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
+**2026-10-22 ~11:55 precedence, following the ~09:05 flow.** The [current revision](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
 and [eight four-case boards](mockups/a739-owner-receipt-flow/README.md) take precedence over
-all conflicting historical text below. Before card: Print credit card slip checkbox;
+all conflicting historical text below. **No cash slips**, superseding cash-yes and the proposed
+cash checkbox: EUR10 cash on EUR30 leaves EUR20, no slip. Before card: Print card slip checkbox;
 on confirmed success: request the eligible slip once. After each part: remaining amount and
 next tender. After final payment or an edit clearing due: Receipt / Full invoice / None on
 that device, with details for Full invoice and folded default-printer + Print and email + Email
 for both. Timing A is answered; no post-payment slip row or final Print/Email/None in Pay.
 The settling edit owns a new choice. The proposed unchecked checkbox default is a builder call.
-Cash's replacement trigger is the single next question; reader-native paper and no-answer policy
-remain scoped open. Existing G5/cash eligibility, A790/A796 settings and table closure stay
-separate. Full invoice after issued F2 depends on existing A556's separate fiscal integration
-under A948/Q17/Q5(d), not a late F1 mutation or a second charge. Keep public F1 gated. No rebuild
+The single next question is the reader-paper display: recommend “Reader supplies its slip”
+with no effective Waitron checkbox for known own-paper readers, the checkbox for known no-paper
+readers, and explained unavailability for unknown capability. No duplicates remains answered;
+the app does not control native paper. No-answer/no-timer/no-zone-fallback policy and complete
+revision agreement remain separately unapproved. G5's eligible card slips, A790/A796 settings
+and table closure retain their scopes. Full invoice after issued F2 depends on A556's fiscal
+integration under A948/Q17/Q5(d), not a late F1 mutation or a second charge. Keep public F1 gated. No rebuild
 until owner agreement; no new landing gate. All earlier body bytes below remain historical.
 
 2026-10-22 proposed revision, awaiting owner decision: [timing A after settlement versus timing B

@@ -19,9 +19,13 @@ no public F1/F3 capability follows from this addendum. See the linked revision's
 The older timing question and prepayment identity/delivery staging below are historical where
 they conflict. The immediate expanded Full invoice state is a **target with a fiscal dependency**,
 not a working late F1 choice. No guest response delays issuance and no new payment follows.
-A739's cash trigger, reader-native paper boundary and unapproved no-answer/no-fallback proposal
-remain there. Full A790 routing-design approval and dependent integration/build remain owed;
+A739's ~11:55 [no-cash-slips precedence](2026-10-22-a739-owner-payment-and-receipt-flow.md)
+supersedes the earlier cash trigger question; its card-checkbox reader-paper display and
+unapproved no-answer/no-fallback proposal remain there. Full A790 routing-design approval and
+dependent integration/build remain owed;
 no A–M or A796 answer is reopened. Every byte of the previous body follows unchanged.
+
+
 
 ---
 

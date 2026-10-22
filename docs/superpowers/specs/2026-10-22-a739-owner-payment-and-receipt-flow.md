@@ -1,3 +1,71 @@
+# 2026-10-22 ~11:55 precedence: no cash slips; card only
+
+**Current A739 revision, design only.** The owner's **NO cash slips** answer supersedes
+the earlier cash-yes answer and the proposed pre-Cash checkbox. Cash never gets a payment
+slip. Only card has **Print card slip**, chosen before the transaction; a requested eligible
+Waitron slip is admitted immediately after confirmed successful payment. On a EUR30 bill,
+EUR10 cash leaves EUR20 to pay and prints no slip. The final document choice still follows settlement.
+
+The ~09:05 flow is unchanged: after each part, show the remaining amount and ask the next
+tender. Immediately after final settlement, or an edit clearing the amount owed, show
+**Receipt / Full invoice / None** in that active session. The edit owns a fresh decision.
+Receipt and Full invoice reveal a folded default-printer row with **Print**, and an email
+field with separate **Email**; Full invoice also reveals customer details. None reveals no
+fields and cancels no accepted slip or delivery. Keep all four journeys, amount modes,
+cash/change, payment recovery, practice-reader work and separate table closure.
+
+Full invoice after an issued F2 still requires a new F3 replacement under **A556**, with
+A948/A555 and asesor Q17/Q5(d). F3 records a full invoice linked to the simplified receipt;
+it never edits the original, takes another payment or delays the original issuance. Public
+F1/F3 remains gated pending that separate fiscal work. The drawings are target previews.
+Original/copy designation still comes from server delivery history across Print and Email,
+with existing failed/unknown recovery boundaries; a retry is not automatically a copy.
+Printing, emailing, None, slip retry and replacement delivery open no drawer. Payment keeps
+its independent profile and permission checks and separately audited drawer action.
+
+## One next question: the reader-owned paper display
+
+The no-duplicate policy is already answered. The earlier answers retain own-paper exclusion; P3 records the source checks for that exclusion
+and unknown-capability unavailability. Neither specifies how the new
+pre-card checkbox presents those cases. This asks only about that display.
+
+**Does this treatment fit your card-checkbox requirement: show “Reader supplies its slip”
+with no effective Waitron Print card slip checkbox for a known own-paper reader, keep the
+checkbox for a known no-paper reader, and explain that Waitron slip printing is unavailable
+when the reader's paper capability is unknown? Recommendation: yes.**
+
+For a EUR10 card contribution on a EUR30 bill, a known own-paper reader supplies its slip
+and Waitron adds none. On a known no-paper reader, you may tick Print card slip before Card;
+confirmed success requests the non-fiscal EUR10 slip showing EUR20 left. Unknown capability
+is never guessed to mean no paper. This proposal neither controls nor suppresses the reader's
+native paper and promises no new reader print control. Manual card remains excluded.
+
+Keep the recorded contribution and historical balance on any later slip copy, even when the
+bill changes. A requested but unavailable Waitron printer warns and leaves the money received;
+it never silently switches printer. The illustrated eligible card branch retains the folded
+Equipment Receipt printer and separate slip-role checks. Its unchecked initial value remains
+a builder proposal, not an owner answer.
+
+Later topics, not questions for this stage: **durable Document choice pending with recovery,
+no timer and no zone fallback** remains unapproved; **complete revision agreement and its
+remaining builder calls** remains separate and unapproved. No product rebuild before that
+agreement. A790/A796 retain their answered scopes. This amendment adds no landing gate.
+
+The [eight current SVG boards](../../backlog/mockups/a739-owner-receipt-flow/README.md)
+reflect this cash answer and proposed reader display. Authority: lane F `questions.md:2918–2920`, heading “OWNER ANSWER — A739 cash slip:
+NO cash slips (2026-10-22 ~11:55)”. This is owner provenance, not runtime evidence.
+
+**Historical body below, preserved unchanged.** Its “Slip boundaries: one next owner question”
+cash-trigger question, cash eligibility claims and cash-dependent work row are superseded by
+this addendum. Its source register remains tied to its original M/P SHAs and source reads;
+“this checkout's HEAD” describes that original inspection, not this revision. No new runtime
+proof is claimed. The original product SHA `3e45abdc69c0305100304d4501ca96812ba87a0b`
+and all earlier changed-test inventories remain preserved.
+
+
+
+---
+
 # A739: payment first, then your receipt or full invoice
 
 **Current revision, 2026-10-22, following the owner's ~09:05 direction. Design only; no

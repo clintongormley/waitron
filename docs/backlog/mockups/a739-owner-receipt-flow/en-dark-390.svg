@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="390" height="7016" viewBox="0 0 390 7016" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="7360" viewBox="0 0 390 7360" role="img" aria-labelledby="title desc">
   <title id="title">A739 owner payment and receipt flow</title>
   <desc id="desc">Four scenarios: counter payment, three table payers, settling edit, later full invoice. Static target with fiscal dependency. Technical defaults remain proposed.</desc>
-  <rect width="390" height="7016" fill="#101216" />
+  <rect width="390" height="7360" fill="#101216" />
   <g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
     <text x="16" y="36" font-size="12" font-weight="600" fill="#78a9ff">WAITRON / A739</text>
     <text x="16" y="70" font-size="22" font-weight="600" fill="#eceef2">Pay, then choose</text>
@@ -15,7 +15,7 @@
       <rect x="16" y="232" width="358" height="548" rx="16" fill="#191c22" stroke="#333945" />
       <text x="32" y="260" font-size="12" font-weight="600" fill="#78a9ff">1A · BEFORE CARD</text>
       <text x="32" y="290" font-size="18" font-weight="600" fill="#eceef2">Counter · EUR30.00</text>
-      <text x="32" y="314" font-size="12" font-weight="400" fill="#a1a7b3">Pay · One guest · Order 41</text>
+      <text x="32" y="314" font-size="12" font-weight="400" fill="#a1a7b3">Known no-paper reader · Order 41</text>
       <text x="32" y="336" font-size="14" font-weight="400" fill="#eceef2">An amount · Split equally · Items</text>
       <text x="32" y="358" font-size="14" font-weight="400" fill="#eceef2">● Whole bill</text>
       <text x="32" y="388" font-size="18" font-weight="600" fill="#eceef2">To pay now EUR30.00</text>
@@ -23,7 +23,7 @@
       <text x="44" y="448" font-size="14" font-weight="600" fill="#78a9ff">▸ Reader · Bar reader</text>
       <rect x="32" y="478" width="326" height="52" rx="8" fill="#191c22" stroke="#333945" />
       <rect x="44" y="494" width="20" height="20" rx="4" fill="#191c22" stroke="#7a8291" />
-      <text x="74" y="509" font-size="12" font-weight="600" fill="#eceef2">Print credit card slip</text>
+      <text x="74" y="509" font-size="12" font-weight="600" fill="#eceef2">Print card slip</text>
       <text x="32" y="542" font-size="12" font-weight="400" fill="#a1a7b3">Shown checked; default unchecked proposed.</text>
       <text x="32" y="564" font-size="12" font-weight="400" fill="#a1a7b3">Tick before Card to request the slip.</text>
       <rect x="32" y="594" width="326" height="56" rx="8" fill="#262a33" stroke="#333945" />
@@ -123,7 +123,7 @@
       <rect x="16" y="2814" width="358" height="424" rx="16" fill="#191c22" stroke="#333945" />
       <text x="32" y="2842" font-size="12" font-weight="600" fill="#78a9ff">2A · PAYMENT HISTORY</text>
       <text x="32" y="2872" font-size="18" font-weight="600" fill="#eceef2">Table 12 · Three guests</text>
-      <text x="32" y="2896" font-size="12" font-weight="400" fill="#a1a7b3">EUR30 bill · EUR10 each</text>
+      <text x="32" y="2896" font-size="12" font-weight="400" fill="#a1a7b3">EUR30 · Three card parts of EUR10</text>
       <text x="32" y="2918" font-size="18" font-weight="600" fill="#eceef2">Guest 1 · EUR10 received</text>
       <text x="32" y="2948" font-size="12" font-weight="400" fill="#a1a7b3">Slip balance then: EUR20.00</text>
       <text x="32" y="2970" font-size="12" font-weight="400" fill="#a1a7b3">Non-fiscal · Bill 12 · Saved at receipt</text>
@@ -146,14 +146,14 @@
       <rect x="32" y="3464" width="326" height="48" rx="8" fill="#4c8dff" />
       <text x="44" y="3494" font-size="14" font-weight="600" fill="#06101f">Cash · EUR10.00</text>
       <rect x="32" y="3524" width="326" height="48" rx="8" fill="#191c22" stroke="#333945" />
-      <text x="44" y="3554" font-size="14" font-weight="600" fill="#78a9ff">▸ Reader · Bar reader</text>
+      <text x="44" y="3554" font-size="14" font-weight="600" fill="#78a9ff">▸ Reader · Bar · Known no paper</text>
       <rect x="32" y="3584" width="326" height="52" rx="8" fill="#191c22" stroke="#333945" />
       <rect x="44" y="3600" width="20" height="20" rx="4" fill="#191c22" stroke="#7a8291" />
-      <text x="74" y="3615" font-size="12" font-weight="600" fill="#eceef2">Print credit card slip</text>
+      <text x="74" y="3615" font-size="12" font-weight="600" fill="#eceef2">Print card slip</text>
       <rect x="32" y="3648" width="326" height="48" rx="8" fill="#4c8dff" />
       <text x="44" y="3678" font-size="14" font-weight="600" fill="#06101f">Card · EUR10.00</text>
-      <text x="32" y="3708" font-size="12" font-weight="400" fill="#f2b24c">Cash slip trigger: next owner question.</text>
-      <text x="32" y="3730" font-size="12" font-weight="400" fill="#f2b24c">Reader own paper: keep no duplicates.</text>
+      <text x="32" y="3708" font-size="12" font-weight="400" fill="#f2b24c">Cash never gets a slip.</text>
+      <text x="32" y="3730" font-size="12" font-weight="400" fill="#f2b24c">Cash EUR10 settles this EUR10 balance.</text>
       <text x="32" y="3752" font-size="12" font-weight="400" fill="#f2b24c">Unknown money is not settled.</text>
     </g>
     <g transform="translate(0 -390)" data-ui-card="2C">
@@ -168,8 +168,8 @@
       <text x="44" y="4120" font-size="14" font-weight="400" fill="#eceef2">○ Full invoice</text>
       <rect x="32" y="4144" width="326" height="44" rx="8" fill="#2f3a4d" stroke="#4c8dff" />
       <text x="44" y="4172" font-size="14" font-weight="600" fill="#78a9ff">● None</text>
-      <text x="32" y="4196" font-size="14" font-weight="400" fill="#4ac08d">None recorded · no further fields.</text>
-      <text x="32" y="4218" font-size="14" font-weight="400" fill="#4ac08d">The requested card slip still stands.</text>
+      <text x="32" y="4208" font-size="14" font-weight="400" fill="#4ac08d">None recorded · no further fields.</text>
+      <text x="32" y="4230" font-size="14" font-weight="400" fill="#4ac08d">The requested card slip still stands.</text>
       <rect x="32" y="4248" width="326" height="48" rx="8" fill="#191c22" stroke="#333945" />
       <text x="44" y="4278" font-size="14" font-weight="600" fill="#78a9ff">Return to table</text>
       <text x="32" y="4308" font-size="12" font-weight="400" fill="#f2b24c">Table remains open. Finish is separate.</text>
@@ -269,8 +269,8 @@
       <text x="44" y="6958" font-size="12" font-weight="400" fill="#a1a7b3">Customer details continuation</text>
       <text x="44" y="6982" font-size="14" font-weight="400" fill="#eceef2">Name · tax ID · country · address</text>
       <path d="M 32 6995 h 326" stroke="#7a8291" />
-      <text x="32" y="7004" font-size="12" font-weight="400" fill="#a1a7b3">Use the complete fields in 1C.</text>
-      <text x="32" y="7026" font-size="12" font-weight="400" fill="#a1a7b3">Identity enters here, after settlement.</text>
+      <text x="32" y="7016" font-size="12" font-weight="400" fill="#a1a7b3">Use the complete fields in 1C.</text>
+      <text x="32" y="7038" font-size="12" font-weight="400" fill="#a1a7b3">Identity enters here, after settlement.</text>
       <rect x="32" y="7056" width="326" height="48" rx="8" fill="#262a33" stroke="#333945" />
       <text x="44" y="7086" font-size="14" font-weight="600" fill="#a1a7b3">Reissue · unavailable (A556)</text>
       <g aria-label="Disabled" />
@@ -302,9 +302,26 @@
       <text x="32" y="7752" font-size="12" font-weight="400" fill="#f2b24c">Lost reply: recover the same request.</text>
       <text x="32" y="7774" font-size="12" font-weight="400" fill="#f2b24c">Do not automatically send another.</text>
     </g>
-    <text x="16" y="6900" font-size="12" fill="#a1a7b3">Next: cash-slip checkbox is proposed.</text>
-    <text x="16" y="6922" font-size="12" fill="#a1a7b3">Unchecked default: builder proposal.</text>
-    <text x="16" y="6944" font-size="12" fill="#a1a7b3">Reader paper / no answer remain open.</text>
-    <text x="16" y="6966" font-size="12" fill="#a1a7b3">No rebuild before owner agreement.</text>
+    <g data-design-section="reader-paper-proposal">
+      <text x="16" y="6900" font-size="12" font-weight="600" fill="#78a9ff">NEXT · Reader-paper display · Proposed</text>
+      <text x="16" y="6922" font-size="12" fill="#a1a7b3">EUR10 card on EUR30 · EUR20 left</text>
+      <rect x="16" y="6944" width="358" height="88" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="32" y="6966" font-size="12" font-weight="600" fill="#eceef2">Known own-paper reader</text>
+      <text x="32" y="6988" font-size="14" fill="#eceef2">Reader supplies its slip</text>
+      <text x="32" y="7010" font-size="12" fill="#a1a7b3">No Waitron checkbox or extra slip.</text>
+      <rect x="16" y="7044" width="358" height="88" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="32" y="7066" font-size="12" font-weight="600" fill="#eceef2">Known no-paper reader · Before Card</text>
+      <rect x="32" y="7078" width="20" height="20" rx="4" fill="#191c22" stroke="#7a8291" />
+      <text x="62" y="7094" font-size="14" fill="#eceef2">Print card slip</text>
+      <text x="32" y="7116" font-size="12" fill="#a1a7b3">Requested EUR10 slip keeps EUR20 left.</text>
+      <rect x="16" y="7144" width="358" height="88" rx="8" fill="#262a33" stroke="#333945" />
+      <text x="32" y="7166" font-size="12" font-weight="600" fill="#eceef2">Reader paper capability unknown</text>
+      <text x="32" y="7188" font-size="14" fill="#a1a7b3">Waitron slip unavailable</text>
+      <text x="32" y="7210" font-size="12" fill="#a1a7b3">Never guess that it has no paper.</text>
+      <text x="16" y="7254" font-size="12" fill="#a1a7b3">Cash: EUR10 of EUR30, EUR20 left; no slip.</text>
+      <text x="16" y="7276" font-size="12" fill="#a1a7b3">Native paper unchanged; display proposed.</text>
+      <text x="16" y="7298" font-size="12" fill="#a1a7b3">Later: pending/no fallback, full agreement.</text>
+      <text x="16" y="7320" font-size="12" fill="#a1a7b3">Both unapproved. No rebuild before agreement.</text>
+    </g>
   </g>
 </svg>
