@@ -1396,7 +1396,10 @@ describe("sorting and columns", () => {
         ...steak!,
         chargeKept: true,
         preparationStarted: true,
-        refunded: [{ amount: "2.00", state: "pending" }],
+        refunded: [
+          { amount: "1.00", state: "completed" },
+          { amount: "6.00", state: "pending" },
+        ],
       },
       {
         ...burger!,
@@ -1418,7 +1421,7 @@ describe("sorting and columns", () => {
       ["listValue", ["e2", "e1", "e4", "e3"]],
       ["order", ["e2", "e1", "e3", "e4"]],
       ["preparation", ["e2", "e3", "e1", "e4"]],
-      ["refunded", ["e3", "e2", "e1", "e4"]],
+      ["refunded", ["e2", "e3", "e1", "e4"]],
     ];
     for (const [key, order] of orders) {
       await sortBy(el, "entries", key);
