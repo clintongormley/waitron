@@ -11,15 +11,21 @@ import type { HourClockDecision } from "../hour-clock.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { createWaitCountdown, formatRemaining } from "./wait-countdown.js";
+import { createWaitCountdown } from "./wait-countdown.js";
+import {
+  clockProblem,
+  createSecondClockPoll,
+  renderClockProblem,
+  renderWait,
+  settleRefusal,
+  validWait,
+  type ClockProblem,
+} from "./clock-wait.js";
 
 interface Draft {
   reviewed: boolean;
   recoveryRevision: number;
 }
-type Problem =
-  { kind: "second-clock" } | { kind: "disagreement" } | { kind: "later"; allowedFromMs?: number };
-const SECOND_CLOCK_POLL_MS = 15_000;
 interface Context {
   status: string;
   environment: "production" | "preproduction";
@@ -108,21 +114,20 @@ export class FirstSetupHour extends LitElement {
   @state() private kept = false;
   #delivery?: ReturnType<typeof createRecoveryDelivery<void>>;
   #reference?: InitialSetupRecoveryReference;
-  @state() private problem?: Problem;
+  @state() private problem?: ClockProblem;
   #countdown = createWaitCountdown(this, () => void this.#select(true));
-  #poll?: ReturnType<typeof setInterval>;
+  #poll = createSecondClockPoll(this, () => {
+    if (!this.busy) void this.#select(true);
+  });
   #stopWait(): void {
     this.#countdown.stop();
-    if (this.#poll !== undefined) clearInterval(this.#poll);
-    this.#poll = undefined;
+    this.#poll.stop();
   }
   #waitForSecondClock(): void {
     this.result = undefined;
     this.#countdown.stop();
     this.problem = { kind: "second-clock" };
-    this.#poll ??= setInterval(() => {
-      if (!this.busy) void this.#select(true);
-    }, SECOND_CLOCK_POLL_MS);
+    this.#poll.start();
   }
   #generation = 0;
   #scope?: DraftScope<Draft>;
@@ -219,17 +224,8 @@ export class FirstSetupHour extends LitElement {
       throw new Error("invalid comparison");
     return compared as unknown as Comparison;
   }
-  #validWait(result: Record<string, unknown>): boolean {
-    return (
-      Number.isSafeInteger(result.targetMs) &&
-      (result.remainingMs === null ||
-        (typeof result.remainingMs === "number" &&
-          Number.isFinite(result.remainingMs) &&
-          result.remainingMs >= 0))
-    );
-  }
   /** Replaces what the page explains: a problem, a server answer, or neither. */
-  #show(problem: Problem | undefined, result?: Result): void {
+  #show(problem: ClockProblem | undefined, result?: Result): void {
     this.#stopWait();
     this.problem = problem;
     this.result = result;
@@ -264,13 +260,14 @@ export class FirstSetupHour extends LitElement {
       if (
         record(preview) &&
         preview.status === "waiting" &&
-        this.#validWait(preview) &&
+        validWait(preview) &&
         typeof preview.remainingMs === "number" &&
         preview.remainingMs > 0
       )
         this.#show(undefined, preview as unknown as Result);
-    } catch {
-      if (current()) this.error = true;
+    } catch (error) {
+      // Before a press the page explains nothing: a preview the box refuses only means no wait.
+      if (current() && clockProblem(error) === undefined) this.error = true;
     } finally {
       if (current()) this.busy = false;
     }
@@ -303,7 +300,7 @@ export class FirstSetupHour extends LitElement {
       if (!current()) return;
       if (!record(result)) throw new Error("invalid selection");
       if (result.status === "waiting") {
-        if (!this.#validWait(result)) throw new Error("invalid wait");
+        if (!validWait(result)) throw new Error("invalid wait");
       } else if (result.status === "selected") {
         if (
           result.kind !== "waitron-hour-setup" ||
@@ -321,24 +318,13 @@ export class FirstSetupHour extends LitElement {
       this.#show(undefined, result as unknown as Result);
     } catch (error) {
       if (!current()) return;
-      const polling = this.#poll !== undefined;
-      const { code, params } = (error ?? {}) as { code?: unknown; params?: unknown };
-      const reason =
-        code === "sif.allocation_invalid" && record(params) ? params.reason : undefined;
-      if (reason === "second_clock_missing") this.#waitForSecondClock();
-      else if (reason === "clock_disagreement") this.#show({ kind: "disagreement" });
-      else if (reason === "minute_not_later" && record(params))
-        this.#show({
-          kind: "later",
-          ...(Number.isSafeInteger(params.allowedFromMs)
-            ? { allowedFromMs: params.allowedFromMs as number }
-            : {}),
-        });
-      // A request lost on the way (no refusal code) is retried by the next poll; a refusal is not.
-      else if (!(automatic && polling && code === undefined)) {
-        this.#show(undefined);
-        this.error = true;
-      }
+      settleRefusal(error, automatic && this.#poll.running, {
+        waitForSecondClock: () => this.#waitForSecondClock(),
+        show: (problem) => this.#show(problem),
+        fail: () => {
+          this.error = true;
+        },
+      });
     } finally {
       if (current()) this.busy = false;
     }
@@ -451,54 +437,6 @@ export class FirstSetupHour extends LitElement {
     } finally {
       if (this.isConnected && generation === this.#generation) this.busy = false;
     }
-  }
-  #explain(
-    t: {
-      whySecondClock: string;
-      onBox: string;
-      secondClockDo: string;
-      secondClockEnds: string;
-      whyRefused: string;
-      differ: string;
-      differDo: string;
-      later: string;
-      laterFrom: (time: string) => string;
-    },
-    clock: HourClockDecision | undefined,
-  ) {
-    const problem = this.problem;
-    if (problem?.kind === "second-clock")
-      return html`<section data-test="clock-wait">
-        <p role="status">${t.whySecondClock}</p>
-        ${
-          clock?.unavailable.some((r) => r.source === "browser" && r.reason === "same_machine")
-            ? html`<p>${t.onBox}</p>`
-            : nothing
-        }
-        <p>${t.secondClockDo}</p>
-        <p>${t.secondClockEnds}</p>
-      </section>`;
-    if (problem?.kind === "disagreement")
-      return html`<section data-test="clock-refused">
-        <p role="status">${t.whyRefused}</p>
-        <p>${t.differ}</p>
-        <p>${t.differDo}</p>
-      </section>`;
-    if (problem?.kind === "later") {
-      const time =
-        problem.allowedFromMs === undefined
-          ? undefined
-          : new Intl.DateTimeFormat(this.locale === "en" ? "en-GB" : "es-ES", {
-              hour: "2-digit",
-              minute: "2-digit",
-              hourCycle: "h23",
-              timeZone: this.context.venue.location.timeZone,
-            }).format(problem.allowedFromMs);
-      return html`<p role="status" data-test="minute-not-later">
-        ${t.later}${time === undefined ? nothing : html` ${t.laterFrom(time)}`}
-      </p>`;
-    }
-    return nothing;
   }
   override render() {
     const en = this.locale === "en";
@@ -661,23 +599,10 @@ export class FirstSetupHour extends LitElement {
             </section>`
           : nothing
       }
-      ${this.#explain(t, clock)}
+      ${renderClockProblem(this.problem, t, clock, this.locale, venue.location.timeZone)}
       ${
         this.result?.status === "waiting"
-          ? html`<section data-test="hour-wait">
-              <p role="status">${t.whyWait}</p>
-              <p>${t.nothingToDo}</p>
-              ${
-                this.#countdown.remainingMs === undefined
-                  ? nothing
-                  : html`<p>
-                      ${t.continuesIn}
-                      <span role="timer" data-test="remaining"
-                        >${formatRemaining(this.#countdown.remainingMs)}</span
-                      >
-                    </p>`
-              }
-            </section>`
+          ? renderWait(t, this.#countdown)
           : this.result?.status === "selected"
             ? html`<section data-test="selected-hour">
                 <p role="status">${t.chosen}: <strong>${this.result.identity}</strong></p>

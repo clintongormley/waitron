@@ -1127,3 +1127,48 @@ it("says in Spanish that the series cannot be made yet, with the plural verb", a
     ),
   );
 });
+it.each([
+  ["second_clock_missing", { ...noSecondClock }],
+  [
+    "clock_disagreement",
+    {
+      ...clock,
+      usable: [
+        { source: "box", lowerMs: instant, upperMs: instant },
+        { source: "browser", lowerMs: instant + 45_000, upperMs: instant + 45_000 },
+      ],
+      disagreement: true,
+    },
+  ],
+] as const)(
+  "a preview refused for %s on load shows the readings with no failure and no explanation",
+  async (reason, decision) => {
+    const prepare = async (proposal: unknown) => {
+      const action = (proposal as { action: string }).action;
+      if (action === "clock-challenge") return { id: "challenge" };
+      if (action === "compare-clocks") return { id: "comparison", clock: decision };
+      // What the real server's preview throws for a comparison that cannot admit a name.
+      throw { code: "sif.allocation_invalid", params: { reason } };
+    };
+    fakeClock();
+    try {
+      const { el, calls } = await mount({ prepare });
+      await vi.waitFor(() =>
+        expect(actionsOf(calls)).toEqual(["clock-challenge", "compare-clocks", "selection"]),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).toBe(
+        "false",
+      );
+      expect(text(el)).not.toContain(WHY_SECOND);
+      expect(text(el)).not.toContain(WHY_REFUSED);
+      vi.advanceTimersByTime(45_000);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(calls).toHaveLength(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);

@@ -143,7 +143,7 @@ const noSecondClock = {
 function scripted(answers: unknown[] = [selected]) {
   const state = {
     decision: clock as typeof clock,
-    preview: { status: "preview" } as unknown,
+    preview: undefined as unknown,
     hold: undefined as Promise<void> | undefined,
     fail: false,
     refusal: undefined as unknown,
@@ -152,7 +152,15 @@ function scripted(answers: unknown[] = [selected]) {
   const prepare = vi.fn(async (request: { proposal: unknown }) => {
     const action = (request.proposal as { action: string }).action;
     if (action === "clock-challenge") return { id: "challenge" };
-    if (action === "preview") return state.preview;
+    if (action === "preview") {
+      if (state.preview !== undefined) return state.preview;
+      // What the real server's preview throws for a comparison that cannot admit a name.
+      if (!state.decision.secondClock)
+        throw { code: "sif.allocation_invalid", params: { reason: "second_clock_missing" } };
+      if (state.decision.disagreement)
+        throw { code: "sif.allocation_invalid", params: { reason: "clock_disagreement" } };
+      return { status: "preview" };
+    }
     if (action === "select") {
       const answer = answers.length > 1 ? answers.shift() : answers[0];
       if (answer instanceof Error || (answer as { code?: string })?.code) throw answer;
@@ -618,7 +626,7 @@ it("a countdown reaching zero accepts nothing the server did not select", async 
     vi.useRealTimers();
   }
 });
-it("a restore reopened during a wait shows the server's time left once the clocks are compared", async () => {
+it("Check again during a wait shows the server's time left", async () => {
   const { state, prepare } = scripted();
   state.preview = { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 };
   const { el } = await mount(prepare);
@@ -637,7 +645,7 @@ it("a restore reopened during a wait shows the server's time left once the clock
     vi.useRealTimers();
   }
 });
-it("explains nothing and retries nothing before the first press", async () => {
+it("Compare clocks with no second clock explains the wait and checks again by itself", async () => {
   const { state, prepare } = scripted();
   state.decision = noSecondClock;
   const { el } = await mount(prepare);
@@ -645,15 +653,48 @@ it("explains nothing and retries nothing before the first press", async () => {
   fakeClock();
   try {
     await compare(el);
-    await vi.waitFor(() =>
-      expect(actionsOf(prepare)).toEqual(["clock-challenge", "compare-clocks", "preview"]),
-    );
-    await el.updateComplete;
+    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+    expect(text(el)).toContain(WHY_SECOND);
+    expect(text(el)).toContain(ON_BOX);
+    expect(text(el)).toContain(RESTORE_ENDS);
+    expect(
+      (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+    ).toBe("");
     expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
-    expect(text(el)).not.toContain(WHY_SECOND);
-    vi.advanceTimersByTime(45_000);
+    expect(quiet(el)).toEqual({ disabled: true, variant: "secondary" });
+    state.decision = clock;
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() => expect(selects(prepare)).toHaveLength(1));
+    await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("Compare clocks with clocks that differ explains the refusal, not a failure", async () => {
+  const { state, prepare } = scripted();
+  state.decision = {
+    ...clock,
+    usable: [
+      { source: "box", lowerMs: instant, upperMs: instant },
+      { source: "browser", lowerMs: instant + 45_000, upperMs: instant + 45_000 },
+    ],
+    disagreement: true,
+  };
+  const { el } = await mount(prepare);
+  await ready(el);
+  fakeClock();
+  try {
+    await compare(el);
+    await vi.waitFor(() => expect(text(el)).toContain(DIFFER_DO));
+    expect(text(el)).toContain(WHY_REFUSED);
+    expect(text(el)).toContain(DIFFER);
+    expect(
+      (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+    ).toBe("");
+    const before = prepare.mock.calls.length;
+    vi.advanceTimersByTime(60_000);
     await el.updateComplete;
-    expect(prepare).toHaveBeenCalledTimes(3);
+    expect(prepare.mock.calls).toHaveLength(before);
     expect(quiet(el)).toEqual({ disabled: false, variant: "primary" });
   } finally {
     vi.useRealTimers();
@@ -661,10 +702,10 @@ it("explains nothing and retries nothing before the first press", async () => {
 });
 it("with no second clock it explains itself and carries on when the internet arrives", async () => {
   const { state, prepare } = scripted();
-  state.decision = noSecondClock;
   const { el } = await mount(prepare);
   await ready(el);
   await compare(el);
+  state.decision = noSecondClock;
   fakeClock();
   try {
     await userEvent.click(button(el, "select"));
@@ -685,6 +726,9 @@ it("with no second clock it explains itself and carries on when the internet arr
 });
 it("a phone with no second clock does not say it is the box", async () => {
   const { state, prepare } = scripted();
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
   state.decision = {
     ...noSecondClock,
     unavailable: [
@@ -692,9 +736,6 @@ it("a phone with no second clock does not say it is the box", async () => {
       { source: "internet", result: "unavailable" as const, reason: "offline" },
     ],
   };
-  const { el } = await mount(prepare);
-  await ready(el);
-  await compare(el);
   await userEvent.click(button(el, "select"));
   await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
   expect(text(el)).toContain(WHY_SECOND);
@@ -836,10 +877,10 @@ it("keeps the countdown's explanation on screen while its re-check is in flight"
 });
 it("keeps checking for a second clock after one automatic re-check is lost", async () => {
   const { state, prepare } = scripted();
-  state.decision = noSecondClock;
   const { el } = await mount(prepare);
   await ready(el);
   await compare(el);
+  state.decision = noSecondClock;
   fakeClock();
   try {
     await userEvent.click(button(el, "select"));
@@ -869,10 +910,10 @@ it("keeps checking for a second clock after one automatic re-check is lost", asy
 });
 it("stops checking for a second clock when a re-check is refused, and shows the failure", async () => {
   const { state, prepare } = scripted();
-  state.decision = noSecondClock;
   const { el } = await mount(prepare);
   await ready(el);
   await compare(el);
+  state.decision = noSecondClock;
   fakeClock();
   try {
     await userEvent.click(button(el, "select"));
@@ -923,12 +964,12 @@ it("explains each wait in Spanish with the restore page's words", async () => {
   const { state, prepare } = scripted([
     { status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 },
   ]);
-  state.decision = noSecondClock;
   const { el } = await mount(prepare);
   el.locale = "es";
   await el.updateComplete;
   await ready(el);
   await compare(el);
+  state.decision = noSecondClock;
   expect(button(el, "select").textContent?.trim()).toBe("Crear las series");
   await userEvent.click(button(el, "select"));
   await vi.waitFor(() =>

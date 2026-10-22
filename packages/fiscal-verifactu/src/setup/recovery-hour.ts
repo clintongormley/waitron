@@ -9,7 +9,15 @@ import type { HourClockDecision } from "../hour-clock.js";
 import "./recovery-key.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { createWaitCountdown, formatRemaining } from "./wait-countdown.js";
+import { createWaitCountdown } from "./wait-countdown.js";
+import {
+  createSecondClockPoll,
+  renderClockProblem,
+  renderWait,
+  settleRefusal,
+  validWait,
+  type ClockProblem,
+} from "./clock-wait.js";
 
 type Context = Parameters<NonNullable<SetupContribution["createRecovery"]>>[0];
 interface Draft {
@@ -24,9 +32,7 @@ interface Comparison {
 type Result =
   | { status: "selected"; identity: string; input: unknown }
   | { status: "waiting"; targetMs: number; remainingMs: number | null };
-type Problem =
-  { kind: "second-clock" } | { kind: "disagreement" } | { kind: "later"; allowedFromMs?: number };
-const SECOND_CLOCK_POLL_MS = 15_000;
+
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -76,14 +82,16 @@ export class RecoveryHourEntry extends LitElement {
   @state() private result?: Result;
   @state() private error = false;
   @state() private keyError = false;
-  @state() private problem?: Problem;
+  @state() private problem?: ClockProblem;
   @state() private attempted = false;
   @state() private refusalDismissed = false;
   #secret?: string;
   #generation = 0;
   #scope?: DraftScope<Draft>;
   #countdown = createWaitCountdown(this, () => void this.#select(true));
-  #poll?: ReturnType<typeof setInterval>;
+  #poll = createSecondClockPoll(this, () => {
+    if (!this.busy) void this.#select(true);
+  });
   override connectedCallback(): void {
     super.connectedCallback();
     this.#register();
@@ -131,11 +139,10 @@ export class RecoveryHourEntry extends LitElement {
   }
   #stopWait(): void {
     this.#countdown.stop();
-    if (this.#poll !== undefined) clearInterval(this.#poll);
-    this.#poll = undefined;
+    this.#poll.stop();
   }
   /** Replaces what the page explains: a problem, a server answer, or neither. */
-  #show(problem: Problem | undefined, result?: Result): void {
+  #show(problem: ClockProblem | undefined, result?: Result): void {
     this.#stopWait();
     this.problem = problem;
     this.result = result;
@@ -143,10 +150,10 @@ export class RecoveryHourEntry extends LitElement {
       this.#countdown.start(result.remainingMs);
   }
   #waitForSecondClock(): void {
-    this.#show({ kind: "second-clock" });
-    this.#poll = setInterval(() => {
-      if (!this.busy) void this.#select(true);
-    }, SECOND_CLOCK_POLL_MS);
+    this.result = undefined;
+    this.#countdown.stop();
+    this.problem = { kind: "second-clock" };
+    this.#poll.start();
   }
   #edit(change: Partial<Draft>): void {
     this.#edited("recoveryOperation");
@@ -240,15 +247,6 @@ export class RecoveryHourEntry extends LitElement {
       throw new Error("invalid comparison");
     return compared as unknown as Comparison;
   }
-  #validWait(result: Record<string, unknown>): boolean {
-    return (
-      Number.isSafeInteger(result.targetMs) &&
-      (result.remainingMs === null ||
-        (typeof result.remainingMs === "number" &&
-          Number.isFinite(result.remainingMs) &&
-          result.remainingMs >= 0))
-    );
-  }
   #begin(): { call: (proposal: unknown) => Promise<unknown>; current: () => boolean } {
     const generation = ++this.#generation;
     const context = this.context;
@@ -264,6 +262,13 @@ export class RecoveryHourEntry extends LitElement {
     this.error = false;
     this.keyError = false;
     return { call, current };
+  }
+  #settle(cause: unknown, retryingQuietly: boolean): void {
+    settleRefusal(cause, retryingQuietly, {
+      waitForSecondClock: () => this.#waitForSecondClock(),
+      show: (problem) => this.#show(problem),
+      fail: (error) => this.#failed(error),
+    });
   }
   #failed(cause: unknown): void {
     this.error = true;
@@ -284,13 +289,14 @@ export class RecoveryHourEntry extends LitElement {
       if (
         record(preview) &&
         preview.status === "waiting" &&
-        this.#validWait(preview) &&
+        validWait(preview) &&
         typeof preview.remainingMs === "number" &&
         preview.remainingMs > 0
       )
         this.#show(undefined, preview as unknown as Result);
     } catch (cause) {
-      if (current()) this.#failed(cause);
+      // Compare clocks already asked the box with the key, so a refusal is explained here.
+      if (current()) this.#settle(cause, false);
     } finally {
       if (current()) {
         this.busy = false;
@@ -323,83 +329,17 @@ export class RecoveryHourEntry extends LitElement {
           selected.input === undefined
         )
           throw new Error("invalid selection");
-      } else if (selected.status !== "waiting" || !this.#validWait(selected))
+      } else if (selected.status !== "waiting" || !validWait(selected))
         throw new Error("invalid wait");
       this.#show(undefined, selected as unknown as Result);
     } catch (cause) {
-      if (!current()) return;
-      const polling = this.#poll !== undefined;
-      const { code, params } = (cause ?? {}) as { code?: unknown; params?: unknown };
-      const reason =
-        code === "sif.allocation_invalid" && record(params) ? params.reason : undefined;
-      if (reason === "second_clock_missing") this.#waitForSecondClock();
-      else if (reason === "clock_disagreement") this.#show({ kind: "disagreement" });
-      else if (reason === "minute_not_later" && record(params))
-        this.#show({
-          kind: "later",
-          ...(Number.isSafeInteger(params.allowedFromMs)
-            ? { allowedFromMs: params.allowedFromMs as number }
-            : {}),
-        });
-      // A request lost on the way (no refusal code) is retried by the next poll; a refusal is not.
-      else if (!(automatic && polling && code === undefined)) {
-        this.#show(undefined);
-        this.#failed(cause);
-      }
+      if (current()) this.#settle(cause, automatic && this.#poll.running);
     } finally {
       if (current()) {
         this.busy = false;
         this.#notify();
       }
     }
-  }
-  #explain(
-    t: {
-      whySecondClock: string;
-      onBox: string;
-      secondClockDo: string;
-      secondClockEnds: string;
-      whyRefused: string;
-      differ: string;
-      differDo: string;
-      later: string;
-      laterFrom: (time: string) => string;
-    },
-    clock: HourClockDecision | undefined,
-  ) {
-    const problem = this.problem;
-    if (problem?.kind === "second-clock")
-      return html`<section data-test="clock-wait">
-        <p role="status">${t.whySecondClock}</p>
-        ${
-          clock?.unavailable.some((r) => r.source === "browser" && r.reason === "same_machine")
-            ? html`<p>${t.onBox}</p>`
-            : nothing
-        }
-        <p>${t.secondClockDo}</p>
-        <p>${t.secondClockEnds}</p>
-      </section>`;
-    if (problem?.kind === "disagreement")
-      return html`<section data-test="clock-refused">
-        <p role="status">${t.whyRefused}</p>
-        <p>${t.differ}</p>
-        <p>${t.differDo}</p>
-      </section>`;
-    if (problem?.kind === "later") {
-      const time =
-        problem.allowedFromMs === undefined
-          ? undefined
-          : new Intl.DateTimeFormat(this.locale === "en" ? "en-GB" : "es-ES", {
-              hour: "2-digit",
-              minute: "2-digit",
-              hourCycle: "h23",
-              timeZone: this.context.selection.timeZone,
-            }).format(problem.allowedFromMs);
-      return html`<p role="status" data-test="minute-not-later">
-        ${t.later}${time === undefined ? nothing : html` ${t.laterFrom(time)}`}
-      </p>`;
-    }
-    return nothing;
   }
   override render() {
     const en = this.locale === "en";
@@ -553,23 +493,10 @@ export class RecoveryHourEntry extends LitElement {
             </section>`
           : nothing
       }
-      ${this.#explain(words, clock)}
+      ${renderClockProblem(this.problem, words, clock, this.locale, this.context.selection.timeZone)}
       ${
         this.result?.status === "waiting"
-          ? html`<section data-test="hour-wait">
-              <p role="status">${words.whyWait}</p>
-              <p>${words.nothingToDo}</p>
-              ${
-                this.#countdown.remainingMs === undefined
-                  ? nothing
-                  : html`<p>
-                      ${words.continuesIn}
-                      <span role="timer" data-test="remaining"
-                        >${formatRemaining(this.#countdown.remainingMs)}</span
-                      >
-                    </p>`
-              }
-            </section>`
+          ? renderWait(words, this.#countdown)
           : this.result?.status === "selected"
             ? html`<p role="status" data-test="selected-hour">
                 ${words.chosen}: <strong>${this.result.identity}</strong>
