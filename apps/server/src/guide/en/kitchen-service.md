@@ -95,6 +95,8 @@ late flags. You no longer choose a venue-wide firing mode there.
 Request held food from the table's order screen. Station queues and the pass show held courses and groups
 without a Fire button. Held dishes stay dimmed and cannot be advanced by tapping them.
 Once released, a dish can move through preparation to Ready at its station.
+While the box is out of disk space, moving a dish on is refused. The station says
+**Not saved: the box is out of disk space. Tell a manager.** and the dish stays where it was.
 
 Confirm allergy instructions in the table's allergy window before requesting cooking. At a
 station or the pass, read the copy already attached to each dish. The kitchen screens do not open
