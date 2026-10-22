@@ -1262,6 +1262,16 @@ export interface BillLookupRow {
   stillOwed: string;
 }
 
+/** An order's dishes: `ordered` counts the order's dishes less cancellations, extras left out and a
+ * dish not sold by the unit as one; the rest count those not yet served by where they stand. */
+export interface OrderStateCounts {
+  ordered: number;
+  unsent: number;
+  held: number;
+  waiting: number;
+  ready: number;
+}
+
 export interface OrderPreviewItem {
   lineId: string;
   name: string;
@@ -1285,6 +1295,7 @@ export interface CounterWaitingOrder {
   collectedAt: string | null;
   /** What collecting a placed order charges, credit notes included. */
   total: string;
+  counts: OrderStateCounts;
   canHandOver: boolean;
   /** A placed order's own service mode, frozen when it was opened, or the order flow of the till's
    * location when the order has none frozen; null on a settled one. */
@@ -1310,7 +1321,7 @@ export interface HeldOrderSummary {
   orderNumber: number;
   label: string | null;
   tableLabel?: string;
-  itemCount: number;
+  counts: OrderStateCounts;
   total: string;
   /** `total` less the money the bill has received. */
   outstanding: string;
@@ -2399,6 +2410,8 @@ export interface InvoiceDeliveryStatus {
 
 export interface DepartmentTransfer {
   currentDepartmentId?: string;
+  /** Present only where the viewer may see the tab. */
+  counts?: OrderStateCounts;
   id: string;
   tabId: string;
   sourceDepartmentId: string;

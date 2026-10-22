@@ -25,7 +25,8 @@ import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
 import { requireRevision, type Run, type TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
-import { checkZones } from "./zone-access.js";
+import { checkZones, inScope, readZoneScope } from "./zone-access.js";
+import { readOrderStateCounts, type OrderStateCounts } from "./order-state-counts.js";
 import { firedQuantity } from "./kitchen-print.js";
 import "./errors.js";
 
@@ -69,6 +70,43 @@ async function actor(
   const result = await monitoringActor(tx, deps, session);
   if (result === null) throw new AppError("department_transfer.not_allowed", {});
   return result;
+}
+
+interface TransferRow {
+  tabId: string;
+  currentDepartmentId?: string;
+}
+
+/**
+ * A sent row keeps showing after another department took the tab, so it carries counts only while
+ * the tab is still the viewer's department's and in the viewer's zones, or in none. Incoming rows
+ * always may.
+ */
+async function withCounts<T extends TransferRow>(
+  tx: Transaction,
+  deps: TillApiDeps,
+  rows: readonly T[],
+  viewer: { departmentId: string; profileId: string } | "receiver",
+): Promise<(T & { counts?: OrderStateCounts })[]> {
+  if (rows.length === 0) return [];
+  let visible: (row: T) => boolean = () => true;
+  if (viewer !== "receiver") {
+    const scope = await readZoneScope(tx, deps.cfg, viewer.profileId);
+    const zones = await VENUE_SERVICE.findOrderZones(
+      tx,
+      deps.cfg,
+      rows.map((row) => row.tabId),
+    );
+    visible = (row) =>
+      row.currentDepartmentId === viewer.departmentId && inScope(scope, zones.get(row.tabId));
+  }
+  const counts = await readOrderStateCounts(tx, [
+    ...new Set(rows.filter(visible).map((row) => row.tabId)),
+  ]);
+  return rows.map((row) => {
+    const tab = visible(row) ? counts.get(row.tabId) : undefined;
+    return tab === undefined ? row : { ...row, counts: tab };
+  });
 }
 
 export function mountDepartmentTransferApi(
@@ -164,9 +202,9 @@ export function mountDepartmentTransferApi(
       const session = await requireSession(deps, c, { action: "take-orders" });
       const requests = await withTransaction(deps.db, async (tx) => {
         const receiver = await monitoringActor(tx, deps, session);
-        return receiver === null
-          ? null
-          : VENUE_SERVICE.listIncomingDepartmentTransfers(tx, deps.cfg, receiver);
+        if (receiver === null) return null;
+        const rows = await VENUE_SERVICE.listIncomingDepartmentTransfers(tx, deps.cfg, receiver);
+        return rows === null ? null : withCounts(tx, deps, rows, "receiver");
       });
       return c.json(
         requests === null
@@ -186,8 +224,8 @@ export function mountDepartmentTransferApi(
         const context = await VENUE_SERVICE.getOrderContext(tx, deps.cfg, tabId);
         if (context.departmentId === sender.departmentId)
           await checkZones(tx, deps.cfg, sender, [{ orderId: tabId }]);
-        // Resolution remains visible to the source after responsibility moves; it exposes no tab contents.
-        return rows;
+        // Resolution remains visible to the source after responsibility moves; `withCounts` then sends no counts.
+        return withCounts(tx, deps, rows, sender);
       });
       return c.json({ requests });
     }),
@@ -197,9 +235,9 @@ export function mountDepartmentTransferApi(
       const session = await requireSession(deps, c, { action: "take-orders" });
       const requests = await withTransaction(deps.db, async (tx) => {
         const sender = await monitoringActor(tx, deps, session);
-        return sender === null
-          ? []
-          : VENUE_SERVICE.listDepartmentSentTransfers(tx, deps.cfg, sender);
+        if (sender === null) return [];
+        const rows = await VENUE_SERVICE.listDepartmentSentTransfers(tx, deps.cfg, sender);
+        return withCounts(tx, deps, rows, sender);
       });
       return c.json({ requests });
     }),

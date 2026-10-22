@@ -1012,7 +1012,7 @@ describe("TillApi", () => {
         id: "wo1",
         orderNumber: 7,
         label: "Mesa 4",
-        itemCount: 2,
+        counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
         total: "3.00",
         openedAt: "2026-08-06T10:00:00.000Z",
       },

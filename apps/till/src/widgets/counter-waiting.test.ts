@@ -1,7 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 import { formatMoney } from "@waitron/shared";
-import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillCounterWaiting } from "./counter-waiting.js";
 import type { CounterWaitingOrder } from "../api/client.js";
@@ -19,6 +19,7 @@ const paid: CounterWaitingOrder = {
   canHandOver: true,
   serviceMode: null,
   movableDishes: [],
+  counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 2 },
 };
 
 const sent: CounterWaitingOrder = {
@@ -34,6 +35,7 @@ const sent: CounterWaitingOrder = {
   canHandOver: true,
   serviceMode: "ticket_then_pay",
   movableDishes: [],
+  counts: { ordered: 3, unsent: 0, held: 0, waiting: 3, ready: 0 },
 };
 
 const handedOver: CounterWaitingOrder = {
@@ -42,6 +44,7 @@ const handedOver: CounterWaitingOrder = {
   orderNumber: 13,
   collectedAt: "2026-10-01T10:05:00.000Z",
   canHandOver: false,
+  counts: { ordered: 3, unsent: 0, held: 0, waiting: 0, ready: 0 },
 };
 
 afterEach(cleanupWidgets);
@@ -99,6 +102,55 @@ describe("till-counter-waiting", () => {
     expect(row.textContent).toContain("#11");
     expect(row.textContent).toContain("Ana");
     expect(row.textContent).toContain(formatMoney("18.00", currentLocale()));
+  });
+
+  it("shows how many items an order holds and how many wait, after its state and total; a handed-over row whose items are all served shows only the items", async () => {
+    const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
+      orders: [sent, handedOver],
+    });
+    const counted = (id: string) =>
+      [...rowOf(el, id).querySelectorAll<HTMLElement>(".summary .counts [data-count]")].map(
+        (chip) => [chip.dataset.count, chip.textContent!.trim()],
+      );
+    expect(counted("wo-sent")).toEqual([
+      ["ordered", countText(3, "order_counts.items", "order_counts.items_one")],
+      ["waiting", countText(3, "order_counts.waiting", "order_counts.waiting_one")],
+    ]);
+    expect(counted("wo-handed")).toEqual([
+      ["ordered", countText(3, "order_counts.items", "order_counts.items_one")],
+    ]);
+    const row = rowOf(el, "wo-sent");
+    const meta = row.querySelector(".meta")!;
+    expect(meta.textContent!.trim()).toBe(formatMoney("7.50", currentLocale()));
+    const counts = row.querySelector(".counts")!;
+    expect(
+      row.querySelector("[data-waiting-state]")!.compareDocumentPosition(counts) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(meta.compareDocumentPosition(counts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("wraps each order's counts inside its row at 320px wide", async () => {
+    const busy = {
+      ...sent,
+      invoiceNumber: "A/12",
+      counts: { ordered: 128, unsent: 12, held: 34, waiting: 56, ready: 78 },
+    };
+    const { el, host } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
+      orders: [busy, paid],
+    });
+    host.style.width = "320px";
+    await el.updateComplete;
+
+    const edge = host.getBoundingClientRect().right;
+    const counts = rowOf(el, "wo-sent").querySelector<HTMLElement>(".counts")!;
+    const chips = [...counts.querySelectorAll<HTMLElement>("[data-count]")];
+    expect(chips).toHaveLength(5);
+    expect(
+      new Set(chips.map((chip) => Math.round(chip.getBoundingClientRect().top))).size,
+    ).toBeGreaterThan(1);
+    for (const chip of chips)
+      expect(chip.getBoundingClientRect().right, chip.dataset.count).toBeLessThanOrEqual(edge);
   });
 
   it("a paid order not yet handed over says so and offers Hand over only", async () => {

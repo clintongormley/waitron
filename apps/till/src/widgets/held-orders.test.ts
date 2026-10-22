@@ -1,8 +1,9 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { formatMoney } from "@waitron/shared";
-import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillHeldOrders } from "./held-orders.js";
 import type { FloorZone, HeldOrderSummary, TableParty, TableState } from "../api/client.js";
@@ -12,7 +13,7 @@ const mesa: HeldOrderSummary = {
   id: "wo-1",
   orderNumber: 5,
   label: "Mesa 4",
-  itemCount: 2,
+  counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
   total: "3.00",
   outstanding: "3.00",
   hasPayments: false,
@@ -26,7 +27,7 @@ const barra: HeldOrderSummary = {
   id: "wo-2",
   orderNumber: 6,
   label: null,
-  itemCount: 1,
+  counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
   total: "1.50",
   outstanding: "1.50",
   hasPayments: false,
@@ -102,8 +103,30 @@ describe("till-held-orders", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]!.textContent).toContain("5");
     expect(rows[0]!.textContent).toContain("Mesa 4");
-    expect(rows[0]!.textContent).toContain("2");
+    expect(
+      [...rows[0]!.querySelectorAll("[data-count]")].map((chip) => chip.textContent!.trim()),
+    ).toEqual([countText(2, "order_counts.items", "order_counts.items_one")]);
     expect(rows[0]!.textContent).toContain(formatMoney("3.00", currentLocale()));
+  });
+
+  it("shows how many items an order holds and how many are held and ready under its total, and no count beside the money", async () => {
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [{ ...mesa, counts: { ordered: 6, unsent: 0, held: 2, waiting: 0, ready: 2 } }],
+    });
+    const row = el.shadowRoot!.querySelector(".order")!;
+    const chips = [...row.querySelectorAll<HTMLElement>(".counts [data-count]")];
+    expect(chips.map((chip) => [chip.dataset.count, chip.textContent!.trim()])).toEqual([
+      ["ordered", countText(6, "order_counts.items", "order_counts.items_one")],
+      ["held", countText(2, "order_counts.held", "order_counts.held_one")],
+      ["ready", countText(2, "order_counts.ready", "order_counts.ready_one")],
+    ]);
+    const meta = row.querySelector(".meta")!;
+    expect(meta.textContent!.trim()).toBe(formatMoney("3.00", currentLocale()));
+    const counts = row.querySelector(".counts")!;
+    expect(meta.compareDocumentPosition(counts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(counts.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      meta.getBoundingClientRect().bottom,
+    );
   });
 
   it("renders an unlabelled order (label null) without crashing", async () => {
@@ -120,6 +143,7 @@ describe("till-held-orders", () => {
       id: "wo-7",
       orderNumber: 7,
       label: "Ana",
+      counts: { ordered: 4, unsent: 0, held: 0, waiting: 1, ready: 3 },
       signals: [
         {
           kind: "ready",
@@ -147,7 +171,10 @@ describe("till-held-orders", () => {
       });
       const row = rowOf(el, 7);
       expect(row.querySelector(".label")!.textContent!.trim()).toBe("Ana");
-      expect(chips(row)).toEqual(["Bar: 2 ready", "Kitchen: 1 ready", "Overdue"]);
+      expect(chips(row)).toEqual(["Overdue"]);
+      expect(row.querySelector('[data-count="ready"]')!.textContent!.trim()).toBe(
+        countText(3, "order_counts.ready", "order_counts.ready_one"),
+      );
       expect(chips(rowOf(el, 5))).toEqual([]);
     });
 
@@ -163,7 +190,21 @@ describe("till-held-orders", () => {
     it("says them in Spanish", async () => {
       setLocale("es");
       const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [ana] });
-      expect(chips(rowOf(el, 7))).toEqual(["Bar: 2 listos", "Kitchen: 1 listo", "Con retraso"]);
+      const row = rowOf(el, 7);
+      expect(chips(row)).toEqual([es["signal.wait_overdue"]]);
+      expect(row.querySelector('[data-count="ready"]')!.textContent!.trim()).toBe(
+        countText(3, "order_counts.ready", "order_counts.ready_one"),
+      );
+    });
+
+    it("says a single ready item in the Spanish singular", async () => {
+      setLocale("es");
+      const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+        orders: [{ ...ana, counts: { ...ana.counts, ready: 1 } }],
+      });
+      expect(rowOf(el, 7).querySelector('[data-count="ready"]')!.textContent!.trim()).toBe(
+        es["order_counts.ready_one"],
+      );
     });
   });
 
@@ -229,26 +270,66 @@ describe("till-held-orders: a narrow card", () => {
     }
   });
 
+  it("wraps each order's counts inside its row at 320px wide", async () => {
+    const busy = {
+      ...mesa,
+      outstanding: "1.00",
+      hasPayments: true,
+      counts: { ordered: 128, unsent: 12, held: 34, waiting: 56, ready: 78 },
+    };
+    const { el, host } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [busy, barra],
+    });
+    host.style.width = "320px";
+    await el.updateComplete;
+
+    const edge = host.getBoundingClientRect().right;
+    const counts = el.shadowRoot!.querySelector<HTMLElement>(".counts")!;
+    const chips = [...counts.querySelectorAll<HTMLElement>("[data-count]")];
+    expect(chips).toHaveLength(5);
+    expect(
+      new Set(chips.map((chip) => Math.round(chip.getBoundingClientRect().top))).size,
+    ).toBeGreaterThan(1);
+    for (const chip of chips)
+      expect(chip.getBoundingClientRect().right, chip.dataset.count).toBeLessThanOrEqual(edge);
+  });
+
   it.each([320, 110])(
     "keeps each order's controls clear of its summary at %ipx wide",
     async (width) => {
-      const partlyPaid = { ...mesa, outstanding: "1.00", hasPayments: true };
+      const partlyPaid = {
+        ...mesa,
+        outstanding: "1.00",
+        hasPayments: true,
+        counts: { ordered: 128, unsent: 12, held: 34, waiting: 56, ready: 78 },
+      };
       const { el, host } = await mountWidget<TillHeldOrders>("till-held-orders", {
         orders: [partlyPaid, barra],
       });
       host.style.width = `${width}px`;
       await el.updateComplete;
 
+      expect(
+        el.shadowRoot!.querySelectorAll(".order")[0]!.querySelectorAll("[data-count]"),
+      ).toHaveLength(5);
       for (const order of el.shadowRoot!.querySelectorAll<HTMLElement>(".order")) {
-        const summary = order.querySelector(".summary")!.getBoundingClientRect();
-        for (const control of order.querySelectorAll("wt-button")) {
-          const box = control.getBoundingClientRect();
-          const apart =
-            box.left >= summary.right ||
-            box.right <= summary.left ||
-            box.top >= summary.bottom ||
-            box.bottom <= summary.top;
-          expect(apart, `${control.className} overlaps the summary`).toBe(true);
+        const parts = [
+          ["the summary", order.querySelector(".summary")!],
+          ...[...order.querySelectorAll<HTMLElement>("[data-count]")].map(
+            (chip) => [`the ${chip.dataset.count} count`, chip] as const,
+          ),
+        ] as const;
+        for (const [name, part] of parts) {
+          const summary = part.getBoundingClientRect();
+          for (const control of order.querySelectorAll("wt-button")) {
+            const box = control.getBoundingClientRect();
+            const apart =
+              box.left >= summary.right ||
+              box.right <= summary.left ||
+              box.top >= summary.bottom ||
+              box.bottom <= summary.top;
+            expect(apart, `${control.className} overlaps ${name}`).toBe(true);
+          }
         }
       }
     },

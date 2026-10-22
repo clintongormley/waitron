@@ -2826,11 +2826,17 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       id: string;
       orderNumber: number;
       label: string | null;
-      itemCount: number;
+      counts: { ordered: number };
       total: string;
     }[];
     expect(summaries).toContainEqual(
-      expect.objectContaining({ id, orderNumber, label: "Mesa 7", itemCount: 1, total: "3.50" }),
+      expect.objectContaining({
+        id,
+        orderNumber,
+        label: "Mesa 7",
+        counts: expect.objectContaining({ ordered: 2 }),
+        total: "3.50",
+      }),
     );
 
     // GET /:id rebuilds the basket from the frozen menu offer and returns its product details.

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { currentLocale, setLocale } from "./t.js";
 import { helpBadgeLabel, helpEn, helpEs, helpText } from "./help-strings.js";
-import { es } from "./strings.js";
+import { en, es } from "./strings.js";
 
 const original = currentLocale();
 afterEach(() => setLocale(original));
@@ -61,5 +61,36 @@ describe("the till's help strings", () => {
 describe("the order screen's help", () => {
   it("the order screen's Send help calls a held group by the same word", () => {
     expect(helpEs["help.order.send"]).toContain(es["table.group_held"].toLowerCase());
+  });
+});
+
+describe("the order lists' help", () => {
+  const states = ["items", "unsent", "held", "waiting", "ready"] as const;
+  // \b is ASCII-only in JS, so a boundary here is "no letter on either side", accents included.
+  const wholeWord = (word: string) =>
+    new RegExp(`(?<!\\p{L})${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\p{L})`, "u");
+  for (const [language, help, words] of [
+    ["English", helpEn, en],
+    ["Spanish", helpEs, es],
+  ] as const) {
+    for (const key of [
+      "help.counter.parked_orders",
+      "help.counter.waiting_orders",
+      "help.more.transfers",
+    ] as const) {
+      it(`${key} in ${language} names the five counts by their chips' words`, () => {
+        for (const state of states)
+          expect(help[key]).toMatch(wholeWord(words[`order_counts.${state}`].replace("{n} ", "")));
+      });
+    }
+  }
+
+  it("help.more.transfers says which tabs show the counts", () => {
+    expect(helpEn["help.more.transfers"]).toContain(
+      "A tab offered to your department, or still yours in the zones this device serves, shows how many items it has, then how many are unsent, held, waiting or ready.",
+    );
+    const sentences = (text: string) => text.split(/(?<=\.)\s+/).length;
+    expect(sentences(helpEs["help.more.transfers"])).toBe(sentences(helpEn["help.more.transfers"]));
+    expect(sentences(helpEn["help.more.transfers"])).toBe(3);
   });
 });

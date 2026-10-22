@@ -12,6 +12,7 @@ import { floorTodayTables } from "@waitron/db";
 import { deleteCourse } from "./course-delete.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -1335,7 +1336,7 @@ async function seedForeignNodeOrder(cfg: DeviceRequestConfig): Promise<string> {
 }
 
 describe("listHeldOrders", () => {
-  it("lists the node's open orders with itemCount, GROSS total and label, ordered by number", async () => {
+  it("lists the node's open orders with item counts, GROSS total and label, ordered by number", async () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await tx.update(products).set({ name: "Coffee" }).where(eq(products.id, cafeId));
@@ -1344,7 +1345,7 @@ describe("listHeldOrders", () => {
     const idA = randomUUID();
     const idB = randomUUID();
 
-    // A: a single line (itemCount 1). B: two lines (itemCount 2) and NO label (the null branch). A is
+    // A: one Coffee × 2. B: Coffee × 1 and Water × 3, and NO label (the null branch). A is
     // parked first, so its per-node number is 1 and B's is 2 — the order the list must come back in.
     const linesA = [{ productId: cafeId, quantity: "2" }];
     const linesB = [
@@ -1375,7 +1376,7 @@ describe("listHeldOrders", () => {
         ],
         orderNumber: 1,
         label: "Mesa 4",
-        itemCount: 1,
+        counts: { ordered: 2, unsent: 2, held: 0, waiting: 0, ready: 0 },
         total: grossA,
         outstanding: grossA,
         hasPayments: false,
@@ -1391,7 +1392,7 @@ describe("listHeldOrders", () => {
         ],
         orderNumber: 2,
         label: null,
-        itemCount: 2,
+        counts: { ordered: 4, unsent: 4, held: 0, waiting: 0, ready: 0 },
         total: grossB,
         outstanding: grossB,
         hasPayments: false,
@@ -1400,6 +1401,54 @@ describe("listHeldOrders", () => {
         signals: [],
       },
     ]);
+  });
+
+  it("lists a party bill's counts of two held, one waiting and one ready dish", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const tabId = await withTransaction(db, async (tx) => {
+      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const held = await makeProduct(tx, cfg, catalogueId, {});
+      const cooking = await makeProduct(tx, cfg, catalogueId, {});
+      const done = await makeProduct(tx, cfg, catalogueId, {});
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
+      await addRound(tx, cfg, tabId, [
+        { productId: held, quantity: "2", hold: true },
+        line(cooking),
+        line(done),
+      ]);
+      const items = await courseItemsFor(tx, tabId);
+      await advanceTicketItem(tx, cfg, byLine(items, done).id, "preparing");
+      await advanceTicketItem(tx, cfg, byLine(items, done).id, "ready");
+      return tabId;
+    });
+
+    const row = (await listHeldOrders({ db }, cfg)).find((order) => order.id === tabId)!;
+    expect(row.counts).toEqual({ ordered: 4, unsent: 0, held: 2, waiting: 1, ready: 1 });
+    expect(row).not.toHaveProperty("itemCount");
+  });
+
+  it("reads every order's counts in the same statements for three orders as for one", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const statements = async () => {
+      const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+      try {
+        const held = await listHeldOrders({ db }, cfg);
+        return { rows: held.length, statements: prepare.mock.calls.length };
+      } finally {
+        prepare.mockRestore();
+      }
+    };
+    await parkProducts(cfg, { id: randomUUID(), lines: [{ productId: cafeId, quantity: "1" }] });
+    const one = await statements();
+    for (let i = 0; i < 2; i++) {
+      await parkProducts(cfg, { id: randomUUID(), lines: [{ productId: cafeId, quantity: "2" }] });
+    }
+    const three = await statements();
+
+    expect(one.rows).toBe(1);
+    expect(three.rows).toBe(3);
+    expect(three.statements).toBe(one.statements);
   });
 
   it("omits settled and abandoned orders — the status filter is the only reason they are gone", async () => {
@@ -2625,7 +2674,9 @@ describe("updateHeldOrder", () => {
     const grossAfter = await grossBasketTotal(cfg, newLines);
     expect(grossAfter).toBe("3.50");
     const [afterSummary] = await listHeldOrders({ db }, cfg);
-    expect(afterSummary!.itemCount).toBe(2);
+    expect(afterSummary!.counts.ordered).toBe(
+      newLines.reduce((sum, line) => sum + Number(line.quantity), 0),
+    );
     expect(afterSummary!.total).not.toBe(beforeSummary!.total);
     expect(afterSummary!.total).toBe(grossAfter);
   });

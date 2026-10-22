@@ -1,6 +1,6 @@
 # A757 — Table states: the lifecycle, how each state is shown, and retiring the Tables tab
 
-Status: **answered (Q29–Q34 all A, 2026-10-17); slices 1, 2 and 7 built 2026-10-19, slices 3, 4 and 5 built 2026-10-20; slices 6 and 8 left (§11).**
+Status: **answered (Q29–Q34 all A, 2026-10-17); slices 1, 2 and 7 built 2026-10-19, slices 3, 4 and 5 built 2026-10-20, slice 6 built 2026-10-22; slice 8 left (§11).**
 Backlog entry: `docs/backlog.md` "A757" and
 [its detail](../../backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab).
 
@@ -413,6 +413,17 @@ own lines included (`itemCount`, `apps/server/src/working-order.ts:4414`). They 
   (`apps/till/src/widgets/tender-pay.ts:1181-1228`). A765 adds the table's name to the same rows and
   builds to this.
 
+**2026-10-22:** built by slice 6 (plan `docs/superpowers/plans/2026-10-21-a757-6-item-counts-by-state.md`).
+`itemCount` is gone: the rows carry `counts` (`readOrderStateCounts`,
+`apps/server/src/order-state-counts.ts`). A dish not sold by the unit — weighed, measured, or with
+decimal places — counts as one item. Dishes saved in a bill's New order panel and not sent count as
+unsent. Requested will count as held, because the reader treats a kitchen item with no `fired_at` as
+held and A773-2's plan keeps Requested's `fired_at` null
+(`docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md:88`). Transfers rows show the counts
+without a total, and only while the tab is the viewer's department's and in its profile's zones or in no zone, or
+to the desk it is offered to (`withCounts`, `apps/server/src/department-transfer-api.ts:85`).
+Held orders (now Parked orders) dropped its per-station ready chip.
+
 ### 5.4 Reserved and Take order (Q20)
 
 Decided as proposed: **Reserved takes the map's reserved colour** (the pale amber fill,
@@ -638,7 +649,7 @@ Each slice is one pull request one implementer can finish well under ~100 tool c
    colour tokens, the zone tabs and the toolbar edge; the 28 px check of section 6 on Santet's plan.
 6. **Item counts by state** — the server sends each order's counts by state with the held-orders
    summary and the Waiting and Transfers lists; the till rows show them. FULL review (a till read
-   path).
+   path; built).
 7. **Service steps: the settings** — the venue-service tables (migration), the list in A756's
    Service tab, the starter set for a new venue. FULL review (migration).
 8. **Service steps on the floor** — the server's step signal, the Done route and its permission, the

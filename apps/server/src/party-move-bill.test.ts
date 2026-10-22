@@ -869,7 +869,10 @@ describe("move a bill to the counter (A82)", () => {
       status: "open",
     });
     const held = await listHeldOrders({ db: v.db }, v.cfg);
-    expect(held.find((h) => h.id === second)).toMatchObject({ label: "Ana", itemCount: 1 });
+    expect(held.find((h) => h.id === second)).toMatchObject({
+      label: "Ana",
+      counts: expect.objectContaining({ ordered: 1 }),
+    });
     expect(await zoneOf(v, second)).toBe(v.counter.zoneId);
     expect((await partyRow(v, ana.partyId)).mainBillId).toBe(ana.tabId);
     expect(await activeTablesOf(v, ana.partyId)).toEqual([mesa]);

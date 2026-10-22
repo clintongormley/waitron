@@ -331,7 +331,7 @@ it("keeps a usable basket and payment controls when many orders are held", async
     id: `held-${i}`,
     orderNumber: i + 1,
     label: `Order ${i + 1}`,
-    itemCount: 1,
+    counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
     total: "7.80",
     outstanding: "7.80",
     hasPayments: false,

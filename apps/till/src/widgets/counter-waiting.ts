@@ -6,6 +6,7 @@ import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
+import { orderCountStyles, orderCounts } from "./order-counts.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import type { StringKey } from "../i18n/strings.js";
 import type { CounterWaitingOrder } from "../api/client.js";
@@ -35,6 +36,7 @@ export class TillCounterWaiting extends LitElement {
     baseStyles,
     orderPreviewStyles,
     orderNumberStyles,
+    orderCountStyles,
     helpAnchorStyles,
     css`
       :host {
@@ -147,6 +149,7 @@ export class TillCounterWaiting extends LitElement {
           ${label ? html`<span class="label">${label}</span>` : nothing}
           <span class="state" data-waiting-state>${t(this.#state(order))}</span>
           <span class="meta">${formatMoney(order.total, currentLocale())}</span>
+          ${orderCounts(order.counts)}
         </button>
         <div class="controls">
           ${
