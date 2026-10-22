@@ -92,21 +92,41 @@ The build goes straight on with each default. The owner is away and may override
    (the cancel rows' ids); the server checks each is a `cancel` row with `refund_handoff` true
    (Decision 5) on the sale's bill — the `working_orders` row named by `sales.working_order_id` —
    and splits the refund's payment amount (not its tip) across them in the order sent. Each cancel's
-   cap is its dish's filed value by the till's running-total method
-   (`apps/till/src/widgets/cancel-item-dialog.ts:208-223`): with `{ quantity, gross }` from A773-1's
-   `cancellationRefundValue` (`apps/server/src/cancellation-refund-value.ts:5-45`) and
-   `share(q) = gross × q ÷ quantity` to the cent, a cancel of `q` after `c` already cancelled on that
-   line (the line's earlier `cancel` rows, oldest first) is capped at `share(c + q) − share(c)`; the
-   cap less what links to pending or completed refunds already hold is what it can take. When
+   cap is **the amount the till showed for it, computed by one shared function and stored on the
+   cancel row when the cancel is recorded** (`refund_value`, Decision 5). Today the till computes it
+   twice, inline (`apps/till/src/widgets/cancel-item-dialog.ts:208-223`, `apps/till/src/till-app.ts:14811-14825`):
+   with `{ quantity, gross }` from A773-1's `cancellationRefundValue`
+   (`apps/server/src/cancellation-refund-value.ts:5-45`), `share(q) = gross × q ÷ quantity` to the
+   cent, and `c` the line's `cancelledQuantity` — the quantity already cancelled **with its charge
+   kept**, read from `line_service_cancellations` (`apps/server/src/line-cancel-context.ts:74-92`),
+   which the keep-charge cancel writes (`apps/server/src/line-cancel.ts:389`) and a split moves —
+   a cancel of `q`
+   shows `share(c + q) − share(c)`. Both copies and the server call one new function,
+   `cancelRefundShare(value, cancelledBefore, quantity)` in `packages/shared` (both apps already
+   depend on `@waitron/shared`, which depends on no workspace package, so no loop). The server
+   calls it inside the keep-charge cancel with the same inputs the till used: the cancel is refused
+   unless its context, `cancelledQuantity` included, equals the one the till read
+   (`requireCancellationContext`, `apps/server/src/line-cancel-context.ts:97-108`), and `c` is that
+   context's value. A don't-charge cancel made before payment is not in `c` on either side: it
+   lowered or deleted the line instead (`removeFromLine`, `apps/server/src/working-order.ts:2992-3024`),
+   and so the filed quantity. Counting it, as the first
+   draft did, can cap below the till: 6 portions filed at €10.00 with one earlier don't-charge cancel,
+   then 1 cancelled — the till shows `share(1)` = €1.67, while `share(2) − share(1)` = €1.66 (**(run)**
+   2026-10-22, `divideDecimal(multiplyDecimal(10.00, q), 6, 2)` from `@waitron/shared` printed 1.67
+   and 3.33). **Line splits:** a split before the cancel moves the line's
+   `line_service_cancellations` row with it (`splitLineServiceState`,
+   `apps/server/src/line-service-state.ts:99-178`), so the till and the server read the same moved
+   `c`; a split after the cancel cannot change a stored cap. The cap less what links to pending or
+   completed refunds already hold is what it can take. When
    `cancellationRefundValue` gives no value (the filed lines do not match the stored ones, or a line
-   has no filed gross, `:22-41`), that cancel cannot be linked: the request is refused
+   has no filed gross, `:22-41`), `refund_value` stays null and that cancel cannot be linked: the request is refused
    `management.request_invalid` naming `cancellationIds`, and the till, which offers no Refund
    tick without that value (`cancel-item-dialog.ts:193-201`), never sends it. To give the till those ids, the
    cancel answer (`{ revision }`) and the Finish table answer (`{ state: "closed" }`) gain
    `refundLinks: [{ lineId, adjustmentId }]` **only when a dish was handed to a refund**, so every
    existing answer pin without a refund stays as it is. *The other way:* link by line id and let
    the server find the newest unlinked cancel.
-5. **Three stored flags, three columns on `adjustments`.** `charge_kept` (not null,
+5. **Four new columns on `adjustments`: three flags and the refund cap.** `charge_kept` (not null,
    default false): the cancel took the dish off the pass and the station but left its charge — the
    flag the backlog asks for, because a still-charge cancel of a dish already comped to €0.00 is
    stored exactly like a don't-charge cancel of it (before = after = reduction = €0.00; read at
@@ -116,7 +136,9 @@ The build goes straight on with each default. The owner is away and may override
    draft's Discard, A909). `refund_handoff` (not null, default false): the waiter ticked Refund for
    this dish on a paid bill, so a refund may name this cancel (Decision 4). Without it, an unticked
    paid-bill cancel, or a still-charge cancel made while the bill was unpaid and the bill paid later,
-   could be named by a refund and show "Refunded" though nobody chose to refund it. No new CHECK, so
+   could be named by a refund and show "Refunded" though nobody chose to refund it. `refund_value`
+   (money, nullable): on a cancel with `refund_handoff`, the cap Decision 4 computes; null on every
+   other row and when there is no filed value. No new CHECK, so
    drizzle-kit should write `ALTER TABLE … ADD COLUMN` with no table rebuild (Task 1a confirms by
    reading the generated SQL; a rebuild is a stop).
 6. **A paid-bill cancel's row records who gave the PIN for its refund** in `approved_by` (D19:
@@ -207,7 +229,10 @@ The build goes straight on with each default. The owner is away and may override
     `tender.refund_exceeds_payment` and `tender.refund_unavailable` (`apps/server/src/errors.ts:590-593`).
     It is cheap: Task 3a already computes the caps in that transaction. A person who holds the refund
     permission and sends no PIN is not capped by it (their own permission covers any amount), and
-    their excess is linked to no cancel. The till words it in `apps/till/src/i18n/codes.ts`: "This
+    their excess is linked to no cancel. A known consequence: a refund to a card keyed on a separate
+    terminal that names cancels is always capped, even for a person who holds the refund permission,
+    because its confirming PIN marks every such approval as by PIN
+    (`apps/server/src/tender-refund-authorization.ts:132-147`). The till words it in `apps/till/src/i18n/codes.ts`: "This
     refund is more than the cancelled dishes' {amount}." / «Esta devolución supera los {amount} de
     los platos cancelados.» (our words, an owner point). `codeMessage` fills no parameters
     (`apps/till/src/i18n/codes.ts:781-786`) and the refund dialog shows a refusal through it as is
@@ -307,8 +332,11 @@ The inputs most likely to break what the design promises, each pinned by a test 
 2. **A refund linked to two cancels of one sale, for less than both** (the waiter typed a smaller
    amount): the first cancel in the order sent takes up to its value, the second the rest; a
    further link beyond the dishes' value links nothing more (Task 3a). **Part-cancels** of one line
-   are capped by the running total, so two cancels of 1 of 3 each take `share(2) − share(1)` and
-   `share(1)`, never more than the line's filed value together (Task 3a).
+   are capped by what the till showed, so two charge-kept cancels of 1 of 3 each take `share(1)`
+   then `share(2) − share(1)`, never more than the line's filed value together (Task 3a). **The
+   server's cap equals the till's amount** on the same inputs, including a line with an earlier
+   don't-charge cancel (6 portions at €10.00: €1.67 is accepted under a carried PIN) and a line split
+   before the cancel (Tasks 2a and 3b).
 3. **A `cancellationIds` naming another sale's cancel, a comp row, a cancel the waiter did not tick
    for a refund, a still-charge cancel made while the bill was unpaid and paid later, an unknown id,
    or a cancel with no filed value** is refused `management.request_invalid` naming
@@ -337,16 +365,16 @@ The inputs most likely to break what the design promises, each pinned by a test 
 |---|---|
 | `packages/adjustments/src/schema/adjustments.ts`, `record.ts`, `drizzle/` (generated), `backup-verification.ts` | 1a |
 | `packages/adjustments/src/schema/refund-links.ts` (new), `schema/index.ts`, `classification.ts`, `migrations.ts`, `refund-links.ts` (new), `index.ts`, `drizzle/` (generated), `backup-verification.ts`; `packages/migrations/migrations.manifest.json` | 1b |
-| `apps/server/src/line-cancel.ts`, `adjustments-apply.ts` | 2a |
+| `packages/shared/src/cancel-refund-share.ts` (new), `packages/shared/src/index.ts`, `apps/server/src/line-cancel.ts`, `adjustments-apply.ts` | 2a |
 | `apps/server/src/line-cancel.ts`, `line-cancel-api.ts`, `finish-party-service.ts`, `till-api.ts` (finish route `:2860-2915`) | 2b |
-| `apps/server/src/tender-refund-api.ts`, `tender-refund-types.ts`, `tender-refund-reservation.ts`, `tender-refunds.ts`, `errors.ts`; `apps/till/src/i18n/codes.ts` | 3a, 3b, 4 |
+| `apps/server/src/tender-refund-api.ts`, `tender-refund-types.ts`, `tender-refund-reservation.ts`, `tender-refunds.ts`, `errors.ts`; `apps/till/src/i18n/codes.ts`, `state/tender-refund.ts`, `widgets/tender-refund-dialog.ts` | 3a, 3b, 4 |
 | `packages/adjustments/src/reports.ts`, `routes.ts` | 5 |
 | `packages/adjustments/src/dashboard/adjustment-report-screen.ts`, `dashboard/client.ts`, `dashboard/strings.ts`, `dashboard/live-queries.ts` | 6 |
 | `apps/server/src/zone-access.ts` | 7 |
 | `apps/till/src/widgets/tender-refund-dialog.ts`, `state/tender-refund.ts`, `api/tender-refund-types.ts`, `i18n/strings.ts` | 8, 9 |
 | `apps/till/src/till-app.ts`, `state/tender-refund.ts`, `api/client.ts`, `api/tender-refund-types.ts`, `api/line-cancel-types.ts`, `api/finish-table-types.ts` | 10a, 10b, 10c |
 | `packages/adjustments/src/provisioning.ts`, `apps/server/src/adjustments-api.ts`, `apps/till/src/till-app.ts` | 11a |
-| `apps/till/src/widgets/cancel-item-dialog.ts`, `screens/till-table-order-screen.ts` | 11b |
+| `apps/till/src/widgets/cancel-item-dialog.ts`, `screens/till-table-order-screen.ts` (and the shared `cancelRefundShare` replaces the dialog's inline share; Task 10c does the same in `till-app.ts`) | 11b |
 | `apps/server/src/guide/en/table-service.md`, `es/table-service.md`, `docs/backlog.md`, `docs/backlog/till.md`, `docs/backlog/kitchen.md`, the design | 12 |
 | `apps/till/src/widgets/bill-refund-dialog.ts`, `apps/till/src/till-app.ts` | 14 |
 
@@ -355,7 +383,7 @@ first draft were split for that reason.
 
 ---
 
-## Task 1a: the three flags on a cancel row (adjustments package)
+## Task 1a: the three flags and the refund cap on a cancel row (adjustments package)
 
 **Files:** `packages/adjustments/src/schema/adjustments.ts:40-81`; the generated
 `packages/adjustments/drizzle/` files; `record.ts:15-79`; `backup-verification.ts:10-38`; tests in
@@ -364,17 +392,18 @@ first draft were split for that reason.
 **Interfaces:**
 - Produces: `adjustments.chargeKept` (`flag("charge_kept").notNull().default(false)`),
   `adjustments.preparationStarted` (`flag("preparation_started")`, nullable) and
-  `adjustments.refundHandoff` (`flag("refund_handoff").notNull().default(false)`), from
+  `adjustments.refundHandoff` (`flag("refund_handoff").notNull().default(false)`), and
+  `adjustments.refundValue` (`money("refund_value")`, nullable), from
   `packages/db/src/schema/columns.ts`'s vocabulary (CLAUDE.md §3).
 - Produces: `NewAdjustment` gains `chargeKept?: boolean` (default false), `preparationStarted?:
-  boolean | null` (default null) and `refundHandoff?: boolean` (default false), written by
-  `recordAdjustment`.
+  boolean | null` (default null), `refundHandoff?: boolean` (default false) and `refundValue?:
+  Decimal | null` (default null, stored in cents at the row), written by `recordAdjustment`.
 
 - [ ] **Failing tests.** `record.test.ts`: (a) "records a charge-kept cancel with whether
   preparation had started and whether it was handed to a refund": `chargeKept: true,
-  preparationStarted: false, refundHandoff: true` read back; (b) "defaults the flags for a comp":
-  `false`, `null`, `false`. `backup-verification.test.ts`: (c) "accepts a backup taken before the
-  three columns, restored with their defaults": the source database's `adjustments` without the
+  preparationStarted: false, refundHandoff: true, refundValue: "1.67"` read back; (b) "defaults the
+  flags for a comp": `false`, `null`, `false`, `null`. `backup-verification.test.ts`: (c) "accepts a
+  backup taken before the four columns, restored with their defaults": the source database's `adjustments` without the
   columns (drop them from the copy the suite already builds, or build it at the previous migration
   — follow how `packages/catalogue/src/backup-verification.test.ts` covers `content_suggestion_jobs`'
   added columns) passes; (d) the control: the restored row with `charge_kept` 1 is `invalid`.
@@ -382,10 +411,11 @@ first draft were split for that reason.
   Expected: (a), (b) fail to typecheck on the unknown fields; (c) is `invalid` (the comparer refuses
   a column it was not told about, `packages/db/src/backup-evidence.ts:59-63`); (d) is `invalid`.
 - [ ] **Schema and generate** with `pnpm --filter @waitron/adjustments db:generate`. Read the SQL:
-  expected three `ALTER TABLE adjustments ADD COLUMN …` and nothing else. **A `__new_adjustments`
+  expected four `ALTER TABLE adjustments ADD COLUMN …` and nothing else. **A `__new_adjustments`
   rebuild is a stop.**
 - [ ] **Code.** The insert in `record.ts`; in `backup-verification.ts`, the `adjustments` policy's
-  `addedColumns` becomes `{ charge_kept: 0n, preparation_started: null, refund_handoff: 0n }` (the
+  `addedColumns` becomes `{ charge_kept: 0n, preparation_started: null, refund_handoff: 0n,
+  refund_value: null }` (the
   backup reader returns integers as `bigint`, `packages/store/src/backup-query.ts:3`, `:40`; the
   catalogue's shape is `packages/catalogue/src/backup-verification.ts:30-35`).
 - [ ] **Guard suites** (schema or migration), reading `migration-upgrade.test.ts`'s summary: it
@@ -393,7 +423,7 @@ first draft were split for that reason.
   needs no venue reset; failed → record the failure and stop. Typecheck `@waitron/adjustments`; the
   fiscal gates; `scripts/english-only.test.ts`.
 - [ ] Commit — "Adjustments record whether a cancel kept its charge, had started and was handed to a
-  refund".
+  refund, and what it may refund".
 
 ## Task 1b: the link from a refund to its cancels (adjustments package)
 
@@ -413,10 +443,9 @@ the generated `drizzle/` files; new `packages/adjustments/src/refund-links.ts`; 
 - Produces in `refund-links.ts`: `linkRefundToCancels(tx, { tenderRefundId, links: { adjustmentId:
   string; amount: Decimal }[] }): Promise<void>` (inserts only), and
   `readCancelsForRefund(tx, adjustmentIds: readonly string[]): Promise<{ id, workingOrderId,
-  lineId, quantity, action, chargeKept, refundHandoff, createdAt, linked: Decimal }[]>`, where
-  `linked` sums `amount` over links whose refund is `pending` or `completed`, and
-  `readLineCancels(tx, lineId): Promise<{ id, quantity }[]>` (the line's `cancel` rows, oldest
-  first, for Task 3a's running total). Exported from the package index.
+  lineId, quantity, action, chargeKept, refundHandoff, refundValue: Decimal | null, linked: Decimal
+  }[]>`, where `linked` sums `amount` over links whose refund is `pending` or `completed`. Exported
+  from the package index.
 
 - [ ] **Failing tests** (`refund-links.test.ts`, `useVenueDb({ migrations: [CORE_MIGRATIONS,
   ADJUSTMENTS_MIGRATIONS] })` as `record.test.ts:20` and `migrations.test.ts:19` do — each set's
@@ -428,7 +457,7 @@ the generated `drizzle/` files; new `packages/adjustments/src/refund-links.ts`; 
   package's `test/` has a precedent, `@waitron/ui/test/venue-theme-fixture.js`. If it does not
   resolve, stop and report rather than copy the fixture):
   (a) "links a refund to two cancels and reads what each holds": €3.00 and €2.50 → `linked` 3.00 and
-  2.50; with the refund `failed`, both 0.00; (b) "reads a line's cancels oldest first"; (c) "refuses
+  2.50; with the refund `failed`, both 0.00; (b) "reads each cancel's stored refund value"; (c) "refuses
   an update and a delete of a link" with the append-only triggers' refusal, as
   `packages/adjustments/src/migrations.test.ts` pins for `adjustments`; (d) "refuses the same cancel
   linked twice to one refund" (the unique index's refusal, by its message).
@@ -447,11 +476,17 @@ the generated `drizzle/` files; new `packages/adjustments/src/refund-links.ts`; 
   and `scripts/live-subscriptions.test.ts`; typecheck; the fiscal gates.
 - [ ] Commit — "A refund can name the cancelled dishes it paid back".
 
-## Task 2a: the cancel writes its flags (server)
+## Task 2a: the cancel writes its flags and its refund cap (shared, server)
 
-**Files:** `apps/server/src/line-cancel.ts` (keep-charge branch `:243-415`, started don't-charge
+**Files:** new `packages/shared/src/cancel-refund-share.ts` and its test, `packages/shared/src/index.ts`;
+`apps/server/src/line-cancel.ts` (keep-charge branch `:243-415`, started don't-charge
 branch `:190-242`), `apps/server/src/adjustments-apply.ts` (`recordAdjustment` call `:932-962`);
 tests in `line-cancel.test.ts`.
+
+**Interfaces:** `cancelRefundShare(value: { quantity: string; gross: string }, cancelledBefore:
+string, quantity: string): Decimal` — `share(cancelledBefore + quantity) − share(cancelledBefore)`
+with `share(q) = divideDecimal(multiplyDecimal(gross, q), value.quantity, 2)`, exactly the till's
+inline arithmetic today (Decision 4). Tasks 10c and 11b replace the till's two inline copies with it.
 
 - [ ] **Failing tests** (`line-cancel.test.ts`): (a) "records a still-charge cancel of a started
   dish as charge kept and started": unpaid bill, `keep_charge` → `chargeKept: true,
@@ -461,18 +496,36 @@ tests in `line-cancel.test.ts`.
   dish on a paid bill as not started" → `preparationStarted: false`; (d) "records a don't-charge
   cancel of a started dish as started, charge not kept"; (e) "a still-charge cancel of a dish comped
   to €0.00 is charge kept and a don't-charge one is not" (Review Focus 1; comp the dish Free first,
-  as `adjustments-apply.test.ts` does). Run
-  `pnpm --filter @waitron/server exec vitest run src/line-cancel.test.ts`. Expected: (a)–(e) fail on
-  the defaults.
-- [ ] **Code.** Keep-charge branch: `chargeKept: true`, `preparationStarted: started`,
-  `refundHandoff: ask.refundHandoff === true`. The started don't-charge branch passes
+  as `adjustments-apply.test.ts` does); (f) "stores the amount the till showed as the refund cap":
+  a paid line of 3 filed at €10.00, `refundHandoff`, two charge-kept cancels of 1 → `refundValue`
+  "3.33" then "3.34"; (g) "leaves out a don't-charge cancel made before payment": 6 portions filed
+  at €10.00 after one don't-charge cancel on the unpaid bill (for example 7 at €2.00, one
+  cancelled without charge, €2.00 comped off the line — check the filed gross is €10.00 before
+  relying on it), then 1 cancelled with `refundHandoff` → `refundValue` "1.67", the same value
+  `cancelRefundShare` gives for the context's `cancelledQuantity`; (h) "reads a split's moved
+  cancellation": a still-charge cancel of 1 on an unpaid line of 4, the bill split moving 2 of the
+  line to a new bill, the new bill paid, 1 cancelled there with `refundHandoff` → `refundValue`
+  equals `cancelRefundShare(refundValue read, context cancelledQuantity, "1")`; (i) no filed value →
+  `refundValue` null. `packages/shared`'s test: `cancelRefundShare({ quantity: "3", gross: "10.00" },
+  "0", "1")` "3.33", `("1", "1")` "3.34", `("0", "2")` "6.67"; `{ quantity: "6", gross: "10.00" }`,
+  `("0", "1")` "1.67" and `("1", "1")` "1.66" (**(run)** 2026-10-22: the till's arithmetic printed
+  these). Run `pnpm --filter @waitron/shared exec vitest run src/cancel-refund-share.test.ts` and
+  `pnpm --filter @waitron/server exec vitest run src/line-cancel.test.ts`. Expected: the module is
+  missing; (a)–(i) fail on the defaults.
+- [ ] **Code.** `cancelRefundShare` in `packages/shared`. Keep-charge branch: `chargeKept: true`,
+  `preparationStarted: started`, `refundHandoff: ask.refundHandoff === true`, and with
+  `refundHandoff` on a settled bill, `refundValue: cancelRefundShare(value, c, ask.quantity)` where
+  `value` is `cancellationRefundValue(tx, bill.id, sale.id, lineId)` (the sale found as
+  `line-cancel-api.ts:130-137` does) and `c` the checked context's `cancelledQuantity` for the line;
+  null when `value` is undefined. The started don't-charge branch passes
   `preparationStarted: true` to `applyAdjustment` (harmless for the kitchen slips: `removeFromLine`
   ORs it with the item's own state, `working-order.ts:2919-2921`), and `applyAdjustment` records
   `preparationStarted: args.preparationStarted ?? null` on a cancel row.
 - [ ] **Run** the file, then `src/adjustments-apply.test.ts src/adjustments-report.test.ts
-  src/draft-discard.test.ts` (whole-row `toEqual`s meet three keys: row 16). Typecheck; the fiscal
-  gates.
-- [ ] Commit — "A cancel records whether it kept the charge, had started and was handed to a refund".
+  src/draft-discard.test.ts` (whole-row `toEqual`s meet four keys: row 16). Typecheck `@waitron/shared`
+  and `@waitron/server`; the fiscal gates.
+- [ ] Commit — "A cancel records whether it kept the charge, had started and was handed to a refund,
+  and what the till showed it may refund".
 
 ## Task 2b: the cancel answers its refund links and records the refund approver (server)
 
@@ -509,8 +562,8 @@ result, so a replay answers the same ids.
 `:150-173`), `tender-refunds.ts:58-134`; new `apps/server/src/tender-refund-links.test.ts`.
 
 **Interfaces:**
-- Consumes: Task 1b's `readCancelsForRefund`, `readLineCancels`, `linkRefundToCancels`; Task 2b's
-  ids.
+- Consumes: Task 1b's `readCancelsForRefund`, `linkRefundToCancels`; Task 2a's stored
+  `refundValue`; Task 2b's ids.
 - Produces: `TenderRefundRequest.cancellationIds?: string[]` (UUIDs, lower-cased, no repeats, at
   most 100). The fingerprint includes `cancellationIds` sorted, **only when present**, so a request
   without them fingerprints as before. The reservation returns the caps' total for Task 3b.
@@ -520,7 +573,7 @@ result, so a replay answers the same ids.
   (a) "splits a refund across the cancels it names, in the order sent" (Review Focus 2): €7.50 and
   €5.50, refund €10.00 → links €7.50 and €2.50; (b) "a second refund naming the same cancels links
   only what is left" → €3.00; (c) "a failed refund frees what it held"; (d) "caps part-cancels of
-  one line by the running total": a line of 3 at €10.00 filed, two cancels of 1 each → caps €3.33
+  one line by what the till showed": a line of 3 at €10.00 filed, two cancels of 1 each → caps €3.33
   and €3.34 (`share(1)` = €3.33, `share(2) − share(1)` = €3.34 at the cent, as
   `cancel-item-dialog.ts:214-220` computes; **(run)** on 2026-10-22 a throwaway test of
   `divideDecimal(multiplyDecimal(10.00, q), 3, 2)` from `@waitron/shared` printed 3.33, 6.67 and a
@@ -537,8 +590,8 @@ result, so a replay answers the same ids.
   `pnpm --filter @waitron/server exec vitest run src/tender-refund-links.test.ts`. Expected:
   (a)–(g) fail; (h) passes.
 - [ ] **Code.** Parse the field; in the reservation, before the insert, check each cancel (a
-  `cancel` row, `refundHandoff`, on the bill `sales.working_order_id` names), compute each cap by
-  Decision 4's running total, allocate the payment amount in order, and write the links with the
+  `cancel` row, `refundHandoff`, on the bill `sales.working_order_id` names), take each cap from
+  its stored `refundValue` (Decision 4; null refuses), allocate the payment amount in order, and write the links with the
   new refund's id. A replay returns before any of this (`tender-refund-reservation.ts:63-70`).
 - [ ] **Run** the file and `src/tender-refund-reservation.test.ts src/tender-refund-api.test.ts
   src/tender-refunds.test.ts src/tender-refund-authorization.test.ts`. Typecheck; the fiscal gates.
@@ -548,18 +601,32 @@ result, so a replay answers the same ids.
 
 **Files:** `apps/server/src/tender-refund-reservation.ts`, `tender-refunds.ts:58-134` (passes
 `viaOverride` from the authorization, `tender-refund-authorization.ts:127-146`),
-`apps/server/src/errors.ts:590-597`, `apps/till/src/i18n/codes.ts`; tests in
-`tender-refund-links.test.ts`, `apps/till/src/i18n/codes.test.ts`.
+`apps/server/src/errors.ts:590-597`, `tender-refund-api.ts` (its status map `:124-135`, where the
+sibling `tender.refund_exceeds_payment` answers 409 at `:131`; a code the map omits answers 400,
+`packages/server-kit/src/error-boundary.ts:42`), `apps/till/src/i18n/codes.ts`,
+`apps/till/src/state/tender-refund.ts` (`:212` clears the saved attempt on the sibling),
+`apps/till/src/widgets/tender-refund-dialog.ts` (`:236` marks the amount field for the sibling);
+tests in `tender-refund-links.test.ts`, `tender-refund-api.test.ts`, `apps/till/src/i18n/codes.test.ts`,
+`apps/till/src/state/tender-refund.test.ts` (beside the sibling's cases at `:410-432`),
+`apps/till/src/widgets/tender-refund-dialog.test.ts`.
 
 - [ ] **Failing tests:** (a) "refuses a PIN-approved linked refund €0.01 above its cancels":
   staff, a manager's `override`, `cancellationIds` of a €5.50 dish, applied "5.51" →
   `tender.refund_exceeds_cancelled` `{ tenderId, cancelled: "5.50" }`, nothing reserved;
   (b) "and one with a tip" → the same code; (c) the control: the same at "5.50" is reserved and
   linked; (d) "does not cap a person who holds the refund permission": a manager's own session,
-  "6.00" → reserved, €5.50 linked; (e) the till words the code in both languages. Run the server
-  file and `pnpm --filter @waitron/till exec vitest run src/i18n/codes.test.ts`. Expected: (a), (b)
-  reserve; (e) has no words.
-- [ ] **Code** (Decision 17); the code in the registry; the till's words.
+  "6.00" → reserved, €5.50 linked; (e) "accepts the till's amount after an earlier don't-charge
+  cancel": the 6-portion line of Task 2a (g), a manager's `override`, applied "1.67" → reserved and
+  linked €1.67; (f) `tender-refund-api.test.ts`: the refusal answers 409; (g) the till words the
+  code in both languages; (h) `state/tender-refund.test.ts`: "clears the saved attempt when the
+  refund exceeds the cancelled dishes", as for `tender.refund_exceeds_payment`, so a changed amount
+  is not `locked`; (i) `tender-refund-dialog.test.ts`: the refusal marks the amount field. Run the
+  server files and `pnpm --filter @waitron/till exec vitest run src/i18n/codes.test.ts
+  src/state/tender-refund.test.ts src/widgets/tender-refund-dialog.test.ts`. Expected: (a), (b)
+  reserve; (f) answers 400; (g)–(i) fail; (e) passes once Task 2a stored the cap.
+- [ ] **Code** (Decision 17); the code in the registry and at 409 in the status map beside its
+  sibling; the till's words; the till treats it as it treats `tender.refund_exceeds_payment` in
+  `state/tender-refund.ts:212` and `widgets/tender-refund-dialog.ts:236`.
 - [ ] **Run** the files, `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts`
   (it is a refusal, not an incident: the alert guard must stay green without an entry), typecheck
   both packages; the fiscal gates.
@@ -796,7 +863,9 @@ and once every sale it was given for has had its refund sent.
   `pnpm --filter @waitron/till exec vitest run src/till-app-parties.test.ts -t "refund"`.
   Expected: (a)–(c) fail on empty props; (d) passes.
 - [ ] **Code.** Carry the per-sale target, dishes and ids into `#openFinishRefund` and the receipts
-  list.
+  list. `#readFinishDishes`' inline share (`till-app.ts:14813-14825`) becomes Task 2a's
+  `cancelRefundShare`, so the till fills in what the server stored as the cap; the existing
+  Finish table refund-amount cases must stay green unchanged.
 - [ ] **Run** the file whole; typecheck.
 - [ ] Commit — "After Finish table, each receipt's refund opens filled in".
 
@@ -832,7 +901,8 @@ and once every sale it was given for has had its refund sent.
   bill's unserved slice only". Run the two files. Expected: no choices; Cancel on the served slice.
 - [ ] **Code.** On a settled bill, `#remaining` subtracts served as the server does
   (`line-cancel.ts:137-140`); `#options` stops refusing a served component; `#canVoidSent` refuses a
-  `served` slice of a settled bill.
+  `served` slice of a settled bill. `#refundAmount`'s inline share (`cancel-item-dialog.ts:211-220`)
+  becomes Task 2a's `cancelRefundShare`; the existing refund-amount cases stay green unchanged.
 - [ ] **Run** the files, `cancel-item-dialog.a11y.test.ts`, `.unsaved.test.ts`,
   `cancel-item-preparation.test.ts`, `cancel-item-reasons.test.ts`; typecheck.
 - [ ] Commit — "Cancel item… on a paid bill offers what is not yet served".
@@ -908,7 +978,9 @@ checks `:292-294`, the ask `:277-280`), `apps/till/src/till-app.ts:9865-9873`; t
   typecheck; the string guards.
 - [ ] Commit — "Give back a payment's reason is the Void reasons drop-down".
 
-**PR description** (plain English): first line — the review path, and "No venue reset needed" if
+**PR description** (plain English): first line — the review path, that the PR waits for the owner's
+approval of `adjustment_refunds` in `scripts/append-only-triggers.test.ts` ("Changed test checks"),
+and "No venue reset needed" if
 Task 1a's upgrade walk passed (else the reset line it wrote). Then what each screen now does, with
 the pictures; the decisions above as owner points; Decision 14's retry case; Task 5's measured
 double count; "Changed test checks" and "Fixtures grown"; the fiscal gates' counts and that no
@@ -921,9 +993,12 @@ filed record changes.
 Each changes only because the design changes what it checks. Lines are on `0abad3d7e`; an
 implementer who finds one moved records the new line. The owner's 2026-10-05 rule
 (`~/waitron-campaign/queue.md`, "OWNER DECISION 2026-10-05") counts a change to any guard under
-`scripts/` as controversial, weakened or not, so row 22 is asked about (A506-1 asked the same of an
-entries-only addition to `scripts/schema-constraints.test.ts`, and the owner said yes on
-2026-10-12). Rows 19–21 are package tests that pin a whole list and gain one entry each, with
+`scripts/` as controversial, weakened or not. So **the PR must not land until the owner approves
+row 22's one name**, `adjustment_refunds` in `scripts/append-only-triggers.test.ts`'s `EXPECTED`;
+the build goes on meanwhile, and the PR's first line says it waits for that approval. Precedents:
+A10-1 (`pay_period_closures` added to the same `EXPECTED`, approved for that one name only) and
+A739 (two named triggers in `scripts/behavioural-triggers.test.ts`'s `EXPECTED_TRIGGERS`, approved
+for those two only), both in `~/waitron-campaign-shared/watcher-handoff.md`. Rows 19–21 are package tests that pin a whole list and gain one entry each, with
 every existing value unchanged.
 
 | # | Task | Where | Old → new | Design |
@@ -943,13 +1018,13 @@ every existing value unchanged.
 | 13 | 8, 10a | `apps/till/src/till-app.test.ts:23838` (fixture), `:23897` (helper flips the switch, types a reason) | as row 12 | D24, D26 |
 | 14 | 11b | `apps/till/src/widgets/cancel-item-dialog.test.ts:601-608` "offers no paid cancellation for a served dish" (3, 1 served → no choices) | "offers the unserved 2 of a partly served paid line"; a wholly served line still offers none | §3.8 item 2 |
 | 15 | 9 | `tender-refund-dialog.test.ts` cases that type into `wt-input[name=reason]` (find with `git grep -n 'name="reason"\|"reason"' -- apps/till/src/widgets/tender-refund-dialog*.test.ts`) | choose from the drop-down | D26 |
-| 16 | 2a, 5, 11a | whole-row or whole-entry `toEqual`s over `adjustments` rows, `AdjustmentEntry` or the till's reason wire, listed by the implementer with file:line as found | gain `chargeKept`, `preparationStarted`, `refundHandoff`, `refunded`, `startsFinishTable` | D19, §3.6, §10 item 7 |
+| 16 | 2a, 5, 11a | whole-row or whole-entry `toEqual`s over `adjustments` rows, `AdjustmentEntry` or the till's reason wire, listed by the implementer with file:line as found | gain `chargeKept`, `preparationStarted`, `refundHandoff`, `refundValue`, `refunded`, `startsFinishTable` | D19, §3.6, §10 item 7 |
 | 17 | 6 | `packages/adjustments/src/dashboard/adjustment-report-screen.test.ts` column pins of the entries list (sort table at `:1295`, any column list), with file:line as found | gain the Preparation started and Refunded columns | D19, §3.6 |
 | 18 | 7 | an existing case that pins `party.not_open` for a closed party from a device outside its zone, if any | now 403 `service_zone.not_allowed` | §3.8 "Who may" |
 | 19 | 1b | `packages/adjustments/src/classification.test.ts:9-13` (the classification list) and `:22-26` (the change sources) | gain `["adjustment_refunds", "ledger", true]` and `{ table: "adjustment_refunds", type: "adjustment_refunds" }` — shape pin, nothing weakened | §3.6 |
 | 20 | 1b | `classification.test.ts:18` (`appendOnlyTables` `["adjustments"]`) | `["adjustments", "adjustment_refunds"]` — shape pin | §3.6 |
 | 21 | 1b | `packages/adjustments/src/backup-verification.test.ts:175` (the tables emptied for an honest target-only restore) | gains `adjustment_refunds` — shape pin | §3.6 |
-| 22 | 1b | `scripts/append-only-triggers.test.ts:35` (`EXPECTED`, every append-only table by name) | gains `"adjustment_refunds"` in its sorted place — shape pin, the exception named above | §3.6 |
+| 22 | 1b | `scripts/append-only-triggers.test.ts:35` (`EXPECTED`, every append-only table by name) | gains `"adjustment_refunds"` in its sorted place — waits for the owner's approval of that one name (above) | §3.6 |
 | 23 | 14 | `apps/till/src/widgets/bill-refund-dialog.test.ts` and `.unsaved.test.ts` cases that type a reason (25 and 12 hits of `git grep -c '"reason"\|reason:'` on `0abad3d7e`, which include fixture and assertion lines; the typing goes through `type(el, "reason", …)` and `fill(form, "reason", …)`), and `payment-leading-zeros.test.ts`, which types one at `:187` and `:205` | choose from the drop-down | D15 |
 
 **Unchanged, checked:** `apps/server/src/line-cancel-api.test.ts:597` and
@@ -978,7 +1053,9 @@ If a suite turns red on a check not in this table, it is a stop and a report, th
    only up to the ticked dishes' total with no tip, never for a separately keyed card (Decision 3);
    the server refuses a PIN-approved linked refund above that total (Decision 17).
 4. **A refund raised above the filled-in total is an ordinary refund**: it asks for a PIN and the
-   dish's report entry shows no "Refunded" (Decisions 3 and 16).
+   dish's report entry shows no "Refunded" (Decisions 3 and 16). This sits against D19 and §3.6,
+   which show money given back linked to the cancel: here money did go back for the dish, and its
+   entry does not say so.
 5. **"Refund pending €x"** («Devolución pendiente …») and the words of
    `tender.refund_exceeds_cancelled` are new, our words (Decisions 7 and 17).
 6. **A still-charged cancelled dish is now counted once in the person's sales** (Decision 8).
