@@ -62,6 +62,18 @@ describe("the user guides", () => {
     },
   );
 
+  it.each(GUIDE_LANGUAGES)("the Box status guide in %s registers its sections", (lang) => {
+    expect(GUIDE_PAGES).toContain("box-status");
+    const markdown = readGuide(root, lang, "box-status");
+    expect(markdown).toBeDefined();
+    expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
+      "open",
+      "rows",
+      "free-space",
+      "out-of-space",
+    ]);
+  });
+
   it.each(GUIDE_LANGUAGES)("the appearance guide in %s registers its sections", (lang) => {
     expect(GUIDE_PAGES).toContain("appearance");
     const markdown = readGuide(root, lang, "appearance");

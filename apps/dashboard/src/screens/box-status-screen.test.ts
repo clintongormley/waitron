@@ -13,6 +13,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { goToLabel } from "../widgets/alert-format.js";
+import { guideHref } from "../help-guide.js";
 import "./box-status-screen.js";
 import type { BoxStatusScreen } from "./box-status-screen.js";
 
@@ -456,6 +457,18 @@ describe("dashboard-box-status-screen", () => {
     expect(tooltip.getAttribute("mode")).toBe("help-mode");
     expect(tooltip.getAttribute("aria-label")).toBe(t("box_status.free_help_label"));
     expect(text(tooltip)).toBe(t("box_status.free_help"));
+  });
+
+  it.each([
+    ["en", "/help/en/box-status#free-space"],
+    ["es", "/help/es/box-status#free-space"],
+  ])("the help tooltip links to the guide's free-space section in %s", async (locale, href) => {
+    setLocale(locale);
+    const { el } = await mount(stubApi());
+    const tooltip = q(el, "[data-test=row-disk] wt-help-tooltip")!;
+    expect(tooltip.getAttribute("guide-href")).toBe(href);
+    expect(tooltip.getAttribute("guide-href")).toBe(guideHref("box-status.free-space"));
+    expect(tooltip.getAttribute("guide-label")).toBe(t("box_status.free_help_guide"));
   });
 
   it("reads again in the background after the first read", async () => {

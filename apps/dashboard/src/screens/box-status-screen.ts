@@ -12,6 +12,7 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { goToLabel } from "../widgets/alert-format.js";
+import { guideHref } from "../help-guide.js";
 import { boxStatusRows, type PartRow } from "./box-status-rows.js";
 
 /** The least `formatBytes` writes as "1 MB" rather than "0 MB". */
@@ -244,7 +245,11 @@ export class BoxStatusScreen extends LitElement {
         ?loading=${this.freeing}
         @click=${() => void this.#free()}
         >${label}</wt-button
-      ><wt-help-tooltip mode="help-mode" aria-label=${t("box_status.free_help_label")}
+      ><wt-help-tooltip
+        mode="help-mode"
+        aria-label=${t("box_status.free_help_label")}
+        guide-href=${guideHref("box-status.free-space")}
+        guide-label=${t("box_status.free_help_guide")}
         >${t("box_status.free_help")}</wt-help-tooltip
       >
     </span>`;
