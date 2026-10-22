@@ -3,8 +3,7 @@ import "@waitron/ui";
 import type { ServiceStepDue } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 
-/** A due step's name joined to its Done button. Done's label names the step, so two Done buttons
- * on one screen are told apart. */
+/** Done's label names the step, so two Done buttons on one screen are told apart. */
 export function stepChip(step: ServiceStepDue, options: { onDone: () => void }): TemplateResult {
   return html`<span class="step-chip" data-chip="service-step" data-step=${step.stepId}
     ><span class="step-name"><wt-icon name="floor-step" size="sm"></wt-icon>${step.name}</span
@@ -13,7 +12,10 @@ export function stepChip(step: ServiceStepDue, options: { onDone: () => void }):
       class="step-done"
       data-step-done=${step.stepId}
       aria-label=${t("floor.step_done_label").replace("{step}", step.name)}
-      @click=${options.onDone}
+      @click=${(event: Event) => {
+        event.stopPropagation();
+        options.onDone();
+      }}
     >
       ${t("floor.step_done")}
     </button></span

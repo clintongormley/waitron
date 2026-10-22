@@ -66,6 +66,16 @@ describe("stepChip", () => {
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps Done's click from reaching the chip's ancestors", async () => {
+    const onDone = vi.fn();
+    const { host, done } = await mount(dessert, onDone);
+    const ancestor = vi.fn();
+    host.addEventListener("click", ancestor);
+    await userEvent.click(done);
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(ancestor).not.toHaveBeenCalled();
+  });
+
   it("paints each segment from its token", async () => {
     const { el, host, chip, name, done } = await mount();
     const tokens = {
@@ -110,6 +120,16 @@ describe("stepChip", () => {
     const box = done.getBoundingClientRect();
     expect(box.height).toBeGreaterThanOrEqual(tap.height);
     expect(box.width).toBeGreaterThanOrEqual(tap.width);
+  });
+
+  it("holds Done to the touch-target width even when its label is narrow", async () => {
+    const { el, host, done } = await mount();
+    host.style.setProperty("--wt-space-3", "0px");
+    host.style.setProperty("--wt-tap-min", "80px");
+    await el.updateComplete;
+    const box = done.getBoundingClientRect();
+    expect(box.width).toBeGreaterThanOrEqual(80);
+    expect(box.height).toBeGreaterThanOrEqual(80);
   });
 
   it("wraps a 40-character name inside the chip at 320 px", async () => {
