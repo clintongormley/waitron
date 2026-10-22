@@ -154,7 +154,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/zones/:id/today/update-layout                 | path zone              | refuses POST /api/zones/:id/today/update-layout      |
  * | POST /api/parties/:id/finish                            | party                  | refuses POST /api/parties/:id/finish                 |
  * | POST /api/parties/:id/bill-request                      | party                  | refuses POST /api/parties/:id/bill-request           |
- * | POST /api/parties/:id/service-steps/:stepId/done | party | refuses POST /api/parties/:id/service-steps/:stepId/done |
+ * | POST /api/parties/:id/service-steps/:stepId/done | party; step's table | refuses POST /api/parties/:id/service-steps/:stepId/done (party); service-step-done.test.ts: "refuses a step found on a table in a zone the profile may not serve" (table) |
  * | PUT  /api/parties/:id/name                              | party                  | refuses PUT /api/parties/:id/name                    |
  * | PUT  /api/parties/:id/guests                            | party                  | refuses PUT /api/parties/:id/guests                  |
  * | POST /api/parties/:id/move, /join                       | party; body table      | refuses POST /api/parties/:id/<move|join> (party), (table) |

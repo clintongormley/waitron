@@ -2708,7 +2708,7 @@ export class TillFloorScreen extends LitElement {
     </wt-dialog>`;
   }
 
-  /** A card is one button, so a table needing clearing or moving is a plain box instead. */
+  /** A button cannot hold a button, so a table needing clearing or moving is a plain box instead. */
   #waitingCard(table: TableState, kind: Waiting): TemplateResult {
     const words = WAITING[kind];
     const clear = kind === "clear";
