@@ -156,8 +156,6 @@ export async function recordSubstitution(
     });
   }
 
-  // Nothing branches on `verification.ok`: a failed check records one incident carrying every
-  // issue, once `saleId` exists, and the F3 is chained anyway.
   const verification = await backend.checkIntegrity(tx, input.nodeId);
   const pending: Array<{ error: AppError; severity: IncidentSeverity }> = [];
   if (verification.issues.length > 0) {
