@@ -3,6 +3,7 @@ import {
   lineServiceCancellations,
   nowIso,
   orderGroups,
+  sales,
   ticketItems,
   workingOrderLines,
   workingOrders,
@@ -10,6 +11,7 @@ import {
 } from "@waitron/db";
 import {
   AppError,
+  cancelRefundShare,
   centsToDecimal,
   decimal,
   divideDecimal,
@@ -23,6 +25,7 @@ import { findAdjustmentReason, policySnapshotOf, recordAdjustment } from "@waitr
 import { staffPresentationName } from "@waitron/catalogue";
 import type { CancellationContext } from "./line-cancel-context.js";
 import { requireCancellationContext } from "./line-cancel-context.js";
+import { cancellationRefundValue } from "./cancellation-refund-value.js";
 import type { TillConfig } from "./till-config.js";
 import { applyAdjustment, reasonNameIn, type AdjustmentArgs } from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
@@ -233,7 +236,7 @@ export async function cancelItem(
             operatorId,
             submissionId: ask.submissionId,
             approver: ask.approver,
-            preparationStarted: ask.preparationStarted,
+            preparationStarted: true,
           },
           policy.venueLocale,
           policy.attempts,
@@ -303,6 +306,24 @@ export async function cancelItem(
             }),
           );
         const amount = coveredValue(false);
+        const refundHandoff = ask.refundHandoff === true && context.billStatus === "settled";
+        let refundValue = null;
+        if (refundHandoff) {
+          const [sale] = await tx
+            .select({ id: sales.id })
+            .from(sales)
+            .where(eq(sales.workingOrderId, bill!.id));
+          const value =
+            sale === undefined
+              ? undefined
+              : await cancellationRefundValue(tx, bill!.id, sale.id, lineId);
+          if (value !== undefined)
+            refundValue = cancelRefundShare(
+              value,
+              context.components.find((row) => row.lineId === lineId)!.cancelledQuantity,
+              ask.quantity,
+            );
+        }
         await recordAdjustment(tx, {
           workingOrderId: bill!.id,
           line: {
@@ -335,6 +356,10 @@ export async function cancelItem(
           requestedBy: operatorId,
           approvedBy: null,
           note: ask.note ?? null,
+          chargeKept: true,
+          preparationStarted: started,
+          refundHandoff,
+          refundValue,
         });
         const corrections = [];
         for (const { row, remaining } of family) {

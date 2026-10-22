@@ -959,6 +959,7 @@ export async function applyAdjustment(
         requestedBy: args.operatorId,
         approvedBy: approved,
         note: args.note,
+        preparationStarted: args.preparationStarted ?? null,
       });
       const revision = await readOrderRevision(tx, args.orderId);
       if (attendance !== undefined) {
