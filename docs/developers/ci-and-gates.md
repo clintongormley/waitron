@@ -705,7 +705,7 @@ skipped); GitHub names a job by its `name:` when one is set (on 2026-10-06,
 `LICENSE is unmodified Elastic License 2.0`), so the guard below fails if a needed job sets one.
 A completed entry with any other conclusion fails at once. It tries again at thirty-second
 intervals, twenty-one tries in all, when the API call fails, the number of jobs read differs from
-its `total_count`, a needed job has no entry, or an entry is not yet completed, and fails when the
+its `total_count`, a needed job has no entry, or an entry is not yet completed and lacks the combined evidence below, and fails when the
 tries run out, so an API it cannot read fails the check rather than passing it. The step has a
 twelve-minute limit (`timeout-minutes: 12`) inside a fifteen-minute job, so a call that hangs fails
 the check when the step limit is reached. The step carries its own limit because GitHub's runner marks a timed-out step
@@ -727,6 +727,42 @@ listed all 30 jobs with `total_count` 30; `lint` appeared with attempt 1's `star
 `runner_id` 0 in attempt 1, had been re-run (started 2026-10-05T21:40:45Z, conclusion `success`).
 Run 37368759185 attempt 2 showed the same shape with 26 jobs.
 
+**Delayed job records (A1019, 2026-10-22).** A job still marked `in_progress` can pass the
+second step only when its own `needs` result is `success` and its API record supplies all of:
+
+- This run id, this attempt number and this run's head commit. Pull requests use their head
+  commit, matching the jobs API, rather than the temporary merge commit checked out by default.
+- A positive job id and runner id, an explicit null conclusion, and at least two completed steps.
+- A successful `Set up job` first and exactly one successful `Complete job` last. Every step has
+  a nonblank name, an increasing positive integer number, and a `success` or `skipped` conclusion.
+
+The check still reads every API page and every matching physical job, including each matrix shard
+and reusable-workflow child. A missing job, incomplete page count or unfinished evidence waits
+within the existing limit, then fails. Duplicate job names or ids fail. Final API failures and
+unknown conclusions fail even if `needs` says success. Failed, cancelled or unknown `needs`
+results also fail. An unfinished record from an older attempt cannot use this substitute; a
+completed record carried into a partial rerun keeps its ordinary completed-result check.
+The workflow guard refuses job-level `continue-on-error` on needed jobs so it cannot mask the
+final result used by this substitute.
+
+Steps alone do not establish success. The runner completes the job context before draining its
+upload queue and publishing the job result. The latter operations can fail. The substitute
+therefore requires the workflow's final `needs` result as well as the individual step records.
+It prints the physical job name, run, attempt and head whenever it uses that combination.
+
+| Source | Source wording | Use |
+| --- | --- | --- |
+| [GitHub runner, JobRunner.cs at 4c989f2](https://github.com/actions/runner/blob/4c989f2f108bb6798e07ea5935bc8bc4aab7de2f/src/Runner.Worker/JobRunner.cs#L290), read 2026-10-22 | `TaskResult result = jobContext.Complete(taskResult);` then `await ShutdownQueue`, then `await runServer.CompleteJobAsync` | The published step list precedes job-result publication; it is insufficient on its own. |
+
+Run 39836334373's `ci` job 120030677650 passed its `needs` step, then rejected
+`test-dashboard (4)` through all 21 reads from 19:10:55 to 19:21:25 UTC on 22 October.
+A later `gh api repos/clintongormley/waitron/actions/runs/39836334373/attempts/1/jobs?per_page=100`
+read reports that shard successful, with its last step at 19:10:08 UTC. That establishes a
+status mismatch during the recorded polls, not the service-side cause. The A850 incident's
+21 October run 39618481608 similarly exhausted the wait; its later successful records did not
+change its failed required check. Old failed runs remain failed. Qualify a new branch head
+through the normal hook and CI after the repair; do not call an unchanged rerun a repair.
+
 `scripts/ci-workflow.test.mjs` runs each step's script: the first on sample `needs` results, the
 second against a stand-in `gh` that serves sample pages and failures. Default-window cases use
 twenty-one tries and a thirty-second delay through a stand-in `sleep` that records each wait.
@@ -739,7 +775,8 @@ first step has no `if:` key, the second has `if: always()` and `timeout-minutes:
 differently — is not seen, and neither what `toJSON(needs)` produces nor the API's real answers are
 tested there.
 
-**A674, 2026-10-16: allow a late API status to settle.** Main run
+**A674, 2026-10-16: allow a late API status to settle.** The current combined-evidence rule
+above supplements this earlier wait-only policy. Its measurements follow unchanged. Main run
 [`38573258715`, attempt 1](https://github.com/clintongormley/waitron/actions/runs/38573258715/attempts/1)
 failed after six polls. Its `ci` job `115887527392` logged `not completed:
 test-payments-stripe` from 13:44:52Z through 13:45:50Z on 2026-10-14. On 2026-10-16,

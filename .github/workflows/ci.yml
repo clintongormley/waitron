@@ -2609,7 +2609,9 @@ jobs:
       # `test-heavy (1)`, a reusable workflow's `image / smoke` (or `image` when skipped). A completed
       # conclusion other than `success` or `skipped` fails at once; anything not yet settled (the
       # call failing, a number of jobs read that differs from the API's `total_count`, a needed job
-      # absent or still running) is retried a bounded number of times, then fails.
+      # absent or still running) is retried a bounded number of times, then fails. A delayed status
+      # can use final needs success plus every step completed for this exact run, attempt and head.
+      # Steps alone cannot establish the result: the runner publishes it after the final step.
       - name: Fail unless GitHub's jobs API reports every needed job succeeded or skipped
         if: always()
         timeout-minutes: 12
@@ -2618,6 +2620,7 @@ jobs:
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           NEEDS: ${{ toJSON(needs) }}
         run: |
           set -euo pipefail
@@ -2630,19 +2633,48 @@ jobs:
           fi
 
           judge='
-            ($ENV.NEEDS | fromjson | keys_unsorted) as $ids
+            def finished($need):
+              try (
+                $need.result == "success" and .status == "in_progress" and has("conclusion") and .conclusion == null
+                and (.id | type == "number" and . > 0 and floor == .)
+                and (.runner_id | type == "number" and . > 0)
+                and ($ENV.RUN_ID | test("^[1-9][0-9]*$"))
+                and ($ENV.RUN_ATTEMPT | test("^[1-9][0-9]*$"))
+                and ($ENV.HEAD_SHA | test("^[a-f0-9]{40}$"))
+                and .run_id == ($ENV.RUN_ID | tonumber)
+                and .run_attempt == ($ENV.RUN_ATTEMPT | tonumber)
+                and .head_sha == $ENV.HEAD_SHA
+                and (.steps as $steps
+                     | ($steps | type == "array" and length >= 2)
+                     and $steps[0].name == "Set up job" and $steps[0].conclusion == "success"
+                     and $steps[-1].name == "Complete job" and $steps[-1].conclusion == "success"
+                     and ([$steps[] | select(.name == "Complete job")] | length == 1)
+                     and all(range(0; $steps | length); . as $i | $steps[$i] as $step
+                       | ($step.name | type == "string" and test("\\S"))
+                         and $step.status == "completed"
+                         and ($step.conclusion == "success" or $step.conclusion == "skipped")
+                         and ($step.number | type == "number" and . > 0 and floor == .)
+                         and ($i == 0 or $step.number > $steps[$i - 1].number)))
+              ) catch false;
+            ($ENV.NEEDS | fromjson) as $needs
+            | ($needs | keys_unsorted) as $ids
             | (map(.jobs[])) as $jobs
             | [$ids[] as $id
                | {id: $id,
-                  jobs: [$jobs[] | select(.name == $id or (.name | startswith("\($id) (") or startswith("\($id) / ")))]}]
+                  jobs: [$jobs[] | select(.name == $id or (.name | startswith("\($id) (") or startswith("\($id) / ")))
+                         | if finished($needs[$id]) then . + {status: "completed", conclusion: "success", from_steps: true} else . end]}]
             | {lines: [.[] | if (.jobs | length) == 0 then "\(.id): not in the jobs API"
-                             else (.jobs[] | "\(.name): \(if .status == "completed" then .conclusion else .status end)") end],
-               bad: [.[].jobs[] | select(.status == "completed" and .conclusion != "success" and .conclusion != "skipped") | .name],
+                             else (.jobs[] | "\(.name): \(if .from_steps then "success (final needs and completed steps; run \(.run_id), attempt \(.run_attempt), \(.head_sha))" elif .status == "completed" then .conclusion else .status end)") end],
+               bad: [($needs | to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key),
+                     (.[].jobs[] | select(.status == "completed" and .conclusion != "success" and .conclusion != "skipped") | .name)],
+               duplicate: [([.[].jobs] | add | (group_by(.name)[] | select(length > 1) | .[0].name),
+                            (map(select(.id | type == "number")) | group_by(.id)[] | select(length > 1) | .[0].name))],
                missing: [.[] | select((.jobs | length) == 0) | .id],
                pending: [.[].jobs[] | select(.status != "completed") | .name],
                read: ($jobs | length),
                total: $pages[0].total_count}
             | . + if (.bad | length) > 0 then {verdict: "fail", reason: "not succeeded or skipped: \(.bad | join(", "))"}
+                  elif (.duplicate | length) > 0 then {verdict: "fail", reason: "duplicate job evidence: \(.duplicate | join(", "))"}
                   elif .read != .total then {verdict: "retry", reason: "read \(.read) of \(.total) jobs"}
                   elif (.missing | length) > 0 then {verdict: "retry", reason: "no job in the jobs API for: \(.missing | join(", "))"}
                   elif (.pending | length) > 0 then {verdict: "retry", reason: "not completed: \(.pending | join(", "))"}
