@@ -1266,87 +1266,10 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   now"; a line with no stored snapshot whose product the till no longer offers is still dropped with
   `held.product_gone`, and the first edit of the order removes such an extra.
 
-## A757. Table states: review the lifecycle, then retire the Tables tab
-
-**A757 (owner, 2026-10-16) — design first; it comes back to the owner before anything is built.**
-
-**Design (2026-10-17, revised the same day after the owner's answers to Q15–Q20):** [the lifecycle,
-one order of precedence, how each state is shown on the card, the map and the zone tabs, service
-steps, and six new owner questions, Q29–Q34](../superpowers/specs/2026-10-17-a757-table-states-design.md),
-with [mock-ups](mockups/a757-table-states/). Q29–Q34 were answered on 2026-10-17; slice 1, Needs clearing per department, landed (plan
-`docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`); slice 7, the service steps'
-settings in the department dialog's Service tab, landed (plan
-`docs/superpowers/plans/2026-10-19-a757-7-service-step-settings.md`); slice 2, retiring venue-made
-statuses, landed (plan `docs/superpowers/plans/2026-10-19-a757-2-retire-venue-statuses.md`);
-slice 3, the held mark and its countdown, landed (plan
-`docs/superpowers/plans/2026-10-20-a757-3-held-mark-countdown.md`; pictures as built in
-`docs/backlog/mockups/a757-table-states/built-3/`); slice 4, the order of precedence, two pulse
-speeds and the calm card, landed (plan
-`docs/superpowers/plans/2026-10-20-a757-4-precedence-pulses.md`; pictures as built in
-`docs/backlog/mockups/a757-table-states/built-4/`); a follow-up to slice 4, the owner's look
-changes and the Spanish word for held dishes, landed (plan
-`docs/superpowers/plans/2026-10-20-a757-4b-owner-look-changes.md`; pictures drawn for it in
-`docs/backlog/mockups/a757-table-states/4b-owner-changes.png` and `4b-owner-changes-dark.png`;
-pictures as built in `docs/backlog/mockups/a757-table-states/built-4b/`); slice 5, the whole-table
-map and the zone tabs, landed (plan `docs/superpowers/plans/2026-10-20-a757-5-map-zone-tabs.md`;
-pictures as built in `docs/backlog/mockups/a757-table-states/built-5/`); slice 6, item counts by
-state in the order lists, landed (plan `docs/superpowers/plans/2026-10-21-a757-6-item-counts-by-state.md`;
-pictures as built in `docs/backlog/mockups/a757-table-states/built-6/`).
-
-Venue settings' Tables tab (`apps/dashboard/src/screens/service-status-screen.ts`) held two things:
-
-- **Needs clearing** — until A757 slice 1 (2026-10-19), on or off for the whole venue
-  (`service_settings.clearing_workflow`). When on, a table a party leaves shows "Needs clearing" on
-  the till's floor until someone taps "Mark cleared". Slice 1 moved the switch to each department,
-  in the department dialog's Service tab under Table states (`departments.needs_clearing`).
-- **Statuses the venue makes up** (`table_service_statuses`,
-  `packages/db/src/schema/table-service-statuses.ts`): a label and a colour. A waiter puts one on a
-  table from the till's table screen (`apps/till/src/screens/till-table-order-screen.ts:2558`); a
-  table carries at most one (`dining_tables.status_id`), and the floor shows its colour. They sit
-  beside the lifecycle the till works out itself — Free, Reserved, Seated, Needs clearing — and
-  change none of it.
-  **2026-10-19:** retired by slice 2 — the table, the till's Status section and chip, the dashboard
-  screen and the Tables tab are gone.
-
-Since slice 2 (2026-10-19) the Tables tab is gone.
-
-Decided (owner, 2026-10-16):
-
-- **The Tables tab goes.**
-- **Optional states are switched on or off per department**, in the department dialog's Service
-  tab (A756), "Needs clearing" among them.
-- **An optional state is one the code understands** — it knows when the state can appear and what
-  clears it — rather than a label a waiter puts on any table. The owner said "maybe", so the review
-  confirms it. Example: "Bill requested" could appear only on a seated table and clear when the
-  bill is paid.
-
-The review: write down every state a table goes through and what moves it between them, including
-the states A508's table QR code would add (call a waiter, bill requested); say which are optional;
-decide what becomes of the statuses a venue has already made. It comes back with the lifecycle
-drawn out and a recommendation. The open note that the Tables tab's colour field label is cut to
-"C…" at 390 px goes with the screen (2026-10-19: deleted with it by slice 2).
-
-**Widened 2026-10-16 (owner): how each state is shown, on the floor and in the order lists.** The
-board shows every state as it looks today beside a proposal, for the owner to choose. Today a table
-can carry the signals `take_order`, `ready` (per station), `long_wait` (warm, overdue, forgotten),
-`held` (how many dishes its held groups hold), `held_unavailable`, `bill_requested`,
-`unsent_draft`, `release_due` and `needs_clearing` (`apps/server/src/table-signals.ts`, chips in
-`apps/till/src/widgets/signal-chips.ts`), besides seated, joined, paid and taken off. Two additions
-the owner asked for:
-
-- **Late orders pulse.** Decide which of warm, overdue and forgotten pulse; the same pulse as A738's
-  Waiting tab; a colour change instead under reduced motion.
-- **Item counts by state in the order lists.** Built by A757 slice 6
-  (`docs/superpowers/plans/2026-10-21-a757-6-item-counts-by-state.md`): Parked orders and Waiting
-  rows, and Transfers rows, for the desk a tab is offered to and for the department holding it
-  while the tab is in a zone the viewing device's profile serves or in none, show how many items an order holds,
-  then how many are unsent, held, waiting and ready (`readOrderStateCounts`, `apps/server/src/order-state-counts.ts`; chips in
-  `apps/till/src/widgets/order-counts.ts`).
-
 ## A893. Owner review of every table state and its look, after A757 lands
 
-**A893 (owner, 2026-10-18).** Waits for the whole of A757 (owner, relayed by the watcher,
-2026-10-18); Waiter called (design §4 row 5) cannot be shown until A508. Once A757 lands, show the
+**A893 (owner, 2026-10-18).** A757 landed 2026-10-22 (it was to wait for the whole of A757: owner,
+relayed by the watcher, 2026-10-18); Waiter called (design §4 row 5) cannot be shown until A508. Once A757 lands, show the
 owner, on the running till:
 
 - every row of [A757 §4](../superpowers/specs/2026-10-17-a757-table-states-design.md#4-one-order-of-precedence),
@@ -1367,6 +1290,9 @@ owner, on the running till:
   not change it; I believe the stretching predates slice 4.
 - the Open points of slice 4's follow-up, the owner's look changes
   (`docs/superpowers/plans/2026-10-20-a757-4b-owner-look-changes.md`).
+- the choices slice 8 made where the pictures are silent: its plan's Owner points
+  (`docs/superpowers/plans/2026-10-22-a757-8-service-steps-floor.md`), each built with the default
+  named there, and the step pictures as built (`docs/backlog/mockups/a757-table-states/built-8/`).
 - the choices slice 6 made where the pictures are silent: its plan's Owner points
   (`docs/superpowers/plans/2026-10-21-a757-6-item-counts-by-state.md`), each built with the default
   named there.
@@ -1621,6 +1547,16 @@ whether those reads should follow today's map once a group is left.
 id answers `theme.not_found` (404), not `shared.invalid_id`, so the permission check still runs
 first. ui-core's token files stay shipped beside the server bundle rather than built into it. The
 optional tidy-ups the same review listed were not recorded individually and are dropped.
+
+### Table states are ones the code understands, switched per department (A757, owner 2026-10-16)
+
+Venue settings' Tables tab is gone. An optional table state is one the code understands, knowing
+when it can appear and what clears it, rather than a label a waiter puts on any table; the
+statuses a venue made up (`table_service_statuses`) were retired by A757 slice 2 (2026-10-19).
+Optional states are switched on or off per department, in the department dialog's Service tab;
+Needs clearing is one (`departments.needs_clearing`, A757 slice 1). The lifecycle, the order of
+precedence and each state's look are in
+[A757's design](../superpowers/specs/2026-10-17-a757-table-states-design.md).
 
 ### `timingBand` counts only fired dishes (A757 Q17, owner 2026-10-17; built by A757 slice 3)
 
@@ -2631,7 +2567,7 @@ reach them.
 ## Task 10 (#908, the service dashboard's attention signals)
 
 - **Decided by A757 (owner, 2026-10-17): Reserved takes the map's reserved colour (built by A757
-  slice 4); Take order becomes a service step (A757 slice 8).** They looked alike (Q20).
+  slice 4); Take order becomes a service step (built by A757 slice 8).** They looked alike (Q20).
   "Bill requested" no longer looks like "N en camino": it has been filled purple since A472.
   [A757's design](../superpowers/specs/2026-10-17-a757-table-states-design.md).
 - The till drops the bill request's late answer, a refusal included, once the waiter has signed out

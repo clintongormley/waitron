@@ -224,7 +224,8 @@ sentences live in `apps/till/src/i18n/codes.ts`.
   `cancel_credit.done_action`, `strings.ts:3000`, `:3349`); `floor.step_done_label` "Done: {step}"
   / «Hecho: {step}» (the Done button's accessible name, so two Done buttons on one screen are told
   apart). A code sentence in `apps/till/src/i18n/codes.ts`: `service_step.not_found` "This step no
-  longer exists." / «Este paso ya no existe.». `signal.take_order` is deleted in Task 9 (nothing
+  longer exists" / «Este paso ya no existe», without a full stop, as its twin `table.not_found`
+  (corrected 2026-10-22 by the Task 6 ruling). `signal.take_order` is deleted in Task 9 (nothing
   reads it then). A step's own name is venue data and is shown as stored, never translated. Help
   and guide words: Task 10. No other new words.
 - **English in code.** Spanish only in `strings.ts`, `codes.ts`, `help-strings.ts` and
@@ -401,6 +402,12 @@ sentences live in `apps/till/src/i18n/codes.ts`.
      be ahead of now: the step is then live and not yet due. Q31's example: last round 22:00, N 20 →
      "Drinks?" at 22:20; Done at 22:21 → again at 22:40; an order at 22:30 moves `L`, so the next is
      22:50.
+     **2026-10-22, as built (Task 5 ruling):** the formula above let a Done tapped before the first
+     repeat clear nothing. The built rule (`triggerOf`, `apps/server/src/service-step-reckoning.ts`):
+     with `shown(t) = L + max(1, floor((t − L) / N))·N`, the repeat showing at `t` (before any
+     repeat has come, the first), `T = shown(now)`; if the step's latest Done is later than `L`,
+     `T = max(shown(now), shown(done) + N)`. So a Done clears the repeat showing when it was tapped
+     and the next repeat after it shows next: last round 22:00, N 20, Done at 22:10 → next 22:40.
    - **Dishes, reckoned as the fire reminder reckons them** (§8 start 3 cites `releaseReminder`):
      the same three filters as `readReleaseReminders` — `isNull(workingOrderLines.parentLineId)`,
      `onShownBill()` and `not(isRecalledDish(tx))` (`apps/server/src/order-groups.ts:1497-1508`;
@@ -426,12 +433,14 @@ sentences live in `apps/till/src/i18n/codes.ts`.
    Dessert? due 21:42; Done 21:45 → nothing live. Task 2 pins exactly this.
 
 4. **Which department's steps a table shows: its own zone's.** One statement joins the seated
-   tables to `zone_service_policies` and `service_steps` (the join of `table-clearing.ts:11-18`,
+   tables to `zone_service_policies` and `service_steps` (the join of
+   `packages/venue-service/src/table-clearing.ts:11-18`,
    without the `needs_clearing` filter, ordered by position then id). A table whose zone has no
    policy row shows no steps (slice 1 Decision 3's rule). A party seated across tables of two
    departments shows each table its own department's step, reckoned from the same party facts;
    Done on one clears only that department's steps (step ids are per department). Tables of one
-   department carry the same steps.
+   department carry the same steps. (2026-10-22: no path today seats a party across zones; the
+   two-department case is a guard.)
 
 5. **The Done route.** `POST /api/parties/:id/service-steps/:stepId/done`, no body, answering 200
    `{ cleared: string[] }` — the step ids it recorded.
@@ -561,7 +570,7 @@ sentences live in `apps/till/src/i18n/codes.ts`.
 2. **A double tap, or two tills tapping Done**: one set of rows, the second answer `{ cleared: [] }`
    — Task 5.
 3. **A step deleted in the dashboard while a till shows it**: Done answers 404
-   `service_step.not_found`, the till says "This step no longer exists." and re-reads the floor;
+   `service_step.not_found`, the till says "This step no longer exists" and re-reads the floor;
    the step's completions went with it — Tasks 1, 5 and 8.
 4. **A step falling due while the floor sits idle in list view**: the card shows it at its due
    minute with no re-read, and the map's look changes too — Tasks 6 and 7b.
@@ -1201,10 +1210,12 @@ language restored in `finally`.
 14. **The guide's "Refund a payment" page becomes "Table service"** («Servicio en mesa»), holding
     its refund sections and the new service-steps section.
 15. **New words:** "Done" («Hecho»), "Done: Dessert?" as the button's spoken name («Hecho:
-    Dessert?», the step's name as stored), "This step no longer exists." («Este paso ya no
-    existe.»); the fixed «Tomar nota» chip retires, replaced by the step's own stored name.
+    Dessert?», the step's name as stored), "This step no longer exists" («Este paso ya no
+    existe», without a full stop since the Task 6 ruling); the fixed «Tomar nota» chip retires, replaced by the step's own stored name.
 16. **The order screen's status pin names the step** but has no timer of its own, so a step that
     falls due while the order screen stays open reaches the pin at its next redraw.
+17. **The status pin's sheet shows the step as a plain chip, without Done** (Task 8 ruling,
+    2026-10-22): Done is on the card and in the details opened from the map.
 
 ## What contradicted the brief or the design
 
