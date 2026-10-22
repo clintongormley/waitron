@@ -52,13 +52,10 @@ function authorize(tx: Transaction, managementSessionId: string) {
   return authorizeManager(tx, { managementSessionId, permission: "layout.configure" });
 }
 
-async function requireTheme(
-  tx: Transaction,
-  id: string,
-): Promise<{ name: string; theme: string | null }> {
+async function requireTheme(tx: Transaction, id: string): Promise<{ name: string }> {
   if (isUuid(id)) {
     const [row] = await tx
-      .select({ name: customThemes.name, theme: THEME_TEXT })
+      .select({ name: customThemes.name })
       .from(customThemes)
       .where(eq(customThemes.id, id));
     if (row !== undefined) return row;
@@ -146,14 +143,17 @@ export async function renameCustomTheme(
   input: { managementSessionId: string; id: string; name: string },
 ): Promise<StoredTheme> {
   await authorize(tx, input.managementSessionId);
-  const { theme } = await requireTheme(tx, input.id);
+  await requireTheme(tx, input.id);
   const { name, key } = parseThemeName(input.name);
   const updatedAt = nowIso();
+  let theme: string | null;
   try {
-    await tx
+    const [row] = await tx
       .update(customThemes)
       .set({ name, nameKey: key, updatedAt })
-      .where(eq(customThemes.id, input.id));
+      .where(eq(customThemes.id, input.id))
+      .returning({ theme: THEME_TEXT });
+    theme = row!.theme;
   } catch (error) {
     throw nameTakenOr(error);
   }
@@ -168,7 +168,11 @@ export async function deleteCustomTheme(
   await authorize(tx, input.managementSessionId);
   await requireTheme(tx, input.id);
   await tx.delete(customThemes).where(eq(customThemes.id, input.id));
-  return { inUse: (await readThemeInUse(tx))?.id ?? null };
+  const [inUse] = await tx
+    .select({ id: customThemes.id })
+    .from(customThemes)
+    .where(eq(customThemes.inUse, 1));
+  return { inUse: inUse?.id ?? null };
 }
 
 /** `null` puts Waitron's own theme in use. */
