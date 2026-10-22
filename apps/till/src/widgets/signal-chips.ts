@@ -28,6 +28,8 @@ export function signalChips(
     switch (signal.kind) {
       case "take_order":
         return [{ key: "take-order", text: t("signal.take_order"), tone: "primary" }];
+      case "service_step":
+        return [];
       case "ready":
         return signal.byStation.map(({ stationName, count }) => ({
           key: "ready",

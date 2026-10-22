@@ -7,6 +7,8 @@
 export type TableSignal =
   /** An open party with no line on any bill of its family that is not abandoned, and no open draft. */
   | { kind: "take_order" }
+  /** The table's department's steps whose trigger has happened and that are not cleared, soonest due first. */
+  | { kind: "service_step"; steps: ServiceStepDue[] }
   /** The owners of the party's open drafts holding a line, oldest first; "" for one no longer known. */
   | { kind: "unsent_draft"; ownerNames: string[] }
   /** Dishes the kitchen has made ready and nobody has served yet, counted in units per station. */
@@ -24,6 +26,13 @@ export type TableSignal =
   | { kind: "held_unavailable"; groupId: string; lineNames: string[] }
   | { kind: "bill_requested"; requestedAt: string }
   | { kind: "needs_clearing"; since: string };
+
+export interface ServiceStepDue {
+  stepId: string;
+  name: string;
+  /** When the step shows: its trigger plus its minutes. May still be ahead. */
+  dueAt: string;
+}
 
 export interface ReadyAtStation {
   stationId: string;
