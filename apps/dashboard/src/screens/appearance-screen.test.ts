@@ -221,6 +221,20 @@ it.each(changes)(
   },
 );
 
+it("leaves the venue settings page's space between the Look card and the Themes card", async () => {
+  const { api } = stubApi([json(listOf(GREEN))]);
+  const el = await mount(api);
+  await expect.poll(() => themesCard(el)?.list).toEqual(listOf(GREEN));
+  const look = card(el)!.shadowRoot!.querySelector("section")!.getBoundingClientRect();
+  const themes = themesCard(el)!.shadowRoot!.querySelector("section")!.getBoundingClientRect();
+  const space = parseFloat(
+    getComputedStyle(el).getPropertyValue("--wt-space-5") ||
+      getComputedStyle(document.documentElement).getPropertyValue("--wt-space-5"),
+  );
+  expect(space).toBeGreaterThan(0);
+  expect(themes.top - look.bottom).toBeCloseTo(space, 0);
+});
+
 describe("the page opens the Look card's editor from the Themes card", () => {
   const LUCIA = theme({ ...WAITRON_CHOICES, brandColor: "#1e5b3a", corners: "round" });
   const CHRISTMAS = named(

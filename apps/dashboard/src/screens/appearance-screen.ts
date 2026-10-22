@@ -47,6 +47,11 @@ export class AppearanceScreen extends LitElement {
         display: block;
         min-width: 0;
       }
+      .cards {
+        display: grid;
+        gap: var(--wt-space-5);
+        min-width: 0;
+      }
       .error {
         color: var(--wt-color-danger);
       }
@@ -123,7 +128,8 @@ export class AppearanceScreen extends LitElement {
       }
       ${
         this.list
-          ? html`<dashboard-look-card
+          ? html`<div class="cards">
+              <dashboard-look-card
                 .api=${this.api}
                 .list=${this.list}
                 .canEdit=${this.canEdit}
@@ -142,7 +148,8 @@ export class AppearanceScreen extends LitElement {
                     .querySelector<LookCard>("dashboard-look-card")
                     ?.edit(event.detail)}
                 @themes-changed=${(event: CustomEvent<ThemesChanged>) => this.#changed(event.detail)}
-              ></dashboard-themes-card>`
+              ></dashboard-themes-card>
+            </div>`
           : nothing
       }`;
   }
