@@ -1,9 +1,9 @@
 # Till notices
 
 Some problems with the box stop staff from working, and the person at the till is often the first
-to notice. So every till and handheld shows a line under its top bar when the box needs attention.
-The line says what is wrong and what to do. It never covers your work, and you never have to
-dismiss it.
+to notice. So once someone has signed in, every till and handheld shows a line under its top bar
+when the box needs attention. The line does not show on the sign-in, clock-in or attendance pages.
+It says what is wrong and what to do. It never covers your work, and you never have to dismiss it.
 
 ## Read the notice line {#notice-line}
 
@@ -32,8 +32,8 @@ running out. A manager should free space before it runs out.
 
 **12 sales not yet sent to the tax agency · Retried automatically** is blue. Sending sales to the
 tax agency has failed, and the box keeps trying by itself. The sales are recorded on the box, so
-you can keep selling. When some of the waiting sales need a person to sort them out, the hint
-reads **Tell a manager** instead.
+you can keep selling. A sale that needs a person to sort it out is not retried, so while any of the
+waiting sales needs one, the hint reads **Tell a manager** instead.
 
 **The box needs attention · Tell a manager** is a notice this till has no words for, perhaps from
 a newer version of the box. Tell a manager so they can check the box.
