@@ -2583,3 +2583,21 @@ The scratch placement runs migrations, so describe it as a check of a disposable
 a read-only operation throughout. The store's `verification-venue-copy.test.ts` separately tests
 process exclusion, ordinary-share promotion, context expiry and cleanup. The caller still needs an
 independent process deadline for synchronous work.
+
+## Reset a module spy's failure implementation explicitly
+
+After simulating a filesystem refusal, restore the real operation explicitly between cases.
+In `backup-verification.permission.test.ts`, `vi.restoreAllMocks()` alone left the fake `fs.rm`
+installed on the module created by `vi.mock("node:fs/promises", { spy: true })`. The next case's
+query-close failure therefore appeared protected because directory removal still failed.
+The suite restores `vi.mocked(fs.rm).mockImplementation(realFs.rm)` after every case, with
+`realFs` obtained through `vi.importActual`.
+
+Measured on Vitest 4.1.11 and Node 26.11.1 (2026-10-22, A1004): removing the placed-query
+`cleanupFailed = true` passed the original full file's seven cases but failed its query-close case
+alone. Adding a valid verification after the failure cases exposed the leak as
+`unavailable / cleanup_uncertain`. With the explicit reset, deleting that failure flag fails the
+query-close case in the full eight-case file; restoring it passes all eight.
+Run `pnpm --filter @waitron/server exec vitest run src/backup-verification.permission.test.ts`
+for the full-file check. The additional valid-verification case guards this file; it does not
+check other suites' teardown.
