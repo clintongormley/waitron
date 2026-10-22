@@ -543,6 +543,31 @@ it("takes the cancel's reason when the reasons arrive after the dialog opens", a
   expect(combo(el).value).toBe("courtesy");
 });
 
+it("keeps the waiter's chosen reason when a refreshed list brings the cancel's reason", async () => {
+  const el = await mount({
+    reasons: reasons.filter((reason) => reason.id !== "courtesy"),
+    startReasonId: "courtesy",
+  });
+  expect(combo(el).value).toBe("");
+  await choose(el, "return");
+  el.reasons = reasons;
+  await el.updateComplete;
+  expect(combo(el).value).toBe("return");
+});
+
+it("clears a chosen reason that a refreshed list no longer has and blocks the refund", async () => {
+  const el = await mount();
+  const asks = collect(el, "tender-refund-submit");
+  await choose(el, "courtesy");
+  el.reasons = reasons.filter((reason) => reason.id !== "courtesy");
+  await el.updateComplete;
+  expect(combo(el).value).toBe("");
+  await click(el);
+  expect(asks).toEqual([]);
+  expect(combo(el).error).toBe(t("adjust.reason_required"));
+  expect(button(el).disabled).toBe(true);
+});
+
 it("asks Other's note and sends the typed words as the reason", async () => {
   const el = await mount();
   const asks = collect<TenderRefundAsk>(el, "tender-refund-submit");
@@ -616,6 +641,11 @@ it("fills in what one payment can return and says what is left", async () => {
   expect(root(el).querySelector("[data-left]")!.textContent!.trim()).toBe(
     t("tender_refund.left").replace("{amount}", () => "2,00 €"),
   );
+});
+
+it("says nothing is left when one payment returns exactly the dishes' total", async () => {
+  const el = await mount({ tenders: [{ ...cash, appliedRemaining: "5.50" }], target: "5.50" });
+  expect(root(el).querySelector("[data-left]")).toBeNull();
 });
 
 it("fills in the dishes' total on the payment the waiter picks", async () => {
