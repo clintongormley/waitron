@@ -328,9 +328,10 @@ export class TillFinishTableDialog extends LitElement {
                     )}
                     ${this.attempted && choice?.preparationStarted === null ? html`<p class="error" role="alert">${t("cancel_item.preparation")}</p>` : nothing}
                   </fieldset>`
-                : html`<p>
-                    ${t("cancel_item.preparation")}:
-                    ${t(dish.context.stage === "started" ? "cancel_item.yes" : "cancel_item.no")}
+                : html`<p data-preparation>
+                    ${t("finish_table.preparation_known").replace("{answer}", () =>
+                      t(dish.context.stage === "started" ? "cancel_item.yes" : "cancel_item.no"),
+                    )}
                   </p>`
             }
             ${

@@ -46,6 +46,7 @@ export const en = {
   "allergy.stale": "The table changed. Review the latest allergy information before trying again.",
 
   "finish_table.unserved": "{n} dishes not served",
+  "finish_table.preparation_known": "Preparation started: {answer}",
   "cancel_item.title": "Cancel item",
   "cancel_item.preparation": "Has preparation started?",
   "cancel_item.yes": "Yes",
@@ -1791,6 +1792,7 @@ export const es: Record<StringKey, string> = {
   "allergy.stale": "La mesa ha cambiado. Revisa la información de alergias antes de reintentar.",
 
   "finish_table.unserved": "{n} platos sin servir",
+  "finish_table.preparation_known": "En preparación: {answer}",
   "cancel_item.title": "Cancelar plato",
   "cancel_item.preparation": "En preparación",
   "cancel_item.yes": "Sí",

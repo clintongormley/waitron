@@ -112,6 +112,17 @@ it("lists the entire unserved set with known preparation and waits for a reason"
   expect(button(el).variant).toBe("secondary");
   expect(dialogOpenUnder(el)).toBe(true);
 });
+it("states a known preparation as a statement, not the question with a colon", async () => {
+  const el = await mount();
+  const line = (lineId: string) =>
+    root(el).querySelector(`[data-dish="${lineId}"] [data-preparation]`)!.textContent!.trim();
+  expect(line("croquetas")).toBe("Preparation started: Yes");
+  expect(line("flan")).toBe("Preparation started: No");
+  setLocale("es-ES");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(line("croquetas")).toBe("En preparación: Sí");
+});
 it("offers no counter collection: Back and the main action are its only buttons", async () => {
   for (const refundAtTill of [false, true]) {
     const el = await mount({ refundAtTill });
