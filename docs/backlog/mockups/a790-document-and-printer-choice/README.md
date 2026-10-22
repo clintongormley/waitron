@@ -1,3 +1,27 @@
+# A790: M agreed; complete routing review, 2026-10-22
+
+**“UPDATE EQUIPMENT TOO”, owner answer M, 2026-10-19 about 21:20.** On a phone/till,
+an explicit Invoice selection saves to the same Equipment Invoice setting on successful
+selection save, rather than print acceptance. Future Invoice forms start there while
+eligible. Receipt, dashboard acceptance-triggered memory, permissions and submitted work
+stay unchanged. Choosing/saving prints nothing.
+
+The [current design addendum](../../../superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
+consolidates the precise A–M/Q1–Q6 agreements, proposes the remaining builder calls and asks
+for **complete A790 routing-design approval for planning**. All earlier text and boards
+remain historical where conflicting; every earlier README byte follows unchanged below.
+No owner approval of the complete design, plan or build is inferred.
+
+[Eight new static SVG boards](revision-m-agreed/README.md) show M and the approval boundary.
+The [newer A739 timing revision](../../../superpowers/specs/2026-10-22-a739-receipt-timing-revision.md)
+still awaits timing A/B, slip-replacement and no-fallback decisions. A790 selects neither;
+integration must be agreed before dependent build. A796's device Receipt holding is not
+reopened, and its concurrency is not claimed for Invoice. Save refusal, unknown save/print
+and successful-save/failed-refresh remain distinct. Common F1 guards/public closure remain.
+All eight PNGs were rendered in headless Chromium, checked for native text bounds and
+individually inspected. Static drawings provide no runtime or physical-output evidence.
+
+---
 # A790: L agreed; M proposed, 2026-10-19, after the 17:22 answer
 
 **A–L keep their precise answered scopes; M alone is proposed. Full design, plan and build

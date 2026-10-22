@@ -3733,35 +3733,20 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
     sends the same request.
 
 - **A790. Choose a document and its permitted printer.**
-  [Design addenda](superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
-  and [mockups](backlog/mockups/a790-document-and-printer-choice/README.md).
-  **A–L approved only in their precise scopes; full design/plan/build unapproved.**
-  **L, 2026-10-19 ~17:22: NO FORGET BUTTON.** Dashboard print forms offer no Forget
-  control. Only the next accepted print replaces the remembered printer for that browser,
-  venue and document; browser site-data clearing forgets it. Selection, cancel-before-submit
-  and refusal leave it alone. Site-data clearing cancels no pending print and must not
-  discard an unanswered request's identity. No extra automatic expiry/manual reset is added.
-  **M alone, proposed:** should choosing an Invoice printer on an authenticated phone/till
-  update the same Equipment Invoice setting on successful save (recommended), or apply only
-  to this invoice? Ana's Invoice setting is Office · A4; her profile also permits Terrace
-  belt on receipt paper. She chooses Terrace for recorded F/1042. Shared-setting proposal:
-  after a successful save, Equipment and the next new Invoice form F/1043 use Terrace while
-  eligible. Alternative: F/1042 requests Terrace after named confirmation, while Equipment
-  and the next new form stay Office. Receipt stays Bar receipt in both. Choosing/saving
-  never prints; an unanswered save is not yet confirmed. Exact save/concurrency/permission/
-  failure/late-identity handling remains open, without an atomic save+print promise.
-  M grants no permission and changes neither dashboard browser memory nor A796 Receipt.
-  Q2's eligible device choice then profile default, mixed-paper invoice list and Q4's lack
-  of an exclusive Invoice holder check remain. A–K's document facts, dashboard scope,
-  inline forms, browser-memory rules, fallback and empty-list behavior remain in the design.
-  Keep fixed request context, same-identity reconciliation, current authorization/location
-  checks, server original/copy and the shared F1 guard; public F1 stays closed. No extra
-  payment/fiscal/drawer effect. M, technical storage/errors/private lifecycles/concurrent-late
-  outcomes/account transitions, portable Receipt holding, wider steps, integration and full
-  design/plan/build remain open. Do not re-ask A–L/A796; A799 is untouched.
-  [Eight static L/M boards](backlog/mockups/a790-document-and-printer-choice/revision-l-and-invoice-equipment/README.md)
-  cover EN/ES, light/dark, 390/1280. All eight final PNGs rendered and individually inspected; native SVG text bounds checked. Historical design
-  and README bytes remain exact suffixes; no runtime/accessibility/physical result claimed.
+  [Current design](superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
+  and [M boards](backlog/mockups/a790-document-and-printer-choice/revision-m-agreed/README.md).
+  **A–M agreed only in their precise scopes; full routing-design approval for planning is next.**
+  **M, owner 2026-10-19 ~21:20: UPDATE EQUIPMENT TOO.** Phone/till Invoice selection saves
+  the same Equipment Invoice setting when selected, confirmed on successful save rather than
+  print acceptance. Future Invoice forms use it while eligible; Receipt and dashboard memory
+  stay separate. The design proposes save identity/revisions, late-answer recovery and management
+  printing without device pickup for review. A796 already covers device Receipt takeover.
+  Preserve fixed print intent, sale-location/permission checks, original/copy and the common F1
+  guard; public F1 stays closed. No product code or migration built.
+  [A739 timing/slip/no-fallback decisions](superpowers/specs/2026-10-22-a739-receipt-timing-revision.md)
+  and their integration remain unapproved; this routing revision chooses neither timing.
+  Next: owner approves the complete routing description and builder calls, or requests changes;
+  then write the concrete plan. Dependent build waits the accepted A739 contract.
 
 - **Loose ends left by A661 (#1745).**
   - The till's payment-time options and a staged A4 choice resolve the device's invoice printer

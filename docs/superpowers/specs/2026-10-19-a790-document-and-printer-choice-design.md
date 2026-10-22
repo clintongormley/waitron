@@ -1,3 +1,152 @@
+# A790: M agreed; complete routing design for review, 2026-10-22
+
+**Owner answer M, 2026-10-19 about 21:20: “UPDATE EQUIPMENT TOO”. A–M are agreed
+only in their precise answered scopes. The complete design, implementation plan and build
+remain unapproved.** This current addendum takes precedence over conflicting proposals
+below. Every earlier byte remains an exact historical suffix, including old questions,
+source readings and inspection receipts. Authority: lane F's `questions.md`, A790 answers
+A–M, especially the answer to “A790 — L answer recorded; M”.
+
+## One device Invoice setting
+
+When you explicitly select another Invoice printer on a phone/till, save it to that device's
+**same Equipment Invoice setting**. Save on selection, confirmed by successful save, rather
+than waiting for print acceptance. Future newly opened Invoice forms start there while
+eligible, otherwise use the eligible profile Invoice default under Q2. There is no separate
+invoice-history preference. M grants no new permission, changes no Receipt choice or
+dashboard memory, and reroutes no pending or submitted delivery.
+
+Worked M: Ana's Harbour phone has **Invoice: Office · A4**, **Receipt: Bar receipt**.
+Office and **Terrace belt · Receipt paper** are eligible on its profile's invoice list.
+In recorded **F/1042**, she opens Invoice's inline foldable printer row and chooses Terrace.
+Once the Equipment save succeeds, Equipment shows Terrace and the next new **F/1043** Invoice
+form starts there while eligible. Receipt stays Bar. Closing F/1042 before printing does
+not undo the successful selection save. She still gives the named final confirmation,
+**Print a copy on Terrace belt** when server-designated as a copy. Choosing, saving, reading
+and folding print nothing. Acceptance is not evidence of paper or customer handover.
+
+## A–L and Q1–Q6 stay precise
+
+| Agreement | Current scope                                                                                                                                                                                                                                                                                                                                                                                   |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A         | Receipt and Invoice render the same recorded full invoice, including its original customer facts. Receipt is compact; Invoice uses its destination's paper. Neither issues another invoice.                                                                                                                                                                                                     |
+| B         | Dashboard without a device profile offers every active printer at the **sale's venue**, including A4 and portable for both documents, bypassing profile lists. Exclude disabled, deleted and other-venue equipment. Retain person/Orders visibility, current offers and accompanying-device restrictions. No profile step, borrowed till identity or Equipment update. Memory grants no access. |
+| C / D     | Invoice's printer row is inline and foldable with its named confirmation. Simplified-sale Print/reprint opens Receipt directly, preserving recorded facts and offered language; no F1 conversion or added email.                                                                                                                                                                                |
+| E / H / I | Dashboard memories are separate by sale venue and document, shared across logins in the same browser, retained through ordinary reopening. Clearing site data forgets them.                                                                                                                                                                                                                     |
+| F         | Dashboard memory changes only on server acceptance. Cancel before submission, refusal and empty offers leave it alone; later paper failure does not undo acceptance.                                                                                                                                                                                                                            |
+| G / J     | Only on a newly opened dashboard form without usable memory: preselect the sole eligible printer; with several, require a choice and keep Print quiet/disabled. Explain an unavailable remembered choice, without a first-use warning. Neither replaces a selection mid-form.                                                                                                                   |
+| K / L     | After a successful empty offers read, stay open with explanation, quiet disabled Print, offers-only **Refresh printers**, and Cancel. No polling or printing from Refresh. No Forget button, automatic expiry or extra reset policy.                                                                                                                                                            |
+| Q1–Q6     | Name final printer actions; use device Invoice choice then eligible profile default and the mixed-paper invoice list; retain full-invoice email; use the common print/reprint entry and role lists with B's dashboard exception; no exclusive Invoice holder under Q4; show **· A4** in Devices' Invoice value; keep **A4 printers** on Printers.                                               |
+
+The phone's one Equipment Receipt setting, QR/NFC interactions and A796's decided device
+Receipt takeover rules remain. [A796 Revision 4](2026-10-19-a796-handheld-payments-design.md),
+§3 step 4 and §8 defaults 5/12/18–22, already covers portable Receipt selection on devices:
+list takeover asks, scan takes, and holding constrains use. Do not reopen it. Invoice is a
+separate role, even on receipt paper; M inherits none of A796's Receipt save/concurrency
+implementation claims. A796's older automatic final-receipt timing is not selected here.
+
+## Builder calls proposed for complete-design approval
+
+These resolve implementation details for review; they are **not additional owner answers
+or claims about running code**.
+
+- **Invoice save outcomes and competing edits:** show the selected target as Saving while
+  unanswered and hold this form's final print confirmation until the save is resolved.
+  A definitive refusal restores the authoritative prior choice and shows the field refusal;
+  the refusal alone does not disable a valid action. An unknown save stays unconfirmed:
+  reconcile that same save operation, including a late commit, before a competing save or
+  print. A current-value reread alone cannot settle a write that may still arrive. Propose
+  a stable save id and server-checked Invoice revision across Invoice writers, with stale
+  edits reloaded for deliberate reselection. Do not claim the existing queue supplies this.
+  A known successful save followed by failed refresh stays **saved, refresh unavailable**;
+  never undo it or resend it as a failed save. Bind replies to device/session/opening;
+  retain operation recovery after close/logout without applying stale replies to another UI.
+- **Forms and offers:** keep one dialog, document first for an existing F1, then that
+  document's inline form; Back returns without printing. D skips the sole Receipt document.
+  Keep a sole printer's visible name and final confirmation. Device Invoice starts with
+  the eligible saved choice, else eligible profile default, else requires a choice, even
+  for a sole offer. Use K's explicit empty-list recovery for device forms too. Keep loading,
+  failed reads and unknown submissions distinct. Sort dashboard offers by name then id;
+  label **name · A4 / name · Receipt paper**. Use shared fields/disclosure/footer primitives,
+  semantic names, tokens and field/bottom errors. Retain drafts and valid selections by id;
+  invalid selections require explicit reselection, never a mid-form fallback.
+- **Browser memory and late answers:** propose durable browser storage keyed by appliance,
+  sale venue and document, shared across tabs/logins with no extra expiry or Forget control.
+  Keep only printer identity and an acceptance-order token, never credentials or customer
+  details. Apply the highest server acceptance order for that key, so late responses cannot
+  restore older accepted work. Logout invalidates UI callbacks, not accepted history;
+  reconciliation may recover that history after an authorized login. Filter every remembered
+  id through current offers before showing it. A blocked/failed preference store shows a
+  retention warning and uses session memory; private-browser retention is not promised.
+- **Request recovery and storage:** propose the historical local print-request record
+  contract for all entry points, including F2 and sale-id transaction copies: freeze the
+  full intent and atomically record reservation/job/audit/result plus acceptance order.
+  Retain results with their work; never turn an expired identity into a fresh print.
+  Keep unanswered request identity durably and recover it before fresh work; if that cannot
+  be retained, explain and hold new print submission, without blocking money or issuance.
+  The implementation plan must name the concrete schema, local classification, retention
+  and migration; no migration-free claim or migration execution is made here.
+- **Portable Receipt boundary:** A796 continues to govern device selection/holding. For a
+  dashboard with no device identity, propose explicit management delivery to B's active
+  sale-venue list without acquiring/reassigning a holder or changing a phone's Equipment.
+  This is management printing, not a device pickup. Retain accompanying-device checks when
+  present and the common delivery guard; never impersonate the original till. This builder
+  proposal is included in the approval request, not attributed to A796 or silently added
+  to B. Keep print-queue Resend's separate permission/recovery policy outside A790.
+
+Freeze sale/document/printer/language/context under each print identity. Recheck current
+session/person/device authority, offers and **sale-derived location in the reservation
+transaction**. Both F1 document routes and email share the active-delivery guard and
+server-derived original/copy; changing designation requires review and a new confirmation,
+never a receipt-endpoint escape. Reconcile unknown/late results under the same identity
+before fresh work. Keep accepted-write/failed-refresh separate. No silent reroute, payment,
+fiscal issuance/hash/number change, drawer work or public F1 enablement follows from A790.
+
+## A739 timing remains a separate unapproved decision
+
+The [2026-10-22 A739 revision](2026-10-22-a739-receipt-timing-revision.md) awaits an answer:
+**A**, ask immediately after confirmed settlement, or **B**, ask on Finish of an already-paid
+bill. Its post-success slip **Print / No paper** replacement and pending recovery with **no
+zone fallback** also remain unapproved. Preserve the answered settling-edit ownership:
+it owns a new decision; earlier partial payers never become its owner. Do not choose either
+timing, keep the old payment-confirmation delivery proposal by default, or rebuild A739 here.
+
+A790 defines document meaning, eligible routing, selection-save effects and explicit delivery
+confirmation whenever the approved delivery form opens. Its old payment staging/confirmation
+passages are conditional history until that integration is agreed. Keep invoice identity and
+required recipient facts before issuance, and public F1 closed. The later plan must reconcile
+payment-time staging, slip versus final-document roles, request ownership and delivery admission
+with the accepted A739 contract before any dependent build. Timing changes no pending work's
+fixed destination. Neither A790 approval nor M answers A739.
+
+## Next owner request: approve the complete routing design
+
+**Do you approve the complete A790 document/printer routing design, including the builder
+calls above, for implementation planning, while A739's timing, slip replacement, no-fallback
+policy and their integration remain separate and require agreement before dependent build?**
+
+Recommend approval for planning: M now makes Equipment and future Invoice forms agree, and
+the remaining technical choices are stated for review. Alternative: request specific design
+changes before planning. Neither answer is presumed. Overall build approval is still owed;
+this documentation pass authorizes no plan execution or product change. No new preference
+interview is needed. A799 and the closed public-F1 prerequisite are not advanced.
+
+## Fresh source reading, not runtime verification
+
+| Chain read in this checkout                                                                                                                                                 | Limited observation                                                                                                                                                                                                                                                                                                                                                |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `equipment-dialog.ts:51,376` → `till-app.ts:9463` → `api/client.ts:3456` → `device-api.ts:392` → `device-equipment.ts:343` → `packages/layouts/src/device-equipment.ts:370` | Equipment declares the Invoice role; the event reaches the PUT, session/device recheck and role setter. The setter checks active local profile-listed equipment and stores the choice. This does not establish inline Invoice integration or the proposed revision/id recovery contract. App paths here are under `apps/till/src/` or `apps/server/src/` as named. |
+| `packages/layouts/src/device-equipment.ts:37,45,414` and `packages/db/src/schema/devices.ts:50,55`                                                                          | Invoice uses the existing receipt-printer/page-printer column pair; choosing a kind clears the other. The holder branch is conditional on held roles, which exclude Invoice. Read only; no save or race was run.                                                                                                                                                   |
+| `apps/server/src/orders-api.ts:155,281,297` → `orders-reprint.ts:11` → `receipt-print.ts:326,349` / `invoice-delivery-actions.ts:56` → `invoice-delivery.ts:42`             | Read the management visibility/action boundary, copy queueing and shared F1 reservation path. The old copy helper uses configured till location; this addendum requires sale location instead. No claim that the complete new list/guard/portable contract already works.                                                                                          |
+| `apps/server/src/till-setup.ts:118`, `till-sale.ts:521`, `working-order.ts:4043`                                                                                            | Start advertises `fullInvoices: false`; the two request/order helpers refuse F1. Read only; public closure and caller coverage must be retained and tested in the later build.                                                                                                                                                                                     |
+
+[Eight static M/review boards](../../backlog/mockups/a790-document-and-printer-choice/revision-m-agreed/README.md)
+use the previous SVG style and system palette, in EN/ES, light/dark, 390/1280 px.
+They distinguish proposed UI from design explanation. All eight PNGs were rendered in
+headless Chromium, checked for native text bounds and individually inspected. Static drawings
+provide no runtime, accessibility, legal or physical-paper evidence.
+
+---
 # A790: L agreed; M proposed, 2026-10-19, after the 17:22 answer
 
 **A–L retain only their precise answered scopes. M is the sole new owner question,
