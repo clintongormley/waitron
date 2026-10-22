@@ -780,13 +780,17 @@ describe("configuration transfer database path", () => {
         orderNumber: 1,
         label: "Practice tab",
       });
+      const [defaultDepartment] = await tx
+        .select({ id: departments.id })
+        .from(departments)
+        .where(eq(departments.isDefault, true));
+      const practiceZone = await createServiceZone(
+        tx,
+        { locationId: brandLocationId(source.locationId) },
+        { name: "Practice tables", departmentId: defaultDepartment!.id },
+      );
       await tx.insert(diningTables).values({
-        zoneId: (
-          await tx
-            .insert(floorZones)
-            .values({ locationId: source.locationId, name: "Practice tables" })
-            .returning({ id: floorZones.id })
-        )[0]!.id,
+        zoneId: practiceZone.id,
         id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
         locationId: source.locationId,
         label: "T1",
@@ -5001,11 +5005,11 @@ describe("special days in a configuration transfer", () => {
       modules: ALL_MODULES,
     });
     await withTransaction(suite.db, async (tx) => {
-      await tx.insert(departments).values({
-        locationId: source.locationId,
-        name: "Deli",
-        tradingName: "Deli",
-      });
+      const [department] = await tx
+        .insert(departments)
+        .values({ locationId: source.locationId, name: "Deli", tradingName: "Deli" })
+        .returning({ id: departments.id });
+      await tx.insert(departmentSalePolicies).values({ departmentId: department!.id });
       await tx.insert(kitchenStations).values([
         { locationId: source.locationId, name: "Bar" },
         { locationId: source.locationId, name: "Pass" },

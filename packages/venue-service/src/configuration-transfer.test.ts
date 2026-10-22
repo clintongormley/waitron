@@ -229,6 +229,8 @@ describe("the menu timetable rows of a bundle", () => {
   const DELI_PERIOD = "33333333-3333-4333-8333-333333333333";
   function menuTables(): Tables {
     return {
+      department_sale_policies: [{ department_id: RESTAURANT }, { department_id: DELI }],
+      zone_sale_policies: [{ zone_id: BARRA }],
       departments: [
         { id: RESTAURANT, is_default: 1 },
         { id: DELI, is_default: 0 },
@@ -406,6 +408,7 @@ describe("the menu timetable rows of a bundle", () => {
 
 describe("department transfer settings in a configuration bundle", () => {
   const valid = (): Tables => ({
+    department_sale_policies: [{ department_id: RESTAURANT }, { department_id: DELI }],
     departments: [{ id: RESTAURANT }, { id: DELI }],
     device_profiles: [{ id: "receiving-profile" }],
     department_transfer_desks: [
@@ -817,6 +820,11 @@ describe("validateRoutingConfiguration", () => {
     const tables = routingTables();
     tables.departments!.find((row) => row.id === DELI)!.active = 1;
     tables.floor_zones!.find((row) => row.id === CLOSED_ZONE)!.active = 1;
+    tables.department_sale_policies = [{ department_id: RESTAURANT }, { department_id: DELI }];
+    tables.zone_sale_policies = [TERRACE, INSIDE, CLOSED_ZONE, BARE_ZONE].map((zone_id) => ({
+      zone_id,
+    }));
+    tables.zone_service_policies!.push({ zone_id: BARE_ZONE, department_id: RESTAURANT });
     expect(() => validate(tables)).not.toThrow();
     tables.routing_cells!.push(cell({ product: LARGE, station: BAR }));
     expect(() => validate(tables)).toThrowError(refusal("routing_cells.product_id"));
@@ -828,6 +836,8 @@ describe("deleted hierarchy rows in a configuration bundle", () => {
   const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
   function zoneTables(): Tables {
     return {
+      department_sale_policies: [{ department_id: RESTAURANT }, { department_id: DELI }],
+      zone_sale_policies: [{ zone_id: PATIO }],
       departments: [
         { id: RESTAURANT, name: "Restaurant", active: 1 },
         { id: DELI, name: "Deli", active: 0 },
@@ -947,6 +957,7 @@ describe("service-period configuration", () => {
   };
   function tables(): Tables {
     return {
+      department_sale_policies: [{ department_id: RESTAURANT }],
       departments: [{ id: RESTAURANT }],
       catalogues: [{ id: "customer" }, { id: "staff" }],
       menu_periods: [
@@ -1061,6 +1072,9 @@ describe("configuration receipt modes", () => {
           VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
             departments: [{ id: RESTAURANT }],
             floor_zones: [{ id: "zone" }],
+            zone_service_policies: [{ zone_id: "zone", department_id: RESTAURANT }],
+            department_sale_policies: [{ department_id: RESTAURANT }],
+            zone_sale_policies: [{ zone_id: "zone" }],
             [table]: [{ department_id: RESTAURANT, zone_id: "zone", receipt_print_mode: value }],
           }),
         ).toThrowError(refusal(`${table}.receipt_print_mode`));
@@ -1080,6 +1094,9 @@ describe("configuration receipt modes", () => {
           VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
             departments: [{ id: RESTAURANT }],
             floor_zones: [{ id: "zone" }],
+            zone_service_policies: [{ zone_id: "zone", department_id: RESTAURANT }],
+            department_sale_policies: [{ department_id: RESTAURANT }],
+            zone_sale_policies: [{ zone_id: "zone" }],
             [table]: [
               {
                 department_id: RESTAURANT,
@@ -1111,6 +1128,9 @@ describe("configuration order starts", () => {
           VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
             departments: [{ id: RESTAURANT }],
             floor_zones: [{ id: "zone" }],
+            zone_service_policies: [{ zone_id: "zone", department_id: RESTAURANT }],
+            department_sale_policies: [{ department_id: RESTAURANT }],
+            zone_sale_policies: [{ zone_id: "zone" }],
             [table]: [{ department_id: RESTAURANT, zone_id: "zone", order_start: value }],
           }),
         ).toThrowError(refusal(`${table}.order_start`));
@@ -1130,6 +1150,9 @@ describe("configuration order starts", () => {
           VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
             departments: [{ id: RESTAURANT }],
             floor_zones: [{ id: "zone" }],
+            zone_service_policies: [{ zone_id: "zone", department_id: RESTAURANT }],
+            department_sale_policies: [{ department_id: RESTAURANT }],
+            zone_sale_policies: [{ zone_id: "zone" }],
             [table]: [
               {
                 department_id: RESTAURANT,
@@ -1151,7 +1174,10 @@ it.each([0, false])(
       VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({ departments: [{ id: "old", active }] }),
     ).toThrowError(refusal("departments.active"));
     expect(() =>
-      VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({ departments: [{ id: "live", active: 1 }] }),
+      VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
+        departments: [{ id: "live", active: 1 }],
+        department_sale_policies: [{ department_id: "live" }],
+      }),
     ).not.toThrow();
   },
 );
@@ -1202,6 +1228,8 @@ describe("season weeks in a configuration bundle", () => {
    *  only. Terrace closes 23:00–02:00 on a Winter Friday. */
   function seasonTables(): Tables {
     return {
+      department_sale_policies: [{ department_id: RESTAURANT }],
+      zone_sale_policies: [{ zone_id: "terrace" }],
       departments: [{ id: RESTAURANT }],
       floor_zones: [{ id: "terrace", active: 1 }],
       zone_service_policies: [{ zone_id: "terrace", department_id: RESTAURANT }],
@@ -1418,6 +1446,7 @@ describe("season weeks in a configuration bundle", () => {
 describe("department receipt configuration fields", () => {
   function tables(receipt: unknown): Tables {
     return {
+      department_sale_policies: [{ department_id: RESTAURANT }],
       departments: [{ id: RESTAURANT, active: 1 }],
       department_receipts: [{ department_id: RESTAURANT, receipt }],
     };
@@ -1478,6 +1507,8 @@ describe("special days in a configuration bundle", () => {
    *  restaurant, the terrace open 12:00–14:00; 16 August is Closed all day. */
   function specialTables(): Tables {
     return {
+      department_sale_policies: [{ department_id: RESTAURANT }],
+      zone_sale_policies: [{ zone_id: "terrace" }],
       departments: [{ id: RESTAURANT }],
       floor_zones: [{ id: "terrace", active: 1 }],
       zone_service_policies: [{ zone_id: "terrace", department_id: RESTAURANT }],
@@ -1840,6 +1871,7 @@ describe("validateServiceSteps", () => {
 
   function bundle(steps: Row[]): Tables {
     return {
+      department_sale_policies: [{ department_id: RESTAURANT }, { department_id: DELI }],
       departments: [{ id: RESTAURANT }, { id: DELI }],
       kitchen_courses: [{ id: COURSE }],
       service_steps: steps,
