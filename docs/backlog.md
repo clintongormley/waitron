@@ -2169,6 +2169,19 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   timing band; showing minutes needs the oldest fired dish's age in the read.
   [Detail](backlog/till.md#a936-waitings-minutes-on-the-map)
 
+- **A1005. A till a few seconds ahead taps the next every-N-minutes repeat too early (left open by
+  A757 slice 8's finish review).** The till shows the next repeat by its own clock; a Done that
+  reaches the server a moment before that repeat falls due by the server's clock answers
+  `{ cleared: [] }`, and the chip stays until a second tap. Measured by the re-read reviewer with a
+  till 2 seconds early, before and after the review fix. The plan's owner point 3 wants a till a
+  little ahead accepted; now that a Done carries the `dueAt` the till showed, the server could
+  accept a shown repeat a few seconds ahead.
+
+- **A1006. A dish or station name holding `$&` or `$1` is garbled in the till's cross-references.**
+  `apps/till/src/widgets/queue-crossrefs.ts` fills `{name}` and `{station}` with
+  `String.replace` and a string, so a replacement pattern in the venue's text is expanded. A757
+  slice 8 fixed the same shape in `step-chip.ts` by passing a function (`() => name`).
+
 - **A937. Measure the owner's real floor plan once it is drawn (left open by A757 slice 5).** Slice
   5's size check ran on Santet's invented grid, where Terrace's tables show names but no cue; re-run
   it on the owner's floor. [Detail](backlog/till.md#a937-measure-the-owners-real-floor-plan-once-it-is-drawn)
