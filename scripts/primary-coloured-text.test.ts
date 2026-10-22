@@ -70,6 +70,11 @@ export const GRAPHIC_USES: readonly GraphicUse[] = [
     draws: "the card-waiting spinner's ring",
   },
   {
+    file: "apps/till/src/widgets/notice-strip.ts",
+    selector: '.line[data-notice-tone="notice"] wt-icon',
+    draws: "a blue staff notice's icon",
+  },
+  {
     file: "packages/ui/src/components/wt-data-table.ts",
     selector: ".eye-toggle wt-icon",
     draws: "the column chooser's eye icon",
