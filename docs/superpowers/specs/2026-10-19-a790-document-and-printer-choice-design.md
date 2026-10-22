@@ -1,3 +1,30 @@
+# 2026-10-22 addendum: A739's owner-directed final screen
+
+The owner's ~09:05 [A739 flow](2026-10-22-a739-owner-payment-and-receipt-flow.md) answers
+its timing A and replaces final delivery staging in Pay and the post-payment slip row.
+After settlement or a settling edit, choose Receipt / Full invoice / None. Receipt and Full
+invoice reveal an inline folded default-printer row with its named Print action, plus an
+email field with a separate Email action. Full invoice also reveals recipient details.
+These commands require explicit presses; choosing a document or saving Equipment prints nothing.
+
+**A790 A–M, Q1–Q6 and A796 stay within their answered scopes.** The new screen uses the
+same Equipment Receipt setting and separate Equipment Invoice setting (M saves on successful
+selection), role lists, named confirmation, sale-location/authority checks and fixed submitted
+intent. Dashboard B/E–L memory and fallback rules remain; this adds no device preference or
+receipt memory. Selecting Full invoice never silently switches Equipment. A790's Receipt versus
+Invoice for an existing full invoice remains two renderings/routes of that same document.
+A739's Full invoice after an F2 instead needs separate fiscal substitution under existing A556;
+no public F1/F3 capability follows from this addendum. See the linked revision's source register.
+
+The older timing question and prepayment identity/delivery staging below are historical where
+they conflict. The immediate expanded Full invoice state is a **target with a fiscal dependency**,
+not a working late F1 choice. No guest response delays issuance and no new payment follows.
+A739's cash trigger, reader-native paper boundary and unapproved no-answer/no-fallback proposal
+remain there. Full A790 routing-design approval and dependent integration/build remain owed;
+no A–M or A796 answer is reopened. Every byte of the previous body follows unchanged.
+
+---
+
 # A790: M agreed; complete routing design for review, 2026-10-22
 
 **Owner answer M, 2026-10-19 about 21:20: “UPDATE EQUIPMENT TOO”. A–M are agreed

@@ -1,0 +1,310 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="7016" viewBox="0 0 390 7016" role="img" aria-labelledby="title desc">
+  <title id="title">A739 owner payment and receipt flow</title>
+  <desc id="desc">Four scenarios: counter payment, three table payers, settling edit, later full invoice. Static target with fiscal dependency. Technical defaults remain proposed.</desc>
+  <rect width="390" height="7016" fill="#f7f7f8" />
+  <g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+    <text x="16" y="36" font-size="12" font-weight="600" fill="#1a5fd0">WAITRON / A739</text>
+    <text x="16" y="70" font-size="22" font-weight="600" fill="#16181d">Pay, then choose</text>
+    <text x="16" y="98" font-size="12" font-weight="400" fill="#5c626e">2026-10-22 · Owner-directed target</text>
+    <text x="16" y="120" font-size="12" font-weight="400" fill="#5c626e">Static design · not running product</text>
+    <g transform="translate(0 0)" data-design-section="1">
+      <text x="16" y="180" font-size="18" font-weight="600" fill="#16181d">01  Counter · EUR30</text>
+      <text x="16" y="208" font-size="12" font-weight="400" fill="#5c626e">One payer, then document choice</text>
+    </g>
+    <g transform="translate(0 0)" data-ui-card="1A">
+      <rect x="16" y="232" width="358" height="548" rx="16" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="32" y="260" font-size="12" font-weight="600" fill="#1a5fd0">1A · BEFORE CARD</text>
+      <text x="32" y="290" font-size="18" font-weight="600" fill="#16181d">Counter · EUR30.00</text>
+      <text x="32" y="314" font-size="12" font-weight="400" fill="#5c626e">Pay · One guest · Order 41</text>
+      <text x="32" y="336" font-size="14" font-weight="400" fill="#16181d">An amount · Split equally · Items</text>
+      <text x="32" y="358" font-size="14" font-weight="400" fill="#16181d">● Whole bill</text>
+      <text x="32" y="388" font-size="18" font-weight="600" fill="#16181d">To pay now EUR30.00</text>
+      <rect x="32" y="418" width="326" height="48" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="44" y="448" font-size="14" font-weight="600" fill="#1a5fd0">▸ Reader · Bar reader</text>
+      <rect x="32" y="478" width="326" height="52" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <rect x="44" y="494" width="20" height="20" rx="4" fill="#ffffff" stroke="#7d8390" />
+      <text x="74" y="509" font-size="12" font-weight="600" fill="#16181d">Print credit card slip</text>
+      <text x="32" y="542" font-size="12" font-weight="400" fill="#5c626e">Shown checked; default unchecked proposed.</text>
+      <text x="32" y="564" font-size="12" font-weight="400" fill="#5c626e">Tick before Card to request the slip.</text>
+      <rect x="32" y="594" width="326" height="56" rx="8" fill="#f0f1f4" stroke="#d6d9e0" />
+      <text x="44" y="617" font-size="14" fill="#16181d">▸ Slip printer · Bar receipt</text>
+      <text x="44" y="637" font-size="12" fill="#5c626e">Same Equipment choice · Folded</text>
+      <rect x="32" y="662" width="326" height="48" rx="8" fill="#1f6feb" />
+      <text x="44" y="692" font-size="14" font-weight="600" fill="#ffffff">Card · EUR30.00</text>
+      <text x="32" y="722" font-size="12" font-weight="400" fill="#8a5300">Selected + confirmed success: queue slip.</text>
+      <text x="32" y="744" font-size="12" font-weight="400" fill="#8a5300">Decline / unknown: no success slip.</text>
+      <path d="M 48 504 l 4 4 l 8 -9" fill="none" stroke="#1a5fd0" stroke-width="2" />
+    </g>
+    <g transform="translate(0 38)" data-ui-card="1B">
+      <rect x="16" y="758" width="358" height="688" rx="16" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="32" y="786" font-size="12" font-weight="600" fill="#1a5fd0">1B · AFTER SETTLEMENT</text>
+      <text x="32" y="816" font-size="18" font-weight="600" fill="#16181d">Paid EUR30.00 · Due EUR0</text>
+      <text x="32" y="840" font-size="12" font-weight="400" fill="#5c626e">Illustrated branch: slip was requested</text>
+      <text x="32" y="862" font-size="12" font-weight="400" fill="#1a7f5a">Card slip queued · separate document</text>
+      <rect x="32" y="892" width="326" height="44" rx="8" fill="#e3ebfb" stroke="#1f6feb" />
+      <text x="44" y="920" font-size="14" font-weight="600" fill="#1a5fd0">● Receipt</text>
+      <rect x="32" y="944" width="326" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="44" y="972" font-size="14" font-weight="400" fill="#16181d">○ Full invoice</text>
+      <rect x="32" y="996" width="326" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="44" y="1024" font-size="14" font-weight="400" fill="#16181d">○ None</text>
+      <rect x="32" y="1048" width="326" height="56" rx="8" fill="#f0f1f4" stroke="#d6d9e0" />
+      <text x="44" y="1071" font-size="14" font-weight="600" fill="#16181d">▸ Printer · Bar receipt</text>
+      <text x="44" y="1091" font-size="12" font-weight="400" fill="#5c626e">Default · Folded · Change to expand</text>
+      <rect x="32" y="1116" width="326" height="48" rx="8" fill="#1f6feb" />
+      <text x="44" y="1146" font-size="14" font-weight="600" fill="#ffffff">Print on Bar receipt</text>
+      <rect x="32" y="1176" width="326" height="56" rx="4" fill="#f0f1f4" />
+      <text x="44" y="1194" font-size="12" font-weight="400" fill="#5c626e">Email * (only to send)</text>
+      <text x="44" y="1218" font-size="14" font-weight="400" fill="#16181d">guest@</text>
+      <path d="M 32 1231 h 326" stroke="#b3261e" />
+      <text x="32" y="1250" font-size="12" font-weight="400" fill="#b3261e">Enter a complete email address.</text>
+      <text x="32" y="1268" font-size="12" font-weight="400" fill="#5c626e">After an invalid Email attempt.</text>
+      <text x="32" y="1298" font-size="12" font-weight="400" fill="#b3261e">Correct the highlighted field.</text>
+      <rect x="32" y="1328" width="326" height="48" rx="8" fill="#f0f1f4" stroke="#d6d9e0" />
+      <text x="44" y="1358" font-size="14" font-weight="600" fill="#5c626e">Email · unavailable until valid</text>
+      <g aria-label="Disabled" />
+      <text x="32" y="1388" font-size="12" font-weight="400" fill="#8a5300">Print and Email are separate presses.</text>
+      <text x="32" y="1410" font-size="12" font-weight="400" fill="#8a5300">Neither takes payment or opens drawer.</text>
+    </g>
+    <g transform="translate(0 -54)" data-ui-card="1C">
+      <rect x="16" y="1554" width="358" height="984" rx="16" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="32" y="1582" font-size="12" font-weight="600" fill="#1a5fd0">1C · FULL INVOICE TARGET</text>
+      <text x="32" y="1612" font-size="18" font-weight="600" fill="#16181d">Paid EUR30.00 · Due EUR0</text>
+      <text x="32" y="1636" font-size="12" font-weight="400" fill="#5c626e">Preview only · separate fiscal dependency</text>
+      <rect x="32" y="1658" width="326" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="44" y="1686" font-size="14" font-weight="400" fill="#16181d">○ Receipt</text>
+      <rect x="32" y="1710" width="326" height="44" rx="8" fill="#e3ebfb" stroke="#1f6feb" />
+      <text x="44" y="1738" font-size="14" font-weight="600" fill="#1a5fd0">● Full invoice</text>
+      <rect x="32" y="1762" width="326" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="44" y="1790" font-size="14" font-weight="400" fill="#16181d">○ None</text>
+      <text x="32" y="1814" font-size="12" font-weight="400" fill="#8a5300">F2 already issued; F3 is required.</text>
+      <text x="32" y="1836" font-size="12" font-weight="400" fill="#8a5300">Public reissue is not built (A556).</text>
+      <rect x="32" y="1866" width="326" height="56" rx="4" fill="#f0f1f4" />
+      <text x="44" y="1884" font-size="12" font-weight="400" fill="#5c626e">Legal name *</text>
+      <text x="44" y="1908" font-size="14" font-weight="400" fill="#16181d">North Coast Studio SL</text>
+      <path d="M 32 1921 h 326" stroke="#7d8390" />
+      <rect x="32" y="1930" width="326" height="56" rx="4" fill="#f0f1f4" />
+      <text x="44" y="1948" font-size="12" font-weight="400" fill="#5c626e">Tax identifier *</text>
+      <text x="44" y="1972" font-size="14" font-weight="400" fill="#16181d">B12345674</text>
+      <path d="M 32 1985 h 326" stroke="#7d8390" />
+      <rect x="32" y="1994" width="326" height="56" rx="4" fill="#f0f1f4" />
+      <text x="44" y="2012" font-size="12" font-weight="400" fill="#5c626e">Country *</text>
+      <text x="44" y="2036" font-size="14" font-weight="400" fill="#16181d">Spain · ES</text>
+      <path d="M 32 2049 h 326" stroke="#7d8390" />
+      <rect x="32" y="2058" width="326" height="56" rx="4" fill="#f0f1f4" />
+      <text x="44" y="2076" font-size="12" font-weight="400" fill="#5c626e">Full postal address *</text>
+      <text x="44" y="2100" font-size="14" font-weight="400" fill="#16181d">18 Harbour Road, 08003 Barcelona</text>
+      <path d="M 32 2113 h 326" stroke="#7d8390" />
+      <text x="32" y="2122" font-size="12" font-weight="400" fill="#5c626e">Illustrative details; not verified.</text>
+      <text x="32" y="2144" font-size="12" font-weight="400" fill="#5c626e">Save quiet while unchanged.</text>
+      <rect x="32" y="2174" width="326" height="48" rx="8" fill="#f0f1f4" stroke="#d6d9e0" />
+      <text x="44" y="2204" font-size="14" font-weight="600" fill="#5c626e">Save details · unchanged</text>
+      <g aria-label="Disabled" />
+      <rect x="32" y="2234" width="326" height="56" rx="8" fill="#f0f1f4" stroke="#d6d9e0" />
+      <text x="44" y="2257" font-size="14" font-weight="600" fill="#16181d">▸ Printer · Office · A4</text>
+      <text x="44" y="2277" font-size="12" font-weight="400" fill="#5c626e">Default · Folded · Change to expand</text>
+      <rect x="32" y="2302" width="326" height="48" rx="8" fill="#f0f1f4" stroke="#d6d9e0" />
+      <text x="44" y="2332" font-size="14" font-weight="600" fill="#5c626e">Print on Office · needs fiscal work</text>
+      <g aria-label="Disabled" />
+      <rect x="32" y="2362" width="326" height="56" rx="4" fill="#f0f1f4" />
+      <text x="44" y="2380" font-size="12" font-weight="400" fill="#5c626e">Delivery email (separate)</text>
+      <text x="44" y="2404" font-size="14" font-weight="400" fill="#16181d">billing@example.invalid</text>
+      <path d="M 32 2417 h 326" stroke="#7d8390" />
+      <rect x="32" y="2426" width="326" height="48" rx="8" fill="#f0f1f4" stroke="#d6d9e0" />
+      <text x="44" y="2456" font-size="14" font-weight="600" fill="#5c626e">Email · needs recorded invoice</text>
+      <g aria-label="Disabled" />
+      <text x="32" y="2486" font-size="12" font-weight="400" fill="#8a5300">No delayed F2 issue. No second charge.</text>
+      <text x="32" y="2508" font-size="12" font-weight="400" fill="#8a5300">This preview does not enable F1 / F3.</text>
+    </g>
+    <g transform="translate(0 -210)" data-design-section="2">
+      <text x="16" y="2762" font-size="18" font-weight="600" fill="#16181d">02  Table · Three EUR10 payers</text>
+      <text x="16" y="2790" font-size="12" font-weight="400" fill="#5c626e">Historical balances stay fixed</text>
+    </g>
+    <g transform="translate(0 -210)" data-ui-card="2A">
+      <rect x="16" y="2814" width="358" height="424" rx="16" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="32" y="2842" font-size="12" font-weight="600" fill="#1a5fd0">2A · PAYMENT HISTORY</text>
+      <text x="32" y="2872" font-size="18" font-weight="600" fill="#16181d">Table 12 · Three guests</text>
+      <text x="32" y="2896" font-size="12" font-weight="400" fill="#5c626e">EUR30 bill · EUR10 each</text>
+      <text x="32" y="2918" font-size="18" font-weight="600" fill="#16181d">Guest 1 · EUR10 received</text>
+      <text x="32" y="2948" font-size="12" font-weight="400" fill="#5c626e">Slip balance then: EUR20.00</text>
+      <text x="32" y="2970" font-size="12" font-weight="400" fill="#5c626e">Non-fiscal · Bill 12 · Saved at receipt</text>
+      <text x="32" y="3000" font-size="18" font-weight="600" fill="#16181d">Guest 2 · EUR10 received</text>
+      <text x="32" y="3030" font-size="12" font-weight="400" fill="#5c626e">Slip balance then: EUR10.00</text>
+      <text x="32" y="3052" font-size="12" font-weight="400" fill="#5c626e">Non-fiscal · Bill 12 · Saved at receipt</text>
+      <text x="32" y="3082" font-size="18" font-weight="600" fill="#16181d">Guest 3 · EUR10 received</text>
+      <text x="32" y="3112" font-size="12" font-weight="400" fill="#5c626e">Slip balance then: EUR0.00</text>
+      <text x="32" y="3134" font-size="12" font-weight="400" fill="#5c626e">Non-fiscal · Bill 12 · Saved at receipt</text>
+      <text x="32" y="3164" font-size="12" font-weight="400" fill="#8a5300">Guest 3 line is the final result.</text>
+      <text x="32" y="3186" font-size="12" font-weight="400" fill="#8a5300">Earlier copies keep EUR20 and EUR10.</text>
+      <text x="32" y="3208" font-size="12" font-weight="400" fill="#8a5300">Only eligible requested slips print.</text>
+    </g>
+    <g transform="translate(0 -286)" data-ui-card="2B">
+      <rect x="16" y="3330" width="358" height="456" rx="16" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="32" y="3358" font-size="12" font-weight="600" fill="#1a5fd0">2B · NEXT PAYMENT</text>
+      <text x="32" y="3388" font-size="18" font-weight="600" fill="#16181d">EUR10.00 left to pay</text>
+      <text x="32" y="3412" font-size="12" font-weight="400" fill="#5c626e">After guest 2 · EUR20 received</text>
+      <text x="32" y="3434" font-size="14" font-weight="400" fill="#16181d">How will the next guest pay?</text>
+      <rect x="32" y="3464" width="326" height="48" rx="8" fill="#1f6feb" />
+      <text x="44" y="3494" font-size="14" font-weight="600" fill="#ffffff">Cash · EUR10.00</text>
+      <rect x="32" y="3524" width="326" height="48" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="44" y="3554" font-size="14" font-weight="600" fill="#1a5fd0">▸ Reader · Bar reader</text>
+      <rect x="32" y="3584" width="326" height="52" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <rect x="44" y="3600" width="20" height="20" rx="4" fill="#ffffff" stroke="#7d8390" />
+      <text x="74" y="3615" font-size="12" font-weight="600" fill="#16181d">Print credit card slip</text>
+      <rect x="32" y="3648" width="326" height="48" rx="8" fill="#1f6feb" />
+      <text x="44" y="3678" font-size="14" font-weight="600" fill="#ffffff">Card · EUR10.00</text>
+      <text x="32" y="3708" font-size="12" font-weight="400" fill="#8a5300">Cash slip trigger: next owner question.</text>
+      <text x="32" y="3730" font-size="12" font-weight="400" fill="#8a5300">Reader own paper: keep no duplicates.</text>
+      <text x="32" y="3752" font-size="12" font-weight="400" fill="#8a5300">Unknown money is not settled.</text>
+    </g>
+    <g transform="translate(0 -390)" data-ui-card="2C">
+      <rect x="16" y="3906" width="358" height="456" rx="16" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="32" y="3934" font-size="12" font-weight="600" fill="#1a5fd0">2C · LAST GUEST PAID</text>
+      <text x="32" y="3964" font-size="18" font-weight="600" fill="#16181d">Paid EUR30.00 · Due EUR0</text>
+      <text x="32" y="3988" font-size="12" font-weight="400" fill="#5c626e">Ask on this handheld or counter now</text>
+      <text x="32" y="4010" font-size="14" font-weight="400" fill="#16181d">Whole-bill document · EUR30.00</text>
+      <rect x="32" y="4040" width="326" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="44" y="4068" font-size="14" font-weight="400" fill="#16181d">○ Receipt</text>
+      <rect x="32" y="4092" width="326" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="44" y="4120" font-size="14" font-weight="400" fill="#16181d">○ Full invoice</text>
+      <rect x="32" y="4144" width="326" height="44" rx="8" fill="#e3ebfb" stroke="#1f6feb" />
+      <text x="44" y="4172" font-size="14" font-weight="600" fill="#1a5fd0">● None</text>
+      <text x="32" y="4196" font-size="14" font-weight="400" fill="#1a7f5a">None recorded · no further fields.</text>
+      <text x="32" y="4218" font-size="14" font-weight="400" fill="#1a7f5a">The requested card slip still stands.</text>
+      <rect x="32" y="4248" width="326" height="48" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="44" y="4278" font-size="14" font-weight="600" fill="#1a5fd0">Return to table</text>
+      <text x="32" y="4308" font-size="12" font-weight="400" fill="#8a5300">Table remains open. Finish is separate.</text>
+      <text x="32" y="4330" font-size="12" font-weight="400" fill="#8a5300">Choosing None does not cancel a slip.</text>
+    </g>
+    <g transform="translate(0 -464)" data-design-section="3">
+      <text x="16" y="4504" font-size="18" font-weight="600" fill="#16181d">03  Edit clears the balance</text>
+      <text x="16" y="4532" font-size="12" font-weight="400" fill="#5c626e">EUR30 total, EUR10 already received</text>
+    </g>
+    <g transform="translate(0 -464)" data-ui-card="3A">
+      <rect x="16" y="4556" width="358" height="368" rx="16" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="32" y="4584" font-size="12" font-weight="600" fill="#1a5fd0">3A · EDIT WITHOUT PAYMENT</text>
+      <text x="32" y="4614" font-size="18" font-weight="600" fill="#16181d">Bill 52 · EUR30.00</text>
+      <text x="32" y="4638" font-size="12" font-weight="400" fill="#5c626e">EUR10 received · EUR20 still due</text>
+      <text x="32" y="4660" font-size="18" font-weight="600" fill="#16181d">Remove EUR20 unpaid</text>
+      <text x="32" y="4690" font-size="14" font-weight="400" fill="#16181d">Kept items                  EUR10.00</text>
+      <text x="32" y="4712" font-size="14" font-weight="400" fill="#16181d">Removed unpaid items   EUR20.00</text>
+      <rect x="32" y="4742" width="326" height="56" rx="4" fill="#f0f1f4" />
+      <text x="44" y="4760" font-size="12" font-weight="400" fill="#5c626e">Revised total</text>
+      <text x="44" y="4784" font-size="14" font-weight="400" fill="#16181d">EUR10.00</text>
+      <path d="M 32 4797 h 326" stroke="#7d8390" />
+      <rect x="32" y="4806" width="326" height="48" rx="8" fill="#1f6feb" />
+      <text x="44" y="4836" font-size="14" font-weight="600" fill="#ffffff">Save edit</text>
+      <text x="32" y="4866" font-size="12" font-weight="400" fill="#8a5300">Successful save settles the EUR10 bill.</text>
+      <text x="32" y="4888" font-size="12" font-weight="400" fill="#8a5300">No Cash or Card. No new slip.</text>
+    </g>
+    <g transform="translate(0 -546)" data-ui-card="3B">
+      <rect x="16" y="5022" width="358" height="416" rx="16" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="32" y="5050" font-size="12" font-weight="600" fill="#1a5fd0">3B · FRESH DOCUMENT CHOICE</text>
+      <text x="32" y="5080" font-size="18" font-weight="600" fill="#16181d">Total EUR10 · Paid EUR10</text>
+      <text x="32" y="5104" font-size="12" font-weight="400" fill="#5c626e">Due EUR0 · edit saved successfully</text>
+      <text x="32" y="5126" font-size="14" font-weight="400" fill="#16181d">Choose the document for this edit.</text>
+      <rect x="32" y="5156" width="326" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="44" y="5184" font-size="14" font-weight="400" fill="#16181d">○ Receipt</text>
+      <rect x="32" y="5208" width="326" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="44" y="5236" font-size="14" font-weight="400" fill="#16181d">○ Full invoice</text>
+      <rect x="32" y="5260" width="326" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="44" y="5288" font-size="14" font-weight="400" fill="#16181d">○ None</text>
+      <text x="32" y="5312" font-size="12" font-weight="400" fill="#8a5300">Nothing inherited from the EUR10 payer.</text>
+      <text x="32" y="5334" font-size="12" font-weight="400" fill="#8a5300">Ask the active editor, including office.</text>
+      <text x="32" y="5356" font-size="12" font-weight="400" fill="#8a5300">No one answers: policy not yet agreed.</text>
+      <text x="32" y="5386" font-size="12" font-weight="400" fill="#5c626e">Proposed: choice pending, no timer.</text>
+      <text x="32" y="5408" font-size="12" font-weight="400" fill="#5c626e">No zone fallback remains unapproved.</text>
+    </g>
+    <g transform="translate(0 -630)" data-ui-card="3C">
+      <rect x="16" y="5538" width="358" height="568" rx="16" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="32" y="5566" font-size="12" font-weight="600" fill="#1a5fd0">3C · RECEIPT SELECTED</text>
+      <text x="32" y="5596" font-size="18" font-weight="600" fill="#16181d">EUR10 receipt · Bill 52</text>
+      <text x="32" y="5620" font-size="12" font-weight="400" fill="#5c626e">Same fresh edit-owned decision</text>
+      <rect x="32" y="5642" width="326" height="44" rx="8" fill="#e3ebfb" stroke="#1f6feb" />
+      <text x="44" y="5670" font-size="14" font-weight="600" fill="#1a5fd0">● Receipt</text>
+      <rect x="32" y="5694" width="326" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="44" y="5722" font-size="14" font-weight="400" fill="#16181d">○ Full invoice</text>
+      <rect x="32" y="5746" width="326" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="44" y="5774" font-size="14" font-weight="400" fill="#16181d">○ None</text>
+      <rect x="32" y="5798" width="326" height="56" rx="8" fill="#f0f1f4" stroke="#d6d9e0" />
+      <text x="44" y="5821" font-size="14" font-weight="600" fill="#16181d">▸ Printer · Bar receipt</text>
+      <text x="44" y="5841" font-size="12" font-weight="400" fill="#5c626e">Default · Folded · Change to expand</text>
+      <rect x="32" y="5866" width="326" height="48" rx="8" fill="#1f6feb" />
+      <text x="44" y="5896" font-size="14" font-weight="600" fill="#ffffff">Print on Bar receipt</text>
+      <rect x="32" y="5926" width="326" height="56" rx="4" fill="#f0f1f4" />
+      <text x="44" y="5944" font-size="12" font-weight="400" fill="#5c626e">Email * (only to send)</text>
+      <text x="44" y="5968" font-size="14" font-weight="400" fill="#16181d">guest@example.invalid</text>
+      <path d="M 32 5981 h 326" stroke="#7d8390" />
+      <rect x="32" y="5990" width="326" height="48" rx="8" fill="#1f6feb" />
+      <text x="44" y="6020" font-size="14" font-weight="600" fill="#ffffff">Email</text>
+      <text x="32" y="6050" font-size="12" font-weight="400" fill="#8a5300">Either or both, explicit commands.</text>
+      <text x="32" y="6072" font-size="12" font-weight="400" fill="#8a5300">Retries recover delivery, not payment.</text>
+    </g>
+    <g transform="translate(0 -742)" data-design-section="4">
+      <text x="16" y="6286" font-size="18" font-weight="600" fill="#16181d">04  Later full invoice request</text>
+      <text x="16" y="6314" font-size="12" font-weight="400" fill="#5c626e">Separate fiscal dependency</text>
+    </g>
+    <g transform="translate(0 -742)" data-ui-card="4A">
+      <rect x="16" y="6338" width="358" height="336" rx="16" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="32" y="6366" font-size="12" font-weight="600" fill="#1a5fd0">4A · LATER REQUEST</text>
+      <text x="32" y="6396" font-size="18" font-weight="600" fill="#16181d">Receipt S/318 · EUR30</text>
+      <text x="32" y="6420" font-size="12" font-weight="400" fill="#5c626e">Receipt already printed · paid</text>
+      <text x="32" y="6442" font-size="14" font-weight="400" fill="#16181d">The guest now asks for a full invoice.</text>
+      <text x="32" y="6464" font-size="14" font-weight="400" fill="#16181d">Keep the original receipt recorded.</text>
+      <rect x="32" y="6494" width="326" height="56" rx="8" fill="#f0f1f4" stroke="#d6d9e0" />
+      <text x="44" y="6517" font-size="14" font-weight="600" fill="#16181d">▸ Printer · Bar receipt</text>
+      <text x="44" y="6537" font-size="12" font-weight="400" fill="#5c626e">Default · Folded · Change to expand</text>
+      <rect x="32" y="6562" width="326" height="48" rx="8" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="44" y="6592" font-size="14" font-weight="600" fill="#1a5fd0">Print a copy on Bar receipt</text>
+      <text x="32" y="6622" font-size="12" font-weight="400" fill="#8a5300">Copy: same receipt and number.</text>
+      <text x="32" y="6644" font-size="12" font-weight="400" fill="#8a5300">Copying cannot create a full invoice.</text>
+    </g>
+    <g transform="translate(0 -836)" data-ui-card="4B">
+      <rect x="16" y="6784" width="358" height="384" rx="16" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="32" y="6812" font-size="12" font-weight="600" fill="#1a5fd0">4B · FISCAL DEPENDENCY</text>
+      <text x="32" y="6842" font-size="18" font-weight="600" fill="#16181d">Receipt to full invoice</text>
+      <text x="32" y="6866" font-size="12" font-weight="400" fill="#5c626e">Target preview · not an available action</text>
+      <text x="32" y="6888" font-size="14" font-weight="400" fill="#16181d">New F3 linked to S/318 is required.</text>
+      <text x="32" y="6910" font-size="14" font-weight="400" fill="#16181d">The original F2 is never rewritten.</text>
+      <rect x="32" y="6940" width="326" height="56" rx="4" fill="#f0f1f4" />
+      <text x="44" y="6958" font-size="12" font-weight="400" fill="#5c626e">Customer details continuation</text>
+      <text x="44" y="6982" font-size="14" font-weight="400" fill="#16181d">Name · tax ID · country · address</text>
+      <path d="M 32 6995 h 326" stroke="#7d8390" />
+      <text x="32" y="7004" font-size="12" font-weight="400" fill="#5c626e">Use the complete fields in 1C.</text>
+      <text x="32" y="7026" font-size="12" font-weight="400" fill="#5c626e">Identity enters here, after settlement.</text>
+      <rect x="32" y="7056" width="326" height="48" rx="8" fill="#f0f1f4" stroke="#d6d9e0" />
+      <text x="44" y="7086" font-size="14" font-weight="600" fill="#5c626e">Reissue · unavailable (A556)</text>
+      <g aria-label="Disabled" />
+      <text x="32" y="7116" font-size="12" font-weight="400" fill="#8a5300">Core writer exists; public flow is missing.</text>
+      <text x="32" y="7138" font-size="12" font-weight="400" fill="#8a5300">Owner lands the separate fiscal build.</text>
+    </g>
+    <g transform="translate(0 -952)" data-ui-card="4C">
+      <rect x="16" y="7300" width="358" height="504" rx="16" fill="#ffffff" stroke="#d6d9e0" />
+      <text x="32" y="7328" font-size="12" font-weight="600" fill="#1a5fd0">4C · BOUNDARIES</text>
+      <text x="32" y="7358" font-size="18" font-weight="600" fill="#16181d">EUR0 new charge</text>
+      <text x="32" y="7382" font-size="12" font-weight="400" fill="#5c626e">A556 · A948 · Q17 · Q5(d)</text>
+      <text x="32" y="7404" font-size="14" font-weight="400" fill="#16181d">No second payment or settlement.</text>
+      <text x="32" y="7426" font-size="14" font-weight="400" fill="#16181d">No drawer action from documents.</text>
+      <text x="32" y="7448" font-size="14" font-weight="400" fill="#16181d">No delay to the earlier F2 issuance.</text>
+      <rect x="32" y="7478" width="326" height="56" rx="8" fill="#f0f1f4" stroke="#d6d9e0" />
+      <text x="44" y="7501" font-size="14" font-weight="600" fill="#16181d">▸ Printer · Office · A4</text>
+      <text x="44" y="7521" font-size="12" font-weight="400" fill="#5c626e">Default · Folded · Change to expand</text>
+      <rect x="32" y="7546" width="326" height="48" rx="8" fill="#f0f1f4" stroke="#d6d9e0" />
+      <text x="44" y="7576" font-size="14" font-weight="600" fill="#5c626e">Print · fiscal document needed</text>
+      <g aria-label="Disabled" />
+      <rect x="32" y="7606" width="326" height="56" rx="4" fill="#f0f1f4" />
+      <text x="44" y="7624" font-size="12" font-weight="400" fill="#5c626e">Email * (only to send)</text>
+      <text x="44" y="7648" font-size="14" font-weight="400" fill="#16181d">billing@example.invalid</text>
+      <path d="M 32 7661 h 326" stroke="#7d8390" />
+      <rect x="32" y="7670" width="326" height="48" rx="8" fill="#f0f1f4" stroke="#d6d9e0" />
+      <text x="44" y="7700" font-size="14" font-weight="600" fill="#5c626e">Email · fiscal document needed</text>
+      <g aria-label="Disabled" />
+      <text x="32" y="7730" font-size="12" font-weight="400" fill="#8a5300">Later Print / Email need the new record.</text>
+      <text x="32" y="7752" font-size="12" font-weight="400" fill="#8a5300">Lost reply: recover the same request.</text>
+      <text x="32" y="7774" font-size="12" font-weight="400" fill="#8a5300">Do not automatically send another.</text>
+    </g>
+    <text x="16" y="6900" font-size="12" fill="#5c626e">Next: cash-slip checkbox is proposed.</text>
+    <text x="16" y="6922" font-size="12" fill="#5c626e">Unchecked default: builder proposal.</text>
+    <text x="16" y="6944" font-size="12" fill="#5c626e">Reader paper / no answer remain open.</text>
+    <text x="16" y="6966" font-size="12" fill="#5c626e">No rebuild before owner agreement.</text>
+  </g>
+</svg>

@@ -2363,6 +2363,20 @@ Board 1 is the target; board 2 the windows.
 
 ### A739. Paying: Hold · Pay, and one payment window
 
+**2026-10-22 ~09:05 owner-direction addendum.** The [current revision](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
+and [eight four-case boards](mockups/a739-owner-receipt-flow/README.md) take precedence over
+all conflicting historical text below. Before card: Print credit card slip checkbox;
+on confirmed success: request the eligible slip once. After each part: remaining amount and
+next tender. After final payment or an edit clearing due: Receipt / Full invoice / None on
+that device, with details for Full invoice and folded default-printer + Print and email + Email
+for both. Timing A is answered; no post-payment slip row or final Print/Email/None in Pay.
+The settling edit owns a new choice. The proposed unchecked checkbox default is a builder call.
+Cash's replacement trigger is the single next question; reader-native paper and no-answer policy
+remain scoped open. Existing G5/cash eligibility, A790/A796 settings and table closure stay
+separate. Full invoice after issued F2 depends on existing A556's separate fiscal integration
+under A948/Q17/Q5(d), not a late F1 mutation or a second charge. Keep public F1 gated. No rebuild
+until owner agreement; no new landing gate. All earlier body bytes below remain historical.
+
 2026-10-22 proposed revision, awaiting owner decision: [timing A after settlement versus timing B
 on Finish, with six-case static mockups](../superpowers/specs/2026-10-22-a739-receipt-timing-revision.md).
 The settling edit owns a new receipt decision; partial-slip choice needs an explicit replacement.

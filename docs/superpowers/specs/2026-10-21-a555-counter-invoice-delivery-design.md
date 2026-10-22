@@ -1,3 +1,21 @@
+# 2026-10-22 precedence: A739 now asks after settlement
+
+The owner's ~09:05 [A739 payment and receipt flow](2026-10-22-a739-owner-payment-and-receipt-flow.md)
+replaces this proposal's ordinary before-payment recipient/delivery staging where the two meet.
+Do not ask A555's old A/B timing question or promise prepayment identity entry for that flow.
+Receipt / Full invoice / None follows confirmed settlement or a settling edit; Full invoice
+then reveals identity, and both documents reveal separate Print and Email actions.
+
+Issuance does not wait for those details. An already-issued F2 stays immutable; a requested
+full invoice needs separate F3 orchestration under existing A556, with A948/Q17/Q5(d)'s fiscal
+dependencies. The core writer's existence is not a public reissue feature. Keep public F1 closed,
+existing F1 identity fixed during collection, money received, original/copy recovery and A790's
+accepted printer settings. No fiscal build or extra landing gate is authorized. The entire
+2026-10-21 proposal follows unchanged as history; its reuseable delivery requirements are
+subject to the new integration design and separate fiscal work.
+
+---
+
 # A555: keep a counter full invoice's chosen delivery through payment
 
 **Status: proposal, 2026-10-21. Full-design owner approval required before implementation.**

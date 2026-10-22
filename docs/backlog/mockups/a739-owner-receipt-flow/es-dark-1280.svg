@@ -1,0 +1,308 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="3224" viewBox="0 0 1280 3224" role="img" aria-labelledby="title desc">
+  <title id="title">A739 flujo de cobro y documentos</title>
+  <desc id="desc">Cuatro casos: mostrador, tres pagos en mesa, cambio que salda, factura posterior. Objetivo estático con dependencia fiscal. Valores técnicos propuestos.</desc>
+  <rect width="1280" height="3224" fill="#101216" />
+  <g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+    <text x="24" y="36" font-size="12" font-weight="600" fill="#78a9ff">WAITRON / A739</text>
+    <text x="24" y="70" font-size="22" font-weight="600" fill="#eceef2">Cobrar y después elegir</text>
+    <text x="24" y="98" font-size="12" font-weight="400" fill="#a1a7b3">2026-10-22 · Objetivo indicado por el dueño</text>
+    <text x="24" y="120" font-size="12" font-weight="400" fill="#a1a7b3">Diseño estático · no es producto funcionando</text>
+    <g transform="translate(0 0)" data-design-section="1">
+      <text x="24" y="180" font-size="22" font-weight="600" fill="#eceef2">01  Mostrador: un pago de EUR30</text>
+      <text x="24" y="208" font-size="14" font-weight="400" fill="#a1a7b3">Cobrar y después elegir documento. La factura depende de desarrollo fiscal.</text>
+    </g>
+    <g transform="translate(0 0)" data-ui-card="1A">
+      <rect x="24" y="232" width="400" height="548" rx="16" fill="#191c22" stroke="#333945" />
+      <text x="40" y="260" font-size="12" font-weight="600" fill="#78a9ff">1A · ANTES DE TARJETA</text>
+      <text x="40" y="290" font-size="18" font-weight="600" fill="#eceef2">Mostrador · EUR30,00</text>
+      <text x="40" y="314" font-size="12" font-weight="400" fill="#a1a7b3">Cobrar · Un cliente · Pedido 41</text>
+      <text x="40" y="336" font-size="14" font-weight="400" fill="#eceef2">Un importe · A partes iguales · Artículos</text>
+      <text x="40" y="358" font-size="14" font-weight="400" fill="#eceef2">● Toda la cuenta</text>
+      <text x="40" y="388" font-size="18" font-weight="600" fill="#eceef2">A pagar ahora EUR30,00</text>
+      <rect x="40" y="418" width="368" height="48" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="52" y="448" font-size="14" font-weight="600" fill="#78a9ff">▸ Lector · Barra</text>
+      <rect x="40" y="478" width="368" height="52" rx="8" fill="#191c22" stroke="#333945" />
+      <rect x="52" y="494" width="20" height="20" rx="4" fill="#191c22" stroke="#7a8291" />
+      <text x="82" y="509" font-size="12" font-weight="600" fill="#eceef2">Imprimir resguardo de tarjeta</text>
+      <text x="40" y="542" font-size="12" font-weight="400" fill="#a1a7b3">Marcada aquí; inicio sin marcar propuesto.</text>
+      <text x="40" y="564" font-size="12" font-weight="400" fill="#a1a7b3">Márcalo antes de Tarjeta para pedirlo.</text>
+      <rect x="40" y="594" width="368" height="56" rx="8" fill="#262a33" stroke="#333945" />
+      <text x="52" y="617" font-size="14" fill="#eceef2">▸ Impresora de resguardo · Barra</text>
+      <text x="52" y="637" font-size="12" fill="#a1a7b3">Misma opción de Equipo · Plegada</text>
+      <rect x="40" y="662" width="368" height="48" rx="8" fill="#4c8dff" />
+      <text x="52" y="692" font-size="14" font-weight="600" fill="#06101f">Tarjeta · EUR30,00</text>
+      <text x="40" y="722" font-size="12" font-weight="400" fill="#f2b24c">Marcado + cobro confirmado: encolar.</text>
+      <text x="40" y="744" font-size="12" font-weight="400" fill="#f2b24c">Rechazo / sin respuesta: sin resguardo.</text>
+      <path d="M 56 504 l 4 4 l 8 -9" fill="none" stroke="#78a9ff" stroke-width="2" />
+    </g>
+    <g transform="translate(0 0)" data-ui-card="1B">
+      <rect x="440" y="232" width="400" height="688" rx="16" fill="#191c22" stroke="#333945" />
+      <text x="456" y="260" font-size="12" font-weight="600" fill="#78a9ff">1B · DESPUÉS DEL COBRO</text>
+      <text x="456" y="290" font-size="18" font-weight="600" fill="#eceef2">Pagado EUR30,00 · Debe EUR0</text>
+      <text x="456" y="314" font-size="12" font-weight="400" fill="#a1a7b3">Ejemplo: se pidió el resguardo</text>
+      <text x="456" y="336" font-size="12" font-weight="400" fill="#4ac08d">Resguardo en cola · documento aparte</text>
+      <rect x="456" y="366" width="368" height="44" rx="8" fill="#2f3a4d" stroke="#4c8dff" />
+      <text x="468" y="394" font-size="14" font-weight="600" fill="#78a9ff">● Ticket</text>
+      <rect x="456" y="418" width="368" height="44" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="468" y="446" font-size="14" font-weight="400" fill="#eceef2">○ Factura completa</text>
+      <rect x="456" y="470" width="368" height="44" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="468" y="498" font-size="14" font-weight="400" fill="#eceef2">○ Ninguno</text>
+      <rect x="456" y="522" width="368" height="56" rx="8" fill="#262a33" stroke="#333945" />
+      <text x="468" y="545" font-size="14" font-weight="600" fill="#eceef2">▸ Impresora · Barra</text>
+      <text x="468" y="565" font-size="12" font-weight="400" fill="#a1a7b3">Predeterminada · Plegada · Cambiar</text>
+      <rect x="456" y="590" width="368" height="48" rx="8" fill="#4c8dff" />
+      <text x="468" y="620" font-size="14" font-weight="600" fill="#06101f">Imprimir en Barra</text>
+      <rect x="456" y="650" width="368" height="56" rx="4" fill="#262a33" />
+      <text x="468" y="668" font-size="12" font-weight="400" fill="#a1a7b3">Correo * (solo para enviar)</text>
+      <text x="468" y="692" font-size="14" font-weight="400" fill="#eceef2">guest@</text>
+      <path d="M 456 705 h 368" stroke="#ff7f73" />
+      <text x="456" y="724" font-size="12" font-weight="400" fill="#ff7f73">Escribe un correo completo.</text>
+      <text x="456" y="742" font-size="12" font-weight="400" fill="#a1a7b3">Tras un intento de envío no válido.</text>
+      <text x="456" y="772" font-size="12" font-weight="400" fill="#ff7f73">Corrige el campo señalado.</text>
+      <rect x="456" y="802" width="368" height="48" rx="8" fill="#262a33" stroke="#333945" />
+      <text x="468" y="832" font-size="14" font-weight="600" fill="#a1a7b3">Enviar correo · corrige el campo</text>
+      <g aria-label="Desactivado" />
+      <text x="456" y="862" font-size="12" font-weight="400" fill="#f2b24c">Imprimir y enviar son acciones aparte.</text>
+      <text x="456" y="884" font-size="12" font-weight="400" fill="#f2b24c">No cobran ni abren el cajón.</text>
+    </g>
+    <g transform="translate(0 0)" data-ui-card="1C">
+      <rect x="856" y="232" width="400" height="984" rx="16" fill="#191c22" stroke="#333945" />
+      <text x="872" y="260" font-size="12" font-weight="600" fill="#78a9ff">1C · OBJETIVO: FACTURA</text>
+      <text x="872" y="290" font-size="18" font-weight="600" fill="#eceef2">Pagado EUR30,00 · Debe EUR0</text>
+      <text x="872" y="314" font-size="12" font-weight="400" fill="#a1a7b3">Solo vista previa · dependencia fiscal</text>
+      <rect x="872" y="336" width="368" height="44" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="884" y="364" font-size="14" font-weight="400" fill="#eceef2">○ Ticket</text>
+      <rect x="872" y="388" width="368" height="44" rx="8" fill="#2f3a4d" stroke="#4c8dff" />
+      <text x="884" y="416" font-size="14" font-weight="600" fill="#78a9ff">● Factura completa</text>
+      <rect x="872" y="440" width="368" height="44" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="884" y="468" font-size="14" font-weight="400" fill="#eceef2">○ Ninguno</text>
+      <text x="872" y="492" font-size="12" font-weight="400" fill="#f2b24c">F2 ya emitida; hace falta una F3.</text>
+      <text x="872" y="514" font-size="12" font-weight="400" fill="#f2b24c">Reemisión pública sin construir (A556).</text>
+      <rect x="872" y="544" width="368" height="56" rx="4" fill="#262a33" />
+      <text x="884" y="562" font-size="12" font-weight="400" fill="#a1a7b3">Nombre o razón social *</text>
+      <text x="884" y="586" font-size="14" font-weight="400" fill="#eceef2">North Coast Studio SL</text>
+      <path d="M 872 599 h 368" stroke="#7a8291" />
+      <rect x="872" y="608" width="368" height="56" rx="4" fill="#262a33" />
+      <text x="884" y="626" font-size="12" font-weight="400" fill="#a1a7b3">NIF *</text>
+      <text x="884" y="650" font-size="14" font-weight="400" fill="#eceef2">B12345674</text>
+      <path d="M 872 663 h 368" stroke="#7a8291" />
+      <rect x="872" y="672" width="368" height="56" rx="4" fill="#262a33" />
+      <text x="884" y="690" font-size="12" font-weight="400" fill="#a1a7b3">País *</text>
+      <text x="884" y="714" font-size="14" font-weight="400" fill="#eceef2">España · ES</text>
+      <path d="M 872 727 h 368" stroke="#7a8291" />
+      <rect x="872" y="736" width="368" height="56" rx="4" fill="#262a33" />
+      <text x="884" y="754" font-size="12" font-weight="400" fill="#a1a7b3">Dirección postal completa *</text>
+      <text x="884" y="778" font-size="14" font-weight="400" fill="#eceef2">18 Harbour Road, 08003 Barcelona</text>
+      <path d="M 872 791 h 368" stroke="#7a8291" />
+      <text x="872" y="800" font-size="12" font-weight="400" fill="#a1a7b3">Datos de ejemplo; sin verificar.</text>
+      <text x="872" y="822" font-size="12" font-weight="400" fill="#a1a7b3">Guardar inactivo mientras no cambie.</text>
+      <rect x="872" y="852" width="368" height="48" rx="8" fill="#262a33" stroke="#333945" />
+      <text x="884" y="882" font-size="14" font-weight="600" fill="#a1a7b3">Guardar datos · sin cambios</text>
+      <g aria-label="Desactivado" />
+      <rect x="872" y="912" width="368" height="56" rx="8" fill="#262a33" stroke="#333945" />
+      <text x="884" y="935" font-size="14" font-weight="600" fill="#eceef2">▸ Impresora · Oficina · A4</text>
+      <text x="884" y="955" font-size="12" font-weight="400" fill="#a1a7b3">Predeterminada · Plegada · Cambiar</text>
+      <rect x="872" y="980" width="368" height="48" rx="8" fill="#262a33" stroke="#333945" />
+      <text x="884" y="1010" font-size="14" font-weight="600" fill="#a1a7b3">Imprimir en Oficina · falta desarrollo</text>
+      <g aria-label="Desactivado" />
+      <rect x="872" y="1040" width="368" height="56" rx="4" fill="#262a33" />
+      <text x="884" y="1058" font-size="12" font-weight="400" fill="#a1a7b3">Correo de entrega (aparte)</text>
+      <text x="884" y="1082" font-size="14" font-weight="400" fill="#eceef2">billing@example.invalid</text>
+      <path d="M 872 1095 h 368" stroke="#7a8291" />
+      <rect x="872" y="1104" width="368" height="48" rx="8" fill="#262a33" stroke="#333945" />
+      <text x="884" y="1134" font-size="14" font-weight="600" fill="#a1a7b3">Enviar · requiere factura emitida</text>
+      <g aria-label="Desactivado" />
+      <text x="872" y="1164" font-size="12" font-weight="400" fill="#f2b24c">No retrasa la F2. No cobra otra vez.</text>
+      <text x="872" y="1186" font-size="12" font-weight="400" fill="#f2b24c">Esta vista no habilita F1 ni F3.</text>
+    </g>
+    <g transform="translate(0 -156)" data-design-section="2">
+      <text x="24" y="1440" font-size="22" font-weight="600" fill="#eceef2">02  Mesa: el último de tres pagos de EUR10</text>
+      <text x="24" y="1468" font-size="14" font-weight="400" fill="#a1a7b3">Cada parte guarda su saldo; solo el último pago abre la elección del documento.</text>
+    </g>
+    <g transform="translate(0 -156)" data-ui-card="2A">
+      <rect x="24" y="1492" width="400" height="424" rx="16" fill="#191c22" stroke="#333945" />
+      <text x="40" y="1520" font-size="12" font-weight="600" fill="#78a9ff">2A · HISTORIAL DE PAGOS</text>
+      <text x="40" y="1550" font-size="18" font-weight="600" fill="#eceef2">Mesa 12 · Tres clientes</text>
+      <text x="40" y="1574" font-size="12" font-weight="400" fill="#a1a7b3">Cuenta EUR30 · EUR10 por persona</text>
+      <text x="40" y="1596" font-size="18" font-weight="600" fill="#eceef2">Cliente 1 · EUR10 recibido</text>
+      <text x="40" y="1626" font-size="12" font-weight="400" fill="#a1a7b3">Saldo del resguardo: EUR20,00</text>
+      <text x="40" y="1648" font-size="12" font-weight="400" fill="#a1a7b3">No fiscal · Cuenta 12 · Saldo guardado</text>
+      <text x="40" y="1678" font-size="18" font-weight="600" fill="#eceef2">Cliente 2 · EUR10 recibido</text>
+      <text x="40" y="1708" font-size="12" font-weight="400" fill="#a1a7b3">Saldo del resguardo: EUR10,00</text>
+      <text x="40" y="1730" font-size="12" font-weight="400" fill="#a1a7b3">No fiscal · Cuenta 12 · Saldo guardado</text>
+      <text x="40" y="1760" font-size="18" font-weight="600" fill="#eceef2">Cliente 3 · EUR10 recibido</text>
+      <text x="40" y="1790" font-size="12" font-weight="400" fill="#a1a7b3">Saldo del resguardo: EUR0,00</text>
+      <text x="40" y="1812" font-size="12" font-weight="400" fill="#a1a7b3">No fiscal · Cuenta 12 · Saldo guardado</text>
+      <text x="40" y="1842" font-size="12" font-weight="400" fill="#f2b24c">La fila 3 muestra el resultado final.</text>
+      <text x="40" y="1864" font-size="12" font-weight="400" fill="#f2b24c">Las copias conservan EUR20 y EUR10.</text>
+      <text x="40" y="1886" font-size="12" font-weight="400" fill="#f2b24c">Solo se imprimen resguardos pedidos.</text>
+    </g>
+    <g transform="translate(0 -156)" data-ui-card="2B">
+      <rect x="440" y="1492" width="400" height="456" rx="16" fill="#191c22" stroke="#333945" />
+      <text x="456" y="1520" font-size="12" font-weight="600" fill="#78a9ff">2B · SIGUIENTE PAGO</text>
+      <text x="456" y="1550" font-size="18" font-weight="600" fill="#eceef2">Quedan EUR10,00 por pagar</text>
+      <text x="456" y="1574" font-size="12" font-weight="400" fill="#a1a7b3">Tras cliente 2 · EUR20 recibido</text>
+      <text x="456" y="1596" font-size="14" font-weight="400" fill="#eceef2">¿Cómo pagará el siguiente cliente?</text>
+      <rect x="456" y="1626" width="368" height="48" rx="8" fill="#4c8dff" />
+      <text x="468" y="1656" font-size="14" font-weight="600" fill="#06101f">Efectivo · EUR10,00</text>
+      <rect x="456" y="1686" width="368" height="48" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="468" y="1716" font-size="14" font-weight="600" fill="#78a9ff">▸ Lector · Barra</text>
+      <rect x="456" y="1746" width="368" height="52" rx="8" fill="#191c22" stroke="#333945" />
+      <rect x="468" y="1762" width="20" height="20" rx="4" fill="#191c22" stroke="#7a8291" />
+      <text x="498" y="1777" font-size="12" font-weight="600" fill="#eceef2">Imprimir resguardo de tarjeta</text>
+      <rect x="456" y="1810" width="368" height="48" rx="8" fill="#4c8dff" />
+      <text x="468" y="1840" font-size="14" font-weight="600" fill="#06101f">Tarjeta · EUR10,00</text>
+      <text x="456" y="1870" font-size="12" font-weight="400" fill="#f2b24c">Resguardo de efectivo: por decidir.</text>
+      <text x="456" y="1892" font-size="12" font-weight="400" fill="#f2b24c">Papel del lector: no duplicar.</text>
+      <text x="456" y="1914" font-size="12" font-weight="400" fill="#f2b24c">Dinero sin confirmar no está cobrado.</text>
+    </g>
+    <g transform="translate(0 -156)" data-ui-card="2C">
+      <rect x="856" y="1492" width="400" height="456" rx="16" fill="#191c22" stroke="#333945" />
+      <text x="872" y="1520" font-size="12" font-weight="600" fill="#78a9ff">2C · ÚLTIMO PAGO RECIBIDO</text>
+      <text x="872" y="1550" font-size="18" font-weight="600" fill="#eceef2">Pagado EUR30,00 · Debe EUR0</text>
+      <text x="872" y="1574" font-size="12" font-weight="400" fill="#a1a7b3">Preguntar ahora en este dispositivo</text>
+      <text x="872" y="1596" font-size="14" font-weight="400" fill="#eceef2">Documento de toda la cuenta · EUR30,00</text>
+      <rect x="872" y="1626" width="368" height="44" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="884" y="1654" font-size="14" font-weight="400" fill="#eceef2">○ Ticket</text>
+      <rect x="872" y="1678" width="368" height="44" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="884" y="1706" font-size="14" font-weight="400" fill="#eceef2">○ Factura completa</text>
+      <rect x="872" y="1730" width="368" height="44" rx="8" fill="#2f3a4d" stroke="#4c8dff" />
+      <text x="884" y="1758" font-size="14" font-weight="600" fill="#78a9ff">● Ninguno</text>
+      <text x="872" y="1782" font-size="14" font-weight="400" fill="#4ac08d">Ninguno guardado · sin más campos.</text>
+      <text x="872" y="1804" font-size="14" font-weight="400" fill="#4ac08d">El resguardo pedido sigue en curso.</text>
+      <rect x="872" y="1834" width="368" height="48" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="884" y="1864" font-size="14" font-weight="600" fill="#78a9ff">Volver a la mesa</text>
+      <text x="872" y="1894" font-size="12" font-weight="400" fill="#f2b24c">La mesa sigue abierta. Cierre aparte.</text>
+      <text x="872" y="1916" font-size="12" font-weight="400" fill="#f2b24c">Ninguno no cancela un resguardo.</text>
+    </g>
+    <g transform="translate(0 -260)" data-design-section="3">
+      <text x="24" y="2120" font-size="22" font-weight="600" fill="#eceef2">03  Un cambio elimina EUR20 sin nuevo pago</text>
+      <text x="24" y="2148" font-size="14" font-weight="400" fill="#a1a7b3">El cambio abre una elección nueva para EUR10. El primer pago conserva su historial.</text>
+    </g>
+    <g transform="translate(0 -260)" data-ui-card="3A">
+      <rect x="24" y="2172" width="400" height="368" rx="16" fill="#191c22" stroke="#333945" />
+      <text x="40" y="2200" font-size="12" font-weight="600" fill="#78a9ff">3A · EDITAR SIN COBRAR</text>
+      <text x="40" y="2230" font-size="18" font-weight="600" fill="#eceef2">Cuenta 52 · EUR30,00</text>
+      <text x="40" y="2254" font-size="12" font-weight="400" fill="#a1a7b3">EUR10 recibido · EUR20 pendiente</text>
+      <text x="40" y="2276" font-size="18" font-weight="600" fill="#eceef2">Quitar EUR20 sin pagar</text>
+      <text x="40" y="2306" font-size="14" font-weight="400" fill="#eceef2">Artículos restantes         EUR10,00</text>
+      <text x="40" y="2328" font-size="14" font-weight="400" fill="#eceef2">Artículos retirados           EUR20,00</text>
+      <rect x="40" y="2358" width="368" height="56" rx="4" fill="#262a33" />
+      <text x="52" y="2376" font-size="12" font-weight="400" fill="#a1a7b3">Nuevo total</text>
+      <text x="52" y="2400" font-size="14" font-weight="400" fill="#eceef2">EUR10,00</text>
+      <path d="M 40 2413 h 368" stroke="#7a8291" />
+      <rect x="40" y="2422" width="368" height="48" rx="8" fill="#4c8dff" />
+      <text x="52" y="2452" font-size="14" font-weight="600" fill="#06101f">Guardar cambio</text>
+      <text x="40" y="2482" font-size="12" font-weight="400" fill="#f2b24c">Guardar salda la cuenta de EUR10.</text>
+      <text x="40" y="2504" font-size="12" font-weight="400" fill="#f2b24c">Sin Efectivo ni Tarjeta. Sin resguardo.</text>
+    </g>
+    <g transform="translate(0 -260)" data-ui-card="3B">
+      <rect x="440" y="2172" width="400" height="416" rx="16" fill="#191c22" stroke="#333945" />
+      <text x="456" y="2200" font-size="12" font-weight="600" fill="#78a9ff">3B · NUEVA ELECCIÓN</text>
+      <text x="456" y="2230" font-size="18" font-weight="600" fill="#eceef2">Total EUR10 · Pagado EUR10</text>
+      <text x="456" y="2254" font-size="12" font-weight="400" fill="#a1a7b3">Debe EUR0 · cambio guardado</text>
+      <text x="456" y="2276" font-size="14" font-weight="400" fill="#eceef2">Elige el documento tras este cambio.</text>
+      <rect x="456" y="2306" width="368" height="44" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="468" y="2334" font-size="14" font-weight="400" fill="#eceef2">○ Ticket</text>
+      <rect x="456" y="2358" width="368" height="44" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="468" y="2386" font-size="14" font-weight="400" fill="#eceef2">○ Factura completa</text>
+      <rect x="456" y="2410" width="368" height="44" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="468" y="2438" font-size="14" font-weight="400" fill="#eceef2">○ Ninguno</text>
+      <text x="456" y="2462" font-size="12" font-weight="400" fill="#f2b24c">No hereda la elección del primer pago.</text>
+      <text x="456" y="2484" font-size="12" font-weight="400" fill="#f2b24c">Preguntar a quien editó, también oficina.</text>
+      <text x="456" y="2506" font-size="12" font-weight="400" fill="#f2b24c">Sin respuesta: política sin acordar.</text>
+      <text x="456" y="2536" font-size="12" font-weight="400" fill="#a1a7b3">Propuesta: pendiente, sin temporizador.</text>
+      <text x="456" y="2558" font-size="12" font-weight="400" fill="#a1a7b3">Sin entrega automática: no aprobado.</text>
+    </g>
+    <g transform="translate(0 -260)" data-ui-card="3C">
+      <rect x="856" y="2172" width="400" height="568" rx="16" fill="#191c22" stroke="#333945" />
+      <text x="872" y="2200" font-size="12" font-weight="600" fill="#78a9ff">3C · TICKET ELEGIDO</text>
+      <text x="872" y="2230" font-size="18" font-weight="600" fill="#eceef2">Ticket EUR10 · Cuenta 52</text>
+      <text x="872" y="2254" font-size="12" font-weight="400" fill="#a1a7b3">La nueva elección pertenece al cambio</text>
+      <rect x="872" y="2276" width="368" height="44" rx="8" fill="#2f3a4d" stroke="#4c8dff" />
+      <text x="884" y="2304" font-size="14" font-weight="600" fill="#78a9ff">● Ticket</text>
+      <rect x="872" y="2328" width="368" height="44" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="884" y="2356" font-size="14" font-weight="400" fill="#eceef2">○ Factura completa</text>
+      <rect x="872" y="2380" width="368" height="44" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="884" y="2408" font-size="14" font-weight="400" fill="#eceef2">○ Ninguno</text>
+      <rect x="872" y="2432" width="368" height="56" rx="8" fill="#262a33" stroke="#333945" />
+      <text x="884" y="2455" font-size="14" font-weight="600" fill="#eceef2">▸ Impresora · Barra</text>
+      <text x="884" y="2475" font-size="12" font-weight="400" fill="#a1a7b3">Predeterminada · Plegada · Cambiar</text>
+      <rect x="872" y="2500" width="368" height="48" rx="8" fill="#4c8dff" />
+      <text x="884" y="2530" font-size="14" font-weight="600" fill="#06101f">Imprimir en Barra</text>
+      <rect x="872" y="2560" width="368" height="56" rx="4" fill="#262a33" />
+      <text x="884" y="2578" font-size="12" font-weight="400" fill="#a1a7b3">Correo * (solo para enviar)</text>
+      <text x="884" y="2602" font-size="14" font-weight="400" fill="#eceef2">guest@example.invalid</text>
+      <path d="M 872 2615 h 368" stroke="#7a8291" />
+      <rect x="872" y="2624" width="368" height="48" rx="8" fill="#4c8dff" />
+      <text x="884" y="2654" font-size="14" font-weight="600" fill="#06101f">Enviar correo</text>
+      <text x="872" y="2684" font-size="12" font-weight="400" fill="#f2b24c">Una o ambas acciones, siempre explícitas.</text>
+      <text x="872" y="2706" font-size="12" font-weight="400" fill="#f2b24c">Reintentar entrega no vuelve a cobrar.</text>
+    </g>
+    <g transform="translate(0 -372)" data-design-section="4">
+      <text x="24" y="2920" font-size="22" font-weight="600" fill="#eceef2">04  Después: de ticket a factura completa</text>
+      <text x="24" y="2948" font-size="14" font-weight="400" fill="#a1a7b3">Es desarrollo fiscal aparte; no es una copia, ni modificar la F2, ni cobrar otra vez.</text>
+    </g>
+    <g transform="translate(0 -372)" data-ui-card="4A">
+      <rect x="24" y="2972" width="400" height="336" rx="16" fill="#191c22" stroke="#333945" />
+      <text x="40" y="3000" font-size="12" font-weight="600" fill="#78a9ff">4A · PETICIÓN POSTERIOR</text>
+      <text x="40" y="3030" font-size="18" font-weight="600" fill="#eceef2">Ticket S/318 · EUR30</text>
+      <text x="40" y="3054" font-size="12" font-weight="400" fill="#a1a7b3">Ticket ya impreso · pagado</text>
+      <text x="40" y="3076" font-size="14" font-weight="400" fill="#eceef2">El cliente pide ahora factura completa.</text>
+      <text x="40" y="3098" font-size="14" font-weight="400" fill="#eceef2">El ticket original sigue registrado.</text>
+      <rect x="40" y="3128" width="368" height="56" rx="8" fill="#262a33" stroke="#333945" />
+      <text x="52" y="3151" font-size="14" font-weight="600" fill="#eceef2">▸ Impresora · Barra</text>
+      <text x="52" y="3171" font-size="12" font-weight="400" fill="#a1a7b3">Predeterminada · Plegada · Cambiar</text>
+      <rect x="40" y="3196" width="368" height="48" rx="8" fill="#191c22" stroke="#333945" />
+      <text x="52" y="3226" font-size="14" font-weight="600" fill="#78a9ff">Imprimir una copia en Barra</text>
+      <text x="40" y="3256" font-size="12" font-weight="400" fill="#f2b24c">Copia: mismo ticket y mismo número.</text>
+      <text x="40" y="3278" font-size="12" font-weight="400" fill="#f2b24c">Copiar no crea una factura completa.</text>
+    </g>
+    <g transform="translate(0 -372)" data-ui-card="4B">
+      <rect x="440" y="2972" width="400" height="384" rx="16" fill="#191c22" stroke="#333945" />
+      <text x="456" y="3000" font-size="12" font-weight="600" fill="#78a9ff">4B · DEPENDENCIA FISCAL</text>
+      <text x="456" y="3030" font-size="18" font-weight="600" fill="#eceef2">De ticket a factura completa</text>
+      <text x="456" y="3054" font-size="12" font-weight="400" fill="#a1a7b3">Vista objetivo · acción no disponible</text>
+      <text x="456" y="3076" font-size="14" font-weight="400" fill="#eceef2">Hace falta una F3 vinculada a S/318.</text>
+      <text x="456" y="3098" font-size="14" font-weight="400" fill="#eceef2">La F2 original nunca se modifica.</text>
+      <rect x="456" y="3128" width="368" height="56" rx="4" fill="#262a33" />
+      <text x="468" y="3146" font-size="12" font-weight="400" fill="#a1a7b3">Continuación de datos del cliente</text>
+      <text x="468" y="3170" font-size="14" font-weight="400" fill="#eceef2">Nombre · NIF · país · dirección</text>
+      <path d="M 456 3183 h 368" stroke="#7a8291" />
+      <text x="456" y="3192" font-size="12" font-weight="400" fill="#a1a7b3">Usa los campos completos de 1C.</text>
+      <text x="456" y="3214" font-size="12" font-weight="400" fill="#a1a7b3">Los datos se piden después del cobro.</text>
+      <rect x="456" y="3244" width="368" height="48" rx="8" fill="#262a33" stroke="#333945" />
+      <text x="468" y="3274" font-size="14" font-weight="600" fill="#a1a7b3">Reemitir · no disponible (A556)</text>
+      <g aria-label="Desactivado" />
+      <text x="456" y="3304" font-size="12" font-weight="400" fill="#f2b24c">Existe la función, falta el flujo público.</text>
+      <text x="456" y="3326" font-size="12" font-weight="400" fill="#f2b24c">El dueño integra el desarrollo fiscal.</text>
+    </g>
+    <g transform="translate(0 -372)" data-ui-card="4C">
+      <rect x="856" y="2972" width="400" height="504" rx="16" fill="#191c22" stroke="#333945" />
+      <text x="872" y="3000" font-size="12" font-weight="600" fill="#78a9ff">4C · LÍMITES</text>
+      <text x="872" y="3030" font-size="18" font-weight="600" fill="#eceef2">EUR0 de nuevo cobro</text>
+      <text x="872" y="3054" font-size="12" font-weight="400" fill="#a1a7b3">A556 · A948 · Q17 · Q5(d)</text>
+      <text x="872" y="3076" font-size="14" font-weight="400" fill="#eceef2">Sin segundo cobro ni liquidación.</text>
+      <text x="872" y="3098" font-size="14" font-weight="400" fill="#eceef2">Los documentos no abren el cajón.</text>
+      <text x="872" y="3120" font-size="14" font-weight="400" fill="#eceef2">No retrasa la emisión de la F2.</text>
+      <rect x="872" y="3150" width="368" height="56" rx="8" fill="#262a33" stroke="#333945" />
+      <text x="884" y="3173" font-size="14" font-weight="600" fill="#eceef2">▸ Impresora · Oficina · A4</text>
+      <text x="884" y="3193" font-size="12" font-weight="400" fill="#a1a7b3">Predeterminada · Plegada · Cambiar</text>
+      <rect x="872" y="3218" width="368" height="48" rx="8" fill="#262a33" stroke="#333945" />
+      <text x="884" y="3248" font-size="14" font-weight="600" fill="#a1a7b3">Imprimir · falta documento fiscal</text>
+      <g aria-label="Desactivado" />
+      <rect x="872" y="3278" width="368" height="56" rx="4" fill="#262a33" />
+      <text x="884" y="3296" font-size="12" font-weight="400" fill="#a1a7b3">Correo * (solo para enviar)</text>
+      <text x="884" y="3320" font-size="14" font-weight="400" fill="#eceef2">billing@example.invalid</text>
+      <path d="M 872 3333 h 368" stroke="#7a8291" />
+      <rect x="872" y="3342" width="368" height="48" rx="8" fill="#262a33" stroke="#333945" />
+      <text x="884" y="3372" font-size="14" font-weight="600" fill="#a1a7b3">Enviar · falta documento fiscal</text>
+      <g aria-label="Desactivado" />
+      <text x="872" y="3402" font-size="12" font-weight="400" fill="#f2b24c">La entrega requiere el nuevo registro.</text>
+      <text x="872" y="3424" font-size="12" font-weight="400" fill="#f2b24c">Respuesta perdida: recuperar petición.</text>
+      <text x="872" y="3446" font-size="12" font-weight="400" fill="#f2b24c">No volver a enviar automáticamente.</text>
+    </g>
+    <text x="24" y="3152" font-size="12" fill="#a1a7b3">SIGUIENTE: casilla de efectivo propuesta; tarjeta sin marcar es decisión técnica propuesta.</text>
+    <text x="24" y="3174" font-size="12" fill="#a1a7b3">Papel del lector y política sin respuesta pendientes. No reconstruir antes del acuerdo.</text>
+  </g>
+</svg>

@@ -352,6 +352,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   was not checked (A231q's review, read, not run). Nothing issues an F3 today: no route calls
   `recordSubstitution`.
 
+  **2026-10-22 source-reading addendum:** core substitution exists, but no public app caller
+  was found in the inspected main/product trees. The [A739 owner-flow revision](superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md#the-fiscal-dependency-is-visible-not-solved-by-moving-fields)
+  records the missing recipient/address, request recovery, bill/delivery and no-charge integration
+  here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is created.
+
 - **A557. A success reported after an attempt had ended is not shown.** The delivery status marks
   such an attempt `lateSuccess` (`apps/server/src/invoice-delivery-status.ts`), but neither the till
   nor the dashboard shows it, so staff see only the attempt's earlier outcome. Left open by A231q.
@@ -2479,17 +2484,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   catalogue, reports and invoice-line identity before building an arbitrary-price path.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
-- **A739 — paying: Park · Pay and one payment window (owner, 2026-10-15; open).** Pay opens one
-  window: how much (An amount, Split equally, Items, Whole bill), the reader and printer (Change,
-  Scan a QR sticker, or tap NFC), the receipt (print, email or none, language, full invoice),
-  then Cash or Card. The simulator asks Declined/Approved at Card; Decline not declining is
-  reproduced and fixed; the Demo card reader goes; no receipt screen after paying. It follows the Counter cleanup; the custom-item residual is separate.
-  Once it lands, add help-mode badges to the payment window's buttons (A582 slice 4b left them for it).
-  [Detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
-  **2026-10-22 proposed revision, awaiting owner decision:** compare asking for final delivery
-  after settlement or on Finish, including edit-owned choice and partial-slip replacement.
-  [Six-case revision and static mockups](superpowers/specs/2026-10-22-a739-receipt-timing-revision.md).
-  All implementation and acceptance work remains open; the earlier scope above is retained.
+- **A739 — Park · Pay and one payment window; owner-flow revision, 2026-10-22.** Before card,
+  optionally request its slip; after a part, show what remains and ask the next tender; after
+  final payment or a settling edit, offer Receipt / Full invoice / None with separate Print/Email.
+  Cash's new slip trigger is next; reader-owned paper, no-answer policy and full revision
+  agreement remain open. Full invoice after an F2 needs A556's separate fiscal integration;
+  public F1 stays gated. Preserve A790/A796 settings and A582's help-mode badges in the build.
+  No rebuild before agreement; product integration and acceptance remain open.
+  [Current revision](superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md),
+  [four-case boards](backlog/mockups/a739-owner-receipt-flow/README.md),
+  [historical detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window).
 
 - **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`
   (used by MOVED slips) reads a counter order whose delivery table was released as the counter,
@@ -3743,8 +3747,9 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   printing without device pickup for review. A796 already covers device Receipt takeover.
   Preserve fixed print intent, sale-location/permission checks, original/copy and the common F1
   guard; public F1 stays closed. No product code or migration built.
-  [A739 timing/slip/no-fallback decisions](superpowers/specs/2026-10-22-a739-receipt-timing-revision.md)
-  and their integration remain unapproved; this routing revision chooses neither timing.
+  [A739 owner-flow revision](superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
+  now answers timing A; cash trigger, reader-owned paper, no-answer policy and integration
+  remain scoped there. Its postsettlement Print/Email form preserves A790's answered settings.
   Next: owner approves the complete routing description and builder calls, or requests changes;
   then write the concrete plan. Dependent build waits the accepted A739 contract.
 
