@@ -10,6 +10,7 @@ import * as schema from "./schema/index.js";
 const OWNED = [
   "acks",
   "cadenas",
+  "clock_stop_restarts",
   "envio_flujo",
   "envios",
   "filing_case_events",
