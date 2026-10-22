@@ -2628,7 +2628,7 @@ check other suites' teardown.
 
 ## Keep a positional script's usage header before its imports
 
-Keep the leading `//` usage block first in `record-one-sale.ts` and `settle-invoice-first.ts`.
+Keep a positional script's leading `//` usage block before its imports.
 Guard: `apps/server/scripts/script-arguments.test.ts`, weaker than its name: it reads source counts,
 not argument order or an executed command. Its header reader stops at the first non-comment line.
 
