@@ -1,5 +1,11 @@
 # Table service
 
+## Trust the box before opening the till {#certificate-trust}
+
+If the till asks you to install the box's certificate, choose **Open the setup page for
+instructions**. Install the certificate on this device, then reopen the till. This page follows
+your browser's preferred supported language, with English as the fallback.
+
 ## Refund all or part of a payment {#refund-payment}
 
 When a bill's payment needs returning, start with that payment so you can see how much remains

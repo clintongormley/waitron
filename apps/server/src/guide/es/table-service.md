@@ -1,5 +1,12 @@
 # Servicio en mesa
 
+## Confía en el servidor antes de abrir la caja {#certificate-trust}
+
+Si la caja te pide instalar el certificado del servidor, elige **Abre la página de configuración
+para ver las instrucciones**. Instala el certificado en este dispositivo y vuelve a abrir la caja.
+Esta página usa el idioma compatible preferido de tu navegador; si no encuentra ninguno, usa el
+inglés.
+
 ## Devolver un pago entero o una parte {#refund-payment}
 
 Cuando tengas que devolver un pago de una cuenta, empieza por ese pago para comprobar cuánto queda

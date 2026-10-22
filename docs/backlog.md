@@ -4939,12 +4939,6 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
   chooser; the browser draws them. Left open by C42 (#837, the setup wizard in Spanish and
   English).
 
-- **A830. Translate the till's certificate trust page (owner, 2026-10-17; left open by A379's
-  source audit).** The page a device shows before it trusts the box's certificate
-  (`trustInstructions`, `apps/till/src/main.ts`) is fixed English. Give it Spanish and the venue's
-  other interface languages. The development device chooser stays English on purpose. Done when a
-  test shows the page in Spanish.
-
 - **Restaurant menus are “carta” in the Spanish dashboard, module, setup and till wording** (owner
   decision 2026-09-29; C55 #858, C56 #901). Account and row-action menus keep “menú”.
   `apps/till/src/i18n/strings.test.ts` fails if a Spanish string in the till's catalogue says

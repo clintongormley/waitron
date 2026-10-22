@@ -2,6 +2,11 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "trust.title": "This device hasn't trusted the till yet",
+  "trust.explanation":
+    "The till is served over HTTPS with the venue box's own certificate, which this device does not recognise yet. Install the box's certificate, then reopen the till.",
+  "trust.open_setup": "Open the setup page for instructions",
+
   "service.open": "Open",
   "service.printer_unknown": "Receipt printer status unknown",
   "service.printer_none": "No receipt printer",
@@ -1737,6 +1742,11 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "trust.title": "Este dispositivo todavía no confía en la caja",
+  "trust.explanation":
+    "La caja se sirve por HTTPS con el certificado del servidor del local, que este dispositivo todavía no reconoce. Instala el certificado del servidor y vuelve a abrir la caja.",
+  "trust.open_setup": "Abre la página de configuración para ver las instrucciones",
+
   "service.open": "Abierto",
   "service.printer_unknown": "Estado de la impresora de recibos desconocido",
   "service.printer_none": "Sin impresora de recibos",
