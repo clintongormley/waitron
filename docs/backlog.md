@@ -5848,8 +5848,8 @@ Not in any track until the standalone primary is done.
 
 - **A1018. Agree and build the hosted writer stop-proof contract.** [Contract direction agreed](superpowers/specs/2026-10-22-a1018-cloud-stop-proof-design.md)
   by Lane G for Cloud under the explicit D118 transfer on 2026-10-22. The single worked-example
-  owner question is now eligible; approval remains pending. Cloud's canonical publication and
-  Lane D's two wording corrections await release of Lane D's D79 file reservation. Build authority,
+  owner question remains pending. Cloud's [canonical contract section](https://github.com/waitron-io/waitron-cloud/blob/6700d6f2319ff0b62b0ccc27e833487935ad2174/docs/waitron-integration-contract.md#hosted-writer-retirement-a1018-direction-agreed)
+  is published; Lane D's two wording corrections remain open. Build authority,
   implementation and provider qualification remain separate gates; no enforcement profile is qualified.
   Continuation still requires runtime retirement and final-data proof; explicit cold restore
   stays separate. [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)

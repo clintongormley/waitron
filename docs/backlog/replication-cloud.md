@@ -20,22 +20,26 @@ example. Approval would accept the requirement and its availability trade-off: c
 waits if retirement or the final data cannot be established. Owner approval remains pending;
 it would not qualify a provider or grant build authority.
 
-Cloud's canonical entry in its existing
-[hosted lifecycle and promotion section](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/waitron-integration-contract.md#hosted-lifecycle-and-promotion-proposed)
-and Lane D's two wording corrections remain pending because of Lane D's D79 file reservation.
-The corrections clarify that restart/machine-replacement permission exceptions do not waive
-continuation proof, and distinguish continuation from explicitly authorised cold restore in
-the hosting recovery prose and table. Lane G retains the canonical entry follow-up; Lane D
-owns the corrections. Pin the eventual Cloud publication SHA here when available; the Cloud
-pin above identifies the reviewed design, not a new contract publication. Keep the protocol
-in that shared home rather than maintaining two drifting copies.
+Cloud's canonical
+[A1018 contract section](https://github.com/waitron-io/waitron-cloud/blob/6700d6f2319ff0b62b0ccc27e833487935ad2174/docs/waitron-integration-contract.md#hosted-writer-retirement-a1018-direction-agreed)
+is published at `6700d6f2319ff0b62b0ccc27e833487935ad2174` through
+[D118 PR #300](https://github.com/waitron-io/waitron-cloud/pull/300). It records the direction
+agreement against Waitron `db7cddeb2d38984b284b23e8e391e7ebd7cb9156`; the Cloud pin above
+identifies the reviewed production design. The section says “Neither profile is qualified”
+and “Owner design approval remains pending”. Keep the protocol in that shared home rather
+than maintaining two drifting copies.
+
+Lane D's two wording corrections remain open in the production and hosting designs. They
+clarify that restart/machine-replacement permission exceptions do not waive continuation proof,
+and distinguish continuation from explicitly authorised cold restore in the hosting recovery
+prose and table.
 
 Cold restore remains the owner-accepted separate fresh-chain/data-loss path with no A1018 stop
 proof; preserve its existing recovery operation, key and source/sole-recovery gates. Never silently
 convert failed continuation to cold restore. On-prem A947 slices 4e/5a and tail/return work remain
 separate integration dependencies.
 
-Keep this item open. Canonical publication/corrections, owner design approval, wire schema,
+Keep this item open. Lane D's wording corrections, owner design approval, wire schema,
 executable planning, separate build authority, implementations and joint adverse/deletion controls
 remain pending. Runtime and provider qualification are separate acceptance gates; no enforcement
 profile is qualified. The Cloud reply's candidate mechanisms and future requirements supply no

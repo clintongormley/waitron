@@ -1,5 +1,13 @@
 # A1018: prove a hosted writer stopped before its successor starts
 
+> **2026-10-22 publication update:** Cloud's shared contract section is now published at
+> [`6700d6f2319ff0b62b0ccc27e833487935ad2174`](https://github.com/waitron-io/waitron-cloud/blob/6700d6f2319ff0b62b0ccc27e833487935ad2174/docs/waitron-integration-contract.md#hosted-writer-retirement-a1018-direction-agreed)
+> through [D118 PR #300](https://github.com/waitron-io/waitron-cloud/pull/300).
+> It records the direction agreement against this proposal's original revision
+> `db7cddeb2d38984b284b23e8e391e7ebd7cb9156`. The owner's single design question is pending;
+> no enforcement profile, wire schema or build is approved. Lane D's production/hosting
+> wording corrections remain open. The earlier status notes and proposal below are historical.
+
 > **2026-10-22 update: the status below is historical.** Lane G, acting for Cloud under
 > the explicit D118 transfer, accepted Waitron proposal
 > `db7cddeb2d38984b284b23e8e391e7ebd7cb9156` against Cloud pin
