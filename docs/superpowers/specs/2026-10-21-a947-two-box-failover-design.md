@@ -29,8 +29,8 @@ rewritten, and carries a dated pointer here.
 >    a restore's backup floor; it covers a restore because both go through the same target
 >    arithmetic (`packages/fiscal-verifactu/src/hour-selection.ts`, `earliestMs` and `targetMs`),
 >    and no restore case waits for a floor within 150 seconds;
->    `apps/server/src/hour-recovery-host.test.ts`, "a backup's own floors" (a restore refused for a floor days ahead, and one waiting once past
->    both).
+>    `apps/server/src/hour-recovery-host.test.ts`, "a backup's own floors" (a restore refused for a
+>    floor days ahead, and one waiting once past both).
 > 2. **Only taking the name needs the page's own comparison.** The reads that carry no comparison
 >    id — the preview, prepare and resume — use this box's newest clock reading that itself admits
 >    a name and is no more than 30 seconds old; a select must name its comparison.

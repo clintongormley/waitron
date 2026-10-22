@@ -38,7 +38,8 @@ name needs a second clock within 30 seconds of the box").
 The new series are named from the box's clock: five symbols for the UTC minute. The box also reads
 the selected backup and any database still on the disk, and the name must be a later minute than
 every name in that history (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`,
-"D2: the old database still on the disk"), and not before the backup's newest invoice record or
+"D1: a known later name in the surviving database" and "D2: the old database still on the disk"),
+and not before the backup's newest invoice record or
 the moment the backup was made (`apps/server/src/hour-recovery-host.test.ts`, "a backup's own
 floors"). Names
 made after the backup, or by a box this one never saw, are invisible to it.
