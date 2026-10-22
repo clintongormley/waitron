@@ -103,3 +103,20 @@ Park agree. What is left: Find a bill's state filter (`till-find-bill-screen.ts:
 an open, unpaid order with no table (`apps/server/src/find-bill-bills.ts:83`) **Held** /
 **En espera** (`find_page.held`, `strings.ts:525`, `:2125`). Done when that filter uses the till's
 word. Not renamed in A582: `strings.ts` was being changed heavily by two other lanes at the time.
+
+## The adjustment-reason and venue delete windows still use older wording
+
+The A1014 retrospective review of A831 (#1974) found two other windows outside A831's prep-station
+and staff-role scope. Source checks on 22 October 2026 at `d0f65694f` found:
+
+- `packages/adjustments/src/dashboard/strings.ts:70-74` still uses "Settings removed" and
+  "Checking whether this reason can be deleted…"; its Spanish `adjustments.delete_ends`,
+  `adjustments.delete_removes` and `adjustments.delete_loading` also differ from the device window.
+- `packages/venue-service/src/dashboard/strings.ts:8-12` still uses "Work ended", "Settings removed"
+  and "Checking deletion impact…"; the Spanish `venue.delete_*` twins differ too.
+
+Next, compare these windows' three fields with `devices.delete_ends`, `devices.delete_removes` and
+`devices.delete_loading` in `apps/dashboard/src/i18n/strings.ts`, and align them in both languages.
+Keep the windows' refusal and impact details. A831's prep-station and staff-role fields are covered
+separately by `apps/dashboard/src/i18n/delete-dialog-wording.test.ts`; that comparison does not
+audit these two windows.

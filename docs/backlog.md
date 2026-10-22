@@ -4978,6 +4978,11 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 - **The recovery page's Spanish (#650) has not been read by a native speaker.** Left open by SQLite
   slice 2 Task 3a (#566, one process per venue folder; #573; #608).
 
+- **The adjustment-reason and venue delete windows still use older settings, work and loading
+  wording.** Compare `adjustments.delete_*` and `venue.delete_*` with the device window in both
+  languages, then align those three fields without changing their refusal or impact details.
+  [Detail](backlog/languages.md#the-adjustment-reason-and-venue-delete-windows-still-use-older-wording)
+
 - **The file pickers' "Choose File / No file chosen" follow the browser's language**, not the
   chooser; the browser draws them. Left open by C42 (#837, the setup wizard in Spanish and
   English).
