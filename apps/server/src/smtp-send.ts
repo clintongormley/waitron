@@ -35,12 +35,13 @@ export async function sendSmtpMessage(
     if (url.protocol !== "smtp:" && url.protocol !== "smtps:") return failure(undefined);
     const secure = url.protocol === "smtps:";
     context = { encryption: secure ? "tls" : "starttls", hasUser: url.username !== "" };
+    const host = url.hostname.replace(/^\[(.*)\]$/, "$1");
     const port = url.port === "" ? (secure ? 465 : 587) : Number(url.port);
     // URL query options must not enable provider logging or weaken certificate checks.
     transport =
       options.transport ??
       nodemailer.createTransport({
-        host: url.hostname,
+        host,
         port,
         secure,
         requireTLS: url.searchParams.get("requireTLS") === "true",
@@ -70,7 +71,7 @@ export async function sendSmtpMessage(
           const onClose = () => answer(new Error("email.send_timeout"));
           socket.once("error", onError);
           socket.once("close", onClose);
-          socket.connect({ host: url.hostname, port }, () => {
+          socket.connect({ host, port }, () => {
             answer(finished ? new Error("email.send_timeout") : null);
           });
         },

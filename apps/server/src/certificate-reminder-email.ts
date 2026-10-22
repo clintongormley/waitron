@@ -14,7 +14,13 @@ export function createCertificateReminderSender(
 ): CertificateReminderSender {
   return async ({ smtp, recipient, subject, text }) => {
     const outcome = await sendSmtpMessage(smtp, { to: recipient, subject, text });
-    if (outcome.status !== "sent") options.onFailure?.(outcome.reason);
+    if (outcome.status !== "sent") {
+      try {
+        options.onFailure?.(outcome.reason);
+      } catch {
+        // Diagnostics must not change whether a worker may retry this message.
+      }
+    }
     return outcome.status;
   };
 }

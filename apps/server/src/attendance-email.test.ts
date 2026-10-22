@@ -260,3 +260,20 @@ it("reports an attendance deadline as unknown with only its safe diagnostic", as
     await rig.close();
   }
 });
+
+it("keeps a rejected attendance outcome if its diagnostic callback throws", async () => {
+  const { smtpRig: diagnosticRig } = await import("./testing/smtp-settings-fixture.js");
+  const { createAttendanceEmailSender } = await import("./attendance-email.js");
+  const rig = await diagnosticRig("data-refused");
+  try {
+    expect(
+      await createAttendanceEmailSender({
+        onFailure: () => {
+          throw new Error("diagnostic failed");
+        },
+      })({ ...message, smtp: rig.config }),
+    ).toBe("rejected");
+  } finally {
+    await rig.close();
+  }
+});

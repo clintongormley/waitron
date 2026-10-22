@@ -215,3 +215,19 @@ it("reports a reminder deadline as unknown with only its safe diagnostic", async
     await rig.close();
   }
 });
+
+it("keeps a rejected certificate outcome if its diagnostic callback throws", async () => {
+  const { smtpRig: diagnosticRig } = await import("./testing/smtp-settings-fixture.js");
+  const rig = await diagnosticRig("data-refused");
+  try {
+    expect(
+      await createCertificateReminderSender({
+        onFailure: () => {
+          throw new Error("diagnostic failed");
+        },
+      })({ ...message, smtp: rig.config }),
+    ).toBe("rejected");
+  } finally {
+    await rig.close();
+  }
+});

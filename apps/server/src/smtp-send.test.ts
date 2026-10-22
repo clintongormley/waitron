@@ -304,3 +304,36 @@ it("does not let URL logging options disclose the SMTP conversation", async () =
     await rig.close();
   }
 });
+
+it("reaches a configured bracketed IPv6 relay address", async () => {
+  const { createServer, Socket } = await import("node:net");
+  const { once } = await import("node:events");
+  const { parseEmailSettings } = await import("@waitron/provisioning");
+  const sockets = new Set<InstanceType<typeof Socket>>();
+  const server = createServer((socket) => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
+    socket.end("421 temporarily unavailable\r\n");
+  });
+  server.listen(0, "::1");
+  await once(server, "listening");
+  try {
+    const address = server.address();
+    if (typeof address !== "object" || address === null) throw new Error("missing listener");
+    const config = parseEmailSettings({
+      server: "[::1]",
+      port: address.port,
+      encryption: "starttls",
+      from: "venue@example.test",
+    });
+    expect(await sendSmtpMessage(config, message, { timeoutMs: 2000 })).toEqual({
+      status: "rejected",
+      reason: "email.test_refused",
+    });
+  } finally {
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
