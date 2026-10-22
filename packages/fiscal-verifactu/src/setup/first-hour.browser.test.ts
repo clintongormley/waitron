@@ -266,6 +266,14 @@ it("requires the scope confirmation then imports only selected server input", as
     expect(el.shadowRoot!.textContent).toContain(code);
   expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull();
 });
+it("asks no last-hour question and offers no clock confirmation", async () => {
+  const { el } = await mount();
+  await ready(el);
+  expect(el.shadowRoot!.querySelectorAll('input[type="radio"]')).toHaveLength(0);
+  expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
+  expect(el.shadowRoot!.querySelector('[name="setup-clock-confirmed"]')).toBeNull();
+  expect(text(el)).not.toContain("UTC hour");
+});
 it("keeps the server wait and never imports or locally completes it", async () => {
   const { el, calls } = await mount({
     select: async () => ({
