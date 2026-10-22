@@ -40,6 +40,12 @@ describe("a name needs a second clock within 30 seconds of the box", () => {
     if (!allowed) expect(clockRefusal(decision)).toBe("clock_disagreement");
   });
 
+  it("names no disagreement or missing clock for clocks that agree", () => {
+    const decision = compareHourClocks([sample("box", T), sample("browser", T)], RELEASE);
+    expect(canSelectHour(decision)).toBe(true);
+    expect(clockRefusal(decision)).toBe("clock_unconfirmed");
+  });
+
   it("reads the middle of a reading's range, not its edge", () => {
     const decision = compareHourClocks(
       [sample("box", T), sample("browser", T + 29_000, 2500)],

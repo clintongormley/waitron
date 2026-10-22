@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { LitElement } from "lit";
-import { applyTokens } from "@waitron/ui";
+import { LitElement, html } from "lit";
+import { applyTokens, LeaveController } from "@waitron/ui";
 import type { InitialSetupActions } from "@waitron/module/src/setup-contract.js";
 import { readRecoveryPdf, openRecoveryPdf } from "../recovery-reader.js";
 import { FISCAL_SETUP } from "@waitron/fiscal-verifactu/setup";
@@ -87,6 +87,7 @@ async function mount(
     locale?: "en" | "es";
     prepare?: (proposal: unknown) => Promise<unknown>;
     request?: typeof context;
+    within?: HTMLElement;
   } = {},
 ) {
   const calls: { action: string; value?: unknown }[] = [];
@@ -128,8 +129,8 @@ async function mount(
   } satisfies InitialSetupActions & { preparation: typeof preparation };
   const host = document.createElement("main");
   applyTokens(host);
-  document.body.append(host);
-  hosts.push(host);
+  (options.within ?? document.body).append(host);
+  hosts.push(options.within ?? host);
   const parent = FISCAL_SETUP.create({
     locale: options.locale ?? "en",
     request: options.request ?? structuredClone(context),
@@ -185,6 +186,27 @@ const DIFFER_DO =
   "Try from another phone or till. If they still differ, the box's time may be wrong: ask for help.";
 const fakeClock = () =>
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
+class LeaveShell extends LitElement {
+  readonly leave = new LeaveController(this);
+  override render() {
+    return html`<slot></slot>`;
+  }
+}
+customElements.define("first-hour-leave-shell", LeaveShell);
+it("counts the reviewed tick as an unsaved change, and unticking it as none", async () => {
+  const shell = document.createElement("first-hour-leave-shell") as LeaveShell;
+  document.body.append(shell);
+  await shell.updateComplete;
+  const { el } = await mount({ within: shell });
+  expect(shell.leave.coordinator.isDirty([el])).toBe(false);
+  await ready(el);
+  expect(shell.leave.coordinator.isDirty([el])).toBe(true);
+  await userEvent.click(
+    el.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-details-confirmed"]')!,
+  );
+  await el.updateComplete;
+  expect(shell.leave.coordinator.isDirty([el])).toBe(false);
+});
 it("automatically compares clocks and shows combined country, place, zone and local time before selection", async () => {
   const { el, calls } = await mount();
   await ready(el);

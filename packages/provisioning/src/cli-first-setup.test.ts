@@ -219,6 +219,7 @@ it("a restarted command recovers its original wait using the setup password", as
   expect(after.frozen).toEqual(before.frozen);
   expect(after.ownerGeneration).toBe(2);
   expect(after.status).toBe("claimed");
+  expect(f.prompts).toEqual([]);
   expect(
     f.output.filter(
       (line) =>

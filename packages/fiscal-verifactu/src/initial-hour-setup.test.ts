@@ -764,7 +764,7 @@ it.each([1.5, 8_640_000_000_060_000, -8_640_000_000_060_000])(
   },
 );
 
-it.each([1.5, 8_640_000_000_060_000])(
+it.each([1.5, 8_640_000_000_060_000, -8_640_000_000_060_000])(
   "terminal refuses a selection wait whose target %d is no time",
   async (targetMs) => {
     const f = configured();
