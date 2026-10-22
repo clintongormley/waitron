@@ -115,7 +115,6 @@ function refundBody(
     appliedAmount,
     tipAmount: "0.00",
     reason: "Dish never served",
-    cashConfirmed: true,
     ...(cancellationIds === undefined ? {} : { cancellationIds }),
   };
 }
@@ -406,7 +405,6 @@ describe("a refund names the cancels it pays back", () => {
         appliedAmount: "10.00",
         tipAmount: "0.00",
         reason: "Dish never served",
-        cashConfirmed: true,
         manualConfirmed: false,
       }),
     );

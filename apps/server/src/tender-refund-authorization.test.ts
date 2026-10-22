@@ -202,7 +202,6 @@ function request(tenderId: string, patch: Partial<TenderRefundRequest> = {}): Te
     appliedAmount: "2.00",
     tipAmount: "0.00",
     reason: "Goodwill",
-    cashConfirmed: true,
     ...patch,
   };
 }

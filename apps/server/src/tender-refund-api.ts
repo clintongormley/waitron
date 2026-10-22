@@ -99,15 +99,14 @@ function overrideOf(body: Record<string, unknown>): Override | undefined {
 function parseRequest(body: Record<string, unknown>): TenderRefundRequest {
   const strings = ["submissionId", "tenderId", "appliedAmount", "tipAmount", "reason"] as const;
   for (const field of strings) if (typeof body[field] !== "string") throw invalid(field);
-  for (const field of ["cashConfirmed", "manualConfirmed"] as const)
-    if (body[field] !== undefined && typeof body[field] !== "boolean") throw invalid(field);
+  if (body.manualConfirmed !== undefined && typeof body.manualConfirmed !== "boolean")
+    throw invalid("manualConfirmed");
   return {
     submissionId: body.submissionId as string,
     tenderId: body.tenderId as string,
     appliedAmount: body.appliedAmount as string,
     tipAmount: body.tipAmount as string,
     reason: body.reason as string,
-    ...(body.cashConfirmed === undefined ? {} : { cashConfirmed: body.cashConfirmed as boolean }),
     ...(body.manualConfirmed === undefined
       ? {}
       : { manualConfirmed: body.manualConfirmed as boolean }),
@@ -258,7 +257,6 @@ export function mountTenderRefundApi(
         appliedAmount: centsToDecimal(row.appliedAmount),
         tipAmount: centsToDecimal(row.tipAmount),
         reason: row.reason,
-        cashConfirmed: row.method === "cash",
         manualConfirmed: row.manual,
         override,
       };

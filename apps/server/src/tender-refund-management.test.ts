@@ -164,7 +164,6 @@ async function pending(method: "cash" | "card" = "card", manual = false) {
       appliedAmount: "2.00",
       tipAmount: "0.00",
       reason: "Goodwill",
-      cashConfirmed: true,
       ...(manual
         ? { manualConfirmed: true, override: { personId: venue.adminId, pin: "1234" } }
         : {}),

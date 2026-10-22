@@ -30,6 +30,7 @@ import {
   type OrderVenue,
 } from "./testing/order-venue.js";
 import { inTx, send } from "./testing/bill-venue.js";
+import { fingerprint } from "./parties.js";
 import type { TenderRefundRequest } from "./tender-refund-types.js";
 
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -46,7 +47,6 @@ const ask = (tenderId: string, patch: Partial<TenderRefundRequest> = {}): Tender
   appliedAmount: "2.00",
   tipAmount: "0.00",
   reason: "Goodwill",
-  cashConfirmed: true,
   ...patch,
 });
 const create = (saleId: string, body: unknown, cookie = venue.supervisorTill) =>
@@ -474,7 +474,7 @@ it.each([null, [], "bad", 42].map((body) => ({ body })))(
     expect(await effects()).toEqual(before);
   },
 );
-it.each(["cashConfirmed", "manualConfirmed", "override"])(
+it.each(["manualConfirmed", "override"])(
   "refuses explicit null %s before any refund",
   async (field) => {
     const t = await target();
@@ -485,6 +485,27 @@ it.each(["cashConfirmed", "manualConfirmed", "override"])(
     expect((await effects()).refunds).toHaveLength(0);
   },
 );
+it.each([true, "true", null])("ignores a leftover cashConfirmed %j", async (leftover) => {
+  const t = await target(),
+    body = ask(t.tenderId);
+  const first = await create(t.saleId, { ...body, cashConfirmed: leftover });
+  expect(first, JSON.stringify(first.json)).toMatchObject({ status: 200 });
+  const id = (first.json as { id: string }).id;
+  const [row] = await store.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
+  expect(row!.fingerprint).toBe(
+    fingerprint({
+      saleId: t.saleId,
+      tenderId: t.tenderId,
+      appliedAmount: "2.00",
+      tipAmount: "0.00",
+      reason: "Goodwill",
+      manualConfirmed: false,
+    }),
+  );
+  const again = await create(t.saleId, body);
+  expect(again).toMatchObject({ status: 200, json: { id } });
+  expect((await effects()).refunds).toHaveLength(1);
+});
 it("returns domain not-found responses for malformed and unknown path identities", async () => {
   for (const id of ["bad", randomUUID()]) {
     for (const answer of [await list(id), await create(id, ask(randomUUID()))])
@@ -683,7 +704,6 @@ it.each([
   { field: "reason", value: 5 },
   { field: "submissionId", value: "bad" },
   { field: "tenderId", value: null },
-  { field: "cashConfirmed", value: "true" },
   { field: "manualConfirmed", value: [true] },
 ])("refuses invalid $field=$value without a refund or provider call", async ({ field, value }) => {
   const t = await target();

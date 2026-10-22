@@ -110,9 +110,8 @@ export async function reserveTenderRefund(
   ) {
     throw invalid("reason");
   }
-  for (const field of ["cashConfirmed", "manualConfirmed"] as const) {
-    if (request[field] !== undefined && typeof request[field] !== "boolean") throw invalid(field);
-  }
+  if (request.manualConfirmed !== undefined && typeof request.manualConfirmed !== "boolean")
+    throw invalid("manualConfirmed");
   const cancellationIds = cancellationIdsOf(request.cancellationIds);
   const reason = request.reason.trim();
   const print = fingerprint({
@@ -121,7 +120,6 @@ export async function reserveTenderRefund(
     appliedAmount: centsToDecimal(appliedAmount),
     tipAmount: centsToDecimal(tipAmount),
     reason,
-    cashConfirmed: request.cashConfirmed === true,
     manualConfirmed: request.manualConfirmed === true,
     ...(cancellationIds === undefined ? {} : { cancellationIds: [...cancellationIds].sort() }),
   });
@@ -153,8 +151,6 @@ export async function reserveTenderRefund(
       tip: refundable.tipRemaining,
     });
   }
-  if (refundable.method === "cash" && request.cashConfirmed !== true)
-    throw invalid("cashConfirmed");
   if (refundable.manual && request.manualConfirmed !== true) throw invalid("manualConfirmed");
 
   let provider: string | null = null;
