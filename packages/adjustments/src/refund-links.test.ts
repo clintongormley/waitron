@@ -204,6 +204,10 @@ describe("the link from a refund to its cancels", () => {
     expect(await read([randomUUID()])).toEqual([]);
   });
 
+  it("reads nothing for an empty list", async () => {
+    expect(await read([])).toEqual([]);
+  });
+
   it("refuses an update and a delete of a link", async () => {
     const order = await seedWorkingOrder(db);
     const reason = await seedVoidReason(db);

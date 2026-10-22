@@ -43,7 +43,6 @@ export async function readCancelsForRefund(
   tx: Transaction,
   adjustmentIds: readonly string[],
 ): Promise<CancelForRefund[]> {
-  if (adjustmentIds.length === 0) return [];
   const found = await tx.execute<{
     id: string;
     workingOrderId: string;
