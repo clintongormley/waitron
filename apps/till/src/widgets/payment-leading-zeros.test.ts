@@ -3,7 +3,13 @@ import { userEvent } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import type { BillBalance, BillPaymentView, BillLookupRow, TillProduct } from "../api/client.js";
+import type {
+  AdjustmentReason,
+  BillBalance,
+  BillPaymentView,
+  BillLookupRow,
+  TillProduct,
+} from "../api/client.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import type { RefundAsk } from "../state/bill-payment.js";
 import type { PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
@@ -50,6 +56,18 @@ const payment: BillPaymentView = {
   refunds: [],
 };
 
+const chargedTooMuch: AdjustmentReason = {
+  id: "much",
+  name: "Charged too much",
+  kind: "void",
+  actions: ["cancel"],
+  noteRequired: false,
+  maxPercentBp: null,
+  maxAmount: null,
+  applyRoles: [],
+  approverRoles: [],
+};
+
 type Dialog = TillBillPayDialog | TillBillRefundDialog | TillTenderPay | TillFindBillDialog;
 
 async function type(dialog: Dialog, name: string, value: string): Promise<void> {
@@ -57,6 +75,15 @@ async function type(dialog: Dialog, name: string, value: string): Promise<void> 
   const input = field.shadowRoot!.querySelector("input")!;
   input.value = value;
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await dialog.updateComplete;
+}
+
+async function choose(dialog: TillBillRefundDialog, id: string): Promise<void> {
+  dialog
+    .shadowRoot!.querySelector("wt-combobox[name=reason]")!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: id }, bubbles: true, composed: true }),
+    );
   await dialog.updateComplete;
 }
 
@@ -180,11 +207,12 @@ describe.each(["en", "es"] as const)("leading-zero amounts in %s", (locale) => {
       setLocale(locale);
       const { el } = await mountWidget<TillBillRefundDialog>("till-bill-refund-dialog", {
         payment,
+        reasons: [chargedTooMuch],
       });
       const asked = capture<RefundAsk>(el, "bill-refund-continue");
       await click(el, 'input[name="howMuch"][value="part"]');
       await type(el, "amount", amount);
-      await type(el, "reason", "Charged too much");
+      await choose(el, "much");
       await click(el, "[data-refund-continue]");
       expect(asked).toEqual([
         { appliedAmount: "5.50", tipAmount: "0.00", reason: "Charged too much" },
@@ -198,11 +226,12 @@ describe.each(["en", "es"] as const)("leading-zero amounts in %s", (locale) => {
       setLocale(locale);
       const { el } = await mountWidget<TillBillRefundDialog>("till-bill-refund-dialog", {
         payment,
+        reasons: [chargedTooMuch],
       });
       const asked = capture<RefundAsk>(el, "bill-refund-continue");
       await click(el, 'input[name="howMuch"][value="part"]');
       await type(el, "amount", amount);
-      await type(el, "reason", "Charged too much");
+      await choose(el, "much");
       await click(el, "[data-refund-continue]");
       expect(asked).toEqual([]);
       expect(

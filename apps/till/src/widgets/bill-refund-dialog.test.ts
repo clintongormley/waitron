@@ -6,7 +6,7 @@ import { es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./bill-refund-dialog.js";
 import type { TillBillRefundDialog } from "./bill-refund-dialog.js";
-import type { BillPaymentView } from "../api/client.js";
+import type { AdjustmentReason, BillPaymentView } from "../api/client.js";
 import type { RefundAsk } from "../state/bill-payment.js";
 
 afterEach(cleanupWidgets);
@@ -42,9 +42,32 @@ const cardWithTip = paymentOf({
   change: null,
 });
 
+const voidReason = (id: string, name: string, over: Partial<AdjustmentReason> = {}) =>
+  ({
+    id,
+    name,
+    kind: "void",
+    actions: ["cancel"],
+    noteRequired: false,
+    maxPercentBp: null,
+    maxAmount: null,
+    applyRoles: [],
+    approverRoles: [],
+    ...over,
+  }) as AdjustmentReason;
+const reasons = [
+  voidReason("twice", "Charged twice"),
+  voidReason("much", "Charged too much"),
+  voidReason("wrong", "Wrong dish"),
+  voidReason("long", "x".repeat(501)),
+  voidReason("other", "Other", { noteRequired: true }),
+  voidReason("comp", "Birthday", { kind: "comp", actions: ["comp"] }),
+];
+
 async function mount(over: Partial<TillBillRefundDialog> = {}) {
   const { el } = await mountWidget<TillBillRefundDialog>("till-bill-refund-dialog", {
     payment: paymentOf(),
+    reasons,
     ...over,
   });
   return el;
@@ -59,9 +82,11 @@ const field = (el: TillBillRefundDialog, name: string) =>
       label: string;
       error: string;
       required: boolean;
+      disabled: boolean;
+      value: string;
       updateComplete: Promise<unknown>;
     }
-  >(`wt-input[name="${name}"]`);
+  >(`:is(wt-input, wt-combobox)[name="${name}"]`);
 const actions = (el: TillBillRefundDialog) =>
   root(el).querySelector<HTMLElement & { error: string }>("wt-form-actions")!;
 const button = (el: TillBillRefundDialog, selector: string) =>
@@ -71,6 +96,13 @@ async function type(el: TillBillRefundDialog, name: string, value: string): Prom
   const input = field(el, name)!.shadowRoot!.querySelector("input")!;
   input.value = value;
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+}
+
+async function choose(el: TillBillRefundDialog, id: string): Promise<void> {
+  field(el, "reason")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: id }, bubbles: true, composed: true }),
+  );
   await el.updateComplete;
 }
 
@@ -123,7 +155,7 @@ describe.each(["en", "es"] as const)("A803 refund wording (%s)", (locale) => {
 });
 
 describe("till-bill-refund-dialog: how much and why", () => {
-  it("gives back the whole payment, its tip with it, with the reason typed", async () => {
+  it("gives back the whole payment, its tip with it, with the reason chosen", async () => {
     const el = await mount({ payment: cardWithTip });
     const asked = capture<RefundAsk>(el, "bill-refund-continue");
 
@@ -132,7 +164,7 @@ describe("till-bill-refund-dialog: how much and why", () => {
         .replace("{amount}", money("45.00"))
         .replace("{tip}", money("5.00")),
     );
-    await type(el, "reason", "  Charged twice ");
+    await choose(el, "twice");
     expect(text(button(el, "[data-refund-continue]"))).toBe(
       t("bill_refund.continue").replace("{amount}", money("45.00")),
     );
@@ -147,7 +179,7 @@ describe("till-bill-refund-dialog: how much and why", () => {
 
     await pick(el, "part");
     await type(el, "amount", "12,5");
-    await type(el, "reason", "Charged too much");
+    await choose(el, "much");
     await click(el, "[data-refund-continue]");
 
     expect(asked).toEqual([
@@ -188,7 +220,7 @@ describe("till-bill-refund-dialog: how much and why", () => {
     expect(text(root(el).querySelector("[data-refund-whole-only]"))).toBe(
       t("bill_refund.whole_only").replace("{amount}", money("35.00")),
     );
-    await type(el, "reason", "Wrong dish");
+    await choose(el, "wrong");
     await click(el, "[data-refund-continue]");
 
     expect(asked).toEqual([{ appliedAmount: "35.00", tipAmount: "0.00", reason: "Wrong dish" }]);
@@ -205,9 +237,9 @@ describe("till-bill-refund-dialog: how much and why", () => {
     expect(field(el, "reason")!.error).toBe(t("bill_refund.reason_invalid"));
     expect(actions(el).error).toBe(t("form.fix_fields"));
     expect(button(el, "[data-refund-continue]").disabled).toBe(true);
-    await type(el, "reason", "x".repeat(501));
+    await choose(el, "long");
     expect(field(el, "reason")!.error).toBe(t("bill_refund.reason_long"));
-    await type(el, "reason", "Charged twice");
+    await choose(el, "twice");
     expect(field(el, "reason")!.error).toBe("");
     expect(button(el, "[data-refund-continue]").disabled).toBe(false);
   });
@@ -215,7 +247,7 @@ describe("till-bill-refund-dialog: how much and why", () => {
   it("refuses a part above what the payment took, or of nothing", async () => {
     const el = await mount();
     await pick(el, "part");
-    await type(el, "reason", "Charged too much");
+    await choose(el, "much");
     const limit = t("bill_refund.amount_invalid").replace("{amount}", money("50.00"));
 
     for (const typed of ["", "0", "50.01", "abc"]) {
@@ -227,7 +259,7 @@ describe("till-bill-refund-dialog: how much and why", () => {
     expect(field(el, "amount")!.error).toBe("");
   });
 
-  it("continues on Enter in the amount or the reason", async () => {
+  it("continues on Enter in the amount or Other's note", async () => {
     const el = await mount();
     const asked = capture<RefundAsk>(el, "bill-refund-continue");
     const enter = (name: string) =>
@@ -238,11 +270,12 @@ describe("till-bill-refund-dialog: how much and why", () => {
         );
     await pick(el, "part");
     await type(el, "amount", "5");
-    await type(el, "reason", "Charged too much");
+    await choose(el, "other");
+    await type(el, "note", "Charged too much");
 
     enter("amount");
     await el.updateComplete;
-    enter("reason");
+    enter("note");
     await el.updateComplete;
 
     expect(asked).toHaveLength(2);
@@ -251,6 +284,82 @@ describe("till-bill-refund-dialog: how much and why", () => {
       tipAmount: "0.00",
       reason: "Charged too much",
     });
+  });
+
+  it("offers the Void reasons in a drop-down that starts empty", async () => {
+    const el = await mount();
+    const asked = capture<RefundAsk>(el, "bill-refund-continue");
+    const combo = root(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "wt-combobox[name=reason]",
+    )!;
+
+    expect(combo.required).toBe(true);
+    expect(combo.value).toBe("");
+    expect(combo.placeholder).toBe(t("adjust.reason_required"));
+    expect(combo.options.map((option) => option.value)).toEqual([
+      "twice",
+      "much",
+      "wrong",
+      "long",
+      "other",
+    ]);
+    expect(root(el).querySelector("wt-input[name=reason]")).toBeNull();
+    await click(el, "[data-refund-continue]");
+    expect(asked).toEqual([]);
+    expect(field(el, "reason")!.error).toBe(t("bill_refund.reason_invalid"));
+    expect(button(el, "[data-refund-continue]").disabled).toBe(true);
+  });
+
+  it("sends a chosen reason's name", async () => {
+    const el = await mount();
+    const asked = capture<RefundAsk>(el, "bill-refund-continue");
+    await choose(el, "wrong");
+    expect(field(el, "note")).toBeNull();
+    await click(el, "[data-refund-continue]");
+    expect(asked).toEqual([{ appliedAmount: "50.00", tipAmount: "0.00", reason: "Wrong dish" }]);
+  });
+
+  it("asks Other's note and sends the typed words", async () => {
+    const el = await mount();
+    const asked = capture<RefundAsk>(el, "bill-refund-continue");
+    await choose(el, "other");
+    expect(field(el, "note")!.required).toBe(true);
+    await click(el, "[data-refund-continue]");
+    expect(asked).toEqual([]);
+    expect(field(el, "note")!.error).toBe(t("adjust.note_required"));
+    expect(actions(el).error).toBe(t("form.fix_fields"));
+    await type(el, "note", "r".repeat(501));
+    expect(field(el, "note")!.error).toBe(t("bill_refund.reason_long"));
+    await type(el, "note", "  Spilled on the coat ");
+    expect(field(el, "note")!.error).toBe("");
+    await click(el, "[data-refund-continue]");
+    expect(asked).toEqual([
+      { appliedAmount: "50.00", tipAmount: "0.00", reason: "Spilled on the coat" },
+    ]);
+  });
+
+  it("offers Retry when the reasons could not be read and asks the app to read them again", async () => {
+    const el = await mount({ reasons: null });
+    const retried = capture<unknown>(el, "bill-refund-reasons");
+    await click(el, "[data-reasons-retry]");
+    expect(retried).toHaveLength(1);
+
+    el.reasonsLoading = true;
+    await el.updateComplete;
+    expect(field(el, "reason")!.disabled).toBe(true);
+    await click(el, "[data-reasons-retry]");
+    expect(retried).toHaveLength(1);
+
+    el.reasons = reasons;
+    el.reasonsLoading = false;
+    await el.updateComplete;
+    expect(root(el).querySelector("[data-reasons-retry]")).toBeNull();
+    expect(field(el, "reason")!.value).toBe("");
+  });
+
+  it("says so when the venue has no Void reasons", async () => {
+    const el = await mount({ reasons: [reasons[5]!] });
+    expect(text(root(el).querySelector(".body"))).toContain(t("adjust.no_reasons"));
   });
 
   it("closes when its dialog is dismissed", async () => {
@@ -293,7 +402,7 @@ describe("till-bill-refund-dialog: the server's refusals", () => {
     el.refusal = { code: "management.request_invalid", field: "reason" };
     await el.updateComplete;
     expect(field(el, "reason")!.error).toBe(codeMessage("management.request_invalid"));
-    await type(el, "reason", "Charged twice");
+    await choose(el, "twice");
     expect(field(el, "reason")!.error).toBe("");
   });
 
@@ -347,7 +456,7 @@ describe("till-bill-refund-dialog: a card keyed on a separate terminal", () => {
     const asked = capture<RefundAsk>(el, "bill-refund-continue");
     await pick(el, "part");
     await type(el, "amount", "10");
-    await type(el, "reason", "Charged too much");
+    await choose(el, "much");
     await click(el, "[data-refund-continue]");
 
     el.terminal = true;

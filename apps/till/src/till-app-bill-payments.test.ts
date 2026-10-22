@@ -45,6 +45,7 @@ import { userEvent } from "vitest/browser";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
   adjustmentStubs,
+  cancelReason,
   cancelThroughDialog,
   cleanupWidgets,
   expectNoA11yViolations,
@@ -5602,6 +5603,44 @@ describe("till-app: giving back a bill payment", () => {
 
     expect(approval(el)).toBeNull();
     expect(inRefund(el, "wt-form-actions")!.error).toBe(t("bill_refund.approvers_failed"));
+  });
+
+  it("offers the Void reasons read for Give back, and reads them again after a failed read", async () => {
+    const charged = { ...cancelReason, id: "r-charged", name: "Charged twice" };
+    const listAdjustmentReasons = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue([charged]);
+    const refundBillPayment = vi.fn().mockResolvedValue(givenBack(cashPaid, refundOf()));
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([partly]),
+      getBillBalance: vi.fn().mockResolvedValue(holding(cashPaid)),
+      listAdjustmentReasons,
+      refundBillPayment,
+    });
+    await openTable(el);
+    await openDialog(el, "rest");
+    await press(el, `[data-payment-refund="${cashPaid.id}"]`);
+    await expect.poll(() => refundDialog(el)!.reasons).toBeNull();
+    await expect.poll(() => refundDialog(el)!.reasonsLoading).toBe(false);
+
+    inRefund(el, "[data-reasons-retry]")!.click();
+    await flush(el);
+    await expect.poll(() => refundDialog(el)!.reasons).toEqual([charged]);
+    expect(listAdjustmentReasons).toHaveBeenCalledTimes(2);
+    expect(inRefund(el, "[data-reasons-retry]")).toBeNull();
+
+    inRefund(el, "wt-combobox[name=reason]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "r-charged" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    inRefund(el, "[data-refund-continue]")!.click();
+    await flush(el);
+    expect(refunds().map(({ request }) => request.reason)).toEqual(["Charged twice"]);
   });
 
   it("puts a refusal of the reason under the reason", async () => {

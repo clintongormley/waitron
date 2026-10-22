@@ -1134,6 +1134,8 @@ interface BillRefunding extends PayingOrder {
   asked: RefundAsk | null;
   refusal: DialogRefusal | null;
   busy: boolean;
+  reasons: AdjustmentReason[] | null;
+  reasonsLoading: boolean;
 }
 
 /** The unpaid departure dialog, opened from the refusal of Finish table on party `partyId`. */
@@ -9991,6 +9993,12 @@ export class TillApp extends LitElement {
         .terminal=${open.terminal}
         .refusal=${open.refusal}
         .busy=${open.busy}
+        .reasons=${open.reasons}
+        .reasonsLoading=${open.reasonsLoading}
+        @bill-refund-reasons=${(event: Event) => {
+          event.stopPropagation();
+          void this.#loadBillRefundReasons(open.id);
+        }}
         @bill-refund-continue=${(event: Event) => void this.#onRefundContinue(event)}
         @bill-refund-close=${() => this.#closeBillRefunding()}
       ></till-bill-refund-dialog>
@@ -17175,7 +17183,26 @@ export class TillApp extends LitElement {
       asked: null,
       refusal: null,
       busy: false,
+      reasons: null,
+      reasonsLoading: false,
     };
+    void this.#loadBillRefundReasons(this.billRefunding.id);
+  }
+
+  async #loadBillRefundReasons(id: number): Promise<void> {
+    const open = this.#billRefundingNow(id);
+    if (open === null || open.reasonsLoading) return;
+    const api = this.api;
+    this.billRefunding = { ...open, reasonsLoading: true };
+    let reasons: AdjustmentReason[] | null = null;
+    try {
+      reasons = await api.listAdjustmentReasons();
+    } catch {
+      // The dialog offers Retry while the reasons are unread.
+    }
+    const now = this.#billRefundingNow(id);
+    if (now !== null && this.isConnected && this.api === api)
+      this.billRefunding = { ...now, reasons, reasonsLoading: false };
   }
 
   #billRefundingNow(id: number): BillRefunding | null {
