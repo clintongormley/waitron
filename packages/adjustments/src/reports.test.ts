@@ -771,6 +771,111 @@ describe("each cancel's charge, preparation and refunds (plan Decision 7)", () =
     expect(byId.get(failed)).toMatchObject({ preparationStarted: null, refunded: [] });
     expect(byId.get(unlinked)).toMatchObject({ refunded: [] });
   });
+
+  /** A still-charged €10.00 cancel of `name` on `visit`, by `by`, at `at`. */
+  const chargedCancel = (
+    visit: string,
+    reason: AdjustmentReason,
+    by: string,
+    name: string,
+    at: string,
+  ) =>
+    adjust({
+      bill: visit,
+      reason,
+      reasonName: "Mistake",
+      action: "cancel",
+      line: { name, list: "10.00", creditedTo: by, stage: "fired" },
+      before: "10.00",
+      after: "10.00",
+      nominal: "10.00",
+      by,
+      chargeKept: true,
+      at,
+    });
+
+  /** A refund in `state` on its own cash sale, linked to `adjustmentId` for `amount` at `at`. */
+  async function linkedRefund(
+    venue: Awaited<ReturnType<typeof seedVenue>>,
+    invoiceNumber: number,
+    state: "pending" | "completed",
+    adjustmentId: string,
+    amount: string,
+    at: string,
+  ): Promise<void> {
+    const sale = await seedRefundableSale(db, venue, {
+      method: "cash",
+      applied: "20.00",
+      tip: "0.00",
+      at: EVENING,
+      invoiceNumber,
+    });
+    const tenderRefundId = await seedTenderRefund(db, sale, {
+      applied: "5.50",
+      tip: "0.00",
+      state,
+      createdAt: EVENING,
+      at: state === "pending" ? null : EVENING,
+    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(at));
+    try {
+      await withTransaction(db, (tx) =>
+        linkRefundToCancels(tx, {
+          tenderRefundId,
+          links: [{ adjustmentId, amount: decimal(amount) }],
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  it("lists a cancel's two refunds oldest first", async () => {
+    const ana = await person("Ana");
+    const reason = await seedReason(db);
+    const visit = await bill();
+    const venue = await seedVenue(db);
+    const cancel = await chargedCancel(visit.id, reason, ana, "Steak", "2026-09-15T19:00:00.000Z");
+    await linkedRefund(venue, 1, "completed", cancel, "2.00", "2026-09-15T19:40:00.000Z");
+    await linkedRefund(venue, 2, "pending", cancel, "3.00", "2026-09-15T19:50:00.000Z");
+
+    const [entry] = await entries();
+
+    expect(entry).toMatchObject({
+      id: cancel,
+      refunded: [
+        { amount: "2.00", state: "completed" },
+        { amount: "3.00", state: "pending" },
+      ],
+    });
+  });
+
+  it("reads the refund links of the page's own rows alone", async () => {
+    const ana = await person("Ana");
+    const reason = await seedReason(db);
+    const visit = await bill();
+    const venue = await seedVenue(db);
+    const older = await chargedCancel(visit.id, reason, ana, "Steak", "2026-09-15T19:00:00.000Z");
+    const newer = await chargedCancel(visit.id, reason, ana, "Soup", "2026-09-15T19:10:00.000Z");
+    await linkedRefund(venue, 1, "completed", older, "2.00", "2026-09-15T19:40:00.000Z");
+    await linkedRefund(venue, 2, "completed", newer, "3.00", "2026-09-15T19:50:00.000Z");
+
+    const readLinks = await withTransaction(db, async (tx) => {
+      const execute = vi.spyOn(tx, "execute");
+      const found = await listAdjustmentEntries(tx, { ...range(), limit: 1 });
+      expect(found.entries.map((row) => row.id)).toEqual([newer]);
+      const rows: unknown[] = [];
+      for (const result of execute.mock.results) {
+        const { rows: read } = (await result.value) as { rows: Record<string, unknown>[] };
+        rows.push(...read.filter((row) => "adjustmentId" in row));
+      }
+      execute.mockRestore();
+      return rows;
+    });
+
+    expect(readLinks).toEqual([{ adjustmentId: newer, amount: "300", state: "completed" }]);
+  });
 });
 
 describe("which bills and lines a range holds", () => {
