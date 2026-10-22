@@ -107,6 +107,10 @@ test "flags bare Spanish prose in a line comment"). It should be fixed whatever 
 | `apps/server/src/recovery-surface.ts:107–425` (about 50) | «Waitron no ha arrancado», «Reintentar un arranque normal» | Operator, the page shown when the box fails to start | Tables keyed by language; must stay loadable without the database |
 | `packages/dashboard-kit/src/codes.ts:9`, `alert-messages.ts:21` (and `table-strings.ts`) | «Algo salió mal, inténtalo de nuevo», «Algo requiere atención» | Owner and managers, fallback error and alert | `{ en, es }` pairs in generic code; the guard skips them (they are not listed words) |
 
+_2026-10-22 (A969): the fallback error, fallback alert and empty-table pairs moved to
+`packages/dashboard-kit/src/strings.ts`; the audit row above records their earlier location._
+
+
 ## Bucket D — starter and demo content written into a database
 
 **Real venues:**
