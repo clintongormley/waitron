@@ -9,7 +9,7 @@ changes a **cross-package contract**, the shared `TableSignal` union in `package
 server sends and the till reads; and Task 5 adds a till write route. So every task gets its
 per-task review, and `/finish-branch` runs the full wave with two Codex angles. **`packages/*`
 changes:** `packages/shared` (the signal type, Tasks 2 and 9) and `packages/venue-service` (the
-table, its migration, its reads and its write, Tasks 1 and 3). **No `packages/ui` change**: the
+table, its migration, its reads and its write, Tasks 1 and 3a). **No `packages/ui` change**: the
 map's cue is already a string and the chips already take any key; a task that finds it needs a
 `packages/ui` change stops and reports. **Nothing fiscal**: no task touches `packages/fiscal-*`,
 invoices, the chain, series or AEAT filing; the golden hash test
@@ -21,7 +21,8 @@ this plan was written). Implementers are dispatched as `subagent_type: "implemen
 
 **Goal:** a seated table shows the one service step it is due for — a blue chip "🛎 Dessert? | Done"
 on its card, a seated-blue table with "🛎 Dessert?" on the map, the step with Done in its details —
-and a tap on Done, any order sent after the step started, or the party leaving clears it.
+and a tap on Done, an order sent once it is due, the party's first order, or the party leaving
+clears it.
 
 **Architecture:** a new venue-service table, `service_step_completions`, records each Done (party,
 step, time, person). The server works out each seated table's steps on every floor read in a pure
@@ -44,6 +45,42 @@ Pictures `docs/backlog/mockups/a757-table-states/10-service-steps.png`, `02-life
 Decision 7, what this slice owes), `docs/superpowers/plans/2026-10-20-a757-4-precedence-pulses.md`
 (Decision 2: "slice 8's step signal maps to `step`"), `docs/superpowers/plans/2026-10-20-a757-5-map-zone-tabs.md`
 (the map's `step` look, Decision 4).
+
+## Driver rulings (plan review)
+
+- **C1:** Task 6 keeps `case "take_order": return [];` in `signalChips` (its switch has no
+  default) until Task 9 removes the member, converts every till `{ kind: "take_order" }` fixture to
+  `dueStepSignal("Take order")`, makes the key and text-only assertion changes (the precedence
+  chip key, the Spanish test), and ends by running every floor screen test file plus the details
+  sheet's and status pin's a11y files. Task 7 keeps only the card-with-Done changes.
+- **I1:** follow the spec as written. "Started" is when a step falls due (its trigger plus its
+  minutes); one step shows at a time, the latest due; Q30: an order sent after a step is due clears
+  it. Today's Take order behaviour is kept by one general rule needing no marker: before the
+  party's first order an open draft hides every live step, and that first order clears every step
+  triggered before it. The first order's time comes from the same `order_group_events` statement
+  (the earliest row beside the latest). The 20:34 example comes out the same; Dessert? survives a
+  drinks round sent while it waits out its minutes; the former owner points 1 and 2 are gone.
+- **I2:** the dishes are reckoned with the existing serving reckoning, as §8 says:
+  `serviceQuantities` and `serviceCompletedAt` (`apps/server/src/line-service-state.ts:20-49`), the
+  cancellation's time selected, and `readReleaseReminders`' three filters
+  (`apps/server/src/order-groups.ts:1497-1508`).
+- **I3:** Task 4's statement-count extension gives the parties' departments steps so the step reads
+  run in both counts; the kinds assertion stays unchanged (no step is live there) and
+  `three.count === one.count` stays.
+- **I4:** the a11y case that checks the card with Done is the list case at
+  `till-floor-screen.a11y.test.ts:473-500`, gaining `canMarkSteps: true`; `:677` is a zone-tab case
+  and only its fixture changes.
+- **I5:** Task 7 is split into 7a (the step chip and its tests) and 7b (the card, the timer, the
+  floor screen's tests); Task 3 into 3a (venue-service reads and writes) and 3b (`readTableSteps`
+  and its database tests).
+- **Minor:** `dueStepSignal` defaults to `2000-01-01T00:00:00.000Z` (M1); Task 9's grep may name
+  the generic `take-order` chip key in `packages/ui/src/components/wt-table-token.a11y.test.ts:147`,
+  which stays (M2); `createDepartment` writes the starters, so two-department fixtures replace them
+  with `setSteps` (M3); `doneAt` is `new Date(nowMs).toISOString()` (M4); step ids are
+  de-duplicated before the insert and in `cleared`, with a test (M5); `requireStepParam`
+  lower-cases (M6); Task 5's deletion proof expects `409 party.not_open` (M7); `canMarkSteps` stays
+  its own property, with the reason in Decision 8 (M8); owner point 7 says what a split-off party
+  lacks (M9); citations corrected (M10).
 
 ## Sources the plan answers to (quoted)
 
@@ -299,66 +336,82 @@ sentences live in `apps/till/src/i18n/codes.ts`.
    ```
 
    The server sends every live step, not only the one to show, because a step still ahead can
-   overtake the one showing ("the latest one started") and the list view re-reads the floor only
+   overtake the one showing ("the latest one started", the latest due, Decision 3) and the list view re-reads the floor only
    after this till's own actions; with the whole list the till redraws at the next `dueAt`, as it
    does for a reminder (`#watchReminders`). A table with no live step carries no `service_step`
    signal. In the server's list it goes first, where `take_order` was.
 
 3. **The reckoning** (`liveSteps`, pure). For each step of the table's department, in list order,
-   with its index `i`:
+   with its index `i`, a **trigger** `T` (the moment its start happened) and a **due time** `D`
+   (when it starts, in §8's and Q30's sense, and shows):
 
-   | Start | Its start time `S` | Its due time `D` |
+   | Start | Its trigger `T` | Its due time `D` |
    |---|---|---|
-   | `seated` | the party's `opened_at` | `S + minutes` |
-   | `after_previous` | the latest Done of the step directly above (`i − 1`); none when `i = 0` or never done | `S + minutes` |
-   | `course_served` | the latest `served_at` of the family's dishes of that course, once none of them is left to serve; none if no dish of it | `S + minutes` |
-   | `all_served` | the latest `served_at` of all the family's dishes, once none is left to serve; none with no dish | `S + minutes` |
-   | `since_last_order` | the repeat at `L + k·N` (below); none before the first order | `S` |
+   | `seated` | the party's `opened_at` | `T + minutes` |
+   | `after_previous` | the latest Done of the step directly above (`i − 1`); none when `i = 0` or never done | `T + minutes` |
+   | `course_served` | the latest serving end of the family's dishes of that course, once none of them is left to serve; none if no dish of it | `T + minutes` |
+   | `all_served` | the latest serving end of all the family's dishes, once none is left to serve; none with no dish | `T + minutes` |
+   | `since_last_order` | the repeat at `L + k·N` (below); none before the first order | `T` |
 
-   A step is **live** when it has a start time and none of these holds: its own latest Done is
-   later than `S`; the family's last order `L` is later than `S`; the party has an open draft.
-   Live steps are listed soonest `D` first, ties in list order.
+   With `F` the party's first order and `L` its last ("an order sent" is defined below), a step
+   is **live** when it has a trigger and none of these holds:
+   - its own latest Done is later than `T`;
+   - `L` is later than `D` — **Q30: an order sent after a step is due clears it**;
+   - `F` is later than `T` — the party's first order clears every step triggered before it;
+   - `F` is none and the party has an open draft — before the first order, an order being taken
+     hides every step.
 
-   - **"Started" means `S`, the moment its start happened, not `D`.** So an order sent between
-     Set up's Done (20:33) and Take order's due time (20:35) clears Take order before it shows —
-     the order is in, so nobody needs reminding to take it. Comparisons are strictly "later than",
-     so the Done that starts an `after_previous` step (its `S` equals that Done's time) does not
-     clear it.
+   Live steps are listed soonest `D` first, ties in list order. The one shown is the latest due
+   (driver ruling I1).
+
+   - **"Started" is `D`, as the spec writes it** ("the latest one started", "any order sent after
+     a step started"). So Dessert? (Mains served, 10) survives a drinks round sent while it waits
+     out its minutes: mains served 21:32, drinks sent 21:35, Dessert? still shows at 21:42; an order
+     sent at 21:43 clears it.
+   - **Done is compared with `T`, not `D`**, so a Done from a till whose clock runs a little ahead
+     of the server, tapped just before the server's `D`, still counts. Comparisons are strictly
+     "later than", so the Done that triggers an `after_previous` step (its `T` equals that Done's
+     time) does not clear it.
+   - **Take order's extra rule, with no marker on the step.** Today `take_order` shows only while
+     the party has no line and no open draft (`table-signals.ts:231-233`). The last two rules keep
+     that for any step without knowing which one is Take order: before the first order an open
+     draft (today's `drafting`, `table-signals.ts:216-223`, moved into this reader) hides every live
+     step, and the first order clears every step triggered before it. Example: seated 20:30, Set up
+     Done 20:33 → Take order triggered 20:33, due 20:35; the first order sent at 20:34 → Take order
+     never shows. After the first order a draft hides nothing, so a dessert order being drafted
+     leaves Dessert? showing until it is sent. Why no marker: there is no column today (slice 7
+     Decision 7); a hidden boolean set only on the starter's Take order would need a migration on
+     `service_steps` and a dashboard control the pictures do not draw, and a name match would break
+     on rename and in Spanish («Tomar nota»).
    - **`since_last_order` (Q31: "every N minutes since the last order").** With `N = minutes ×
-     60 000` and `L` the last order: `k = max(1, floor((now − L) / N))`, `S = L + k·N`; if the
-     step's latest Done is later than that `S`, the next repeat after the Done,
-     `S = L + (floor((done − L) / N) + 1)·N`. `S` may be ahead of now: the step is then live and
-     not yet due. Q31's example: last round 22:00, N 20 → "Drinks?" at 22:20; Done at 22:21 → again
-     at 22:40; an order at 22:30 moves `L`, so the next is 22:50.
-   - **Dishes:** dish lines only (`parent_line_id` null) of the family's bills that are not
-     abandoned; with `Q` the quantity, `C` the cancelled quantity and `served` as slice 6 defines
-     it (all of `max(0, Q − C)` once `served_at` is set, else `min(served_quantity, max(0, Q −
-     C))`), a dish is left to serve while `max(0, Q − C) − served > 0`; one cancelled whole (`Q − C
-     ≤ 0`) is ignored; a dish's serving time is its `served_at`, and one with nothing left but no
-     `served_at` gives no time. Held dishes are unserved, so "nothing is held" (§8 start 4) needs
-     no rule of its own.
+     60 000`: `k = max(1, floor((now − L) / N))`, `T = L + k·N`; if the step's latest Done is later
+     than that `T`, the next repeat after the Done, `T = L + (floor((done − L) / N) + 1)·N`. `T` may
+     be ahead of now: the step is then live and not yet due. Q31's example: last round 22:00, N 20 →
+     "Drinks?" at 22:20; Done at 22:21 → again at 22:40; an order at 22:30 moves `L`, so the next is
+     22:50.
+   - **Dishes, reckoned as the fire reminder reckons them** (§8 start 3 cites `releaseReminder`):
+     the same three filters as `readReleaseReminders` — `isNull(workingOrderLines.parentLineId)`,
+     `onShownBill()` and `not(isRecalledDish(tx))` (`apps/server/src/order-groups.ts:1497-1508`;
+     `onShownBill` at `:1657-1659`, `isRecalledDish` at `apps/server/src/draft-source.ts:34`) — over
+     the family's bills, selecting `servedAt`, `servedQuantity`, `quantity`,
+     `coalesce(line_service_cancellations.quantity, 0)` and `line_service_cancellations.cancelled_at`.
+     A dish is left to serve while `serviceQuantities(...).remaining > 0`, and its serving end is
+     `serviceCompletedAt(...)` (`apps/server/src/line-service-state.ts:20-49`): the later of its
+     serving and the cancellation of its rest, or the cancellation time for a dish cancelled whole.
+     Held dishes are unserved, so "nothing is held" (§8 start 4) needs no rule of its own.
    - **An order sent** is a `submitted` or `joined` `order_group_events` row of the party or a party
-     merged into it (`order-groups.ts:388-397`); firing a held course is not one.
-   - **Take order's extra rule, and how the code knows which step is Take order: it does not need
-     to.** The rule above already gives Take order today's behaviour for every step: it hides while
-     the party has an open draft (today's `drafting`, `table-signals.ts:216-223`, moved into this
-     reader), and any order sent after it started clears it. Example: seated 20:30, Set up Done
-     20:33, the waiter starts a draft at 20:34 → Take order does not show at 20:35; the draft is
-     discarded at 20:37 → it shows then, being due since 20:35. Why not a marker on the step: there is no column today (slice 7 Decision 7);
-     a hidden boolean set only on the starter's Take order would need a migration on
-     `service_steps` and a dashboard control the pictures do not draw, would not follow a renamed
-     or re-created step, and a name match would break in Spanish («Tomar nota») and on rename. The
-     cost is that any step, Dessert? included, hides while a draft is open — the waiter is at the
-     table taking an order, which is Q30's reason to clear it anyway. Owner point 2.
-   - **"After the step before" starts only from a Done on the step above**, never from an order
+     merged into it (`order-groups.ts:388-397`); firing a held course is not one. One statement
+     reads them; `F` is the earliest and `L` the latest per party, by `Date.parse`.
+   - **"After the step before" triggers only from a Done on the step above**, never from an order
      clearing it: when guests order before anyone taps Set up, Take order never starts, which is
      right; the price is that a "Coffee? · after the step before" under "Dessert?" never starts when
-     dessert was ordered rather than Done. Owner point 3.
+     dessert was ordered rather than Done. Owner point 1.
 
    Worked through §8's example with Set up (seated, 0), Take order (after the step before, 2), a
    Mains course, Dessert? (Mains served, 10): 20:30 seated → Set up due 20:30; Done 20:33 → Set up
-   not live, Take order `S` 20:33, due 20:35; order sent 20:36 → Take order not live; mains all
-   served 21:32 → Dessert? due 21:42; Done 21:45 → nothing live. Task 2 pins exactly this.
+   not live, Take order triggered 20:33, due 20:35; first order sent 20:36 → Take order not live
+   (an order after its due time, and the first order after its trigger); mains all served 21:32 →
+   Dessert? due 21:42; Done 21:45 → nothing live. Task 2 pins exactly this.
 
 4. **Which department's steps a table shows: its own zone's.** One statement joins the seated
    tables to `zone_service_policies` and `service_steps` (the join of `table-clearing.ts:11-18`,
@@ -383,22 +436,24 @@ sentences live in `apps/till/src/i18n/codes.ts`.
      1. the party, `select state, opened_at from parties where id = ?` — absent or not `open` →
         `party.not_open` `{ partyId }` (the code `requirePartyParam` and the group commands use);
      2. its tables, `party_tables` with `left_at` null;
-     3. `readTableSteps(tx, [{ partyId, openedAt, tableIds }], nowMs)` (Task 3);
+     3. `readTableSteps(tx, [{ partyId, openedAt, tableIds }], nowMs)` (Task 3b);
      4. the department whose steps include `stepId` among the party's tables; none →
         `service_step.not_found` `{ stepId }` (a step deleted meanwhile, or another department's);
      5. if `stepId` is not live, answer `{ cleared: [] }` and write nothing (a second tap, another
         till's Done, or an order sent meanwhile);
      6. else record a completion for it and for every other live step of that department whose `D`
-        is at or before its `D` — the steps it was hiding — all at one `doneAt` (`nowIso()`) and
-        `doneBy` = the session's person, in one insert; answer their ids.
+        is at or before its `D` — the steps it was hiding — all at one `doneAt` (`new Date(nowMs).toISOString()`, so the time written is the time the
+        reckoning used) and `doneBy` = the session's person, in one insert; answer their ids. A party
+        at two tables of one department reads the same steps for both tables, so the step ids are
+        de-duplicated before the insert and in `cleared`.
    - **A live step not yet due is accepted**: the till shows Done only once a step is due by its
-     own clock, and a till a few seconds ahead of the server must not be refused. Owner point 5.
+     own clock, and a till a few seconds ahead of the server must not be refused. Owner point 3.
    - **`service_step.not_found`** is declared again in `apps/server/src/errors.ts` with venue-service's
      params, `{ stepId: string }` (`packages/venue-service/src/errors.ts:53`): every file that
      throws a code imports its registry (CLAUDE.md §3), and identical declarations merge (measured
      by slice 7 with `tsc` 7.0.2, its Decision 8). `STATUS` gains `"service_step.not_found": 404`.
-     A step id that is not a UUID is refused the same code (`requireStepParam`, beside
-     `requireDraftParam`, `till-api.ts:1091-1094`). No incident is recorded, so
+     A step id that is not a UUID is refused the same code, and a UUID is lower-cased
+     (`requireStepParam`, beside and like `requireDraftParam`, `till-api.ts:1091-1094`). No incident is recorded, so
      `scripts/alert-codes.test.ts` gains nothing; it and `scripts/errors-reachable.test.ts` are run.
    - **No party revision**: Done does not take or bump `parties.revision`, so another till's open
      order screen is not made stale by it; its idempotence comes from step 5.
@@ -427,7 +482,7 @@ sentences live in `apps/till/src/i18n/codes.ts`.
      pair, `packages/ui/src/floor-chips.ts:82-86`); the Done segment `--wt-color-surface-raised`
      with `--wt-color-text`, a 1 px `--wt-color-primary` line between; the chip outlined 1 px
      `--wt-color-primary`, `--wt-radius-sm`, `--wt-font-size-sm` bold; Done at least
-     `--wt-tap-min` tall and wide (owner point 12), with `outline: var(--wt-focus-ring);
+     `--wt-tap-min` tall and wide (owner point 10), with `outline: var(--wt-focus-ring);
      outline-offset: var(--wt-focus-offset)` on `:focus-visible`. A long name wraps inside the
      chip (`overflow-wrap: anywhere`, as `signalChipStyles` does, `signal-chips.ts:128-131`).
    - **Where Done is not offered** — the unplaced token, and a device whose profile lacks
@@ -438,8 +493,8 @@ sentences live in `apps/till/src/i18n/codes.ts`.
 
 7. **The till reads the step.** `apps/till/src/state/service-steps.ts`:
    `currentStep(signals, now): ServiceStepDue | null` — the last step of the `service_step` signal
-   whose `dueAt` is at or before `now` (the list is soonest first, so the last due is the latest
-   started); `nextStepDueAt(signals, now): number` — the first `dueAt` after `now`, else
+   whose `dueAt` is at or before `now` (the list is soonest first, so the last one due is the
+   latest due, which §8 calls "the latest one started"); `nextStepDueAt(signals, now): number` — the first `dueAt` after `now`, else
    `Number.POSITIVE_INFINITY`. Then: `tableStates` adds `step` when `currentStep` is not null;
    `signalChips(signals, { forgottenShown, now })` gives the plain step chip (callers without a
    clock pass none and get no step chip — the held-orders list and the order screen's bill-request
@@ -458,7 +513,10 @@ sentences live in `apps/till/src/i18n/codes.ts`.
    `device.forbidden_action`, so no other table write's messages change — and re-reads the floor
    either way (`await this.#refreshFloor()`), as `#onMarkCleared` does. No busy state: the route is
    idempotent, so a second tap before the re-read changes nothing. Both components take
-   `canMarkSteps`, set from `this.capabilities.includes("take-orders")`.
+   `canMarkSteps`, set from `this.capabilities.includes("take-orders")` — today the same value as
+   `canChangeToday` (`till-app.ts:17451`), kept as its own property because it means something
+   else: if changing today's floor later gets its own profile action, Done must not quietly follow
+   it.
 
 9. **Test venues start with no steps.** The party suites' provisioned venue now holds the three
    starter steps (slice 7), and with this slice Set up (seated, 0) would show on every seated table
@@ -470,56 +528,65 @@ sentences live in `apps/till/src/i18n/codes.ts`.
    steps; a suite that tests them adds its own." That is setup, not an assertion change, and it
    hides no code from coverage. A suite on another venue fixture that turns red only because of a
    provisioned starter step's `service_step` signal gets the same delete in its own setup, named in
-   the pull request. Task 3 proves the starter set itself reaches the floor.
+   the pull request. Task 3b proves the starter set itself reaches the floor. `createDepartment`
+   also writes the starter steps (`packages/venue-service/src/operations.ts:214`), and
+   `apps/server/src/testing/service-zone.ts` creates departments with it, so a second department
+   made in a test starts with the starters (Spanish names in the es-ES test venue): Tasks 3b and 5
+   replace them with `setSteps` before relying on a department's list.
 
 10. **Help, guide and design system.** `help.floor.tables_list` gains a sentence about Done and the
     two map help texts one about the details' Done (Task 10). The user guide has no floor page
     today (`apps/server/src/guide-catalogue.ts:6-14`); the closest, `table-service`, is titled
     "Refund a payment" (`apps/server/src/i18n/table-service-guide.ts:1-4`) and holds two refund
     sections. Task 10 adds a section `{#service-steps}` to it in English and Spanish and retitles
-    the page "Table service" / «Servicio en mesa» (owner point 16). `design-system.md:943`, the
+    the page "Table service" / «Servicio en mesa» (owner point 14). `design-system.md:943`, the
     floor states paragraph, gains the step chip and the step card's shape.
 
 ## Review focus
 
 1. **A party at two tables in two departments**: each table shows its own department's step, and
-   Done on one leaves the other's — Tasks 3 and 5.
+   Done on one leaves the other's — Tasks 3b and 5.
 2. **A double tap, or two tills tapping Done**: one set of rows, the second answer `{ cleared: [] }`
    — Task 5.
 3. **A step deleted in the dashboard while a till shows it**: Done answers 404
    `service_step.not_found`, the till says "This step no longer exists." and re-reads the floor;
    the step's completions went with it — Tasks 1, 5 and 8.
 4. **A step falling due while the floor sits idle in list view**: the card shows it at its due
-   minute with no re-read, and the map's look changes too — Tasks 6 and 7.
-5. **Guests order while Take order is not yet due**: it never shows — Tasks 2 and 4.
+   minute with no re-read, and the map's look changes too — Tasks 6 and 7b.
+5. **Guests order while Take order is not yet due**: it never shows; **a drinks round sent while
+   Dessert? waits out its minutes** leaves Dessert? to show — Tasks 2 and 4.
 6. **A configuration import over a venue with completions**: it succeeds and leaves none — Task 1.
 
 ## Changed checks
 
 Each edit below changes what an existing assertion pins because §8 makes Take order a service step
 and gives steps their look (§5.4 line 431: "Take order is now a service step and looks like every
-step"; slice 4 plan, Open point 11: "Take order keeps its blue-bordered chip until slice 8").
+step"; slice 4 plan, Open point 11: "Take order keeps its blue-bordered chip until slice 8"). The
+last column names the task that makes the edit.
 
-| File:line | Today | After | Why |
-|---|---|---|---|
-| `apps/server/src/table-signals.test.ts:221-252` "asks a just-seated party for its order until dishes are saved" | `[{ kind: "take_order" }]` before and after an empty draft; `[unsent_draft]` with a drafted line | the test adds one step, Take order (seated, 0); title "shows a just-seated party's Take order step until dishes are drafted"; `[{ kind: "service_step", steps: [{ stepId, name: "Take order", dueAt: <the party's opened_at> }] }]` before and after the empty draft; `[unsent_draft]` with a drafted line (unchanged) | §8 start 1; Take order hides while an order is being taken (Decision 3) |
-| `apps/server/src/table-signals.test.ts:257-264` "stops asking for the order once a line is on a bill" | `order()` (the test-only `addTabRound`) then `signals` `[]` | adds the Take order step, orders with `orderForParty` (`party-venue.ts:248-268`, which sends through `placeGroups`), title "clears the Take order step once an order is sent", `signals` `[]` | Q30; `addTabRound` records no order (Decision 3) |
-| `apps/server/src/canvas-retirement-upgrade.test.ts:498-512` | `retained` lists `service_steps: []` and the other tables made after its starting point | gains `service_step_completions: []` | a whole-shape expectation gaining the new table (slice 7 measured the same failure for its table, its "Whole-suite measurement") |
-| `apps/till/src/widgets/signal-chips.test.ts:49-52` "draws the overdue wait with the timer, and Take order with no icon" | `signalChips([{ kind: "take_order" }])[0]?.icon` undefined | title "…and a service step with the bell"; a due step's chip has icon `floor-step`, text the step's name, tone `primary-filled`, key `service-step` | §4 row 8 cue "🛎 and the step's name"; picture 10's bell |
-| `apps/till/src/widgets/signal-chips.test.ts:55-58` (chipState) | `{ kind: "take_order" }` → `step` | a due `service_step` → `step`; one not yet due gives no chip | same state, new signal |
-| `apps/till/src/state/table-precedence.test.ts:101` | `["step", { signals: [take_order] }, ["step"]]` | a due step → `["step"]`; new row: a step not yet due ranks nothing (`step` absent) | `currentStep` (Decision 7) |
-| `apps/till/src/state/floor-look.test.ts:90`, `:172-181`, `:292-299`, `:458` | cue and words `en["signal.take_order"]` | the step's name ("Dessert?") | §4 row 8, §6 |
-| `apps/till/src/screens/till-floor-screen.signals.test.ts:154-157` "says take the order for a party with nothing ordered or drafted" | `chips(card)` `["Take order"]` | title "shows the due service step with Done"; the card's `[data-chip="service-step"] .step-name` reads the step's name and its `[data-step-done]` reads "Done"; the card is a `div.step-card` holding `button.card-open` | §8, picture 10 |
-| `apps/till/src/screens/till-floor-screen.signals.test.ts:205-237` "says the signals in Spanish" | keys list holds `signal.take_order`; last chip `es["signal.take_order"]` | `signal.take_order` leaves the keys list; the step chip shows its stored name and `es["floor.step_done"]`, and the other chips are unchanged | the step's name is venue data; `signal.take_order` retires |
-| `apps/till/src/screens/till-floor-screen.precedence.test.ts:375-401` "lists every mark, most urgent first…" | `'[data-chip="take-order"]'` sixth | `'[data-chip="service-step"]'` sixth — same place | same rank, new mark |
+| File:line | Today | After | Why | Task |
+|---|---|---|---|---|
+| `apps/server/src/table-signals.test.ts:221-252` "asks a just-seated party for its order until dishes are saved" | `[{ kind: "take_order" }]` before and after an empty draft; `[unsent_draft]` with a drafted line | the test adds one step, Take order (seated, 0); title "shows a just-seated party's Take order step until dishes are drafted"; `[{ kind: "service_step", steps: [{ stepId, name: "Take order", dueAt: <the party's opened_at> }] }]` before and after the empty draft; `[unsent_draft]` with a drafted line (unchanged) | §8 start 1; before the first order a draft hides every step (Decision 3) | 4 |
+| `apps/server/src/table-signals.test.ts:257-264` "stops asking for the order once a line is on a bill" | `order()` (the test-only `addTabRound`) then `signals` `[]` | adds the Take order step, orders with `orderForParty` (`party-venue.ts:248-268`, which sends through `placeGroups`), title "clears the Take order step once the first order is sent", `signals` `[]` | the first order clears every step triggered before it; `addTabRound` records no order (Decision 3) | 4 |
+| `apps/server/src/canvas-retirement-upgrade.test.ts:498-512` | `retained` lists `service_steps: []` and the other tables made after its starting point | gains `service_step_completions: []` | a whole-shape expectation gaining the new table (slice 7 measured the same failure for its table, its "Whole-suite measurement") | 1 |
+| `apps/till/src/widgets/signal-chips.test.ts:49-52` "draws the overdue wait with the timer, and Take order with no icon" | `signalChips([{ kind: "take_order" }])[0]?.icon` undefined | title "…and a service step with the bell"; a due step's chip has icon `floor-step`, text the step's name, tone `primary-filled`, key `service-step` | §4 row 8 cue "🛎 and the step's name"; picture 10's bell | 6 |
+| `apps/till/src/widgets/signal-chips.test.ts:55-58` (chipState) | `{ kind: "take_order" }` → `step` | a due `service_step` → `step`; one not yet due gives no chip | same state, new signal | 6 |
+| `apps/till/src/state/table-precedence.test.ts:101` | `["step", { signals: [take_order] }, ["step"]]` | a due step → `["step"]`; new row: a step not yet due ranks nothing (`step` absent) | `currentStep` (Decision 7) | 6 |
+| `apps/till/src/state/floor-look.test.ts:90`, `:172-181`, `:292-299`, `:458` | cue and words `en["signal.take_order"]` | the step's name ("Take order", the fixture's) | §4 row 8, §6 | 6 |
+| `apps/till/src/screens/till-floor-screen.signals.test.ts:205-237` "says the signals in Spanish" | keys list holds `signal.take_order`; last chip `es["signal.take_order"]` | `signal.take_order` leaves the keys list; the last chip is the fixture step's stored name, "Take order", untranslated; the other chips unchanged | a step's name is venue data; `signal.take_order` retires | 6 |
+| `apps/till/src/screens/till-floor-screen.precedence.test.ts:375-401` "lists every mark, most urgent first…" | `'[data-chip="take-order"]'` sixth | `'[data-chip="service-step"]'` sixth — same place | same rank, new mark | 6 |
+| `apps/till/src/screens/till-floor-screen.a11y.test.ts:473-500` "has no violations with signals side by side…, on the list" | mounted with `{ zones, tables, canOpenStation: true }` | also `canMarkSteps: true`, so axe checks the card with Done in both themes; its assertions unchanged | Decision 6 | 7b |
 
-Fixture-only changes (the signal's type changes; each assertion stays): `signal-chips.test.ts:102`,
-`table-precedence.test.ts:162`, `:187`, `till-floor-screen.signals.test.ts:311`,
-`till-floor-screen.precedence.test.ts:206`, `:565`, `till-floor-screen.zone-tabs.test.ts:237`,
-`:284`, `:471`, `:799`, `:911`, `:966`, `:1114`, `:1150`, `:1247`, `till-floor-screen.a11y.test.ts:481`,
-`:677`, `apps/till/src/widgets/table-details-sheet.a11y.test.ts:41`,
-`apps/till/src/widgets/table-status.a11y.test.ts:65` — each `{ kind: "take_order" }` becomes
-`dueStepSignal("Take order")`, a due step, from a till test helper Task 6 adds.
+Fixture-only changes, all made by **Task 6** (each `{ kind: "take_order" }` becomes
+`dueStepSignal("Take order")`, a due step; each assertion stays): `signal-chips.test.ts:102`,
+`table-precedence.test.ts:162`, `:187`, `till-floor-screen.signals.test.ts:155` (its card is
+mounted without `canMarkSteps`, so the plain chip reads "Take order", as the assertion at `:156`
+expects), `:311`, `till-floor-screen.precedence.test.ts:206`, `:565`,
+`till-floor-screen.zone-tabs.test.ts:237`, `:284`, `:471`, `:799`, `:911`, `:966`, `:1114`,
+`:1150`, `:1247`, `till-floor-screen.a11y.test.ts:481`, `:677` (a zone-tab case: the table is off
+screen and never draws Done; the zone states it asserts at `:707` keep `"step"`),
+`apps/till/src/widgets/table-details-sheet.a11y.test.ts:41`,
+`apps/till/src/widgets/table-status.a11y.test.ts:65`.
 
 ---
 
@@ -545,7 +612,7 @@ Fixture-only changes (the signal's type changes; each assertion stays): `signal-
 re-exports `./service-steps.js`).
 
 - [ ] **Step 1: Write the failing tests.** Rows are inserted with `tx.insert(serviceStepCompletions)`
-  (setup), parties with `tx.insert(parties).values({ openedBy: "x" })` as
+  (setup), parties with `tx.insert(parties).values({ openedBy: "sender" })` as
   `packages/venue-service/src/department-transfers.test.ts:312` does.
   - `schema/service-steps.test.ts`: `"keeps who tapped Done on a step, and when"` (read back);
     `"refuses a completion naming no party or no step"` — `FOREIGN KEY constraint failed`, caught
@@ -593,109 +660,131 @@ re-exports `./service-steps.js`).
 
 **Interfaces — produces:**
 - `interface StepRule { id: string; name: string; start: ServiceStepStart; courseId: string | null; minutes: number }`
-  (declared in venue-service in Task 3; until then import `ServiceStepStart` from
-  `@waitron/venue-service` and declare `StepRule` here, Task 3 moves it)
-- `interface StepFacts { openedAt: number; lastOrderAt: number | null; drafting: boolean; courseServedAt: ReadonlyMap<string, number>; allServedAt: number | null; doneAt: ReadonlyMap<string, number> }`
-- `interface LiveStep { stepId: string; name: string; startedAt: number; dueAt: number }`
+  (declared here, importing `ServiceStepStart` from `@waitron/venue-service`; Task 3a moves it to
+  venue-service)
+- `interface StepFacts { openedAt: number; firstOrderAt: number | null; lastOrderAt: number | null; drafting: boolean; courseServedAt: ReadonlyMap<string, number>; allServedAt: number | null; doneAt: ReadonlyMap<string, number> }`
+- `interface LiveStep { stepId: string; name: string; triggeredAt: number; dueAt: number }`
 - `liveSteps(rules: readonly StepRule[], facts: StepFacts, nowMs: number): LiveStep[]` — Decision 3
-- `interface DishServing { courseId: string | null; quantity: number; servedQuantity: number; cancelled: number; servedAt: string | null }`
-  (quantities in thousandths, as stored)
-- `servedTimes(dishes: readonly DishServing[]): { courseServedAt: Map<string, number>; allServedAt: number | null }`
+- `interface DishServing { courseId: string | null; quantity: number; servedQuantity: number; servedAt: string | null; cancelledQuantity: number; cancelledAt: string | null }`
+  (quantities in thousandths, as stored; the shape `serviceCompletedAt` takes, plus the course)
+- `servedTimes(dishes: readonly DishServing[]): { courseServedAt: Map<string, number>; allServedAt: number | null }`,
+  built on `serviceQuantities` and `serviceCompletedAt` (`apps/server/src/line-service-state.ts:20-49`)
 
 - [ ] **Step 1: Write the failing tests** (times built from one base instant; names as listed):
   - `"the worked example of the design's §8"` — Decision 3's last paragraph, asserting the live
     list at 20:30, 20:34, 20:36, 21:41, 21:42 and 21:46;
   - `"a seated step is due its minutes after the party sat down"`;
-  - `"after the step before starts at the Done of the step above, and never for the first step"`;
-  - `"a course served starts at its latest serving once none of it is left, and never for a course
-    not ordered"`; `"everything served needs a dish and none left, and starts again after the next
-    serving"`;
+  - `"after the step before is triggered by the Done of the step above, and never for the first
+    step"`;
+  - `"a course served is triggered by its latest serving end once none of it is left, and never for
+    a course not ordered"`; `"everything served needs a dish and none left, and starts again after
+    the next serving"`;
   - `"every N minutes since the last order repeats, a Done stops only the current repeat, and
     nothing comes before the first order"` (Q31's 22:00 / 22:20 / 22:21 / 22:40 / 22:30 → 22:50);
-  - `"a Done after a step started clears it; one before its next start does not"`;
-  - `"an order sent after a step started clears it, even before it is due"` (the 20:34 case) and
-    `"an order sent before a step started leaves it"`;
-  - `"the Done that starts the next step does not clear it"` (equal instants);
-  - `"no step is live while an order is being taken"`;
+  - `"a Done after a step's trigger clears it; one before its next trigger does not"`;
+  - `"an order sent after a step is due clears it"`;
+  - `"an order sent while a step waits out its minutes leaves it, unless it is the party's first
+    order"` — the 20:34 case clears Take order; a second order in the same window leaves a step;
+  - `"Dessert? survives a drinks round sent while it waits out its minutes"` — mains served 21:32,
+    drinks sent 21:35 (not the first order), Dessert? live and due 21:42; an order at 21:43 clears
+    it;
+  - `"the Done that triggers the next step does not clear it"` (equal instants);
+  - `"before the first order an open draft hides every step; after it a draft hides none"`;
   - `"lists live steps soonest due first, ties in list order"`;
-  - `servedTimes`: a dish cancelled whole is ignored; a part-served dish keeps its course unserved;
-    a dish with nothing left and no `served_at` gives no time; dishes with no course count only
-    for everything served.
+  - `servedTimes`: a dish whose remainder was cancelled gives the cancellation time when that is
+    later than its serving; a dish cancelled whole gives its cancellation time; a part-served dish
+    keeps its course unserved; dishes with no course count only for everything served.
 - [ ] **Step 2: Run, watch them fail:**
   `pnpm --filter @waitron/server exec vitest run src/service-step-reckoning.test.ts`
-- [ ] **Step 3: Implement**; one doc comment on `liveSteps` stating "started" means the start time
-  and the three clearing rules; no others.
-- [ ] **Step 4: Run** — PASS; prove two rules by deletion: drop the drafting rule (the drafting case
-  fails), compare an order with `D` instead of `S` (the 20:34 case fails); restore; record both.
+- [ ] **Step 3: Implement**; one doc comment on `liveSteps` naming trigger and due time and the
+  four rules that end a step; no others.
+- [ ] **Step 4: Run** — PASS; prove three rules by deletion: drop the first-order rule (the 20:34
+  case fails), compare orders with the trigger instead of the due time (the Dessert? case fails),
+  drop the draft rule (the draft case fails); restore; record all three.
 - [ ] **Step 5:** typecheck `@waitron/shared`, `@waitron/server`, `@waitron/till`; prettier;
   commit — `"Work out which service steps a party is due for (A757 slice 8)"`.
 
-### Task 3: reading the floor's steps in six statements
+### Task 3a: venue-service reads and writes the steps and their completions
 
 **Files:**
-- Create: `packages/venue-service/src/service-step-completions.ts` and its test (node project);
-  modify `packages/venue-service/src/index.ts` (exports)
-- Create: `apps/server/src/service-step-signals.ts`, `apps/server/src/service-step-signals.test.ts`,
-  and `apps/server/src/testing/service-steps.ts` (test helpers)
+- Create: `packages/venue-service/src/service-step-completions.ts`,
+  `packages/venue-service/src/service-step-completions.test.ts` (node project); modify
+  `packages/venue-service/src/index.ts` (exports)
 - Modify: `apps/server/src/service-step-reckoning.ts` (import `StepRule` from venue-service)
 
+**Interfaces — produces:** `StepRule` (moved here); `readTableStepRules(tx, tableIds: readonly
+string[]): Promise<Map<string, { departmentId: string; rules: StepRule[] }>>` — one statement
+(Decision 4), a table with a department and no steps present with `rules: []`, a table in no
+department absent; `readStepCompletions(tx, partyIds: readonly string[]): Promise<{ partyId:
+string; stepId: string; doneAt: string }[]>` — one statement, none for `[]`;
+`recordStepCompletions(tx, rows: readonly { partyId: string; stepId: string; doneAt: string;
+doneBy: string }[]): Promise<void>` — one insert, none for `[]`.
+
+- [ ] **Step 1: Write the failing tests** (parties inserted as
+  `packages/venue-service/src/department-transfers.test.ts:312` does,
+  `tx.insert(parties).values({ openedBy: "sender" })`): `"reads each table's department's steps
+  in list order"`, `"leaves out a table whose zone has no department"`, `"records completions and
+  reads them back by party"`, and `"reads nothing and writes nothing for no ids"`.
+- [ ] **Step 2: Run, watch them fail:**
+  `pnpm --filter @waitron/venue-service exec vitest run --project node src/service-step-completions.test.ts`
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** — PASS; typecheck `@waitron/venue-service` and `@waitron/server`.
+- [ ] **Step 5:** prettier; commit — `"Venue-service reads a table's steps and records Done (A757 slice 8)"`.
+
+### Task 3b: reading the floor's steps in six statements
+
+**Files:**
+- Create: `apps/server/src/service-step-signals.ts`, `apps/server/src/service-step-signals.test.ts`,
+  and `apps/server/src/testing/service-steps.ts` (test helpers)
+
 **Interfaces — produces:**
-- venue-service: `StepRule` (moved here); `readTableStepRules(tx, tableIds: readonly string[]):
-  Promise<Map<string, { departmentId: string; rules: StepRule[] }>>` — one statement (Decision 4),
-  a table with a department and no steps present with `rules: []`, a table in no department
-  absent; `readStepCompletions(tx, partyIds: readonly string[]): Promise<{ partyId: string;
-  stepId: string; doneAt: string }[]>` — one statement, none for `[]`;
-  `recordStepCompletions(tx, rows: readonly { partyId: string; stepId: string; doneAt: string;
-  doneBy: string }[]): Promise<void>` — one insert, none for `[]`.
-- server: `interface StepParty { partyId: string; openedAt: string; tableIds: readonly string[] }`;
+- `interface StepParty { partyId: string; openedAt: string; tableIds: readonly string[] }`;
   `interface TableSteps { departmentId: string; ruleIds: ReadonlySet<string>; live: LiveStep[] }`;
   `readTableSteps(tx, parties: readonly StepParty[], nowMs: number): Promise<Map<string, TableSteps>>`
   keyed by table id; `stepSignal(steps: TableSteps | undefined): Extract<TableSignal, { kind:
   "service_step" }> | undefined` (undefined when nothing is live; `dueAt` as
   `new Date(ms).toISOString()`).
 - The six statements, each once for all parties: `partyFamilies` (`parties.ts:459`);
-  `readTableStepRules`; `readStepCompletions`; the family's dish lines (`parent_line_id` null, bill
-  not abandoned, joined to `working_orders.party_id in` the family ids, left join
-  `line_service_cancellations`) → `servedTimes` per party; `order_group_events` of kinds
-  `submitted` and `joined` for the family ids → the latest by `Date.parse` per party; open
-  `order_drafts` of the parties (today's `drafting`, `table-signals.ts:216-223`).
-- test helpers: `departmentOf(v, zoneId): Promise<string>`; `setSteps(v, departmentId, steps:
-  ServiceStepInput[]): Promise<string[]>` (through `saveServiceSteps`, returning ids in order);
+  `readTableStepRules`; `readStepCompletions`; the family's dishes with Decision 3's three filters
+  and columns → `servedTimes` per party; `order_group_events` of kinds `submitted` and `joined` for
+  the family ids → the earliest (`firstOrderAt`) and latest (`lastOrderAt`) per party by
+  `Date.parse`; open `order_drafts` of the parties (today's `drafting`, `table-signals.ts:216-223`).
+- Test helpers: `departmentOf(v, zoneId): Promise<string>`; `setSteps(v, departmentId, steps:
+  ServiceStepInput[]): Promise<string[]>` (through `saveServiceSteps`, which replaces whatever the
+  department held — the starters `createDepartment` writes included — and returns ids in order);
   `setOpenedAt(v, partyId, iso)`.
 
-- [ ] **Step 1: Write the failing tests:**
-  - venue-service: `"reads each table's department's steps in list order"`, `"leaves out a table
-    whose zone has no department"`, `"records completions and reads them back by party"`;
-  - server (`useVenueDb` with `migrationOptionsFor(manifestSets(), null)`, `setupPartyVenue`, which
-    holds the starter steps until Task 4 clears them — delete them in this file's setup until
-    then), each with a fixed `nowMs`:
-    - `"a seated party's step is due at its seating"` (`opened_at` set by `setOpenedAt`);
-    - `"a course served reads the family's dishes of that course"` (a course from `createCourse`,
-      `apps/server/src/kitchen.ts:347`; `course_id` set on the lines by a direct update; all
-      served with `serveLine`, `apps/server/src/testing/serve-line.ts`);
-    - `"everything served starts once the last dish is served"`;
-    - `"an order sent through placeGroups clears a started step"` (`orderForParty`) and `"every N
-      minutes since the last order counts from that order"`;
-    - `"after the step before starts at a recorded Done"` (`recordStepCompletions`);
-    - `"no step shows while the party has an open draft"` (`saveDraftForTest` with a line, as
-      `table-signals.test.ts:240-247`);
-    - `"a party at tables of two departments gets each table's own steps"` (a second department and
-      zone made with `createDepartment` / `createServiceZone` from `@waitron/venue-service`, as
-      `apps/server/src/testing/service-zone.ts` does; the party joined to a table there);
-    - `"a table whose zone has no department shows no step"`;
-    - `"a new venue's starter steps reach the floor"` — `addStarterServiceSteps` on the tables
-      zone's department, seat: one live step named `Montar mesa` (the venue's locale is `es-ES`,
-      `party-venue.ts:52`) due at the seating;
-    - `"reads every fact once, whatever the number of parties"` — the `prepare` spy of
-      `table-signals.test.ts:789-796`: three parties prepare as many statements as one, and none
-      are prepared for `[]`.
+- [ ] **Step 1: Write the failing tests** (`useVenueDb` with `migrationOptionsFor(manifestSets(),
+  null)`, `setupPartyVenue`, which holds the starter steps until Task 4 clears them — delete them in
+  this file's setup until then), each with a fixed `nowMs`:
+  - `"a seated party's step is due at its seating"` (`opened_at` set by `setOpenedAt`);
+  - `"a course served reads the family's dishes of that course"` (a course from `createCourse`,
+    `apps/server/src/kitchen.ts:308`; `course_id` set on the lines by a direct update; all served
+    with `serveLine`, `apps/server/src/testing/serve-line.ts`); `"a recalled dish and an abandoned
+    bill's dishes are left out"`;
+  - `"everything served is triggered once the last dish is served"`;
+  - `"the first order sent through placeGroups clears a step triggered before it"`
+    (`orderForParty`) and `"every N minutes since the last order counts from that order"`;
+  - `"after the step before is triggered by a recorded Done"` (`recordStepCompletions`);
+  - `"before the first order no step shows while the party has an open draft"` (`saveDraftForTest`
+    with a line, as `table-signals.test.ts:240-247`);
+  - `"a party at tables of two departments gets each table's own steps"` — a second department and
+    zone made as `apps/server/src/testing/service-zone.ts` does (`createDepartment` writes the
+    starters, `packages/venue-service/src/operations.ts:214`; `setSteps` replaces them); the party
+    joined to a table there;
+  - `"a table whose zone has no department shows no step"`;
+  - `"a new venue's starter steps reach the floor"` — `addStarterServiceSteps` on the tables zone's
+    department, seat: one live step named `Montar mesa` (the venue's locale is `es-ES`,
+    `party-venue.ts:52`) due at the seating;
+  - `"reads every fact once, whatever the number of parties"` — the `prepare` spy of
+    `table-signals.test.ts:789-796`: three parties prepare as many statements as one, and none are
+    prepared for `[]`.
 - [ ] **Step 2: Run, watch them fail:**
-  `pnpm --filter @waitron/venue-service exec vitest run --project node src/service-step-completions.test.ts`
-  and `pnpm --filter @waitron/server exec vitest run src/service-step-signals.test.ts`
+  `pnpm --filter @waitron/server exec vitest run src/service-step-signals.test.ts`
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** both — PASS; prove the bound by deletion: read the completions inside a loop
-  over parties and see the statement-count case fail; restore; record it.
-- [ ] **Step 5:** typecheck `@waitron/venue-service`, `@waitron/server`; prettier; commit —
+- [ ] **Step 4: Run** — PASS; prove the bound by deletion: read the completions inside a loop over
+  parties and see the statement-count case fail; restore; record it.
+- [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit —
   `"Read every seated table's service steps in six statements (A757 slice 8)"`.
 
 ### Task 4: the floor read sends the steps; Take order goes
@@ -709,14 +798,17 @@ re-exports `./service-steps.js`).
   calls `readTableSteps(tx, stepParties, nowMs)` once beside `readPartySignals` (`:8232`), then
   `tableSignals(…, stepSignal(tableSteps.get(r.id)), …)` (`:8269`)
 - Modify: `apps/server/src/testing/party-venue.ts` — Decision 9's delete
-- Modify: `apps/server/src/table-signals.test.ts` (Changed checks), and remove Task 3's temporary
+- Modify: `apps/server/src/table-signals.test.ts` (Changed checks), and remove Task 3b's temporary
   delete from `service-step-signals.test.ts`
 
 - [ ] **Step 1: Write the failing tests** in `table-signals.test.ts`: the two Changed-checks rows;
   `"puts a due step first among a table's signals"` (a step and a ready dish); `"a step stops
   showing when the party leaves"` (`finishTable`: the table's row has no party and no
-  `service_step`); extend `"reads every kind of fact once for the whole floor"` so every busy party
-  also has a live step, keeping `three.count` equal to `one.count`.
+  `service_step`); and extend `"reads every kind of fact once for the whole floor"`
+  (`:768-817`) by giving the tables' department steps with `setSteps` before the first count, so
+  the step reads run in both counts. Its parties hold an open draft and order only through the
+  test-only `addTabRound` (`:775-786`), so no step is live and the kinds assertion (`:803-808`)
+  stays unchanged; `three.count` must still equal `one.count`.
 - [ ] **Step 2: Run, watch them fail:**
   `pnpm --filter @waitron/server exec vitest run src/table-signals.test.ts src/service-step-signals.test.ts`
 - [ ] **Step 3: Implement.**
@@ -738,7 +830,8 @@ re-exports `./service-steps.js`).
   `apps/server/src/till-api.service-steps.test.ts`
 - Modify: `apps/server/src/errors.ts` (`"service_step.not_found": { stepId: string }`),
   `apps/server/src/till-api.ts` (the route beside the bill request, `:2925`; `requireStepParam`
-  beside `requireDraftParam`; `STATUS` gains `"service_step.not_found": 404`)
+  beside `requireDraftParam`, lower-casing as it does; `STATUS` gains
+  `"service_step.not_found": 404`)
 - Modify: `apps/server/src/till-api.profile-actions.test.ts` — map row
   `| POST /api/parties/:id/service-steps/:stepId/done | take-orders | take-orders |` after the
   bill-request row (`:112`), and `ordering("POST", \`/api/parties/${id}/service-steps/${id}/done\`)`
@@ -751,20 +844,23 @@ re-exports `./service-steps.js`).
 **Interfaces — produces:** `markServiceStepDone(tx, args: { partyId: string; stepId: string;
 personId: string; nowMs: number }): Promise<{ cleared: string[] }>`; the route answers that object.
 
-- [ ] **Step 1: Write the failing tests.**
+- [ ] **Step 1: Write the failing tests.** Departments a test relies on get their list from
+  `setSteps` (Task 3b), which replaces the starters `createDepartment` writes.
   - `service-step-done.test.ts` (database level): `"records Done with the person and the time, and
-    the step stops showing"`; `"a second Done writes nothing and clears nothing"`; `"Done also
-    records the due steps the shown one was hiding, so their followers start"`; `"Done on a step
-    not yet due is accepted"`; `"refuses a step of a department none of the party's tables is in"`
-    and `"…a step that no longer exists"` → `toMatchObject({ code: "service_step.not_found",
-    params: { stepId } })`; `"refuses a party that has left"` → `party.not_open`; `"Done on one
-    department's step leaves the other table's step"` (the two-department fixture of Task 3).
+    the step stops showing"` (`done_at` equals `new Date(nowMs).toISOString()`); `"a second Done
+    writes nothing and clears nothing"`; `"Done also records the due steps the shown one was
+    hiding, so their followers start"`; `"Done on a step not yet due is accepted"`; `"a party at two
+    tables of one department records each step once and names it once"`; `"refuses a step of a
+    department none of the party's tables is in"` and `"…a step that no longer exists"` →
+    `toMatchObject({ code: "service_step.not_found", params: { stepId } })`; `"refuses a party that
+    has left"` → `party.not_open`; `"Done on one department's step leaves the other table's step"`
+    (Task 3b's two-department fixture).
   - `till-api.service-steps.test.ts` (mount and session as
     `apps/server/src/till-api.kitchen-note.test.ts` does — read it first): 200 and
     `{ cleared: [stepId] }`, the completion's `done_by` the session's person; a double tap answers
-    `{ cleared: [] }` with one row; 404 `service_step.not_found` for a UUID that is no step and
-    for `not-a-uuid`; 409 `party.not_open` for an unknown and a closed party; 401
-    `session.required` with no cookie; and each answer's body read as
+    `{ cleared: [] }` with one row; an upper-case step id is found; 404 `service_step.not_found`
+    for a UUID that is no step and for `not-a-uuid`; 409 `party.not_open` for an unknown and a
+    closed party; 401 `session.required` with no cookie; each answer's body read as
     `toEqual({ error: { code, params } })`.
   - The two map files' new rows (their suites already iterate the rows).
 - [ ] **Step 2: Run, watch them fail:**
@@ -772,62 +868,65 @@ personId: string; nowMs: number }): Promise<{ cleared: string[] }>`; the route a
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** Step 2's command — PASS — and
   `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts`. Prove the
-  two gates by deletion: drop `action: "take-orders"` (the profile-actions row fails with a 200),
-  drop `checkZones` (the profile-zones row fails); restore; record both.
+  two gates by deletion: drop `action: "take-orders"` and see the profile-actions row fail with
+  `409 party.not_open` in place of `device.forbidden_action` (its party id is random, and
+  `checkZones` lets a party in no zone through, `apps/server/src/zone-access.ts:43-56`); drop
+  `checkZones` and see the profile-zones row fail; restore; record both.
 - [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit —
   `"A till marks a party's service step Done (A757 slice 8)"`.
 
-### Task 6: the till reads the step (state, chips, map words)
+### Task 6: the till reads the step (state, chips, map words) and every `take_order` fixture moves
 
 **Files:**
 - Create: `apps/till/src/state/service-steps.ts` and its test; a test helper
-  `dueStepSignal(name: string, dueAt?: string): TableSignal` in the till's existing test fixtures
-  folder (`apps/till/test/`), due a minute before the tests' `now` by default
-- Modify: `apps/till/src/state/table-precedence.ts:47`, `apps/till/src/widgets/signal-chips.ts`
-  (the `service_step` chip with `now`; `chipState("service-step") → "step"`; the `take-order`
-  case goes), `apps/till/src/state/floor-look.ts` (`step` leaves `FIXED_CUE` and `FIXED_WORDS`;
-  `kindWords` and `kindCue` read the step's name; `reminderClock` adds the current step id),
+  `dueStepSignal(name: string, dueAt = "2000-01-01T00:00:00.000Z"): TableSignal` in the till's
+  existing test fixtures folder (`apps/till/test/`) — a fixed past instant, because the till's test
+  files use different `now`s
+- Modify: `apps/till/src/state/table-precedence.ts:47` (`step` from `currentStep`; `take_order`
+  no longer ranks), `apps/till/src/widgets/signal-chips.ts` (the `service_step` chip with `now`;
+  `chipState("service-step") → "step"`; `case "take_order"` returns `[]` — the switch has no
+  default, `:28-67`, so the case stays until Task 9 removes the member),
+  `apps/till/src/state/floor-look.ts` (`step` leaves `FIXED_CUE` and `FIXED_WORDS`; `kindWords`
+  and `kindCue` read the step's name; `reminderClock` adds the current step id),
   `apps/till/src/screens/till-floor-screen.ts:178-184` (`tableChips` passes `now`),
   `apps/till/src/widgets/table-details-sheet.ts:209` (passes `this.now ?? Date.now()`)
 - Modify: `apps/till/src/i18n/strings.ts` (`floor.step_done`, `floor.step_done_label`),
   `apps/till/src/i18n/codes.ts` (`service_step.not_found`), and their tests
-- Modify: the state-level Changed checks and fixture rows (`signal-chips.test.ts`,
-  `table-precedence.test.ts`, `floor-look.test.ts`)
+- Modify: every till test with `{ kind: "take_order" }` — the Changed checks rows marked Task 6 and
+  every fixture-only row
 
 **Interfaces — produces:** `currentStep(signals: readonly TableSignal[], now: number):
 ServiceStepDue | null`; `nextStepDueAt(signals: readonly TableSignal[], now: number): number`;
-`signalChips(signals, { forgottenShown?: boolean; now?: number })`.
+`signalChips(signals, { forgottenShown?: boolean; now?: number })`; `dueStepSignal`.
 
 - [ ] **Step 1: Write the failing tests:** `service-steps.test.ts` — the latest due of three steps,
   none due, a step due exactly now, `nextStepDueAt` with and without a step ahead;
-  `table-precedence.test.ts` — Changed checks plus "a step not yet due ranks nothing";
-  `signal-chips.test.ts` — Changed checks plus "gives no step chip without a clock";
-  `floor-look.test.ts` — Changed checks plus "a merge says the step of the member due latest" and
-  "`reminderClock` changes when a step falls due and not before"; `codes.test.ts` — the new
+  `table-precedence.test.ts` — its Changed check plus "a step not yet due ranks nothing";
+  `signal-chips.test.ts` — its Changed checks plus "gives no step chip without a clock";
+  `floor-look.test.ts` — its Changed check plus "a merge says the step of the member due latest"
+  and "`reminderClock` changes when a step falls due and not before"; `codes.test.ts` — the new
   sentence in both languages; `strings.test.ts` — both new keys in both languages, and
-  `es["floor.step_done"]` equal to `es["make_now.dismiss"]`.
+  `es["floor.step_done"]` equal to `es["make_now.dismiss"]`; then convert the floor screen's
+  fixtures and make the Spanish and precedence Changed checks.
 - [ ] **Step 2: Run, watch them fail:**
   `pnpm --filter @waitron/till exec vitest run src/state/service-steps.test.ts src/state/table-precedence.test.ts src/widgets/signal-chips.test.ts src/state/floor-look.test.ts src/i18n/codes.test.ts src/i18n/strings.test.ts`
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** the same — PASS.
+- [ ] **Step 4: Run** Step 2's files, every floor screen file and the two a11y files with a
+  converted fixture — PASS, each `Tests` count read:
+  `pnpm --filter @waitron/till exec vitest run src/state/service-steps.test.ts src/state/table-precedence.test.ts src/widgets/signal-chips.test.ts src/state/floor-look.test.ts src/i18n/codes.test.ts src/i18n/strings.test.ts src/screens/till-floor-screen*.test.ts src/widgets/table-details-sheet.a11y.test.ts src/widgets/table-status.a11y.test.ts`
+  (check `memory_pressure | grep free` and split the run if headroom is short). Then
+  `git grep -n "kind: \"take_order\"" -- apps/till` names nothing.
 - [ ] **Step 5:** typecheck `@waitron/till`; prettier; commit —
   `"The till ranks, words and redraws a table's due service step (A757 slice 8)"`.
 
-### Task 7: the card's step chip and its Done button
+### Task 7a: the step chip
 
 **Files:**
-- Create: `apps/till/src/widgets/step-chip.ts` (`stepChip`, `stepChipStyles`, Decision 6) and
-  `apps/till/src/widgets/step-chip.test.ts`, `step-chip.a11y.test.ts`
-- Modify: `apps/till/src/screens/till-floor-screen.ts` — `canMarkSteps` property beside
-  `canChangeToday` (`:748`); `#card` draws Decision 6's box when the current step is shown with
-  Done; `#marks` puts `stepChip` in place of the plain step chip; `#watchReminders` also wakes at
-  the soonest `nextStepDueAt`; the `service-step-done` event
-- Modify: the floor screen's Changed checks and fixture rows (`signals`, `precedence`,
-  `zone-tabs`, `a11y` test files)
+- Create: `apps/till/src/widgets/step-chip.ts` (`stepChip`, `stepChipStyles`, Decision 6),
+  `apps/till/src/widgets/step-chip.test.ts`, `apps/till/src/widgets/step-chip.a11y.test.ts`
 
 **Interfaces — produces:** `stepChip(step: ServiceStepDue, options: { onDone: () => void }):
-TemplateResult`; event `service-step-done`, `detail: { partyId: string; stepId: string; tableId:
-string }`.
+TemplateResult`; `stepChipStyles`.
 
 - [ ] **Step 1: Write the failing tests:**
   - `step-chip.test.ts`: the name and "Done" drawn; the Done button's accessible name
@@ -836,24 +935,46 @@ string }`.
     `--wt-tap-min` tall and wide; a 40-character name wraps inside the chip at 320 px; Spanish
     reads `es[...]` (language restored after, CLAUDE.md §4);
   - `step-chip.a11y.test.ts`: axe over the chip in light and dark, following
-    `apps/till/src/widgets/order-counts.a11y.test.ts`;
-  - in the floor screen's tests (new file `till-floor-screen.steps.test.ts`): a due step's card is
-    a `div.step-card` with `button.card-open` named `${name}, ${mapLook([table], now).description}`;
-    a click on the box and on the cover each send `open-table`; a click on Done sends
-    `service-step-done` with the ids and no `open-table` (use `userEvent.click`, CLAUDE.md §4); a
-    step not yet due draws no chip, then appears with no re-read when its minute comes (the
-    screen's `now` unset, fake timers advanced as the held countdown's tests do — read
-    `till-floor-screen.held.test.ts` first); with `canMarkSteps` false the card stays a
-    `button.card` with the plain chip; a table with no step keeps `button.card`; the step chip
-    sits in its precedence place (the precedence Changed check);
-  - `till-floor-screen.a11y.test.ts`: its "Step" case (`:677`) now draws the Done chip; axe passes
-    in both themes.
+    `apps/till/src/widgets/order-counts.a11y.test.ts`.
 - [ ] **Step 2: Run, watch them fail:**
-  `pnpm --filter @waitron/till exec vitest run src/widgets/step-chip.test.ts src/widgets/step-chip.a11y.test.ts src/screens/till-floor-screen.steps.test.ts src/screens/till-floor-screen.signals.test.ts src/screens/till-floor-screen.precedence.test.ts`
+  `pnpm --filter @waitron/till exec vitest run src/widgets/step-chip.test.ts src/widgets/step-chip.a11y.test.ts`
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the same plus
+  `pnpm exec vitest run scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts` —
+  PASS.
+- [ ] **Step 5:** typecheck `@waitron/till`; prettier; commit —
+  `"A service step's chip with its Done button (A757 slice 8)"`.
+
+### Task 7b: the card holds the step chip; the floor redraws when a step falls due
+
+**Files:**
+- Modify: `apps/till/src/screens/till-floor-screen.ts` — `canMarkSteps` property beside
+  `canChangeToday` (`:748`; Decision 8 says why it is its own); `#card` draws Decision 6's box
+  when the current step is shown with Done; `#marks` puts `stepChip` in place of the plain step
+  chip; `#watchReminders` also wakes at the soonest `nextStepDueAt`; the `service-step-done` event
+- Create: `apps/till/src/screens/till-floor-screen.steps.test.ts`
+- Modify: `apps/till/src/screens/till-floor-screen.a11y.test.ts:473-500` (Changed checks)
+
+**Interfaces — produces:** event `service-step-done`, `detail: { partyId: string; stepId: string;
+tableId: string }`.
+
+- [ ] **Step 1: Write the failing tests** in `till-floor-screen.steps.test.ts`: with
+  `canMarkSteps` true, a due step's card is a `div.step-card` with `button.card-open` named
+  `${name}, ${mapLook([table], now).description}`; a click on the box and on the cover each send
+  `open-table`; a click on Done sends `service-step-done` with the ids and no `open-table` (use
+  `userEvent.click`, CLAUDE.md §4); the step chip sits in its precedence place among the marks; a
+  step not yet due draws no chip, then appears with no re-read when its minute comes (the screen's
+  `now` unset, fake timers advanced as the held countdown's tests do — read
+  `till-floor-screen.held.test.ts` first), and the map's look changes at the same moment; with
+  `canMarkSteps` false the card stays a `button.card` with the plain chip; a table with no step
+  keeps `button.card`. In the a11y file, the list case at `:473-500` gains `canMarkSteps: true`
+  (axe in both themes).
+- [ ] **Step 2: Run, watch them fail:**
+  `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.steps.test.ts src/screens/till-floor-screen.a11y.test.ts`
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** every floor screen test file — PASS, each `Tests` count read:
-  `pnpm --filter @waitron/till exec vitest run src/widgets/step-chip.test.ts src/widgets/step-chip.a11y.test.ts src/screens/till-floor-screen*.test.ts`,
-  plus `pnpm exec vitest run scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts`.
+  `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen*.test.ts`, plus
+  `pnpm exec vitest run scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts`.
 - [ ] **Step 5:** typecheck `@waitron/till`; prettier; commit —
   `"A floor card shows its due service step with a Done button (A757 slice 8)"`.
 
@@ -894,16 +1015,17 @@ string }`.
 
 **Files:**
 - Modify: `packages/shared/src/table-signals.ts` (the `take_order` member goes),
+  `apps/till/src/widgets/signal-chips.ts` (Task 6's `case "take_order"` goes),
   `apps/till/src/i18n/strings.ts` (`signal.take_order` goes, both languages)
-- Modify: every fixture-only row of Changed checks still holding `{ kind: "take_order" }`
 
-- [ ] **Step 1:** Remove the member and the strings; `pnpm --filter @waitron/shared typecheck`,
-  `pnpm --filter @waitron/server typecheck`, `pnpm --filter @waitron/till typecheck` name every
-  remaining use; convert each fixture to `dueStepSignal(...)`. Then
-  `git grep -n "take_order\|signal.take_order\|take-order\"" -- apps packages` must name nothing
-  but the `take-orders` profile action (`"take-orders"`).
-- [ ] **Step 2: Run** every till test file the grep named before the change, each `Tests` count
-  read: `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.zone-tabs.test.ts src/screens/till-floor-screen.a11y.test.ts src/screens/till-floor-screen.signals.test.ts src/screens/till-floor-screen.precedence.test.ts src/state/floor-look.test.ts src/state/table-precedence.test.ts src/widgets/signal-chips.test.ts src/widgets/table-details-sheet.a11y.test.ts src/widgets/table-status.a11y.test.ts src/i18n/strings.test.ts`
+- [ ] **Step 1:** Remove the member, the case and the strings; `pnpm --filter @waitron/shared
+  typecheck`, `pnpm --filter @waitron/server typecheck` and `pnpm --filter @waitron/till typecheck`
+  must pass with no other change (Task 6 converted every till fixture; Task 4 every server one).
+  Then `git grep -n "take_order\|take-order\"" -- apps packages` must name nothing but
+  `packages/ui/src/components/wt-table-token.a11y.test.ts:147`, a generic chip fixture whose key
+  `take-order` is a made-up string the token does not read, which stays.
+- [ ] **Step 2: Run**, each `Tests` count read:
+  `pnpm --filter @waitron/till exec vitest run src/widgets/signal-chips.test.ts src/i18n/strings.test.ts src/screens/till-floor-screen.signals.test.ts`
   and `pnpm --filter @waitron/server exec vitest run src/table-signals.test.ts` — PASS.
 - [ ] **Step 3:** prettier; commit — `"Take order is a service step: the take_order signal and its word go (A757 slice 8)"`.
 
@@ -919,9 +1041,9 @@ string }`.
   — retitle (`# Table service` / `# Servicio en mesa`) and add `## Clear a service step
   {#service-steps}` / `## Marcar un paso de servicio como hecho {#service-steps}`: what a step is
   and where it shows (the card's chip with Done, the map's blue table with the bell and the step's
-  name, the table's details); one at a time, the latest started; what clears it (Done, any order
-  sent after it started, the party leaving) and that it hides while an order is being taken; that
-  it starts again when its start happens again; where a venue sets them (the department's Service
+  name, the table's details); one at a time, the latest due; what clears it (Done, an order sent
+  once it is showing, the party's first order, the party leaving) and that before the first order
+  it hides while an order is being taken; that it starts again when its start happens again; where a venue sets them (the department's Service
   tab, Service steps). Short, in `~/.claude/docs-writing-style.md`'s style.
 - Modify: `apps/server/src/i18n/table-service-guide.ts` ("Table service" / «Servicio en mesa»)
 - Modify: `docs/developers/design-system.md:943` — after the held chip's sentences: a due service
@@ -957,9 +1079,10 @@ string }`.
 - [ ] **Step 1: The design.** Status line (`:3`): "slice 8 built 2026-10-2x; A757 is built". Dated
   notes, each pointing at this plan: under §5.4 (after `:438`), Take order is a step and looks like
   one; under §8 (after `:580`), what slice 8 built — completions in `service_step_completions`, a
-  step's start time is when its start happened (an order or Done after it clears it), every step
-  hides while an order is being taken (how Take order keeps its rule; the code does not know which
-  step is Take order), "after the step before" starts only from a Done, the route, the chip and its
+  step starts when it falls due and the latest due shows; an order sent after that clears it; the
+  party's first order clears every step triggered before it, and before that order an open draft
+  hides every step (how Take order keeps its rule; the code does not know which step is Take
+  order); a Done counts from the step's trigger; "after the step before" starts only from a Done, the route, the chip and its
   Done, the map's name cue; §11 item 8 "(built)". Line `:4-5`'s link to the backlog detail gets a
   dated pointer once Step 3 deletes that section.
 - [ ] **Step 2: `docs/backlog.md`.** A757 is finished, so its entry (`:2159-2172`) is **deleted**
@@ -1022,44 +1145,41 @@ language restored in `finally`.
 
 ## Owner points (each with the default this plan builds; the owner is away until 2 Nov)
 
-1. **A step "starts" when its start happens, before its minutes.** An order sent or a Done tapped
-   after that moment clears it, even while it is not yet showing: Set up Done at 20:33, the order
-   sent at 20:34 → Take order (due 20:35) never shows. The other reading counts from when it shows,
-   so Take order would appear at 20:35 after the order was in.
-2. **Every step hides while an order is being taken, and the code does not know which step is Take
-   order.** That is how Take order keeps today's rule; Dessert? hides too while a dessert order is
-   drafted. The alternative is a hidden flag set only on the starter's Take order (a migration and
-   no dashboard control).
-3. **"After the step before" starts only from a Done on the step above**, not from an order
+1. **"After the step before" starts only from a Done on the step above**, not from an order
    clearing it: when guests order before Set up is tapped, Take order never starts; a "Coffee? ·
    after the step before" under "Dessert?" never starts when dessert was ordered rather than Done.
-4. **One Done clears the step shown and every due step it was hiding**, each recorded, so their
+2. **One Done clears the step shown and every due step it was hiding**, each recorded, so their
    own followers start.
-5. **Done is accepted on a step that has started but is not yet due by the server's clock**, so a
-   till a little ahead is not refused; a Done on a step no longer showing changes nothing and is
-   not an error.
-6. **Dishes cancelled whole are ignored** by "a course served" and "everything served"; a course
-   never ordered never starts its step; only sent dishes count (a draft is not ordered).
-7. **"Every N minutes since the last order"** repeats at the last order + N, + 2N, …; nothing
+3. **Done is accepted on a step that has been triggered but is not yet due by the server's
+   clock**, so a till a little ahead is not refused; a Done on a step no longer showing changes
+   nothing and is not an error.
+4. **Dishes are reckoned as the fire reminder reckons them**: a dish's serving ends at its serving
+   or at the cancellation of its rest, whichever is later, and a dish cancelled whole ends at its
+   cancellation; recalled dishes and abandoned bills are left out; only sent dishes count (a draft
+   is not ordered); a course never ordered never starts its step.
+5. **"Every N minutes since the last order"** repeats at the last order + N, + 2N, …; nothing
    before the first order; Done stops only the current repeat.
-8. **"An order sent" is a group submission** (new dishes, or dishes joining a held course); firing
+6. **"An order sent" is a group submission** (new dishes, or dishes joining a held course); firing
    a held course is not one.
-9. **A party moved to another department's table, or split off as a new party, starts that
+7. **A party moved to another department's table, or split off as a new party, starts that
    department's steps from the beginning**: Set up shows again (from the party's seating for a
-   move, from the split for a new party).
-10. **A party across two departments' tables** shows each table its own department's step.
-11. **A table whose zone has no department shows no steps**, as Needs clearing does.
-12. **Done is at least 44 px square** (`--wt-tap-min`), so a card with a step is a little taller
+   move, from the split for a new party). A party split off with dishes has no orders of its own —
+   the group submissions belong to the party they were sent from — so its Set up shows at once,
+   its first order is whatever it orders next, and "every N minutes since the last order" never
+   starts until then.
+8. **A party across two departments' tables** shows each table its own department's step.
+9. **A table whose zone has no department shows no steps**, as Needs clearing does.
+10. **Done is at least 44 px square** (`--wt-tap-min`), so a card with a step is a little taller
     than picture 10 draws it.
-13. **The unplaced token shows the step without Done**; Done is on the card and in the details.
-14. **A device whose profile cannot take orders sees the step without Done.**
-15. **Done in the details closes them**, as Mark cleared does.
-16. **The guide's "Refund a payment" page becomes "Table service"** («Servicio en mesa»), holding
+11. **The unplaced token shows the step without Done**; Done is on the card and in the details.
+12. **A device whose profile cannot take orders sees the step without Done.**
+13. **Done in the details closes them**, as Mark cleared does.
+14. **The guide's "Refund a payment" page becomes "Table service"** («Servicio en mesa»), holding
     its refund sections and the new service-steps section.
-17. **New words:** "Done" («Hecho»), "Done: Dessert?" as the button's spoken name («Hecho:
-    Dessert?», the step's name as stored), "This step no longer exists." («Este paso ya no existe.»); the fixed «Tomar nota»
-    chip retires, replaced by the step's own stored name.
-18. **The order screen's status pin names the step** but has no timer of its own, so a step that
+15. **New words:** "Done" («Hecho»), "Done: Dessert?" as the button's spoken name («Hecho:
+    Dessert?», the step's name as stored), "This step no longer exists." («Este paso ya no
+    existe.»); the fixed «Tomar nota» chip retires, replaced by the step's own stored name.
+16. **The order screen's status pin names the step** but has no timer of its own, so a step that
     falls due while the order screen stays open reaches the pin at its next redraw.
 
 ## What contradicted the brief or the design
@@ -1071,5 +1191,6 @@ language restored in `finally`.
 - The design cites the reminder redraw at `till-floor-screen.ts:717-728`; it is now `:949-963`.
 - The design's "What it stores" says the steps' table is `state` per `conventions-data.md`; the
   completions table is `state` too, for the reason in Decision 1, not because the design says so.
-- §8 gives Take order an extra rule "as `take_order` does"; this plan builds that behaviour for
-  every step rather than marking Take order (Decision 3, owner point 2).
+- §8 gives Take order an extra rule "as `take_order` does"; this plan keeps it with one general
+  rule about the party's first order rather than marking Take order (Decision 3, driver ruling
+  I1).
