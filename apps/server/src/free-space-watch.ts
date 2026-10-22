@@ -1,0 +1,92 @@
+import { codeOf, type Logger } from "@waitron/server-kit";
+import type { DiskFullState } from "./disk-full-state.js";
+import { freeBytes, type Statfs } from "./free-bytes.js";
+import { unrefTimer, type Timer } from "./unref-timer.js";
+
+/** Below this the box warns that its disk is running out (design §4.6 item 4). */
+export const SPACE_LOW_BYTES = 2 * 1024 ** 3;
+/** The warning goes off only at this much free, so it does not toggle at the line. */
+export const SPACE_OK_BYTES = 2.5 * 1024 ** 3;
+export const FREE_SPACE_CHECK_MS = 60_000;
+
+export interface FreeSpaceReading {
+  /** The latest reading the filesystem could give; null until one. */
+  readonly freeBytes: number | null;
+  readonly readAt: Date | null;
+  /** When the warning now on came on; null while it is off. */
+  readonly lowSince: Date | null;
+}
+
+export interface FreeSpaceState {
+  /** `free` is `freeBytes`' answer: null where the filesystem cannot say, which changes nothing. */
+  record(free: number | null, at: Date): void;
+  current(): FreeSpaceReading;
+}
+
+export function createFreeSpaceState(deps: { log: Logger }): FreeSpaceState {
+  let reading: FreeSpaceReading = { freeBytes: null, readAt: null, lowSince: null };
+  let lastReadable: boolean | null = null;
+  return {
+    record(free, at) {
+      if (free === null) {
+        if (lastReadable !== false) deps.log("warn", "storage.free_space_unread", {});
+        lastReadable = false;
+        return;
+      }
+      if (lastReadable !== true) deps.log("info", "storage.free_space_read", { freeBytes: free });
+      lastReadable = true;
+      let lowSince = reading.lowSince;
+      if (lowSince === null && free < SPACE_LOW_BYTES) {
+        lowSince = at;
+        deps.log("warn", "storage.space_low", { freeBytes: free });
+      } else if (lowSince !== null && free >= SPACE_OK_BYTES) {
+        lowSince = null;
+        deps.log("info", "storage.space_ok", { freeBytes: free });
+      }
+      reading = { freeBytes: free, readAt: at, lowSince };
+    },
+    current: () => reading,
+  };
+}
+
+/**
+ * Reads `dir`'s free space at once and then every `intervalMs`, each timer armed after the reading
+ * before it finished. While `disk` holds a noted stop, each reading also asks it to re-check, so a
+ * stop lifts when space is freed even if nothing writes.
+ */
+export function startFreeSpaceWatch(deps: {
+  dir: string;
+  state: FreeSpaceState;
+  disk: Pick<DiskFullState, "noted" | "full">;
+  intervalMs: number;
+  now: () => Date;
+  log: Logger;
+  statfs?: Statfs;
+  timer?: (ms: number, fn: () => void) => Timer;
+}): { stop: () => void } {
+  const timer = deps.timer ?? unrefTimer;
+  let stopped = false;
+
+  async function read(): Promise<void> {
+    if (stopped) return;
+    try {
+      const free = await freeBytes(deps.dir, deps.statfs);
+      if (stopped) return;
+      deps.state.record(free, deps.now());
+      if (deps.disk.noted()) await deps.disk.full();
+    } catch (error) {
+      deps.log("warn", "storage.free_space_check_failed", { errorCode: codeOf(error) });
+    } finally {
+      if (!stopped) armed = timer(deps.intervalMs, () => void read());
+    }
+  }
+
+  let armed = timer(0, () => void read());
+
+  return {
+    stop: () => {
+      stopped = true;
+      armed.cancel();
+    },
+  };
+}
