@@ -436,3 +436,54 @@ approval is separate. Take one owner question at a time. The transport foundatio
 can be planned separately from later customer manifests after its own contract is
 accepted. Joint acceptance, implementation planning, migration decision, FULL build
 review and runtime/provider qualification remain later gates.
+
+### A951 correction, 2026-10-22: connection reachability and the existing two interfaces
+
+The owner's decision 1 answer at about 16:15 and addendum at about 16:20 supersede
+the publication question and recommendation in the historical A951 body above.
+The [current revision](../superpowers/specs/2026-10-22-a951-box-public-access-design.md)
+aligns with Cloud's existing [confirmed compromise, lines 89–104 and 148–180](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/product-and-platform.md#L89)
+and [proposed A951 contract, lines 115–263](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/waitron-integration-contract.md#L115).
+It records exact source hashes and historical section/line receipts: sections 3 and
+7 already separate the paths and certificate purposes, and section 8 already denies
+unlisted routes. Section 13's first question was misplaced; section 10's public
+product readiness and sections 8/11's publication choices are separate product work.
+
+A951 gives reachability to segregated listeners, with a default-deny manifest
+framework. It enables no product automatically and authorises no publication,
+pause or per-service switches. Staff TLS passes through Cloud and ends at the box;
+the staff private key stays there. Customer HTTPS ends at Cloud for bot/attack
+filtering, then uses scoped WireGuard and verified encrypted upstream transport,
+with an independent box identity/key/certificate and authenticated Cloud forwarder.
+The public certificate key stays at Cloud. Customer ingress refuses all staff,
+till/device, setup/recovery, sync, fiscal, backup/restore and hardware routes; no
+wildcard proxy. Public credentials cannot enter staff APIs. Whether any customer
+routes also appear on the staff hostname remains a named product/interface decision;
+default deny is a recommendation, not an owner-approved answer to that question.
+
+Cloud can read public request/response plaintext in memory, including contact/order
+details, for filtering. That grants no general retention authority. Keep raw bodies,
+cookies, authentication and QR/session secrets out of shared diagnostics and shared
+private-state caches. Bounded metadata policy remains an A980/D101 joint gate,
+following [D101's inventory, lines 43–79 and 124–128](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/superpowers/specs/2026-10-22-cloud-data-protection-design.md#L43).
+Staff hostname/IP/connection metadata remains visible to passthrough. This describes
+architecture and proposals, not deployed protection from host-provider privileges.
+
+All other technical invariants/proposals remain, including three revision/grant
+counters, test-only opt-in staff CSR v1, independent upstream mutual TLS, scoped
+expiry/revocation, local sale independence and no offsite queue or writer/restore/
+fiscal authority from connectivity. D88 cold-recovery, `.local` and timing
+decisions stay answered; proposed timer values still need agreement. Storage and
+migration stay with the later approved plan. The foundation need not wait for
+customer pages/policies; staff-only qualification can proceed after its own scoped
+approvals, including origin/device/passkey behaviour. Customer routes and product
+privacy/authentication/pause choices remain separate.
+
+The revised design's sole new owner question asks approval of the complete revised
+connection design **for planning only**, recommending yes. Its example keeps tills
+on `.local`, gives an away manager the encrypted dashboard, and filters a customer's
+booking at Cloud before forwarding; the booking product controls availability.
+A yes authorises writing a plan, not approving an unwritten plan, implementation,
+deployment, provider operations or service switches. Full revised-design approval,
+pinned bilateral scoped contracts, plan/build approval and provider/runtime
+qualification remain open. Source inspection supplies no runtime verification.

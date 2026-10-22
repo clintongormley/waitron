@@ -6027,9 +6027,13 @@ the tree. What remains, largest first:
   integration (2026-09-24; #638, #808).
 
 - **A951. The box's lasting tunnel and public-certificate client, for the customer-facing pages**
-  — design proposed; owner review and pinned joint Cloud contract acceptance remain open.
-  Venue devices keep `.local` by default; customer access comes soon after go-live and precedes
-  A1013/A508/A509/A1012. No plan or build is approved. [Design](superpowers/specs/2026-10-22-a951-box-public-access-design.md);
+  — revised 2026-10-22 to align with Cloud's existing two-interface architecture: staff TLS
+  passes through to the box; customer HTTPS ends at Cloud for filtering, then uses verified
+  encrypted upstream transport. A951 provides reachability, not service publication or pause
+  controls. Venue devices keep `.local`; customer access comes soon after go-live and precedes
+  A1013/A508/A509/A1012. Complete revised design approval for planning only and pinned scoped
+  bilateral contracts remain open. The foundation need not wait for customer-product designs.
+  No plan or build is approved. [Design](superpowers/specs/2026-10-22-a951-box-public-access-design.md);
   [detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client).
 
 - **Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side

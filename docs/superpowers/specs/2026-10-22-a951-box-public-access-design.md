@@ -1,3 +1,165 @@
+# CURRENT REVISION: A951 connection and two remote interfaces
+
+**2026-10-22. Incorporates the owner's decision 1 correction at about 16:15 and
+addendum at about 16:20. Complete revised design awaits approval for planning only.**
+
+Your remote connection gives you reachability to the box. It does not decide which
+services you find there. A951 supplies the tunnel, certificates and appropriately
+segregated listeners, with a default-deny route-manifest framework. It enables no
+customer product automatically and authorises no per-service publication controls.
+This revision takes precedence over the historical draft below; all technical
+requirements and proposals not superseded here remain part of the revised design.
+
+## Follow the existing Cloud architecture
+
+This applies an existing decision, rather than proposing the two-interface choice
+again. At Cloud pin `35af2d396d916223ff4f319d8f44093685d62da5`:
+
+- [Product and platform, lines 89–104](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/product-and-platform.md#L89)
+  calls this the “Confirmed compromise”: public HTTPS terminates in Cloud for
+  inspection; staff TLS passes through on a separate hostname. Lines 148–180 retain
+  `.local` as the default and specify the separate names, keys and onward transport.
+- [Public access and A951, lines 115–263](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/waitron-integration-contract.md#L115)
+  remains **PROPOSED**: lines 129–149 describe the entrances, 156–209 the restricted
+  customer boundary and 211–263 the lifecycle and acceptance gates. The confirmed
+  architecture does not approve every detail of that contract.
+- [D101, lines 43–79](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/superpowers/specs/2026-10-22-cloud-data-protection-design.md#L43)
+  inventories remote transport and security metadata separately. Lines 124–128
+  distinguish in-memory processing from storage and provider access; lines 341–351
+  retain D101's scoped authority and remaining gates.
+
+SHA-256 of those pinned document bytes, in the same order, checked with
+`git show <pin>:<path>` and `shasum -a 256`:
+
+| Document             | SHA-256                                                            |
+| -------------------- | ------------------------------------------------------------------ |
+| Product and platform | `f3ccc126d829b380d2bf31a4983406a4a15c05fc156454e8cd359ff9bbbb18ff` |
+| Integration contract | `1b3b43a3d92ed83ca8816bd8867f24176a82d7ceb0c83e25a7b36440a19deaa7` |
+| D101                 | `34c27c92f952b2499c140533efd9193063821348977bf8fa83003001acf459d1` |
+
+These are source-inspection receipts, not runtime verification.
+
+## Keep the two remote interfaces distinct
+
+1. **Dashboard/staff hostname:** the browser's TLS connection ends at the box.
+   Cloud passes the encrypted connection through, so it cannot inspect staff HTTP
+   content on that forwarding path. The staff certificate's private key stays at
+   the box. Cloud still sees hostname, IP and connection metadata. This is the
+   confirmed architecture with proposed controls, not proof of deployment, metadata
+   invisibility or protection from host-provider privileges. Network and connection
+   filtering happen at Cloud; staff HTTP authentication and permissions stay at the
+   box. `.local` remains the venue default. The optional remote staff origin needs
+   separate authentication, device, cookie and passkey qualification; existing local
+   sessions or enrolment do not automatically follow it. Public customer credentials
+   must never enter staff APIs.
+2. **Customer hostname:** browser TLS ends at Cloud so it can filter bots and attacks.
+   Cloud holds that public certificate's private key. It forwards accepted requests
+   over scoped WireGuard and verified encrypted upstream HTTPS to the box's customer
+   listener. Keep the box's independent public-upstream identity, private key and
+   certificate, and authenticated Cloud forwarder, separate from staff TLS. The
+   proposed mutual TLS lifecycle in historical section 7 still needs joint acceptance.
+   The customer listener refuses dashboard, staff login, till/device, setup, recovery,
+   sync, backup/restore, fiscal administration, hardware and staff catch-all routes.
+   Both boundaries deny unlisted routes; there is no wildcard public proxy.
+
+Whether particular customer routes may also appear on the staff hostname remains a
+named product/interface decision. Recommend default deny there until explicitly
+agreed, without attributing that recommendation to the owner. The customer-host
+refusal of staff routes does not decide the reverse direction.
+
+## Separate inspection from retention
+
+Cloud can see public request and response plaintext in memory for filtering,
+including booking contact details and order details. Limit processing to the agreed
+purpose and minimise data. This visibility grants no general right to keep payloads.
+Keep raw bodies, cookies, authentication material and QR/session secrets out of
+shared diagnostics and shared private-state caches. Retain historical sections 8
+and 10's payload exclusions and private-status `no-store` requirement.
+
+The allowed metadata fields, purpose, access, location, bounds and retention policy
+remain an **A980/D101 joint acceptance gate** for the affected flow, including staff
+transport metadata. No retention period or provider authority is invented here.
+The [contract's lines 197–203](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/waitron-integration-contract.md#L197)
+and D101's register requirements above supply the existing boundary, not a claim
+that encryption means no processing or that these controls are deployed.
+
+## What matches, and what this correction supersedes
+
+The following references use the unchanged historical draft at Waitron publication
+`497489340977a4ccb3f3e98609c6d4b47cdb8c69`, so prepending this revision cannot move
+their cited line numbers:
+
+- **Already matches:** [section 3, lines 73–132](https://github.com/clintongormley/waitron/blob/497489340977a4ccb3f3e98609c6d4b47cdb8c69/docs/superpowers/specs/2026-10-22-a951-box-public-access-design.md#L73),
+  including the diagram at 80–93, separates local access, staff passthrough and public
+  termination. [Section 7, lines 288–317](https://github.com/clintongormley/waitron/blob/497489340977a4ccb3f3e98609c6d4b47cdb8c69/docs/superpowers/specs/2026-10-22-a951-box-public-access-design.md#L288)
+  separates certificate purposes and failure scopes. [Section 8, lines 432–478](https://github.com/clintongormley/waitron/blob/497489340977a4ccb3f3e98609c6d4b47cdb8c69/docs/superpowers/specs/2026-10-22-a951-box-public-access-design.md#L432)
+  supplies default deny, credential separation and no offsite queue.
+- **Superseded:** [section 13, lines 644–677](https://github.com/clintongormley/waitron/blob/497489340977a4ccb3f3e98609c6d4b47cdb8c69/docs/superpowers/specs/2026-10-22-a951-box-public-access-design.md#L644)
+  misplaced publication-per-service as A951's first decision. Its question and
+  recommendation of independent controls are withdrawn from A951. Every implication
+  that publication, pause or service switches belong to the connection's lifecycle
+  is superseded, wherever it appears in the historical draft.
+- **Scope corrected:** [section 10, lines 515–528](https://github.com/clintongormley/waitron/blob/497489340977a4ccb3f3e98609c6d4b47cdb8c69/docs/superpowers/specs/2026-10-22-a951-box-public-access-design.md#L515)
+  lists “Public products”; that is separate product readiness, not connection
+  lifecycle or authority to switch services. [Section 8, lines 410–489](https://github.com/clintongormley/waitron/blob/497489340977a4ccb3f3e98609c6d4b47cdb8c69/docs/superpowers/specs/2026-10-22-a951-box-public-access-design.md#L410)
+  and [section 11, lines 540–591](https://github.com/clintongormley/waitron/blob/497489340977a4ccb3f3e98609c6d4b47cdb8c69/docs/superpowers/specs/2026-10-22-a951-box-public-access-design.md#L540)
+  retain the manifest framework and path-scoped acceptance. Customer publication,
+  pause, authentication, privacy and business choices belong to separate product
+  designs, not automatic A951 controls.
+
+## Retain the technical boundaries and scoped gates
+
+- Keep all three independent counters: installation configuration revision, appliance
+  content revision and transport-grant sequence. Preserve durable apply/acknowledgement,
+  stop/reboot recovery, scoped network rules, cell moves, fresh replacement secrets
+  and exclusion of endpoint secrets from transferable state.
+- Keep staff CSR v1 opt-in and test-installation-only. Preserve its exact exchange,
+  current-intent checks and atomic install/reload. Neither the install helper nor
+  this revision permits an arbitrary issuer. Public-upstream mutual TLS needs its
+  own accepted issuer/trust and renewal/revocation lifecycle; it cannot
+  silently widen staff v1.
+- Fail closed on expiry/revocation for the affected remote path and its connections;
+  shared transport withdrawal closes both remote paths. Unrelated `.local` sales
+  remain governed locally. No WAN/Cloud dependency is added to local sales, no
+  offsite booking/order queue is introduced, and lost outcomes require reconciliation.
+- Tunnel access, certificates and control leases confer no writer, restore or fiscal
+  authority. Preserve the already answered D88 cold-recovery choice rather than a
+  running follower, and the `.local` and soon-after-go-live
+  decisions. No fiscal clock or identity rule changes. Storage and migration choices
+  wait for the approved plan. Historical timer values, including the ten-minute
+  transport grant, one-minute attempts, 30-second drain and 5-second to 5-minute CSR
+  polling proposal, remain proposals requiring scoped agreement, not owner decisions.
+
+The foundation must not wait for customer pages or their product policies. After
+the relevant approvals, qualify segregated listeners with an empty customer manifest
+and isolated test fixtures. Staff-only qualification can proceed separately with its
+own origin/device approvals; customer-path qualification needs its independent
+upstream identity and privacy contract. Apply each acceptance case only to the path
+or capability being enabled, while checking that other routes remain denied.
+
+Full owner approval of this revised connection design, bilateral pinned scoped
+contracts, an approved implementation plan, separate build authority and applicable
+provider/runtime qualifications remain open. D101 planning approval does not supply
+them. This revision is documentation only. Customer pages remain separate designs.
+
+## One owner question: approve the revised connection design for planning only
+
+Your tills stay on `.local`. Away from the venue, you reach the dashboard through
+the encrypted staff hostname. A customer's booking request is inspected at Cloud
+and forwarded through the separate customer path; the booking product controls
+whether bookings are available. The tunnel supplies access, without switching the
+booking service on.
+
+**Do you approve the complete revised A951 connection design for preparing its
+implementation plan only? Recommendation: yes.** A yes authorises writing the plan;
+it approves no unwritten plan, runtime build, deployment, provider work or service
+switches. Later technical contracts and per-product privacy, authentication and
+pause choices remain separate. It does not reopen the two-interface decision.
+
+---
+
+# Historical draft: preserved verbatim; the current revision above takes precedence
+
 # A951: Keep the box connected without opening its staff interface to customers
 
 **22 October 2026. Proposed box-side design for owner review. No implementation plan,
