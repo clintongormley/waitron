@@ -1,3 +1,4 @@
+import { buildQrPayload } from "@waitron/verifactu";
 import QRCode from "qrcode";
 import { describe, expect, it } from "vitest";
 import { qrModules } from "./qr-matrix.js";
@@ -65,5 +66,45 @@ describe("qrModules", () => {
   it("forces the QR version when asked", () => {
     expect(qrModules("Waitron 30-40 mm", { version: 7 })).toHaveLength(45);
     expect(qrModules("Waitron 30-40 mm", { version: 9 })).toHaveLength(53);
+  });
+});
+
+describe("a receipt QR for a five-symbol installation name", () => {
+  // buildQrPayload reads only IDFactura and ImporteTotal; the values are those of the 2026-10-22
+  // probe (~/waitron-campaign/a947-plan4a/probes/qr-size.mjs), which printed these sizes.
+  const squares = (numSerie: string, environment: "preproduction" | "production"): number =>
+    qrModules(
+      buildQrPayload(
+        {
+          IDFactura: {
+            IDEmisorFactura: "B12345674",
+            NumSerieFactura: numSerie,
+            FechaExpedicionFactura: "23-10-2026",
+          },
+          ImporteTotal: "123456.78",
+        } as Parameters<typeof buildQrPayload>[0],
+        environment,
+      ),
+    ).length;
+
+  it.each([
+    ["preproduction", 45],
+    ["production", 49],
+  ] as const)("is the same size as a four-symbol one in %s: %i squares", (environment, size) => {
+    for (const numSerie of [
+      "A-06XV/1",
+      "A-0CZZW/1",
+      "A-06XV/99999",
+      "A-0CZZW/9999",
+      "A-0CZZW/10000",
+      "A-06XV/9999999999",
+      "A-0CZZW/9999999999",
+    ]) {
+      expect(squares(numSerie, environment), numSerie).toBe(size);
+    }
+  });
+
+  it("grows with a long enough series name (the probe's control)", () => {
+    expect(squares("ABCDEFGHIJKLMNOPQRSTU-0CZZW/9999999999", "preproduction")).toBe(49);
   });
 });

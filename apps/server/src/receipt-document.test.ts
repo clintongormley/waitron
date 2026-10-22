@@ -1069,6 +1069,54 @@ describe("the header rows: order, number and date (A754)", () => {
     ).toEqual(amount("", "Pedido 41", { gap: 2 }));
   });
 
+  describe("with a five-symbol installation name in the invoice number", () => {
+    const printedHeader = (
+      paperWidth: "58mm" | "80mm",
+      invoiceNumber: string,
+      issuedAt = ISSUED,
+    ): string[] => {
+      const lines = printedLines(
+        formatReceipt({
+          ...SIMPLIFIED,
+          result: { ...SIMPLIFIED.result, invoiceNumber, issuedAt },
+          printer: { paperWidth, resolution: "180dpi" },
+        }),
+      );
+      const first = lines.findIndex((line) => line.startsWith("Mesa 6"));
+      return lines.slice(first, lines.indexOf("-".repeat(lines[first]!.length), first));
+    };
+
+    it("prints a four-digit counter and the numeric date on one line on 58 mm", () => {
+      const date = receiptDateTimeNumeric(ISSUED, "es-ES", 120);
+      expect(printedHeader("58mm", "A-0CZZW/9999")).toEqual([
+        "Mesa 6               Pedido 41",
+        `A-0CZZW/9999  ${date}`,
+      ]);
+    });
+
+    it("moves the date to its own right-aligned line on 58 mm at five digits, cutting nothing", () => {
+      const date = receiptDateTimeNumeric(ISSUED, "es-ES", 120);
+      expect(printedHeader("58mm", "A-0CZZW/10000")).toEqual([
+        "Mesa 6               Pedido 41",
+        "A-0CZZW/10000",
+        date.padStart(30),
+      ]);
+    });
+
+    it("fits a ten-digit counter beside the longest Spanish date on 80 mm", () => {
+      const september = "2026-09-28T20:34:00.000Z";
+      const date = receiptDateTime(september, "es-ES", 120);
+      for (let month = 0; month < 12; month++) {
+        const other = new Date(Date.UTC(2026, month, 28, 20, 34)).toISOString();
+        expect(date.length).toBeGreaterThanOrEqual(receiptDateTime(other, "es-ES", 120).length);
+      }
+      expect(printedHeader("80mm", "A-0CZZW/9999999999", september)).toEqual([
+        "Mesa 6                           Pedido 41",
+        `A-0CZZW/9999999999${date.padStart(42 - 18)}`,
+      ]);
+    });
+  });
+
   it.each([
     { paperWidth: undefined, heading: "Factura simplificada" },
     { paperWidth: "80mm" as const, heading: "Factura simplificada" },
