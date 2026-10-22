@@ -364,3 +364,16 @@ it("discards the staged copy once the restore is staged, and keeps it when the r
   expect((await restore()).status).toBe(202);
   expect(clearStagedRecovery).toHaveBeenCalledTimes(1);
 });
+it("keeps the stage route unavailable without the first-setup host", async () => {
+  const stageRecovery = vi.fn(async () => ({ stagedId }));
+  const app = new Hono();
+  mountSetup(app, { environment: "preproduction", stageRecovery }, () => {});
+  const response = await app.request(
+    "/setup-api/recovery/stage",
+    stageForm({ eventId: "e", source: archiveSource }),
+    tls(),
+  );
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+  expect(stageRecovery).not.toHaveBeenCalled();
+});

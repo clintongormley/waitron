@@ -168,7 +168,8 @@ export function mountRecoveryPreparationApi(
     options.run(c, log, async () => {
       c.header("Cache-Control", "no-store");
       assertOwnerTransport(c);
-      if (deps.stageRecovery === undefined) throw new AppError("setup.not_ready", {});
+      if (deps.stageRecovery === undefined || deps.firstSetup === undefined)
+        throw new AppError("setup.not_ready", {});
       if (options.busy()) throw new AppError("setup.already_provisioning", {});
       if (contentType(c) !== "multipart/form-data") invalid("body");
       const { payload, artifact } = await readUpload(c, options.uploadLimit);

@@ -843,6 +843,7 @@ async function bootServer(
 ): Promise<StartedServer> {
   const now = () => new Date();
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
+  await clearStagedRecoveries(join(config.stateDir, RESTORE_STAGING_DIR));
   // Here rather than in `loadConfig`: `health.ts` imports from `config.ts` to build `DUTY_BUDGET_MS`,
   // so `config.ts` importing it back would be a cycle. An idle host sleeps `config.maxTickMs`
   // verbatim, so a ceiling at or past the drain budget would read the drain duty as stale.
@@ -975,7 +976,6 @@ async function bootServer(
   if (restoredTriggers.length > 0) {
     log("warn", "append_only.triggers_restored", { triggers: restoredTriggers });
   }
-  await clearStagedRecoveries(join(config.stateDir, RESTORE_STAGING_DIR));
 
   // Drift visibility: log the enabled set against what the database has actually migrated. A
   // soft-disabled module's data is kept; it is simply not migrated.

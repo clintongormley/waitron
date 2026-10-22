@@ -830,6 +830,35 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     }
   }, 60_000);
 
+  it("removes a staged decrypted copy even when the start then fails before migrating", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-staged-early-"));
+    const leftover = join(stateDir, "restore-staging", "staged-recovery", "archive-validate-left");
+    try {
+      await mkdir(leftover, { recursive: true });
+      await writeFile(join(leftover, "venue.db"), "decrypted venue");
+      await expect(
+        startServer(
+          {
+            WAITRON_VENUE_DIR: join(stateDir, "venue"),
+            WAITRON_STATE_DIR: stateDir,
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_ENV: "preproduction",
+            WAITRON_HTTP_PORT: String(await freePort()),
+            WAITRON_HTTP_LANDING_PORT: "0",
+            WAITRON_SETUP_APP_DIR: join(stateDir, "no-such-app"),
+          },
+          {},
+        ),
+      ).rejects.toMatchObject({
+        code: "server.config_invalid",
+        params: { variable: "WAITRON_SETUP_APP_DIR" },
+      });
+      await expect(readdir(dirname(leftover))).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("deletes setup validation's plaintext copy after staging a confirmed archive", async () => {
     beforeServerStarts();
     const venue = await freshVenue();

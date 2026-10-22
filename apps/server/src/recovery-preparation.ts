@@ -22,7 +22,7 @@ import {
 import { AppError, isAppError } from "@waitron/shared";
 import { isDeepStrictEqual } from "node:util";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { lstat, rm } from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
@@ -367,6 +367,8 @@ export async function clearStagedRecoveries(stagingDir: string): Promise<void> {
 interface StagedCopy {
   readonly id: string;
   readonly eventId: string;
+  /** Never opened: a preparation migrates the database it reads, so each one reads its own copy.
+   * Its decrypted secret entries stay in memory for as long as the copy is kept. */
   readonly copy: ValidatedArtifact & { readonly sourceId: string };
   usedAt: number;
   users: number;
@@ -401,7 +403,8 @@ export function createSetupRecoveryPreparation(
   const touch = (entry: StagedCopy) => {
     entry.usedAt = Date.now();
     clearTimeout(expiry);
-    expiry = setTimeout(() => void drop(entry), STAGED_RECOVERY_UNUSED_MS + 1);
+    // Boot clears whatever a failed delete leaves behind.
+    expiry = setTimeout(() => drop(entry).catch(() => {}), STAGED_RECOVERY_UNUSED_MS + 1);
     expiry.unref();
   };
   // Read at each use as well as by the timer, so a clock moved past the hour is refused at once.
@@ -436,7 +439,21 @@ export function createSetupRecoveryPreparation(
       entry.users += 1;
       touch(entry);
       try {
-        return await interactive.prepare(entry.copy, entry.copy.sourceId, request, hold, client);
+        const scratch = await mkdtemp(join(stagedDir, "request-"));
+        try {
+          const databasePath = join(scratch, VENUE_FILE);
+          await copyFile(entry.copy.databasePath, databasePath);
+          await chmod(databasePath, 0o600);
+          return await interactive.prepare(
+            { ...entry.copy, databasePath, discard: async () => {} },
+            entry.copy.sourceId,
+            request,
+            hold,
+            client,
+          );
+        } finally {
+          await rm(scratch, { recursive: true, force: true });
+        }
       } finally {
         entry.users -= 1;
         if (entry.retired) await release(entry);
@@ -471,23 +488,9 @@ export function createSetupRecoveryPreparation(
       await prepared.discard();
     }
   };
-  const busy = (eventId: string, entry: StagedCopy | undefined) => {
-    if (entry !== undefined && entry.eventId !== eventId)
-      throw new AppError("setup.already_provisioning", {});
-  };
   const stage: StageRecovery = async (eventId, source) => {
-    busy(eventId, await live());
     const copy = await validateArtifact({ ...options, ...source, stagingDir: stagedDir });
     const previous = await live();
-    try {
-      // The first open rewrites the file's header into WAL mode; doing it here leaves every
-      // preparation reading a file no request changes.
-      await (await openVenueDatabase(dirname(copy.databasePath))).close();
-      busy(eventId, previous);
-    } catch (error) {
-      await copy.discard();
-      throw error;
-    }
     const entry: StagedCopy = {
       id: randomUUID(),
       eventId,
