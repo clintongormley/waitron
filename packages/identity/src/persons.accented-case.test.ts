@@ -57,7 +57,7 @@ describe("a live display name is taken whatever case its accented letters are ty
     ["JOSÉ GARCÍA", "José García"],
   ] as const) {
     it(`refuses ${second} when ${first} is already employed`, async () => {
-      const { token } = await openManagementSession(suite.db, "manager");
+      const { token } = await openManagementSession(suite.db, "admin");
       await create(token, first);
 
       await expect(create(token, second)).rejects.toMatchObject({
@@ -69,7 +69,7 @@ describe("a live display name is taken whatever case its accented letters are ty
 
   it("refuses a second person whose name differs only in the case of an ASCII letter", async () => {
     // The control: `lower()` folds ASCII, so this case alone cannot tell the two folds apart.
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     await create(token, "ANA LOPEZ");
 
     await expect(create(token, "Ana Lopez")).rejects.toMatchObject({
@@ -79,7 +79,7 @@ describe("a live display name is taken whatever case its accented letters are ty
   });
 
   it("refuses a second person whose name differs only in how the accent is encoded", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     await create(token, PRECOMPOSED);
 
     await expect(create(token, DECOMPOSED)).rejects.toMatchObject({
@@ -90,7 +90,7 @@ describe("a live display name is taken whatever case its accented letters are ty
 
   it("accepts a name that differs by an accent rather than by its case", async () => {
     // The control in the other direction: Lopez and López are two people.
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     await create(token, "Ana Lopez");
 
     await expect(create(token, "Ana López")).resolves.toMatchObject({ id: expect.any(String) });
@@ -99,7 +99,7 @@ describe("a live display name is taken whatever case its accented letters are ty
 
 describe("a login address is taken whichever way its accent is encoded", () => {
   it("refuses a second person whose address differs only in how the accent is encoded", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     await create(token, "One", "josé@example.test");
 
     await expect(create(token, "Two", "josé@example.test")).rejects.toMatchObject({
@@ -110,7 +110,7 @@ describe("a login address is taken whichever way its accent is encoded", () => {
 
   it("refuses a second person whose address differs only in case", async () => {
     // The control: the address path refuses duplicates at all.
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     await create(token, "One", "owner@example.test");
 
     await expect(create(token, "Two", "OWNER@example.test")).rejects.toMatchObject({
@@ -139,7 +139,7 @@ describe("an unproven replacement address is taken whichever way its accent is e
   }
 
   it("refuses a new person taking an address that differs only in how the accent is encoded", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     await requestAddressChange("maría@example.test");
 
     await expect(create(token, "Someone", "maría@example.test")).rejects.toMatchObject({
@@ -149,7 +149,7 @@ describe("an unproven replacement address is taken whichever way its accent is e
   });
 
   it("refuses a new person taking a pending address that differs only in case", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     await requestAddressChange("pending@example.test");
 
     await expect(create(token, "Someone", "PENDING@example.test")).rejects.toMatchObject({
@@ -167,7 +167,7 @@ describe("an unproven replacement address is taken whichever way its accent is e
  */
 describe("the index itself folds, not only the check in front of it", () => {
   it("refuses setEmail when the address differs only in how the accent is encoded", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "admin");
     await create(token, "Held", "mari\u0301a@example.test");
     const target = await seedPerson(suite.db, "staff");
 

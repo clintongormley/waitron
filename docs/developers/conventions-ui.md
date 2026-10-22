@@ -772,7 +772,7 @@ and says so. The answer says only whether that credential id has a row, and it i
 signature check, so the id plus a challenge, which anyone can fetch without signing in
 (`POST /management-api/passkey/auth/options`), is enough to ask. A credential row has no status of
 its own (`webauthn_credentials` in `packages/identity/src/schema/webauthn.ts`) and suspension keeps
-it, so a suspended owner's passkey stays the generic answer. A manager's login reset and a reactivation do delete the person's
+it, so a suspended owner's passkey stays the generic answer. An admin's login reset and a reactivation do delete the person's
 passkeys (`resetPersonLogin`, `reactivatePersonForInvitation`, `packages/identity/src/staff.ts`),
 so after either, an old passkey answers `passkey.not_registered` like one the person removed.
 Guards: the unknown, wiped-install, login-reset and suspended cases in

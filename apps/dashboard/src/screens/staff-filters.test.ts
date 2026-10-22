@@ -58,7 +58,10 @@ const people: PersonSummary[] = [
 
 async function screen(): Promise<StaffScreen> {
   const api = { listStaff: vi.fn().mockResolvedValue(people) } as unknown as DashboardApi;
-  const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+  const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+    canAdminister: true,
+    api,
+  });
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
   return el;

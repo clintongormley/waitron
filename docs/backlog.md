@@ -4270,12 +4270,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
-- **Decide whether managers may change non-admin sign-in details.** Staff management lets a
-  manager change a non-admin's email and request a reset there; a manager can therefore receive
-  that account's reset link. Decide whether this authority stays with staff management or every
-  other person's sign-in change needs an admin. Admin accounts and the shared mail paths have
-  separate checks. [Detail](backlog/dashboard.md#non-admin-sign-in-authority)
-
 - **Spacing for buttons grouped beside Cancel belongs in `wt-form-actions`.** The
   `[Cancel] [Delete…] … [Save]` row (design-system.md → Forms) has each dialog space its own group;
   move it into `packages/ui/src/components/wt-form-actions.ts`. Left open by A719 (#1838).

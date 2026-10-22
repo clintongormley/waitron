@@ -39,7 +39,11 @@ const sparse: PersonSummary = {
 
 async function mount(person = ada) {
   setLocale("en-GB");
-  const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+  const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+    canAdminister: true,
+    person,
+    open: true,
+  });
   await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   const saves = vi.fn<(detail: PersonEditDetails) => void>();
   el.addEventListener("save-person", (event) =>

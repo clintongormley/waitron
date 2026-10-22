@@ -45,6 +45,7 @@ export class PersonEdit extends LitElement {
 
   @property({ attribute: false }) person: PersonSummary | null = null;
   @property({ attribute: false }) currentPersonId: string | null = null;
+  @property({ type: Boolean }) canAdminister = false;
   @property({ type: Boolean, reflect: true }) open = false;
   @property({ type: Boolean }) busy = false;
   @property() error: string | null = null;
@@ -270,7 +271,7 @@ export class PersonEdit extends LitElement {
         label=${label}
         .value=${value}
         error=${errors[field] ?? ""}
-        ?disabled=${this.busy}
+        ?disabled=${this.busy || (field === "email" && !this.canAdminister && this.person?.personId !== this.currentPersonId)}
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(field, event)}
       ></wt-input>
     `;
@@ -337,7 +338,7 @@ export class PersonEdit extends LitElement {
                     noResultsLabel=${t("categories.combobox_no_results")}
                     .options=${rolesByName().map((role) => ({ value: role, label: roleName(role) }))}
                     .value=${this.details.role}
-                    ?disabled=${this.busy}
+                    ?disabled=${this.busy || (!this.canAdminister && person.personId !== this.currentPersonId)}
                     @wt-change=${(event: CustomEvent<{ value: string }>) => {
                       event.stopPropagation();
                       this.details = { ...this.details, role: event.detail.value as PersonRole };
@@ -352,7 +353,7 @@ export class PersonEdit extends LitElement {
                     search="auto"
                     searchPlaceholder=${t("categories.combobox_search")}
                     noResultsLabel=${t("categories.combobox_no_results")}
-                    ?disabled=${this.busy || person.personId === this.currentPersonId}
+                    ?disabled=${this.busy || !this.canAdminister || person.personId === this.currentPersonId}
                     .options=${this.#statusOptions(person).map((status) => ({
                       value: status,
                       label: statusName(status),
@@ -369,7 +370,7 @@ export class PersonEdit extends LitElement {
                   ></wt-combobox>
                 </div>
                 ${
-                  person.status === "pending"
+                  person.status === "pending" && this.canAdminister
                     ? html`<div class="actions">
                         <wt-button
                           data-test="resend-invitation"

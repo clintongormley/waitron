@@ -589,8 +589,7 @@ describe("resetPersonLogin refusals", () => {
   });
 
   it("refuses to reset the only active admin", async () => {
-    const { token } = await openManagementSession(suite.db, "manager");
-    const admin = await seedPerson(suite.db, "admin");
+    const { token, personId: admin } = await openManagementSession(suite.db, "admin");
     expect(
       await codeOf(() =>
         run((tx) => resetPersonLogin(tx, { managementSessionId: token, personId: admin })),

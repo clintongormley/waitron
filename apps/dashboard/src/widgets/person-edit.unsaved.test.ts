@@ -37,6 +37,7 @@ class PersonEditApp extends LitElement {
   person = person;
   override render() {
     return html`<dashboard-person-edit
+        .canAdminister=${true}
         .person=${this.person}
         .open=${true}
         @wt-close=${() => this.closes++}
@@ -208,7 +209,7 @@ it("a completed staff save invalidates a pending discard question and closes onc
 it("standalone Edit staff Cancel reports once after its native delayed close", async () => {
   const { el: form } = await mountWidget<HTMLElementTagNameMap["dashboard-person-edit"]>(
     "dashboard-person-edit",
-    { person, open: true },
+    { canAdminister: true, person, open: true },
   );
   await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   let closes = 0;

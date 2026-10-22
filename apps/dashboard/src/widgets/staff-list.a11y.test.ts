@@ -29,7 +29,11 @@ afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("staff-list a11y (%s theme)", (theme) => {
   it("renders accessibly", async () => {
-    const { host } = await mountWidget<StaffList>("dashboard-staff-list", { people }, theme);
+    const { host } = await mountWidget<StaffList>(
+      "dashboard-staff-list",
+      { canAdminister: true, people },
+      theme,
+    );
     await expectNoA11yViolations(host);
   });
 });

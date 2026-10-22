@@ -79,6 +79,7 @@ export class StaffScreen extends LitElement {
     },
   );
   @property({ attribute: false }) currentPersonId: string | null = null;
+  @property({ type: Boolean }) canAdminister = false;
   @state() private people: PersonSummary[] = [];
   @state() private formOpen = false;
   @state() private editingPerson: PersonSummary | null = null;
@@ -101,7 +102,7 @@ export class StaffScreen extends LitElement {
 
   #onRowAction(event: CustomEvent<{ personId: string; action: string }>): void {
     event.stopPropagation();
-    if (this.rowBusy) return;
+    if (this.rowBusy || !this.canAdminister) return;
     const person = this.people.find((person) => person.personId === event.detail.personId);
     const action = event.detail.action;
     if (
@@ -118,7 +119,7 @@ export class StaffScreen extends LitElement {
   }
 
   async #confirmRowAction(): Promise<void> {
-    if (this.rowAction === null || this.rowBusy) return;
+    if (this.rowAction === null || this.rowBusy || !this.canAdminister) return;
     const { person, action } = this.rowAction;
     if (action === "disable" && person.personId === this.currentPersonId) return;
     this.rowBusy = true;
@@ -207,6 +208,7 @@ export class StaffScreen extends LitElement {
   #addOpener: HTMLElement | null = null;
 
   #openForm(): void {
+    if (!this.canAdminister) return;
     this.rowAction = null;
     this.#showError(null);
     this.invitationStatus = null;
@@ -340,6 +342,7 @@ export class StaffScreen extends LitElement {
   }
 
   #renderAdd(slot?: "empty-action") {
+    if (!this.canAdminister) return nothing;
     return html`<wt-button
       variant="primary"
       data-test="add"
@@ -412,6 +415,7 @@ export class StaffScreen extends LitElement {
         .searchTerm=${this.search}
         .emptyMessage=${this.people.length === 0 ? t("staff.empty") : tableNoMatches()}
         .currentPersonId=${this.currentPersonId}
+        .canAdminister=${this.canAdminister}
         @person-action=${(event: CustomEvent<{ personId: string; action: string }>) => this.#onRowAction(event)}
         @edit-person=${(e: CustomEvent<{ personId: string }>) => this.#onEditPerson(e)}
         >${this.people.length === 0 ? this.#renderAdd("empty-action") : nothing}</dashboard-staff-list
@@ -494,6 +498,7 @@ export class StaffScreen extends LitElement {
         .busy=${this.#editing}
         .person=${this.editingPerson}
         .currentPersonId=${this.currentPersonId}
+        .canAdminister=${this.canAdminister}
         .open=${this.editOpen}
         .error=${this.editOpen ? this.errorKey : null}
         .errorField=${this.errorField}
