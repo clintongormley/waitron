@@ -43,6 +43,7 @@ import {
   type ExpoOrder,
 } from "./working-order.js";
 import { partyFamily, readFamilyBills, setPartyGuests } from "./parties.js";
+import { fireGroup } from "./order-groups.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { createZone } from "./testing/service-zone.js";
 import { combineParties } from "./testing/table-action-fixture.js";
@@ -234,6 +235,22 @@ async function billRow(billId: string) {
   return bill!;
 }
 
+async function combine(into: Table, from: Table) {
+  await inTx(venue, (tx) =>
+    combineParties(tx, venue.cfg, {
+      from: from.partyId,
+      into: into.partyId,
+      bills: "separate",
+      tables: "join",
+      operatorId: venue.staffId,
+    }),
+  );
+}
+
+async function allergyAnswer(partyId: string) {
+  return (await inTx(venue, (tx) => VENUE_SERVICE.readPartyAllergy(tx, partyId))).answer;
+}
+
 async function serveAll(t: Table, billId: string) {
   const lines = await topLines([billId]);
   await inTx(venue, async (tx) =>
@@ -321,15 +338,7 @@ describe("finishing a table by sending the food still to come to the counter", (
   it("moves a merged-in party's paid bill", async () => {
     const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
     const other = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
-    await inTx(venue, (tx) =>
-      combineParties(tx, venue.cfg, {
-        from: other.partyId,
-        into: t.partyId,
-        bills: "separate",
-        tables: "join",
-        operatorId: venue.staffId,
-      }),
-    );
+    await combine(t, other);
     const body = await collect(t.partyId, await bodyFor(t));
     expect(body.collect.bills.map((bill) => bill.billId).sort()).toEqual(
       [t.billIds[0], other.billIds[0]].sort(),
@@ -340,6 +349,96 @@ describe("finishing a table by sending the food still to come to the counter", (
     expect((await billRow(t.billIds[0]!)).partyId).toBeNull();
     expect((await billRow(other.billIds[0]!)).partyId).toBeNull();
     expect((await snapshot(t)).party[0]?.state).toBe("closed");
+  });
+
+  it("fires a merged-in party's held dish under the combined table's allergy answer", async () => {
+    const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
+    const other = await table([{ name: "Burger" }], "hold", [], ["12.00"]);
+    await combine(t, other);
+    expect(await allergyAnswer(t.partyId)).toBe("none");
+    const body = await collect(t.partyId, await bodyFor(t));
+
+    expect(await post(t.partyId, body)).toEqual({ status: 200, body: { state: "closed" } });
+
+    expect((await billRow(other.billIds[0]!)).partyId).toBeNull();
+    const tickets = await venue.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, other.billIds[0]!));
+    expect(tickets.length).toBeGreaterThan(0);
+    expect(tickets.every((item) => item.firedAt !== null)).toBe(true);
+  });
+
+  it("fires a merged-in party's held dish when that party's allergies joined the table", async () => {
+    const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
+    const other = await table([{ name: "Burger" }], "hold", [], ["12.00"]);
+    await inTx(venue, (tx) =>
+      VENUE_SERVICE.writePartyAllergy(
+        tx,
+        other.partyId,
+        { answer: "allergies", guests: [{ who: "Green coat", allergens: { milk: {} } }] },
+        venue.staffId,
+      ),
+    );
+    await combine(t, other);
+    const merged = await inTx(venue, (tx) => VENUE_SERVICE.readPartyAllergy(tx, t.partyId));
+    expect(merged.answer).toBe("allergies");
+    expect(merged.guests.map((guest) => guest.who)).toEqual(["Green coat"]);
+    const body = await collect(t.partyId, await bodyFor(t));
+
+    expect(await post(t.partyId, body)).toEqual({ status: 200, body: { state: "closed" } });
+
+    expect((await billRow(other.billIds[0]!)).partyId).toBeNull();
+    const tickets = await venue.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, other.billIds[0]!));
+    expect(tickets.length).toBeGreaterThan(0);
+    expect(tickets.every((item) => item.firedAt !== null)).toBe(true);
+  });
+
+  it("refuses a merged-in party's held dish when the combined table has no allergy answer", async () => {
+    const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
+    const other = await table([{ name: "Burger" }], "hold", [], ["12.00"]);
+    await venue.db.run(sql`delete from party_allergy where party_id = ${other.partyId}`);
+    await combine(t, other);
+    expect(await allergyAnswer(t.partyId)).toBeNull();
+    const body = await collect(t.partyId, await bodyFor(t));
+    const both = { partyId: t.partyId, billIds: [t.billIds[0]!, other.billIds[0]!] };
+    const before = await snapshot(both);
+
+    const answer = await post(t.partyId, body);
+
+    expect(answer.status).toBe(409);
+    expect(answer.body).toMatchObject({
+      error: { code: "allergy.unanswered", params: { partyId: t.partyId } },
+    });
+    expect(await snapshot(both)).toEqual(before);
+  });
+
+  it("fires a merged-in party's held dish from the table's Fire under the combined table's answer", async () => {
+    const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
+    const other = await table([{ name: "Burger" }], "hold", [], ["12.00"]);
+    await combine(t, other);
+    const [held] = await venue.db
+      .select({ id: orderGroups.id })
+      .from(orderGroups)
+      .where(and(eq(orderGroups.partyId, t.partyId), eq(orderGroups.state, "held")));
+
+    await inTx(venue, async (tx) =>
+      fireGroup(tx, venue.cfg, t.partyId, held!.id, {
+        expectedPartyRevision: await partyRevision(t.partyId),
+        operatorId: venue.staffId,
+        submissionId: randomUUID(),
+      }),
+    );
+
+    const tickets = await venue.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, other.billIds[0]!));
+    expect(tickets.length).toBeGreaterThan(0);
+    expect(tickets.every((item) => item.firedAt !== null)).toBe(true);
   });
 
   it("refuses a set changed since it was read without moving anything", async () => {
@@ -602,15 +701,7 @@ async function tableWithBillFromElsewhere() {
     VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, other.billIds[0]!, elsewhere),
   );
   await pay(other.billIds[0]!, "12.00");
-  await inTx(venue, (tx) =>
-    combineParties(tx, venue.cfg, {
-      from: other.partyId,
-      into: t.partyId,
-      bills: "separate",
-      tables: "join",
-      operatorId: venue.staffId,
-    }),
-  );
+  await combine(t, other);
   const both = { partyId: t.partyId, billIds: [t.billIds[0]!, other.billIds[0]!] };
   const body = await collect(t.partyId, await bodyFor(both));
   expect(body.collect.bills).toHaveLength(2);
@@ -845,7 +936,7 @@ async function guestsOf(billId: string) {
   });
 }
 
-describe("a full invoice's guests line follows the bill's party (Decision 10)", () => {
+describe("a full invoice's guests line follows the bill's party (A1027)", () => {
   it("a full invoice's later copies lose their guests line when the bill moves to the counter (A1027)", async () => {
     const t = await table([{ name: "Burger" }], "fire", [], [null]);
     await seatGuests(t.partyId, 4);

@@ -1883,14 +1883,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   paid bills moves, the copies of the bill left behind gain one. A simplified receipt keeps the
   count stored at payment.
 
-- **A1028. Fire is refused on a merged-in party's paid bill when that party never answered
-  allergies (found by A758-7, owner point).** Releasing a merged-in (absorbed) party's held work is
-  refused `allergy.unanswered`, naming the absorbed party (`apps/server/src/working-order.ts:2370-2371`,
-  from #1910, which predates A758-7). So a table combined with another that never answered the
-  allergy question cannot use "They'll collect it at the counter": run in A758-7's tests, it was
-  refused and nothing changed. Its ordinary table Fire is believed to be refused the same way (the
-  implementer's claim; not run by the reviewer). The owner decides whether an absorbed party's
-  answer should count.
+- **A1030. Firing one held dish is refused on a merged-in party's paid bill (found by A758-7).**
+  `fireHeldLine` (`apps/server/src/order-groups.ts`) looks for the dish only among bills whose
+  `party_id` is the table's own party. A paid bill keeps the party it was paid under, so after
+  Combine tables a held dish on the absorbed party's paid bill answers `group.not_found`. Firing the
+  whole group, or collecting at the counter, fires it. It predates A758-7 (`c9ad7a634`).
 
 - **A1029. The till has no words of its own for `station.no_default` (found by A758-7).** No key
   for it in `CODE_MESSAGES` (`apps/till/src/i18n/codes.ts`), so `codeMessage` falls back to the

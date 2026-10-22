@@ -715,8 +715,7 @@ async function activeGroupLines(tx: Transaction, groupId: string) {
 
 /**
  * Before these bills leave the party: fire each held group holding one of their dishes, in the
- * party's group order, and take apart one with no dish left to fire. The caller has moved the
- * party's revision on.
+ * party's group order, and take apart one with no dish left to fire.
  */
 export async function releaseHeldWorkOf(
   tx: Transaction,
@@ -787,8 +786,8 @@ export async function releaseHeldWorkOf(
 
 /**
  * Release a held group's lines bill by bill, in the order the bills were opened, as
- * {@link fireOrderLines} releases them, and record it fired. The caller has moved the party's
- * revision on and checked the group is held.
+ * {@link fireOrderLines} releases them, and record it fired. The caller has checked the group is
+ * held.
  */
 async function releaseGroup(
   tx: Transaction,
