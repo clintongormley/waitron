@@ -59,9 +59,9 @@ const rgb = (hex: string) => {
 };
 const columnKeys = (el: Card) => table(el).columns.map((column) => column.key);
 
-async function mount(list: ThemeList, canEdit = true): Promise<Card> {
+async function mount(list: ThemeList, canEdit = true, scheme?: "light" | "dark"): Promise<Card> {
   const api = new DashboardApi("", () => Promise.reject(new Error("no request expected")));
-  const { el } = await mountWidget<Card>("dashboard-themes-card", { api, list, canEdit });
+  const { el } = await mountWidget<Card>("dashboard-themes-card", { api, list, canEdit }, scheme);
   await table(el).updateComplete;
   return el;
 }
@@ -98,6 +98,22 @@ describe("dashboard-themes-card", () => {
     expect(text(warning)).toBe("1 hard to read");
     expect(warning!.querySelector("wt-icon")!.getAttribute("name")).toBe("warning");
   });
+
+  for (const scheme of ["light", "dark"] as const) {
+    it(`the built in tag is a pill that stands out from the card (${scheme})`, async () => {
+      const el = await mount(four, true, scheme);
+      const tag = row(el, "waitron")!.querySelector<HTMLElement>("[data-test=tag-built-in]")!;
+      const card = getComputedStyle(el.shadowRoot!.querySelector("section")!).backgroundColor;
+      const pill = getComputedStyle(tag).backgroundColor;
+      expect(pill).not.toBe("rgba(0, 0, 0, 0)");
+      expect(pill).not.toBe(card);
+      const probe = document.createElement("span");
+      probe.style.background = "var(--wt-color-surface-lifted)";
+      tag.after(probe);
+      expect(pill).toBe(getComputedStyle(probe).backgroundColor);
+      probe.remove();
+    });
+  }
 
   it("counts two warnings, and words the count in Spanish", async () => {
     const doubled: ThemeView = { ...summer, warnings: [...summer.warnings, ...summer.warnings] };

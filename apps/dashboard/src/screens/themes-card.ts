@@ -116,7 +116,7 @@ export class ThemesCard extends LitElement {
       }
       wt-data-table::part(tag built-in) {
         margin-inline-start: var(--wt-space-2);
-        background: var(--wt-color-surface-raised);
+        background: var(--wt-color-surface-lifted);
         color: var(--wt-color-text);
       }
       wt-data-table::part(tag in-use) {
