@@ -512,6 +512,26 @@ and A770 widened the limit
 ([receipt](../developers/ci-and-gates.md#the-upgrade-test-names-the-phase-it-stalled-in)); neither
 shape above has yet been seen in a real run.
 
+## The step-watch no-progress callback can reject before the limit
+
+On 2026-10-22, A999's [CI run 39715628369](https://github.com/clintongormley/waitron/actions/runs/39715628369),
+root job `119616918051`, failed `scripts/step-watch.test.mjs:393`: the reported gap was `999` ms,
+while the unchanged assertion requires at least `1000`. The other 7,987 root cases passed.
+Neither `step-watch.mjs` nor its test differs from A999's base `fef29d8dc576c0920fa9c8e520d82ab190b2fe8c`.
+
+A controlled probe called the real `reportStallAfter` with `idleMs: 1000`, `workMs: 2000`,
+`cpuNow: () => 0`, an injected clock initially at zero, and an intercepted timer callback.
+The body entered a pending `hangs` phase. Advancing that clock to `999` and calling the callback
+rejected with “no phase started or finished for 999 ms, past the 1000 ms no-progress limit”.
+The control at `1000` also rejected. `onIdle` calls `fail` without checking the elapsed gap;
+this probe establishes the early-callback path, not how often a real timer takes it.
+
+Next: give this utility its own fix and regression. Check the elapsed gap in that callback and,
+when it has not reached the limit, re-arm for the remainder. Keep the existing lower-bound
+assertion and cover both the early callback and the callback at the limit. A999 changes no
+watchdog code or guard assertion, and a later green CI run does not establish a watchdog repair.
+The logs and standalone probe are retained under the lane's `receipts/a999-20261022-043104/`.
+
 ## A419 dashboard CI stall remains unexplained (#1474)
 
 Run `37932573955` left `catalogue-screen.test.ts` unfinished; local focused and full-package runs
