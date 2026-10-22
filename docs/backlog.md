@@ -3300,10 +3300,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `color: var(--wt-color-primary)` outside a list of icons and spinners. Slice 5 landed 2026-10-21 (#1947): Settings →
   Appearance shows the theme in use, and a manager edits the brand colour, background and corners in
   place with a Light and Dark preview, warnings with one-press fixes, Fix all and a Hard to read
-  dialog before saving anyway. Until slice 13, Edit is offered only while one of the venue's own
-  themes is in use, so a venue that has only ever used Waitron's theme cannot reach the editor from
-  any screen (a theme can be put in use only through the management API or a configuration copy).
-  Next: slice 13 (the Themes card and the name dialog, which closes that gap), then 6, 7 and 10.
+  dialog before saving anyway. Slice 13 landed 2026-10-22 (#PR): the Themes card lists Waitron's theme and the venue's own; a
+  manager adds, copies, renames, deletes and switches themes, edits any of them, and names a draft
+  with Save as new theme…; Edit works while Waitron's theme is in use, so a new venue makes its first
+  theme from the screen. The create button reads "Add theme", not the design's "New theme", by the
+  house Wording rule (`design-system.md`). Next: 6, 7 and 10.
 
 - **A cash register on the floor plan with no counter zone misses a theme change (A841 slice 5's review,
   2026-10-21).** A till learns of a new theme only through the setup revision its 15-second menu
@@ -3313,7 +3314,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   theme until it opens a table, its zones or profile change, or it reloads. Traced by reading, not
   run. The design says every signed-in till follows within one poll (design section 12). Decide:
   have the poll return the setup revision without asking about a zone, or accept it and correct the
-  design. The user guide's Appearance page already says what is true.
+  design. The user guide's Appearance page already says what is true. The switch dialog's sentence "every signed-in
+  till within 15 seconds" (A841 slice 13, the design's approved words) is untrue for this till too
+  until this is decided.
 
 - **The colour field's custom colour box shows no focus ring while a custom colour is chosen.** The
   rule `.custom input[type="color"].on { outline: var(--wt-selected-ring) }`
