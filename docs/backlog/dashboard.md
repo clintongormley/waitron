@@ -77,24 +77,22 @@ change what deleting a person does.
 
 ## Roles the admin can edit (A7)
 
-A person's role is one of four values (`personRole` in `packages/identity/src/schema/persons.ts`).
-The seam is already right: no call site gates on a role string — every one asks for a PERMISSION and
-one map turns a role into its set (`packages/identity/src/permissions.ts`) — and a session reads the
-role from the database on each request, so an edited role takes effect at once. Roles and their
-permissions become rows the admin owns, per tenant, with the four seeded as defaults; no compatibility
-code.
+**A1002, design proposed 2026-10-22; owner approval, plan and build remain open.** The
+[custom-role design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md) proposes explicit
+privilege grants and four editable default roles, with no runtime seniority ladder. The owner's
+single `person.admin` decision is settled: it covers other people's sign-in details and who holds
+privileges, including when granted to a custom role. The design's remaining choices start with
+how a genuinely new privilege obtains its first holder without letting an actor grant a privilege
+they lack; the recommendation is reset-and-reprovision while pre-live, awaiting the owner.
 
-The design turns on the **ladder**: a module contributes a permission by naming only the lowest role
-that should hold it (`grantedFrom`, on `ModulePermission` in `packages/module/src/module.ts`) and identity spreads it
-upward. A custom role has no position, so either every custom role declares where it sits, or the
-module contract names a permission group instead. Pick one before writing schema;
-`packages/composition/src/role-parity.ts` proves at compile time that the contract's roles and
-identity's are one list, and whatever replaces the union keeps an equivalent tie. Then: who may edit
-a role (`person.admin` plus nobody mints or widens beyond what they hold, and a venue is never left
-with nobody who can administer roles); a role in use (deleting or narrowing one changes live
-sessions on their next request); storage (a table in identity's own migration set with a
-classification entry — never an enum, CLAUDE.md §2); names (built-ins are translated from
-`roleName`, `apps/dashboard/src/i18n/domain.ts:135`, custom ones will not be).
+The design traces remaining role-name checks in staff, attendance, mirrors, provisioning and
+recovery, plus device admission, adjustment policies, imports and dashboard role lists. These are
+source-reading receipts at the design's named commit, not runtime verification. Before editable
+roles, approve and complete the permission review below, including coordination with A980's
+separate privilege for another person's personal-data request. Proposed sale-permission merges
+need separate fiscal authorization; retaining the existing identifiers is an explicit alternative.
+The design also proposes deletion with explicit reassignment, live revocation and a shared last
+administrator check that requires usable dashboard authentication. None is implemented here.
 
 ## A keydown guard that cancels Escape while a save runs did not keep one dialog open
 
@@ -374,6 +372,13 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
 
 ## Review every permission: fewer, coarser, and consistently named
 
+**A1002 proposal, 2026-10-22:** the
+[design's permission inventory](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md#2-one-permission-review-before-role-storage)
+lists current default grants and proposed merges, retirements and new privileges. It is awaiting
+owner approval; the review and its implementation are still open and precede editable roles.
+A980's personal-data privilege is one coordinated entry, not a second export permission invented
+independently by either lane. The dated discussion below remains the background for that review.
+
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). Since
   A494 (2026-10-11), `catalogue.manage` (manager and above, the roles that hold `person.manage`)
   gates the catalogue, units and content languages; the "VAT class for new products" default is set
@@ -395,8 +400,9 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
   backwards-compatibility code until a venue is live) covers the rest. The review should confirm that
   by running it, then drop or narrow that header sentence. **Do it before the editable-roles item
   below** (owner, 2026-09-26): once an admin can make roles and give them permissions, the stored
-  roles would name their permissions (the roles design is not written yet), so a rename after that
-  has to rewrite those rows as well.
+  roles would name their permissions, so a rename after that has to rewrite those rows as well.
+  The roles design was not written when this review was requested; A1002 now proposes those rows
+  in the design linked above, still awaiting approval and implementation.
   **Restated by the owner 2026-10-02: "review all permissions and the roles they're assigned to"** —
   the review covers BOTH halves: every permission, and which of the built-in roles holds each. Two
   role questions from that morning's dashboard Orders screen answers (B27s, lane C questions.md
@@ -408,16 +414,13 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
 
 ## Roles are something an admin can add and edit; the four built-ins are only defaults
 
-- **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner
-  decision 2026-09-12, restated 2026-09-28: "especially because I want roles to be definable by the
-  customer"; design not written). Detail under
-  [Roles the admin can edit](../backlog/dashboard.md#roles-the-admin-can-edit-a7): the ladder question decides the
-  schema. The dashboard's role lists (the add-person and edit-person forms and the Staff screen's
-  role filter) sort by the displayed name in the current language (`rolesByName`,
-  `apps/dashboard/src/i18n/domain.ts`), so a custom role's name would take its place among them; the
-  adjustments module's reasons screen sorts its two role dropdowns the same way with its own copy of
-  the `Intl.Collator` options. Its client-side seniority check keeps a separate ordering; the roles
-  design still needs to decide where custom roles belong in that check.
+The owner decided this on 2026-09-12 and restated it on 2026-09-28. **A1002's
+[proposed design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md) is awaiting full
+owner approval.** Its source audit distinguishes the adjustments screen's hardcoded display order
+from the server's role-membership policy. It proposes live role IDs and explicit privilege checks,
+with optional contextual role restrictions, translated untouched defaults and literal custom names.
+The build must replace the dashboard, till and adjustments role lists together with the server
+consumers and storage. See [A7](#roles-the-admin-can-edit-a7) for the remaining decisions and order.
 
 ## Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order says so
 

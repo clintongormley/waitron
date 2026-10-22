@@ -4666,10 +4666,12 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   `venue.configure` (owner, 2026-10-16, A755).
   [Detail](backlog/dashboard.md#review-every-permission-fewer-coarser-and-consistently-named)
 
-- **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner
-  decision 2026-09-12, restated 2026-09-28: "especially because I want roles to be definable by the
-  customer"; design not written). Detail under [Roles the admin can
-  edit](backlog/dashboard.md#roles-the-admin-can-edit-a7): the ladder question decides the schema.
+- **A1002: roles an admin can add and edit; the four built-ins are only defaults.** The
+  [proposed design](superpowers/specs/2026-10-22-a1002-custom-roles-design.md) is awaiting owner
+  approval; no plan or build yet. The single `person.admin` privilege is settled. New-permission
+  bootstrapping, the permission review's merges/default grants, attendance self-approval, contextual
+  role policies, deletion and mirror visibility remain proposed. Complete the approved permission
+  review before editable-role storage. [Remaining work](backlog/dashboard.md#roles-the-admin-can-edit-a7).
   [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
 
 - **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
