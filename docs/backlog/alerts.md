@@ -17,7 +17,7 @@ their full text.
 
 ## The alert registry's per-source savepoint has no test that fails without it
 
-Found by A798-B slice 4 (#<this pull request>). `readOpenAlerts` (`apps/server/src/alerts.ts`) asks
+Found by A798-B slice 4 (#1958). `readOpenAlerts` (`apps/server/src/alerts.ts`) asks
 each source inside a savepoint so a failed source's writes go with it, but removing the savepoint
 left every test file that reaches `readOpenAlerts` passing (nine files, 2026-10-22): their failing
 sources fail a query or throw before writing anything, so nothing is left for the savepoint to
