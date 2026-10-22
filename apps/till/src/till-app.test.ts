@@ -23979,7 +23979,7 @@ describe("A737 post-invoice refund integration", () => {
     const action = ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-tender-refund]");
     expect(action, "the paid receipt offers Refund").not.toBeNull();
     await userEvent.click(page.elementLocator(action!));
-    await vi.waitFor(() => expect(dialog(el)?.reasons).not.toBeNull());
+    await vi.waitFor(() => expect(dialog(el)?.reasons ?? null).not.toBeNull());
     await dialog(el)!.updateComplete;
     return dialog(el)!;
   }

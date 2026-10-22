@@ -48,6 +48,7 @@ import {
   NUTRITION_ICONS,
   ThemeChoiceController,
   followVenueTheme,
+  formatDecimalInput,
   setHelpMode,
 } from "@waitron/ui";
 import {
@@ -1010,6 +1011,8 @@ interface RefundFill {
   startReasonId: string;
   dishes: string;
   cancellationIds: string[];
+  /** The cancel's Void reasons, so the refund does not read them again. */
+  reasons?: AdjustmentReason[];
 }
 
 interface FinishingTable {
@@ -7537,7 +7540,7 @@ export class TillApp extends LitElement {
         refusal: null,
         pinError: null,
         busy: false,
-        reasons: null,
+        reasons: fill?.reasons ?? null,
         reasonsLoading: false,
         ...(fill === undefined ? {} : { fill }),
       };
@@ -7545,7 +7548,7 @@ export class TillApp extends LitElement {
       this.errorKey = "tender_refund.storage";
       return;
     }
-    void this.#loadTenderRefundReasons();
+    if (fill?.reasons === undefined) void this.#loadTenderRefundReasons();
   }
 
   async #loadTenderRefundReasons(): Promise<void> {
@@ -12921,10 +12924,11 @@ export class TillApp extends LitElement {
         MONEY_SCALE,
       ),
       startReasonId: choice.reasonId ?? "",
-      dishes: `${choice.quantity} × ${open.name}`,
+      dishes: `${formatDecimalInput(trimQuantity(choice.quantity), currentLocale())} × ${open.name}`,
       cancellationIds: links
         .filter((link) => link.lineId === open.lineId)
         .map((link) => link.adjustmentId),
+      ...(open.reasons === undefined ? {} : { reasons: open.reasons }),
     };
   }
 

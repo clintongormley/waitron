@@ -464,6 +464,23 @@ it("explains a reason longer than 500 characters and permits a corrected reason"
   expect(asks[0]!.reason).toBe("Customer request");
 });
 
+it("marks a chosen reason whose name is over 500 characters and sends one of 500", async () => {
+  const long = "r".repeat(501);
+  const el = await mount({
+    reasons: [voidReason("long", long), voidReason("edge", "e".repeat(500))],
+  });
+  const asks = collect<TenderRefundAsk>(el, "tender-refund-submit");
+  await choose(el, "long");
+  await click(el);
+  expect(combo(el).error).toBe(t("bill_refund.reason_long"));
+  expect(root(el).querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+  expect(button(el).disabled).toBe(true);
+  expect(asks).toEqual([]);
+  await choose(el, "edge");
+  await click(el);
+  expect(asks.map((ask) => ask.reason)).toEqual(["e".repeat(500)]);
+});
+
 it("stops an attempted form when its tender becomes unavailable", async () => {
   const el = await mount();
   const asks = collect(el, "tender-refund-submit");

@@ -3691,7 +3691,7 @@ describe("till-app: service cancellation consent", () => {
       });
     });
 
-    it("loads the reasons for the refund screen and retries a failed read", async () => {
+    it("loads the reasons for a receipt's refund screen and retries a failed read", async () => {
       const listAdjustmentReasons = vi
         .fn()
         .mockResolvedValueOnce([complaint, mistake, unserved])
@@ -3699,14 +3699,10 @@ describe("till-app: service cancellation consent", () => {
         .mockResolvedValue([complaint, mistake, unserved]);
       const { el } = await mountApp(linkedMethods({ listAdjustmentReasons }));
       await openMesa4(el);
-      await openCancel(el);
-      emit(cancelDialog(el)!, "cancel-item-choice", {
-        lineId: "line-1",
-        quantity: "1",
-        outcome: "refund",
-        consent: thirds(),
-        reasonId: "r-unserved",
-      });
+      await cancelAndRefundOne(el);
+      emit(refundForm(el)!, "tender-refund-close");
+      await flush(el);
+      emit(ticket(el)!, "tender-refund-open");
       await flush(el);
       await expect.poll(() => refundForm(el)).not.toBeNull();
       await expect.poll(() => listAdjustmentReasons.mock.calls.length).toBe(2);
@@ -3726,7 +3722,7 @@ describe("till-app: service cancellation consent", () => {
         form.shadowRoot!.querySelector<HTMLElement & { value: string }>(
           'wt-combobox[name="reason"]',
         )!.value,
-      ).toBe("r-unserved");
+      ).toBe("");
     });
 
     it("says to refund the rest at a till when no other payment can be refunded here", async () => {
@@ -3777,6 +3773,79 @@ describe("till-app: service cancellation consent", () => {
       await cancelAndRefundOne(el);
       expect(refundForm(el)!.refundAtTill).toBe(false);
     });
+
+    it("does not send staff to a till when this device can refund two of the bill's three payments", async () => {
+      const manual = {
+        ...cash,
+        tenderId: "manual-card",
+        method: "card",
+        manual: true,
+        appliedRemaining: "20.00",
+      };
+      const integrated = {
+        ...cash,
+        tenderId: "reader-card",
+        method: "card",
+        manual: false,
+        appliedRemaining: "8.00",
+      };
+      const { el } = await mountApp(
+        linkedMethods({
+          getTill: vi
+            .fn()
+            .mockResolvedValue({ ...till, capabilities: ["take-cash", "hand-keyed-card-payment"] }),
+          getRefundableTenders: vi
+            .fn()
+            .mockResolvedValue([{ ...cash, appliedRemaining: "2.00" }, manual, integrated]),
+        }),
+      );
+      await openMesa4(el);
+      await cancelAndRefundOne(el);
+      const form = refundForm(el)!;
+      expect(form.refundAtTill).toBe(false);
+      expect(form.shadowRoot!.querySelector("[data-refund-at-till]")).toBeNull();
+    });
+
+    it("reuses the cancel's reasons on the refund screen and reads them again from the receipt", async () => {
+      const listAdjustmentReasons = vi.fn().mockResolvedValue([complaint, mistake, unserved]);
+      const { el } = await mountApp(linkedMethods({ listAdjustmentReasons }));
+      await openMesa4(el);
+      await cancelAndRefundOne(el);
+      await flush(el);
+      expect(refundForm(el)!.reasons).toEqual([complaint, mistake, unserved]);
+      expect(listAdjustmentReasons).toHaveBeenCalledOnce();
+      emit(refundForm(el)!, "tender-refund-close");
+      await flush(el);
+      emit(ticket(el)!, "tender-refund-open");
+      await flush(el);
+      await expect.poll(() => listAdjustmentReasons.mock.calls.length).toBe(2);
+    });
+
+    it.each([
+      ["en-GB", "0.500", "0.5 × Wine"],
+      ["es-ES", "0.500", "0,5 × Wine"],
+      ["en-GB", "1.000", "1 × Wine"],
+      ["es-ES", "1.000", "1 × Wine"],
+    ] as const)(
+      "words the dishes line's quantity in the till's language (%s, %s)",
+      async (locale, quantity, words) => {
+        setLocale(locale);
+        const { el } = await mountApp(linkedMethods());
+        await openMesa4(el, locale);
+        expect(currentLocale()).toBe(locale);
+        await openCancel(el);
+        emit(cancelDialog(el)!, "cancel-item-choice", {
+          lineId: "line-1",
+          quantity,
+          outcome: "refund",
+          consent: thirds(),
+          reasonId: "r-unserved",
+        });
+        await flush(el);
+        await expect.poll(() => refundForm(el)?.reasons ?? null).not.toBeNull();
+        expect(refundForm(el)!.dishes).toBe(words);
+      },
+    );
 
     it("opens a receipt's refund with nothing filled in and the reasons read", async () => {
       const methods = linkedMethods();

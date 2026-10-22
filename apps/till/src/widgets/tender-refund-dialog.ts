@@ -269,6 +269,8 @@ export class TillTenderRefundDialog extends LitElement {
     }
     const reason = this.#reason();
     if (!reason) errors.set("reason", t("adjust.reason_required"));
+    else if (!reason.noteRequired && reason.name.length > REASON_MAX)
+      errors.set("reason", t("bill_refund.reason_long"));
     else if (reason.noteRequired && this.draft.note.trim() === "")
       errors.set("note", t("adjust.note_required"));
     else if (reason.noteRequired && this.draft.note.trim().length > REASON_MAX)
