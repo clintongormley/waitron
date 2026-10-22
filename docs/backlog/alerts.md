@@ -32,6 +32,14 @@ answer inside the savepoint.
 [Design](../superpowers/specs/2026-08-31-logging-diagnostics-foundation-design.md). Eventual vendor destination
 is GitHub issues; for now a bundle only needs to be copy-pastable.
 
+**A982 plan, 2026-10-22:** follow the
+[implementation plan](../superpowers/plans/2026-10-22-a982-one-touch-problem-reports.md) for the
+owner's “button now, Cloud later” scope. Its three implementation PRs remain unbuilt. The manual
+report capture, manager read/download list and carried privacy/setup hardening belong to A982;
+Cloud forwarding, automatic crash/freeze intake and the remaining triage workflow stay open.
+The plan proposes client-only downloads for setup, signed-out and offline screens, without public
+server-log access. The older slice descriptions and decisions below retain their original context.
+
 - **Slice 2 — one-touch bug report.** A `bug_reports` table (`local`, grants in its
   module's set), a capture endpoint that FREEZES a self-contained bundle (client trail `snapshot()` +
   `LogReader.byRequestIds()` + environment), a `wt-report-dialog` and "Report a problem" trigger in

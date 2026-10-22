@@ -5028,9 +5028,12 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
   and `expected`, so a new money slot under another name is unseen.** Left open by C43 (money in
   the dashboard shows its currency sign, #830).
 
-- **Logging Slice 2 — one-touch bug report**, then Slice 3 triage and forwarding, with the Slice 1
-  hardening (client-trail key allowlist, `maskPath` PII, the setup app). Detail under
-  [Logging, diagnostics & one-touch bug report](backlog/alerts.md#logging-diagnostics--one-touch-bug-report-a9-slice-1-landed-192).
+- **A982. Logging Slice 2 — one-touch bug report.** The
+  [implementation plan](superpowers/plans/2026-10-22-a982-one-touch-problem-reports.md) splits the
+  build into trail privacy hardening, frozen local reports with manager read/download, then the
+  shared dialog and app buttons, including setup. Planning only; all three implementation PRs
+  remain open. Cloud forwarding and automatic crash/freeze reporting remain separate follow-ups.
+  [Detail](backlog/alerts.md#logging-diagnostics--one-touch-bug-report-a9-slice-1-landed-192).
 
 - **The Alerts table makes long station warnings hard to read on a phone.** — left open by the
   product folders work. Give the alert text more room at phone width while keeping its handling
