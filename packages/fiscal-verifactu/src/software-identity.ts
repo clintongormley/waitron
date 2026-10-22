@@ -46,9 +46,7 @@ export function softwareVersion(commit: string | null = BUILD_COMMIT): string {
   return commit === null ? "0.0.0-dev" : `0.0.0-dev+${commit}`;
 }
 
-// While the producer is pending the records keep naming the taxpayer, as they did before this
-// field existed: placeholder text could be rejected by AEAT's test service, which every
-// production activation needs to accept first.
+// While pending, the taxpayer is named: AEAT's test service, whose acceptance the first production activation requires, could reject placeholder text.
 export function producerFields(
   identity: SoftwareIdentity,
   taxpayer: { legalName: string; nif: string },
@@ -60,7 +58,7 @@ export function producerFields(
 
 export function refuseUnsetProducer(
   environment: string,
-  published: boolean = BUILD_COMMIT !== null,
+  published: boolean,
   identity: SoftwareIdentity = SOFTWARE_IDENTITY,
 ): void {
   if (environment === "production" && published && identity.producer === PRODUCER_PENDING)

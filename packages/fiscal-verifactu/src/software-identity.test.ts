@@ -32,6 +32,7 @@ describe("SOFTWARE_IDENTITY", () => {
       onlyVerifactu: "S",
       multipleTaxpayersPossible: "N",
       multipleTaxpayersNow: "N",
+      producer: PRODUCER_PENDING,
     });
   });
 });
@@ -53,7 +54,7 @@ describe("softwareVersion", () => {
     expect(fresh.softwareVersion()).toBe(`0.0.0-dev+${COMMIT}`);
   });
 
-  it.each([{}, { sourceCommit: "short" }, null])(
+  it.each([{}, { sourceCommit: "short" }, { sourceCommit: `${COMMIT}a` }, null])(
     "treats a stamp with no usable commit (%j) as none",
     async (stamp) => {
       vi.stubGlobal("__WAITRON_HOUR_RELEASE__", stamp);
