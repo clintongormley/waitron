@@ -356,6 +356,33 @@ it("Void on an actually served dish still opens consent for its original parent"
   expect(cancellations.map((event) => event.detail)).toEqual([{ lineId: "l-croq" }]);
 });
 
+it("offers Void… on a paid bill's unserved slice only", async () => {
+  const paid = () => {
+    const orders = structuredClone(current());
+    orders.groups[0]!.rows[0]!.billStatus = "settled";
+    const store = new DraftStore();
+    store.billStatus = "settled";
+    return { currentOrders: orders, bills: [bill("settled")], draftStore: store };
+  };
+  const served = await openLine("served", paid());
+  if (q(served, "[data-sent-line-dialog] wt-row-actions") !== null) await openMore(served);
+  expect(q(served, "[data-sent-line-dialog]").hasAttribute("open")).toBe(true);
+  expect(q(served, "[data-sent-line-void]")).toBeNull();
+  cleanupWidgets();
+
+  const { el } = await mount({ ...paid(), groups, now });
+  el.style.width = "1280px";
+  await resized(el);
+  const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+  await panel.updateComplete;
+  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="l-croq"]')!);
+  await el.updateComplete;
+  const cancellations = capture(el, "cancel-item");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-void]"));
+  expect(cancellations.map((event) => event.detail)).toEqual([{ lineId: "l-croq" }]);
+});
+
 it.each(["owner", "loading", "sending", "abandoned", "row-abandoned", "cancelled"] as const)(
   "Void is absent for %s, without hiding the recorded information",
   async (blocked) => {

@@ -2,12 +2,10 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import {
-  addDecimal,
+  cancelRefundShare,
   compareDecimal,
   decimal,
-  divideDecimal,
   formatMoney,
-  multiplyDecimal,
   subtractDecimal,
 } from "@waitron/shared";
 import {
@@ -169,19 +167,17 @@ export class TillCancelItemDialog extends LitElement {
     const row = this.consent?.context.components.find(
       (component) => component.lineId === this.lineId,
     );
-    return row
-      ? subtractDecimal(decimal(row.quantity), decimal(row.cancelledQuantity))
-      : decimal("0");
+    if (!row) return decimal("0");
+    const left = subtractDecimal(decimal(row.quantity), decimal(row.cancelledQuantity));
+    return this.consent!.context.billStatus === "settled"
+      ? subtractDecimal(left, decimal(row.servedQuantity))
+      : left;
   }
   #options(): Outcome[] {
     const context = this.consent?.context;
     if (
       !context ||
       context.billStatus === "abandoned" ||
-      (context.billStatus === "settled" &&
-        context.components.some(
-          (row) => compareDecimal(decimal(row.servedQuantity), decimal("0")) > 0,
-        )) ||
       compareDecimal(decimal(this.#remaining()), decimal("0")) <= 0
     )
       return [];
@@ -208,16 +204,11 @@ export class TillCancelItemDialog extends LitElement {
   #refundAmount(): string {
     const value = this.consent?.refundValue;
     if (value === undefined || !this.#quantityValid()) return "";
-    const cancelled = decimal(
-      this.consent!.context.components.find((row) => row.lineId === this.lineId)!.cancelledQuantity,
-    );
-    const share = (quantity: ReturnType<typeof decimal>) =>
-      divideDecimal(multiplyDecimal(decimal(value.gross), quantity), decimal(value.quantity), 2);
+    const cancelled = this.consent!.context.components.find(
+      (row) => row.lineId === this.lineId,
+    )!.cancelledQuantity;
     return formatMoney(
-      subtractDecimal(
-        share(addDecimal(cancelled, decimal(quantityValue(this.draft.quantity)))),
-        share(cancelled),
-      ),
+      cancelRefundShare(value, cancelled, quantityValue(this.draft.quantity)),
       currentLocale(),
     );
   }
