@@ -1336,10 +1336,11 @@ the owner asked for:
 
 - **Late orders pulse.** Decide which of warm, overdue and forgotten pulse; the same pulse as A738's
   Waiting tab; a colour change instead under reduced motion.
-- **Item counts by state in the order lists.** Held orders' rows read "4 · €24.50", where 4 is the
-  number of LINES (`itemCount`, `apps/server/src/working-order.ts`), unlabelled. Show instead the
-  number of items ordered, then how many are held, waiting, ready and so on in Held, Waiting and
-  Transfers (A757 slice 6).
+- **Item counts by state in the order lists.** Built by A757 slice 6
+  (`docs/superpowers/plans/2026-10-21-a757-6-item-counts-by-state.md`): Parked orders, Waiting and
+  Transfers rows show how many items an order holds, then how many are unsent, held, waiting and
+  ready (`readOrderStateCounts`, `apps/server/src/order-state-counts.ts`; chips in
+  `apps/till/src/widgets/order-counts.ts`).
 
 ## A893. Owner review of every table state and its look, after A757 lands
 
@@ -1365,6 +1366,9 @@ owner, on the running till:
   not change it; I believe the stretching predates slice 4.
 - the Open points of slice 4's follow-up, the owner's look changes
   (`docs/superpowers/plans/2026-10-20-a757-4b-owner-look-changes.md`).
+- the choices slice 6 made where the pictures are silent: its plan's Owner points
+  (`docs/superpowers/plans/2026-10-21-a757-6-item-counts-by-state.md`), each built with the default
+  named there.
 - the choices slice 5 made where the pictures are silent: its plan's Owner points
   (`docs/superpowers/plans/2026-10-20-a757-5-map-zone-tabs.md`), each built with the default named
   here, plus two found while building it (the last two):
@@ -1456,6 +1460,18 @@ measured Santet's plan, whose positions are an invented grid (`local/square/impo
 owner's floor: its Terrace zone, eight tables in one row, draws them at 28.7–32.5 px on a phone, so
 they show names but no cue. Once the owner's real floor is drawn, measure each zone's tables at 390
 and 360 px in the till page and bring any zone under either limit back to the owner.
+
+## A995. The floor's ready and held chips count a gram or millilitre dish by its quantity
+
+**A995 (left open by A757 slice 6).** As read on 2026-10-21: the floor's ready chip counts a dish as
+one only when its frozen `unit_precision` is above 0 (`apps/server/src/table-signals.ts:96-103`),
+and the held chip the same (`readHeldCounts`, `apps/server/src/order-groups.ts:1567`), and new
+venues get `g`, `mg` and `ml` at 0 places (`packages/catalogue/src/provisioning.ts:96-146`), so
+150 g of a dish reads as 150 there while slice 6's rows read 1 item. The till's own draft count
+decides "whole units" with `soldByTheUnit`, which does not read `measure`
+(`apps/till/src/screens/till-table-order-screen.ts:214-215`,
+`apps/till/src/widgets/product-name.ts:85-88`), so it adds 330 for a 330 ml dish. Fix: the
+`takesExtras` rule (`apps/server/src/working-order.ts:457-459`) in all three.
 
 ## A758. Adjustment reasons: review the rules, then a page of their own
 

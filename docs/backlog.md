@@ -2163,8 +2163,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Q15–Q20 on 2026-10-17 and added a countdown to Time to fire, two pulse speeds, zone tabs that
   carry a hidden zone's most urgent state, service steps a venue defines, a "nothing needed" look
   and whole-table status on the map; the design is revised and Q29–Q34 answered A, A, A, A, A, A on
-  2026-10-17.** Slices 1–5, a follow-up to slice 4, and 7 have landed (slice 5's plan:
-  `docs/superpowers/plans/2026-10-20-a757-5-map-zone-tabs.md`); slices 6 and 8 are left (design
+  2026-10-17.** Slices 1–7 and a follow-up to slice 4 have landed (slice 5's plan:
+  `docs/superpowers/plans/2026-10-20-a757-5-map-zone-tabs.md`; slice 6's:
+  `docs/superpowers/plans/2026-10-21-a757-6-item-counts-by-state.md`); slice 8 is left (design
   §11; plans in the detail).
   [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab),
   [Design](superpowers/specs/2026-10-17-a757-table-states-design.md),
@@ -2172,7 +2173,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A893. Owner review of every table state and its look, after A757 lands (owner, 2026-10-18).**
   Show the owner each state on the map and the card, both themes, with the pulses and zone tabs, and
-  settle the two suggestions in the detail. Waits for the whole of A757 (slices 6 and 8 are left).
+  settle the two suggestions in the detail. Waits for the whole of A757 (slice 8 is left).
   [Detail](backlog/till.md#a893-owner-review-of-every-table-state-and-its-look-after-a757-lands)
 
 - **A936. Waiting's minutes on the map (left open by A757 slice 5).** The map's cue for a waiting
@@ -2183,6 +2184,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A937. Measure the owner's real floor plan once it is drawn (left open by A757 slice 5).** Slice
   5's size check ran on Santet's invented grid, where Terrace's tables show names but no cue; re-run
   it on the owner's floor. [Detail](backlog/till.md#a937-measure-the-owners-real-floor-plan-once-it-is-drawn)
+
+- **A995. The floor's ready and held chips count a gram or millilitre dish by its quantity (left
+  open by A757 slice 6).** 150 g of a dish reads 150 on the floor's chips and 1 item on the order
+  lists, and the order screen's draft count adds 330 for a 330 ml dish; the fix is to use the
+  server's whole-portion rule in all three.
+  [Detail](backlog/till.md#a995-the-floors-ready-and-held-chips-count-a-gram-or-millilitre-dish-by-its-quantity)
+
+- **A996. Find a bill still counts lines (left open by A757 slice 6).** Its Items column counts a
+  bill's lines (`apps/server/src/find-bill-bills.ts:44`), so for one bill it can disagree with the
+  Parked orders row, which counts items.
 
 - **A900. A757 slice 7's open questions, built with defaults (left open by slice 7, 2026-10-19).**
   For the owner, a candidate question to batch: the words the pictures do not draw — the fifth
