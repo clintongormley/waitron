@@ -387,14 +387,16 @@ describe("reportStallAfter", () => {
 
         time = 1000;
         timers.at(-1).callback();
+        expect(timers).toHaveLength(3);
         const error = await result;
         expect(error).toBeInstanceOf(Error);
         expect(error.message).toContain(
           "no phase started or finished for 1000 ms, past the 1000 ms no-progress limit",
         );
         expect(error.message).toContain("Stalled in phase hangs after 1000 ms.");
-        expect(timers).toHaveLength(3);
-        expect(cleared).toEqual([timers[0], timers[2]]);
+        expect(cleared).toHaveLength(2);
+        expect(cleared[0]).toBe(timers[0]);
+        expect(cleared[1]).toBe(timers[2]);
       } finally {
         release();
         await result;
