@@ -10,8 +10,8 @@ import type { StoredLines, TillBasket } from "./basket.js";
 import type { TabLine, TillProduct } from "../api/client.js";
 import type { AdjustDetail } from "../screens/till-table-order-screen.js";
 
-// A stored counter order in the basket offers Cancel, Give away and Discount on its dishes and
-// Discount the bill, from the server's own listing of its lines (B11c).
+// A stored counter order in the basket offers Cancel and Comp on its dishes and Discount the bill,
+// from the server's own listing of its lines (B11c).
 
 const product = (id: string, name: string, unitPrice: string): TillProduct => ({
   id,
@@ -317,33 +317,33 @@ describe("till-basket: a stored counter order", () => {
     expect(all(el, "[data-cancel-line]")).toBe(1);
   });
 
-  it("offers Give away and Discount on every dish, and Discount the bill once", async () => {
+  it("offers one Comp… on every dish, and the bill's comp once", async () => {
     const el = await mount(storedOrder());
 
     expect(all(el, "[data-comp-line]")).toBe(3);
-    expect(all(el, "[data-discount-line]")).toBe(3);
+    expect(all(el, "[data-discount-line]")).toBe(0);
     expect(all(el, "[data-discount-bill]")).toBe(1);
     expect(el.shadowRoot!.querySelector("[data-discount-bill]")!.textContent!.trim()).toBe(
       t("table.discount_bill"),
     );
     expect(within(el, 2, "data-comp-line")!.getAttribute("aria-label")).toBe(
-      `${t("table.comp_line")} · Hamburguesa`,
+      `${t("comp.title")} · Hamburguesa`,
     );
+    expect(within(el, 2, "data-comp-line")!.textContent!.trim()).toBe(t("comp.title"));
   });
 
-  it("gives away or discounts an extra on its own and whole, naming it with its dish, and offers no Cancel while its dish is not with the kitchen", async () => {
+  it("comps an extra on its own and whole, naming it with its dish, and offers no Cancel while its dish is not with the kitchen", async () => {
     const el = await mount(storedOrder());
     const heard = adjustments(el);
     const bacon = t("table.extra_of").replace("{extra}", "Bacon").replace("{dish}", "Hamburguesa");
 
     expect(all(el, "[data-comp-extra]")).toBe(1);
-    expect(all(el, "[data-discount-extra]")).toBe(1);
+    expect(all(el, "[data-discount-extra]")).toBe(0);
     expect(all(el, "[data-cancel-extra]")).toBe(0);
     expect(within(el, "2-0", "data-comp-extra")!.getAttribute("aria-label")).toBe(
-      `${t("table.comp_line")} · ${bacon}`,
+      `${t("comp.title")} · ${bacon}`,
     );
     within(el, "2-0", "data-comp-extra")!.click();
-    within(el, "2-0", "data-discount-extra")!.click();
 
     const target = {
       lineId: "l-4",
@@ -354,10 +354,7 @@ describe("till-basket: a stored counter order", () => {
       started: false,
       extra: true,
     };
-    expect(heard).toEqual([
-      { kind: "comp", counter: true, target },
-      { kind: "discount", counter: true, target },
-    ]);
+    expect(heard).toEqual([{ kind: "comp", combined: true, counter: true, target }]);
   });
 
   it("cancels an extra on its own and whole once its dish is with the kitchen", async () => {
@@ -522,7 +519,7 @@ describe("till-basket: a stored counter order", () => {
     ]);
   });
 
-  it("gives away or discounts one of a dish with its extras by each unit's share of them", async () => {
+  it("comps one of a dish with its extras by each unit's share of them", async () => {
     const store = storedOrder();
     const twoBurgers: StoredLines = {
       ...stored,
@@ -534,12 +531,11 @@ describe("till-basket: a stored counter order", () => {
     const heard = adjustments(el);
 
     within(el, 2, "data-comp-line")!.click();
-    within(el, 2, "data-discount-line")!.click();
 
     expect(heard.map(({ kind, target }) => [kind, target.total, target.unitTotal])).toEqual([
       ["comp", "23.00", "11.50"],
-      ["discount", "23.00", "11.50"],
     ]);
+    expect(heard[0]!.combined).toBe(true);
   });
 
   it("discounts the whole order as the server listed it", async () => {
@@ -568,10 +564,8 @@ describe("till-basket: no adjustments until the basket matches the stored order"
   const none = (el: TillBasket) =>
     all(el, "[data-cancel-line]") +
     all(el, "[data-comp-line]") +
-    all(el, "[data-discount-line]") +
     all(el, "[data-discount-bill]") +
-    all(el, "[data-comp-extra]") +
-    all(el, "[data-discount-extra]");
+    all(el, "[data-comp-extra]");
 
   it("offers none on a walk-up basket", async () => {
     const store = new WorkingOrderStore();

@@ -372,7 +372,7 @@ it("A738 collection line-window Move sends exactly its dish and keeps collection
   expect(picker.readOnly).toBe(true);
   expect(picker.initialSelections?.note).toBe("No salt");
   expect(counter(el).storedLines).toBeNull();
-  expect(basketOf(el).shadowRoot!.querySelector("[data-discount-line]")).toBeNull();
+  expect(basketOf(el).shadowRoot!.querySelector("[data-comp-line]")).toBeNull();
   const action = picker.querySelector<HTMLElement>("[data-move-station]");
   expect(action, "collection inspection must have the dish's current move facts").not.toBeNull();
   await userEvent.click(action!);

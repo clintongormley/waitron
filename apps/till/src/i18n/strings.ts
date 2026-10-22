@@ -1109,9 +1109,6 @@ export const en = {
   "table.cancel_started": "The kitchen has started this — cancel and bin it?",
   "table.cancel_sent": "It comes off the bill.",
   "table.cancel_extra_told": "It comes off the bill, and the kitchen is told.",
-  // Cancelling, giving away and discounting (service plan Task 11)
-  "table.comp_line": "Give away",
-  "table.discount_line": "Discount",
   "table.discount_bill": "Discount the bill",
   "table.price_was": "Was",
   "table.extra_of": "{extra} (with {dish})",
@@ -2816,9 +2813,6 @@ export const es: Record<StringKey, string> = {
   "table.cancel_started": "La cocina ya lo ha empezado — ¿cancelar y tirarlo?",
   "table.cancel_sent": "Se quitará de la cuenta.",
   "table.cancel_extra_told": "Se quitará de la cuenta y se avisará a cocina.",
-  // Cancelling, giving away and discounting (service plan Task 11)
-  "table.comp_line": "Invitar",
-  "table.discount_line": "Descuento",
   "table.discount_bill": "Descuento en la cuenta",
   "table.price_was": "Antes",
   "table.extra_of": "{extra} (con {dish})",

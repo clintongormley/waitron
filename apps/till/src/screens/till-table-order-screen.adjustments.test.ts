@@ -285,7 +285,7 @@ describe("till-table-order-screen: giving away and discounting a dish", () => {
     await openSentDish(paid, "line-1");
     await openSentMore(paid);
     expect(paid.shadowRoot!.querySelector("[data-sent-line-comp]")).toBeNull();
-    expect(paid.shadowRoot!.querySelector("[data-discount-line]")).toBeNull();
+    expect(paid.shadowRoot!.querySelector("[data-comp-line]")).toBeNull();
     expect(paid.shadowRoot!.querySelector("[data-discount-bill]")).toBeNull();
   });
 });

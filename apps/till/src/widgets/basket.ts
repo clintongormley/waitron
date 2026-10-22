@@ -36,7 +36,6 @@ import type { StringKey } from "../i18n/strings.js";
 import { lineProductName, productUnit } from "./product-name.js";
 import { lineTotal, priceWasStyles } from "./price-was.js";
 import {
-  LINE_ADJUSTMENTS,
   adjustableListing,
   billGross,
   lineAdjustTarget,
@@ -1205,8 +1204,7 @@ export class TillBasket extends LitElement {
     return lineTotal(before, now, "option-total");
   }
 
-  /** Cancel on a dish the kitchen has, and Give away and Discount on every dish, which cover its
-   * extras. */
+  /** Cancel on a dish the kitchen has, and Comp on every dish, which covers its extras. */
   #lineActions(
     line: OrderLine,
     index: number,
@@ -1289,22 +1287,17 @@ export class TillBasket extends LitElement {
             </wt-button>`
           : nothing
       }
-      ${LINE_ADJUSTMENTS.map(
-        ({ kind, label }) =>
-          html`<wt-button
-            class="line-adjust"
-            size="sm"
-            variant="secondary"
-            data-comp-line=${row === "line" && kind === "comp" ? place : nothing}
-            data-discount-line=${row === "line" && kind === "discount" ? place : nothing}
-            data-comp-extra=${row === "extra" && kind === "comp" ? place : nothing}
-            data-discount-extra=${row === "extra" && kind === "discount" ? place : nothing}
-            aria-label=${`${t(label)} · ${name}`}
-            @click=${() => this.#adjust(kind, target())}
-          >
-            ${t(label)}
-          </wt-button>`,
-      )}
+      <wt-button
+        class="line-adjust"
+        size="sm"
+        variant="secondary"
+        data-comp-line=${row === "line" ? place : nothing}
+        data-comp-extra=${row === "extra" ? place : nothing}
+        aria-label=${`${t("comp.title")} · ${name}`}
+        @click=${() => this.#adjust("comp", target(), true)}
+      >
+        ${t("comp.title")}
+      </wt-button>
     </div>`;
   }
 
@@ -1329,8 +1322,8 @@ export class TillBasket extends LitElement {
     </div>`;
   }
 
-  #adjust(kind: AdjustKind, target: AdjustTarget): void {
-    const detail: AdjustDetail = { kind, target, counter: true };
+  #adjust(kind: AdjustKind, target: AdjustTarget, combined?: true): void {
+    const detail: AdjustDetail = { kind, target, counter: true, ...(combined ? { combined } : {}) };
     this.dispatchEvent(new CustomEvent("adjust", { detail, bubbles: true, composed: true }));
   }
 
