@@ -1365,7 +1365,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
             { artifact, recoveryKey, environment: rawEnvironment, ...credentials },
             { oldBoxGone },
           );
-          await deps.clearStagedRecovery?.();
+          // The restore is already recorded, so it must still answer and restart; boot clears
+          // the staging folder on that restart.
+          await deps.clearStagedRecovery?.().catch(() => {
+            log("warn", "setup.staged_recovery_clear_failed", {});
+          });
           const response = c.json({ restoreStaged: true, restarting: true }, 202);
           setTimeout(() => requestRestart(), 0);
           return response;

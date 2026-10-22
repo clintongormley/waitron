@@ -364,6 +364,28 @@ it("discards the staged copy once the restore is staged, and keeps it when the r
   expect((await restore()).status).toBe(202);
   expect(clearStagedRecovery).toHaveBeenCalledTimes(1);
 });
+it("accepts a staged restore and restarts even when the staged copy cannot be deleted", async () => {
+  const clearStagedRecovery = vi.fn(async () => {
+    throw Object.assign(new Error("permission denied"), { code: "EACCES" });
+  });
+  const stageRestore = vi.fn<NonNullable<SetupDeps["stageRestore"]>>(async () => {});
+  const requestRestart = vi.fn();
+  const { app, log } = fixture({ clearStagedRecovery, stageRestore, requestRestart });
+  const response = await app.request("/setup-api/restore", {
+    method: "POST",
+    headers: {
+      "content-type": "application/octet-stream",
+      "x-waitron-recovery-key": "archive password",
+      "x-waitron-restore-environment": "preproduction",
+    },
+    body: new Uint8Array([7, 2, 9]),
+  });
+  expect(response.status).toBe(202);
+  expect(await response.json()).toEqual({ restoreStaged: true, restarting: true });
+  await vi.waitFor(() => expect(requestRestart).toHaveBeenCalledTimes(1));
+  expect(stageRestore).toHaveBeenCalledTimes(1);
+  expect(log).toHaveBeenCalledWith("warn", "setup.staged_recovery_clear_failed", {});
+});
 it("keeps the stage route unavailable without the first-setup host", async () => {
   const stageRecovery = vi.fn(async () => ({ stagedId }));
   const app = new Hono();
