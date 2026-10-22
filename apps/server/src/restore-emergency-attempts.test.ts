@@ -1,7 +1,7 @@
 import { readFile, rm } from "node:fs/promises";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
@@ -86,10 +86,14 @@ it("retains the selected hour after a real hook transaction rolls back", async (
   ]);
   expect(f.journal()).toBe(retained);
   expect(retained).not.toContain("injected callback interruption");
-  const next = (await f.nextEvent()) as { status: string; identity: string };
-  expect(next).toMatchObject({ status: "selected", identity: "0CNQW" });
-  expect(next.identity > "0CNQT").toBe(true);
-  expect(f.journal()).not.toBe(retained);
+  // The settle wait alone ends at 12:42, the rolled-back restore's name (0CNQT); only the
+  // spent-name rule moves it.
+  vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
+  await expect(f.nextEvent()).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T12:43:00Z") },
+  });
+  expect(f.journal()).toBe(retained);
 });
 it.each(["archive", "stream"] as const)(
   "retains readable %s intent before activation and commits before trading settings",

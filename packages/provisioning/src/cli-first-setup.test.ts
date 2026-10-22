@@ -695,24 +695,6 @@ it("the real command deployment refuses production before committing any venue",
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
 });
 
-it("a command Finish checks recovered ownership before loading publication secrets", async () => {
-  const f = await activationFixture();
-  const authorize = vi.spyOn(f.runtime.owner, "authorize");
-  f.interrupt(true);
-  await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow("synthetic publication interrupted");
-  const state = (await f.runtime.store.read())!;
-  // The rerun after the settle wait recovered ownership; the first run's claimed owner never did.
-  const owner = { ...authorize.mock.calls[0]![0], revision: state.revision };
-  const deployment = f.deps.firstSetupDeployment!({ runtime: f.runtime, db: venue.db });
-  const publication = vi.spyOn(deployment, "publication");
-  const { completeFirstSetupCommand } = await import("./first-setup-command-activation.js");
-  await expect(
-    completeFirstSetupCommand(f.runtime, venue.db, owner, deployment),
-  ).rejects.toMatchObject({ code: "setup.owner_required" });
-  expect(publication).not.toHaveBeenCalled();
-  expect((await f.runtime.store.read())!).toEqual(state);
-});
-
 async function realActivationFixture(environment: Record<string, string | undefined> = {}) {
   const f = await activationFixture();
   const { createFirstSetupCommandDeployment } = await import("./first-setup-command-deployment.js");

@@ -330,17 +330,20 @@ it("completes a real sale after current-hour recovery without calling fetch or r
     await copy.close();
   }
 });
-it("gives a fresh recovery of the older backup a later name than the spent minute", async () => {
+it("refuses a fresh recovery of the older backup whose settle wait would land on the spent minute", async () => {
   const f = await stage("archive");
   await f.run();
   const committed = await f.snapshot();
   const retained = f.journal();
-  const next = (await f.nextEvent()) as { status: string; identity: string };
-  expect(next).toMatchObject({ status: "selected", identity: "0CNQT" });
-  expect(next.identity > "0CNQR").toBe(true);
+  // The settle wait alone ends at 12:40, the spent minute (0CNQR); only the spent-name rule moves it.
+  vi.setSystemTime(new Date("2026-10-16T12:38:00Z"));
+  await expect(f.nextEvent()).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T12:41:00Z") },
+  });
   expect(await f.snapshot()).toEqual(committed);
   expect(committed.records).toEqual(f.original);
-  expect(f.journal()).not.toBe(retained);
+  expect(f.journal()).toBe(retained);
 });
 it("replays its exact committed result after trading-settings publication is interrupted", async () => {
   const f = await stage("archive");
