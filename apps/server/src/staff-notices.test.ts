@@ -15,7 +15,7 @@ import {
   type DeviceId,
 } from "@waitron/shared";
 import { ALL_MODULES, enabledStaffNoticeSources } from "./modules.js";
-import { readStaffNotices } from "./staff-notices.js";
+import { createStaffNoticeLog, readStaffNotices } from "./staff-notices.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -362,5 +362,89 @@ describe("readStaffNotices", () => {
       owner: "d",
       key: "k",
     });
+  });
+});
+
+describe("createStaffNoticeLog", () => {
+  const UNAVAILABLE = "staff_notice.source_unavailable";
+
+  it("passes other events through unchanged", () => {
+    const spy = vi.fn<Logger>();
+    const { log } = createStaffNoticeLog(spy);
+    log("warn", "other.event", { a: 1 });
+    log("info", "other.event");
+    expect(spy.mock.calls).toEqual([
+      ["warn", "other.event", { a: 1 }],
+      ["info", "other.event", undefined],
+    ]);
+  });
+
+  it("logs an owner's failure once while it keeps failing", () => {
+    const spy = vi.fn<Logger>();
+    const notices = createStaffNoticeLog(spy);
+    notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "first.code" });
+    notices.settle(["m"]);
+    notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "second.code" });
+    notices.settle(["m"]);
+    expect(spy.mock.calls).toEqual([
+      ["error", UNAVAILABLE, { owner: "m", errorCode: "first.code" }],
+    ]);
+  });
+
+  it("notes the recovery once, and logs a new failure after it", () => {
+    const spy = vi.fn<Logger>();
+    const notices = createStaffNoticeLog(spy);
+    notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "first.code" });
+    notices.settle(["m"]);
+    spy.mockClear();
+    notices.settle([]);
+    expect(spy.mock.calls).toEqual([["info", "staff_notice.source_recovered", { owner: "m" }]]);
+    spy.mockClear();
+    notices.settle([]);
+    expect(spy).not.toHaveBeenCalled();
+    notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "again.code" });
+    expect(spy.mock.calls).toEqual([
+      ["error", UNAVAILABLE, { owner: "m", errorCode: "again.code" }],
+    ]);
+  });
+
+  it("notes the recovery only of the owners that stopped failing", () => {
+    const spy = vi.fn<Logger>();
+    const notices = createStaffNoticeLog(spy);
+    notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "x" });
+    notices.log("error", UNAVAILABLE, { owner: "n", errorCode: "x" });
+    notices.settle(["m", "n"]);
+    spy.mockClear();
+    notices.settle(["n"]);
+    expect(spy.mock.calls).toEqual([["info", "staff_notice.source_recovered", { owner: "m" }]]);
+  });
+
+  it("logs each repeated key once", () => {
+    const spy = vi.fn<Logger>();
+    const { log } = createStaffNoticeLog(spy);
+    for (let i = 0; i < 3; i += 1) {
+      log("error", "staff_notice.duplicate_key", { owner: "d", key: "k" });
+    }
+    log("error", "staff_notice.duplicate_key", { owner: "d", key: "j" });
+    expect(spy.mock.calls).toEqual([
+      ["error", "staff_notice.duplicate_key", { owner: "d", key: "k" }],
+      ["error", "staff_notice.duplicate_key", { owner: "d", key: "j" }],
+    ]);
+  });
+
+  it("through the reader, a source that fails on every read is logged once", async () => {
+    const spy = vi.fn<Logger>();
+    const notices = createStaffNoticeLog(spy);
+    for (let i = 0; i < 3; i += 1) {
+      const result = await withTransaction(db, (tx) =>
+        readStaffNotices(tx, [{ owner: "m", source: failing("boom") }], {
+          reading: READING,
+          log: notices.log,
+        }),
+      );
+      notices.settle(result.unavailable);
+    }
+    expect(spy.mock.calls.filter(([, event]) => event === UNAVAILABLE)).toHaveLength(1);
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });

@@ -65,3 +65,38 @@ export async function readStaffNotices(
   }
   return { notices: notices.sort((a, b) => RANK[a.severity] - RANK[b.severity]), unavailable };
 }
+
+export interface StaffNoticeLog {
+  /** Hand this to a reader as its `log`. */
+  readonly log: Logger;
+  /** After each read, with its `unavailable`: notes each owner that has stopped failing. */
+  settle(unavailable: readonly string[]): void;
+}
+
+/** Wraps `log` so a source that fails on every read is logged once per spell of failing, and each
+ * repeated key once. Other events pass through. */
+export function createStaffNoticeLog(log: Logger): StaffNoticeLog {
+  const failing = new Set<string>();
+  const duplicates = new Set<string>();
+  return {
+    log(level, event, fields) {
+      if (event === "staff_notice.source_unavailable") {
+        const owner = String(fields?.owner);
+        if (failing.has(owner)) return;
+        failing.add(owner);
+      } else if (event === "staff_notice.duplicate_key") {
+        const id = JSON.stringify([fields?.owner, fields?.key]);
+        if (duplicates.has(id)) return;
+        duplicates.add(id);
+      }
+      log(level, event, fields);
+    },
+    settle(unavailable) {
+      for (const owner of failing) {
+        if (unavailable.includes(owner)) continue;
+        failing.delete(owner);
+        log("info", "staff_notice.source_recovered", { owner });
+      }
+    },
+  };
+}
