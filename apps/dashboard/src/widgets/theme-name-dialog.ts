@@ -195,10 +195,7 @@ export class ThemeNameDialog extends LitElement {
         typeof error === "object" && error !== null
           ? (error as { params?: Record<string, unknown> }).params
           : undefined;
-      const sentence =
-        code === "theme.name_taken" || (code === "theme.invalid" && params?.field === "name")
-          ? nameRefusalText(code, params?.reason)
-          : "";
+      const sentence = nameRefusalText(code, params);
       if (sentence) {
         this.refusal = sentence;
         await this.#focusField();

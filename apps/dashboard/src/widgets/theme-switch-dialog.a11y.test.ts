@@ -1,4 +1,5 @@
 import { afterEach, expect, it } from "vitest";
+import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import type { ThemeSwitchDialog } from "./theme-switch-dialog.js";
@@ -23,7 +24,7 @@ it.each(cases)("switch dialog, $shape, $locale / $mode", async ({ shape, mode, l
       open: true,
       name: "Summer terrace",
       lines: shape === "lines" ? [t("appearance.dialog_brand_dark")] : [],
-      error: shape === "error" ? t("appearance.name_taken") : "",
+      error: shape === "error" ? codeMessage("theme.name_taken") : "",
     },
     mode,
   );

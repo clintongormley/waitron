@@ -3,6 +3,7 @@ import {
   type ThemeNameRefusal,
   type ThemeNameResult,
 } from "@waitron/ui-core/theme";
+import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { fill, t } from "../i18n/t.js";
 
@@ -23,10 +24,13 @@ export function nameCheckText(result: ThemeNameResult): string {
   return result.ok ? "" : t(REFUSAL_KEYS[result.reason]);
 }
 
-export function nameRefusalText(code: string, reason: unknown): string {
-  if (code === "theme.name_taken") return t("appearance.name_taken");
+/** The sentence for the name field, or "" when the refusal is not about the name. */
+export function nameRefusalText(code: string, params: Record<string, unknown> | undefined): string {
+  if (code === "theme.name_taken") return codeMessage(code);
+  const reason = params?.reason;
   if (
     code === "theme.invalid" &&
+    params?.field === "name" &&
     typeof reason === "string" &&
     Object.hasOwn(REFUSAL_KEYS, reason)
   ) {

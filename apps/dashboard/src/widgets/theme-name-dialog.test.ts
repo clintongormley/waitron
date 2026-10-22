@@ -170,12 +170,12 @@ for (const [label, refusal, sentence] of [
   [
     "a taken name",
     { code: "theme.name_taken", params: { field: "name" } },
-    "appearance.name_taken",
+    () => codeMessage("theme.name_taken"),
   ],
   [
     "a too-long name",
     { code: "theme.invalid", params: { field: "name", reason: "too_long" } },
-    "appearance.name_too_long",
+    () => t("appearance.name_too_long"),
   ],
 ] as const) {
   it(`${label} is refused under the field and never disables Save`, async () => {
@@ -183,7 +183,7 @@ for (const [label, refusal, sentence] of [
     const { el, dialog } = await open({ kind: "copy", name: "Christmas" }, submit);
     await press(el, dialog);
     expect(submit).toHaveBeenCalledTimes(1);
-    expect(input(dialog).error).toBe(t(sentence));
+    expect(input(dialog).error).toBe(sentence());
     await expectMessageAboveButtons(dialog, save(dialog), t("form.fix_fields"));
     expect(save(dialog).disabled).toBe(false);
     expect(dialog.open).toBe(true);

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { THEME_NAME_MAX_LENGTH, checkThemeName } from "@waitron/ui-core/theme";
+import { codeMessage } from "../i18n/codes.js";
 import { setLocale } from "../i18n/t.js";
 import { copyName, nameCheckText, nameRefusalText } from "./theme-names.js";
 
@@ -52,15 +53,18 @@ it("words each name check's refusal", () => {
 });
 
 it("words a server's refusal of a name and nothing else", () => {
-  expect(nameRefusalText("theme.name_taken", undefined)).toBe(
-    "A theme with this name already exists.",
-  );
-  expect(nameRefusalText("theme.invalid", "reserved")).toBe(
+  expect(nameRefusalText("theme.name_taken", undefined)).toBe(codeMessage("theme.name_taken"));
+  expect(codeMessage("theme.name_taken")).toBe("A theme with this name already exists.");
+  const name = (reason: string) => ({ field: "name", reason });
+  expect(nameRefusalText("theme.invalid", name("reserved"))).toBe(
     '"Waitron" is the built-in theme\'s name. Pick another.',
   );
-  expect(nameRefusalText("theme.invalid", "empty")).toBe("Enter a name.");
-  expect(nameRefusalText("theme.invalid", "too_long")).toBe("Use 60 characters or fewer.");
-  expect(nameRefusalText("theme.invalid", "contrast")).toBe("");
+  expect(nameRefusalText("theme.invalid", name("empty"))).toBe("Enter a name.");
+  expect(nameRefusalText("theme.invalid", name("too_long"))).toBe("Use 60 characters or fewer.");
+  expect(nameRefusalText("theme.invalid", name("contrast"))).toBe("");
+  expect(nameRefusalText("theme.invalid", { field: "brandColor", reason: "too_long" })).toBe("");
+  expect(nameRefusalText("theme.invalid", { reason: "too_long" })).toBe("");
+  expect(nameRefusalText("theme.invalid", undefined)).toBe("");
   expect(nameRefusalText("theme.not_found", undefined)).toBe("");
 });
 

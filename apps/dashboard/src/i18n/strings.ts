@@ -3118,7 +3118,6 @@ export const en = {
   "appearance.name_required": "Enter a name.",
   "appearance.name_too_long": "Use 60 characters or fewer.",
   "appearance.name_reserved": '"Waitron" is the built-in theme\'s name. Pick another.',
-  "appearance.name_taken": "A theme with this name already exists.",
   "appearance.copy_name": "{name} (copy)",
   "appearance.switch_heading": "Use {name} on every screen?",
   "appearance.switch_body":
@@ -6293,7 +6292,6 @@ export const es: Record<StringKey, string> = {
   "appearance.name_required": "Escribe un nombre.",
   "appearance.name_too_long": "Usa 60 caracteres o menos.",
   "appearance.name_reserved": "«Waitron» es el nombre del tema integrado. Elige otro.",
-  "appearance.name_taken": "Ya existe un tema con este nombre.",
   "appearance.copy_name": "{name} (copia)",
   "appearance.switch_heading": "¿Usar {name} en todas las pantallas?",
   "appearance.switch_body":
