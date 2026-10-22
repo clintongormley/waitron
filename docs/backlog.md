@@ -103,6 +103,13 @@ and a [build plan](superpowers/plans/2026-10-22-a802-partial-paid-invoice-correc
 Implementation still needs the plan's protected-writer approval and qualification; this is not
 ranked against the list above.
 
+**Remote access unblocks the customer-facing features, so it comes first among them (owner,
+2026-10-22).** Online booking (A1013), the table's QR code (A508), online ordering for collection
+(A509) and delivery (A1012) all reach the box through the venue's Cloud instance. They come soon
+after go-live, not at it: "The remote access is the bottleneck for most of these features, so we
+need to get that working soon." This repository's part is **A951**, the box's lasting tunnel and
+public-certificate client (_Replication, failover and the cloud_).
+
 **Lower priority (owner, 2026-10-16).** These were the top of the list ranked 2026-09-27; they now
 come after the list above:
 
@@ -2922,6 +2929,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Backlog only, not queued to a lane.
   [Detail](backlog/till.md#a509-online-ordering-for-collection-at-the-counter)
 
+- **A1012. Delivery for online orders (owner, 2026-10-22).** An A509 online order taken to the
+  customer's address instead of collected. Needs the internet, as A509 does, and comes after it.
+  Backlog only, not queued to a lane.
+  [Detail](backlog/till.md#a1012-delivery-for-online-orders)
+
 - **Loose ends left by A429 slice 1 (#1493).**
   - The bookings list shows no table for any booking, and a past booking's kept table name
     (`bookings.table_label`) is stored but shown nowhere.
@@ -3431,8 +3443,13 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Follow device removes the attribute (`packages/ui/src/theme-choice.ts:28`), so such a rule stops
   matching. Next: reword the sentence with the real reasons.
 
-- **Bookings**, each greenfield: public/online/QR booking, availability, reminders, a CRM entity,
-  recurring, a calendar grid, deposits.
+- **A1013. Online booking for customers (owner, 2026-10-22).** A customer books a table from the
+  venue's public page. The bookings module serves staff today (A429); this adds the public side:
+  the times the venue can take, the customer's booking form, confirmation and reminders. Needs
+  remote access (A951). While the box cannot be reached no booking is taken: Waitron Cloud's D88
+  proposal keeps no booking queue of its own. Backlog only, not queued to a lane.
+
+- **Bookings**, each greenfield: a CRM entity, recurring bookings, a calendar grid, deposits.
 
 - **Show how many dishes are being made on the table plan — OPEN (3d, W16).** — left open by the
   product folders work. The plan has no such count; adding one needs another value from
@@ -5233,16 +5250,31 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   Each ‹ › step and each close adds a browser history entry, because a Calendar view can only push
   an address, not replace one.
 
-- **A586. Labour rules and hours balance per person** — named agreements, one per person's contract
-  (today one `convenio_config` per location); a running total of hours clocked and rostered against
-  hours due, annual leave counted, with the yearly overtime cap. After A585; build on the working-time record
-  ([spec open point 6](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md)).
+- **A586. Each person's contract terms, from ready-made rule sets that warn and never refuse
+  (owner, 2026-10-22).** Waitron does not follow or enforce each country's or region's law. Terms
+  that are the same for staff anywhere are generic; rules that depend on the country (Spain's 10%
+  of the year's hours that may be moved) come with the country pack as ready-made rule sets, and
+  each person's contract takes one, because one venue can hold different contracts. Today the
+  rules are one `convenio_config` per location. A broken rule warns the manager and never stops
+  the rota. Per person: pay per hour, contracted hours, extra hours a week, the days-off pattern,
+  split shifts, the longest stretch, annual holiday, and a starting balance for someone who joins
+  mid-year. Then a running total of hours worked and rostered against hours due, holiday counted
+  ([spec open point 6](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md)), and the
+  owner's planning questions: hours spread unevenly across the year, overtime repaid as time off.
+  After A585. [Detail](backlog/workforce.md#a586-each-persons-contract-terms)
 
-- **A587. Availability** — "can't work Wednesdays", preferred days; the `availability` table exists
-  unused. Shown in A585's picker and warnings. After A586.
+- **A587. Availability and personal preferences** — "can't work Wednesdays"; "Anna only works
+  mornings, Monday to Thursday" (owner, 2026-10-22). A preference warns as a broken rule does, in
+  words that say it is the person's preference, not their contract. The `availability` table
+  exists unused. Shown in A585's picker and warnings. After A586.
 
-- **A588. A solver drafts the rota** — fills A585's open slots from each person's staff roles, rules
-  (A586), availability (A587) and contracted hours, for the manager to adjust. After A587.
+- **A588. A solver drafts the rota, as a paid Waitron Cloud feature (owner, 2026-10-22)** — fills
+  A585's open slots from each person's staff roles, contract terms (A586), availability and
+  preferences (A587), for the manager to adjust. It runs in Waitron Cloud, not on the box; the
+  owner's choice of engine is Google's OR-Tools (its CP-SAT solver, Apache 2.0 licence), which
+  takes rules that must hold and preferences to honour where it can. What the box sends is staff
+  personal data, so it belongs in A980's data map. Waitron Cloud's backlog needs the matching
+  entry. After A587.
 
 ### Purchasing, recipes, stock and reports
 
@@ -5955,6 +5987,15 @@ the tree. What remains, largest first:
 
 - **Observations are synthetic until service adapters exist.** Left open by the Cloud connection
   integration (2026-09-24; #638, #808).
+
+- **A951. The box's lasting tunnel and public-certificate client, for the customer-facing pages
+  (owner, 2026-10-21; raised 2026-10-22).** Customers reach the venue's public pages — online
+  booking (A1013), the table's QR code (A508), online orders (A509) and delivery (A1012) — over the
+  box's WireGuard link to its Cloud instance; venue devices keep `.local` by default. Still missing
+  here: the box's certificate-exchange client with lease renewal and TLS reload, and walling the
+  public routes off from staff and till routes. Designed with Waitron Cloud's D88 proposal, which is
+  not yet approved. Soon after go-live, not at it, and the first of the customer-facing work: "The
+  remote access is the bottleneck for most of these features, so we need to get that working soon."
 
 - **Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side
   networking and `@waitron/tunnel`'s retirement; first-contact trust bootstrap; and the

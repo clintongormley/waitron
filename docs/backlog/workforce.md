@@ -169,7 +169,64 @@ once per frame and again when its own size changes, which `CalendarDayBox` does 
 swipe with `SWIPE_PX` and `PHONE_WIDTH` (of `opening-hours-week.ts`). Next: move `stepMonth` and the
 limits, and these, into browser-safe venue-service files and export them.
 
+## A586. Each person's contract terms
+
+**Owner, 2026-10-22.** Kept per person, because one venue can hold different contracts:
+
+- pay per hour;
+- contracted hours a week, and the most extra hours a week;
+- the days-off pattern: two days together, a day and a half together, or one day plus another day
+  (or plus a half day) elsewhere in the week;
+- whether they work split shifts, and the most hours they work in one stretch;
+- annual holiday, in days;
+- for someone who starts in Waitron partway through a year: when they started work, the hours
+  worked so far this year and the holiday days taken, so the hours still due can be counted.
+
+**Two kinds of rule (owner, 2026-10-22).** The terms above are the same for staff anywhere, so
+they are generic workforce data. Other rules depend on the country, such as Spain's 10% of the
+year's hours that may be moved (below): those come with the country pack, as ready-made rule sets
+the person's contract takes, holding limits such as the most hours a week and a day, rest between
+shifts, weekly rest, breaks and the yearly overtime cap. Today these are
+one `convenio_config` row per location (`packages/workforce-es/src/schema/convenio-config.ts`);
+moving them per person reaches every reader, so start from `packages/workforce/src/ruleset.ts` and
+grep `convenio`. Still to decide: whether the owner can change a ready-made set or only pick one,
+and which sets ship first.
+
+**The owner's planning questions, with what Spain's Workers' Statute says.** Quoted from the
+consolidated text (BOE-A-2015-11430, last updated 21/10/2026), fetched 2026-10-22. These are for
+the labour advisor to confirm: a collective agreement can change each of them.
+
+- **More hours in summer, fewer in winter.** Art. 34.2: «En defecto de pacto, la empresa podrá
+  distribuir de manera irregular a lo largo del año el diez por ciento de la jornada de trabajo»,
+  respecting the minimum daily and weekly rest, and «el trabajador deberá conocer con un preaviso
+  mínimo de cinco días el día y la hora de la prestación de trabajo resultante». The differences
+  «deberán quedar compensadas en el plazo de doce meses». So, unless an agreement says otherwise:
+  10% of the year's hours may be moved, with five days' notice of the new times.
+- **How much the rota can be rearranged.** The same five days' notice for moved hours; at least
+  twelve hours between one day's work and the next, and no more than nine ordinary hours a day
+  unless an agreement says otherwise (art. 34.3); weekly rest of «día y medio ininterrumpido»,
+  which can be added up over periods of up to fourteen days (art. 37.1).
+- **Overtime repaid as time off, so quiet shifts become time off and busy ones are staffed.**
+  Art. 35.1: an agreement or the contract chooses between paying overtime and «compensarlas por
+  tiempos equivalentes de descanso retribuido»; with no agreement, overtime «deberán ser
+  compensadas mediante descanso dentro de los cuatro meses siguientes». Art. 35.2: overtime repaid
+  as rest within those four months does not count against the 80-hour yearly cap.
+- **Annual holiday is not the same tool.** Art. 38.1: at least «treinta días naturales», and it
+  cannot be paid out instead of taken; art. 38.3: the person knows their dates «dos meses antes, al
+  menos». So annual holiday can be planned into quiet seasons, but not moved shift by shift the way
+  time off for overtime can.
+
 ## Decisions and deliberate limits
+
+### Labour rules are ready-made sets chosen per person, and they warn, never refuse (owner, 2026-10-22)
+
+Waitron does not keep up with or enforce the labour law of every country or region. Terms that
+are the same for staff anywhere are generic; rules that depend on the country come with the
+country pack as ready-made rule sets, and the owner chooses one for each person's contract. A
+broken rule, or a
+broken personal preference (A587), is a warning; neither stops a shift being planned or a rota
+being published: "some labour laws are unworkable and it would be impossible to run a business
+while obeying all of the laws."
 
 ### A703. Keeping a Calendar view's address words stays a special case named in the app (owner, 2026-10-17)
 

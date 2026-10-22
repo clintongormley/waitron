@@ -551,6 +551,21 @@ name, with a key on the page naming every icon; the customer can hide dishes con
 allergens, or show only dishes matching a chosen diet. Icons and words as in
 [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md).
 
+## A1012. Delivery for online orders
+
+**A1012 (owner, 2026-10-22) — backlog only.** A509's online order, taken to the customer's address
+instead of collected. It shares A509's online menu, payment question and need for remote access
+(A951), and comes after A509. It is not the till's delivery table (a counter order carried to a
+table) nor invoice delivery, which already use the word.
+
+To decide before building:
+
+- Who delivers: the venue's own staff, a delivery company, or both.
+- The area served, any delivery charge, and the smallest order taken.
+- How the address is taken and checked (Waitron Cloud plans a free address-lookup service).
+- Paying when ordering or on delivery, and when the fiscal record is made.
+- How staff see an order go out and come back, and how the customer is told it is on its way.
+
 ## A phone's Chrome drew a white page for the box (watch, not a job yet)
 
 - **A phone's Chrome drew a white page for the box (owner's phone, 2026-10-08; watch, not a job
