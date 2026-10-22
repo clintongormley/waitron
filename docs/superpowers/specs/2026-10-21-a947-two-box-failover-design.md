@@ -3,7 +3,9 @@
 **Date:** 2026-10-21, revised twice the same day for the owner's answers, amended 2026-10-22.
 **Status:** design; all four questions and the owner's two follow-ups of about 22:25 answered
 (§12); the owner approved the second revision on 2026-10-22 at about 02:40, and the amendment below
-adds the owner's direction of about 03:12. Nothing in it is built.
+adds the owner's direction of about 03:12. Slice 4a is built on the branch
+`feat/a947-4a-minute-names` (decisions made while building it are listed below); nothing else in
+it is built.
 **Item:** A947. **Refreshes:** the
 [topology design](2026-09-16-sqlite-litestream-topology-design.md) §4.4 (on-prem primary → on-prem
 mirror), §5 (promotion, return, tail shipper, split brain), §6 (trust and fencing) and §11 (build
@@ -23,8 +25,12 @@ rewritten, and carries a dated pointer here.
 >    minute as `allowedFromMs`. It never takes a minute that begins before the floor.
 >    Tests: `packages/fiscal-verifactu/src/hour-selection.test.ts`, "a backup floor at %s rounds up
 >    to a minute start: %s" (a floor at 09:01:59 waits until 09:02:00; one at 09:02:10.5 is
->    refused, allowed from 09:03:00); `apps/server/src/hour-recovery-host.test.ts`, "a backup's
->    own floors".
+>    refused, allowed from 09:03:00) — run as a re-registration with an activation row's time, not
+>    a restore's backup floor; it covers a restore because both go through the same target
+>    arithmetic (`packages/fiscal-verifactu/src/hour-selection.ts`, `earliestMs` and `targetMs`),
+>    and no restore case waits for a floor within 150 seconds;
+>    `apps/server/src/hour-recovery-host.test.ts`, "a backup's own floors" (a restore refused for a floor days ahead, and one waiting once past
+>    both).
 > 2. **Only taking the name needs the page's own comparison.** The reads that carry no comparison
 >    id — the preview, prepare and resume — use this box's newest clock reading that itself admits
 >    a name and is no more than 30 seconds old; a select must name its comparison.

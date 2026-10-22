@@ -18,7 +18,9 @@ it, by itself; nobody types a time
 (`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "automatically compares clocks
 and shows combined country, place, zone and local time before selection"). A page shown on the
 box's own screen runs on the box's clock, so it does not count as the second clock
-(`apps/server/src/request-from-box.test.ts`). The box's clock must be within 30 seconds of every
+(`apps/server/src/request-from-box.test.ts` sorts a request from the box's own address as the box;
+`packages/fiscal-verifactu/src/hour-setup-clock.test.ts`, "a browser on the box itself is never
+the second clock"). The box's clock must be within 30 seconds of every
 other clock it reads, ahead or behind, and there is no confirmation to get past it
 (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a name needs a second clock within 30
 seconds of the box"). There is no "last hour" question: the page has no such field

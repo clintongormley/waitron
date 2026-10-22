@@ -167,7 +167,7 @@ CI scope and results; the unfiltered `main` merge checks the combined tree when 
 ### First Live setup qualification
 
 For the A679 candidate, follow [first Live setup](../operations/first-live-fiscal-setup.md)
-and [hour-based recovery](../operations/hour-recovery.md). Use an isolated production-shaped
+and [recovering a box](../operations/hour-recovery.md). Use an isolated production-shaped
 host when the managed development stack enables dev mode. The owner's 19 October viewing
 approval covers the generated recovery sheet; automated download/entry checks and final branch
 review remain distinct evidence. No physical-paper acceptance exercise remains under the
@@ -313,10 +313,22 @@ can fail to bind port 80 (`landing.listen_failed`, `EACCES`). Regressions:
 
 ### Disposable preproduction setup and owned Live setup
 
-On the A679 candidate, Demo, Preparation and isolated readiness use the fiscal module's
-disposable hour preparation (`hour-throwaway-allocation.ts`). Live setup uses the owned hour flow, including
-on a development host. It selects an eligible hour after clock/history checks and the operator's
-recent-setup answer; signed allocation files do not replace that flow.
+Demo, Preparation and isolated readiness use the fiscal module's disposable preproduction
+preparation (`packages/fiscal-verifactu/src/hour-throwaway-allocation.ts`), which names from the
+box's clock with no second clock and no history check. Through the setup page, Live on a
+development box (`config.devMode`) takes it too (`apps/server/src/setup-throwaway.route.test.ts`,
+"cell 5: marks Live on a dev box, whose request is stamped preproduction"). Any other Live setup,
+and the terminal's, uses the owned flow: five symbols for the UTC minute, after a second clock on
+another machine agrees within 30 seconds (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a
+name needs a second clock within 30 seconds of the box"), strictly later than every name in the
+history it can read and after a 90 to 150 second wait
+(`packages/fiscal-verifactu/src/hour-selection.test.ts`, "waits for the next minute when the
+current one is known" and "every setup wait over a minute of box readings lies in (90 000,
+150 000]"). The terminal asks no recent-setup question
+(`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal asks nothing, prints
+why it waits and until when, and keeps the wait"), and neither does the setup page, which has no
+such field (`packages/fiscal-verifactu/src/setup/first-hour.ts`; no test pins its absence).
+Signed allocation files do not replace that flow.
 
 Production and preproduction remain separate databases. A disposable preproduction allocation
 is not production authority. Follow the [first Live procedure](../operations/first-live-fiscal-setup.md)

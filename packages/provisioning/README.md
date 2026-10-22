@@ -92,10 +92,15 @@ refuses with `setup.not_ready` before opening the venue directory. For example:
 WAITRON_STATE_DIR=/var/lib/waitron/state node packages/provisioning/dist/bin.js venue
 ```
 
-The interactive Live flow owns its setup attempt, compares clocks and selects
-an eligible hour for its series. Pass an absolute `--recovery-pdf` destination outside both host
-state and the venue. Confirm the password and that you kept the resulting PDF. `--yes` answers
-neither the clock nor retention question. The [setup procedure](../../docs/operations/first-live-fiscal-setup.md)
+The interactive Live flow owns its setup attempt and compares the box's clock with the internet's;
+with only the box's own clock it explains why and stops
+(`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal with only the box's
+clock explains and cancels without a question"). It asks nothing about the clock or recent setups.
+When the name must wait, it prints why and the time it continues at, and stops; run it again
+within a minute after that time (same file, "the terminal asks nothing, prints why it waits and
+until when, and keeps the wait"). The name is five symbols for the UTC minute. Pass an absolute
+`--recovery-pdf` destination outside both host state and the venue. Confirm the password and that
+you kept the resulting PDF. `--yes` does not answer the retention question. The [setup procedure](../../docs/operations/first-live-fiscal-setup.md)
 explains the sequence and limits.
 
 For an accepted production readiness test, set `WAITRON_SETUP_SETTINGS_FILE` to
@@ -211,7 +216,7 @@ that way, the second of those precisely because an operator reaching for the ret
 have their old connection string quietly ignored.
 
 Supply login secrets through environment variables or private prompts. The Live flow still
-asks for clock, setup-password and kept-PDF confirmation:
+asks for setup-password and kept-PDF confirmation:
 
 ```bash
 WAITRON_VENUE_DIR=/var/lib/waitron/venue \

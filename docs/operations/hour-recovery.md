@@ -37,8 +37,10 @@ name needs a second clock within 30 seconds of the box").
 
 The new series are named from the box's clock: five symbols for the UTC minute. The box also reads
 the selected backup and any database still on the disk, and the name must be a later minute than
-every name in that history, and not before the backup's newest invoice record or the moment the
-backup was made (`apps/server/src/hour-recovery-host.test.ts`, "a backup's own floors"). Names
+every name in that history (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`,
+"D2: the old database still on the disk"), and not before the backup's newest invoice record or
+the moment the backup was made (`apps/server/src/hour-recovery-host.test.ts`, "a backup's own
+floors"). Names
 made after the backup, or by a box this one never saw, are invisible to it.
 
 After the clocks pass, the box waits 90 to 150 seconds before it takes the name, and the page
@@ -48,7 +50,8 @@ restore with a countdown that goes back to the server at zero"). Keep the page o
 page is a new restore and starts a new 90 to 150 seconds: the page makes a new restore event each
 time it opens (`apps/setup/src/screens/recovery-allocation.ts`, `eventId: crypto.randomUUID()`),
 and the box keeps each event's wait apart (`packages/fiscal-verifactu/src/hour-selection.ts`,
-`sameEvent`). What the page shows when it cannot go ahead, and what it asks for:
+`sameEvent`); no test reloads a restore page end to end. What the page shows when it cannot go
+ahead, and what it asks for:
 
 - **No second clock** (no internet, and the page is on the box itself): connect the box to the
   internet, or open the page on a phone or laptop on the venue's network that has the backup. It
@@ -113,7 +116,8 @@ Those confirmations attest that the former seller is stopped and no parallel rec
 The command checks the key again, refreshes its clock comparison and checks the retained selection
 before activation. This non-interactive entry needs usable internet time alongside the box clock.
 An unavailable second clock refuses `sif.allocation_invalid` with reason `second_clock_missing`
-(`apps/server/src/hour-promotion.test.ts`, "register-till refuses offline clock").
+(`apps/server/src/hour-promotion.test.ts`, "register-till refuses %s without changing the
+selected venue", row "offline clock").
 Do not delete the retained state to bypass that refusal.
 
 A new event starts the selected series at one and retains the retired series and counters. An
