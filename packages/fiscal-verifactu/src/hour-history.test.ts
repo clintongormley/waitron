@@ -226,3 +226,22 @@ it("refuses a four-symbol code as an invalid record", () => {
     "row/current:invalid_record",
   );
 });
+it("folds a source's own time floor into the recorded floor, the highest winning", () => {
+  const result = projectHourHistory({
+    scope,
+    sources: [
+      { reference: "venue", complete: true, records: [row()], timeFloorMs: 1792700100000 },
+      { reference: "backup-created", complete: true, records: [], timeFloorMs: 1792310400000 },
+    ],
+  });
+  expect(result.recordedTimeFloorMs).toBe(1792700100000);
+  expect(result.greatestSpentMinute).toBe(415420);
+  expect(result.contradictions).toEqual([]);
+  expect(project([], { timeFloorMs: 1792310400000 }).recordedTimeFloorMs).toBe(1792310400000);
+});
+it.each([NaN, Infinity, 1.5, "2026-10-23T08:00:00Z", null])(
+  "reports a source time floor %j as an invalid source",
+  (timeFloorMs) => {
+    expect(project([row()], { timeFloorMs }).contradictions).toEqual(["venue:invalid_source"]);
+  },
+);

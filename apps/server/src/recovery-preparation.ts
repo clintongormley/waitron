@@ -189,6 +189,12 @@ export function createSelectedRecoveryPreparation(options: Options): {
           ...current.history,
           ...survivingHistory,
           ...Object.values(selected.moduleEvidence?.[binding.module] ?? {}),
+          {
+            reference: "backup-created",
+            complete: true,
+            records: [],
+            timeFloorMs: Date.parse(selected.createdAt),
+          },
         ],
         contextKey: JSON.stringify([
           binding,

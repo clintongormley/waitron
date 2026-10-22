@@ -17,6 +17,7 @@ export interface HourHistorySource {
   readonly reference: string;
   readonly complete: boolean;
   readonly records: readonly unknown[];
+  readonly timeFloorMs?: number;
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -57,12 +58,19 @@ export function projectHourHistory(evidence: unknown): HourHistory {
   const seen = new Map<string, string>();
   if (sources.length === 0) contradictions.add("missing_sources");
   for (const source of sources) {
-    if (!record(source) || !text(source.reference) || !Array.isArray(source.records)) {
+    if (
+      !record(source) ||
+      !text(source.reference) ||
+      !Array.isArray(source.records) ||
+      ("timeFloorMs" in source && !Number.isSafeInteger(source.timeFloorMs))
+    ) {
       contradictions.add(`${record(source) ? String(source.reference) : "source"}:invalid_source`);
       continue;
     }
     references.add(source.reference);
     if (source.complete !== true) contradictions.add(`${source.reference}:incomplete`);
+    if (typeof source.timeFloorMs === "number")
+      recordedTimeFloorMs = Math.max(recordedTimeFloorMs ?? source.timeFloorMs, source.timeFloorMs);
     for (const row of source.records) {
       const reference = record(row) && text(row.reference) ? row.reference : source.reference;
       if (

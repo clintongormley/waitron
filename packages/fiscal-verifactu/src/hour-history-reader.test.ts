@@ -3,7 +3,8 @@ import { eq } from "drizzle-orm";
 import { deployment, invoiceSeries, withTransaction, readDeploymentEnvironment } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
-import { locationId } from "@waitron/shared";
+import { recordSale } from "@waitron/core";
+import { locationId, seriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { withHourAdmission } from "./allocation-envelope.js";
@@ -17,6 +18,8 @@ import { projectHourHistory } from "./hour-history.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { registroSif } from "./schema/sif.js";
+import { VerifactuBackend } from "./backend.js";
+import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 async function readInventory() {
   const environment = await readDeploymentEnvironment(suite.db);
@@ -337,4 +340,89 @@ it("retains a later recorded approval time even when its database commit timesta
     },
   });
   expect((await projection()).recordedTimeFloorMs).toBe(Date.parse("2026-10-16T12:30:00Z"));
+});
+
+it("reads the newest fiscal record's generation time as the venue's time floor", async () => {
+  await seedTenants(suite.db);
+  await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
+  const identity = "0CNNW";
+  const issuedAt = "2026-10-16T11:40:00.000Z";
+  const binding: OperationBinding = {
+    module: "fiscal-verifactu",
+    action: "setup",
+    eventId: identity,
+    sourceId: `attempt/${identity}`,
+    targetNodeId: TENANT_A.nodeId,
+  };
+  const input = {
+    allocation: {
+      version: 1,
+      allocationId: `hour/${identity}`,
+      taxpayerNif: "89890001K",
+      softwareId: "W1",
+      environment: "preproduction",
+      installationIdentity: identity,
+      series: bases.map((b) => ({ ...b, code: `${b.code}-${identity}` })),
+      source: "hour",
+      reservationEvidence: null,
+      issuedAt,
+    },
+    approval: {
+      version: 1,
+      eventId: identity,
+      operatorId: "administrator",
+      sourceId: binding.sourceId,
+      targetNodeId: TENANT_A.nodeId,
+      oldMachineOffline: false,
+      oldMachineAbsent: true,
+      noParallelRecovery: true,
+      confirmedAt: issuedAt,
+      incidentEvidence: `owned/${identity}`,
+    },
+  };
+  await withOperationAuthority(binding, "administrator", (authority) => {
+    const operation = { binding, authority, input };
+    return withHourAdmission(
+      operation,
+      { requiredBases: bases, priorActivation: "none" },
+      (evidence) =>
+        withCollectedModuleAllocation(
+          operation,
+          async (request) => ({ ...request, evidence }),
+          (write) =>
+            withTransaction(suite.db, (tx) =>
+              write(tx, {
+                nodeId: TENANT_A.nodeId,
+                locationId: locationId(TENANT_A.locationId),
+              }),
+            ),
+        ),
+    );
+  });
+  expect((await readInventory()).timeFloorMs).toBeUndefined();
+  const clock = {
+    ...steadyClock,
+    now: () => ({ ...steadyClock.now(), instant: new Date("2026-10-22T20:15:00Z") }),
+  };
+  const backend = new VerifactuBackend({
+    deploymentEnvironment: "preproduction",
+    clock,
+    db: suite.db,
+    resolveClient: staticResolver(fakeClient),
+  });
+  const [standard] = await suite.db
+    .select()
+    .from(invoiceSeries)
+    .where(eq(invoiceSeries.code, `A-${identity}`));
+  await withTransaction(suite.db, (tx) =>
+    recordSale(
+      tx,
+      backend,
+      saleInput({ nodeId: TENANT_A.nodeId, seriesId: seriesId(standard!.id), clock }),
+    ),
+  );
+  const source = await readInventory();
+  expect(source.complete).toBe(true);
+  expect(source.timeFloorMs).toBe(Date.parse("2026-10-22T20:15:00Z"));
+  expect((await projection()).recordedTimeFloorMs).toBe(Date.parse("2026-10-22T20:15:00Z"));
 });

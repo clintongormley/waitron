@@ -4,10 +4,12 @@ import {
   type Transaction,
   type DeploymentEnvironment,
 } from "@waitron/db";
+import { sql } from "drizzle-orm";
 import type { HourHistorySource } from "./hour-history.js";
 import { isMinuteAllocatedSeries } from "./hour-identity.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
+import { registrosFacturacion } from "./schema/registros.js";
 import { registroSif } from "./schema/sif.js";
 
 function validBases(value: unknown): value is { code: string; purpose: string }[] {
@@ -100,6 +102,11 @@ export async function readHourHistory(
       establishedAt: fiscalReservations.establishedAt,
     })
     .from(fiscalReservations);
+  const [newest] = await tx
+    .select({
+      generatedAt: sql<string | null>`max(${registrosFacturacion.fechaHoraHusoGenRegistro})`,
+    })
+    .from(registrosFacturacion);
   let complete =
     series.length + sifs.length + allocations.length + reservations.length === 0 ||
     (tenant !== null && environment !== null);
@@ -200,5 +207,8 @@ export async function readHourHistory(
       recordedAtMs: time(row.establishedAt),
     });
   }
-  return { reference: "venue", complete, records };
+  const generatedAt = newest?.generatedAt ?? null;
+  return generatedAt === null
+    ? { reference: "venue", complete, records }
+    : { reference: "venue", complete, records, timeFloorMs: Date.parse(generatedAt) };
 }

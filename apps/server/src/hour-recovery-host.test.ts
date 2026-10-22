@@ -37,6 +37,16 @@ import { buildManifest } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
+import { eq } from "drizzle-orm";
+import { recordSale } from "@waitron/core";
+import { seriesId } from "@waitron/shared";
+import { VerifactuBackend } from "@waitron/fiscal-verifactu/src/backend.js";
+import {
+  fakeClient,
+  saleInput,
+  staticResolver,
+  steadyClock,
+} from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 
 it("persists a recovery hour before the real configured restore runner activates it", async () => {
   const f = await host();
@@ -778,4 +788,92 @@ it("refuses an entered installation code newer than the selected backup, then ac
       .filter((row) => row.retiredAt === null)
       .map((row) => row.code),
   ).toEqual(expect.arrayContaining(["A-0CNRE", "FF-0CNRE", "R-0CNRE"]));
+});
+
+async function sellAt(instant: string) {
+  const saleClock = {
+    ...steadyClock,
+    now: () => ({ ...steadyClock.now(), instant: new Date(instant) }),
+  };
+  const backend = new VerifactuBackend({
+    deploymentEnvironment: "preproduction",
+    clock: saleClock,
+    db: suite.db,
+    resolveClient: staticResolver(fakeClient),
+  });
+  const [standard] = await suite.db
+    .select()
+    .from(invoiceSeries)
+    .where(eq(invoiceSeries.code, "A-0CNNY"));
+  await withTransaction(suite.db, (tx) =>
+    recordSale(
+      tx,
+      backend,
+      saleInput({ nodeId: node.nodeId, seriesId: seriesId(standard!.id), clock: saleClock }),
+    ),
+  );
+}
+
+describe("a backup's own floors", () => {
+  const asBrowser = { onBox: false };
+  const restoreService = (f: Awaited<ReturnType<typeof host>>, createdAt = f.selected.createdAt) =>
+    createSelectedRecoveryPreparation({ ...f.options, selected: { ...f.selected, createdAt } });
+
+  it("refuses a minute before the backup's newest fiscal record, naming the record's time", async () => {
+    await sellAt("2026-10-22T20:15:00Z");
+    clock.set(Date.parse("2026-10-21T10:00:00Z"));
+    const f = await host();
+    await expect(
+      recoverySelectPastWaits(
+        clock,
+        restoreService(f),
+        { installationCodes: ["0CNNY"] },
+        asBrowser,
+      ),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-22T20:15:00Z") },
+    });
+    expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
+  });
+
+  it("refuses a minute before the backup was created, naming its creation time", async () => {
+    clock.set(Date.parse("2026-10-23T07:50:00Z"));
+    const f = await host();
+    await expect(
+      recoverySelectPastWaits(
+        clock,
+        restoreService(f, "2026-10-23T08:00:00Z"),
+        { installationCodes: ["0CNNY"] },
+        asBrowser,
+      ),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-23T08:00:00Z") },
+    });
+    expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
+  });
+
+  it("waits and then selects once both clocks are past both floors", async () => {
+    await sellAt("2026-10-22T20:15:00Z");
+    clock.set(Date.parse("2026-10-24T09:00:00Z"));
+    const f = await host();
+    const service = restoreService(f, "2026-10-23T08:00:00Z");
+    const challenge = (await service.prepare({ action: "clock-challenge" }, asBrowser)) as {
+      id: string;
+    };
+    const compared = (await service.prepare(
+      { action: "compare-clocks", browser: { challengeId: challenge.id, instantMs: clock.wall() } },
+      asBrowser,
+    )) as { id: string };
+    expect(
+      await service.prepare(
+        { action: "select", comparisonId: compared.id, installationCodes: ["0CNNY"] },
+        asBrowser,
+      ),
+    ).toMatchObject({ status: "waiting", targetMs: Date.parse("2026-10-24T09:02:00Z") });
+    expect(
+      await recoverySelectPastWaits(clock, service, { installationCodes: ["0CNNY"] }, asBrowser),
+    ).toMatchObject({ status: "selected" });
+  });
 });
