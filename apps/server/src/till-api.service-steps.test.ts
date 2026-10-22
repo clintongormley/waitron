@@ -152,6 +152,16 @@ describe("POST /api/parties/:id/service-steps/:stepId/done", () => {
     expect(await completions()).toHaveLength(1);
   });
 
+  it("two tills' Done on the same showing at once write one row, and one of them names the step", async () => {
+    const answers = await Promise.all([done(partyId, stepId), done(partyId, stepId)]);
+
+    expect(answers.map((res) => res.status)).toEqual([200, 200]);
+    const bodies = await Promise.all(answers.map((res) => res.json()));
+    expect(bodies).toContainEqual({ cleared: [stepId] });
+    expect(bodies).toContainEqual({ cleared: [] });
+    expect(await completions()).toEqual([{ stepId, doneBy: personId }]);
+  });
+
   it("refuses a Done that does not say when the step it shows was due", async () => {
     for (const body of [
       {},
