@@ -7,8 +7,8 @@
 bill is sent as the 100% percentage the server already accepts (measured below). No migration, no
 fiscal change (a 100% bill percentage could already be typed, `adjustment-dialog.ts:442` refuses
 only above 100, and A758-4 already prints it «Descuento 100%» at the bill's foot,
-`apps/server/src/receipt-document.test.ts:869-876`), no cross-package contract (the till, plus one
-new server test). So no per-task reviewer; the plan is still reviewed once against the design by a
+`apps/server/src/receipt-document.test.ts:869-876`), no cross-package contract (the till, plus two
+new server tests and a test helper). So no per-task reviewer; the plan is still reviewed once against the design by a
 fresh-context reader before any implementer starts, and `/finish-branch` runs its Codex run-it seat.
 
 Implementers are dispatched as `subagent_type: "implementer"`. An implementer that passes about 150
@@ -70,8 +70,11 @@ unless it names a command that was run. A773-1 (#1897) and A758-1 to A758-4 are 
   `apps/till/src/screens/till-table-order-screen.ts:2678`; strings `apps/till/src/i18n/strings.ts:1113`
   "Comp…", `:2815` «Descuento…»), opening the Comp window (`kind: "comp", combined: true`, `:2652`).
   The outline's `till-table-order-screen.adjustments.test.ts:167` and its a11y suite pin no
-  "Give away" or «Invitar» on `main` (`git grep -n -i "give away\|invitar" -- apps/till/src/screens`
-  finds only a describe name, `till-table-order-screen.adjustments.test.ts:381`); §9.1's list of them
+  "Give away" or «Invitar» on `main`:
+  `git grep -n -i -E "give.?away|giving away|given away|invitar" -- apps/till/src/screens` (git
+  2.56.0) prints only test names and a comment — `till-table-order-screen.adjustments.test.ts:157`
+  ("giving away and discounting a dish"), `:381` ("a dish split by a give-away"), `:388`, `:389`,
+  and `till-ticket-view.test.ts:1531` ("a line given away or discounted"). §9.1's list of them
   predates A773-1.
 - **The counter's basket is not.** Each stored dish and each extra offers two buttons,
   `LINE_ADJUSTMENTS` (`apps/till/src/state/adjust-target.ts:43-46`): "Give away"
@@ -80,17 +83,25 @@ unless it names a command that was run. A773-1 (#1897) and A758-1 to A758-4 are 
   Each opens the dialog's separate give-away or discount mode (`#adjust(kind, …)`, `:1332-1335`, no
   `combined`). **Renaming `table.comp_line` alone, as the outline says, would put two «Descuento»
   buttons side by side on every Spanish dish** — see Decision 1.
-- **The dashboard is done.** `git grep -n -i "give away\|invitar" -- packages/adjustments/src` finds
-  only comments in `packages/adjustments/src/errors.ts:20-28`.
+- **The dashboard is done.** `git grep -n -i -E "give.?away|giving away|given away|invitar" -- packages/adjustments/src`
+  prints only three comments, `packages/adjustments/src/errors.ts:20`, `:24` and `:28` ("A
+  give-away or a discount…").
 - **Every «Invitar» left**, `git grep -n -i "invitar" -- apps packages`: `strings.ts:2810`
   (`table.comp_line`), `:2828` (`comp.make_free` «Invitar {n}»), `:2831` (`adjust.comp_title`),
   `:2833` (`adjust.comp_extra_title`), `:2869` (`adjust.do_comp`), and
   `apps/till/src/i18n/codes.ts:611` (`adjustment.weighed_partial`, «…no se puede invitar ni
   descontar…»), with its pins at `codes.test.ts:398` and `widgets/adjustment-dialog.test.ts:212`.
-- **Every English "give … away" a person sees** (`git grep -n -i "given away\|give it away\|give away" -- apps packages ':!**/*.test.ts'`):
-  `strings.ts:1108`, `:1129` ("Give an item away"), `:1131` ("Give an extra away"), `:1167` ("Give
-  it away"), and `codes.ts:610` ("…can't be given away or discounted. Discount the whole line
-  instead"). The rest are comments and a test helper's reason name (`apps/server/src/testing/cancel-line.ts:34`).
+- **Every English "give … away" a person sees.**
+  `git grep -n -i -E "give.?away|giving away|given away|invitar" -- apps packages ':!**/*.test.ts'`
+  prints, besides the «Invitar» lines above and shift swaps, `strings.ts:1108` ("Give away"),
+  `codes.ts:610` ("…can't be given away or discounted. Discount the whole line instead"), and
+  comments or test-helper names (`strings.ts:1107`, `:2809`; `adjustment-dialog.ts:40`;
+  `basket.ts:1208`; `adjust-target.ts:70`; `price-was.ts:20`; `till-app.ts:3069`;
+  `api/client.ts:4244`; `apps/server/src/errors.ts:733`; `apps/server/src/till-sale.ts:936`;
+  `apps/server/src/testing/cancel-line.ts:33-34`, `:149-151`). That pattern misses "Give an item
+  away", so a second grep, `git grep -n -i -E 'give (an|it)[a-z ]* away' -- apps packages ':!**/*.test.ts'`,
+  prints `strings.ts:1129` ("Give an item away"), `:1131` ("Give an extra away") and `:1167`
+  ("Give it away").
 - **Not about comps, unchanged:** staff invitations in the dashboard (`apps/dashboard/src/i18n/strings.ts:4145-5073`),
   the server's and Spanish guide's `staff.md:14-17`, setup's `finish.ts:134`, the demo seed's
   reason name «Invitación del encargado» (`apps/server/scripts/demo-seed/seed-adjustments.ts:156`),
@@ -114,11 +125,19 @@ unless it names a command that was run. A773-1 (#1897) and A758-1 to A758-4 are 
   `management.request_invalid` `{ field: "percentBp" }` and recorded nothing. The bound is
   `isPercentBp` (`packages/adjustments/src/policy.ts:19-22`), checked at
   `apps/server/src/adjustments-apply.ts:345-346`; the stored check allows it
-  (`packages/adjustments/src/schema/adjustments.ts:97-101`). Task 3 commits that measurement as a test.
-- **"Ask for approval" stays** (§3.2): the Comp window's confirm button reads
-  `t("adjust.ask_approval")` whenever the server asks for a PIN (`adjustment-dialog.ts:1046`;
-  `strings.ts:1166`, ES «Pedir aprobación» `:2868`). Nothing pins it in the Comp window today
-  (`git grep -n ask_approval -- 'apps/till/src/**/*.test.ts'` finds nothing); Task 2 adds the pin.
+  (`packages/adjustments/src/schema/adjustments.ts:97-101`). Task 4 commits that measurement as a test, and adds the payment of such a bill, which a
+  reviewer measured on 2026-10-22: Pay with cash "0" answered 200 and closed the bill as one sale
+  of 0, settled, one fiscal record and no tender; a 50% bill answered 400 `sale.tender_shortfall`.
+- **"Ask for approval" stays** (§3.2): the dialog's confirm button reads `t("adjust.ask_approval")`
+  whenever the server asks for a PIN, in every mode (`adjustment-dialog.ts:1046`; `strings.ts:1166`,
+  ES «Pedir aprobación» `:2868`). The text is pinned only in the separate modes
+  (`adjustment-dialog.test.ts:541`, `:572`, `:604`, found with
+  `git grep -n "ask_approval\|Ask for approval" -- 'apps/till/src/**/*.test.ts'`); no test opens the
+  Comp window (`combined`) at an approval, so Task 2 adds that pin.
+- **The Comp window's heading reads "Comp…"** (`adjustment-dialog.ts:548-549`, `t("comp.title")`,
+  since A773-1, `c9ad7a634`), while the owner's picture 04 draws "Comp". Ruling (driver,
+  2026-10-22): the heading stays as built, no test pins its ellipsis, and the PR lists the
+  difference as an owner point.
 - **The guides say nothing about comps.** `git grep -n -i -E "comp\b|comp…|discount|give away|descuento|invit|gratis" -- apps/server/src/guide`
   finds only "recorded prices and discounts" (`en/modifiers.md:110`, `es/modifiers.md:122`) and
   staff invitations (`en/staff.md:14-16`, `es/staff.md:14-17`). No guide describes the till's comp
@@ -139,7 +158,7 @@ unless it names a command that was run. A773-1 (#1897) and A758-1 to A758-4 are 
    `adjustment-dialog.test.ts` (its `mount` defaults to the separate give-away, `:59-66`) and moves
    `till-app-adjustments.test.ts` off it (its `requestAdjustment` emits `kind` without `combined`,
    `:342-358`, though the table screen sends `combined: true`, `:2652` — both since A773-1,
-   `git log -S` → `c9ad7a634`, #1897). That is its own item: Task 5 files it. Their strings are still
+   `git log -S` → `c9ad7a634`, #1897). That is its own item: Task 6 files it as A1007. Their strings are still
    reworded here so no «Invitar» is left (the outline names them).
 3. **"Comp the bill" offers Free only under a reason that allows both Free and a percentage.** Free
    on the bill is stored as a 100% percentage (§3.4), so the reason must allow a percentage or the
@@ -185,9 +204,11 @@ unless it names a command that was run. A773-1 (#1897) and A758-1 to A758-4 are 
 | `apps/till/src/widgets/adjustment-dialog.test.ts` | 2, 3 |
 | `apps/till/src/widgets/adjustment-dialog.combined.test.ts` | 2 |
 | `apps/till/src/widgets/adjustment-dialog.a11y.test.ts`, `adjustment-dialog.unsaved.test.ts` | 3 |
-| `apps/server/src/adjustments-api.test.ts` | 3 |
-| `docs/backlog/mockups/a758-adjustment-reasons/built/` (pictures) | 4 |
-| `docs/backlog.md`, `docs/backlog/till.md` | 5 |
+| `apps/till/src/screens/till-table-order-screen.adjustments.test.ts` (`:288`) | 1 |
+| `apps/server/src/adjustments-api.test.ts` | 4 |
+| `apps/server/src/pay-owing-nothing.test.ts`, `apps/server/src/testing/cancel-line.ts` | 4 |
+| `docs/backlog/mockups/a758-adjustment-reasons/built/` (pictures) | 5 |
+| `docs/backlog.md`, `docs/backlog/till.md` | 6 |
 
 **No migration.** No task touches a schema, a migration set or `packages/*/drizzle`.
 
@@ -198,7 +219,7 @@ unless it names a command that was run. A773-1 (#1897) and A758-1 to A758-4 are 
   `codeMessage()` after `setLocale("es-ES")`, never a Spanish literal; the guards in
   `strings.test.ts` compare catalogue entries with each other, as its siblings do
   (`strings.test.ts:152-181`). Two existing Spanish literals this plan touches are replaced that way
-  (checks 9 and 10 below).
+  (checks 7 and 9 below).
 - **A test's check changes only where this item's design changes what it checks** (owner,
   2026-10-05). Every change is listed under "Changed test checks" with its old and new value. Any
   other check that turns red is a stop and a report to the driver.
@@ -207,24 +228,27 @@ unless it names a command that was run. A773-1 (#1897) and A758-1 to A758-4 are 
   `basket.ts:1208-1209`, `adjustment-dialog.ts:40`, and the suite comment `basket.adjustments.test.ts:13-14`.
 - Every commit `git commit -s`, staging explicit paths. Every task ends with its focused tests (a
   Vitest run that prints a `Tests` count; unset `AI_AGENT` and `CLAUDECODE` to see console output),
-  `pnpm --filter @waitron/till typecheck` (and `@waitron/server` for Task 3), and
+  `pnpm --filter @waitron/till typecheck` (`@waitron/server` instead for Task 4), and
   `pnpm exec prettier --check <files changed>`.
 
 ## Review Focus
 
-1. **A free bill the server refuses** (`adjustment.no_reduction` on a bill already at €0.00): Free
+1. **A free whole bill is paid and filed.** One tap now makes a bill owe €0.00; Pay must close it
+   as an invoice of 0.00 with no tender, as a bill whose every line was given away already closes
+   (`apps/server/src/pay-owing-nothing.test.ts:167-181`). → Task 4, test 2.
+2. **A free bill the server refuses** (`adjustment.no_reduction` on a bill already at €0.00): Free
    has no value field, so the message must show above the action, not under a field that is not
    drawn (`refusalField` maps `no_reduction` to `"value"` for a discount, `adjustment-dialog.ts:79-80`).
    → Task 3, test 3.
-2. **Leaving Free on the bill:** to € under a reason that allows no amount clears the reason (the
-   existing `pickKind`, `:904-909`); back to % shows an empty value field. → Task 3, test 2.
-3. **Spanish basket:** one «Descuento…» per dish, never two buttons with one word. → Task 1 test 1
-   (by count) and Task 4 (seen).
+3. **Leaving or reaching Free on the bill:** to € under a reason that allows no amount clears the
+   reason (the existing `pickKind`, `:904-909`); back to % shows an empty value field; reaching Free
+   with a reason chosen that offers no Free clears it. → Task 3, test 2. (The Spanish basket's one
+   «Descuento…» per dish is pinned by count in Task 1 test 1 and seen in Task 5.)
 4. **Unsaved changes on the bill:** choosing Free is a change (closing asks), choosing % again is
    back at the start (the draft scope compares `#comparable`, `:267-293`). → Task 3, test 5.
 5. **Part of a dish from the counter:** "Give away" offered "1 / All" radios; the Comp window offers
    a − n + stepper (`adjustment-dialog.ts:698-717`) and sends `quantity` only when less than all
-   (`:505-509`). → Task 1, test 3.
+   (`:505-509`). → Task 1, test 4.
 
 ---
 
@@ -234,7 +258,8 @@ unless it names a command that was run. A773-1 (#1897) and A758-1 to A758-4 are 
 `apps/till/src/i18n/strings.ts` (delete `table.comp_line` and `table.discount_line`, `:1108-1109`,
 `:2810-2811`); tests `apps/till/src/widgets/basket.adjustments.test.ts`,
 `apps/till/src/widgets/basket.a11y.test.ts`, `apps/till/src/till-app-counter-adjustments.test.ts`,
-`apps/till/src/till-app-counter-move-station.test.ts`.
+`apps/till/src/till-app-counter-move-station.test.ts`,
+`apps/till/src/screens/till-table-order-screen.adjustments.test.ts`.
 
 **Interfaces:** produces nothing new. The basket's `adjust` event for a comp becomes
 `{ kind: "comp", combined: true, counter: true, target }` (`AdjustDetail`,
@@ -257,7 +282,8 @@ unless it names a command that was run. A773-1 (#1897) and A758-1 to A758-4 are 
   4. `till-app-counter-adjustments.test.ts`, new case "opens the Comp window on a stored dish and
      sends one of two cañas": with the caña listed at quantity `"2.000"` (`listing(4, "2.50", "2.000")`,
      `heldOrder` likewise, `:106-135`), press `[data-comp-line="1"]`; the dialog's `combined` is
-     `true` and its `wt-dialog` heading is `t("comp.title")`; choose Complaint, set the
+     `true` (the heading is not checked: its "Comp…" against picture 04's "Comp" is an owner
+     point); choose Complaint, set the
      `adjustQuantity` stepper to 1 (as `adjustment-dialog.combined.test.ts:172` does), Continue;
      `api.previewAdjustment` was called with `("wo-9", { ...ask, quantity: "1" })`.
 - [ ] **Step 2: Run and watch them fail.**
@@ -273,7 +299,7 @@ unless it names a command that was run. A773-1 (#1897) and A758-1 to A758-4 are 
   strings in both languages. Reword the comment at `basket.ts:1208-1209` ("Cancel on a dish the
   kitchen has, and Comp on every dish, which covers its extras.") and the suite comment at
   `basket.adjustments.test.ts:13-14`.
-- [ ] **Step 4: Update the other checks** (rows 1–5 of "Changed test checks"), and the helpers:
+- [ ] **Step 4: Update the other checks** (rows 1–5 and 10 of "Changed test checks"), and the helpers:
   `till-app-counter-adjustments.test.ts`'s `chooseReason` (`:325-331`) matches a reason by the text
   before the first " · " of its label (the Comp window labels a reason "Complaint · Free, % · …",
   `adjustment-dialog.ts:605-627`); its comments `:28`, `:333`, `:1649` say Comp, not Give away.
@@ -298,14 +324,20 @@ unless it names a command that was run. A773-1 (#1897) and A758-1 to A758-4 are 
        start with `word`.
      - "names a free comp with the Free choice's word": `comp.make_free` and `adjust.do_comp`,
        lowercased, contain `free`.
-     - "has no Spanish catalogue string that says invitar": no `es` value matches `/invit/i`.
-     - "has no English catalogue string that says give … away": no `en` value matches
+     - "has no Spanish comp string that says invitar": no `es` value of a comp key matches
+       `/invit/i`.
+     - "has no English comp string that says give … away": no `en` value of a comp key matches
        `/\bgiv(e|en|ing)\b[^.]*\baway\b/i`.
-     A comment says the guard is weaker than its name, as the siblings' do (`:42-45`): it reads the
+     The comp keys are every key starting `comp.` or `adjust.`, and `table.discount_bill` (ruling,
+     driver 2026-10-22): a future till string inviting a person to an account, or giving a shift
+     away, is not refused. The English half takes the same keys for the shift reason. A comment says
+     the guard is weaker than its name, as the siblings' do (`:42-45`): it reads those keys of the
      catalogue in `strings.ts` only; `codes.ts`'s messages are pinned in `codes.test.ts`.
   2. `codes.test.ts:394-399`: the new English and Spanish `adjustment.weighed_partial` texts of
      Decision 6 (check 6).
-  3. `adjustment-dialog.combined.test.ts`, new case "asks for approval when the server needs a PIN":
+  3. `adjustment-dialog.combined.test.ts`, new case "asks for approval when the server needs a PIN"
+     (the text is pinned today only in the separate modes, `adjustment-dialog.test.ts:541`, `:572`,
+     `:604`):
      at the confirm step with a preview whose `needsApproval` is
      `{ by: "reason", roles: ["manager", "admin"] }`, `[data-adjust-confirm]` reads
      `t("adjust.ask_approval")`. It passes before any change (design §3.2 keeps the button); its
@@ -332,7 +364,7 @@ unless it names a command that was run. A773-1 (#1897) and A758-1 to A758-4 are 
 **Files:** modify `apps/till/src/widgets/adjustment-dialog.ts`, `apps/till/src/i18n/strings.ts`;
 tests `adjustment-dialog.test.ts`, `adjustment-dialog.a11y.test.ts`,
 `adjustment-dialog.unsaved.test.ts`, `apps/till/src/till-app-counter-adjustments.test.ts`,
-`apps/till/src/i18n/strings.test.ts`, `apps/server/src/adjustments-api.test.ts`.
+`apps/till/src/i18n/strings.test.ts`. The server's side is Task 4.
 
 **Interfaces:** inside the dialog only. The separate discount mode's `discountKind` state widens from
 `DiscountKind` to the existing `CompKind` (`"free" | "percent" | "amount"`, `:59-60`). On a bill
@@ -352,32 +384,29 @@ target (`target.lineId === null`) Free sends
      Complaint, Continue → `adjust-preview` detail
      `{ action: "discount_percent", reasonId: "Complaint", note: null, percentBp: 10000 }`. Then
      choose `percent`: the percent field is shown and empty; choose `amount` with Complaint chosen:
-     no reason stays chosen (Complaint allows no amount).
+     no reason stays chosen (Complaint allows no amount). Last, on a fresh mount: choose Regular
+     under `percent`, then choose `free`: no reason stays chosen (Regular offers no Free).
   3. "puts a free bill's refusal above the action": with Free and Complaint chosen and
      `refusal: "adjustment.no_reduction"`, `actions(el).error` contains
      `codeMessage("adjustment.no_reduction")` and no `[data-error-for]` or `wt-input` error holds it.
   4. `adjustment-dialog.a11y.test.ts`, in its themed `describe.each` (`:61`): "has no violations
-     comping the whole bill with Free chosen".
+     comping the whole bill with Free chosen". Mount `kind: "discount"` on a bill target
+     `{ lineId: null, name: t("adjust.whole_bill"), quantity: null, total: "40.00", unitTotal: null }`
+     (not the file's `steaks`, a dish, `:36-42`), with the file's `reasons` (`:11-34`), whose first
+     reason allows Free, a percentage and an amount; choose `free` and that reason.
   5. `adjustment-dialog.unsaved.test.ts`: "choosing Free on the bill is a change, and % again is
-     not" — follow the file's own close-and-ask pattern (`:68-121`).
+     not" — follow the file's own close-and-ask pattern (`:68-121`), but mount on the bill target
+     of test 4 with a reason allowing `["comp", "discount_percent"]` (the file's only reason,
+     Regular, `:20`, allows no Free).
   6. `till-app-counter-adjustments.test.ts`: "comps the whole stored order free": press
      `[data-discount-bill]`, choose `free`, Complaint, Continue →
      `api.previewAdjustment` called with `("wo-9", { expectedEdit: null, expectedRevision: 4, lineId: null, reasonId: "r-complaint", note: null, action: "discount_percent", percentBp: 10000 })`.
   7. `strings.test.ts`, Task 2's D10 describe gains "titles the bill's comp with the Comp window's
      word": `table.discount_bill` and `adjust.discount_bill_title` start with `word` in both
      languages; and `adjust.kind`, `adjust.kind_percent`, `adjust.kind_amount` are not keys of `en`.
-  8. `apps/server/src/adjustments-api.test.ts`, new case beside "the route's own rules" (`:916`):
-     "comps a whole bill free as a 100% percentage": `billWith(venue, [{ name: "Steak" }, { name: "Burger" }])`,
-     `post(billId, { action: "discount_percent", percentBp: 10000 }, { cookie: venue.cookie.staff })`
-     answers 200; `recordedOn(billId)` is one row with `lineId: null`, `action: "discount_percent"`,
-     `percentBp: 10000`, `afterAmount: 0`, `reduction` equal to `beforeAmount` and above 0. It passes
-     before any change (measured above); its control: change `value <= 10000` to `value < 10000` in
-     `packages/adjustments/src/policy.ts:21`, run, see it fail with 400 `percentBp`, restore.
 - [ ] **Step 2: Run and watch 1–7 fail.**
   `pnpm --filter @waitron/till exec vitest run src/widgets/adjustment-dialog.test.ts src/widgets/adjustment-dialog.a11y.test.ts src/widgets/adjustment-dialog.unsaved.test.ts src/till-app-counter-adjustments.test.ts src/i18n/strings.test.ts`
   — expected: no `free` radio (1, 2, 3, 5, 6), a11y finds no Free to choose (4), the words (7).
-  `pnpm --filter @waitron/server exec vitest run src/adjustments-api.test.ts -t "100% percentage"`
-  passes; run the control.
 - [ ] **Step 3: Implement** in `adjustment-dialog.ts`:
   `#discountKinds()` (`:362-369`) puts `"free"` first when `this.target?.lineId === null` and some
   reason allows both `comp` and `discount_percent`; `#offered()` (`:371-378`) under Free keeps the
@@ -391,10 +420,51 @@ target (`target.lineId === null`) Free sends
   `adjust.kind_percent`, `adjust.kind_amount` in both languages.
 - [ ] **Step 4: Run.**
   `pnpm --filter @waitron/till exec vitest run src/widgets src/till-app-counter-adjustments.test.ts src/till-app-adjustments.test.ts src/screens/till-table-order-screen.adjustments.test.ts src/screens/till-table-order-screen.panel-footer.test.ts src/screens/till-table-order-screen.panel-footer.a11y.test.ts src/i18n`
-  — all pass; `pnpm --filter @waitron/till typecheck`; `pnpm --filter @waitron/server typecheck`.
+  — all pass; `pnpm --filter @waitron/till typecheck`.
 - [ ] **Step 5: Commit** — "Till: Comp the bill, with Free as a 100% percentage (A758-5)".
 
-## Task 4: LOOK
+## Task 4: the server takes a free whole bill, and Pay closes it
+
+Split from Task 3 (driver ruling, 2026-10-22). No server code changes: both tests pin what the till
+now relies on, so both pass when written; each has a control that must fail.
+
+**Files:** tests `apps/server/src/adjustments-api.test.ts`, `apps/server/src/pay-owing-nothing.test.ts`;
+helper `apps/server/src/testing/cancel-line.ts` (grows; see "Fixtures grown").
+
+**Interfaces:** produces `compWholeBill(venue: BillVenue, billId: string, percentBp: number):
+Promise<void>` in `testing/cancel-line.ts`, beside `giveAway` (`:148-161`): it POSTs
+`{ ...await cancelBody(venue.db, billId, 1), lineId: null, reasonId, action: "discount_percent",
+percentBp }` to `/api/working-orders/${billId}/adjustments` and expects 200, under a new
+`COMP_BILL_REASON` (`kind: "comp"`, `actions: ["comp", "discount_percent"]`, every role on both
+lists, no limits, no note), created by `reasonIdOf` (`:45-52`) as `GIVE_AWAY_REASON` is
+(`:32-42`, which allows only `comp`, so a bill-level percentage under it is refused).
+
+- [ ] **Step 1: Write the tests.**
+  1. `adjustments-api.test.ts`, new case beside "the route's own rules" (`:916`): "comps a whole
+     bill free as a 100% percentage": `billWith(venue, [{ name: "Steak" }, { name: "Burger" }])`,
+     `post(billId, { action: "discount_percent", percentBp: 10000 }, { cookie: venue.cookie.staff })`
+     answers 200; `recordedOn(billId)` is one row with `lineId: null`, `action: "discount_percent"`,
+     `percentBp: 10000`, `afterAmount: 0`, `reduction` equal to `beforeAmount` and above 0.
+  2. `pay-owing-nothing.test.ts`, in "Pay on a bill whose every line was given away" (`:155`), beside
+     its cash cases (`:167-181`): "closes a bill comped free as a whole on a cash Pay of 0, with an
+     invoice of 0.00, no tender and no drawer": `seatedWith(venue, "Caña")`,
+     `compWholeBill(venue, tabId, 10000)`, `pay(tabId, { method: "cash", amount: "0" })` answers 200
+     with `answer.json` matching `{ total: "0.00", tender: { method: "unpaid" } }`, then
+     `expectClosedOwingNothing(tabId)` (`:143-153`) and the drawer-job count unchanged. Its
+     control, in the same case or the next: a second bill comped at `5000`, paid with cash `"0"`,
+     answers 400 with code `sale.tender_shortfall` and `statusOf(venue, billId)` is not `"settled"`
+     (the reviewer measured both answers on 2026-10-22).
+- [ ] **Step 2: Run them, then their controls.**
+  `pnpm --filter @waitron/server exec vitest run src/adjustments-api.test.ts src/pay-owing-nothing.test.ts -t "free"`
+  — both pass, with a `Tests` count that includes them. Controls, each restored after: change
+  `value <= 10000` to `value < 10000` in `packages/adjustments/src/policy.ts:21` — test 1 fails with
+  400 `percentBp` and test 2 fails inside `compWholeBill`; then make `compWholeBill` send
+  `percentBp - 1` — test 2 fails on the 400 `sale.tender_shortfall`, not on a closed bill.
+- [ ] **Step 3: Run** `pnpm --filter @waitron/server exec vitest run src/adjustments-api.test.ts src/pay-owing-nothing.test.ts`
+  — all pass; `pnpm --filter @waitron/server typecheck`.
+- [ ] **Step 4: Commit** — "Server tests: a whole bill comped free is recorded, paid and filed at 0.00 (A758-5)".
+
+## Task 5: LOOK
 
 Tests read keys; nobody has seen the new buttons. Method as A758-4's Task 6
 (`docs/superpowers/plans/2026-10-21-a758-4-full-comp-receipt.md:591-616`): a throwaway browser test,
@@ -419,7 +489,7 @@ Tests read keys; nobody has seen the new buttons. Method as A758-4's Task 6
   `__screenshots__/look/` folder; `git status --short` shows only the pictures. Commit —
   "Pictures of the till's Comp words as built (A758-5)".
 
-## Task 5: backlog
+## Task 6: backlog
 
 **Files:** `docs/backlog.md` (A758 `:2229-2268`; the new entry after A923 at `:2271`),
 `docs/backlog/till.md` (`:1421-1431`).
@@ -434,14 +504,14 @@ entry only when it finishes it (CLAUDE.md §6), so the entry stays and says only
 - [ ] **A758** (`docs/backlog.md`): after A758-4's sentence add "**A758-5 built the till's words**
   ([plan](superpowers/plans/2026-10-22-a758-5-comp-window-words.md)): a counter order's dishes offer
   one Comp… that opens the Comp window, as a table's do; "Comp the bill" offers Free beside % and €;
-  no till word says "Give away" or «Invitar»; A10xx is what it left open." Replace "Left: A758-5
+  no till word says "Give away" or «Invitar»; A1007 is what it left open." Replace "Left: A758-5
   (the till's Comp words), and the §3.8 and "collect it at the counter" slices." with "Left: the
   §3.8 slice and the "collect it at the counter" slice." Never mark the entry done.
 - [ ] **`docs/backlog/till.md` "## A758"**: the same A758-5 sentence after A758-4's (`:1426-1430`);
   "A758-5 and the §3.8 and "collect it at the counter" slices follow." becomes "The §3.8 and
   "collect it at the counter" slices follow."
-- [ ] **New entry**, its number read from `~/waitron-campaign-shared/next-item-number` (read, use,
-  write back the next one), placed after A923: "**A10xx. The till's adjustment window keeps a
+- [ ] **New entry A1007** (reserved 2026-10-22: `~/waitron-campaign-shared/next-item-number` read
+  A1007 and was written back as A1008), placed after A923: "**A1007. The till's adjustment window keeps a
   give-away and a line discount nothing opens (left open by A758-5).** Since A758-5 a dish or extra
   is comped only through the Comp window (`combined`), on the table and at the counter; the window's
   separate `kind: "comp"` mode and its line `kind: "discount"` mode remain, with their titles
@@ -450,14 +520,19 @@ entry only when it finishes it (CLAUDE.md §6), so the entry stays and says only
   `till-app-adjustments.test.ts` drives the table's comps through that separate mode
   (`requestAdjustment` emits no `combined`) though the table screen sends `combined: true` — both
   since A773-1. Retire the two modes, make `kind: "comp"` mean the Comp window, and move those app
-  tests onto it."
+  tests onto it. The one-or-all choice (`#quantityChoice`) and `adjust.quantity_one`,
+  `adjust.quantity_all` and `adjust.quantity_shown` are not theirs alone: the cancel mode, which
+  stays, uses them (a cancel offer of several whole units draws the choice,
+  `apps/till/src/screens/till-table-order-screen.a11y.test.ts:375-389`), so they stay unless the
+  cancel moves too."
 - [ ] Add the owner points below to the PR description, not the backlog. `pnpm exec prettier
   --file-info docs/backlog.md` prints `"ignored": true`. Commit — "Backlog: A758-5 built the till's
-  Comp words; A10xx holds the window's unused modes".
+  Comp words; A1007 holds the window's unused modes".
 
 **PR description** (plain English): first line "Review path: light — the till's words and the
 basket's Comp button; no rule about who may comp changes, no migration, no filed figure changes."
-Then what changed, with the pictures' paths; the server measurement (Task 3 test 8 and its control);
+Then what changed, with the pictures' paths; the server measurements (Task 4's two tests and their
+controls);
 "Changed test checks" below; the owner points below.
 
 ---
@@ -477,6 +552,7 @@ Each changes because D10 / §3.4 changes what the till offers or says.
 | 7 | 2 | `apps/till/src/widgets/adjustment-dialog.test.ts:211-213` | the Spanish literal → `codeMessage("adjustment.weighed_partial", "es")` (reads the code file, which check 6 pins) |
 | 8 | 2 | `adjustment-dialog.test.ts:223`, `:226` | "Give an extra away" → "Comp an extra"; "Give an item away" → "Comp an item" |
 | 9 | 2 | `adjustment-dialog.test.ts:231` | «Invitar un extra» literal → `t("adjust.comp_extra_title")` (locale already `es-ES`, `:230`) |
+| 10 | 1 | `apps/till/src/screens/till-table-order-screen.adjustments.test.ts:288` | `querySelector("[data-discount-line]")` → `querySelector("[data-comp-line]")`: on a paid bill the table draws no basket-style comp button; the old attribute no longer exists anywhere, so the check would pass whatever the screen drew |
 
 **Helpers and comments only, no check changes:** `basket.adjustments.test.ts:13-14` and `:566-575`;
 `till-app-counter-adjustments.test.ts:28`, `:325-331`, `:333`, `:1649`.
@@ -484,12 +560,17 @@ Each changes because D10 / §3.4 changes what the till offers or says.
 **Unchanged, checked:** `adjustment-dialog.test.ts:510` reads `t("adjust.do_comp")`;
 `adjustment-dialog.combined.test.ts:282`, `:292` pin "Make 2 free", which stays;
 `till-table-order-screen.adjustments.test.ts:438`, `panel-footer.test.ts:211` and
-`panel-footer.a11y.test.ts:54` read `t("table.discount_bill")`. The already vacuous
-`[data-comp-line], [data-discount-line]` checks on the table screen
-(`till-table-order-screen.adjustments.test.ts:161`, `:279`, `:288`, `:363`;
-`drawer-service-retirement.test.ts:178`; `till-app-adjustments.test.ts:4138`) are the table's and
-are left as they are. If any other check turns red, stop and report it; it becomes a new row only
+`panel-footer.a11y.test.ts:54` read `t("table.discount_bill")`. The table's checks that look for
+`[data-comp-line]` (alone or beside `[data-discount-line]`) still guard that the table draws no
+basket-style buttons and stay as they are: `till-table-order-screen.adjustments.test.ts:161`,
+`:279`, `:363`; `drawer-service-retirement.test.ts:178`; `till-app-adjustments.test.ts:4138`. Only
+`:288` looks for the discount marker alone, and becomes check 10. If any other check turns red, stop and report it; it becomes a new row only
 with the design point that changes it.
+
+## Fixtures grown
+
+- `apps/server/src/testing/cancel-line.ts`: `COMP_BILL_REASON` and `compWholeBill` (Task 4).
+  Existing callers are unchanged.
 
 ## Owner points (each with the default this PR builds)
 
@@ -502,3 +583,5 @@ with the design point that changes it.
    button, «Descuento en un plato» / «Descuento en un extra», the weighed-item message; in English
    "Comp the bill", "Comp the whole bill", "Apply the comp", "Make it free", "Comp an item".
 5. **The Comp window keeps "Ask for approval"** (design §3.2, unchanged); now pinned by a test.
+6. **The Comp window's heading reads "Comp…"** (as A773-1 built it), where picture 04 draws
+   "Comp". Left as built; the owner may ask for the plain word.
