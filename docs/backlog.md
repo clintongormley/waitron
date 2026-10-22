@@ -6188,11 +6188,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   at its own date (a change to how the guard walks, so the owner decides).
   [Detail](backlog/ci.md#a624-the-upgrade-walk-cannot-step-a-new-set-whose-first-migration-names-another-sets-later-table)
 
-- **The step-watch no-progress callback can reject before the limit.** A999's CI reported
-  `999` ms against its unchanged `1000` ms assertion. An injected early callback reproduces
-  that rejection; check the elapsed gap and re-arm for the remainder before refusing the body.
-  Keep the existing assertion. [Receipt](backlog/ci.md#the-step-watch-no-progress-callback-can-reject-before-the-limit).
-
 - **The step-watch case's A544 pre-push failure is fixed at a likely cause, not a confirmed
   one.** The failure's message was not kept. On 2026-10-16 (A770) it failed in a third shape,
   recorded in the detail. Next: if "reports the phase a synchronous call holds the thread in…" fails
