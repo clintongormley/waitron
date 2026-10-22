@@ -2785,6 +2785,9 @@ and nothing guards it across screens:
 - A841 slice 5: the Look card on Settings → Appearance, editing in place
   (`apps/dashboard/src/screens/look-card.ts`). Its leave cases are in `look-card.unsaved.test.ts`
   beside it;
+- A841 slice 13: the theme name dialog (`apps/dashboard/src/widgets/theme-name-dialog.ts`); Make a
+  copy and Save as new theme… open already savable. Its leave cases are in
+  `theme-name-dialog.unsaved.test.ts` beside it;
 - A231q: the mail server settings form (`apps/dashboard/src/widgets/email-settings-form.ts`); the
   order detail's invoice email form (`apps/dashboard/src/widgets/invoice-email-dialog.ts`); an office
   printer's Add (`apps/dashboard/src/widgets/page-printer-add.ts`); the office printers panel's
@@ -4005,15 +4008,30 @@ rather than assuming this composition applies unchanged.
 
 ### Appearance (venue themes)
 
-Settings → Appearance holds one card, Look (`apps/dashboard/src/screens/look-card.ts`, A841
-slice 5), built with `settingsCard` and `settingsRows`:
+Settings → Appearance holds two cards: Look (`apps/dashboard/src/screens/look-card.ts`, A841
+slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
+(`apps/dashboard/src/screens/themes-card.ts`, A841 slice 13). The Look card:
 
 - **Saved, its rows are** Theme in use, Brand colour (a chip and the value, "Custom · " before a
   colour that is not a swatch, and the shade of each kind of screen whose fix is taken), Background,
   Corners and Colours set by hand. Below them comes one warning line for each warning the server
   sends with the theme, then the note about each screen's own Theme setting.
-- **Edit opens the editor in place**, in the same card. It is offered only to a person holding
-  `layout.configure`, and only while one of the venue's own themes is in use.
+- **Edit opens the editor in place**, in the same card. It is offered to a person holding
+  `layout.configure`, whichever theme is in use.
+- **The editor has three ways in, and its heading and top line follow the latest read** (A841
+  slice 13, D6): a stored theme (the Look card's Edit while it is in use, or a Themes row's Edit),
+  headed "Look" while it is in use and "Edit theme: {name}" otherwise; Waitron's theme while it is
+  in use (the Look card's Edit), opening on Waitron's choices and headed "Look"; and a new theme
+  (the Themes card's New theme), opening on Waitron's choices and headed "New theme". The line
+  above the choices reads "Theme in use: {name}. Saving changes every screen." or "Not in use.
+  Saving changes no screen until you use it." For Waitron's theme and a new theme, Save opens the
+  name dialog (switch on for Waitron's theme in use, off for a new one), since Waitron's theme is
+  never stored into. Save stays quiet and disabled until the draft changes in all three.
+- **Save as new theme… is drawn only while editing a stored theme**, in the `secondary` slot
+  before Cancel, `variant="secondary"` (D8). It is never quiet-and-disabled for an unchanged draft:
+  it is disabled only while a request is being sent, or after a save attempt while the colour code
+  fails its check. It opens the name dialog with "{name} (copy)", the switch on exactly when the
+  edited theme is in use, and leaves the edited theme as it was saved.
 - **The editor lays out by the card's width, never the window's** (container queries): the choices
   and the preview sit side by side when the form is at least 900px wide, and the preview's two
   panels sit side by side when the preview is at least 640px wide. Narrower, each stacks, the
@@ -4028,19 +4046,47 @@ slice 5), built with `settingsCard` and `settingsRows`:
 - **The preview's Light and Dark panels are painted from the draft inside the card and nowhere
   else** (`apps/dashboard/src/widgets/theme-preview.ts`). Each panel is a theme root inside the
   preview's shadow root, painted by a constructed sheet adopted into that shadow root only. The draft
-  never reaches the page itself; the page repaints after a save, and only while the saved theme is
-  the one in use.
+  never reaches the page itself; the page repaints after a write that changes the theme in use: a
+  save of it, a theme created with its switch on, a switch, or a delete that leaves Waitron's theme
+  in use.
 - **A readability warning is drawn with the warning icon in `--wt-color-warning`, never as a field
   error**, and never disables Save. A brand-colour warning with a fix carries the fix as a button
   below it, and a fix taken shows its shade with Undo; two or more warnings with fixes add a Fix all
   line. The "·" before Undo travels with Undo: when Undo wraps onto a line of its own the "·" is
   clipped away, so no line starts with it.
-- **Save with a warning opens the Hard to read dialog**
-  (`apps/dashboard/src/widgets/hard-to-read-dialog.ts`): one line per warning, then Back, Save
+- **Save, or Save as new theme…, with a warning opens the Hard to read dialog**
+  (`apps/dashboard/src/widgets/hard-to-read-dialog.ts`) before any name dialog (D7): one line per warning, then Back, Save
   anyway and, only when fixing all would leave no warning, Fix and save. With Fix and save offered
   it is the main button and Save anyway is `secondary`; without it, Save anyway is the main button.
 - **A theme saved with warnings keeps them on the saved card**, one warning line each, in the same
   warning colour and icon.
+
+The Themes card lists Waitron's theme first, then the venue's own, in a `wt-data-table`:
+
+- **Its columns are Name, Colours and Status, then Actions.** Name carries a "built in" tag on
+  Waitron's row. Colours shows three chips (the brand colour, the light and the dark page colour),
+  painted as data in each chip's `style`, and the column is dropped at the dashboard's
+  `(max-width: 48rem)` breakpoint, the literal `DRAWER_BREAKPOINT` uses. Status carries "In use"
+  and "{count} hard to read" tags. Chips and tags are styled through `::part()`, never a class
+  (Primitives, above).
+- **The Actions column and New theme are for `layout.configure` only**; a person without it sees
+  the list alone. The row menu offers Use on every screen (not on the row in use), Edit and Rename
+  (not on Waitron's row), Make a copy, and Delete in the danger colour (not on Waitron's row, and
+  not on the row of the theme open in the editor). New theme sits in the card's action slot as
+  `secondary`.
+- **The name dialog** (`apps/dashboard/src/widgets/theme-name-dialog.ts`) serves the first save,
+  Save as new theme…, Make a copy and Rename. It takes a draft scope; Make a copy and Save as new
+  theme… open already savable (`saveActionState`'s `savableAtOpen`), while Rename and the first save
+  open quiet. Every kind but Rename shows the
+  "Use it on every screen now" switch, and while that switch is on and the theme has warnings, the
+  dialog lists them under "Hard to read:". A name refusal (`theme.name_taken`, or `theme.invalid`
+  naming the name field) shows under the field; any other refusal shows at the bottom.
+- **The switch dialog** (`apps/dashboard/src/widgets/theme-switch-dialog.ts`) asks "Use {name} on
+  every screen?", lists the theme's warnings when it has any, and never refuses a theme for them;
+  Back and Use it, with a refusal shown at the bottom.
+- **The delete dialog is `wt-delete-dialog`, its impact built from the card's live list**
+  (`themeDeleteImpact`, `apps/dashboard/src/widgets/theme-delete.ts:7`) rather than read from the
+  server: deleting the theme in use lists one change, that Waitron's theme goes on every screen.
 
 ## Event discipline
 

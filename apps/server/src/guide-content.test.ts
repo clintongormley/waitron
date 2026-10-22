@@ -56,6 +56,10 @@ describe("the user guides", () => {
       "edit",
       "hard-to-read",
       "save",
+      "themes",
+      "names",
+      "switch",
+      "delete",
     ]);
   });
 
