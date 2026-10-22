@@ -252,7 +252,10 @@ export class LookCard extends LitElement {
   }
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("canEdit") && !this.canEdit) this.#cancel();
-    if (changed.has("list")) this.#adopt();
+    if (changed.has("list")) {
+      this.#followName();
+      this.#adopt();
+    }
     const choices = this.draft?.choices;
     if (choices && choices !== this.#derivedFrom) {
       this.#derivedFrom = choices;
@@ -332,6 +335,13 @@ export class LookCard extends LitElement {
   #inUse(editing: Editing): boolean {
     const inUse = this.list?.inUse;
     return editing.id === null ? editing.from === "in-use" && inUse === null : inUse === editing.id;
+  }
+  /** A theme deleted elsewhere stays open under the last name the list gave it (D19). */
+  #followName(): void {
+    const editing = this.#editing;
+    if (!editing || editing.id === null) return;
+    const name = this.list?.themes.find((theme) => theme.id === editing.id)?.name;
+    if (name !== undefined) editing.name = name;
   }
   #adopt(): void {
     const editing = this.#editing;
@@ -683,7 +693,7 @@ export class LookCard extends LitElement {
     if (editing.id === null) {
       return editing.from === "in-use" ? BUILT_IN_THEME_NAME : t("appearance.add_theme");
     }
-    return this.list?.themes.find((theme) => theme.id === editing.id)?.name ?? editing.name;
+    return editing.name;
   }
   #heading(editing: Editing): string {
     if (this.#inUse(editing)) return t("appearance.look");

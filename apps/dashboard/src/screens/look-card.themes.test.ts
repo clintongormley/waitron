@@ -644,6 +644,24 @@ describe("Save as new theme…", () => {
     expect(getVenueTheme).toHaveBeenCalledTimes(1);
   });
 
+  it("a theme renamed and then deleted elsewhere keeps its latest name", async () => {
+    setLocale("en-GB");
+    const { el } = await mount(waitronInUse);
+    el.edit({ id: "t-lucia" });
+    await el.updateComplete;
+    expect(heading(el)).toBe("Edit theme: Bar Lucía");
+    el.list = { themes: [{ ...lucia, name: "Autumn" }, xmas], inUse: null };
+    await el.updateComplete;
+    expect(heading(el)).toBe("Edit theme: Autumn");
+    el.list = { themes: [xmas], inUse: null };
+    await el.updateComplete;
+    expect(isEditing(el)).toBe(true);
+    expect(heading(el)).toBe("Edit theme: Autumn");
+    await userEvent.click(button(el, "save-as-new"));
+    const dialog = await nameDialog(el);
+    expect(nameInput(dialog).value).toBe("Autumn (copy)");
+  });
+
   it("switch off for a theme not in use", async () => {
     const { el, createTheme, getVenueTheme } = await mount(luciaInUse);
     el.edit({ id: "t-xmas" });
