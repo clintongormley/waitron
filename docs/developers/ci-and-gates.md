@@ -738,21 +738,22 @@ second step only when its own `needs` result is `success` and its API record sup
 
 The check still reads every API page and every matching physical job, including each matrix shard
 and reusable-workflow child. A missing job, incomplete page count or unfinished evidence waits
-within the existing limit, then fails. Duplicate job names or ids fail. Final API failures and
+within the existing limit, then fails. Duplicate matching job names or ids wait for an unambiguous answer within the same limit, then fail. Final API failures and
 unknown conclusions fail even if `needs` says success. Failed, cancelled or unknown `needs`
 results also fail. An unfinished record from an older attempt cannot use this substitute; a
 completed record carried into a partial rerun keeps its ordinary completed-result check.
-The workflow guard refuses job-level `continue-on-error` on needed jobs so it cannot mask the
-final result used by this substitute.
+The workflow guard refuses job-level `continue-on-error` on needed jobs and their local reusable
+workflows so it cannot mask the final result used by this substitute. This guard reads workflow
+text; it does not inspect remote reusable workflows or evaluate GitHub expressions.
 
 Steps alone do not establish success. The runner completes the job context before draining its
-upload queue and publishing the job result. The latter operations can fail. The substitute
+upload queue and publishing the job result. The job-completion call can fail. The substitute
 therefore requires the workflow's final `needs` result as well as the individual step records.
 It prints the physical job name, run, attempt and head whenever it uses that combination.
 
 | Source | Source wording | Use |
 | --- | --- | --- |
-| [GitHub runner, JobRunner.cs at 4c989f2](https://github.com/actions/runner/blob/4c989f2f108bb6798e07ea5935bc8bc4aab7de2f/src/Runner.Worker/JobRunner.cs#L290), read 2026-10-22 | `TaskResult result = jobContext.Complete(taskResult);` then `await ShutdownQueue`, then `await runServer.CompleteJobAsync` | The published step list precedes job-result publication; it is insufficient on its own. |
+| [GitHub runner, JobRunner.cs at 4c989f2](https://github.com/actions/runner/blob/4c989f2f108bb6798e07ea5935bc8bc4aab7de2f/src/Runner.Worker/JobRunner.cs#L290), read 2026-10-22 | `TaskResult result = jobContext.Complete(taskResult);` then `await ShutdownQueue(throwOnFailure: false)`, then `await runServer.CompleteJobAsync` | The published step list precedes job-result publication; it is insufficient on its own. |
 
 Run 39836334373's `ci` job 120030677650 passed its `needs` step, then rejected
 `test-dashboard (4)` through all 21 reads from 19:10:55 to 19:21:25 UTC on 22 October.

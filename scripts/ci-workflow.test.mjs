@@ -1195,6 +1195,29 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
       },
     ],
     [
+      "a text number on the last step",
+      (steps) => {
+        steps.at(-1).number = "6";
+      },
+    ],
+    [
+      "a fractional step number",
+      (steps) => {
+        steps[1].number = 2.5;
+      },
+    ],
+    [
+      "a step after Complete job",
+      (steps) => {
+        steps.push({
+          name: "Post checkout",
+          number: 7,
+          status: "completed",
+          conclusion: "success",
+        });
+      },
+    ],
+    [
       "no final step",
       (steps) => {
         steps.pop();
@@ -1264,6 +1287,33 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
       ]);
       expect(result.status, result.output).not.toBe(0);
       expect(result.output).toContain("duplicate job evidence");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "refuses a malformed commit id even when the workflow and record agree",
+    () => {
+      const result = runCrossCheck(
+        needsFor("lint"),
+        [page([{ ...finishedJob("lint"), head_sha: "not-a-sha" }])],
+        { identity: { HEAD_SHA: "not-a-sha" } },
+      );
+      expect(result.status, result.output).not.toBe(0);
+      expect(result.output).toContain("not completed: lint");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "rereads duplicate pages and accepts only a later unambiguous answer",
+    () => {
+      const entry = finishedJob("lint");
+      const result = runCrossCheck(needsFor("lint"), [page([entry, entry]), page([entry])]);
+      expect(result.status, result.output).toBe(0);
+      expect(result.calls).toBe(2);
+      expect(result.output).toContain("Try 1 of 3: duplicate job evidence");
+      expect(result.output).toContain("lint: success (final needs and completed steps");
     },
     ONE_RUN_TEST_TIMEOUT_MS,
   );
@@ -1379,9 +1429,24 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
   });
 
   it("never masks a needed job's failure with job-level continue-on-error", () => {
-    const masked = needsOf(job("ci").body).filter((id) =>
-      job(id).body.some((line) => /^ {4}continue-on-error:/.test(line)),
-    );
+    const masked = [];
+    const visited = new Set();
+    const visit = (file, neededIds) => {
+      if (visited.has(file)) return;
+      visited.add(file);
+      const blocks = jobBlocks(readFileSync(join(repoRoot, ".github/workflows", file), "utf8"));
+      expect(blocks.length, file).toBeGreaterThan(0);
+      for (const block of blocks) {
+        if (neededIds && !neededIds.includes(block.id)) continue;
+        if (block.lines.some((line) => /^ {4}continue-on-error:/.test(line)))
+          masked.push(`${file}:${block.id}`);
+        const called = block.lines
+          .map((line) => /^ {4}uses: \.\/\.github\/workflows\/(\S+)\s*$/.exec(line)?.[1])
+          .find(Boolean);
+        if (called) visit(called);
+      }
+    };
+    visit("ci.yml", needsOf(job("ci").body));
     expect(masked).toEqual([]);
   });
 
