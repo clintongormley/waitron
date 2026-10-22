@@ -1,3 +1,4 @@
+import { withIssuanceTransaction } from "@waitron/core";
 // Side-effect only: loads this host's errors.ts augmentation for the codes these routes throw.
 import "./errors.js";
 // The registry of `device_profile.not_found` and `device_profile.invalid`, which these routes throw.
@@ -12,7 +13,6 @@ import {
   deviceProfiles,
   devices,
   nowIso,
-  withTransaction,
   workingOrders,
   tenderRefunds,
   sales,
@@ -132,6 +132,7 @@ export interface PaymentsApiDeps {
 const PAYMENTS_MANAGE: Permission = "payments.manage";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
+  "fiscal.fingerprint_mismatch": 409,
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,
@@ -317,13 +318,17 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     sessionId: string,
     fn: (tx: Transaction, personId: string) => Promise<T>,
   ): Promise<T> =>
-    withTransaction(deps.db, async (tx) => {
-      const { authorizedBy } = await authorizeManager(tx, {
-        managementSessionId: sessionId,
-        permission: PAYMENTS_MANAGE,
-      });
-      return fn(tx, authorizedBy);
-    });
+    withIssuanceTransaction(
+      deps.db,
+      async (tx) => {
+        const { authorizedBy } = await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: PAYMENTS_MANAGE,
+        });
+        return fn(tx, authorizedBy);
+      },
+      log,
+    );
 
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
 

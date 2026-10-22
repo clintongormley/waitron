@@ -1,3 +1,4 @@
+import { withIssuanceTransaction } from "@waitron/core";
 import { refuseRecalledWrite } from "./draft-source.js";
 import { currentZoneDevice } from "./device-zones.js";
 import type { LiveEvents } from "./live-api.js";
@@ -449,6 +450,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   // The fiscal filing refuses the record: not a malformed request, and permanent for the same
   // basket, so 409 rather than 400 or 500.
   "fiscal.record_invalid": 409,
+  "fiscal.fingerprint_mismatch": 409,
   "clock.unusable": 409,
   "fiscal.foreign_recipient_unsupported": 409,
   // Adding a line refuses a classification snapshot the catalogue's data cannot make valid:
@@ -3547,31 +3549,35 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const namedPersonId = requireBodyUuid(body.personId, "personId").toLowerCase();
       if (namedPersonId !== personId.toLowerCase())
         throw new AppError("draft.person_not_signed_in", { personId: namedPersonId });
-      const draft = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        const result = await saveDraft(
-          tx,
-          cfg,
-          partyId,
-          personId,
-          {
-            billId: body.billId,
-            draftId,
-            revision,
-            lines: body.lines,
-            expectedEdit: parseBillEditExpected(body.expectedEdit),
-          },
-          deps.attendance,
-        );
-        await issueIfFullyPaid(
-          tx,
-          fiscal,
-          sendingCfg(cfg, c, session.device),
-          result.edit.billId,
-          personId,
-        );
-        return result;
-      });
+      const draft = await withIssuanceTransaction(
+        deps.db,
+        async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ partyId }]);
+          const result = await saveDraft(
+            tx,
+            cfg,
+            partyId,
+            personId,
+            {
+              billId: body.billId,
+              draftId,
+              revision,
+              lines: body.lines,
+              expectedEdit: parseBillEditExpected(body.expectedEdit),
+            },
+            deps.attendance,
+          );
+          await issueIfFullyPaid(
+            tx,
+            fiscal,
+            sendingCfg(cfg, c, session.device),
+            result.edit.billId,
+            personId,
+          );
+          return result;
+        },
+        log,
+      );
       return c.json(draft);
     }),
   );
@@ -3584,29 +3590,33 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const draftId = requireDraftParam(c.req.param("did"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const command = groupCommand(session.personId, body);
-      const result = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        const split = await splitDraft(
-          tx,
-          cfg,
-          partyId,
-          draftId,
-          {
-            ...command,
-            expectedEdit: parseBillEditExpected(body.expectedEdit),
-            lineIds: body.lineIds,
-          },
-          deps.attendance,
-        );
-        await issueIfFullyPaid(
-          tx,
-          fiscal,
-          sendingCfg(cfg, c, session.device),
-          split.source.edit.billId,
-          session.personId,
-        );
-        return split;
-      });
+      const result = await withIssuanceTransaction(
+        deps.db,
+        async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ partyId }]);
+          const split = await splitDraft(
+            tx,
+            cfg,
+            partyId,
+            draftId,
+            {
+              ...command,
+              expectedEdit: parseBillEditExpected(body.expectedEdit),
+              lineIds: body.lineIds,
+            },
+            deps.attendance,
+          );
+          await issueIfFullyPaid(
+            tx,
+            fiscal,
+            sendingCfg(cfg, c, session.device),
+            split.source.edit.billId,
+            session.personId,
+          );
+          return split;
+        },
+        log,
+      );
       return c.json(result);
     }),
   );
@@ -3719,12 +3729,16 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         ...joinGroupOf(body),
       };
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const submitted = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        const result = await submitDraft(tx, sendCfg, partyId, draftId, input, deps.attendance);
-        await issueIfFullyPaid(tx, fiscal, sendCfg, result.tabId, personId);
-        return result;
-      });
+      const submitted = await withIssuanceTransaction(
+        deps.db,
+        async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ partyId }]);
+          const result = await submitDraft(tx, sendCfg, partyId, draftId, input, deps.attendance);
+          await issueIfFullyPaid(tx, fiscal, sendCfg, result.tabId, personId);
+          return result;
+        },
+        log,
+      );
       return c.json(submitted);
     }),
   );
@@ -3944,23 +3958,27 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       >(c);
       const copy = requireRevision(revision);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const saved = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
-        const revision = await updateOrderLine(
-          tx,
-          sendCfg,
-          id,
-          lineNo,
-          patch,
-          copy,
-          { operatorId: personId, expectedEdit },
-          deps.attendance === undefined
-            ? undefined
-            : { recorder: deps.attendance, clock: deps.clock },
-        );
-        await issueIfFullyPaid(tx, fiscal, sendCfg, id, personId);
-        return { revision, party: await partyRevisionOfOrder(tx, id) };
-      });
+      const saved = await withIssuanceTransaction(
+        deps.db,
+        async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+          const revision = await updateOrderLine(
+            tx,
+            sendCfg,
+            id,
+            lineNo,
+            patch,
+            copy,
+            { operatorId: personId, expectedEdit },
+            deps.attendance === undefined
+              ? undefined
+              : { recorder: deps.attendance, clock: deps.clock },
+          );
+          await issueIfFullyPaid(tx, fiscal, sendCfg, id, personId);
+          return { revision, party: await partyRevisionOfOrder(tx, id) };
+        },
+        log,
+      );
       return c.json(saved);
     }),
   );
@@ -4064,23 +4082,27 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const transfers = requireTransfers(body.transfers);
       const command = billCommand(personId, body);
       const saleCfg = sendingCfg(cfg, c, session.device);
-      const result = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: billId }]);
-        const split = await splitBill(tx, cfg, billId, transfers, {
-          ...command,
-          expectedEdit: parseBillEditExpected(body.expectedEdit),
-        });
-        await issueIfFullyPaid(tx, fiscal, saleCfg, billId, personId);
-        await captureKitchenActivity(
-          tx,
-          deps.attendance === undefined
-            ? undefined
-            : { recorder: deps.attendance, clock: deps.clock },
-          personId,
-          [billId, split.billId],
-        );
-        return split;
-      });
+      const result = await withIssuanceTransaction(
+        deps.db,
+        async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ orderId: billId }]);
+          const split = await splitBill(tx, cfg, billId, transfers, {
+            ...command,
+            expectedEdit: parseBillEditExpected(body.expectedEdit),
+          });
+          await issueIfFullyPaid(tx, fiscal, saleCfg, billId, personId);
+          await captureKitchenActivity(
+            tx,
+            deps.attendance === undefined
+              ? undefined
+              : { recorder: deps.attendance, clock: deps.clock },
+            personId,
+            [billId, split.billId],
+          );
+          return split;
+        },
+        log,
+      );
       return c.json(result);
     }),
   );

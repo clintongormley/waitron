@@ -1,3 +1,4 @@
+import { withIssuanceTransaction } from "@waitron/core";
 import { parseBillEditExpected } from "./bill-editing.js";
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -153,41 +154,45 @@ export function mountAdjustmentsApi(
       );
       const attempts = overridePinAttempts(pinThrottle, session.deviceId);
       const answer = await withPinCheckAhead(deps.db, parsedApprover, attempts, (checked) =>
-        withTransaction(deps.db, async (tx) => {
-          await checkZones(tx, deps.cfg, session, [{ partyId }]);
-          const applied = await discardDraft(
-            tx,
-            cfg,
-            partyId,
-            draftId,
-            session.personId,
-            {
-              submissionId,
-              revision,
-              expectedRevision,
-              expectedEdit,
-              ...(reasonId === undefined ? {} : { reasonId }),
-              note: typeof note === "string" ? note : null,
-              approver: withCheck(parsedApprover, checked),
-            },
-            deps.venueLocale,
-            attempts,
-            deps.attendance === undefined
-              ? undefined
-              : { recorder: deps.attendance, clock: deps.clock },
-          );
-          await issueIfFullyPaid(
-            tx,
-            fiscal,
-            sendingCfg(cfg, c, session.device),
-            applied.billId,
-            session.personId,
-          );
-          if (applied.adjustmentIds.length > 0) {
-            await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, applied.billId);
-          }
-          return applied;
-        }),
+        withIssuanceTransaction(
+          deps.db,
+          async (tx) => {
+            await checkZones(tx, deps.cfg, session, [{ partyId }]);
+            const applied = await discardDraft(
+              tx,
+              cfg,
+              partyId,
+              draftId,
+              session.personId,
+              {
+                submissionId,
+                revision,
+                expectedRevision,
+                expectedEdit,
+                ...(reasonId === undefined ? {} : { reasonId }),
+                note: typeof note === "string" ? note : null,
+                approver: withCheck(parsedApprover, checked),
+              },
+              deps.venueLocale,
+              attempts,
+              deps.attendance === undefined
+                ? undefined
+                : { recorder: deps.attendance, clock: deps.clock },
+            );
+            await issueIfFullyPaid(
+              tx,
+              fiscal,
+              sendingCfg(cfg, c, session.device),
+              applied.billId,
+              session.personId,
+            );
+            if (applied.adjustmentIds.length > 0) {
+              await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, applied.billId);
+            }
+            return applied;
+          },
+          log,
+        ),
       );
       return c.json(answer);
     }),
@@ -210,22 +215,26 @@ export function mountAdjustmentsApi(
       const answer = await withPinCheckAhead(deps.db, toCheck, attempts, (checked) => {
         const approver = withCheck(parsedApprover, checked);
         const saleCfg = sendingCfg(cfg, c, session.device);
-        return withTransaction(deps.db, async (tx) => {
-          await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
-          const applied = await applyAdjustment(
-            tx,
-            cfg,
-            { ...ask, submissionId, ...(approver === undefined ? {} : { approver }) },
-            deps.venueLocale,
-            attempts,
-            deps.attendance === undefined
-              ? undefined
-              : { recorder: deps.attendance, clock: deps.clock },
-          );
-          await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
-          await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);
-          return { ...applied, party: await partyRevisionOfOrder(tx, id) };
-        });
+        return withIssuanceTransaction(
+          deps.db,
+          async (tx) => {
+            await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+            const applied = await applyAdjustment(
+              tx,
+              cfg,
+              { ...ask, submissionId, ...(approver === undefined ? {} : { approver }) },
+              deps.venueLocale,
+              attempts,
+              deps.attendance === undefined
+                ? undefined
+                : { recorder: deps.attendance, clock: deps.clock },
+            );
+            await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
+            await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);
+            return { ...applied, party: await partyRevisionOfOrder(tx, id) };
+          },
+          log,
+        );
       });
       return c.json(answer);
     }),

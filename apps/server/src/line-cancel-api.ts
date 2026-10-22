@@ -1,3 +1,4 @@
+import { withIssuanceTransaction } from "@waitron/core";
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import {
@@ -187,41 +188,45 @@ export function mountLineCancelApi(
                 deps.venueLocale,
               );
       const answer = await withPinCheckAhead(deps.db, toCheck, attempts, (checked) =>
-        withTransaction(deps.db, async (tx) => {
-          const current = await admittedSession(tx, deps, session);
-          const cfg = sendingCfg(requestCfg(deps.cfg, current), c, current.device);
-          await checkZones(tx, deps.cfg, current, [{ partyId }]);
-          if (ask.refundHandoff === true)
-            await authorize(
+        withIssuanceTransaction(
+          deps.db,
+          async (tx) => {
+            const current = await admittedSession(tx, deps, session);
+            const cfg = sendingCfg(requestCfg(deps.cfg, current), c, current.device);
+            await checkZones(tx, deps.cfg, current, [{ partyId }]);
+            if (ask.refundHandoff === true)
+              await authorize(
+                tx,
+                {
+                  sessionId: session.sessionId,
+                  permission: "sale.refund",
+                  override: withCheck(ask.approver, checked),
+                },
+                attempts,
+              );
+            const applied = await cancelItem(
               tx,
+              cfg,
+              partyId,
+              lineId,
+              { ...ask, approver: withCheck(ask.approver, checked) },
+              session.personId,
+              deps.attendance === undefined
+                ? undefined
+                : { recorder: deps.attendance, clock: deps.clock },
               {
-                sessionId: session.sessionId,
-                permission: "sale.refund",
-                override: withCheck(ask.approver, checked),
+                venueLocale: deps.venueLocale,
+                attempts,
+                completeAdjustment: async (billId) => {
+                  await issueIfFullyPaid(tx, fiscal, cfg, billId, session.personId);
+                  await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, billId);
+                },
               },
-              attempts,
             );
-          const applied = await cancelItem(
-            tx,
-            cfg,
-            partyId,
-            lineId,
-            { ...ask, approver: withCheck(ask.approver, checked) },
-            session.personId,
-            deps.attendance === undefined
-              ? undefined
-              : { recorder: deps.attendance, clock: deps.clock },
-            {
-              venueLocale: deps.venueLocale,
-              attempts,
-              completeAdjustment: async (billId) => {
-                await issueIfFullyPaid(tx, fiscal, cfg, billId, session.personId);
-                await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, billId);
-              },
-            },
-          );
-          return applied;
-        }),
+            return applied;
+          },
+          log,
+        ),
       );
       return c.json(answer);
     }),

@@ -251,8 +251,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   - **A1003. Refuse a locally detected fingerprint mismatch before writing the record.**
     The owner chose refusal on 22 October. The [implementation plan](superpowers/plans/2026-10-22-a1003-fingerprint-refusal.md)
     covers rollback, a separate alert and retry with the unused number. The owner approved the
-    two exact fiscal-test changes on 22 October; implementation is in progress, with the implicit
-    issuance owners and request wording still to finish. The owner lands the complete fiscal PR.
+    two exact fiscal-test changes on 22 October. The refusal and transaction owners are implemented;
+    request wording, browser qualification and branch finishing remain. The owner lands the complete
+    fiscal PR.
     A985's TEST lookup retained the wrong fingerprint; production behaviour remains unmeasured.
   - A voided sale whose lookup AEAT answers under the sale's own reference is not handled; not
     shown to happen either way.
