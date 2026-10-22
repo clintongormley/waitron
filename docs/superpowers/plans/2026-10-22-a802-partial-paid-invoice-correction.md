@@ -58,7 +58,7 @@ Each risk has named assertions in its owning task; these are mandatory, not futu
 `rg -n 'recordCorrection\(|RecordCorrectionInput|deriveVatBreakdown' packages apps --glob '*.ts'` identified the following consumer groups. Re-run it before the contract edit and include any new consumers in focused verification:
 
 - Production core caller: `apps/server/src/cancel-credit.ts`; ordinary sale/substitution share only the derivation helper, which remains unchanged.
-- Script callers: `apps/server/scripts/{settle-invoice-first,modelo-303-demo,daily-close-demo}.ts`. Preserve their legacy partial inputs; do not silently make all callers supply the new field.
+- Script callers: `apps/server/scripts/{modelo-303-demo,daily-close-demo}.ts`. Preserve their legacy partial inputs; do not silently make all callers supply the new field.
 - Core tests: `record-correction.test.ts`, plus structural backend wrappers in `record-sale.test.ts` and `record-void.test.ts`. In particular preserve `record-correction.test.ts:553` (legacy mismatching cents), `:694` (legacy derivation), whole reversal, authorization and no-settlement cases.
 - Real-regime consumers: `fiscal-verifactu/src/{backend.test,correction-path.e2e.test,correction-amount.huella.test}.ts`; direct backend tests already supply a breakdown. Preserve the pinned correction hash at `correction-amount.huella.test.ts:177` and all golden write-path/inmutabilidad bytes.
 - Backend implementations/tests: fiscal-none, fiscal testing fake, and their correction tests. Optional admission avoids forcing structural test wrappers to change existing assertions.

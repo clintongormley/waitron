@@ -6645,9 +6645,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   pack already names its demo; the data set itself (`apps/server/scripts/demo-seed/data-sets/`)
   moves into `country-es`, plus region demos ("catalán demo in Catalunya"). After A918. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A973. `settle-invoice-first.ts` writes English.** An operator script that can write «Comida»,
-  «Descuento» and «Supervisora» into a production venue's filed records. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
-
 - **A974. Comments, identifiers and file names in general code to English** (Bucket E and F of the
   audit). Low priority. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 

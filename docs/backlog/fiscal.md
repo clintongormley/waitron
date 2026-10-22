@@ -817,11 +817,10 @@ job count as a physical exactly-once printing guarantee.
 
 - **Nothing in the product can issue a corrective invoice (R5, _factura rectificativa_) for a VAT
   error on an issued simplified invoice.** `recordCorrection` exists
-  (`packages/core/src/record-correction.ts`; the Verifactu backend corrects only an F2, as an R5),
-  but no route calls it: its only callers under `apps/` are three scripts in
-  `apps/server/scripts/` (`daily-close-demo.ts`, `modelo-303-demo.ts`, `settle-invoice-first.ts`)
-  and tests. _(2026-10-02, C126: the whole-order cancel route now calls it, for a credit of the
-  whole invoice only; no route issues a correction for part of one.)_ The owner also needs a way to
+  (`packages/core/src/record-correction.ts`; the Verifactu backend corrects only an F2, as an R5);
+  the whole-order cancel route calls it for a credit of the whole invoice. No route issues a
+  correction for part of one. The remaining script callers are `daily-close-demo.ts` and
+  `modelo-303-demo.ts` under `apps/server/scripts/`. The owner also needs a way to
   correct an issued invoice when a customer spots an error after payment, regardless of the future
   Tabs · Bill choice (2026-10-04, A261 step 2 decision). **The owner's points for when this is
   designed (2026-09-29):** (1) the amount staff enter is what the customer gets back,

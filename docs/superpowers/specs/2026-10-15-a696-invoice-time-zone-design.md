@@ -1,5 +1,7 @@
 # A696: invoice dates and record offsets in the location's time zone
 
+_2026-10-22, A973: the invoice-first settlement operator script and its test are retired by owner decision. References to that command below record the earlier tree; current build plans omit it._
+
 > **Owner approval and planning update, 2026-10-21:** the owner approved the
 > [startup design](2026-10-20-a696-startup-zone-validation-design.md), including the minimal
 > A166 country-zone list and creation/import checks first, and authorised its plan and build

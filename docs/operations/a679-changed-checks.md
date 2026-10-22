@@ -1,5 +1,7 @@
 # A679 changed test checks
 
+_2026-10-22, A973: the invoice-first settlement operator script and its test are retired by owner decision. References to that command below record the earlier tree; current build plans omit it._
+
 Use this inventory to review changes to checks that existed before the replacement setup flow.
 It records changes on the candidate branch, not acceptance of the finished product.
 
