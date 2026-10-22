@@ -31,7 +31,7 @@ interface Comparison {
 }
 type Result =
   | { status: "selected"; identity: string; input: unknown }
-  | { status: "waiting"; targetMs: number; remainingMs: number | null };
+  | { status: "waiting"; targetMs: number; remainingMs: number };
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -146,8 +146,7 @@ export class RecoveryHourEntry extends LitElement {
     this.#stopWait();
     this.problem = problem;
     this.result = result;
-    if (result?.status === "waiting" && result.remainingMs !== null)
-      this.#countdown.start(result.remainingMs);
+    if (result?.status === "waiting") this.#countdown.start(result.remainingMs);
   }
   #waitForSecondClock(): void {
     this.result = undefined;
@@ -285,17 +284,16 @@ export class RecoveryHourEntry extends LitElement {
     this.#notify();
     try {
       this.comparison = await this.#readClocks(call);
+      if (this.comparison.clock.releaseBlocked) return;
       const preview = await call({ action: "preview" });
       if (
         record(preview) &&
         preview.status === "waiting" &&
         validWait(preview) &&
-        typeof preview.remainingMs === "number" &&
-        preview.remainingMs > 0
+        (preview.remainingMs as number) > 0
       )
         this.#show(undefined, preview as unknown as Result);
     } catch (cause) {
-      // Compare clocks already asked the box with the key, so a refusal is explained here.
       if (current()) this.#settle(cause, false);
     } finally {
       if (current()) {

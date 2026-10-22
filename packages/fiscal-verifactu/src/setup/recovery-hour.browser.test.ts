@@ -542,6 +542,22 @@ it.each([
   await compare(el);
   expect(button(el, "select").disabled).toBe(true);
 });
+it("a box clock before this release shows only the release line when the preview is refused", async () => {
+  const prepare = vi.fn(async (request: { proposal: unknown }) => {
+    const action = (request.proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks")
+      return { id: "comparison", clock: { ...clock, releaseBlocked: true } };
+    // What the real server's preview throws for a box clock before the release.
+    throw { code: "sif.allocation_invalid", params: { reason: "clock_unconfirmed" } };
+  });
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  await vi.waitFor(() => expect(button(el, "compare").disabled).toBe(false));
+  expect(text(el)).toContain("Box time precedes this Waitron release.");
+  expect(formError(el)).toBe("");
+});
 it("sends no installation code", async () => {
   const { el, prepare } = await mount();
   await ready(el);

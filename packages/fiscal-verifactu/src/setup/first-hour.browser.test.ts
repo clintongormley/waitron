@@ -446,6 +446,23 @@ it("a clock refusal shows both readings and no countdown, and waits for Check ag
     vi.useRealTimers();
   }
 });
+it("a later minute allowed from beyond the date range is explained without a time", async () => {
+  const { el } = await mount({
+    select: async () => {
+      throw {
+        code: "sif.allocation_invalid",
+        params: { reason: "minute_not_later", allowedFromMs: 8_640_000_000_060_000 },
+      };
+    },
+  });
+  await ready(el);
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=minute-not-later]")?.textContent?.trim()).toBe(
+      "The series cannot be made yet: a later minute is already in use.",
+    ),
+  );
+});
 it("a later minute in use names its time and does not count down", async () => {
   const allowedFromMs = Date.parse("2026-10-18T20:04:00Z");
   const { el, calls } = await mount({
@@ -693,6 +710,8 @@ it.each([
   { status: "waiting", targetMs: instant, remainingMs: -1 },
   { status: "waiting", targetMs: instant, remainingMs: Infinity },
   { status: "waiting", targetMs: instant, remainingMs: "1000" },
+  { status: "waiting", targetMs: instant + 1800000, remainingMs: null },
+  { status: "waiting", targetMs: 8_640_000_000_060_000, remainingMs: 1000 },
 ])("refuses malformed hour result %j without importing it and permits retry", async (result) => {
   const { el, calls } = await mount({ select: async () => result });
   await ready(el);
@@ -707,19 +726,6 @@ it.each([
     el.shadowRoot!.querySelector("[data-test=selected-hour], [data-test=hour-wait]"),
   ).toBeNull();
   expect(button(el, "select").disabled).toBe(false);
-});
-
-it("shows a server wait requiring fresh clocks without inventing a numeric countdown", async () => {
-  const { el, calls } = await mount({
-    select: async () => ({ status: "waiting", targetMs: instant + 1800000, remainingMs: null }),
-  });
-  await ready(el);
-  await userEvent.click(button(el, "select"));
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("[data-test=hour-wait]")).not.toBeNull(),
-  );
-  expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
-  expect(calls.filter((call) => call.action === "input")).toEqual([]);
 });
 
 it.each(["clock-challenge", "compare-clocks"])(
@@ -1172,6 +1178,27 @@ it.each([
     }
   },
 );
+
+it("a box clock before this release shows only the release line when the preview is refused", async () => {
+  const { el } = await mount({
+    prepare: async (proposal: unknown) => {
+      const action = (proposal as { action: string }).action;
+      if (action === "clock-challenge") return { id: "challenge" };
+      if (action === "compare-clocks")
+        return { id: "comparison", clock: { ...clock, releaseBlocked: true } };
+      // What the real server's preview throws for a box clock before the release.
+      throw { code: "sif.allocation_invalid", params: { reason: "clock_unconfirmed" } };
+    },
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
+  );
+  await vi.waitFor(() => expect(button(el, "compare").disabled).toBe(false));
+  expect(text(el)).toContain("Box time precedes this Waitron release.");
+  expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).toBe(
+    "false",
+  );
+});
 
 it("a missing second clock reported by the server starts the 15-second check", async () => {
   let refused = false;

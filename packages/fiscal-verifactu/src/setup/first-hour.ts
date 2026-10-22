@@ -44,7 +44,7 @@ interface Comparison {
   clock: HourClockDecision;
 }
 type Result =
-  | { status: "waiting"; targetMs: number; remainingMs: number | null }
+  | { status: "waiting"; targetMs: number; remainingMs: number }
   | {
       status: "selected";
       identity: string;
@@ -229,8 +229,7 @@ export class FirstSetupHour extends LitElement {
     this.#stopWait();
     this.problem = problem;
     this.result = result;
-    if (result?.status === "waiting" && result.remainingMs !== null)
-      this.#countdown.start(result.remainingMs);
+    if (result?.status === "waiting") this.#countdown.start(result.remainingMs);
   }
   async #compare(): Promise<void> {
     if (!this.api?.preparation || this.busy) return;
@@ -254,19 +253,17 @@ export class FirstSetupHour extends LitElement {
       const comparison = await this.#readClocks(api, current);
       if (!comparison || !current()) return;
       this.comparison = comparison;
-      if (context.status !== "claimed") return;
+      if (context.status !== "claimed" || comparison.clock.releaseBlocked) return;
       const preview = await api.preparation!({ action: "selection" });
       if (!current()) return;
       if (
         record(preview) &&
         preview.status === "waiting" &&
         validWait(preview) &&
-        typeof preview.remainingMs === "number" &&
-        preview.remainingMs > 0
+        (preview.remainingMs as number) > 0
       )
         this.#show(undefined, preview as unknown as Result);
     } catch (error) {
-      // Before a press the page explains nothing: a preview the box refuses only means no wait.
       if (current() && clockProblem(error) === undefined) this.error = true;
     } finally {
       if (current()) this.busy = false;

@@ -26,13 +26,16 @@ export const SECOND_CLOCK_POLL_MS = 15_000;
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
+/** A whole millisecond a `Date` can hold. */
+const instantMs = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && Math.abs(value as number) <= 8_640_000_000_000_000;
+
 export function validWait(result: Record<string, unknown>): boolean {
   return (
-    Number.isSafeInteger(result.targetMs) &&
-    (result.remainingMs === null ||
-      (typeof result.remainingMs === "number" &&
-        Number.isFinite(result.remainingMs) &&
-        result.remainingMs >= 0))
+    instantMs(result.targetMs) &&
+    typeof result.remainingMs === "number" &&
+    Number.isFinite(result.remainingMs) &&
+    result.remainingMs >= 0
   );
 }
 
@@ -46,15 +49,14 @@ export function clockProblem(error: unknown): ClockProblem | undefined {
   if (reason === "minute_not_later")
     return {
       kind: "later",
-      ...(Number.isSafeInteger(allowedFromMs) ? { allowedFromMs: allowedFromMs as number } : {}),
+      ...(instantMs(allowedFromMs) ? { allowedFromMs } : {}),
     };
   return undefined;
 }
 
 /**
  * Shows what a failed request means. While the page checks for a second clock by itself
- * (`retryingQuietly`), a request lost on the way (no refusal code) is left to the next check;
- * a refusal is never retried.
+ * (`retryingQuietly`), a request lost on the way (no refusal code) is left to the next check.
  */
 export function settleRefusal(
   error: unknown,
