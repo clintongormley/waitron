@@ -21,7 +21,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   departments,
@@ -1094,14 +1094,15 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
       .insert(persons)
       .values({ displayName: "Admin", pinHash: hashPin("8181"), role: "admin" })
       .returning({ id: persons.id });
-    const [leaver] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Leaver", pinHash: hashPin("8282"), role: "staff" })
-      .returning({ id: persons.id });
-    const { token } = await withTransaction(suite.db, (tx) =>
-      loginWithPin(tx, { deviceId, personId: leaver!.id, pin: "8282" }),
-    );
+    let token: string;
     try {
+      const [leaver] = await suite.db
+        .insert(persons)
+        .values({ displayName: "Leaver", pinHash: hashPin("8282"), role: "staff" })
+        .returning({ id: persons.id });
+      ({ token } = await withTransaction(suite.db, (tx) =>
+        loginWithPin(tx, { deviceId, personId: leaver!.id, pin: "8282" }),
+      ));
       const manager = await withTransaction(suite.db, (tx) =>
         startManagementSession(tx, { personId: admin!.id }),
       );
@@ -1139,6 +1140,20 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
     });
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  });
+
+  it("an action the device's profile does not allow is still refused", async () => {
+    const { deviceId } = await seedDevice(suite.db, {
+      locationId: cfg.locationId,
+      capabilities: ["take-cash"],
+    });
+    const token = await openSession(suite.db, deviceId);
+    const db = stampRefused(new AppError("storage.disk_full", {}));
+    const res = await guardApp(db, { action: "take-orders" }).request("/whoami", {
+      headers: { cookie: `${SESSION_COOKIE}=${token}` },
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: { code: "device.forbidden_action" } });
   });
 
   it("any other failure still fails", async () => {

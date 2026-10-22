@@ -129,8 +129,6 @@ export async function requireSession(
   try {
     row = await withTransaction(deps.db, (tx) => check(tx, options.passive !== true));
   } catch (error) {
-    // A full disk refuses the stamp or the change-log drain, not the session: the same checks run
-    // again, unstamped and outside the write lock.
     if (!diskFullIn(error)) throw error;
     row = await check(deps.db, false);
   }
