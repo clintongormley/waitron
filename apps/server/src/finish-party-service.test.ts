@@ -342,6 +342,30 @@ describe("finishing paid food service", () => {
     expect(JSON.stringify(after.commands)).not.toContain(`"${PINS.manager}"`);
   });
 
+  it("answers a link for each handed-off dish and none for the others", async () => {
+    const p = await fixture();
+    const confirmed = await confirm(p);
+    const body = {
+      ...confirmed,
+      approver: { personId: venue.managerId, pin: PINS.manager },
+      cancellations: confirmed.cancellations.map((item, index) =>
+        index === 0 ? { ...item, refundHandoff: true } : item,
+      ),
+    };
+    const answer = await post(p, body);
+    expect(answer.status, JSON.stringify(answer.body)).toBe(200);
+    const rows = (await snapshot(p)).adjustments.filter((row) => row.workingOrderId === p.billId);
+    const burger = rows.find((row) => row.lineId === p.lines[0]!.id)!;
+    const water = rows.find((row) => row.lineId === p.lines[1]!.id)!;
+    expect(answer.body).toEqual({
+      state: "closed",
+      refundLinks: [{ lineId: p.lines[0]!.id, adjustmentId: burger.id }],
+    });
+    expect(burger).toMatchObject({ refundHandoff: true, approvedBy: venue.managerId });
+    expect(water).toMatchObject({ refundHandoff: false, approvedBy: null });
+    expect(await post(p, body)).toEqual(answer);
+  });
+
   it("cancels paid dishes from every merged party bill without reassigning filed money", async () => {
     const p = await fixture();
     const other = await fixture();

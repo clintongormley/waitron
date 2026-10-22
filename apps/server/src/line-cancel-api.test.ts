@@ -203,6 +203,69 @@ describe("the public cancellation read and command", () => {
     expect(await frozen()).toEqual(before);
   });
 
+  async function paidFixture() {
+    const p = await fixture();
+    await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
+      id: p.billId,
+      tender: { method: "cash", amount: "26.00" },
+      lines: [],
+    });
+    return p;
+  }
+  async function cancelRows(p: Fixture) {
+    return (await venue.db.select().from(adjustments).where(eq(adjustments.lineId, p.parent.id)))
+      .filter((row) => row.action === "cancel")
+      .map((row) => ({ id: row.id, approvedBy: row.approvedBy, refundHandoff: row.refundHandoff }));
+  }
+
+  it("answers the cancel's id for a refund handoff and replays it", async () => {
+    const p = await paidFixture();
+    const body = await bodyFor(p, { outcome: "keep_charge", refundHandoff: true });
+    const answer = await post(p, body, venue.cookie.manager);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const [row] = await cancelRows(p);
+    const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
+    expect(answer.json).toEqual({
+      revision: party!.revision,
+      refundLinks: [{ lineId: p.parent.id, adjustmentId: row!.id }],
+    });
+    expect((await post(p, body, venue.cookie.manager)).json).toEqual(answer.json);
+    expect(await cancelRows(p)).toHaveLength(1);
+  });
+
+  it("records the refund approver on a handed-off cancel", async () => {
+    const p = await paidFixture();
+    const answer = await post(
+      p,
+      await bodyFor(p, {
+        outcome: "keep_charge",
+        refundHandoff: true,
+        approver: { personId: venue.managerId, pin: PINS.manager },
+      }),
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await cancelRows(p)).toEqual([
+      { id: expect.any(String), approvedBy: venue.managerId, refundHandoff: true },
+    ]);
+  });
+
+  it("records no approver and answers no refund link on a paid-bill cancel with nothing ticked", async () => {
+    const p = await paidFixture();
+    const answer = await post(
+      p,
+      await bodyFor(p, {
+        outcome: "keep_charge",
+        approver: { personId: venue.managerId, pin: PINS.manager },
+      }),
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
+    expect(answer.json).toEqual({ revision: party!.revision });
+    expect(await cancelRows(p)).toEqual([
+      { id: expect.any(String), approvedBy: null, refundHandoff: false },
+    ]);
+  });
+
   it.each(["own-permission", "approved", "wrong-pin"] as const)(
     "checks paid refund handoff permission (%s) without changing filed money",
     async (who) => {

@@ -1200,6 +1200,21 @@ describe("What a cancel records for refunds", () => {
     ]);
   });
 
+  it("answers no refund link and records no approver for a Refund tick on a bill that is not paid", async () => {
+    const order = await fixture();
+    await startExtra(order);
+    const answer = await cancel(order, {
+      ...(await askFor(order)),
+      refundHandoff: true,
+      approver: { personId: venue.managerId, pin: PINS.manager },
+    });
+    const { party, adjustments: rows } = await snapshot(order);
+    expect(answer).toEqual({ revision: party[0]!.revision });
+    expect(
+      rows.map((row) => ({ approvedBy: row.approvedBy, refundHandoff: row.refundHandoff })),
+    ).toEqual([{ approvedBy: null, refundHandoff: false }]);
+  });
+
   it("records a paid-bill cancel answered No as not started, and its Refund tick", async () => {
     const order = await fixture();
     await pay(order.billId, "36.00");

@@ -62,6 +62,13 @@ export interface CancelItemAsk {
   approver?: AdjustmentArgs["approver"];
 }
 
+export interface RefundLink {
+  lineId: string;
+  adjustmentId: string;
+}
+
+export type CancelItemAnswer = { revision: number; refundLinks?: RefundLink[] };
+
 export async function cancelItem(
   tx: Transaction,
   cfg: TillConfig,
@@ -75,7 +82,7 @@ export async function cancelItem(
     attempts?: PinAttempts;
     completeAdjustment?: (billId: string) => Promise<void>;
   } = { venueLocale: cfg.locale },
-): Promise<{ revision: number }> {
+): Promise<CancelItemAnswer> {
   if (ask.outcome !== "remove_charge" && ask.outcome !== "keep_charge") throw invalid("outcome");
   if (ask.preparationStarted !== undefined && typeof ask.preparationStarted !== "boolean")
     throw invalid("preparationStarted");
@@ -322,7 +329,7 @@ export async function cancelItem(
               ask.quantity,
             );
         }
-        await recordAdjustment(tx, {
+        const adjustmentId = await recordAdjustment(tx, {
           workingOrderId: bill!.id,
           line: {
             id: lineId,
@@ -352,7 +359,7 @@ export async function cancelItem(
           reduction: decimal("0"),
           nominalValue: coveredValue(true),
           requestedBy: operatorId,
-          approvedBy: null,
+          approvedBy: refundHandoff ? (ask.approver?.personId ?? null) : null,
           note: ask.note ?? null,
           chargeKept: true,
           preparationStarted: started,
@@ -435,6 +442,11 @@ export async function cancelItem(
           [bill!.id],
           `party:${partyId}:${ask.submissionId}`,
         );
+        if (refundHandoff)
+          return {
+            revision: await partyRevision(tx, partyId),
+            refundLinks: [{ lineId, adjustmentId }],
+          };
       }
       return { revision: await partyRevision(tx, partyId) };
     },
