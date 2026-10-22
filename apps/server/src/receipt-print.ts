@@ -511,7 +511,6 @@ export async function confirmReceiptHandover(
   return readOriginalReceiptPrint(tx, saleId);
 }
 
-/** The issuance action emits an unmarked original without opening the drawer. */
 export async function enqueueOriginalReceipt(
   tx: Transaction,
   cfg: OriginConfig,
@@ -521,15 +520,13 @@ export async function enqueueOriginalReceipt(
   personId?: string | null,
   requestKey?: string,
 ): Promise<void> {
-  if (ticket.invoiceType === "F1") {
-    const [original] = await tx
-      .select({ id: printJobs.id })
-      .from(printJobs)
-      .where(and(eq(printJobs.saleId, saleId), eq(printJobs.receiptCopy, false)))
-      .limit(1);
-    // A failed original is retried through its existing job, preserving its bytes and history.
-    if (original !== undefined) return;
-  }
+  const [original] = await tx
+    .select({ id: printJobs.id })
+    .from(printJobs)
+    .where(and(eq(printJobs.saleId, saleId), eq(printJobs.receiptCopy, false)))
+    .limit(1);
+  // A failed original is retried through its existing job, preserving its bytes and history.
+  if (original !== undefined) return;
   const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, saleId, false, printers);
   if (resolved === undefined) return;
   const job = await enqueuePrintJob(

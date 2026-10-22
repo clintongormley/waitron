@@ -809,6 +809,24 @@ describe("the money a bill has received", () => {
   });
 });
 
+// Read-model fixtures include attempts independently of the resend command's admission rules.
+async function insertReceiptAttempt(tx: Transaction, sourceId: string): Promise<{ jobId: string }> {
+  const [source] = await tx.select().from(printJobs).where(eq(printJobs.id, sourceId));
+  const [attempt] = await tx
+    .insert(printJobs)
+    .values({
+      locationId: source!.locationId,
+      printerId: source!.printerId,
+      payload: source!.payload,
+      kind: "document",
+      saleId: source!.saleId,
+      receiptCopy: source!.receiptCopy,
+      resendOf: source!.resendOf ?? source!.id,
+    })
+    .returning({ jobId: printJobs.id });
+  return attempt!;
+}
+
 describe("the invoice at full payment", () => {
   it("refuses a filed F1 whole credit without changing its sale, settlement or series", async () => {
     const billId = await tabWith("Caña");
@@ -1579,7 +1597,7 @@ describe("the invoice at full payment", () => {
       canRetry: false,
       handover: { personId: OPERATOR, confirmedAt: expect.any(String) },
     });
-    const resend = await inTx((tx) => resendPrintJob(tx, original!.id));
+    const resend = await inTx((tx) => insertReceiptAttempt(tx, original!.id));
     await inTx((tx) =>
       tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, resend.jobId)),
     );
@@ -1651,7 +1669,7 @@ describe("the invoice at full payment", () => {
       tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, retry.jobId)),
     );
     expect(await read()).toEqual({ status: "done", jobId: retry.jobId, canRetry: false });
-    const extra = await inTx((tx) => resendPrintJob(tx, retry.jobId));
+    const extra = await inTx((tx) => insertReceiptAttempt(tx, retry.jobId));
     await inTx((tx) =>
       tx
         .update(printJobs)

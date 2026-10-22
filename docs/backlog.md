@@ -494,10 +494,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   action:** whoever next works the compliance track widens those two sentences.
   [Detail](backlog/fiscal.md#the-fiscal-record-is-built-from-total--vat_breakdown-is-a-false-narrow-enumeration-and-it-reproduces-itself)
 
-- **One original per invoice, structurally.** F2 requests to `POST /api/sales/:id/receipt` still
-  have no limit or idempotency; two calls produced three unmarked originals, and art. 14.1 says
-  exactly one. **Remaining:** contain repeated F2 requests per sale, with the invoice number on the
-  slip. [Detail](backlog/fiscal.md#one-original-per-invoice-structurally)
+- **A receipt printer can lose its reply after printing.** Automatic delivery retries and an
+  exhausted original's retry retain the original bytes. The customer may therefore receive an
+  extra unmarked sheet when the previous attempt printed but its reply was lost. **Next action:**
+  decide how an uncertain physical delivery should be recovered; request deduplication alone does
+  not establish one physical print. [Detail](backlog/fiscal.md#uncertain-receipt-delivery)
 
 - **A888. After A795 lands: the owner's checks with real certificates** (left open by A795). The
   owner approved landing A795 on 2026-10-19 before these ran. Run with the operator harness `apps/server/src/aeat-certificate-check.preprod.test.ts`:

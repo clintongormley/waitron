@@ -1,3 +1,4 @@
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { readBillEditState } from "./bill-editing.js";
 import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
@@ -5470,4 +5471,78 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
     expect(right.status).toBe(429);
     expect(await refundRows(paymentId)).toEqual([]);
   });
+});
+
+describe("simplified invoice original HTTP requests", () => {
+  it.each([true, false])(
+    "keeps one original across repeated requests (queued at issue: %s)",
+    async (queuedAtIssue) => {
+      const billId = await bill120();
+      const [device] = await suite.db.select().from(devices).where(eq(devices.id, venue.deviceId));
+      if (!queuedAtIssue)
+        await suite.db
+          .update(devices)
+          .set({ receiptPrinterId: null })
+          .where(eq(devices.id, venue.deviceId));
+      try {
+        expect((await contribute(billId, "120.00")).status).toBe(200);
+      } finally {
+        await suite.db
+          .update(devices)
+          .set({ receiptPrinterId: device!.receiptPrinterId })
+          .where(eq(devices.id, venue.deviceId));
+      }
+      const invoices = await saleOf(billId);
+      const sale = invoices[0]!;
+      const [profile] = await suite.db
+        .select()
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.id, venue.profileId));
+      await suite.db
+        .update(deviceProfiles)
+        .set({ capabilities: [...(profile!.capabilities as string[]), "print-receipt"] })
+        .where(eq(deviceProfiles.id, venue.profileId));
+      try {
+        const before = await inTx((tx) =>
+          tx.select().from(printJobs).where(eq(printJobs.saleId, sale.id)),
+        );
+        const drawer = await suite.db.select().from(drawerOpens);
+        const replies = await Promise.all([
+          request("POST", `/api/sales/${billId}/receipt`),
+          request("POST", `/api/sales/${billId}/receipt`),
+        ]);
+        expect(replies.map((response) => response.status)).toEqual([200, 200]);
+        const requested = await inTx((tx) =>
+          tx.select().from(printJobs).where(eq(printJobs.saleId, sale.id)),
+        );
+        if (queuedAtIssue) expect(requested).toEqual(before);
+        else expect(requested.filter((job) => job.receiptCopy === false)).toHaveLength(1);
+        expect((await request("POST", `/api/sales/${billId}/reprint`, {})).status).toBe(200);
+        const jobs = await inTx((tx) =>
+          tx.select().from(printJobs).where(eq(printJobs.saleId, sale.id)),
+        );
+        const originals = jobs.filter((job) => job.receiptCopy === false);
+        const copies = jobs.filter((job) => job.receiptCopy === true);
+        expect(originals).toHaveLength(1);
+        expect(copies).toHaveLength(1);
+        const marker = receiptLabelsFor(sale.locale).duplicate;
+        expect(printedLines(originals[0]!.payload).join("\n")).not.toContain(marker);
+        const copy = printedLines(copies[0]!.payload).join("\n");
+        expect(copy).toContain(marker);
+        const [series] = await suite.db
+          .select()
+          .from(invoiceSeries)
+          .where(eq(invoiceSeries.id, sale.seriesId));
+        expect(copy).toContain(`${series!.code}/${sale.invoiceNumber}`);
+        expect(await suite.db.select().from(drawerOpens)).toEqual(drawer);
+        expect(await saleOf(billId)).toEqual(invoices);
+        expect(registroCount(billId)).toBe(1);
+      } finally {
+        await suite.db
+          .update(deviceProfiles)
+          .set({ capabilities: profile!.capabilities })
+          .where(eq(deviceProfiles.id, venue.profileId));
+      }
+    },
+  );
 });

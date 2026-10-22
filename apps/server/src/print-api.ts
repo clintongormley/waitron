@@ -1421,7 +1421,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   app.get("/management-api/print-jobs", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) => {
+      const rows = await gated(sessionId, async (tx) => {
         const recentCompleted = tx
           .select({ id: printJobs.id })
           .from(printJobs)
@@ -1439,7 +1439,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           )
           .orderBy(desc(printJobs.createdAt), desc(printJobs.id))
           .limit(RECENT_JOBS_LIMIT);
-        return tx
+        const jobs = await tx
           .select({
             id: printJobs.id,
             printerId: printJobs.printerId,
@@ -1447,6 +1447,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             printerDeletedAt: printers.deletedAt,
             status: printJobs.status,
             kind: printJobs.kind,
+            receiptCopy: printJobs.receiptCopy,
+            saleId: printJobs.saleId,
             attempts: printJobs.attempts,
             lastError: printJobs.lastError,
             createdAt: printJobs.createdAt,
@@ -1467,13 +1469,36 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             ),
           )
           .orderBy(desc(printJobs.createdAt), desc(printJobs.id));
-      });
-      return c.json(
-        rows.map(({ kind, printerDeletedAt, ...job }) => ({
+        const reserved = await tx
+          .select({ saleId: printJobs.saleId })
+          .from(printJobs)
+          .where(
+            and(
+              inArray(
+                printJobs.saleId,
+                jobs.flatMap((job) =>
+                  job.receiptCopy === false && job.saleId !== null ? [job.saleId] : [],
+                ),
+              ),
+              eq(printJobs.receiptCopy, false),
+              or(
+                eq(printJobs.status, "done"),
+                eq(printJobs.status, "queued"),
+                eq(printJobs.status, "printing"),
+                and(eq(printJobs.status, "failed"), lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
+              ),
+            ),
+          );
+        const reservedSales = new Set(reserved.map((job) => job.saleId));
+        return jobs.map(({ kind, printerDeletedAt, receiptCopy, saleId, ...job }) => ({
           ...job,
-          canResend: printerDeletedAt === null && canResendPrintJob({ ...job, kind }),
-        })),
-      );
+          canResend:
+            printerDeletedAt === null &&
+            !(receiptCopy === false && reservedSales.has(saleId)) &&
+            canResendPrintJob({ ...job, kind, receiptCopy }),
+        }));
+      });
+      return c.json(rows);
     }),
   );
 

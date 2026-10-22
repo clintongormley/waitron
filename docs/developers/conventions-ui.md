@@ -1643,3 +1643,27 @@ entry case checks that the hostname-valid saved pair continues serving verified 
 "reserved authority after" cases interrupt completion, then change the address or expire only the
 saved leaf; resumption signs a new leaf with the reserved CA rather than leaving an unfinished
 repair permanently refused. An expired or unusable reserved CA still refuses.
+
+
+## Receipt originals and marked copies
+
+`enqueueOriginalReceipt` keeps a sale's existing original job for both F1 and F2, including failed
+jobs. When the receipt helper resolves no printer, it adds no job. Deleting an original's printer
+retains that original's history; an explicit reprint can send a marked copy to its replacement.
+A completed original and its failed predecessors cannot be resent through the printer-job action.
+An original with an active retry blocks another retry as well. Exhausted attempts without one of
+those reservations may retry on their retained printer, keeping their bytes.
+
+The dashboard's offered action combines `canResendPrintJob` with a sale-wide reservation read in
+`print-api.ts`; the helper alone does not read sibling jobs. The open physical-delivery limit is in
+[the fiscal backlog](../backlog/fiscal.md#uncertain-receipt-delivery).
+
+| Source, checked 2026-10-22 | Source words | Applied here |
+| --- | --- | --- |
+| [RD 1619/2012, art. 14.1](https://www.boe.es/buscar/act.php?id=BOE-A-2012-14696#a14) | “Los empresarios y profesionales o sujetos pasivos sólo podrán expedir un original de cada factura.” | A repeated original request does not create another original job. Explicit copies retain their duplicate designation. This job-level rule does not settle uncertain physical delivery. |
+
+Receipt: the receipt-original and completed-ancestor cases in `receipt-print.test.ts`,
+`invoice-print-api.test.ts`, `bill-payments-api.test.ts` and printing’s `outbox.test.ts`
+were run on 2026-10-22. The focused
+original-request control first failed with three originals where one was expected; the management
+control first offered resend for a completed original.

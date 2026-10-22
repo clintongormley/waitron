@@ -737,13 +737,16 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
   claim is TRUE and the legal track is kept separate. **Next action:** whoever next works the
   compliance track widens those two sentences.
 
-## One original per invoice, structurally
+## Uncertain receipt delivery
 
-- **One original per invoice, structurally.** F2 requests to `POST /api/sales/:id/receipt` still
-  have no limit or idempotency; two calls produced three unmarked originals, and art. 14.1 says
-  exactly one. A231's branch now retains the existing original job for F1 requests, with a
-  no-printer-at-issuance path that queues it later; its F2 control still queues three originals.
-  **Remaining:** contain repeated F2 requests per sale, with the invoice number on the slip.
+Automatic receipt transport retries and manual retries of exhausted original jobs retain their
+payload. If a printer printed before its reply was lost, sending those bytes again can produce
+another unmarked sheet. A991 contains repeated original requests and refuses resending a job
+recorded as completed; it does not establish that an uncertain transport attempt printed nothing.
+
+Next action: design recovery for uncertain physical delivery across automatic retries and explicit
+retry actions, retaining the customer's route to a legible invoice. Do not describe the outbox's
+job count as a physical exactly-once printing guarantee.
 
 ## A888. After A795 lands: the owner's checks with real certificates
 

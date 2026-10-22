@@ -2824,6 +2824,10 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
 
     expect((await post(app, onA, `/api/sales/${id}/receipt`)).status).toBe(200);
     expect((await post(app, onB, `/api/sales/${id}/receipt`)).status).toBe(200);
+    expect((await jobs()).map((job) => [job.printerId, job.kind])).toEqual([[r1, "document"]]);
+
+    const onBSale = await ringSale(app, cfg, onB, each.menuItemId);
+    expect((await post(app, onB, `/api/sales/${onBSale}/receipt`)).status).toBe(200);
 
     const printed = await jobs();
     expect(printed.map((job) => [job.printerId, job.kind])).toEqual([
