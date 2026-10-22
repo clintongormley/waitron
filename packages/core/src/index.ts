@@ -20,6 +20,8 @@ export {
   openIncidents,
   recordIncident,
   recordIncidentOnce,
+  IssuanceRefusal,
+  withIssuanceTransaction,
 } from "./incidents.js";
 export type { TenantIncident } from "./incidents.js";
 export type { Incident, IncidentSeverity, RecordIncidentInput } from "./incidents.js";

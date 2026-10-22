@@ -1,10 +1,68 @@
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
 import { and, desc, eq, gte, isNotNull, isNull, sql } from "drizzle-orm";
-import { devices, incidents, newId } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
-import { readOrigin } from "@waitron/shared";
-import type { AppError, DeviceId, Origin, SaleId, Source } from "@waitron/shared";
+import { devices, incidents, newId, withTransaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
+import { AppError, isAppError, readOrigin } from "@waitron/shared";
+import type { DeviceId, ErrorCode, ErrorParams, Origin, SaleId, Source } from "@waitron/shared";
+
+export class IssuanceRefusal<C extends ErrorCode = ErrorCode> extends AppError<C> {
+  declare readonly incident: { readonly origin: Origin; readonly detectedAt: Date };
+
+  constructor(
+    error: AppError<C>,
+    incident: { readonly origin: Origin; readonly detectedAt: Date },
+  ) {
+    super(error.code, error.params as ErrorParams[C]);
+    Object.defineProperty(this, "incident", { value: incident, enumerable: false });
+  }
+}
+
+// The failed issuance must finish rolling back before its sale-free incident can commit.
+export async function withIssuanceTransaction<T>(
+  db: Database,
+  fn: (tx: Transaction) => Promise<T> | T,
+  log?: (level: "error", event: string, fields?: Record<string, unknown>) => void,
+): Promise<T> {
+  try {
+    return await withTransaction(db, fn);
+  } catch (error) {
+    if (error instanceof IssuanceRefusal) {
+      try {
+        await withTransaction(db, (tx) =>
+          recordIncidentOnce(tx, {
+            origin: error.incident.origin,
+            detectedAt: error.incident.detectedAt,
+            error,
+            severity: "error",
+          }),
+        );
+      } catch (incidentError) {
+        const fields = {
+          incidentRecorded: false,
+          incidentFailureCode: isAppError(incidentError) ? incidentError.code : "unknown",
+        };
+        let logged = false;
+        if (log) {
+          try {
+            log("error", error.code, fields);
+            logged = true;
+          } catch {
+            // The original refusal remains the caller's error if reporting fails too.
+          }
+        }
+        if (!logged) {
+          try {
+            process.stderr.write(`${error.code} ${JSON.stringify(fields)}\n`);
+          } catch {
+            // A closed stderr must not replace the issuance refusal.
+          }
+        }
+      }
+    }
+    throw error;
+  }
+}
 
 export type IncidentSeverity = "warning" | "error";
 
@@ -31,9 +89,8 @@ export interface Incident {
 
 /**
  * Records an incident on the caller's transaction, deduplicated to at most one OPEN incident per
- * `(source, device_id, code, sale_id)` by the `incidents_open_dedup` index. Never a fresh
- * connection: an incident that committed while its sale rolled back would report a failure for a
- * sale that never existed. Only `.code` and `.params` are written; an `AppError` would not survive the round trip.
+ * `(source, device_id, code, sale_id)` by the `incidents_open_dedup` index. Sale-linked incidents
+ * share the sale's transaction; a refused issuance uses `withIssuanceTransaction` without a sale id.
  */
 export async function recordIncident(tx: Transaction, input: RecordIncidentInput): Promise<void> {
   await tx
