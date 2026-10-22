@@ -58,6 +58,23 @@ git("fetch", "origin", "main");
 symlinkSync(join(root, "scripts"), join(fixture, "scripts"));
 const bin = join(temporary, "bin");
 mkdirSync(bin);
+const realTimeout = spawnSync("bash", ["-c", "command -v gtimeout || command -v timeout"], {
+  env,
+  encoding: "utf8",
+}).stdout.trim();
+const realGit = spawnSync("bash", ["-c", "command -v git"], {
+  env,
+  encoding: "utf8",
+}).stdout.trim();
+for (const [name, source] of Object.entries({
+  gtimeout: '#!/usr/bin/env bash\nexec "$WT_REAL_TIMEOUT" "$@"\n',
+  timeout:
+    '#!/usr/bin/env bash\n[ "$WT_GTIMEOUT_ONLY" != true ] || exit 127\nexec "$WT_REAL_TIMEOUT" "$@"\n',
+  git: '#!/usr/bin/env bash\nif [ "$WT_DIFF_FAIL" = true ] && [ "$1" = diff ]; then printf "docs/note.md\\n"; exit 1; fi\nexec "$WT_REAL_GIT" "$@"\n',
+})) {
+  writeFileSync(join(bin, name), source);
+  chmodSync(join(bin, name), 0o755);
+}
 writeFileSync(
   join(bin, "gh"),
   '#!/usr/bin/env bash\nprintf "%s\\n" "$@" >> "$WT_GH_ARGS"\n[ "$WT_GH_STATUS" = 0 ] || exit "$WT_GH_STATUS"\nprintf "%s" "$WT_RUNS" | jq -r "$4"\n',
@@ -92,6 +109,9 @@ function classifyRun({
   before = codeHead,
   runs = [successful(baseline)],
   status = 0,
+  gtimeoutOnly = false,
+  diffFail = false,
+  expectedStatus = 0,
 } = {}) {
   const output = join(temporary, `output-${serial++}`);
   const args = `${output}.args`;
@@ -112,11 +132,15 @@ function classifyRun({
       WT_GH_ARGS: args,
       WT_GH_STATUS: String(status),
       WT_RUNS: JSON.stringify({ workflow_runs: runs }),
+      WT_REAL_TIMEOUT: realTimeout,
+      WT_REAL_GIT: realGit,
+      WT_GTIMEOUT_ONLY: String(gtimeoutOnly),
+      WT_DIFF_FAIL: String(diffFail),
     },
     encoding: "utf8",
     timeout: 30_000,
   });
-  expect(result.status, result.stderr).toBe(0);
+  expect(result.status, result.stderr).toBe(expectedStatus);
   return {
     values: Object.fromEntries(
       readFileSync(output, "utf8")
@@ -142,6 +166,16 @@ describe("main CI recovery", () => {
       code: "false",
       scope: "global",
     });
+  });
+  it("can read the baseline when coreutils exposes only gtimeout", () => {
+    expect(classifyRun({ gtimeoutOnly: true, runs: [successful(codeHead)] }).values.code).toBe(
+      "false",
+    );
+  });
+  it("fails classification rather than accepting partial paths from a failed diff", () => {
+    const result = classifyRun({ diffFail: true, expectedStatus: 1 });
+    expect(result.values).not.toHaveProperty("code");
+    expect(result.stderr).toContain("cannot diff the main CI baseline");
   });
   it.each([
     ["API refusal", { status: 1 }],

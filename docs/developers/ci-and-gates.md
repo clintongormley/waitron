@@ -852,10 +852,11 @@ root `scripts/` is scanned.
 and run on every push, so a regression in a skipped path is caught there only as far as the root suites
 exercise it.
 
-A merge to `main` runs the unfiltered suite whenever its `code` output is true — anything but a
-change made only of inert paths, documentation, or machinery neither `ROOT_SCOPE_CONSUMERS` nor
-`GLOBAL_ROOT_FILES` lists;
-that run verifies the narrowing. Read the `changes` job's `code`, `scope` and `packages` outputs
+A merge to `main` runs the unfiltered suite whenever its `code` output is true. The range starts
+at a successful ancestral CI run, so even a docs merge runs the suite when that range includes
+unchecked code. A range containing only inert paths, documentation or machinery neither
+`ROOT_SCOPE_CONSUMERS` nor `GLOBAL_ROOT_FILES` lists can skip it. That run verifies the narrowing.
+Read the `changes` job's `code`, `scope` and `packages` outputs
 before treating a green PR as evidence about the workspace. Designed and built in #27.
 
 ### Two pushes to `main` must never share a concurrency group
@@ -925,11 +926,13 @@ from the cancellation above: there is no run to rerun.
 Main pushes now compare against a successful ancestral CI run instead of the preceding push.
 `scripts/ci-diff-paths.sh` reads the latest 100 successful main CI runs, accepts only completed
 push or manual runs on main, and checks ancestry locally. A missing baseline or failed API read
-selects the full suite and image. The API call has a 30-second deadline and a five-second kill
-grace. A docs push can therefore run the packages when earlier code has not completed CI.
+selects the full suite and image. The API call uses `gtimeout` or `timeout` with a 30-second
+deadline and a five-second kill grace; neither command available also selects the full run.
+A docs push can therefore run the packages and publish when earlier code has not completed CI.
 Pull requests retain their merge-base scope; release tags and manual dispatches run everything.
 
-If a main run is missing, start a full validation of current main:
+If a main run is missing, start a full validation of current main. Let an existing manual recovery
+finish before starting another:
 
 ```sh
 gh workflow run ci.yml --ref main

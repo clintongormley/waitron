@@ -14,7 +14,12 @@ if [[ "$EVENT" != push || "$REF" != refs/heads/main ]]; then
 fi
 
 # A later docs push must include code whose earlier CI run was lost or has not succeeded.
-if ! candidates=$(timeout -k 5 30 gh api \
+deadline=$(command -v gtimeout || command -v timeout || true)
+if [[ -z "$deadline" ]]; then
+  echo "no timeout command: running everything" >&2
+  exit
+fi
+if ! candidates=$("$deadline" -k 5 30 gh api \
   "repos/$REPOSITORY/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=100" \
   --jq '.workflow_runs[] | select(.head_branch == "main" and .status == "completed" and .conclusion == "success" and (.event == "push" or .event == "workflow_dispatch")) | .head_sha'); then
   echo "cannot read successful main CI runs: running everything" >&2
