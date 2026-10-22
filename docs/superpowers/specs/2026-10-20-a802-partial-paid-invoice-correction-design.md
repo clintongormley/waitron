@@ -1,5 +1,12 @@
 # A802: Correct part of a paid invoice
 
+**Approval update, 2026-10-22:** the owner approved this design and all three policies on
+2026-10-21: issue the correction before a connected-card refund, require both permissions and
+explicit refund links, and apply the proposed source-history gates. The original proposal below
+is retained as dated history; its three owner questions are answered. The
+[build plan](../plans/2026-10-22-a802-partial-paid-invoice-correction.md) carries the implementation
+and qualification steps. Its protected-writer approval remains separate from design approval.
+
 **PROPOSED, 2026-10-20. Full owner approval is required before a plan or build.**
 This is a design milestone only. The product rules below are driver proposals except where
 explicitly attributed to the owner. Approval of the design does not grant an exception to

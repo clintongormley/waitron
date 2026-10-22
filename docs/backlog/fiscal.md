@@ -829,12 +829,15 @@ job count as a physical exactly-once printing guarantee.
   should instead cancel the original and issue a new invoice (`TipoRectificativa` "S", where
   today's path files by differences, "I", in `packages/fiscal-verifactu/src/backend.ts`) — asked as
   asesor Q31 (2026-09-30), not decided.
-- **A802: proposed design ready for owner review, 2026-10-20.** The
+- **A802: design approved 2026-10-21; implementation remains open.** The
   [design](../superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md)
   covers paid-receipt corrections, their money-back workflow and A758's same-step correction.
-  Plan and build await full owner approval. Refund timing, permissions/linkage and source-history
-  admission remain proposed policies. Exact-gross integration needs qualification through the
-  existing writer before implementation can promise it. The owner's 2026-10-18 scope follows:
+  The owner approved correction before connected refund, both permissions with explicit refund
+  links, and the proposed source-history gates. The
+  [build plan](../superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md) identifies
+  the protected-writer approval needed before implementation and the exact-gross qualification
+  required before the dependent money workflow.
+  The owner's 2026-10-18 scope follows:
   - A server route that issues a partial correction through `recordCorrection`
     (`packages/core/src/record-correction.ts`), filing by differences as today.
   - A till action on a paid receipt, where staff already find one (the find-a-bill page, beside
@@ -850,6 +853,13 @@ job count as a physical exactly-once printing guarantee.
     −€5.50, base −€5.00, VAT −€0.50.
   - Later fit: the bills-and-tables brainstorm (2026-10-17/18) moves order lines to one portion per
     line; a correction then picks portions the same way staff pick dishes to move.
+
+## Correct VAT without returning money
+
+The owner excluded a VAT-only correction from A802 on 2026-10-21. Design how to correct a wrong
+VAT rate or classification while keeping the customer's gross total unchanged and returning no
+money. Settle its fiscal document, source-history checks, paper and reporting in that separate
+design. A802's gross-reduction workflow does not authorise this build.
 
 ## "No tax (0%)" is an open fiscal question, and it must be answered before the first live filing
 
