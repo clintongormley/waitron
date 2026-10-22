@@ -60,6 +60,8 @@ does not exist.
 - **Task 6 (#761, HOLD tickets in advance).** Left open:
   - A failed HOLD correction slip (HOLD CHANGED or HOLD CANCELLED) raises no "Printing problem",
     like every correction slip: none is recorded in `kitchen_print_jobs`.
+  - A printed HOLD ticket goes stale when held groups are reordered or a party is merged into
+    another (both renumber `GROUP n`). Only a FIRE ticket or a Reprint can be relied on.
   - Whether a group's HOLD ticket was queued is recorded per group, not per station, so a
     correction, and a Reprint's REPRINT and HOLD section, can print at a station whose printer
     never printed that group's HOLD ticket.
@@ -219,13 +221,90 @@ of its node that is not made here, on an order neither abandoned nor collected; 
 `timingBand`, like the `long_wait` signal before it, counts only fired dishes (`ticket_items.fired_at`
 set; A757 Q17).
 
-Probe, 2026-10-20, on `feat/a757-3-held-mark-countdown`, in a test file deleted after:
-hold a group of one Burger with `placeGroups` (`release: "hold"`), set its ticket item's `queued_at`
-20 minutes back, and call `computeOverdueOrders` before releasing it. It returned the order with
-`stationName: "Cocina"`, `ageMinutes: 20`, `band: "forgotten"`.
-
 Next: decide whether the report leaves held dishes out, as the floor does. If it does, add a
 `fired_at is not null` test to its `where` and a case beside `overdue-orders.test.ts`'s.
+
+## A1006. A dish or station name holding `$&` or `$'` is garbled in the kitchen's cross-references
+
+- **A1006. A dish or station name holding `$&` or `$'` is garbled in the kitchen's
+  cross-references.** `apps/till/src/widgets/queue-crossrefs.ts` fills `{name}` and `{station}` with
+  `String.replace` and a string, so a replacement pattern in the venue's text is expanded; A757
+  slice 8 fixed the same shape in `step-chip.ts` by passing a function (`() => step.name`). The
+  fills also run one after the other, so a dish named `Tea {station}` takes the station's name.
+
+## A807. One slip per printer and one notice per station for a whole-order kitchen-note change (owner, 2026-10-17)
+
+- **A807. One slip per printer and one notice per station for a whole-order kitchen-note change
+  (owner, 2026-10-17).** Today a change or removal of the order's kitchen note prints one slip and
+  raises one acknowledged notice for each affected dish (A743's default). Print one slip per printer
+  listing the affected dishes, and raise ONE notice the cook acknowledges once per station. Done
+  when `apps/server/src/order-kitchen-note.corrections.test.ts`'s three-dish edit shows one slip per
+  printer and one notice per station.
+
+## Supervisors have no dashboard path to a prep station's times
+
+- **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12). The times
+  show in the Calendar's Show picker, offered only to someone with `venue_service.manage`: a
+  read-only Calendar offers no stations. The stations service-times route still lets `venue.view` read them (`routes.ts`). Owner to decide whether a
+  supervisor gets a read-only view, which would now mean offering stations in a read-only
+  Calendar's Show — left open by A506-12.
+
+## A routing period line naming another location's period is flagged but never drawn
+
+- **A routing period line naming another location's period is flagged but never drawn** (left open
+  by A455, #1492): the server marks it `notOffered`, but the grid (`routing-grid-model.ts`) and the
+  cell editor (`routing-cell-editor.ts`) drop a line whose period is not in the model's periods, so
+  an unrelated save of that cell removes it silently. Reachable only by a hand-made database insert.
+  Fix: show the line and make removing it an explicit choice.
+
+## A908. Kitchen cancellation on Record unpaid departure (left open by A758's Q43 revision, 2026-10-19)
+
+- **A908. Kitchen cancellation on Record unpaid departure (left open by A758's Q43 revision,
+  2026-10-19).** Decide whether departure should ask about each unserved dish and send kitchen
+  cancellation slips before closing the party, using Finish table's choices without a refund.
+  A773-2 retires the pass's per-device Done action; assess this decision against its service
+  lifetime rather than adding another manual clearing action. Bring the owner a worked example.
+
+## A809. The table screen reads its printing problems in the groups read (owner, 2026-10-17)
+
+- **A809. The table screen reads its printing problems in the groups read (owner, 2026-10-17).**
+  Today every table load makes a second request, `GET /api/parties/:id/print-problems`, beside
+  `GET /api/parties/:id/groups` (`apps/server/src/till-api.ts`). Fold the printing problems into the
+  groups read and drop the second request; the exact-body assertion in
+  `apps/server/src/till-api.groups.test.ts` changes with it. Done when a table load no longer
+  calls `GET /api/parties/:id/print-problems` and the printing problems arrive in the groups read.
+
+## The earliest fire time is picked by comparing the stored times as text
+
+- Left by C78's review: the earliest fire time is picked by comparing the stored times as text,
+  right only while every writer stores the same `toISOString()` form (every writer found uses
+  `nowIso()`; not proven for all); and a dish recalled and fired again carries its new fire time but
+  its old group's firer. Left open by the table actions plan's Task 9 (#874, dishes arriving in a
+  party get a kitchen group).
+
+## `GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no caller
+
+- **`GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no
+  caller** — found while removing the Stations tab's health read (A366 slice 4 decision 34): the
+  route (`apps/server/src/management-api.ts`) and the client method
+  (`packages/venue-service/src/dashboard/routing-client.ts`) are called only by their own tests.
+  Decide whether to remove them or use them; slice 4 Part A leaves both.
+
+## A selected tab that grows while its strip keeps its width is not scrolled back into view
+
+- **A selected tab that grows while its strip keeps its width is not scrolled back into view**
+  (`packages/ui/src/components/wt-tabs.ts`) — left open by A487a (#1540): a late font load or a
+  longer label can leave it cut at the strip's edge, and `main` before #1540 behaved the same. Since
+  #1540 the fade is resized when the tab grows; scrolling it back was not added because doing so
+  broke the "leaves a strip the reader scrolled where it is when only its height changes" case.
+
+## A694 — Correction slips do not print the party's name (2026-10-15; open, owner decision)
+
+- **A694 — Correction slips do not print the party's name (2026-10-15; open, owner decision).**
+  Kitchen tickets and MOVED slips read "Order 5 · Ana" for a named party (A683). The other kitchen
+  slips — VOID, RECALLED, MOVED TO a station, HOLD CHANGED, HOLD CANCELLED and CHANGED (an extra
+  taken off) — still print the bare order number (`formatCorrectionSlip`,
+  `apps/server/src/kitchen-ticket.ts`). Decide: should they carry the name too? Left open by A683.
 
 ## Decisions and deliberate limits
 
@@ -234,12 +313,6 @@ Next: decide whether the report leaves held dishes out, as the floor does. If it
 A dish whose course is switched off follows the no-course rule: Fire now, listed first, whether
 you send it or move its bill. This replaces the earlier earliest-listed-course rule in the
 [table-actions plan](../superpowers/plans/2026-09-28-table-actions.md).
-
-On 2026-10-19, A773-1's `draft-place.test.ts` checked first and later placement;
-`till-table-order-screen.arranged-send.test.ts` and `till-app-drafts.test.ts` checked the direct
-Send all request. The server's `party-arriving-inactive-course.test.ts` and
-`party-arriving-dishes.test.ts` checked moved dishes, their firing order and retained bill rows.
-These are separate send and move checks, not a trial on a physical till.
 
 ### A756 point 1. Courses have their own page under Products and menus (owner, 2026-10-16)
 
@@ -278,11 +351,6 @@ change; check that against the code when PR 8 is picked up.
 - Configuration bundles use version 4. Older exports must be exported again from a compatible
   source; there is no conversion of station-order settings. **2026-10-19:** A757 slice 2 moved the
   export to version 5. **2026-10-21:** A841 slice 2 moved it to version 6.
-
-The populated predecessor test carries ticket, printer, timing and staffing references through the
-native column drop and compares every recorded table value except the retired column. Run
-`pnpm --filter @waitron/server exec vitest run src/station-order-migration.test.ts` and
-`pnpm exec vitest run scripts/migration-upgrade.test.ts` for this migration's retention checks.
 
 - **Whole-order kitchen notes (A743, owner 2026-10-15).** You can give the kitchen one
   instruction above a counter order or a table party's dishes, alongside each dish's own note.
@@ -381,8 +449,7 @@ native column drop and compares every recorded table value except the retired co
   objected to. The colour is `kitchen_stations.colour` in the core set (`packages/db`),
   because `kitchen_stations` is core's table; it has no CHECK,
   because a CHECK makes drizzle rebuild `kitchen_stations` and a rebuild deletes its cascading
-  children's rows (a reviewer added one in a scratch worktree and `db:generate` produced
-  `__new_kitchen_stations` five times), so the station routes and the configuration import refuse a
+  children's rows, so the station routes and the configuration import refuse a
   colour outside the twelve, and a stored one outside them draws unpainted. With one period chosen,
   a cell that A507's rule leaves blank is named, in the "differs" style, when its station for the
   period differs from its row's Every zone's saved station for the period. "Always opens on All
@@ -413,10 +480,6 @@ native column drop and compares every recorded table value except the retired co
 - **Dishes that arrive in a party get a kitchen group at the receiving party (P16, owner,
   2026-10-17: kept).** Spec §15's "leaves with them outside any group" is read as the side the bill
   leaves; the receiving party groups the dishes (the table actions plan's Task 9, #874).
-
-- **A dish whose course is switched off is treated as a dish with no course (C80, owner,
-  2026-10-17)**: Fire now, listed first, whether it was sent or moved. Relayed to lane G for A773;
-  A773's spec does not cover it yet.
 
 - **A doneness answer prints as an indented `+` sub-line on the kitchen ticket (owner,
   2026-10-17: fine as built).**

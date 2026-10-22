@@ -1857,50 +1857,33 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
-- **A1006. A dish or station name holding `$&` or `$'` is garbled in the kitchen's
-  cross-references.** `apps/till/src/widgets/queue-crossrefs.ts` fills `{name}` and `{station}` with
-  `String.replace` and a string, so a replacement pattern in the venue's text is expanded; A757
-  slice 8 fixed the same shape in `step-chip.ts` by passing a function (`() => step.name`). The
-  fills also run one after the other, so a dish named `Tea {station}` takes the station's name.
+- **A1006. A dish or station name holding `$&` or `$'` is garbled in the kitchen's cross-references.**
+  [Detail](backlog/kitchen.md#a1006-a-dish-or-station-name-holding--or--is-garbled-in-the-kitchens-cross-references)
 
-- **A756. The Kitchen tab split up (owner, 2026-10-16; changed by A773 the same day).** Left: the
-  parts that wait for A773-1 — the reminder to send the next course on the department's Service
-  tab, and late flags, identical dishes, held courses, MOVED slips, done on the screen and changes
-  after sending on each station — then the Kitchen tab's removal, after A773-2 takes fire control
-  away (plan `docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md`, "Parts that wait").
-  Open points from #1852 and #1854 are in the detail. [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
+- **A756. The Kitchen tab split up (owner, 2026-10-16; changed by A773 the same day).**
+  Open points from #1852 and #1854 are in the detail.
+  [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
 
-- **A807. One slip per printer and one notice per station for a whole-order kitchen-note change
-  (owner, 2026-10-17).** Today a change or removal of the order's kitchen note prints one slip and
-  raises one acknowledged notice for each affected dish (A743's default). Print one slip per printer
-  listing the affected dishes, and raise ONE notice the cook acknowledges once per station. Done
-  when `apps/server/src/order-kitchen-note.corrections.test.ts`'s three-dish edit shows one slip per
-  printer and one notice per station.
+- **A807. One slip per printer and one notice per station for a whole-order kitchen-note change (owner, 2026-10-17).**
+  [Detail](backlog/kitchen.md#a807-one-slip-per-printer-and-one-notice-per-station-for-a-whole-order-kitchen-note-change-owner-2026-10-17)
 
-- **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12). The times
-  show in the Calendar's Show picker, offered only to someone with `venue_service.manage`: a
-  read-only Calendar offers no stations. The stations service-times route still lets `venue.view` read them (`routes.ts`). Owner to decide whether a
-  supervisor gets a read-only view, which would now mean offering stations in a read-only
-  Calendar's Show — left open by A506-12.
+- **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12).
+  [Detail](backlog/kitchen.md#supervisors-have-no-dashboard-path-to-a-prep-stations-times)
 
 - **Browser tests still read `history.length` to tell whether a push happened, and Chromium stops
   it at 50**, so past that a test cannot see a push (`git grep -l 'history\.length;' -- '*.test.ts'`,
   Prep stations' older address cases among them). Move them to `pushState`/`replaceState` spies, as
   the retired-address tests do — left open by A506-12.
 
-- **A routing period line naming another location's period is flagged but never drawn** (left open
-  by A455, #1492): the server marks it `notOffered`, but the grid (`routing-grid-model.ts`) and the
-  cell editor (`routing-cell-editor.ts`) drop a line whose period is not in the model's periods, so
-  an unrelated save of that cell removes it silently. Reachable only by a hand-made database insert.
+- **A routing period line naming another location's period is flagged but never drawn** (left open by A455, #1492).
   Fix: show the line and make removing it an explicit choice.
+  [Detail](backlog/kitchen.md#a-routing-period-line-naming-another-locations-period-is-flagged-but-never-drawn)
 
 - KDS-4 follow-up: device-mode reprint behind `requireDevice`.
 
-- **A908. Kitchen cancellation on Record unpaid departure (left open by A758's Q43 revision,
-  2026-10-19).** Decide whether departure should ask about each unserved dish and send kitchen
-  cancellation slips before closing the party, using Finish table's choices without a refund.
-  A773-2 retires the pass's per-device Done action; assess this decision against its service
-  lifetime rather than adding another manual clearing action. Bring the owner a worked example.
+- **A908. Kitchen cancellation on Record unpaid departure (left open by A758's Q43 revision, 2026-10-19).**
+  Bring the owner a worked example.
+  [Detail](backlog/kitchen.md#a908-kitchen-cancellation-on-record-unpaid-departure-left-open-by-a758s-q43-revision-2026-10-19)
 
 - **A930. The manager's overdue report counts a held dish as late (left open by A757 slice 3).**
   `computeOverdueOrders` (`packages/reporting/src/overdue-orders.ts`) never checks `fired_at`, so a
@@ -1917,66 +1900,24 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   single-target only. [Detail](backlog/kitchen.md#kds-operations--low-priority-a9)
 
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group; printing
-  problems).** [Detail](backlog/kitchen.md#task-5-750-kitchen-pass-and-table-screen-by-group-printing-problems)
-  - `*** REPRINT ***`, `GROUP n`, `*** HOLD ***`, `*** FIRE ***`, `*** HOLD CHANGED ***` and
-    `*** HOLD CANCELLED ***` print in English.
-  - A switched-off printer's printing problem keeps showing until the printer is switched on and a
-    Reprint prints there; there is no way to dismiss one.
-  - A failed ticket on a pass printer (one ticket for the whole order) shows on the card of every
-    station it covered, even where that station's own printer printed; it stops showing at a
-    station once a Reprint of the bill would not link that pass printer to that station.
-    _2026-10-10 (A366 slice 5 Part B): a pass printer is now a printer listed on every station,
-    and its combined ticket is linked to each, so this applies again._
-  - Finish table drops the problem of a bill that transfers emptied (read, not run; not re-checked
-    by B6a).
-  - After a merge, a reprint of the absorbed bill that was still waiting at the merge clears
-    nothing when it prints, so its warning stays until the merged bill is reprinted once more
-    (`moveKitchenPrintLinks`, `apps/server/src/kitchen-print.ts`).
-  - Only dishes whose unit does not print on the ticket — sold in Each by the unit's identity
-    (`readLinesSoldInEach`), or with no unit recorded on the line — are added together or split; a
-    venue-made unit that counts pieces (a "portion"), even one spelled like Each, prints line by
-    line, because nothing records a unit's kind (a unit field would need a migration).
-  - The kitchen-ticket grouping setting sits on Venue settings' **Kitchen** tab, and so does "Print
-    held groups in advance", which is not about sent work at all.
-  - Setting up a venue from an imported configuration deletes every kitchen station, and the
-    `kitchen_print_jobs` station key has no delete rule; whether that venue can already hold link
-    rows at that point was not tested (read, not run).
-  - The pass's Ready records no `order_group_events` row, so who pressed them is recorded
-    nowhere readable; a new kind changes that append-only table's check, which is a core migration.
+  problems).**
+  [Detail](backlog/kitchen.md#task-5-750-kitchen-pass-and-table-screen-by-group-printing-problems)
 
 - **A809. The table screen reads its printing problems in the groups read (owner, 2026-10-17).**
-  Today every table load makes a second request, `GET /api/parties/:id/print-problems`, beside
-  `GET /api/parties/:id/groups` (`apps/server/src/till-api.ts`). Fold the printing problems into the
-  groups read and drop the second request; the exact-body assertion in
-  `apps/server/src/till-api.groups.test.ts` changes with it. Done when a table load no longer
-  calls `GET /api/parties/:id/print-problems` and the printing problems arrive in the groups read.
+  [Detail](backlog/kitchen.md#a809-the-table-screen-reads-its-printing-problems-in-the-groups-read-owner-2026-10-17)
 
 - **Loose ends left by service Task 6 (#761, HOLD tickets in advance).**
   [Detail](backlog/kitchen.md#task-6-761-hold-tickets-in-advance)
-  - A failed HOLD correction slip (HOLD CHANGED or HOLD CANCELLED) raises no "Printing problem",
-    like every correction slip: none is recorded in `kitchen_print_jobs`.
-  - A printed HOLD ticket goes stale when held groups are reordered or a party is merged into
-    another (both renumber `GROUP n`). Only a FIRE ticket or a Reprint can be relied on.
-  - Whether a group's HOLD ticket was queued is recorded per group, not per station, so a
-    correction, and a Reprint's REPRINT and HOLD section, can print at a station whose printer
-    never printed that group's HOLD ticket.
 
 - Left by C78's review: the earliest fire time is picked by comparing the stored times as text,
-  right only while every writer stores the same `toISOString()` form (every writer found uses
-  `nowIso()`; not proven for all); and a dish recalled and fired again carries its new fire time but
-  its old group's firer. Left open by the table actions plan's Task 9 (#874, dishes arriving in a
-  party get a kitchen group).
+  right only while every writer stores the same `toISOString()` form.
+  [Detail](backlog/kitchen.md#the-earliest-fire-time-is-picked-by-comparing-the-stored-times-as-text)
 
-- **`GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no
-  caller** — found while removing the Stations tab's health read (A366 slice 4 decision 34): the
-  route (`apps/server/src/management-api.ts`) and the client method
-  (`packages/venue-service/src/dashboard/routing-client.ts`) are called only by their own tests.
-  Decide whether to remove them or use them; slice 4 Part A leaves both.
+- **`GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no caller** — decide whether to remove them or use them.
+  [Detail](backlog/kitchen.md#get-management-apistationsoutputs-down-and-the-dashboards-listoutputsdown-have-no-caller)
 
-- **A long word in a routing-grid row name still splits at 390 px** — a word wider than what is
-  left of the capped first column beside the indent and the arrow still breaks inside itself
-  ("BOCAD/ILLOS", "CLAN/DESTI/NA" one level down). Options: widen the cap, shrink the arrow at
-  phone width, or hyphenate.
+- **A long word in a routing-grid row name still splits at 390 px.**
+  Options: widen the cap, shrink the arrow at phone width, or hyphenate.
   [Detail](backlog/kitchen.md#a-long-word-in-a-routing-grid-row-name-still-splits-at-390-px)
 
 - **The station editor's Printers read-out (no `printer.manage`) is reachable only at component
@@ -1997,17 +1938,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (`visibleRoutingRows`); a change to one can leave the other behind. Move the order into
   `packages/venue-service/src/routing.ts` and use it from both. Left open by A366 slice 4 Part A.
 
-- **Routing reads do work only one screen uses** — left open by A366 slice 4 Part A's review:
-  every read of the routing model works out each period's products (`readRoutingPeriods`), which
-  only the routing cell editor needs; and the Opening hours model reads every period's routing uses
-  (`readRoutingUses`). Work each out only where it is used.
+- **Routing reads do work only one screen uses** — left open by A366 slice 4 Part A's review.
+  Work each out only where it is used.
   [Detail](backlog/kitchen.md#routing-reads-do-work-only-one-screen-uses)
 
-- **A selected tab that grows while its strip keeps its width is not scrolled back into view**
-  (`packages/ui/src/components/wt-tabs.ts`) — left open by A487a (#1540): a late font load or a
-  longer label can leave it cut at the strip's edge, and `main` before #1540 behaved the same. Since
-  #1540 the fade is resized when the tab grows; scrolling it back was not added because doing so
-  broke the "leaves a strip the reader scrolled where it is when only its height changes" case.
+- **A selected tab that grows while its strip keeps its width is not scrolled back into view** — left open by A487a (#1540).
+  [Detail](backlog/kitchen.md#a-selected-tab-that-grows-while-its-strip-keeps-its-width-is-not-scrolled-back-into-view)
 
 - **`PUT /management-api/stations/:sid/printers` (`apps/server/src/print-api.ts`) has no dashboard caller** since A366 slice 4 Part A
   moved a station's printers into the station save; `parseStationPrinterIds`
@@ -2069,23 +2005,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Left open by A439.
 
 - **A694 — Correction slips do not print the party's name (2026-10-15; open, owner decision).**
-  Kitchen tickets and MOVED slips read "Order 5 · Ana" for a named party (A683). The other kitchen
-  slips — VOID, RECALLED, MOVED TO a station, HOLD CHANGED, HOLD CANCELLED and CHANGED (an extra
-  taken off) — still print the bare order number (`formatCorrectionSlip`,
-  `apps/server/src/kitchen-ticket.ts`). Decide: should they carry the name too? Left open by A683.
+  Decide: should they carry the name too? Left open by A683.
+  [Detail](backlog/kitchen.md#a694--correction-slips-do-not-print-the-partys-name-2026-10-15-open-owner-decision)
 
 - **A695 — Naming or renaming a party after its food was sent prints nothing (2026-10-15; open,
-  owner decision).** Since A683 a named party's kitchen tickets read "Order 5 · Ana", but Name the
-  party prints no MOVED slip (A650 design, path 17), so a ticket already on the rail keeps the old
-  name, or none, while later tickets for the same order carry the new one. Decide: should a rename
-  of a party with sent food print a slip?
+  owner decision).** Decide: should a rename of a party with sent food print a slip?
   [Detail](backlog/kitchen.md#a695--naming-or-renaming-a-party-after-its-food-was-sent-prints-nothing)
 
 - **A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
-  (2026-10-15; open, owner decision).** The dish keeps its earlier made-here choice
-  (`keepMadeHere`, `apps/server/src/working-order.ts`), but its extras are routed afresh in
-  `insertSplitExtras`, which reads the made-here stations of the sending device. Decide: should
-  extras keep their earlier choice, as the dish does?
+  (2026-10-15; open, owner decision).** Decide: should extras keep their earlier choice, as the dish does?
   [Detail](backlog/kitchen.md#a692--editing-a-sent-dish-decides-its-extras-made-here-again-by-the-device-that-edits)
 
 ### The till, devices and table service
