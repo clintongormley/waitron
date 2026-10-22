@@ -3364,6 +3364,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   60 seconds (not measured). Decide whether that is acceptable, or whether sign-in should ask again
   when the start-up answer is older than some bound.
 
+- **A841 slice 13 tidy-ups its review left (#1959's finish-branch, 2026-10-22).** Optional, no
+  behaviour change: the switch dialog (`apps/dashboard/src/widgets/theme-switch-dialog.ts`) could be
+  built inside the Themes card (`apps/dashboard/src/screens/themes-card.ts`) rather than beside it,
+  keeping its guard against a double press; the choice of whether a saved or switched theme repaints
+  the page is made in more than one place (`themes-card.ts`, `look-card.ts`) and could be made in
+  one; `apps/dashboard/src/widgets/theme-delete.ts` could take a clearer name. The review named three
+  smaller tidy-ups the finish-branch report did not list; they were not recorded.
+
 - **A841 slice 3 tidy-ups its review left (#1940's finish-branch, 2026-10-21).** Optional: about
   twenty dashboard test files repeat the same stub setup and could share a helper (the stubs predate
   #1940); the till still checks that the theme hash is a string although its type says so (removing
