@@ -1,9 +1,10 @@
-// The six narration lines are this script's output, so they are what the assertions read.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openVenueDatabase, sales } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { openVenueDatabase, saleLines, sales } from "@waitron/db";
+import { persons } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { settleInvoiceFirst } from "./settle-invoice-first.js";
@@ -41,7 +42,7 @@ describe("settle-invoice-first against a real venue directory", () => {
     expect(lines).toHaveLength(6);
     expect(lines[0]).toMatch(/^1\. issued invoice-first sale [0-9a-f-]{36} \(total 110\.00\)/);
     expect(lines[1]).toMatch(/^2\. outstanding: [0-9a-f-]{36}=110\.00$/);
-    expect(lines[2]).toMatch(/^3\. issued rectificativa [0-9a-f-]{36} \(total -11\.00\)/);
+    expect(lines[2]).toMatch(/^3\. issued corrective invoice [0-9a-f-]{36} \(total -11\.00\)/);
     expect(lines[3]).toMatch(/^4\. outstanding: [0-9a-f-]{36}=99\.00$/);
     expect(lines[4]).toMatch(/^5\. settled [0-9a-f-]{36} at 99\.00$/);
     expect(lines[5]).toBe("6. outstanding: (none)");
@@ -51,6 +52,35 @@ describe("settle-invoice-first against a real venue directory", () => {
     const ids = [lines[1], lines[3], lines[4]].map((l) => /[0-9a-f-]{36}/.exec(l!)![0]);
     expect(new Set(ids).size).toBe(1);
     expect(lines[0]).toContain(ids[0]!);
+  });
+
+  it("stores English names and receipt descriptions for the sale and correction", async () => {
+    const store = await openVenueDatabase(venueDir);
+    try {
+      const rows = await store.venue
+        .select({ name: saleLines.name, descriptions: saleLines.descriptions })
+        .from(saleLines)
+        .orderBy(saleLines.unitPrice);
+      expect(rows).toEqual([
+        { name: "Discount", descriptions: { "es-ES": "Discount" } },
+        { name: "Meal", descriptions: { "es-ES": "Meal" } },
+      ]);
+    } finally {
+      await store.close();
+    }
+  });
+
+  it("stores an English name for the correction's authorizer", async () => {
+    const store = await openVenueDatabase(venueDir);
+    try {
+      const rows = await store.venue
+        .select({ displayName: persons.displayName })
+        .from(persons)
+        .where(eq(persons.email, "supervisor@invoice-first.demo"));
+      expect(rows).toEqual([{ displayName: "Supervisor" }]);
+    } finally {
+      await store.close();
+    }
   });
 
   it("wrote both sales and both fiscal records into the directory the env named", async () => {

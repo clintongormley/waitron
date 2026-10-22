@@ -1,7 +1,3 @@
-// Walks the invoice-first + correction + settle loop against the real backend, then exits: issues a
-// deferred sale, corrects it with a rectificativa, settles at the net, printing what is outstanding
-// after each step.
-//
 // Prerequisites: the taxpayer row, the node, the standard and rectificative series must exist, and
 // the node's SIF be registered. The venue directory is resolved as the server resolves it
 // (`scripts/venue-dir.ts`). `WAITRON_ENV` is required: it stamps the unrecoverable `entorno` onto
@@ -73,7 +69,6 @@ export interface SettleInvoiceFirstArgs {
   rectificativeSeriesId: string;
 }
 
-/** Reports each step through `log`, so a test can assert the narration the script produces. */
 export async function settleInvoiceFirst(
   args: SettleInvoiceFirstArgs,
   env: NodeJS.ProcessEnv,
@@ -123,8 +118,8 @@ export async function settleInvoiceFirst(
       lines: [
         {
           lineNo: 1,
-          name: "Comida",
-          descriptions: { [LOCALE]: "Comida" },
+          name: "Meal",
+          descriptions: { [LOCALE]: "Meal" },
           quantity: "1",
           unitPrice: saleBase,
           vatRate: rate,
@@ -147,7 +142,7 @@ export async function settleInvoiceFirst(
       const [person] = await tx
         .insert(persons)
         .values({
-          displayName: "Supervisora",
+          displayName: "Supervisor",
           email: "supervisor@invoice-first.demo",
           pinHash: hashPin("1234"),
           role: "supervisor",
@@ -173,8 +168,8 @@ export async function settleInvoiceFirst(
       lines: [
         {
           lineNo: 1,
-          name: "Descuento",
-          descriptions: { [LOCALE]: "Descuento" },
+          name: "Discount",
+          descriptions: { [LOCALE]: "Discount" },
           quantity: "1",
           unitPrice: corrBase,
           vatRate: rate,
@@ -186,7 +181,7 @@ export async function settleInvoiceFirst(
     };
     const corr = await withTransaction(db, (tx) => recordCorrection(tx, backend, corrInput));
     log(
-      `3. issued rectificativa ${corr.saleId} (total ${corrTotal}), fiscal ${corr.fiscal.recordId}`,
+      `3. issued corrective invoice ${corr.saleId} (total ${corrTotal}), fiscal ${corr.fiscal.recordId}`,
     );
 
     const afterCorrection = await withTransaction(db, (tx) => listOutstandingSales(tx));

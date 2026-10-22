@@ -568,8 +568,6 @@ until A977).
   derives other geography values (A833 landed: setup and the demo start only for a country with a
   pack). English provided. The ~33 staff and kitchen names with no English (`menu.ts`) and «Menú del
   Día» in an English slot (`menu.ts:840`) are fixed there. After A918.
-- **A973 — point 6: the operator script.** `apps/server/scripts/settle-invoice-first.ts:126–177`
-  writes «Comida», «Descuento», «Supervisora» and accepts `WAITRON_ENV=production`; write English.
 - **A974 — Bucket E and F: comments, identifiers, file names.** The audit's tables list them
   (`apps/server`, `apps/dashboard`, `apps/till`, `packages/db` schema comments, `venue-service`,
   `catalogue`, `purchasing`, `packages/ui/demo/main.ts`, setup's receipt-language names
