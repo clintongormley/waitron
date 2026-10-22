@@ -48,6 +48,7 @@ import {
   waitronLook,
   type LookDraft,
 } from "../widgets/look-draft.js";
+import { copyName } from "../widgets/theme-names.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
 import "../widgets/hard-to-read-dialog.js";
 import "../widgets/theme-name-dialog.js";
@@ -68,6 +69,7 @@ import {
 const PRIMARY = "--wt-color-primary";
 
 type Editing = { id: string; name: string } | { id: null; from: "in-use" | "new" };
+type Target = "save" | "save-as-new";
 
 function chip(colour: string): TemplateResult {
   return html`<span class="chip" aria-hidden="true" style="background:${colour}"></span>`;
@@ -217,6 +219,7 @@ export class LookCard extends LitElement {
   #scope?: DraftScope<LookDraft>;
   #leave?: LeaveCoordinator;
   #generation = 0;
+  #target: Target = "save";
 
   constructor() {
     super();
@@ -451,10 +454,11 @@ export class LookCard extends LitElement {
       >
     </p>`;
   }
-  async #save(): Promise<void> {
+  async #save(target: Target): Promise<void> {
     const draft = this.draft;
     if (this.submitting || !draft || !this.#editing) return;
-    if (saveActionState(this.#scope).unchanged) return;
+    if (target === "save" && saveActionState(this.#scope).unchanged) return;
+    this.#target = target;
     this.submitted = true;
     this.refusedCode = "";
     this.actionError = "";
@@ -475,7 +479,7 @@ export class LookCard extends LitElement {
     const editing = this.#editing;
     this.asking = false;
     if (this.submitting || !draft || !editing) return;
-    if (editing.id === null) {
+    if (editing.id === null || this.#target === "save-as-new") {
       this.#askName(draft, editing);
       return;
     }
@@ -504,9 +508,10 @@ export class LookCard extends LitElement {
   #askName(draft: LookDraft, editing: Editing): void {
     const choices = normaliseChoices(draft.choices);
     const scope = this.#scope;
+    const asNew = editing.id !== null;
     this.#nameDialog()?.show({
-      kind: "first-save",
-      name: "",
+      kind: asNew ? "save-as-new" : "first-save",
+      name: asNew ? copyName(this.#name(editing)) : "",
       inUse: this.#inUse(editing),
       warningLines: deriveTheme(draft.choices).warnings.map((warning) =>
         saveDialogLine(warning, draft.choices),
@@ -537,7 +542,7 @@ export class LookCard extends LitElement {
       .open=${this.asking}
       .lines=${warnings.map((warning) => saveDialogLine(warning, draft.choices))}
       .canFix=${this.asking && canFixAll(WAITRON_DEFAULTS, draft.choices)}
-      .opener=${this.shadowRoot?.querySelector<HTMLElement>("[data-test=save]") ?? null}
+      .opener=${this.shadowRoot?.querySelector<HTMLElement>(`[data-test=${this.#target}]`) ?? null}
       @hard-to-read-back=${() => {
         this.asking = false;
       }}
@@ -559,7 +564,7 @@ export class LookCard extends LitElement {
       <form
         @submit=${(event: Event) => {
           event.preventDefault();
-          void this.#save();
+          void this.#save("save");
         }}
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
@@ -628,6 +633,18 @@ export class LookCard extends LitElement {
             @click=${() => this.#change(() => waitronLook(), true)}
             >${t("appearance.use_waitron")}</wt-button
           >
+          ${
+            editing.id === null
+              ? nothing
+              : html`<wt-button
+                  slot="secondary"
+                  data-test="save-as-new"
+                  variant="secondary"
+                  ?disabled=${busy}
+                  @click=${() => void this.#save("save-as-new")}
+                  >${t("appearance.save_as_new")}</wt-button
+                >`
+          }
           <wt-button
             slot="secondary"
             data-test="cancel"
@@ -641,7 +658,7 @@ export class LookCard extends LitElement {
             variant=${saveAction.variant}
             ?loading=${busy}
             ?disabled=${saveAction.unchanged || busy || badCode}
-            @click=${() => void this.#save()}
+            @click=${() => void this.#save("save")}
             >${t("action.save")}</wt-button
           >
         </wt-form-actions>

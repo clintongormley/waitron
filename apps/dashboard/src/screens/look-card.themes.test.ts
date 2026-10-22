@@ -590,3 +590,129 @@ describe("opening the editor from the Themes card", () => {
     expect(toggle(dialog).checked).toBe(false);
   });
 });
+
+describe("Save as new theme…", () => {
+  it("Save as new theme… is offered only for a stored theme, and never quiet", async () => {
+    setLocale("en-GB");
+    const { el } = await mount(luciaInUse);
+    el.edit({ id: "t-lucia" });
+    await el.updateComplete;
+    const saveAsNew = button(el, "save-as-new");
+    expect(saveAsNew).not.toBeNull();
+    expect(text(saveAsNew)).toBe("Save as new theme…");
+    expect(saveAsNew.slot).toBe("secondary");
+    expect(saveAsNew.nextElementSibling).toBe(button(el, "cancel"));
+    expect(saveAsNew.disabled).toBe(false);
+    expect(saveAsNew.variant).toBe("secondary");
+    expect(button(el, "save").disabled).toBe(true);
+
+    el.edit({ kind: "new" });
+    await el.updateComplete;
+    expect(heading(el)).toBe("New theme");
+    expect(button(el, "save-as-new")).toBeNull();
+
+    const waitron = await mount(waitronInUse);
+    await openWaitronEditor(waitron.el);
+    expect(isEditing(waitron.el)).toBe(true);
+    expect(button(waitron.el, "save-as-new")).toBeNull();
+  });
+
+  it("it names a copy of the edited theme, switch on for the theme in use", async () => {
+    setLocale("en-GB");
+    const { el, changes, createTheme, saveTheme, getVenueTheme } = await mount(luciaInUse);
+    el.edit({ id: "t-lucia" });
+    await el.updateComplete;
+    await userEvent.click(button(el, "save-as-new"));
+    const dialog = await nameDialog(el);
+    expect(nameInput(dialog).value).toBe("Bar Lucía (copy)");
+    expect(toggle(dialog).checked).toBe(true);
+    expect(nameSave(dialog).disabled).toBe(false);
+    await userEvent.click(nameSave(dialog));
+    await expect.poll(() => isEditing(el)).toBe(false);
+    expect(createTheme).toHaveBeenCalledTimes(1);
+    expect(createTheme).toHaveBeenCalledWith({
+      name: "Bar Lucía (copy)",
+      theme: normaliseChoices(LUCIA),
+      inUse: true,
+    });
+    expect(saveTheme).not.toHaveBeenCalled();
+    expect(changes).toEqual([
+      { kind: "created", theme: await createTheme.mock.results[0]!.value, inUse: true },
+    ]);
+    await expect.poll(() => getVenueTheme.mock.calls.length).toBe(1);
+    await settle(el);
+    expect(getVenueTheme).toHaveBeenCalledTimes(1);
+  });
+
+  it("switch off for a theme not in use", async () => {
+    const { el, createTheme, getVenueTheme } = await mount(luciaInUse);
+    el.edit({ id: "t-xmas" });
+    await el.updateComplete;
+    await userEvent.click(button(el, "save-as-new"));
+    const dialog = await nameDialog(el);
+    expect(nameInput(dialog).value).toBe("Christmas (copy)");
+    expect(toggle(dialog).checked).toBe(false);
+    await userEvent.click(nameSave(dialog));
+    await expect.poll(() => isEditing(el)).toBe(false);
+    expect(createTheme.mock.calls[0]![0]).toMatchObject({ name: "Christmas (copy)", inUse: false });
+    await settle(el);
+    expect(getVenueTheme).not.toHaveBeenCalled();
+  });
+
+  it("a warning asks Hard to read first", async () => {
+    setLocale("en-GB");
+    const { el, createTheme } = await mount(luciaInUse);
+    el.edit({ id: "t-lucia" });
+    await el.updateComplete;
+    await typeInCode(el, "#f2d300");
+    await userEvent.click(button(el, "save-as-new"));
+    await expect.poll(() => hardDialog(el).open).toBe(true);
+    expect(nameDialogOf(el).open).toBe(false);
+    await userEvent.click(hardButton(el, "save-anyway"));
+    const dialog = await nameDialog(el);
+    expect(nameInput(dialog).value).toBe("Bar Lucía (copy)");
+    expect(toggle(dialog).checked).toBe(true);
+    expect(nameWarnings(dialog)).toEqual([
+      "Brand colour: buttons are hard to see on light screens.",
+    ]);
+    await userEvent.click(nameSave(dialog));
+    await expect.poll(() => createTheme.mock.calls.length).toBe(1);
+    expect(createTheme.mock.calls[0]![0].theme).toEqual(
+      normaliseChoices({ ...LUCIA, brandColor: "#f2d300", brandFix: {} }),
+    );
+  });
+
+  it("a bad code blocks it like Save", async () => {
+    setLocale("en-GB");
+    const { el, createTheme } = await mount(luciaInUse);
+    el.edit({ id: "t-lucia" });
+    await el.updateComplete;
+    await typeInCode(el, "#12");
+    await userEvent.click(button(el, "save-as-new"));
+    await settle(el);
+    expect(nameDialogOf(el).open).toBe(false);
+    expect(hardDialog(el).open).toBe(false);
+    expect(codeField(el).error).toBe(t("appearance.bad_code"));
+    expect(createTheme).not.toHaveBeenCalled();
+  });
+
+  it("while a save is sent it is disabled", async () => {
+    const { el, saveTheme } = await mount(luciaInUse);
+    let finish: (view: ThemeView) => void = () => {};
+    saveTheme.mockImplementationOnce(
+      () =>
+        new Promise<ThemeView>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    el.edit({ id: "t-lucia" });
+    await el.updateComplete;
+    await square(el);
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    await el.updateComplete;
+    expect(button(el, "save-as-new").disabled).toBe(true);
+    finish(theme("t-lucia", "Bar Lucía", { ...LUCIA, corners: "square" }));
+    await expect.poll(() => isEditing(el)).toBe(false);
+  });
+});
