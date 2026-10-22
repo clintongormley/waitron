@@ -1012,7 +1012,11 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
    * Call n of the stub answers `answers[n-1]`: a string to print, or `{ out, status }`. Runs with
    * three tries and no delay unless `defaults` is set.
    */
-  function prepareCrossCheck(needs, answers, { defaults = false, holdGh = false } = {}) {
+  function prepareCrossCheck(
+    needs,
+    answers,
+    { defaults = false, holdGh = false, identity = {} } = {},
+  ) {
     const stateDir = mkdtempSync(join(root, "run-"));
     lastStateDir = stateDir;
     answers.forEach((answer, at) => {
@@ -1027,10 +1031,12 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
       REPO: "o/r",
       RUN_ID: "123",
       RUN_ATTEMPT: "2",
+      HEAD_SHA: "a".repeat(40),
       VERDICT_SCRIPT: ciJobsApiStep().script,
     };
     if (!defaults) Object.assign(env, { JOBS_API_TRIES: "3", JOBS_API_DELAY: "0" });
     if (holdGh) env.GH_STUB_HOLD = "1";
+    Object.assign(env, identity);
     if (needs !== undefined) env.NEEDS = typeof needs === "string" ? needs : JSON.stringify(needs);
     return { env, stateDir };
   }
@@ -1078,6 +1084,263 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
       .split("\n")
       .filter(Boolean);
 
+  const finishedJob = (name) => ({
+    ...apiJob(name, null, "in_progress"),
+    id: 456,
+    run_id: 123,
+    run_attempt: 2,
+    head_sha: "a".repeat(40),
+    steps: [
+      { name: "Set up job", number: 1, status: "completed", conclusion: "success" },
+      { name: "Run tests", number: 2, status: "completed", conclusion: "success" },
+      { name: "Post checkout", number: 5, status: "completed", conclusion: "skipped" },
+      { name: "Complete job", number: 6, status: "completed", conclusion: "success" },
+    ],
+  });
+
+  it.each(["lint", "test-heavy (2)", "image / smoke"])(
+    "accepts final needs success and complete exact-attempt steps for %s despite a delayed job status",
+    (name) => {
+      const id = name.split(/[ (/]/)[0];
+      const result = runCrossCheck(needsFor(id), [page([finishedJob(name)])]);
+      expect(result.status, result.output).toBe(0);
+      expect(result.calls).toBe(1);
+      expect(result.sleeps).toEqual([]);
+      expect(result.output).toContain(`${name}: success (final needs and completed steps`);
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
+  it.each(["failure", "cancelled", "unknown", null])(
+    "refuses needs result %s even when the API reports success",
+    (result) => {
+      const check = runCrossCheck({ lint: { result } }, [page([apiJob("lint", "success")])]);
+      expect(check.status, check.output).not.toBe(0);
+      expect(check.output).toContain("not succeeded or skipped: lint");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
+  it.each([
+    ["another run", { run_id: 124 }],
+    ["an earlier attempt", { run_attempt: 1 }],
+    ["another head", { head_sha: "b".repeat(40) }],
+    ["missing identity", { head_sha: undefined }],
+    ["a queued job", { status: "queued" }],
+    ["an unknown conclusion", { conclusion: "neutral" }],
+    ["a missing conclusion", { conclusion: undefined }],
+    ["an invalid job id", { id: 0 }],
+    ["no runner", { runner_id: 0 }],
+    ["missing steps", { steps: undefined }],
+    ["empty steps", { steps: [] }],
+  ])(
+    "refuses delayed success evidence with %s",
+    (_label, changes) => {
+      const result = runCrossCheck(needsFor("lint"), [
+        page([{ ...finishedJob("lint"), ...changes }]),
+      ]);
+      expect(result.status, result.output).not.toBe(0);
+      expect(result.output).toContain("not completed: lint");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
+  it.each([
+    [
+      "an unfinished step",
+      (steps) => {
+        steps[1].status = "in_progress";
+      },
+    ],
+    [
+      "a failed step",
+      (steps) => {
+        steps[1].conclusion = "failure";
+      },
+    ],
+    [
+      "an unknown step result",
+      (steps) => {
+        steps[1].conclusion = null;
+      },
+    ],
+    [
+      "a skipped setup",
+      (steps) => {
+        steps[0].conclusion = "skipped";
+      },
+    ],
+    [
+      "a skipped final step",
+      (steps) => {
+        steps.at(-1).conclusion = "skipped";
+      },
+    ],
+    [
+      "an unnamed step",
+      (steps) => {
+        steps[1].name = " ";
+      },
+    ],
+    [
+      "an invalid step number",
+      (steps) => {
+        steps[1].number = "2";
+      },
+    ],
+    [
+      "no setup",
+      (steps) => {
+        steps.shift();
+      },
+    ],
+    [
+      "a text number on the last step",
+      (steps) => {
+        steps.at(-1).number = "6";
+      },
+    ],
+    [
+      "a fractional step number",
+      (steps) => {
+        steps[1].number = 2.5;
+      },
+    ],
+    [
+      "a step after Complete job",
+      (steps) => {
+        steps.push({
+          name: "Post checkout",
+          number: 7,
+          status: "completed",
+          conclusion: "success",
+        });
+      },
+    ],
+    [
+      "no final step",
+      (steps) => {
+        steps.pop();
+      },
+    ],
+    [
+      "a duplicated final step",
+      (steps) => {
+        steps.push({ ...steps.at(-1), number: 7 });
+      },
+    ],
+    [
+      "out-of-order steps",
+      (steps) => {
+        steps[2].number = 1;
+      },
+    ],
+  ])(
+    "refuses completed-step evidence with %s",
+    (_label, changeSteps) => {
+      const entry = finishedJob("lint");
+      changeSteps(entry.steps);
+      const result = runCrossCheck(needsFor("lint"), [page([entry])]);
+      expect(result.status, result.output).not.toBe(0);
+      expect(result.output).toContain("not completed: lint");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
+  it.each([
+    { RUN_ID: "" },
+    { RUN_ID: "123.0" },
+    { RUN_ATTEMPT: "" },
+    { RUN_ATTEMPT: "2.0" },
+    { HEAD_SHA: "" },
+    { HEAD_SHA: "not-a-sha" },
+  ])(
+    "refuses delayed evidence without a valid workflow identity %j",
+    (identity) => {
+      const result = runCrossCheck(needsFor("lint"), [page([finishedJob("lint")])], { identity });
+      expect(result.status, result.output).not.toBe(0);
+      expect(result.output).toContain("not completed: lint");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "does not substitute steps for skipped needs or explicit final API failures",
+    () => {
+      const skipped = runCrossCheck({ lint: { result: "skipped" } }, [page([finishedJob("lint")])]);
+      expect(skipped.status, skipped.output).not.toBe(0);
+      expect(skipped.output).toContain("not completed: lint");
+      const failed = runCrossCheck(needsFor("lint"), [
+        page([{ ...finishedJob("lint"), status: "completed", conclusion: "failure" }]),
+      ]);
+      expect(failed.status, failed.output).not.toBe(0);
+      expect(failed.output).toContain("not succeeded or skipped: lint");
+    },
+    TWO_RUNS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "refuses two physical shard names sharing a job id",
+    () => {
+      const result = runCrossCheck(needsFor("test-heavy"), [
+        page([finishedJob("test-heavy (1)"), finishedJob("test-heavy (2)")]),
+      ]);
+      expect(result.status, result.output).not.toBe(0);
+      expect(result.output).toContain("duplicate job evidence");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "refuses a malformed commit id even when the workflow and record agree",
+    () => {
+      const result = runCrossCheck(
+        needsFor("lint"),
+        [page([{ ...finishedJob("lint"), head_sha: "not-a-sha" }])],
+        { identity: { HEAD_SHA: "not-a-sha" } },
+      );
+      expect(result.status, result.output).not.toBe(0);
+      expect(result.output).toContain("not completed: lint");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "rereads duplicate pages and accepts only a later unambiguous answer",
+    () => {
+      const entry = finishedJob("lint");
+      const result = runCrossCheck(needsFor("lint"), [page([entry, entry]), page([entry])]);
+      expect(result.status, result.output).toBe(0);
+      expect(result.calls).toBe(2);
+      expect(result.output).toContain("Try 1 of 3: duplicate job evidence");
+      expect(result.output).toContain("lint: success (final needs and completed steps");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "keeps checking every matrix shard and refuses duplicate evidence",
+    () => {
+      const one = finishedJob("test-heavy (1)");
+      const two = { ...finishedJob("test-heavy (2)"), id: 457 };
+      const needs = needsFor("test-heavy");
+      const failed = runCrossCheck(needs, [page([one, apiJob(two.name, "failure")])]);
+      expect(failed.status, failed.output).not.toBe(0);
+      expect(failed.output).toContain("not succeeded or skipped: test-heavy (2)");
+      const missing = runCrossCheck(needs, [page([one], 2)]);
+      expect(missing.status, missing.output).not.toBe(0);
+      expect(missing.output).toContain("read 1 of 2 jobs");
+      const duplicate = runCrossCheck(needs, [page([one, { ...two, name: one.name }])]);
+      expect(duplicate.status, duplicate.output).not.toBe(0);
+      expect(duplicate.output).toContain("duplicate job evidence");
+      const passed = runCrossCheck(needs, [page([one, two])]);
+      expect(passed.status, passed.output).toBe(0);
+      expect(passed.output).toContain("test-heavy (1): success (final needs and completed steps");
+      expect(passed.output).toContain("test-heavy (2): success (final needs and completed steps");
+    },
+    FOUR_RUNS_TEST_TIMEOUT_MS,
+  );
+
   it("is wired to always run, read this run's jobs with a token allowed to, allow twelve minutes inside a fifteen-minute job, and keep its default tries", () => {
     const { keys, step } = ciJobsApiStep();
     expect(keys).toContain("        if: always()");
@@ -1088,6 +1351,7 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
       "          REPO: ${{ github.repository }}",
       "          RUN_ID: ${{ github.run_id }}",
       "          RUN_ATTEMPT: ${{ github.run_attempt }}",
+      "          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}",
       "          NEEDS: ${{ toJSON(needs) }}",
     ]) {
       expect(step).toContain(line);
@@ -1162,6 +1426,28 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
     expect(needs.length).toBeGreaterThan(0);
     const named = needs.filter((id) => job(id).body.some((line) => /^ {4}name:/.test(line)));
     expect(named).toEqual([]);
+  });
+
+  it("never masks a needed job's failure with job-level continue-on-error", () => {
+    const masked = [];
+    const visited = new Set();
+    const visit = (file, neededIds) => {
+      if (visited.has(file)) return;
+      visited.add(file);
+      const blocks = jobBlocks(readFileSync(join(repoRoot, ".github/workflows", file), "utf8"));
+      expect(blocks.length, file).toBeGreaterThan(0);
+      for (const block of blocks) {
+        if (neededIds && !neededIds.includes(block.id)) continue;
+        if (block.lines.some((line) => /^ {4}continue-on-error:/.test(line)))
+          masked.push(`${file}:${block.id}`);
+        const called = block.lines
+          .map((line) => /^ {4}uses: \.\/\.github\/workflows\/(\S+)\s*$/.exec(line)?.[1])
+          .find(Boolean);
+        if (called) visit(called);
+      }
+    };
+    visit("ci.yml", needsOf(job("ci").body));
+    expect(masked).toEqual([]);
   });
 
   // A kill ends the script's shell, not the `$(gh …)` subshell it is waiting on, so a killed run
