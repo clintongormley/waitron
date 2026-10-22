@@ -2637,55 +2637,13 @@ that refuses the stamp or the drain; and, on the real small disk in
 `apps/server/src/start-full-disk.e2e.test.ts`, "the box health read answers on a full disk with a
 change waiting, passive and not", "a manager's ordinary alert read answers on a full disk with a
 change waiting", "free-space deletion frees a rotated log on a full disk, and the stop lifts" and
-"a supervisor is refused on a full disk".
-
-**What free-space deletion deletes.** Only what the box can make again: in
-`<stateDir>/backup-staging`, a staged dump (`STAGED_DUMP`, also its `.partial`) and a real folder
-whose name starts `backup-encrypt-`; in `<logDir>`, rotated logs `waitron.log.<n>` with `n ≥ 2`,
-so the current log and the newest rotated one stay; in `<logDir>/crash-reports`, a
-`holder-frozen-*.json` older than seven days (`CRASH_REPORT_KEEP_MS`). That is the start's forced
-clean-up set (`freeSpaceAtStart`, `apps/server/src/start-space.ts`, whose name rules it reuses),
-minus symbolic links: a folder or an entry that is a link is skipped, because `rm` would remove only
-the link and its size is not space freed. Every path is built with `join` and the path `lstat`
-judges is the path `rm` removes: a trailing separator makes `lstat` describe a link's target, and
-`rm` of `link/` deleted the target's files (the slice plan's M4). The page's figure is the same set
-summed without deleting (`surveyLeftovers`); a press runs `deleteLeftovers` through
-`createSpaceFreer`, one at a time, and empties the disk-usage walk's cache afterwards
-(`ttl-cache.ts`'s `clear()`), so the next read walks again. All in
-`apps/server/src/free-space-now.ts`; the refusing cases are under "what the deletion must never
-delete" in `free-space-now.test.ts`.
-
-**Backup staging is touched only inside the staging turn** (`apps/server/src/backup-staging-turn.ts`).
-A backup run holds the turn from its first step to the end of its own clean-up (`runBackup`, taken
-by the sweep's `tick` in `backup-sweep.ts`); a free-space deletion takes it through `ifNoBackup`,
-which answers `{ ran: false }` at once, and the deletion skips staging and says
-`backupRunning: true`, while a run holds the turn or waits for it — a deletion never waits for a
-run. A page's survey takes no turn: it measures staging best-effort and leaves it out while a run
-holds the turn, so a refresh can never keep a press out. Why: deleting a file a process holds open
-frees nothing until the file is closed — on the small disk, an unlinked 1 MiB file held open for
-reading left free space at `0` until `close`, then `1048576` (the slice plan's M3) — so deleting a
-dump a run reads frees nothing until the run closes it, and can fail the run. The start's clean-up
-(`freeSpaceAtStart`) takes no turn: it runs before the backup supervisor exists. Cases:
-`apps/server/src/backup-staging-turn.test.ts`, and the turn shared with the backups in
-`free-space-now.test.ts` and `boot.box-health.test.ts`. Guard: `scripts/backup-staging-touchers.test.ts`,
-which allows exactly `start-space.ts`, `backup-supervisor.ts` and `free-space-now.ts` to name
-`BACKUP_STAGING_DIR` or `"backup-staging"`.
-`apps/server/scripts/cloud-backup-fixture.ts`, a development fixture, calls `runOnce` outside any
-turn on its own scratch root; it is outside the guard's `apps/*/src` scan.
-
-**Weaker than the rule.**
-
-- The refusing cases name the files they plant (the venue's files, the state folder's, look-alike
-  names, links, configured backup folders), not every file a box could hold.
-- The staging turn is in-process only. Another process writing backup staging is not kept out by
-  it; the only other product writer found is the start, which a held venue folder stops (A978).
-  Found by `grep -rn "BACKUP_STAGING_DIR\|stagingDir"` over `apps` and `packages`, not run.
-- The guard reads text: a staging path built another way escapes it (`backup-sweep.ts` receives
-  the folder as `stagingDir` and names neither), and it never checks that a listed file takes the
-  turn. The sweep's `stagingTurn` is optional; boot passes it.
-- `start-space.ts` still builds the log folder's paths without the `resolve()` that
-  `free-space-now.ts` gained, so a log folder configured as a link with a trailing separator could
-  let the start's clean-up reach the link's target. Read, not run.
+"a supervisor is refused on a full disk". The fallback's own refusals (a supervisor, an ended,
+expired or suspended session) are pinned by the "on a full disk" half of the `describe.each` in
+`box-health-api.test.ts`, through a stand-in that refuses every write turn. On the real disk a
+supervisor is refused before the fallback: replacing the fallback with a rethrow left "a supervisor
+is refused on a full disk" passing, while the manager's case failed 507 (Task 15's review, macOS
+`hdiutil` image). The refusal seems to come at commit, after the permission check has already
+thrown (inferred, not isolated).
 
 **Still refused.**
 
@@ -2705,6 +2663,61 @@ turn on its own scratch root; it is outside the guard's `apps/*/src` scan.
   life sees the device go quiet.
 - A full disk the engine reports as anything but result code 13 is not `storage.disk_full`
   (`diskFullIn`, `packages/shared/src/engine-failure.ts`), so neither change catches it.
+
+#### Backup staging is touched only inside the staging turn
+
+The turn is `apps/server/src/backup-staging-turn.ts`. A backup run holds the turn from its first
+step to the end of its own clean-up (`runBackup`, taken by the sweep's `tick` in `backup-sweep.ts`); a free-space deletion takes it through `ifNoBackup`,
+which answers `{ ran: false }` at once, and the deletion skips staging and says
+`backupRunning: true`, while a run holds the turn or waits for it — a deletion never waits for a
+run. A page's survey takes no turn: it measures staging best-effort and leaves it out while a run
+holds the turn, so a refresh can never keep a press out. Why: deleting a file a process holds open
+frees nothing until the file is closed — on the small disk, an unlinked 1 MiB file held open for
+reading left free space at `0` until `close`, then `1048576` (the slice plan's M3) — so deleting a
+dump a run reads frees nothing until the run closes it. It can also fail the run: `runOnce`
+(`backup-sweep.ts`) archives the dump to a path in staging and then reads it back by that path to
+pack the encrypted archive (read, not run). The start's clean-up (`freeSpaceAtStart`) takes no
+turn: it runs while no backup supervisor is running in this process, before boot starts one or,
+for the forced clean-up after a failed start (`node-entry.ts`), after the failed boot's unwind has
+stopped it — stopping the supervisor aborts a run under way and waits for it to settle. Cases:
+`apps/server/src/backup-staging-turn.test.ts`, and the turn shared with the backups in
+`free-space-now.test.ts` and `boot.box-health.test.ts`. Guard: `scripts/backup-staging-touchers.test.ts`,
+which allows exactly `start-space.ts`, `backup-supervisor.ts` and `free-space-now.ts` to name
+`BACKUP_STAGING_DIR` or `"backup-staging"`.
+`apps/server/scripts/cloud-backup-fixture.ts`, a development fixture, calls `runOnce` outside any
+turn on its own scratch root; it is outside the guard's `apps/*/src` scan.
+
+**What free-space deletion deletes.** Only what the box can make again: in
+`<stateDir>/backup-staging`, a staged dump (`STAGED_DUMP`, also its `.partial`) and a real folder
+whose name starts `backup-encrypt-`; in `<logDir>`, rotated logs `waitron.log.<n>` with `n ≥ 2`,
+so the current log and the newest rotated one stay; in `<logDir>/crash-reports`, a
+`holder-frozen-*.json` older than seven days (`CRASH_REPORT_KEEP_MS`). That is the start's forced
+clean-up set (`freeSpaceAtStart`, `apps/server/src/start-space.ts`, whose name rules it reuses),
+minus symbolic links: a folder or an entry that is a link is skipped, because `rm` would remove only
+the link and its size is not space freed. The path `lstat` judges is the path `rm` removes, and the
+log folder is passed through `resolve()` first, which drops a trailing separator: a trailing
+separator makes `lstat` describe a link's target, and `rm` of `link/` deleted the target's
+files (the slice plan's M4). The staging folder is `join(stateDir, "backup-staging")`, which never
+ends in a separator. The page's figure is the same set
+summed without deleting (`surveyLeftovers`); a press runs `deleteLeftovers` through
+`createSpaceFreer`, one at a time, and empties the disk-usage walk's cache afterwards
+(`ttl-cache.ts`'s `clear()`), so the next read walks again. All in
+`apps/server/src/free-space-now.ts`; the refusing cases are under "what the deletion must never
+delete" in `free-space-now.test.ts`.
+
+**Weaker than the rule.**
+
+- The refusing cases name the files they plant (the venue's files, the state folder's, look-alike
+  names, links, configured backup folders), not every file a box could hold.
+- The staging turn is in-process only. Another process writing backup staging is not kept out by
+  it; the only other product writer found is the start, which a held venue folder stops (A978).
+  Found by `grep -rn "BACKUP_STAGING_DIR\|stagingDir"` over `apps` and `packages`, not run.
+- The guard reads text: a staging path built another way escapes it (`backup-sweep.ts` receives
+  the folder as `stagingDir` and names neither), and it never checks that a listed file takes the
+  turn. The sweep's `stagingTurn` is optional; boot passes it.
+- `start-space.ts` still builds the log folder's paths without the `resolve()` that
+  `free-space-now.ts` gained, so a log folder configured as a link with a trailing separator could
+  let the start's clean-up reach the link's target. Read, not run.
 
 ### A full disk is not one error code
 

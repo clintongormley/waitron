@@ -480,7 +480,8 @@ A987's design does not change the route
   start never deletes them while a running server holds the venue folder.)" Built in
   `freeSpaceAtStart` (`apps/server/src/start-space.ts`), which keeps them while another
   process holds the venue folder's lock. The limits that remain: a cut-off run's copy stays until
-  the next start; where the lock cannot be taken for another reason (measured on a full disk with
+  the next start, or a Free press on the Box status page while no backup run holds or waits for
+  the staging turn (A798-B slice 7); where the lock cannot be taken for another reason (measured on a full disk with
   no other holder), the holder file's heartbeat decides, so a holder that died less than 30 s
   before keeps it until a later start (`docs/developers/conventions-data.md`, "Every start takes
   the venue lock"); a box reset also deletes it (`wipe_box`, `deploy/waitron.sh`). A box whose first
@@ -822,15 +823,15 @@ written.
 
 ## Slice 7b: Reintentar ahora, and the Hacienda row's last accepted record
 
-Left open by A798-B slice 7 (#…). The page's Hacienda row reads the staff notices and the bell
-(slice 7 decision 1): it shows the unsent count (`fiscal.records_unsent`) and the bell's submission
-alerts, and slice 7 added no seat to the module contract. 7b adds the Veri\*Factu module's own
-route for Reintentar ahora — which changes when records reach AEAT, so it is parked for the owner —
+Left open by A798-B slice 7. The page's Hacienda row reads the staff notices and the bell
+(slice 7 decision 1): it shows the unsent count (`fiscal.records_unsent`) and the bell's
+tax-agency alerts (every `fiscal`-area alert but the clock's), and slice 7 added no seat to the
+module contract. 7b adds the Veri\*Factu module's own route for Reintentar ahora — which changes when records reach AEAT, so it is parked for the owner —
 and, with it, the last accepted record's time, as the module's own row on the page.
 
 ## On a box with card payments off, the card-reader battery check may raise alert.source_unavailable on every bell read
 
-Left open by A798-B slice 7 (#…). `batteryAlertSource` is registered in `bootServer`'s alert
+Left open by A798-B slice 7. `batteryAlertSource` is registered in `bootServer`'s alert
 sources whatever the module (`apps/server/src/boot.ts`), and reads `card_readers`, which does not
 exist when the payments module is off (A798-B slice 7 plan, M9: `select … from card_readers` threw
 `no such table` with the payments set left out); the registry turns a failing source into that

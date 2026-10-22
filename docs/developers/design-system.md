@@ -2735,10 +2735,12 @@ and the staffing grid's block editor in the A761 entry):
   translated, and keeps its own variant while its own press is being sent.
   A841 slice 5 brought the Look card's Use Waitron's look under it: drawn `secondary` throughout,
   and disabled while the draft already is Waitron's look or a save is under way.
-  A798-B slice 7 brought the Box status page's Free ("Liberar") under it: drawn `secondary` and
-  disabled while the box's read has not answered, while it has under 500,000 bytes to free (it
-  then reads "Nothing to free"), on a mirror or a fenced node, and after a press until the box is
-  read again; `primary` once it can act, keeping `primary` while its own deletion is being sent.
+  A798-B slice 7 brought the Box status page's Free ("Liberar") under it. It is not drawn until
+  the box's read has answered (the page draws no rows until then, nor until the bell's read has
+  answered or failed); once drawn, it is `secondary` and disabled while the box has under 500,000
+  bytes to free (it then reads "Nothing to free"), on a mirror or a fenced node, and after a press
+  until the box is read again; `primary` once it can act, keeping `primary` while its own deletion
+  is being sent.
   Not covered: a button disabled only while a request is being sent, an action blocked by its own
   field checks and the sign-in screens. Nothing guards it across screens.
 
@@ -5343,7 +5345,8 @@ alert list, and holds no staged input.
   can. What fills the disk (database, backups on the box, logs, the rest of the disk) is the Disk
   space row's detail.
 - **Free.** On the Disk space row, "Free {size}" with the figure the box would free, and a help-mode
-  "?" that opens the guide. Its states follow the button rule (Forms, above): quiet and disabled
+  "?" that opens the guide. It is not drawn until the box's read has answered (the page draws no
+  rows until then, nor until the bell's read has answered or failed). Its states follow the button rule (Forms, above): quiet and disabled
   under 500,000 bytes ("Nothing to free"), on a mirror or a fenced node (with "This box only keeps
   a read-only copy, so it can't free space here." under the row), and after a press until the box is
   read again; `primary` with `loading` while its own deletion is sent. No confirmation dialog:
