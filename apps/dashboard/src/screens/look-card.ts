@@ -537,6 +537,7 @@ export class LookCard extends LitElement {
       warningLines: deriveTheme(draft.choices).warnings.map((warning) =>
         saveDialogLine(warning, draft.choices),
       ),
+      opener: this.#targetButton(),
       submit: async ({ name, inUse }) => {
         const generation = this.#generation;
         this.submitting = true;
@@ -552,6 +553,9 @@ export class LookCard extends LitElement {
       },
     });
   }
+  #targetButton(): HTMLElement | null {
+    return this.shadowRoot?.querySelector<HTMLElement>(`[data-test=${this.#target}]`) ?? null;
+  }
   async #focusInvalid(): Promise<void> {
     await this.updateComplete;
     const form = this.shadowRoot!.querySelector("form");
@@ -563,7 +567,7 @@ export class LookCard extends LitElement {
       .open=${this.asking}
       .lines=${warnings.map((warning) => saveDialogLine(warning, draft.choices))}
       .canFix=${this.asking && canFixAll(WAITRON_DEFAULTS, draft.choices)}
-      .opener=${this.shadowRoot?.querySelector<HTMLElement>(`[data-test=${this.#target}]`) ?? null}
+      .opener=${this.#targetButton()}
       @hard-to-read-back=${() => {
         this.asking = false;
       }}

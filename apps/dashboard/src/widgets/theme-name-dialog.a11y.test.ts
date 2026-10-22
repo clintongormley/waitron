@@ -13,15 +13,22 @@ afterEach(() => {
 type State = "copy" | "rename" | "first-save-empty" | "taken" | "warning";
 
 const requests: Record<State, Omit<ThemeNameRequest, "submit">> = {
-  copy: { kind: "copy", name: "Christmas", inUse: false, warningLines: [] },
-  rename: { kind: "rename", name: "Christmas", inUse: false, warningLines: [] },
-  "first-save-empty": { kind: "first-save", name: "", inUse: false, warningLines: [] },
-  taken: { kind: "copy", name: "Christmas", inUse: false, warningLines: [] },
+  copy: { kind: "copy", name: "Christmas", inUse: false, warningLines: [], opener: null },
+  rename: { kind: "rename", name: "Christmas", inUse: false, warningLines: [], opener: null },
+  "first-save-empty": {
+    kind: "first-save",
+    name: "",
+    inUse: false,
+    warningLines: [],
+    opener: null,
+  },
+  taken: { kind: "copy", name: "Christmas", inUse: false, warningLines: [], opener: null },
   warning: {
     kind: "save-as-new",
     name: "Christmas",
     inUse: true,
     warningLines: ["Brand colour: buttons are hard to see on dark screens."],
+    opener: null,
   },
 };
 

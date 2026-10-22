@@ -169,6 +169,7 @@ export class ThemesCard extends LitElement {
   @state() private switchError = "";
   @state() private deleting: { id: string; name: string } | null = null;
   @state() private deleteError = "";
+  #opener: HTMLElement | null = null;
   /** Waits a frame: the new columns change the card's height, and a change made inside the
    * callback makes Chromium report "ResizeObserver loop completed with undelivered notifications". */
   readonly #resize = new ResizeObserver(([entry]) => {
@@ -255,13 +256,23 @@ export class ThemesCard extends LitElement {
     return columns;
   }
 
-  #item(row: Row, kind: string, label: string, onClick: () => void): TemplateResult {
+  #item(
+    row: Row,
+    kind: string,
+    label: string,
+    onClick: (menu: HTMLElement | null) => void,
+  ): TemplateResult {
     return html`<wt-button
       align="start"
       data-test=${`${kind}-${row.key}`}
       variant=${kind === "delete" ? "danger" : "ghost"}
       ?disabled=${this.submitting}
-      @click=${onClick}
+      @click=${(event: Event) =>
+        onClick(
+          (event.currentTarget as HTMLElement)
+            .closest("wt-row-actions")!
+            .shadowRoot!.querySelector<HTMLElement>("button"),
+        )}
       >${label}</wt-button
     >`;
   }
@@ -269,18 +280,19 @@ export class ThemesCard extends LitElement {
   #menu(row: Row): TemplateResult {
     const view = row.view;
     return html`<wt-row-actions label=${`${t("appearance.theme_actions")}: ${row.name}`}>
-      ${row.inUse ? nothing : this.#item(row, "use", t("appearance.use_everywhere"), () => this.#askSwitch(row))}
+      ${row.inUse ? nothing : this.#item(row, "use", t("appearance.use_everywhere"), (menu) => this.#askSwitch(row, menu))}
       ${
         view === null
           ? nothing
           : html`${this.#item(row, "edit", t("action.edit"), () => this.#edit({ id: view.id }))}
-            ${this.#item(row, "rename", t("appearance.rename"), () => this.#rename(view))}`
+            ${this.#item(row, "rename", t("appearance.rename"), (menu) => this.#rename(view, menu))}`
       }
-      ${this.#item(row, "copy", t("appearance.make_copy"), () => this.#copy(row))}
+      ${this.#item(row, "copy", t("appearance.make_copy"), (menu) => this.#copy(row, menu))}
       ${
         view === null || view.id === this.editingId
           ? nothing
-          : this.#item(row, "delete", t("action.delete"), () => {
+          : this.#item(row, "delete", t("action.delete"), (menu) => {
+              this.#opener = menu;
               this.deleteError = "";
               this.deleting = { id: view.id, name: view.name };
             })
@@ -318,12 +330,13 @@ export class ThemesCard extends LitElement {
     this.#nameDialog()?.show(request);
   }
 
-  #rename(view: ThemeView): void {
+  #rename(view: ThemeView, opener: HTMLElement | null): void {
     this.#ask({
       kind: "rename",
       name: view.name,
       inUse: false,
       warningLines: [],
+      opener,
       submit: async ({ name }) => {
         const renamed = await this.#write(() => this.api.renameTheme(view.id, name));
         this.#changed({ kind: "renamed", theme: renamed });
@@ -331,7 +344,7 @@ export class ThemesCard extends LitElement {
     });
   }
 
-  #copy(row: Row): void {
+  #copy(row: Row, opener: HTMLElement | null): void {
     const choices = row.view?.choices ?? null;
     this.#ask({
       kind: "copy",
@@ -341,6 +354,7 @@ export class ThemesCard extends LitElement {
         choices === null
           ? []
           : row.view!.warnings.map((warning) => saveDialogLine(warning, choices)),
+      opener,
       submit: async ({ name, inUse }) => {
         const created = await this.#write(() =>
           this.api.createTheme({ name, theme: choices ?? WAITRON_CHOICES, inUse }),
@@ -351,8 +365,9 @@ export class ThemesCard extends LitElement {
     });
   }
 
-  #askSwitch(row: Row): void {
+  #askSwitch(row: Row, opener: HTMLElement | null): void {
     const choices = row.view?.choices ?? null;
+    this.#opener = opener;
     this.switchError = "";
     this.switching = {
       id: row.view?.id ?? null,
@@ -384,6 +399,8 @@ export class ThemesCard extends LitElement {
     this.deleteError = "";
     try {
       const { inUse } = await this.#write(() => this.api.deleteTheme(id));
+      // The row menu that opened the dialog goes with the theme.
+      this.#opener = this.renderRoot.querySelector<HTMLElement>("[data-test=new-theme]");
       if (this.deleting === target) this.deleting = null;
       this.#changed({ kind: "deleted", id, inUse });
       if (inUse === null) repaintVenueTheme(this.api);
@@ -402,6 +419,7 @@ export class ThemesCard extends LitElement {
         .lines=${switching?.lines ?? []}
         .busy=${this.submitting}
         .error=${this.switchError}
+        .opener=${this.#opener}
         @theme-switch-confirm=${(event: Event) => {
           event.stopPropagation();
           void this.#switch();
@@ -417,6 +435,7 @@ export class ThemesCard extends LitElement {
         .submitting=${this.submitting}
         .actionError=${this.deleteError}
         .copy=${themeDeleteCopy()}
+        .opener=${this.#opener}
         @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) => {
           event.stopPropagation();
           void this.#delete(event.detail.id);

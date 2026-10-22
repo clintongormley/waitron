@@ -28,6 +28,7 @@ export interface ThemeNameRequest {
   /** Ignored for "rename", which shows no switch. */
   readonly inUse: boolean;
   readonly warningLines: readonly string[];
+  readonly opener: HTMLElement | null;
   /** Throws the request's error. */
   readonly submit: (input: { name: string; inUse: boolean }) => Promise<void>;
 }
@@ -70,6 +71,8 @@ export class ThemeNameDialog extends LitElement {
   /** A refusal's sentence for the field, kept until the field changes or Save is pressed again. */
   @state() private refusal = "";
   @state() private bottom = "";
+  /** Kept after closing: the close reaches `wt-dialog` after the request is cleared. */
+  @state() private opener: HTMLElement | null = null;
 
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
@@ -80,6 +83,7 @@ export class ThemeNameDialog extends LitElement {
     this.#opening += 1;
     const inUse = request.kind === "rename" ? false : request.inUse;
     this.request = request;
+    this.opener = request.opener;
     this.name = request.name;
     this.inUse = inUse;
     this.busy = false;
@@ -258,6 +262,7 @@ export class ThemeNameDialog extends LitElement {
       data-test="name-dialog"
       heading=${t("appearance.name_heading")}
       .open=${request !== null}
+      .opener=${this.opener}
       .dismissible=${!this.busy}
       .beforeClose=${this.#beforeClose}
       @wt-close=${(event: Event) => {

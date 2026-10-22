@@ -601,3 +601,112 @@ describe("dashboard-themes-card actions", () => {
     expect(createTheme).not.toHaveBeenCalled();
   });
 });
+
+describe("focus goes back to what opened each dialog", () => {
+  function focused(): Element | null {
+    let at = document.activeElement;
+    while (at?.shadowRoot?.activeElement) at = at.shadowRoot.activeElement;
+    return at;
+  }
+  const trigger = (el: Card, key: string) => menu(el, key).shadowRoot!.querySelector("button")!;
+  const where = () => String(focused()?.outerHTML.slice(0, 80));
+
+  /** The page hands each change back as a new list, as the Appearance screen does. */
+  function follow(el: Card): void {
+    el.addEventListener("themes-changed", (event) => {
+      const change = (event as CustomEvent<ThemesChanged>).detail;
+      const list = el.list!;
+      if (change.kind === "renamed") {
+        el.list = {
+          ...list,
+          themes: list.themes.map((view) => (view.id === change.theme.id ? change.theme : view)),
+        };
+      } else if (change.kind === "created") {
+        el.list = { ...list, themes: [...list.themes, change.theme] };
+      } else if (change.kind === "deleted") {
+        el.list = {
+          themes: list.themes.filter((view) => view.id !== change.id),
+          inUse: change.inUse,
+        };
+      } else if (change.kind === "switched") {
+        el.list = { ...list, inUse: change.inUse };
+      }
+    });
+  }
+
+  it("Rename's dialog hands focus back to the row's menu, after Back and after a save", async () => {
+    const { el } = await mount(four);
+    follow(el);
+    await choose(el, "t-xmas", "rename");
+    let dialog = await nameDialog(el);
+    expect(dialog.opener).toBe(trigger(el, "t-xmas"));
+    let closed = dialogClosed(dialog);
+    await userEvent.click(dialog.querySelector<WtButton>("wt-button[data-test=name-back]")!);
+    await closed;
+    await expect.poll(focused, { message: where() }).toBe(trigger(el, "t-xmas"));
+
+    await choose(el, "t-xmas", "rename");
+    dialog = await nameDialog(el);
+    await type(el, dialog, "Holiday");
+    closed = dialogClosed(dialog);
+    await userEvent.click(save(dialog));
+    await closed;
+    await settle(el);
+    await expect.poll(focused, { message: where() }).toBe(trigger(el, "t-xmas"));
+  });
+
+  it("Make a copy's dialog hands focus back to the row's menu", async () => {
+    const { el } = await mount(four);
+    follow(el);
+    await choose(el, "t-xmas", "copy");
+    const dialog = await nameDialog(el);
+    expect(dialog.opener).toBe(trigger(el, "t-xmas"));
+    const closed = dialogClosed(dialog);
+    await userEvent.click(save(dialog));
+    await closed;
+    await settle(el);
+    await expect.poll(focused, { message: where() }).toBe(trigger(el, "t-xmas"));
+  });
+
+  it("the switch dialog hands focus back to the row's menu, after Back and after a switch", async () => {
+    const { el } = await mount(four);
+    follow(el);
+    await choose(el, "t-xmas", "use");
+    let dialog = await switchDialog(el);
+    expect(switchHost(el)!.opener).toBe(trigger(el, "t-xmas"));
+    let closed = dialogClosed(dialog);
+    await userEvent.click(switchButton(dialog, "back"));
+    await closed;
+    await expect.poll(focused, { message: where() }).toBe(trigger(el, "t-xmas"));
+
+    await choose(el, "t-xmas", "use");
+    dialog = await switchDialog(el);
+    closed = dialogClosed(dialog);
+    await userEvent.click(switchButton(dialog, "use"));
+    await closed;
+    await settle(el);
+    await expect.poll(focused, { message: where() }).toBe(trigger(el, "t-xmas"));
+  });
+
+  it("the delete dialog hands focus back to the row's menu, and to Add theme once the row is gone", async () => {
+    const { el } = await mount(four);
+    follow(el);
+    await choose(el, "t-xmas", "delete");
+    let dialog = await deleteDialog(el);
+    expect(dialog.opener).toBe(trigger(el, "t-xmas"));
+    let closed = dialogClosed(dialog.shadowRoot!.querySelector("wt-modal")!);
+    await userEvent.click(dialog.shadowRoot!.querySelector<WtButton>("[data-test=delete-cancel]")!);
+    await closed;
+    await expect.poll(focused, { message: where() }).toBe(trigger(el, "t-xmas"));
+
+    await choose(el, "t-xmas", "delete");
+    dialog = await deleteDialog(el);
+    closed = dialogClosed(dialog.shadowRoot!.querySelector("wt-modal")!);
+    await userEvent.click(confirmDelete(dialog));
+    await closed;
+    await settle(el);
+    const add = el.shadowRoot!.querySelector("[data-test=new-theme]")!;
+    expect(dialog.opener).toBe(add);
+    await expect.poll(focused, { message: where() }).toBe(add.shadowRoot!.querySelector("button"));
+  });
+});

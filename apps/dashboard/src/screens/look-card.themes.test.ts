@@ -662,6 +662,41 @@ describe("Save as new theme…", () => {
     expect(nameInput(dialog).value).toBe("Autumn (copy)");
   });
 
+  it("the name dialog hands focus back to the button that asked for it, Hard to read or not", async () => {
+    const focused = () => {
+      let at = document.activeElement;
+      while (at?.shadowRoot?.activeElement) at = at.shadowRoot.activeElement;
+      return at;
+    };
+    const inner = (name: string) => button(el, name).shadowRoot!.querySelector("button");
+    const where = () => String(focused()?.outerHTML.slice(0, 80));
+    const { el } = await mount(waitronInUse);
+    await openWaitronEditor(el);
+    await pickSwatch(el, "#dd5f5f");
+    await userEvent.click(button(el, "save"));
+    let dialog = await nameDialog(el);
+    expect(dialog.opener).toBe(button(el, "save"));
+    let closed = dialogClosed(dialog);
+    await userEvent.click(nameBack(dialog));
+    await closed;
+    await expect.poll(focused, { message: where() }).toBe(inner("save"));
+    await userEvent.click(q(el, "[data-test=cancel]")!);
+    await expect.poll(() => isEditing(el)).toBe(false);
+
+    el.edit({ id: "t-lucia" });
+    await el.updateComplete;
+    await typeInCode(el, "#f2d300");
+    await userEvent.click(button(el, "save-as-new"));
+    await expect.poll(() => hardDialog(el).open).toBe(true);
+    await userEvent.click(hardButton(el, "save-anyway"));
+    dialog = await nameDialog(el);
+    expect(dialog.opener).toBe(button(el, "save-as-new"));
+    closed = dialogClosed(dialog);
+    await userEvent.click(nameBack(dialog));
+    await closed;
+    await expect.poll(focused, { message: where() }).toBe(inner("save-as-new"));
+  });
+
   it("switch off for a theme not in use", async () => {
     const { el, createTheme, getVenueTheme } = await mount(luciaInUse);
     el.edit({ id: "t-xmas" });

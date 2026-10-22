@@ -26,7 +26,7 @@ async function open(
   submit: ReturnType<typeof vi.fn<Submit>> = vi.fn<Submit>(async () => {}),
 ) {
   const { el } = await mountWidget<ThemeNameDialog>("dashboard-theme-name-dialog", {});
-  el.show({ name: "", inUse: false, warningLines: [], submit, ...request });
+  el.show({ name: "", inUse: false, warningLines: [], opener: null, submit, ...request });
   await el.updateComplete;
   const dialog = el.shadowRoot!.querySelector<WtDialog>("wt-dialog[data-test=name-dialog]")!;
   await expect.poll(() => dialog.open).toBe(true);
@@ -238,6 +238,7 @@ it("show is ignored while open", async () => {
     name: "Other",
     inUse: false,
     warningLines: [],
+    opener: null,
     submit: async () => {},
   });
   await el.updateComplete;
@@ -288,7 +289,14 @@ it("a late success from an earlier opening leaves a reopened dialog open", async
   el.dismiss();
   await el.updateComplete;
   await closed;
-  el.show({ kind: "rename", name: "Summer", inUse: false, warningLines: [], submit: vi.fn() });
+  el.show({
+    kind: "rename",
+    name: "Summer",
+    inUse: false,
+    warningLines: [],
+    opener: null,
+    submit: vi.fn(),
+  });
   await el.updateComplete;
   await expect.poll(() => dialog.open).toBe(true);
   await type(el, dialog, "Holiday");

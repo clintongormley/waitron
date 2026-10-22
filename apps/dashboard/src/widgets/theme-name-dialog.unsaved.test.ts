@@ -26,7 +26,7 @@ async function fixture(kind: ThemeNameKind = "copy", name = "Christmas") {
   const submit = vi.fn<ThemeNameRequest["submit"]>(async () => {});
   const { el: app } = await mountWidget<ThemeNameLeaveApp>("theme-name-leave-test-app", {});
   const host = app.shadowRoot!.querySelector("dashboard-theme-name-dialog")!;
-  host.show({ kind, name, inUse: false, warningLines: [], submit });
+  host.show({ kind, name, inUse: false, warningLines: [], opener: null, submit });
   await host.updateComplete;
   const dialog = host.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
   await expect.poll(() => dialog.open).toBe(true);
