@@ -43,6 +43,7 @@ import {
   formatMoney,
   isZeroDecimal,
   partyTablesName,
+  type ServiceStepDue,
 } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -115,12 +116,15 @@ import {
   kindWords,
   MAP_PRECEDENCE,
   mapKinds,
+  mapLook,
   reminderClock,
   topTabKind,
   type MapKind,
 } from "../state/floor-look.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
 import { chipState, heldChip, signalChipStyles, signalChips } from "../widgets/signal-chips.js";
+import { stepChip, stepChipStyles } from "../widgets/step-chip.js";
+import { currentStep, nextStepDueAt } from "../state/service-steps.js";
 import {
   byPrecedence,
   lateBand,
@@ -176,7 +180,10 @@ const RING_OF: Partial<Record<TableStateKind, FloorRing>> = {
 
 /** The table's own Forgotten badge already says a forgotten wait. */
 function tableChips(table: TableState, now: number) {
-  const chips = signalChips(table.signals, { forgottenShown: lateBand(table) === "forgotten" });
+  const chips = signalChips(table.signals, {
+    forgottenShown: lateBand(table) === "forgotten",
+    now,
+  });
   const held = heldChip(table.signals, reminderDueAt(table.party?.reminder), now);
   return byPrecedence(held === null ? chips : [...chips, held], (chip) =>
     chipState(chip, table.signals),
@@ -323,6 +330,7 @@ export class TillFloorScreen extends LitElement {
     floorTrayStyles,
     floorRingStyles,
     signalChipStyles,
+    stepChipStyles,
     helpAnchorStyles,
     css`
       :host {
@@ -550,6 +558,58 @@ export class TillFloorScreen extends LitElement {
         cursor: pointer;
       }
 
+      .card-open {
+        position: absolute;
+        inset: 0;
+        margin: 0;
+        padding: 0;
+        border: none;
+        border-radius: inherit;
+        background: transparent;
+        cursor: pointer;
+      }
+
+      .card-open:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+
+      /* Above the cover, so Done takes its own clicks. */
+      .step-card .step-done {
+        position: relative;
+        z-index: 1;
+      }
+
+      .step-card {
+        container: step-card / inline-size;
+      }
+
+      /* A card too narrow for a step's name beside Done puts Done under it, so the name has the full width. */
+      @container step-card (width < 150px) {
+        .step-card .badges {
+          align-self: stretch;
+        }
+
+        .step-card .step-chip {
+          flex-direction: column;
+          width: 100%;
+        }
+
+        .step-card .step-name {
+          border-radius: inherit;
+          border-bottom-left-radius: 0;
+          border-bottom-right-radius: 0;
+        }
+
+        .step-card .step-done {
+          border-left: none;
+          border-top: 1px solid var(--wt-color-primary);
+          border-radius: inherit;
+          border-top-left-radius: 0;
+          border-top-right-radius: 0;
+        }
+      }
+
       .card.state-free {
         border-left-color: var(--wt-color-success);
       }
@@ -746,6 +806,9 @@ export class TillFloorScreen extends LitElement {
   /** The device's profile allows `take-orders`, which every change to today's plan needs: the map's
    * drag and the details sheet's actions. */
   @property({ attribute: false }) canChangeToday = false;
+  /** The device's profile allows `take-orders`, so a card offers Done on its step. Its own
+   * property, not `canChangeToday`: Done must not follow if today's floor gets its own action. */
+  @property({ attribute: false }) canMarkSteps = false;
   /** The device has a station view, so each station's ready work links into it. */
   @property({ attribute: false }) canOpenStation = false;
   /** Mounted inside a card host, which supplies the header; the view toggle stays. */
@@ -951,6 +1014,7 @@ export class TillFloorScreen extends LitElement {
     if (this.now !== undefined || !this.isConnected) return;
     let next = Number.POSITIVE_INFINITY;
     for (const table of this.tables) {
+      next = Math.min(next, nextStepDueAt(table.signals, this.#drawnAt));
       const dueAt = reminderDueAt(table.party?.reminder);
       if (dueAt <= this.#drawnAt || dueAt === Number.POSITIVE_INFINITY) continue;
       const at = table.signals.some((signal) => signal.kind === "held")
@@ -1096,6 +1160,7 @@ export class TillFloorScreen extends LitElement {
       .savedName=${this.#savedName(table)}
       .now=${this.#drawnAt}
       .actions=${this.canChangeToday}
+      .canMarkSteps=${this.canMarkSteps}
       .tables=${this.tables}
       .offersJoinWith=${this.#offersJoinWith(table)}
       @today-action=${(event: Event) => this.#onTodayAction(event)}
@@ -2644,7 +2709,7 @@ export class TillFloorScreen extends LitElement {
     </wt-dialog>`;
   }
 
-  /** A card is one button, so a table needing clearing or moving is a plain box instead. */
+  /** A button cannot hold a button, so a table needing clearing or moving is a plain box instead. */
   #waitingCard(table: TableState, kind: Waiting): TemplateResult {
     const words = WAITING[kind];
     const clear = kind === "clear";
@@ -2695,6 +2760,12 @@ export class TillFloorScreen extends LitElement {
     else this.#markMoved(table);
   }
 
+  /** What {@link #cardName} reads aloud. */
+  #spokenName(table: TableState): string {
+    const shown = shownUnder(table);
+    return shown === table.label ? shown : `${shown} ${table.label}`;
+  }
+
   /** Today's name, with the saved name small after it when they differ. */
   #cardName(table: TableState): TemplateResult {
     const shown = shownUnder(table);
@@ -2723,19 +2794,58 @@ export class TillFloorScreen extends LitElement {
     const moving = !this.#prefersReducedMotion();
     const edge = top === "forgotten" && !moving ? " edge-forgotten" : "";
     const calm = top === "held" || top === "nothing-needed" ? " calm" : "";
+    if (this.#doneOffered(table)) {
+      return html`<div
+        class="card state-${table.state}${edge}${calm} step-card"
+        data-table=${table.id}
+        data-top=${top ?? nothing}
+        @click=${() => this.#openTable(table)}
+      >
+        <button
+          type="button"
+          class="card-open"
+          data-card-open
+          aria-label=${`${this.#spokenName(table)}, ${mapLook([table], this.#drawnAt).description}`}
+        ></button>
+        ${this.#cardBody(table, ring, moving, top)}
+      </div>`;
+    }
     return html`<button
       class="card state-${table.state}${edge}${calm}"
       data-table=${table.id}
       data-top=${top ?? nothing}
       @click=${() => this.#openTable(table)}
     >
-      ${renderFloorRing(ring, moving)}
+      ${this.#cardBody(table, ring, moving, top)}
+    </button>`;
+  }
+
+  #cardBody(
+    table: TableState,
+    ring: FloorRing | null,
+    moving: boolean,
+    top: TableStateKind | undefined,
+  ): TemplateResult {
+    return html`${renderFloorRing(ring, moving)}
       <span class="card-head">${this.#cardName(table)} ${this.#seats(table)}</span>
       ${this.#partyName(table)} ${this.#occupancy(table)}
       <span class="badges"
         >${byPrecedence(this.#marks(table, top), (mark) => mark.kind).map(({ mark }) => mark)}</span
-      >
-    </button>`;
+      >`;
+  }
+
+  #doneOffered(table: TableState): boolean {
+    return (
+      this.canMarkSteps &&
+      table.party !== null &&
+      currentStep(table.signals, this.#drawnAt) !== null
+    );
+  }
+
+  #onStepDone(table: TableState, step: ServiceStepDue): void {
+    if (table.party === null) return;
+    const { stepId, dueAt } = step;
+    this.#emit("service-step-done", { partyId: table.party.id, stepId, dueAt, tableId: table.id });
   }
 
   #marks(table: TableState, top: TableStateKind | undefined): CardMark[] {
@@ -2782,8 +2892,15 @@ export class TillFloorScreen extends LitElement {
         >`,
       });
     }
+    const step = this.#doneOffered(table) ? currentStep(table.signals, this.#drawnAt) : null;
     for (const chip of tableChips(table, this.#drawnAt)) {
-      marks.push({ kind: chipState(chip, table.signals), mark: renderFloorChips([chip])[0]! });
+      const kind = chipState(chip, table.signals);
+      if (step !== null && chip.key === "service-step") {
+        marks.push({
+          kind,
+          mark: stepChip(step, { onDone: () => this.#onStepDone(table, step) }),
+        });
+      } else marks.push({ kind, mark: renderFloorChips([chip])[0]! });
     }
     return marks;
   }

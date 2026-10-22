@@ -428,6 +428,7 @@ declare module "@waitron/shared" {
      */
     "party.not_open": { partyId: string };
     "party.not_found": { partyId: string };
+    "service_step.not_found": { stepId: string };
     /**
      * A command carried a party revision another write has since moved past, so it was prepared
      * from a stale copy of the party; or it named a party it read at a table or on a bill where that

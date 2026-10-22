@@ -24,6 +24,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { planVenue } from "@waitron/provisioning";
+import { serviceSteps } from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import type { VenueResult } from "@waitron/provisioning";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
@@ -158,11 +159,14 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     }
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
     const available = (await listAvailableProducts(tx, cfg.locationId)).products;
-    return {
+    const offers = {
       tables: await offerProducts(tx, cfg, { zone: "tables" }),
       counter: await offerProducts(tx, cfg, { zone: "counter" }),
       productIds: new Map(available.map((p) => [p.name, p.id])),
     };
+    // A test venue starts with no service steps; a suite that tests them adds its own.
+    await tx.delete(serviceSteps);
+    return offers;
   });
   return {
     db,

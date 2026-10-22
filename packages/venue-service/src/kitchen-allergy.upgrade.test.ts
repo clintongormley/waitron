@@ -236,8 +236,8 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
   );
   expect(after).toEqual(before);
   expect(suite.db.all(sql`select * from ticket_item_allergies`)).toEqual([]);
-  const triggersAfter = suite.db.all<{ name: string; sql: string }>(
-    sql`select name, sql from sqlite_master where type = 'trigger' order by name`,
+  const triggersAfter = suite.db.all<{ name: string; sql: string; tbl_name: string }>(
+    sql`select name, sql, tbl_name from sqlite_master where type = 'trigger' order by name`,
   );
   const laterColumnDrops = new Map([
     [
@@ -246,11 +246,14 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
     ],
   ]);
   expect(
-    triggersAfter.filter(
-      ({ name, sql: text }) =>
-        !text.includes('"ticket_item_allergies"') &&
-        name !== "waitron_change_kitchen_notices_update",
-    ),
+    triggersAfter
+      .filter(
+        ({ name, sql: text, tbl_name }) =>
+          tables.includes(tbl_name) &&
+          !text.includes('"ticket_item_allergies"') &&
+          name !== "waitron_change_kitchen_notices_update",
+      )
+      .map(({ name, sql: text }) => ({ name, sql: text })),
   ).toEqual(
     triggersBefore
       .filter(({ name }) => name !== "waitron_change_kitchen_notices_update")

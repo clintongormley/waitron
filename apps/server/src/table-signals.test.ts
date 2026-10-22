@@ -27,7 +27,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeReleaseReminderMinutes } from "@waitron/venue-service";
+import { recordStepCompletions, writeReleaseReminderMinutes } from "@waitron/venue-service";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { requestBill } from "./bill-request.js";
@@ -56,6 +56,7 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { serveLine } from "./testing/serve-line.js";
+import { departmentOf, setSteps } from "./testing/service-steps.js";
 import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
 import {
   advanceTicketItem,
@@ -219,15 +220,18 @@ describe("the floor's attention signals", () => {
     );
     expect((await floorRow(v, mesa2)).signals).toEqual([]);
   });
-  it("asks a just-seated party for its order until dishes are saved", async () => {
+  it("shows a just-seated party's Take order step until dishes are drafted", async () => {
     const v = await setupPartyVenue(suite.db);
+    const [takeOrder] = await setSteps(v, await departmentOf(v, v.tables.zoneId), [TAKE_ORDER]);
     const lucia = await person(v, "Lucía");
     const quiet = await seat(v, await v.table("Mesa 1"));
     const drafting = await seat(v, await v.table("Mesa 3"));
+    const takeOrderSignal = {
+      kind: "service_step",
+      steps: [{ stepId: takeOrder, name: "Take order", dueAt: await openedAtOf(v, quiet.partyId) }],
+    };
 
-    expect((await floorRow(v, await tableOf(v, quiet.partyId))).signals).toEqual([
-      { kind: "take_order" },
-    ]);
+    expect((await floorRow(v, await tableOf(v, quiet.partyId))).signals).toEqual([takeOrderSignal]);
 
     await inTx(v, (tx) =>
       saveDraft(tx, v.cfg, quiet.partyId, lucia, {
@@ -246,21 +250,59 @@ describe("the floor's attention signals", () => {
       }),
     );
 
-    expect((await floorRow(v, await tableOf(v, quiet.partyId))).signals).toEqual([
-      { kind: "take_order" },
-    ]);
+    expect((await floorRow(v, await tableOf(v, quiet.partyId))).signals).toEqual([takeOrderSignal]);
     expect((await floorRow(v, await tableOf(v, drafting.partyId))).signals).toEqual([
       { kind: "unsent_draft", ownerNames: ["Lucía"] },
     ]);
   });
 
-  it("stops asking for the order once a line is on a bill", async () => {
+  it("clears the Take order step once the first order is sent", async () => {
     const v = await setupPartyVenue(suite.db);
+    await setSteps(v, await departmentOf(v, v.tables.zoneId), [TAKE_ORDER]);
     const tableId = await v.table("Mesa 1");
-    const { tabId } = await seat(v, tableId);
-    await order(v, tabId, "Agua");
+    const { partyId } = await seat(v, tableId);
+    await orderForParty(v, partyId, ["Agua"]);
 
     expect((await floorRow(v, tableId)).signals).toEqual([]);
+  });
+
+  it("puts a due step first among a table's signals", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const bar = await withBar(v);
+    const [takeOrder, bread] = await setSteps(v, await departmentOf(v, v.tables.zoneId), [
+      TAKE_ORDER,
+      { name: "Bread?", start: "after_previous", courseId: null, minutes: 0 },
+    ]);
+    const mesa2 = await v.table("Mesa 2");
+    const { partyId } = await seat(v, mesa2);
+    const { tabId } = await orderForParty(v, partyId, ["Caña"]);
+    await makeReady(v, tabId, "Caña");
+    const doneAt = new Date().toISOString();
+    await inTx(v, (tx) =>
+      recordStepCompletions(tx, [{ partyId, stepId: takeOrder!, doneAt, doneBy: OPERATOR }]),
+    );
+
+    expect((await floorRow(v, mesa2)).signals).toEqual([
+      { kind: "service_step", steps: [{ stepId: bread, name: "Bread?", dueAt: doneAt }] },
+      { kind: "ready", byStation: [{ stationId: bar, stationName: "Barra", count: 1 }] },
+    ]);
+  });
+
+  it("a step stops showing when the party leaves", async () => {
+    const v = await setupPartyVenue(suite.db);
+    await setSteps(v, await departmentOf(v, v.tables.zoneId), [TAKE_ORDER]);
+    const mesa2 = await v.table("Mesa 2");
+    const { partyId } = await seat(v, mesa2);
+    expect((await floorRow(v, mesa2)).signals.map((signal) => signal.kind)).toEqual([
+      "service_step",
+    ]);
+
+    const finish = { partyId, ...(await commandFor(v, partyId)) };
+    await inTx(v, (tx) => finishTable(tx, finish));
+    const row = await floorRow(v, mesa2);
+
+    expect(row.party).toBeNull();
+    expect(row.signals).not.toContainEqual(expect.objectContaining({ kind: "service_step" }));
   });
 
   it("shows Mesa 2's ready drinks, its due held group and its bill request together; paying clears only the request, serving clears the drinks", async () => {
@@ -785,6 +827,10 @@ describe("the floor's attention signals", () => {
         }),
       );
     };
+    await setSteps(v, await departmentOf(v, v.tables.zoneId), [
+      TAKE_ORDER,
+      { name: "Water?", start: "seated", courseId: null, minutes: 5 },
+    ]);
     await seatBusyTable("Mesa 1");
     const statements = async () => {
       const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
@@ -945,6 +991,15 @@ describe("a bill request", () => {
     );
   });
 });
+
+const TAKE_ORDER = { name: "Take order", start: "seated", courseId: null, minutes: 0 } as const;
+
+async function openedAtOf(v: PartyVenue, partyId: string): Promise<string> {
+  const [row] = await inTx(v, (tx) =>
+    tx.select({ at: parties.openedAt }).from(parties).where(eq(parties.id, partyId)),
+  );
+  return row!.at;
+}
 
 async function tableOf(v: PartyVenue, partyId: string): Promise<string> {
   const [row] = await inTx(v, (tx) =>

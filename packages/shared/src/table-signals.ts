@@ -2,11 +2,11 @@
  * One thing on a table that wants attention (service spec §1). Several coexist on one table. The
  * party's bills and their dishes' kitchen state are read over its FAMILY — the party and every party
  * merged into it — while its drafts, held groups and bill request are its own. Every table the party
- * sits at carries its signals; `needs_clearing` is the table's own.
+ * sits at carries its signals; `service_step` and `needs_clearing` are the table's own.
  */
 export type TableSignal =
-  /** An open party with no line on any bill of its family that is not abandoned, and no open draft. */
-  | { kind: "take_order" }
+  /** The table's department's steps that have a trigger and are not cleared, soonest due first. */
+  | { kind: "service_step"; steps: ServiceStepDue[] }
   /** The owners of the party's open drafts holding a line, oldest first; "" for one no longer known. */
   | { kind: "unsent_draft"; ownerNames: string[] }
   /** Dishes the kitchen has made ready and nobody has served yet, counted in units per station. */
@@ -24,6 +24,16 @@ export type TableSignal =
   | { kind: "held_unavailable"; groupId: string; lineNames: string[] }
   | { kind: "bill_requested"; requestedAt: string }
   | { kind: "needs_clearing"; since: string };
+
+export interface ServiceStepDue {
+  stepId: string;
+  name: string;
+  /**
+   * When the step shows: its trigger plus its minutes, or the repeat itself for a step every N
+   * minutes since the last order. May still be ahead.
+   */
+  dueAt: string;
+}
 
 export interface ReadyAtStation {
   stationId: string;

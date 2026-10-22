@@ -99,6 +99,14 @@ describe("guide pages", () => {
     expect(html).toContain(`<h1>${TABLE_SERVICE_GUIDE_TITLE[lang]}</h1>`);
   });
 
+  it.each(["en", "es"] as const)("serves the service steps section in %s", async (lang) => {
+    const app = new Hono();
+    mountGuidePages(app, {}, vi.fn());
+    const response = await app.request(`/help/${lang}/table-service`);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain('<section id="service-steps"');
+  });
+
   it.each(["en", "es"] as const)("serves the shipped kitchen guide in %s", async (lang) => {
     const app = new Hono();
     mountGuidePages(app, {}, vi.fn());

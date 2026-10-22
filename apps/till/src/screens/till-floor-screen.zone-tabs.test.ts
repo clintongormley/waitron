@@ -7,6 +7,7 @@ import { es } from "../i18n/strings.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type { FloorZone, TableParty, TableState, TableToday } from "../api/client.js";
+import { dueStepSignal } from "../../test/service-steps.js";
 
 const now = Date.parse("2026-10-20T20:00:00.000Z");
 const inMinutes = (m: number) => new Date(now + m * 60_000).toISOString();
@@ -234,7 +235,7 @@ describe("till-floor-screen: zone tabs", () => {
       "table-bill",
     ],
     ["ready", { readyToServe: 2 }, "tab-ready-tint", "success"],
-    ["step", { signals: [{ kind: "take_order" }] }, "tab-seated-tint", "table-seated"],
+    ["step", { signals: [dueStepSignal("Take order")] }, "tab-seated-tint", "table-seated"],
     [
       "delivery",
       { party: null, state: "delivery-pending", pendingDeliveries: 1 },
@@ -281,7 +282,7 @@ describe("till-floor-screen: zone tabs", () => {
       { party: party("p-t2", { reminder: { groupId: "g", dueAt: inMinutes(-1) } }) },
       "wt-pulse-slow",
     ],
-    ["step", { signals: [{ kind: "take_order" }] }, null],
+    ["step", { signals: [dueStepSignal("Take order")] }, null],
   ])("pulses at the state's speed: %s", async (kind, over, speed) => {
     const { el } = await mount([seated("t1", "z1"), seated("t2", "z2", over)], {
       reducedMotion: false,
@@ -468,7 +469,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
   const urgentRight = () => [
     seated("t1", "z1"),
     seated("t5", "z5", { timingBand: "forgotten" }),
-    seated("t6", "z6", { signals: [{ kind: "take_order" }] }),
+    seated("t6", "z6", { signals: [dueStepSignal("Take order")] }),
   ];
 
   it("shows the most urgent hidden tab's icon at the end it is beyond", async () => {
@@ -796,7 +797,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
     seated("t1", "z1"),
     seated("t2", "z2", { timingBand: "forgotten" }),
     seated("t3", "z3", { readyToServe: 2 }),
-    seated("t5", "z5", { signals: [{ kind: "take_order" }] }),
+    seated("t5", "z5", { signals: [dueStepSignal("Take order")] }),
   ];
   const zoneTabs = (el: TillFloorScreen) => [
     ...el.shadowRoot!.querySelectorAll<HTMLElement>("nav.tabs .zone-tab"),
@@ -908,7 +909,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
       [
         seated("t1", "z1"),
         seated("t4", "z4", { timingBand: "forgotten" }),
-        seated("t5", "z5", { signals: [{ kind: "take_order" }] }),
+        seated("t5", "z5", { signals: [dueStepSignal("Take order")] }),
       ],
       async (el, host) => {
         const strip = stripOf(el);
@@ -963,7 +964,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
         // Bar is cut but has nothing to show, and Patio is whole: no edge yet.
         expect(edgeOf(el, "end")).toBeNull();
         expect(patio().right).toBeLessThanOrEqual(paddingBox(strip).right);
-        el.tables = tables({ signals: [{ kind: "take_order" }] });
+        el.tables = tables({ signals: [dueStepSignal("Take order")] });
         await expect.poll(() => edgeOf(el, "end")?.getAttribute("aria-label")).toBe("Show Patio");
         expect(patio().right).toBeGreaterThan(edgeOf(el, "end")!.getBoundingClientRect().left);
       },
@@ -1111,7 +1112,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
       [
         seated("t1", "z1"),
         seated("t3", "z3", { timingBand: "forgotten" }),
-        seated("t4", "z4", { signals: [{ kind: "take_order" }] }),
+        seated("t4", "z4", { signals: [dueStepSignal("Take order")] }),
       ],
       async (el, host) => {
         const strip = stripOf(el);
@@ -1147,7 +1148,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
 
   it.each<["end" | "start", Partial<TableState>, Partial<TableState>]>([
     ["end", { readyToServe: 2 }, {}],
-    ["start", {}, { signals: [{ kind: "take_order" }] }],
+    ["start", {}, { signals: [dueStepSignal("Take order")] }],
   ])(
     "shows a whole wide tab under its own %s edge when a tab beyond the other end has a state",
     async (side, bar, patio) => {
@@ -1244,7 +1245,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
         [
           seated("t1", "z1"),
           seated("t3", "z3", { timingBand: "forgotten" }),
-          seated("t5", "z5", { signals: [{ kind: "take_order" }] }),
+          seated("t5", "z5", { signals: [dueStepSignal("Take order")] }),
         ],
         async (el) => {
           const strip = stripOf(el);

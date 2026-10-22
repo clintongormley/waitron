@@ -5,6 +5,7 @@ import { setLocale } from "../i18n/t.js";
 import "./table-status.js";
 import type { TillTableStatus } from "./table-status.js";
 import type { TableParty, TableState } from "../api/client.js";
+import { dueStepSignal } from "../../test/service-steps.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("es-ES"));
@@ -62,7 +63,7 @@ const forFill = {
     signals: [{ kind: "bill_requested", requestedAt: "2026-10-10T11:00:00Z" }],
   }),
   ready: table({ ...seated, readyToServe: 2 }),
-  seated: table({ ...seated, signals: [{ kind: "take_order" }] }),
+  seated: table({ ...seated, signals: [dueStepSignal("Take order")] }),
   calm: table({ ...seated, pendingToServe: 2 }),
 } satisfies Partial<Record<FloorMapFill, TableState>>;
 
@@ -76,6 +77,18 @@ describe.each(["light", "dark"] as const)("till-table-status a11y (%s theme)", (
       theme,
     );
     expect(el.shadowRoot!.querySelector(`[data-status-pin] [data-fill="${fill}"]`)).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("says the due step's name on the pin, with the bell, and has no violations", async () => {
+    const { el, host } = await mountWidget<TillTableStatus>(
+      "till-table-status",
+      { party, tables: [table({ ...seated, signals: [dueStepSignal("Dessert?")] })] },
+      theme,
+    );
+    const pin = el.shadowRoot!.querySelector<HTMLButtonElement>("[data-status-pin]")!;
+    expect(pin.textContent!.trim()).toBe("Dessert?");
+    expect(pin.querySelector('wt-icon[name="floor-step"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

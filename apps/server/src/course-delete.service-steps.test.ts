@@ -1,11 +1,12 @@
 import { asc, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { kitchenCourses, products, type Transaction } from "@waitron/db";
+import { kitchenCourses, parties, products, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createDepartment,
   saveServiceSteps,
+  serviceStepCompletions,
   serviceSteps,
   type ServiceStepInput,
 } from "@waitron/venue-service";
@@ -114,6 +115,47 @@ describe("deleting a course with service steps", () => {
       { key: "course_products", count: 1, targets: [] },
       { key: "course_service_steps", count: 1, targets: [] },
     ]);
+  });
+
+  it("deleting a course deletes the completions of the steps it deletes", async () => {
+    const { v, id, departmentId } = await venueWithSteps((course) => [
+      step("Set up", "seated"),
+      step("Dessert?", "course_served", 10, course),
+    ]);
+    const stepIds = (
+      await inTx(v, (tx) =>
+        tx
+          .select({ id: serviceSteps.id })
+          .from(serviceSteps)
+          .where(eq(serviceSteps.departmentId, departmentId))
+          .orderBy(asc(serviceSteps.position)),
+      )
+    ).map((row) => row.id);
+    const partyId = await inTx(v, async (tx) => {
+      const [party] = await tx
+        .insert(parties)
+        .values({ openedBy: "sender" })
+        .returning({ id: parties.id });
+      expect(party).toBeDefined();
+      await tx.insert(serviceStepCompletions).values(
+        stepIds.map((stepId) => ({
+          partyId: party!.id,
+          stepId,
+          doneAt: "2026-10-22T20:33:00.000Z",
+          doneBy: "waiter-1",
+        })),
+      );
+      return party!.id;
+    });
+    await inTx(v, (tx) => deleteCourse(tx, v.cfg, id));
+    expect(
+      await inTx(v, (tx) =>
+        tx
+          .select({ stepId: serviceStepCompletions.stepId })
+          .from(serviceStepCompletions)
+          .where(eq(serviceStepCompletions.partyId, partyId)),
+      ),
+    ).toEqual([{ stepId: stepIds[0] }]);
   });
 
   it("after the delete the venue's export still imports", async () => {

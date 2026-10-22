@@ -1,9 +1,9 @@
-# Refund a payment
+# Table service
+
+## Refund all or part of a payment {#refund-payment}
 
 When a bill's payment needs returning, start with that payment so you can see how much remains
 available to refund.
-
-## Refund all or part of a payment {#refund-payment}
 
 In the bill's payment window, choose **Refund** beside the payment. The **Refund a payment**
 window asks how much to refund and the reason. For **Part of it**, enter the **Amount to refund**.
@@ -24,3 +24,28 @@ or manager then approves recording it in Waitron with their PIN.
 
 If a refund gets no answer, check the bill's payments before trying again. The first request may
 already have succeeded.
+
+## Clear a service step {#service-steps}
+
+A service step reminds you to go back to a table at the right moment, such as **Take order** a
+couple of minutes after **Set up** is done, or **Anything else?** once every dish has been served.
+Each step starts at a moment like that and falls due a set number of minutes later. Your venue sets
+them up under **Service steps** on the department's **Service** tab in the dashboard.
+
+When a step is due, the table's card shows its name, with a **Done** button if you may take orders.
+On the map, unless something more urgent is showing, the table turns blue with a bell and the step's
+name, and the table's details list the step, with **Done** if you may take orders. A table shows one
+step at a time: the one that fell due last.
+
+Tap **Done** when you have been to the table and the guests want nothing. It clears the step on show
+and any earlier step it was hiding. Often you don't need to tap it, because these clear a step too:
+
+- An order sent once the step is due. This also clears an earlier step hidden behind it.
+- The party's first order, which clears every step that started before it.
+- The party leaving.
+
+Until the first order is sent, no step shows while an order is being taken for the table.
+
+A cleared step comes back when the moment it starts from happens again, such as more of a course
+being served. A step that repeats every few minutes after the last order comes back with each
+repeat: **Done** clears the one on show, and another order starts the count again.

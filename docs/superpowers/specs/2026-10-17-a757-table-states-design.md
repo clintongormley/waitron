@@ -1,8 +1,12 @@
 # A757 — Table states: the lifecycle, how each state is shown, and retiring the Tables tab
 
-Status: **answered (Q29–Q34 all A, 2026-10-17); slices 1, 2 and 7 built 2026-10-19, slices 3, 4 and 5 built 2026-10-20, slice 6 built 2026-10-22; slice 8 left (§11).**
+Status: **answered (Q29–Q34 all A, 2026-10-17); slices 1, 2 and 7 built 2026-10-19, slices 3, 4 and 5 built 2026-10-20, slice 6 built 2026-10-22, slice 8 built 2026-10-22; A757 is built.**
 Backlog entry: `docs/backlog.md` "A757" and
 [its detail](../../backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab).
+**2026-10-22:** A757 is built, so its backlog entry and detail are deleted; the owner's decisions
+that stood in the detail are kept under
+[Decisions and deliberate limits](../../backlog/till.md#table-states-are-ones-the-code-understands-switched-per-department-a757-owner-2026-10-16),
+and the owner's review of the result is A893.
 
 **2026-10-19:** Q29–Q34 were all answered A by the owner on 2026-10-17, and the build depends only
 on A756's first pull request, #1852, which landed; slice 1 is built by
@@ -134,6 +138,9 @@ Worked out by the server on every floor read (`apps/server/src/table-signals.ts:
 | `held_unavailable` | a held group holds something no longer sellable | chip "Unavailable: …", red border |
 | `bill_requested` | as above | chip "Bill requested", filled purple |
 | `needs_clearing` | as above | a card of its own with Mark cleared |
+
+**2026-10-22:** slice 8 retired `take_order`: every step, Take order among them, now comes as the
+`service_step` signal (§8).
 
 **Not shown today:** a table with held dishes whose reminder is not yet due is not marked as holding
 anything. Its held dishes are counted in the card's "N to serve" badge with every other unserved
@@ -437,6 +444,11 @@ filled blue (`till-floor-screen.ts:467-470`). A773 removes En route anyway.
 unplaced token (`--wt-color-table-reserved`, text `--wt-color-on-table-reserved`). Take order keeps
 its blue-bordered chip until slice 8 gives service steps their look; it already ranks as a step.
 
+**2026-10-22:** slice 8 made Take order a step that looks like every step (plan
+`docs/superpowers/plans/2026-10-22-a757-8-service-steps-floor.md`): it is the starter list's second step, shown with the
+step's chip and Done on the card and the bell on the map; the `take_order` signal and the fixed
+«Tomar nota» chip are gone.
+
 ## 6. The floor map: the whole table shows its state
 
 Pictures 09 (busy floor, phone width, both themes) and 03, 04.
@@ -579,6 +591,23 @@ starts with the three starter steps, named in English when the venue's first rec
 English and in Spanish otherwise (a configuration import brings the bundle's steps instead). Each
 party's done steps are slice 8's.
 
+**2026-10-22:** slice 8 built the steps on the floor (plan
+`docs/superpowers/plans/2026-10-22-a757-8-service-steps-floor.md`). Each Done is a row in `service_step_completions`
+(the party, the step, who tapped it and when). A step starts when its start happens and falls due
+its minutes later; the till shows the latest due one. An order sent once a step is due clears it,
+and any earlier-due step hidden behind it. The party's first order clears every step that started
+before it, and before that order an open draft hides every step: that is how Take order keeps its
+old rule, since the code does not know which step is Take order. A Done counts from the step's
+start, and clears the step shown and the earlier due steps it hid; for "every N minutes since the
+last order" it clears the repeat showing when it was tapped (before any repeat has come, the
+first), and the next repeat after it shows next. "After the step before" starts only from a Done on
+the step above. The party leaving clears its steps. Done is `POST
+/api/parties/:id/service-steps/:stepId/done`, which needs the device's `take-orders` action. The
+card shows the step as one chip with the bell, the name and Done; the table's details opened from
+the map show it with Done; the order screen's status pin names it, and the pin's sheet shows the
+plain chip, without Done. The map
+draws a step as a seated table in blue with the bell and the step's name, cut to fit.
+
 ## 9. Nothing needed: its own look
 
 Picture 11. The owner: "We need a separate status for no attention needed."
@@ -654,7 +683,7 @@ Each slice is one pull request one implementer can finish well under ~100 tool c
    Service tab, the starter set for a new venue. FULL review (migration).
 8. **Service steps on the floor** — the server's step signal, the Done route and its permission, the
    chip and map cue, clearing rules (Q30). FULL review (a till write route: CLAUDE.md §3 asks for a
-   profile-action row and a refusing case).
+   profile-action row and a refusing case). (Built.)
 
 Order: 1 and 2 need A756's Service tab and touch the same tab, so they go in that order; 3, 4 and 6
 are independent of A756; 5 follows 4; 7 needs A756 and 1; 8 follows 4 and 7.

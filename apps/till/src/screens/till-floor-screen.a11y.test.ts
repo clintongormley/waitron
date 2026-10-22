@@ -12,6 +12,7 @@ import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { FloorZone, TableState } from "../api/client.js";
 import type { WtFloorMap } from "@waitron/ui";
+import { dueStepSignal } from "../../test/service-steps.js";
 
 const zones: FloorZone[] = [
   {
@@ -478,7 +479,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
             ...table,
             readyToServe: 1,
             signals: [
-              { kind: "take_order" },
+              dueStepSignal("Take order"),
               {
                 kind: "ready",
                 byStation: [
@@ -495,11 +496,12 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     );
     const list = await mountWidget<TillFloorScreen>(
       "till-floor-screen",
-      { zones, tables: signalled, canOpenStation: true },
+      { zones, tables: signalled, canOpenStation: true, canMarkSteps: true },
       theme,
     );
     expect(list.el.shadowRoot!.querySelectorAll("[data-chip]").length).toBeGreaterThan(5);
     expect(list.el.shadowRoot!.querySelector("[data-open-station]")).not.toBeNull();
+    expect(list.el.shadowRoot!.querySelector(".step-card [data-step-done]")).not.toBeNull();
     await expectNoA11yViolations(list.host);
   });
 
@@ -674,7 +676,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
           { signals: [{ kind: "bill_requested", requestedAt: "2026-09-29T19:55:00.000Z" }] },
         ],
         ["Ready", { readyToServe: 2 }],
-        ["Step", { readyToServe: 0, signals: [{ kind: "take_order" }] }],
+        ["Step", { readyToServe: 0, signals: [dueStepSignal("Take order")] }],
       ];
       const familyZones: FloorZone[] = [
         zones[0]!,

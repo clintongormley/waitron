@@ -282,6 +282,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Those guests already have that table. Choose another table",
     es: "Esa mesa ya es de estos clientes. Elige otra mesa",
   },
+  "service_step.not_found": {
+    en: "This step no longer exists",
+    es: "Este paso ya no existe",
+  },
   "party.main_bill_stays": {
     en: "This is the table's main bill, and the table has other unpaid bills. Move the other bills first, or merge them into this one",
     es: "Es la cuenta principal de la mesa, y la mesa tiene otras cuentas sin pagar. Mueve antes las otras cuentas o júntalas con esta",

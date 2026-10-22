@@ -4,6 +4,7 @@ import { setLocale } from "../i18n/t.js";
 import "./table-details-sheet.js";
 import type { TillTableDetailsSheet } from "./table-details-sheet.js";
 import type { TableState } from "../api/client.js";
+import { dueStepSignal } from "../../test/service-steps.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("es-ES"));
@@ -38,7 +39,7 @@ const everything = table({
   pendingDeliveries: 2,
   nextReservation: { time: "20:30" },
   signals: [
-    { kind: "take_order" },
+    dueStepSignal("Take order"),
     { kind: "long_wait", band: "overdue" },
     { kind: "held_unavailable", groupId: "g1", lineNames: ["Croquetas"] },
     { kind: "bill_requested", requestedAt: "2026-10-10T11:00:00Z" },
@@ -85,6 +86,21 @@ describe.each(["light", "dark"] as const)("till-table-details-sheet a11y (%s the
       { table: shown, heading: "Terraza 4", now: Date.parse("2026-10-10T12:00:00Z") },
       theme,
     );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations for a step drawn with Done", async () => {
+    const { el, host } = await mountWidget<TillTableDetailsSheet>(
+      "till-table-details-sheet",
+      {
+        table: everything,
+        heading: "Terraza 4",
+        now: Date.parse("2026-10-10T12:00:00Z"),
+        canMarkSteps: true,
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-step-done]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

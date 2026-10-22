@@ -289,6 +289,11 @@ it("explains a snooze refused because another group is the one waiting, in both 
   ]);
 });
 
+it("says a service step has gone, in both languages", () => {
+  expect(codeMessage("service_step.not_found", "en")).toBe("This step no longer exists");
+  expect(codeMessage("service_step.not_found", "es")).toBe("Este paso ya no existe");
+});
+
 it("says a table needs clearing, and that a table has gone, in both languages", () => {
   expect(codeMessage("table.needs_clearing", "en")).toBe(
     "That table needs clearing first. Mark it cleared, then try again",

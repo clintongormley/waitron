@@ -7,7 +7,6 @@ import {
   kitchenStationTiming,
   kitchenTimingDefaults,
   lineServiceCancellations,
-  orderDrafts,
   orderGroups,
   products,
   ticketItems,
@@ -160,11 +159,13 @@ export interface SeatedPartyFacts {
   /** Every bill of the party's family, abandoned ones included. */
   bills: readonly FamilyBill[];
   billRequestedAt: string | null;
+  openedAt: string;
 }
 
 /**
- * Each seated party's signals, keyed by party, in {@link TableSignal}'s order. Bills and dishes are
- * the party's family's, abandoned bills left out, so a paid bill's dish still waiting shows. Every
+ * Each seated party's signals, keyed by party, in {@link TableSignal}'s order; `service_step` and
+ * `needs_clearing` are each table's own, added by {@link tableSignals}. Bills and dishes are the
+ * party's family's, abandoned bills left out, so a paid bill's dish still waiting shows. Every
  * kind of fact read here is one query for all the parties, whatever their number.
  */
 export async function readPartySignals(
@@ -213,24 +214,12 @@ export async function readPartySignals(
       asc(workingOrderLines.lineNo),
     );
   const unavailable = groupBy(unavailableRows, (row) => row.partyId);
-  const drafting = new Set(
-    (
-      await tx
-        .selectDistinct({ partyId: orderDrafts.partyId })
-        .from(orderDrafts)
-        .where(and(inArray(orderDrafts.partyId, partyIds), eq(orderDrafts.state, "open")))
-    ).map((row) => row.partyId),
-  );
-
   const heldCounts = await readHeldCounts(tx, partyIds);
 
   const signals = new Map<string, TableSignal[]>();
   for (const party of seated) {
     const own = billsOf.get(party.id)!;
     const list: TableSignal[] = [];
-    if (own.every((bill) => bill.lines === 0) && !drafting.has(party.id)) {
-      list.push({ kind: "take_order" });
-    }
     if (party.unsentDrafts.length > 0) {
       list.push({
         kind: "unsent_draft",
@@ -263,12 +252,14 @@ export async function readPartySignals(
   return signals;
 }
 
-/** The table's signals: its party's, if one sits there, then whether it waits to be cleared. */
+/** The table's signals: its service step, its party's, then whether it waits to be cleared. */
 export function tableSignals(
   partySignals: readonly TableSignal[] | undefined,
+  step: TableSignal | undefined,
   needsClearingSince: string | null,
 ): TableSignal[] {
   return [
+    ...(step === undefined ? [] : [step]),
     ...(partySignals ?? []),
     ...(needsClearingSince === null
       ? []

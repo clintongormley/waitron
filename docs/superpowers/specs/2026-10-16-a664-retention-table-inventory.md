@@ -256,6 +256,8 @@ These additions also change incoming closure for original rows: `parties` receiv
 
 **2026-10-19:** `service_steps`, a venue-service table not in the list above, was added (A757 slice 7, venue-service migration 0062): **L**: `id`, `department_id`, `course_id`; **U**: `name`; **R**: `position`, `start`, `minutes`; retention as `departments` (POL-CONFIG). Out: `department_id` → `departments(id)` [no action]; `course_id` → `kitchen_courses(id)` [no action]. In: none declared. This addition also changes incoming closure for original rows: `departments` receives `service_steps(department_id)` [no action]; `kitchen_courses` receives `service_steps(course_id)` [no action].
 
+**2026-10-22:** `service_step_completions` (added 2026-10-22, A757 slice 8, venue-service migration 0066): **L**: `id`, `party_id`, `step_id`, `done_by`; **R**: `done_at`; retention as `parties` (POL-EPHEMERAL). Out: `party_id` → `parties(id)` [cascade]; `step_id` → `service_steps(id)` [cascade]; non-FK `done_by` is the person who tapped Done. In: none declared. This addition also changes incoming closure for original rows: `parties` receives `service_step_completions(party_id)` [cascade]; `service_steps` receives `service_step_completions(step_id)` [cascade].
+
 **2026-10-19:** `table_service_statuses` was dropped (A757 slice 2, core migration 0181); `dining_tables` lost `status_id` and its key to it. This removes `dining_tables(status_id)` from the table's incoming closure.
 
 ## Local application tables

@@ -214,3 +214,16 @@ describe("the advice for a whole payment refused while an unanswered bill paymen
     },
   );
 });
+
+describe("a service step's Done", () => {
+  it("says Done, and names the step for the button's accessible name, in both languages", () => {
+    expect(en["floor.step_done"]).toBe("Done");
+    expect(es["floor.step_done"]).toBe("Hecho");
+    expect(en["floor.step_done_label"]).toBe("Done: {step}");
+    expect(es["floor.step_done_label"]).toBe("Hecho: {step}");
+  });
+
+  it("says Done with the till's other Done in Spanish", () => {
+    expect(es["floor.step_done"]).toBe(es["make_now.dismiss"]);
+  });
+});

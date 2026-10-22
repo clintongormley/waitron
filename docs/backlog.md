@@ -1884,6 +1884,12 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
+- **A1006. A dish or station name holding `$&` or `$'` is garbled in the kitchen's
+  cross-references.** `apps/till/src/widgets/queue-crossrefs.ts` fills `{name}` and `{station}` with
+  `String.replace` and a string, so a replacement pattern in the venue's text is expanded; A757
+  slice 8 fixed the same shape in `step-chip.ts` by passing a function (`() => step.name`). The
+  fills also run one after the other, so a dish named `Tea {station}` takes the station's name.
+
 - **A756. The Kitchen tab split up (owner, 2026-10-16; changed by A773 the same day).** Left: the
   parts that wait for A773-1 — the reminder to send the next course on the department's Service
   tab, and late flags, identical dishes, held courses, MOVED slips, done on the screen and changes
@@ -2163,30 +2169,21 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [plan](superpowers/plans/2026-10-19-a803-bills-and-tables.md);
   [mockups](backlog/mockups/a803-bills-and-tables/).
 
-- **A757. Table states: review the lifecycle, then retire the Tables tab (owner, 2026-10-16).**
-  Design first. Decided: the Tables tab goes; optional states are switched per department; an
-  optional state is one the code understands, not a label the venue makes up. A773 adds a Requested
-  state (the waiter fired it; the pass has not yet); the held mark counts it. **Owner answered
-  Q15–Q20 on 2026-10-17 and added a countdown to Time to fire, two pulse speeds, zone tabs that
-  carry a hidden zone's most urgent state, service steps a venue defines, a "nothing needed" look
-  and whole-table status on the map; the design is revised and Q29–Q34 answered A, A, A, A, A, A on
-  2026-10-17.** Slices 1–7 and a follow-up to slice 4 have landed (slice 5's plan:
-  `docs/superpowers/plans/2026-10-20-a757-5-map-zone-tabs.md`; slice 6's:
-  `docs/superpowers/plans/2026-10-21-a757-6-item-counts-by-state.md`); slice 8 is left (design
-  §11; plans in the detail).
-  [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab),
-  [Design](superpowers/specs/2026-10-17-a757-table-states-design.md),
-  [mockups](backlog/mockups/a757-table-states/)
-
 - **A893. Owner review of every table state and its look, after A757 lands (owner, 2026-10-18).**
   Show the owner each state on the map and the card, both themes, with the pulses and zone tabs, and
-  settle the two suggestions in the detail. Waits for the whole of A757 (slice 8 is left).
+  settle the two suggestions in the detail. A757 is built (slice 8, 2026-10-22); ready to show the
+  owner.
   [Detail](backlog/till.md#a893-owner-review-of-every-table-state-and-its-look-after-a757-lands)
 
 - **A936. Waiting's minutes on the map (left open by A757 slice 5).** The map's cue for a waiting
   table says "Waiting", not the minutes picture 07 draws, because the floor read carries only the
   timing band; showing minutes needs the oldest fired dish's age in the read.
   [Detail](backlog/till.md#a936-waitings-minutes-on-the-map)
+
+- **A1005. A till a few seconds ahead cannot clear an every-N-minutes repeat that follows a Done
+  (left open by A757 slice 8).** Its Done answers `{ cleared: [] }` until the server's clock
+  reaches that repeat. A Done now carries the `dueAt` the till showed, so the server could accept a
+  shown repeat a few seconds ahead (the plan's Decision 5: "A live step not yet due is accepted").
 
 - **A937. Measure the owner's real floor plan once it is drawn (left open by A757 slice 5).** Slice
   5's size check ran on Santet's invented grid, where Terrace's tables show names but no cue; re-run

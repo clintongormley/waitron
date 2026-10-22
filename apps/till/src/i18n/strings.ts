@@ -935,6 +935,8 @@ export const en = {
   "floor.unsent_owner": "{name} has an unsent order: {n} items",
   "floor.unsent_owner_one": "{name} has an unsent order: 1 item",
   "floor.unsent_mark": "Unsent",
+  "floor.step_done": "Done",
+  "floor.step_done_label": "Done: {step}",
   // Spatial floor plan. The view toggles name the view they switch TO.
   "floor.view_map": "Map",
   "floor.view_list": "List",
@@ -1027,7 +1029,6 @@ export const en = {
   "floor.rename_label": "Name",
   "floor.rename_save": "Save",
   // What wants attention at a table or on a counter order, shown as chips side by side.
-  "signal.take_order": "Take order",
   "signal.ready_at": "{station}: {n} ready",
   "signal.ready_at_one": "{station}: 1 ready",
   "signal.wait_warm": "Waiting",
@@ -2643,6 +2644,8 @@ export const es: Record<StringKey, string> = {
   "floor.unsent_owner": "{name} tiene un pedido sin enviar: {n} artículos",
   "floor.unsent_owner_one": "{name} tiene un pedido sin enviar: 1 artículo",
   "floor.unsent_mark": "Sin enviar",
+  "floor.step_done": "Hecho",
+  "floor.step_done_label": "Hecho: {step}",
   "floor.view_map": "Mapa",
   "floor.view_list": "Lista",
   "floor.unplaced": "Sin colocar",
@@ -2730,7 +2733,6 @@ export const es: Record<StringKey, string> = {
   "floor.rename_title": "Cambiar el nombre de {table}",
   "floor.rename_label": "Nombre",
   "floor.rename_save": "Guardar",
-  "signal.take_order": "Tomar nota",
   "signal.ready_at": "{station}: {n} listos",
   "signal.ready_at_one": "{station}: 1 listo",
   "signal.wait_warm": "Esperando",

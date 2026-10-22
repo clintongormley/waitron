@@ -11,6 +11,7 @@ import type { StringKey } from "../i18n/strings.js";
 import { heldChip } from "../widgets/signal-chips.js";
 import { needsMovingToday } from "./floor-today.js";
 import { minutesToFire, reminderDueAt } from "./release-reminder.js";
+import { currentStep } from "./service-steps.js";
 import { PRECEDENCE, tableStates, type TableStateKind } from "./table-precedence.js";
 
 /** `delivery` and `moving` are drawn on the map only; the list card does not rank them. */
@@ -76,7 +77,6 @@ const FIXED_CUE: Partial<Record<MapKind, { icon: FloorCueIcon; text: StringKey }
   unavailable: { icon: "floor-out", text: "floor.cue_out" },
   fire: { icon: "floor-fire", text: "floor.cue_fire" },
   bill: { icon: "floor-bill", text: "floor.cue_bill" },
-  step: { icon: "floor-step", text: "signal.take_order" },
   "not-sent": { icon: "floor-unsent", text: "floor.unsent_mark" },
   waiting: { icon: "floor-timer", text: "signal.wait_warm" },
   clearing: { icon: "floor-clear", text: "floor.cue_clear" },
@@ -88,7 +88,6 @@ const FIXED_WORDS: Partial<Record<MapKind, StringKey>> = {
   overdue: "signal.wait_overdue",
   fire: "floor.fire_due",
   bill: "signal.bill_requested",
-  step: "signal.take_order",
   "not-sent": "floor.unsent_mark",
   waiting: "signal.wait_warm",
   clearing: "floor.needs_clearing",
@@ -129,6 +128,14 @@ function soonestHeld(members: readonly TableState[], now: number) {
   return soonest!;
 }
 
+/** The name of the step falling due latest among the members' current steps. */
+function latestStep(members: readonly TableState[], now: number): string {
+  const steps = members.flatMap((member) => currentStep(member.signals, now) ?? []);
+  return steps.reduce((latest, step) =>
+    Date.parse(step.dueAt) > Date.parse(latest.dueAt) ? step : latest,
+  ).name;
+}
+
 function soonestBooking(members: readonly TableState[]): string {
   return members
     .flatMap((member) => (member.nextReservation === null ? [] : [member.nextReservation.time]))
@@ -158,6 +165,8 @@ export function kindWords(kind: MapKind, members: readonly TableState[], now: nu
       return t("signal.unavailable").replace("{items}", () => unavailableDishes(members));
     case "ready":
       return readyText(largestReady(members));
+    case "step":
+      return latestStep(members, now);
     case "delivery":
       return `${totalDeliveries(members)} ${t("floor.pending_delivery")}`;
     case "held": {
@@ -180,6 +189,8 @@ export function kindCue(
   switch (kind) {
     case "ready":
       return { icon: "floor-ready", text: String(largestReady(members)) };
+    case "step":
+      return { icon: "floor-step", text: latestStep(members, now) };
     case "delivery":
       return { icon: "floor-step", text: kindWords(kind, members, now) };
     case "held": {
@@ -271,13 +282,20 @@ export function topTabKind(kinds: ReadonlySet<MapKind>): MapKind | null {
   return MAP_PRECEDENCE.find((kind) => TAB_KINDS.has(kind) && kinds.has(kind)) ?? null;
 }
 
-/** Each table's minutes to fire, or "due": it changes whenever a look can change with time. */
+/**
+ * Each table's minutes to fire, or "due", and its current step: it changes whenever a look can
+ * change with time.
+ */
 export function reminderClock(tables: readonly TableState[], now: number): string {
   return tables
     .flatMap((table) => {
+      const parts: string[] = [];
       const dueAt = reminderDueAt(table.party?.reminder);
-      if (dueAt === Number.POSITIVE_INFINITY) return [];
-      return [`${table.id}:${dueAt <= now ? "due" : minutesToFire(dueAt, now)}`];
+      if (dueAt !== Number.POSITIVE_INFINITY)
+        parts.push(`${table.id}:${dueAt <= now ? "due" : minutesToFire(dueAt, now)}`);
+      const step = currentStep(table.signals, now);
+      if (step !== null) parts.push(`${table.id}:step:${step.stepId}`);
+      return parts;
     })
     .join(",");
 }

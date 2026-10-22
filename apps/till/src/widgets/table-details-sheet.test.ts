@@ -7,6 +7,7 @@ import { en, es } from "../i18n/strings.js";
 import "./table-details-sheet.js";
 import type { TillTableDetailsSheet } from "./table-details-sheet.js";
 import type { TableParty, TableState } from "../api/client.js";
+import { dueStepSignal } from "../../test/service-steps.js";
 
 afterEach(cleanupWidgets);
 afterEach(() => setLocale("en"));
@@ -524,6 +525,70 @@ describe("till-table-details-sheet", () => {
     });
     expect(find(el, ".lines")).toBeNull();
     expect(getComputedStyle(find(el, ".chips")!).marginTop).toBe("0px");
+  });
+
+  describe("a due service step", () => {
+    const longName = "Ask whether they would like coffee, dessert or the cheese board";
+    const stepped = (name = "Dessert?") =>
+      table({
+        ...seated,
+        party: party(),
+        signals: [
+          dueStepSignal(name),
+          { kind: "bill_requested", requestedAt: "2026-10-10T12:00:00Z" },
+        ],
+      });
+
+    it("draws the step's whole name with Done above the chips, and not again among them", async () => {
+      const el = await mount({ table: stepped(longName), canMarkSteps: true });
+      const chip = find(el, '[data-chip="service-step"]')!;
+      expect(chip.querySelector(".step-name")!.textContent!.trim()).toBe(longName);
+      expect(text(el, "[data-step-done]")).toBe(en["floor.step_done"]);
+      expect(find(el, "[data-step-done]")!.getAttribute("aria-label")).toBe(
+        en["floor.step_done_label"].replace("{step}", longName),
+      );
+      expect(el.shadowRoot!.querySelectorAll('[data-chip="service-step"]').length).toBe(1);
+      expect(find(el, '.chips [data-chip="service-step"]')).toBeNull();
+      expect(find(el, '.chips [data-chip="bill-requested"]')).not.toBeNull();
+      expect(
+        chip.compareDocumentPosition(find(el, ".chips")!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("sends service-step-done with the ids, then asks to close", async () => {
+      const el = await mount({ table: stepped(), canMarkSteps: true });
+      const seen = captureEvents(el);
+      el.addEventListener("service-step-done", (event) => {
+        expect(event.bubbles && event.composed).toBe(true);
+        seen.push(`service-step-done ${JSON.stringify((event as CustomEvent).detail)}`);
+      });
+      await userEvent.click(find(el, "[data-step-done]")!);
+      expect(seen).toEqual([
+        'service-step-done {"partyId":"p1","stepId":"step-Dessert?","dueAt":"2000-01-01T00:00:00.000Z","tableId":"t1"}',
+        "details-close",
+      ]);
+    });
+
+    it("shows the plain chip among the chips, with no Done, when the device cannot mark steps", async () => {
+      const el = await mount({ table: stepped(), canMarkSteps: false });
+      expect(find(el, "[data-step-done]")).toBeNull();
+      const chip = find(el, '.chips [data-chip="service-step"]')!;
+      expect(chip.textContent!.trim()).toBe("Dessert?");
+      expect(chip.classList.contains("tone-primary-filled")).toBe(true);
+    });
+
+    it("offers no Done for a step not yet due", async () => {
+      const el = await mount({
+        table: table({
+          ...seated,
+          party: party(),
+          signals: [dueStepSignal("Dessert?", "2999-01-01T00:00:00.000Z")],
+        }),
+        canMarkSteps: true,
+      });
+      expect(find(el, "[data-step-done]")).toBeNull();
+      expect(find(el, '[data-chip="service-step"]')).toBeNull();
+    });
   });
 
   it("says Free for a free table with nothing on it", async () => {

@@ -202,6 +202,8 @@ The latest snapshots enumerate **211 application tables and 1654 columns across 
 
 **2026-10-19:** `service_steps`, a venue-service table not in the list above, was added (A757 slice 7, venue-service migration 0062): **L**: `id`, `department_id`, `course_id`; **U**: `name`; **R**: `position`, `start`, `minutes`; retention as `departments` (configuration).
 
+**2026-10-22:** `service_step_completions` (added 2026-10-22, A757 slice 8, venue-service migration 0066): **L**: `id`, `party_id`, `step_id`, `done_by`; **R**: `done_at`; retention as `parties`. Out: `party_id` → `parties(id)` [cascade]; `step_id` → `service_steps(id)` [cascade]; non-FK `done_by` is the person who tapped Done.
+
 ## media (2 tables)
 
 | Table and source block                                                  | D / H / S / L / U / R: all declared fields                                                                         |

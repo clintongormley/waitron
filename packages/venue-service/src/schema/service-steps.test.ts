@@ -11,6 +11,7 @@ import {
   isRefusal,
   kitchenCourses,
   locations,
+  parties,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -18,7 +19,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "../migrations.js";
 import { departments } from "./service.js";
-import { serviceSteps } from "./service-steps.js";
+import { serviceStepCompletions, serviceSteps } from "./service-steps.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -148,5 +149,106 @@ describe("the service_steps table", () => {
       FOREIGN_KEY_VIOLATION,
       "FOREIGN KEY constraint failed",
     );
+  });
+});
+
+describe("the service_step_completions table", () => {
+  async function stepAndParty(name: string) {
+    return withTransaction(db, async (tx) => {
+      const [location] = await tx
+        .insert(locations)
+        .values({ name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
+        .returning({ id: locations.id });
+      const [department] = await tx
+        .insert(departments)
+        .values({ locationId: location!.id, name: "Restaurant", tradingName: "Restaurant" })
+        .returning({ id: departments.id });
+      const [row] = await tx
+        .insert(serviceSteps)
+        .values(step({ departmentId: department!.id, name }))
+        .returning({ id: serviceSteps.id });
+      const [party] = await tx
+        .insert(parties)
+        .values({ openedBy: "sender" })
+        .returning({ id: parties.id });
+      return { stepId: row!.id, partyId: party!.id };
+    });
+  }
+
+  const completionsOf = (stepId: string) =>
+    db
+      .select({
+        partyId: serviceStepCompletions.partyId,
+        stepId: serviceStepCompletions.stepId,
+        doneAt: serviceStepCompletions.doneAt,
+        doneBy: serviceStepCompletions.doneBy,
+      })
+      .from(serviceStepCompletions)
+      .where(eq(serviceStepCompletions.stepId, stepId))
+      .orderBy(asc(serviceStepCompletions.doneAt));
+
+  it("keeps who tapped Done on a step, and when", async () => {
+    const { stepId, partyId } = await stepAndParty("Kept");
+    await withTransaction(db, async (tx) => {
+      await tx.insert(serviceStepCompletions).values([
+        { partyId, stepId, doneAt: "2026-10-22T20:33:00.000Z", doneBy: "waiter-1" },
+        { partyId, stepId, doneAt: "2026-10-22T20:58:00.000Z", doneBy: "waiter-2" },
+      ]);
+    });
+    expect(await completionsOf(stepId)).toEqual([
+      { partyId, stepId, doneAt: "2026-10-22T20:33:00.000Z", doneBy: "waiter-1" },
+      { partyId, stepId, doneAt: "2026-10-22T20:58:00.000Z", doneBy: "waiter-2" },
+    ]);
+  });
+
+  it("refuses a completion naming no party or no step", async () => {
+    const { stepId, partyId } = await stepAndParty("Refusing");
+    for (const row of [
+      { partyId: randomUUID(), stepId },
+      { partyId, stepId: randomUUID() },
+    ]) {
+      const error = await captureError(() =>
+        withTransaction(db, async (tx) => {
+          await tx
+            .insert(serviceStepCompletions)
+            .values({ ...row, doneAt: "2026-10-22T20:33:00.000Z", doneBy: "waiter-1" });
+        }),
+      );
+      expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+      expect(engineErrorMessage(error)).toContain("FOREIGN KEY constraint failed");
+    }
+  });
+
+  it("deletes a step's completions with the step, and a party's with the party", async () => {
+    const first = await stepAndParty("Deleted step");
+    const second = await stepAndParty("Deleted party");
+    await withTransaction(db, async (tx) => {
+      await tx.insert(serviceStepCompletions).values([
+        { ...first, doneAt: "2026-10-22T20:33:00.000Z", doneBy: "waiter-1" },
+        { ...second, doneAt: "2026-10-22T20:34:00.000Z", doneBy: "waiter-1" },
+        {
+          partyId: first.partyId,
+          stepId: second.stepId,
+          doneAt: "2026-10-22T20:35:00.000Z",
+          doneBy: "waiter-1",
+        },
+      ]);
+    });
+    await withTransaction(db, async (tx) => {
+      await tx.delete(serviceSteps).where(eq(serviceSteps.id, first.stepId));
+    });
+    expect(await completionsOf(first.stepId)).toEqual([]);
+    expect(await completionsOf(second.stepId)).toHaveLength(2);
+    await withTransaction(db, async (tx) => {
+      await tx.delete(parties).where(eq(parties.id, second.partyId));
+    });
+    expect(await completionsOf(second.stepId)).toEqual([
+      {
+        partyId: first.partyId,
+        stepId: second.stepId,
+        doneAt: "2026-10-22T20:35:00.000Z",
+        doneBy: "waiter-1",
+      },
+    ]);
   });
 });

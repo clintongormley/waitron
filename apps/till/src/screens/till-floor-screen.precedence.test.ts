@@ -7,6 +7,7 @@ import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { TableParty, TableState, TableToday } from "../api/client.js";
 import type { TableSignal } from "@waitron/shared";
+import { dueStepSignal } from "../../test/service-steps.js";
 
 const now = Date.parse("2026-09-30T20:00:00.000Z");
 const past = new Date(now - 60_000).toISOString();
@@ -203,7 +204,7 @@ describe("till-floor-screen: the card's ring", () => {
     ],
     ["bill", { signals: [{ kind: "bill_requested", requestedAt: past }] }],
     ["ready", { readyToServe: 1 }],
-    ["step", { signals: [{ kind: "take_order" }] }],
+    ["step", { signals: [dueStepSignal("Take order")] }],
     [
       "not-sent",
       {
@@ -381,7 +382,7 @@ describe("till-floor-screen: the card's marks in the order of precedence", () =>
         nextReservation: { time: "21:30" },
         party: party({ reminder: { groupId: "g2", dueAt: past }, unsentDrafts: [draft] }),
         signals: [
-          { kind: "take_order" },
+          dueStepSignal("Take order"),
           { kind: "ready", byStation: [{ stationId: "bar", stationName: "Bar", count: 2 }] },
           { kind: "bill_requested", requestedAt: past },
           { kind: "release_due", groupId: "g2", dueAt: past },
@@ -396,7 +397,7 @@ describe("till-floor-screen: the card's marks in the order of precedence", () =>
       "[data-fire-due]",
       '[data-chip="bill-requested"]',
       '[data-chip="ready"]',
-      '[data-chip="take-order"]',
+      '[data-chip="service-step"]',
       "[data-unsent]",
       "[data-reserved]",
     ]);
@@ -562,7 +563,7 @@ describe("till-floor-screen: the calm card", () => {
         seated("t4", {}, { reminder: { groupId: "g4", dueAt: past } }),
         seated("t5", { signals: [{ kind: "bill_requested", requestedAt: past }] }),
         seated("t6", { readyToServe: 1 }),
-        seated("t7", { signals: [{ kind: "take_order" }] }),
+        seated("t7", { signals: [dueStepSignal("Take order")] }),
         seated("t8", {}, { unsentDrafts: [draft] }),
         seated("t9", { timingBand: "fresh", signals: [longWait("warm")] }),
       ],

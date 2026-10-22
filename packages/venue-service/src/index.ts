@@ -77,6 +77,13 @@ export {
 } from "./service-steps.js";
 
 export {
+  readStepCompletions,
+  readTableStepRules,
+  recordStepCompletions,
+  type StepRule,
+} from "./service-step-completions.js";
+
+export {
   readCourseDeleteSettings,
   courseDeleteSettingsRemoves,
   clearCourseDeleteSettings,
