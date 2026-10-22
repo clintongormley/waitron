@@ -160,6 +160,23 @@ describe("the words for an order's item counts", () => {
     expect(es["order_counts.waiting"]).toContain(waiting);
     expect(es["order_counts.waiting_one"]).toContain(waiting);
     expect(es["order_counts.waiting"]).not.toContain(es["table.group_held"].toLowerCase());
+    expect(es["order_counts.waiting_one"]).not.toContain(es["table.group_held"].toLowerCase());
+  });
+
+  it("says items with the floor's unsent-order word", () => {
+    expect(es["order_counts.items"]).toBe(es["floor.unsent"].split(": ")[1]);
+    expect(es["order_counts.items_one"]).toBe(es["floor.unsent_one"].split(": ")[1]);
+  });
+
+  it("says unsent with the floor's Unsent mark", () => {
+    const unsent = es["floor.unsent_mark"].toLowerCase();
+    expect(es["order_counts.unsent"]).toBe(`{n} ${unsent}`);
+    expect(es["order_counts.unsent_one"]).toBe(`1 ${unsent}`);
+  });
+
+  it("says ready with the order screen's ready flash", () => {
+    expect(es["order_counts.ready"]).toBe(es["table.flash_ready"]);
+    expect(es["order_counts.ready_one"]).toBe(es["table.flash_ready_one"]);
   });
 });
 
