@@ -195,8 +195,8 @@ describe("main CI recovery", () => {
     expect(result.args).toBe("");
   });
   it("exposes manual recovery while retaining push-only publishing and the main tag guard", () => {
-    expect(workflow.split("\nconcurrency:")[0]).toMatch(/^  workflow_dispatch:/m);
-    const changes = workflow.split("\n  changes:\n")[1].split(/^  [a-z]/m)[0];
+    expect(workflow.split("\nconcurrency:")[0]).toMatch(/^ {2}workflow_dispatch:/m);
+    const changes = workflow.split("\n  changes:\n")[1].split(/^ {2}[a-z]/m)[0];
     expect(changes).toContain("      actions: read");
     expect(changes).toContain("GH_TOKEN: ${{ github.token }}");
     expect(changes).toContain("REF: ${{ github.ref }}");
