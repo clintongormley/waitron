@@ -310,7 +310,7 @@ lives in `packages/store/src/index.test.ts`, not beside the file it reverts
 **Every read route now takes the venue's exclusive write lock and issues a DELETE — OPEN (found
 2026-09-23, task F1's review wave).** `withTransaction` (`packages/db/src/tenancy.ts`) runs its body
 inside `withWriteLock` and then drains `change_log` unconditionally, which is a `delete … returning`.
-Plain GETs are among its callers — box status, the unauthenticated content-languages route, and two
+Plain GETs are among its callers — `GET /api/box/status`, the unauthenticated content-languages route, and two
 management reads. The single writer is the engine's and is not removable. The unconditional DELETE
 on a read-only body is: `node:sqlite` exposes a change counter. But it interacts with a documented
 behaviour — the drain deliberately collects the rows an orphaned writer left — so this is a design

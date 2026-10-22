@@ -72,7 +72,9 @@ server-log access. The older slice descriptions and decisions below retain their
     `<logDir>/crash-reports/` — on a box `/var/lib/waitron/logs/crash-reports/` on the persistent
     `logs` volume, outside the venue database. Nothing reads them yet. A start that finds under
     256 MiB free, or that failed on a full disk, deletes those more than a week old
-    (`apps/server/src/start-space.ts:119-133`; `deploy/README.md:254-258`).
+    (`apps/server/src/start-space.ts:119-133`; `deploy/README.md:254-258`), and since A798-B
+    slice 7 so does the Box status page's Free button (`deleteLeftovers`,
+    `apps/server/src/free-space-now.ts`).
 
 ## The Alerts table makes long station warnings hard to read on a phone
 

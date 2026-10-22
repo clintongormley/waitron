@@ -5567,10 +5567,13 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   Box status read and the bell's alert reads answer there; the shell's other reads at sign-in were
   not tried. Left open by A798-B slice 7.
 
-- **Alert sources added by modules were not checked for writes under the bell's full-disk retry.**
-  The retry reads the sources that run in the request's transaction in a `withWriteLock` turn with
-  no drain; what a module's source that writes does to the bell's read on a full disk was not
-  tried. Left open by A798-B slice 7.
+- **An alert source that writes would take the whole bell read down on a full disk.** The bell's
+  full-disk retry reads every source that runs in the request's transaction in one `withWriteLock`
+  turn with no drain, the arrangement M2 measured failing for notice sources
+  ([conventions-data.md](developers/conventions-data.md#a-read-on-a-full-disk-must-not-fail-on-its-own-housekeeping-write));
+  the equipment read gives each notice source a turn of its own. No core alert source writes today
+  (convention review, 2026-10-22, a grep for `.insert(`, `.update(` and `.delete(`). Left open by
+  A798-B slice 7.
 
 - **The recovery page says the start "deleted what it could make again"; the Box status page says
   "files the box no longer needs".** One wording for the same set. Left open by A798-B slice 7.

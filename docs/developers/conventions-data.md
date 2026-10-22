@@ -2431,6 +2431,9 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   `full()` only while `since()` names a refusal, because the extra await would let another write's
   transaction get into the write queue ahead of a payment's first transaction (#1950;
   the in-flight cases in `placed-order-one-payment.test.ts` and `bill-payments.in-flight.test.ts`).
+  A free-space deletion on the Box status page (`createSpaceFreer`,
+  `apps/server/src/free-space-now.ts`) also reads it straight after deleting, so the stop can lift
+  at once (A798-B slice 7).
 - The free-space watch (`apps/server/src/free-space-watch.ts`, started by boot in trading mode)
   reads the venue folder's free space at start, then a minute after each reading finishes. While the
   stop is on, each reading also awaits `full()`, so the stop lifts within about a minute of 16 MiB
@@ -2665,7 +2668,7 @@ has already thrown (inferred, not isolated).
 - While the disk is full, no device's last-seen time moves, so anything that reads it as a sign of
   life sees the device go quiet.
 - A full disk the engine reports as anything but result code 13 is not `storage.disk_full`
-  (`diskFullIn`, `packages/shared/src/engine-failure.ts`), so neither change catches it.
+  (`diskFullIn`, `packages/shared/src/engine-failure.ts`), so none of these fallbacks catches it.
 
 #### Backup staging is touched only inside the staging turn
 

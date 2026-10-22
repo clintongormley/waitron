@@ -847,7 +847,7 @@ inside the workspace's state folder is not deleted by it. The forced clean-up af
 failed on a full disk runs inside `runAdmittedEntry` with the workspace's folders, and the count
 check uses them too. Accepted for A798-B slice 2 (its plan's decision 15). Since A978
 (2026-10-21) this also means a cut-off backup run's plaintext copy in that workspace survives every
-ordinary start; only a start that fails on a full disk deletes it. Not yet put to the owner.
+ordinary start; of the starts, only one that fails on a full disk deletes it. Not yet put to the owner.
 Since A798-B slice 7, the Box status page's Liberar deletes a cut-off backup's leftovers in the
 running server's own state folder, which on such a box is the workspace's (`runEntry` starts the
 server with `WAITRON_STATE_DIR` set to the workspace's state folder, `apps/server/src/node-entry.ts`;

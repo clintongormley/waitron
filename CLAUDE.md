@@ -548,10 +548,8 @@ called weaker than its name, the topic file lists what it does not see.
   holder file and the watchdog are in [conventions-data.md](docs/developers/conventions-data.md).
 - **Anything that writes or deletes in `<state>/backup-staging` does it inside the staging turn**
   (`apps/server/src/backup-staging-turn.ts`), **except the start's clean-up (`freeSpaceAtStart`),
-  which runs while no backup supervisor is running in this process**: a backup run through
-  `runBackup`, a free-space deletion (the Box status page's Free button) through `ifNoBackup`; a
-  page's read takes none. Cost: deleting a dump a run reads frees nothing until the run closes it
-  (A798-B slice 7 plan, M3), and the run reads it back by path. Guard:
+  which runs while no backup supervisor is running in this process**. Cost: deleting a dump a run
+  reads frees nothing until the run closes it (A798-B slice 7 plan, M3). Guard:
   `scripts/backup-staging-touchers.test.ts`, weaker than its name — it reads text and never checks
   that a file takes the turn; the turn is in-process only. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#backup-staging-is-touched-only-inside-the-staging-turn).
