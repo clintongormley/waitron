@@ -79,6 +79,7 @@ export async function beginSettledTenderRefund(
         {
           requestedBy: operator.personId,
           authorizedBy: authorization.authorizedBy,
+          viaOverride: authorization.viaOverride,
         },
         createdAt,
       );

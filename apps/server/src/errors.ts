@@ -588,6 +588,8 @@ declare module "@waitron/shared" {
      */
     "bill.refund_exceeds_payment": { paymentId: string; applied: string; tip: string };
     "tender.refund_exceeds_payment": { tenderId: string; applied: string; tip: string };
+    /** A refund approved by a PIN asked for more than the cancels it names can still take, or a tip. */
+    "tender.refund_exceeds_cancelled": { tenderId: string; cancelled: string };
     "tender.manual_refund_pin_required": { tenderId: string };
     "tender.refund_unavailable": { tenderId: string };
     "tender.refund_in_progress": { tenderId: string };

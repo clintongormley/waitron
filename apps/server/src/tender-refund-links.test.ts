@@ -24,6 +24,7 @@ import { reserveTenderRefund } from "./tender-refund-reservation.js";
 import {
   billWith,
   inTx,
+  PINS,
   provisionAdjustmentVenue,
   type AdjustmentVenue,
   type RoundLine,
@@ -409,5 +410,136 @@ describe("a refund names the cancels it pays back", () => {
         manualConfirmed: false,
       }),
     );
+  });
+});
+
+describe("a PIN-approved linked refund cannot exceed its cancels", () => {
+  const managerPin = () => ({ personId: venue.managerId, pin: PINS.manager });
+
+  function staffRefund(paid: { saleId: string }, body: object) {
+    return send(venue.app, venue.cookie.staff, "POST", `/api/transactions/${paid.saleId}/refunds`, {
+      ...body,
+      override: managerPin(),
+    });
+  }
+
+  /** A paid table of a Burger (€12.00) and a Steak (€25.00); the Burger is cancelled with the
+   * Refund tick. With `tipped`, the table is the Burger alone and its cash tender carries a €1.00
+   * tip. */
+  async function oneCancel(tipped = false) {
+    const b = await bill(tipped ? [{ name: "Burger" }] : [{ name: "Burger" }, { name: "Steak" }]);
+    const paid = await pay(b, tipped ? "12.00" : "37.00");
+    if (tipped)
+      await inTx(venue, async (tx) => {
+        // A till takes a tip only on a connected card; a tip on this cash tender stands in for it.
+        const triggers = tx.all<{ name: string; sql: string }>(
+          sql`select name, sql from sqlite_master where type = 'trigger' and tbl_name = 'tenders'`,
+        );
+        for (const trigger of triggers) tx.run(sql.raw(`drop trigger ${trigger.name}`));
+        await tx
+          .update(tenders)
+          .set({ amount: 1300, tipAmount: 100, cashTendered: 1300 })
+          .where(eq(tenders.id, paid.tenderId));
+        for (const trigger of triggers) tx.run(sql.raw(trigger.sql));
+      });
+    return { paid, burger: await cancel(b, b.lineIds[0]!, "1", true) };
+  }
+
+  async function refusedOver(paid: { saleId: string; tenderId: string }, body: object) {
+    const before = await ledgers();
+    const answer = await staffRefund(paid, body);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(409);
+    expect(answer.json).toEqual({
+      code: "tender.refund_exceeds_cancelled",
+      params: { tenderId: paid.tenderId, cancelled: expect.any(String) },
+    });
+    expect(await ledgers()).toEqual(before);
+    return (answer.json as { params: { cancelled: string } }).params.cancelled;
+  }
+
+  it("refuses a PIN-approved linked refund €0.01 above its cancels", async () => {
+    const { paid, burger } = await oneCancel();
+    expect(await refusedOver(paid, refundBody(paid, "12.01", [burger]))).toBe("12.00");
+  });
+
+  it("and one with a tip", async () => {
+    const { paid, burger } = await oneCancel(true);
+    expect(
+      await refusedOver(paid, { ...refundBody(paid, "12.00", [burger]), tipAmount: "1.00" }),
+    ).toBe("12.00");
+  });
+
+  it("reserves and links one at its cancels' value", async () => {
+    const { paid, burger } = await oneCancel();
+    const answer = await staffRefund(paid, refundBody(paid, "12.00", [burger]));
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await linksOf((answer.json as { id: string }).id)).toEqual([
+      { adjustmentId: burger, amount: 1200 },
+    ]);
+  });
+
+  it("refuses a second one over what the first left", async () => {
+    const { paid, burger } = await oneCancel();
+    const first = await staffRefund(paid, refundBody(paid, "5.00", [burger]));
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    expect(await refusedOver(paid, refundBody(paid, "7.01", [burger]))).toBe("7.00");
+    const second = await staffRefund(paid, refundBody(paid, "7.00", [burger]));
+    expect(second.status, JSON.stringify(second.json)).toBe(200);
+    expect(await linksOf((second.json as { id: string }).id)).toEqual([
+      { adjustmentId: burger, amount: 700 },
+    ]);
+  });
+
+  it("replays one it accepted", async () => {
+    const { paid, burger } = await oneCancel();
+    const body = refundBody(paid, "12.00", [burger]);
+    const first = await staffRefund(paid, body);
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    const before = await ledgers();
+    const again = await staffRefund(paid, body);
+    expect(again.status, JSON.stringify(again.json)).toBe(200);
+    expect(again.json).toEqual(first.json);
+    expect(await ledgers()).toEqual(before);
+  });
+
+  it("does not cap a person who holds the refund permission", async () => {
+    const { paid, burger } = await oneCancel();
+    const answer = await refund(paid, refundBody(paid, "13.00", [burger]));
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await linksOf((answer.json as { id: string }).id)).toEqual([
+      { adjustmentId: burger, amount: 1200 },
+    ]);
+  });
+
+  it("accepts the till's amount after an earlier don't-charge cancel", async () => {
+    const b = await bill([{ name: "Burger", quantity: "7" }], "fire");
+    await inTx(venue, async (tx) => {
+      const [party] = await tx.select().from(parties).where(eq(parties.id, b.partyId));
+      const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, b.billId));
+      await cancelItem(
+        tx,
+        venue.cfg,
+        b.partyId,
+        b.lineIds[0]!,
+        {
+          quantity: "1",
+          expectedEdit: await readBillEditState(tx, b.billId),
+          outcome: "remove_charge",
+          reasonId: venue.reasonId.houseVoid,
+          expectedPartyRevision: party!.revision,
+          expectedBillRevision: order!.revision,
+          expectedContext: await readCancellationContext(tx, b.partyId, b.lineIds[0]!),
+          submissionId: randomUUID(),
+        },
+        venue.managerId,
+      );
+    });
+    const paid = await pay(b, "72.00");
+    const cancelled = await cancel(b, b.lineIds[0]!, "1", true);
+    const answer = await staffRefund(paid, refundBody(paid, "12.00", [cancelled]));
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await linksOf((answer.json as { id: string }).id)).toEqual([
+      { adjustmentId: cancelled, amount: 1200 },
+    ]);
   });
 });

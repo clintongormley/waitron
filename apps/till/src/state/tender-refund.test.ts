@@ -422,6 +422,29 @@ it.each([false, true])(
     expect(api.refundTransaction.mock.calls.at(-1)![1].submissionId).not.toBe(firstId);
   },
 );
+it("clears the saved attempt when the refund exceeds the cancelled dishes", async () => {
+  const api = {
+    refundTransaction: vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockRejectedValueOnce({ code: "tender.refund_exceeds_cancelled" }),
+    getTenderRefund: vi.fn(),
+    retryTenderRefund: vi.fn(),
+  };
+  const session = new TenderRefundSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toMatchObject({
+    code: "authorization.not_permitted",
+  });
+  await expect(session.retry("sale-1", { personId: "manager", pin: "0123" })).rejects.toMatchObject(
+    { code: "tender.refund_exceeds_cancelled" },
+  );
+  const firstId = api.refundTransaction.mock.calls[0]![1].submissionId;
+  expect(session.read("sale-1")).toBeNull();
+  api.refundTransaction.mockResolvedValueOnce(reply({ appliedAmount: "1.00", state: "completed" }));
+  await session.submit("sale-1", { ...ask, appliedAmount: "1.00" });
+  expect(api.refundTransaction.mock.calls.at(-1)![1]).toMatchObject({ appliedAmount: "1.00" });
+  expect(api.refundTransaction.mock.calls.at(-1)![1].submissionId).not.toBe(firstId);
+});
 it.each([false, true])(
   "retains an earlier unknown request through an amount refusal, reload=%s",
   async (reload) => {

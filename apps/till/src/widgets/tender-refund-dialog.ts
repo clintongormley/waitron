@@ -233,7 +233,11 @@ export class TillTenderRefundDialog extends LitElement {
     return errors;
   }
   #refusalField(): Field | null {
-    if (this.shownRefusal?.code === "tender.refund_exceeds_payment") return "appliedAmount";
+    if (
+      this.shownRefusal?.code === "tender.refund_exceeds_payment" ||
+      this.shownRefusal?.code === "tender.refund_exceeds_cancelled"
+    )
+      return "appliedAmount";
     const field = this.shownRefusal?.field;
     if (this.shownRefusal?.code !== "management.request_invalid") return null;
     if (field === "appliedAmount" || field === "tipAmount" || field === "reason") return field;

@@ -87,7 +87,7 @@ export async function reserveTenderRefund(
   cfg: DeviceRequestConfig,
   saleId: string,
   request: TenderRefundRequest,
-  actor: { requestedBy: string; authorizedBy: string },
+  actor: { requestedBy: string; authorizedBy: string; viaOverride?: boolean },
   createdAt: string,
 ): Promise<{
   refund: typeof tenderRefunds.$inferSelect;
@@ -217,6 +217,16 @@ export async function reserveTenderRefund(
     cancellationIds === undefined
       ? undefined
       : await allocateToCancels(tx, saleId, cancellationIds, appliedAmount);
+  // A PIN given for the cancels' refund buys their value only; the refund permission covers any.
+  if (
+    allocation !== undefined &&
+    actor.viaOverride === true &&
+    (tipAmount !== 0 || appliedAmount > allocation.canStillTake)
+  )
+    throw new AppError("tender.refund_exceeds_cancelled", {
+      tenderId,
+      cancelled: centsToDecimal(allocation.canStillTake),
+    });
   const [refund] = await tx
     .insert(tenderRefunds)
     .values({

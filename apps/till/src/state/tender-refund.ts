@@ -209,7 +209,8 @@ export class TenderRefundSession {
       this.#refused.delete(id);
       // A later refusal cannot establish what an earlier unknown call returned.
       if (knownRefused) {
-        if (code === "tender.refund_exceeds_payment") this.attempts.refused(this.scope, sent);
+        if (code === "tender.refund_exceeds_payment" || code === "tender.refund_exceeds_cancelled")
+          this.attempts.refused(this.scope, sent);
         else if (
           code === "authorization.not_permitted" ||
           code === "tender.manual_refund_pin_required" ||

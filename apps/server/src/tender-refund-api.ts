@@ -132,6 +132,7 @@ export function mountTenderRefundApi(
       "submission.id_reused": 409,
       "tender.refund_in_progress": 409,
       "tender.refund_exceeds_payment": 409,
+      "tender.refund_exceeds_cancelled": 409,
       "tender.refund_unavailable": 409,
     },
     "tender_refund.failed",
