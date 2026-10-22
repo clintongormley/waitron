@@ -40,10 +40,6 @@ export interface RecordSubstitutionInput {
    * or a plain Error before anything is read or written.
    */
   substitutedSaleIds: SaleId[];
-  /**
-   * The recipient, required because a full invoice always names one («siempre debe llevar el
-   * destinatario»). Written to the F3's `counterparty_*` columns and passed to the module.
-   */
   counterparty: Counterparty;
   /** The F3's own total, positive: it restates the substituted operations rather than negating
    * them, and `corrects_sale_id` stays null. */
@@ -58,16 +54,8 @@ export interface RecordSubstitutionInput {
 }
 
 /**
- * Records a `factura de canje` (AEAT `TipoFactura` F3): a full invoice, naming the customer's tax
- * details, issued in substitution of one or more simplified tickets (F2).
- *
- * An F3 is not a corrective invoice. The tickets stay recorded, neither edited nor annulled; AEAT
- * avoids counting the amount twice because the record identifies itself as a substitution. So the
- * F3 carries a positive total and one `sale_substitutions` row per ticket.
- *
- * The customer already paid on the tickets («no cobrar dos veces»), so the F3 is recorded with no
- * tender and no settlement. A failed integrity check records an incident and the F3 proceeds
- * anyway.
+ * The customer already paid on the tickets, so the F3 is recorded with no tender and no settlement.
+ * A failed integrity check records an incident and the F3 proceeds anyway.
  */
 export async function recordSubstitution(
   tx: Transaction,
