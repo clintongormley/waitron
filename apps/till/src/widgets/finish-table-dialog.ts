@@ -163,6 +163,14 @@ export class TillFinishTableDialog extends LitElement {
       this.sending = false;
       this.#scope?.commit(this.#baseline);
     }
+    if (changed.has("reasons") && this.draft.reasonId !== "" && this.#reason() === undefined) {
+      const untouched = this.draft.reasonId === this.#baseline?.reasonId;
+      this.draft = { ...this.draft, reasonId: "", note: "" };
+      if (untouched) {
+        this.#baseline = { ...this.#baseline!, reasonId: "" };
+        this.#scope?.commit(this.#baseline);
+      } else this.#scope?.changed();
+    }
     if (
       (changed.has("reasons") || changed.has("defaultReasonId")) &&
       this.draft.reasonId === "" &&
@@ -172,14 +180,6 @@ export class TillFinishTableDialog extends LitElement {
       this.draft = { ...this.draft, reasonId: this.defaultReasonId };
       this.#baseline = { ...this.#baseline, reasonId: this.defaultReasonId };
       this.#scope?.commit(this.#baseline);
-    }
-    if (changed.has("reasons") && this.draft.reasonId !== "" && this.#reason() === undefined) {
-      const untouched = this.draft.reasonId === this.#baseline?.reasonId;
-      this.draft = { ...this.draft, reasonId: "", note: "" };
-      if (untouched) {
-        this.#baseline = { ...this.#baseline!, reasonId: "" };
-        this.#scope?.commit(this.#baseline);
-      } else this.#scope?.changed();
     }
     if (this.isConnected && this.active && !this.#scope) {
       const { scope, coordinator } = draftScopeFor<Draft>(this, {

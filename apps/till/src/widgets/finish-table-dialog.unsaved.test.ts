@@ -216,3 +216,14 @@ it("a chosen reason deleted while it is open stays an unsaved change", async () 
   expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("");
   expect(unload()).toBe(true);
 });
+it("a start reason deleted while another becomes the start reason takes the new one", async () => {
+  const { app, form } = await mount();
+  expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("house");
+  app.reasons = [{ ...app.reasons[0]!, id: "other", name: "Other" }];
+  form.defaultReasonId = "other";
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("other");
+  expect(unload()).toBe(false);
+});
