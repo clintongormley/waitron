@@ -10,7 +10,6 @@ const document: RecoveryDocument = {
   taxpayerName: "Olivo Restauración SL",
   venueName: "Olivo Centro",
   createdAt: "2026-10-18T17:29:32.728Z",
-  installationCodes: ["0CNNW"],
   nodeKey: {
     nodeId: "3262bf78-1d78-4b10-bae6-61fda564d5e8",
     name: "2026-10-18 · K7QF",

@@ -155,7 +155,7 @@ it("offers explicit replacement after raw-key loss and delivers the new real PDF
     new Uint8Array(await (await fetch(download(el)!.href)).arrayBuffer()),
   );
   expect(decoded.document?.nodeKey).toEqual(replacement.key);
-  expect(decoded.document?.installationCodes).toEqual(["0CSQW"]);
+  expect(decoded.document).not.toHaveProperty("installationCodes");
   expect(calls.filter((c) => c.action === "reissue")).toHaveLength(1);
   expect(calls.filter((c) => c.action === "select")).toEqual([
     { action: "select", value: { answer: "no" } },

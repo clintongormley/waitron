@@ -354,7 +354,6 @@ it("activates the current hour through production composition without signed-fil
         {
           action: "select",
           comparisonId: compared.id,
-          installationCodes: ["0CNM0"],
         },
         { onBox: true },
       )) as { status: string; targetMs?: number; input: unknown };

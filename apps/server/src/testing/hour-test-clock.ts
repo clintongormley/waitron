@@ -82,7 +82,6 @@ export async function selectPastWaits<T>(
 export function recoverySelectPastWaits(
   clock: HourTestClock,
   service: { prepare(proposal: unknown, client: { onBox: boolean }): Promise<unknown> },
-  proposal: { installationCodes: readonly string[] },
   client: { onBox: boolean },
   beforeAsk: () => void = () => {},
 ): Promise<unknown> {
@@ -98,6 +97,6 @@ export function recoverySelectPastWaits(
       },
       client,
     )) as { id: string };
-    return service.prepare({ action: "select", ...proposal, comparisonId: compared.id }, client);
+    return service.prepare({ action: "select", comparisonId: compared.id }, client);
   });
 }

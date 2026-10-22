@@ -89,7 +89,6 @@ interface Row {
   onBox?: boolean;
   release?: number;
   surviving?: HourHistorySource[];
-  reportedIdentities?: string[];
   promote?: boolean;
 }
 type Outcome =
@@ -176,7 +175,6 @@ async function restore(c: Row): Promise<Outcome> {
         binding: operation.binding,
         authority,
         comparisonId: comparison.id,
-        ...(c.reportedIdentities === undefined ? {} : { reportedIdentities: c.reportedIdentities }),
       }),
     );
   };
@@ -197,6 +195,61 @@ async function restore(c: Row): Promise<Outcome> {
       ? { refused: params.reason }
       : { refused: params.reason, allowedFromMs: new Date(params.allowedFromMs).toISOString() };
   }
+}
+
+// Drives the hosted restore form's own path (FISCAL_OPERATIONS) up to a disagreeing comparison.
+async function hostedComparison(
+  box: number,
+  run: (
+    send: (proposal: unknown) => Promise<unknown>,
+    comparison: { id: string; clock: { disagreement: boolean } },
+  ) => Promise<void>,
+) {
+  vi.spyOn(hourRelease, "readHourRelease").mockReturnValue({
+    sourceCommit: "a".repeat(40),
+    instantMs: RELEASE,
+    committedAt: new Date(RELEASE).toISOString(),
+    generator: "scripts/generate-hour-release.mjs:v1",
+    generatorSha256: "b".repeat(64),
+  });
+  vi.spyOn(internetClock, "observeInternetHourClock").mockResolvedValue({
+    source: "internet",
+    result: "unavailable",
+    reason: "tls",
+  });
+  const facts: ModuleRecoveryFacts = {
+    country: "ES",
+    taxId: scope.taxpayerNif,
+    environment: scope.environment,
+    bases,
+    contextKey: KEY,
+    history: backupHistory,
+    oldMachineOffline: true,
+    oldMachineAbsent: false,
+    noParallelRecovery: true,
+    priorActivation: "none",
+  };
+  const host: ModuleOperationHost = {
+    environment: {},
+    readPublicEvidence: async () => undefined,
+    readRecoveryFacts: async () => facts,
+    withPreparationState: store(),
+    testClock: { wall: () => box, monotonic: () => 1000 },
+  };
+  const recovery = FISCAL_OPERATIONS.configure!(host).recovery!;
+  await withOperationAuthority(binding, operator, async (authority) => {
+    const operation = { binding, authority };
+    const client = { onBox: false };
+    const challenge = (await recovery(operation, { action: "clock-challenge" }, client)) as {
+      id: string;
+    };
+    const comparison = (await recovery(
+      operation,
+      { action: "compare-clocks", browser: { challengeId: challenge.id, instantMs: TRUE_NOW } },
+      client,
+    )) as { id: string; clock: { disagreement: boolean } };
+    await run((proposal) => recovery(operation, proposal, client), comparison);
+  });
 }
 
 const later = (code: string, than: string) =>
@@ -247,52 +300,10 @@ describe("refused", () => {
   });
 
   it("B2: no proposal confirms a disagreeing comparison", async () => {
-    vi.spyOn(hourRelease, "readHourRelease").mockReturnValue({
-      sourceCommit: "a".repeat(40),
-      instantMs: RELEASE,
-      committedAt: new Date(RELEASE).toISOString(),
-      generator: "scripts/generate-hour-release.mjs:v1",
-      generatorSha256: "b".repeat(64),
-    });
-    vi.spyOn(internetClock, "observeInternetHourClock").mockResolvedValue({
-      source: "internet",
-      result: "unavailable",
-      reason: "tls",
-    });
-    const facts: ModuleRecoveryFacts = {
-      country: "ES",
-      taxId: scope.taxpayerNif,
-      environment: scope.environment,
-      bases,
-      contextKey: KEY,
-      history: backupHistory,
-      oldMachineOffline: true,
-      oldMachineAbsent: false,
-      noParallelRecovery: true,
-      priorActivation: "none",
-    };
-    const host: ModuleOperationHost = {
-      environment: {},
-      readPublicEvidence: async () => undefined,
-      readRecoveryFacts: async () => facts,
-      withPreparationState: store(),
-      testClock: { wall: () => ABOVE_FLOORS, monotonic: () => 1000 },
-    };
-    const recovery = FISCAL_OPERATIONS.configure!(host).recovery!;
-    await withOperationAuthority(binding, operator, async (authority) => {
-      const operation = { binding, authority };
-      const client = { onBox: false };
-      const challenge = (await recovery(operation, { action: "clock-challenge" }, client)) as {
-        id: string;
-      };
-      const comparison = (await recovery(
-        operation,
-        { action: "compare-clocks", browser: { challengeId: challenge.id, instantMs: TRUE_NOW } },
-        client,
-      )) as { id: string; clock: { disagreement: boolean } };
+    await hostedComparison(ABOVE_FLOORS, async (send, comparison) => {
       expect(comparison.clock.disagreement).toBe(true);
       await expect(
-        recovery(operation, { action: "confirm-clock", comparisonId: comparison.id }, client),
+        send({ action: "confirm-clock", comparisonId: comparison.id }),
       ).rejects.toMatchObject({
         code: "sif.allocation_invalid",
         params: { reason: "event_mismatch" },
@@ -300,15 +311,17 @@ describe("refused", () => {
     });
   });
 
-  it("Sv: as S above the backup's floors", async () => {
-    expect(
-      await restore({ box: ABOVE_FLOORS, browser: TRUE_NOW, reportedIdentities: [KNOWN] }),
-    ).toEqual({ refused: "clock_disagreement" });
-  });
-
-  it("S: as B2, with the old sheet's code typed", async () => {
-    expect(await restore({ box: BEHIND, browser: TRUE_NOW, reportedIdentities: [KNOWN] })).toEqual({
-      refused: "clock_disagreement",
+  it.each([
+    ["Sv: as S above the backup's floors", ABOVE_FLOORS],
+    ["S: as B2, with the old sheet's code still sent", BEHIND],
+  ])("%s: a selection carrying an installation code is refused", async (_name, box) => {
+    await hostedComparison(box, async (send, comparison) => {
+      await expect(
+        send({ action: "select", comparisonId: comparison.id, installationCodes: [KNOWN] }),
+      ).rejects.toMatchObject({
+        code: "sif.allocation_invalid",
+        params: { reason: "event_mismatch" },
+      });
     });
   });
 

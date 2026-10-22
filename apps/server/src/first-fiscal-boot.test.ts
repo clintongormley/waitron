@@ -200,7 +200,6 @@ it.each(["trading", "completion-state", "completion-marker"])(
       expect(staged.status).toBe(200);
       const statement = {
         kind: "waitron-recovery-document",
-        installationCodes: [prepared.allocation.installationIdentity],
         version: 1,
         scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "production" },
         taxpayerName: request.legalName,

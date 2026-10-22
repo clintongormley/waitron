@@ -7,7 +7,6 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 const document = {
   kind: "waitron-recovery-document",
-  installationCodes: ["0CNNW"],
   version: 1,
   scope: { taxpayerNif: "B12345674", softwareId: "W1", environment: "production" },
   taxpayerName: "Olivo Restauración SL",

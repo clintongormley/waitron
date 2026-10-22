@@ -215,13 +215,9 @@ export async function stagedHourRestore(
       }),
     };
     const service = createSelectedRecoveryPreparation(options);
-    const outcome = (await recoverySelectPastWaits(
-      clock,
-      service,
-      { installationCodes: ["0CNNW"] },
-      client,
-      follow,
-    )) as { input: unknown };
+    const outcome = (await recoverySelectPastWaits(clock, service, client, follow)) as {
+      input: unknown;
+    };
     const common = {
       environment: "preproduction" as const,
       recoveryOperation: { binding, input: outcome.input },
@@ -243,7 +239,7 @@ export async function stagedHourRestore(
         ...options,
         binding: { ...binding, eventId: binding.eventId + "-another" },
       });
-      return recoverySelectPastWaits(clock, next, { installationCodes: ["0CNNW"] }, client, follow);
+      return recoverySelectPastWaits(clock, next, client, follow);
     };
     const journalPath = join(roots.stateDir, "module-preparation-state.json");
     const journal = () => readFileSync(journalPath, "utf8");

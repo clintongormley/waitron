@@ -269,10 +269,7 @@ it("adds the selected copy's opaque public floor to surviving host evidence", as
   });
   const comparisonId = await compareWith(service);
   await expect(
-    service.prepare(
-      { action: "select", comparisonId, installationCodes: ["0CNNY"] },
-      { onBox: true },
-    ),
+    service.prepare({ action: "select", comparisonId }, { onBox: true }),
   ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "minute_not_later" },
@@ -416,21 +413,13 @@ it("admits recovery from the real validated archive preview with its public spen
   });
   const comparisonId = await compareWith(service);
   await expect(
-    service.prepare(
-      { action: "select", comparisonId, installationCodes: ["0CNNY"] },
-      { onBox: true },
-    ),
+    service.prepare({ action: "select", comparisonId }, { onBox: true }),
   ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "minute_not_later" },
   });
   clock.set(Date.parse("2026-10-16T14:40:00Z"));
-  const outcome = (await recoverySelectPastWaits(
-    clock,
-    service,
-    { installationCodes: ["0CNNY"] },
-    { onBox: true },
-  )) as {
+  const outcome = (await recoverySelectPastWaits(clock, service, { onBox: true })) as {
     identity: string;
     input: unknown;
   };
@@ -556,9 +545,7 @@ it("with only the box's clock a recovery has no confirmation to give, and select
   const comparison = (await f.prepare({ action: "compare-clocks", browser: null })) as {
     id: string;
   };
-  await expect(
-    f.prepare({ action: "select", comparisonId: comparison.id, installationCodes: ["0CNNY"] }),
-  ).rejects.toMatchObject({
+  await expect(f.prepare({ action: "select", comparisonId: comparison.id })).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "second_clock_missing" },
   });
@@ -593,14 +580,7 @@ it("binds a bucket selection to its exact activation point rather than its gener
       activationSourceId: binding.sourceId,
     },
   });
-  expect(
-    await recoverySelectPastWaits(
-      clock,
-      service,
-      { installationCodes: ["0CNNY"] },
-      { onBox: true },
-    ),
-  ).toMatchObject({
+  expect(await recoverySelectPastWaits(clock, service, { onBox: true })).toMatchObject({
     status: "selected",
     identity: "0CNQT",
   });
@@ -644,13 +624,8 @@ describe("module-owned recovery facts from the actual database", () => {
     const compare = async () => {
       comparisonId = await compareWith(service);
     };
-    const select = () =>
-      service.prepare(
-        { action: "select", comparisonId, installationCodes: ["0CNNY"] },
-        { onBox: true },
-      );
-    const selectPastWaits = () =>
-      recoverySelectPastWaits(clock, service, { installationCodes: ["0CNNY"] }, { onBox: true });
+    const select = () => service.prepare({ action: "select", comparisonId }, { onBox: true });
+    const selectPastWaits = () => recoverySelectPastWaits(clock, service, { onBox: true });
     return { ...f, service, compare, select, selectPastWaits, isolation, options };
   }
 
@@ -741,12 +716,7 @@ describe("module-owned recovery facts from the actual database", () => {
         bases: [{ code: "WRONG", purpose: "standard" }],
       }),
     });
-    const selected = await recoverySelectPastWaits(
-      clock,
-      service,
-      { installationCodes: ["0CNNY"] },
-      { onBox: true },
-    );
+    const selected = await recoverySelectPastWaits(clock, service, { onBox: true });
     expect(selected).toMatchObject({
       input: {
         allocation: {
@@ -761,33 +731,20 @@ describe("module-owned recovery facts from the actual database", () => {
   });
 });
 
-it("refuses an entered installation code newer than the selected backup, then accepts the next real hour", async () => {
+it("refuses a selection that still carries an installation code, writing nothing", async () => {
   const f = await host();
-  await f.compare();
+  const compared = await f.compare();
   const beforeSeries = await suite.db.select().from(invoiceSeries);
   const beforeAllocations = await suite.db.select().from(fiscalAllocations);
-  await expect(f.select(["0cnqx"])).rejects.toMatchObject({
+  await expect(
+    f.prepare({ action: "select", comparisonId: compared.id, installationCodes: ["0CNQX"] }),
+  ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T12:46:00Z") },
+    params: { reason: "event_mismatch" },
   });
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
   expect(await suite.db.select().from(invoiceSeries)).toEqual(beforeSeries);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(beforeAllocations);
-  clock.set(Date.parse("2026-10-16T13:00:00Z"));
-  const result = (await f.selectPastWaits(["0cnqx"])) as { input: unknown };
-  expect(result).toMatchObject({ identity: "0CNRE", reportedIdentities: ["0CNQX"] });
-  await runRestoreHooks({
-    db: suite.db,
-    node,
-    modules: f.configured,
-    log: () => {},
-    withModuleOperations: f.service.runner(result.input),
-  });
-  expect(
-    (await suite.db.select().from(invoiceSeries))
-      .filter((row) => row.retiredAt === null)
-      .map((row) => row.code),
-  ).toEqual(expect.arrayContaining(["A-0CNRE", "FF-0CNRE", "R-0CNRE"]));
 });
 
 async function sellAt(instant: string) {
@@ -824,12 +781,7 @@ describe("a backup's own floors", () => {
     clock.set(Date.parse("2026-10-21T10:00:00Z"));
     const f = await host();
     await expect(
-      recoverySelectPastWaits(
-        clock,
-        restoreService(f),
-        { installationCodes: ["0CNNY"] },
-        asBrowser,
-      ),
+      recoverySelectPastWaits(clock, restoreService(f), asBrowser),
     ).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-22T20:15:00Z") },
@@ -841,12 +793,7 @@ describe("a backup's own floors", () => {
     clock.set(Date.parse("2026-10-23T07:50:00Z"));
     const f = await host();
     await expect(
-      recoverySelectPastWaits(
-        clock,
-        restoreService(f, "2026-10-23T08:00:00Z"),
-        { installationCodes: ["0CNNY"] },
-        asBrowser,
-      ),
+      recoverySelectPastWaits(clock, restoreService(f, "2026-10-23T08:00:00Z"), asBrowser),
     ).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-23T08:00:00Z") },
@@ -867,13 +814,10 @@ describe("a backup's own floors", () => {
       asBrowser,
     )) as { id: string };
     expect(
-      await service.prepare(
-        { action: "select", comparisonId: compared.id, installationCodes: ["0CNNY"] },
-        asBrowser,
-      ),
+      await service.prepare({ action: "select", comparisonId: compared.id }, asBrowser),
     ).toMatchObject({ status: "waiting", targetMs: Date.parse("2026-10-24T09:02:00Z") });
-    expect(
-      await recoverySelectPastWaits(clock, service, { installationCodes: ["0CNNY"] }, asBrowser),
-    ).toMatchObject({ status: "selected" });
+    expect(await recoverySelectPastWaits(clock, service, asBrowser)).toMatchObject({
+      status: "selected",
+    });
   });
 });

@@ -227,12 +227,7 @@ describe("selected-hour admission before archive placement", () => {
         binding: { ...f.options.binding, eventId: "newer-surviving-target" },
       });
       agreeInternet();
-      const selected = (await recoverySelectPastWaits(
-        clock,
-        newer,
-        { installationCodes: ["0CNNY"] },
-        { onBox: true },
-      )) as {
+      const selected = (await recoverySelectPastWaits(clock, newer, { onBox: true })) as {
         identity: string;
         input: unknown;
       };
@@ -816,7 +811,6 @@ describe("selected-hour admission before archive placement", () => {
           return post({
             action: "select",
             comparisonId: compared.id,
-            installationCodes: ["0CNNY"],
           });
         }),
       ).toMatchObject({

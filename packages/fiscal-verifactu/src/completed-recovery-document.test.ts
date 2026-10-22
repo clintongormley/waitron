@@ -94,7 +94,7 @@ async function render(
   );
 }
 it.each(["en", "es"] as const)(
-  "the composed %s document includes only this node's current code despite retired and retained history without allocating or changing counters",
+  "the composed %s document carries the key and scope only despite retired and retained history without allocating or changing counters",
   async (locale) => {
     const before = await snapshot();
     const bytes = await render(locale);
@@ -111,9 +111,8 @@ it.each(["en", "es"] as const)(
         .map((item) => ("str" in item ? item.str : ""))
         .join(" ")
         .replace(/\s+/g, " ");
-      expect(text).toContain(
-        locale === "en" ? "Installation code 0CNNW" : "Código de instalación 0CNNW",
-      );
+      expect(text).not.toContain("Installation code");
+      expect(text).not.toContain("Código de instalación");
       const attachment = JSON.parse(
         Buffer.from((await pdf.getAttachmentContent("waitron-recovery-key-v1.json"))!).toString(
           "utf8",
@@ -126,7 +125,6 @@ it.each(["en", "es"] as const)(
         taxpayerName: "Waitron SL",
         venueName: "Local principal",
         createdAt: "2026-10-18T12:00:00.000Z",
-        installationCodes: ["0CNNW"],
         nodeKey,
       });
       expect(text).not.toContain(nodeKey.secret);
@@ -180,7 +178,7 @@ it("the completed manager sheet uses the saved venue zone rather than the host z
     await task.destroy();
   }
 });
-it("unrelated and duplicate history never replace the current node code", async () => {
+it("unrelated and duplicate history still give a sheet with no installation code", async () => {
   const bytes = await render("en", {
     "hour-history": {
       reference: "prepared-hours",
@@ -207,7 +205,7 @@ it("unrelated and duplicate history never replace the current node code", async 
         "utf8",
       ),
     );
-    expect(attached.installationCodes).toEqual(["0CNNW"]);
+    expect(attached).not.toHaveProperty("installationCodes");
   } finally {
     await task.destroy();
   }

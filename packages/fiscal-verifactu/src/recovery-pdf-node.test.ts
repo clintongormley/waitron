@@ -12,7 +12,6 @@ import { recoveryDocumentBytes, type RecoveryDocument } from "./recovery-documen
 
 const document: RecoveryDocument = {
   kind: "waitron-recovery-document",
-  installationCodes: ["0CNNW"],
   version: 1,
   scope: { taxpayerNif: "B12345674", softwareId: "W1", environment: "production" },
   taxpayerName: "Olivo Restauración SL",
@@ -147,40 +146,35 @@ it("carries its font and attachment in a relocated real Node bundle", async () =
   }
 });
 
-it.each(["en", "es"] as const)(
-  "prints this box's current installation code beside public identity in %s",
-  async (locale) => {
-    const input = { ...document, installationCodes: ["0CNNW"] };
-    const task = getDocument({
-      data: await renderRecoveryPdf(input, locale, "Europe/Madrid"),
-      useSystemFonts: false,
-      disableFontFace: true,
-      useWorkerFetch: false,
-      useWasm: false,
-    });
-    try {
-      const pdf = await task.promise;
-      const text = (await (await pdf.getPage(1)).getTextContent()).items
-        .map((item) => ("str" in item ? item.str : ""))
-        .join(" ")
-        .replace(/\s+/g, " ");
-      expect(text).toContain(
-        locale === "en" ? "Installation code 0CNNW" : "Código de instalación 0CNNW",
-      );
-      const attached = JSON.parse(
-        new TextDecoder().decode((await pdf.getAttachmentContent("waitron-recovery-key-v1.json"))!),
-      );
-      expect(attached.installationCodes).toEqual(["0CNNW"]);
-    } finally {
-      await task.destroy();
-    }
-  },
-);
+it.each(["en", "es"] as const)("prints no installation code in %s", async (locale) => {
+  const task = getDocument({
+    data: await renderRecoveryPdf(document, locale, "Europe/Madrid"),
+    useSystemFonts: false,
+    disableFontFace: true,
+    useWorkerFetch: false,
+    useWasm: false,
+  });
+  try {
+    const pdf = await task.promise;
+    const text = (await (await pdf.getPage(1)).getTextContent()).items
+      .map((item) => ("str" in item ? item.str : ""))
+      .join(" ")
+      .replace(/\s+/g, " ");
+    expect(text).not.toContain("Installation code");
+    expect(text).not.toContain("Código de instalación");
+    const attached = JSON.parse(
+      new TextDecoder().decode((await pdf.getAttachmentContent("waitron-recovery-key-v1.json"))!),
+    );
+    expect(Object.hasOwn(attached, "installationCodes")).toBe(false);
+  } finally {
+    await task.destroy();
+  }
+});
 
-it("refuses an ambiguous multi-code sheet instead of picking another box's code", async () => {
+it("refuses a sheet that still carries an installation code", async () => {
   await expect(
     renderRecoveryPdf(
-      { ...document, installationCodes: ["0CNNW", "0CNPG"] },
+      { ...document, installationCodes: ["0CNNW"] } as RecoveryDocument,
       "en",
       "Europe/Madrid",
     ),

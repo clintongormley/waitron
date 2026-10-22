@@ -152,18 +152,13 @@ async function agreed(operations: Operations, operation: Operation) {
   return compare(operations, operation);
 }
 
-async function selectAfterWait(
-  operations: Operations,
-  operation: Operation,
-  installationCodes = ["0CNJR"],
-) {
+async function selectAfterWait(operations: Operations, operation: Operation) {
   const select = async () =>
     (await operations.recovery!(
       operation,
       {
         action: "select",
         comparisonId: (await agreed(operations, operation)).id,
-        installationCodes,
       },
       { onBox: true },
     )) as {
@@ -191,7 +186,7 @@ it.each(["restore", "re-register", "promote"])(
     const operator = action === "promote" ? "authenticated-manager" : key;
     await withOperationAuthority(selectedBinding, operator, async (authority) => {
       const operation = { binding: selectedBinding, authority };
-      const selected = await selectAfterWait(operations, operation, ["0cnJR"]);
+      const selected = await selectAfterWait(operations, operation);
       expect(selected).toMatchObject({
         status: "selected",
         identity: "0CNNW",
@@ -253,7 +248,6 @@ it("takes a browser reading as the box's own when the request came from the box"
         {
           action: "select",
           comparisonId: displayed.id,
-          installationCodes: ["0CNJR"],
         },
         { onBox: true },
       ),
@@ -269,7 +263,6 @@ it("retains a restore's settle wait across newly configured public adapters", as
     const proposal = (comparisonId: string) => ({
       action: "select",
       comparisonId,
-      installationCodes: ["0CNJR"],
     });
     const first = await agreed(FISCAL_OPERATIONS.configure!(f.host), operation);
     expect(
@@ -310,7 +303,6 @@ it.each(["clock-challenge", "compare-clocks", "resume"])(
           {
             action: "select",
             comparisonId: earlier.id,
-            installationCodes: ["0CNJR"],
           },
           { onBox: true },
         ),
@@ -345,10 +337,10 @@ it.each([
   {},
   { action: "unknown" },
   { action: "preview", extra: true },
-  { action: "select", answer: "no", comparisonId: "x", installationCodes: ["0CNJR"] },
-  { action: "select", comparisonId: "x" },
-  { action: "select", installationCodes: ["0CNJR"] },
-  { action: "select", comparisonId: 42, installationCodes: ["0CNJR"] },
+  { action: "select", answer: "no", comparisonId: "x" },
+  { action: "select", comparisonId: "x", installationCodes: ["0CNJR"] },
+  { action: "select" },
+  { action: "select", comparisonId: 42 },
   { action: "compare-clocks" },
   { action: "compare-clocks", browser: {} },
   { action: "compare-clocks", browser: { challengeId: 1, instantMs: NOW } },
@@ -508,7 +500,6 @@ it("rejects a comparison identifier from another host context", async () => {
         {
           action: "select",
           comparisonId: first.id,
-          installationCodes: ["0CNJR"],
         },
         { onBox: true },
       ),
@@ -558,7 +549,6 @@ it.each([
         {
           action: "select",
           comparisonId: comparison.id,
-          installationCodes: ["0CNJR"],
         },
         { onBox: true },
       ),
@@ -567,7 +557,7 @@ it.each([
   });
 });
 
-it("uses reported installations as a floor before saving an hour", async () => {
+it("refuses a selection that still carries an installation code", async () => {
   const f = fixture();
   const operations = FISCAL_OPERATIONS.configure!(f.host);
   await withOperationAuthority(binding, key, async (authority) => {
@@ -576,16 +566,10 @@ it("uses reported installations as a floor before saving an hour", async () => {
     await expect(
       operations.recovery!(
         operation,
-        {
-          action: "select",
-          comparisonId: comparison.id,
-          installationCodes: ["0cnpg"],
-        },
+        { action: "select", comparisonId: comparison.id, installationCodes: ["0CZZW"] },
         { onBox: true },
       ),
-    ).rejects.toMatchObject({
-      params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T12:01:00Z") },
-    });
+    ).rejects.toMatchObject(refusal("event_mismatch"));
     expect(f.history).toEqual([]);
   });
 });

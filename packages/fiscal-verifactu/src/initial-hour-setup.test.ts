@@ -86,7 +86,6 @@ it.each(["en", "es"] as const)(
     });
     expect(document.statement).toEqual({
       kind: "waitron-recovery-document",
-      installationCodes: ["0CNNW"],
       version: 1,
       scope: { taxpayerNif: "89890001K", softwareId: "W1", environment: "preproduction" },
       taxpayerName: "Olivo Restauración SL",
@@ -624,13 +623,13 @@ it("a terminal run more than a minute after its wait's target waits again", asyn
   expect(f.history).toHaveLength(2);
 });
 
-it("refuses a delivered sheet whose installation code differs from its frozen activation", () => {
+it("refuses a delivered sheet that still carries an installation code", () => {
   const f = configured();
   const saved = fixture();
   const statement = {
     kind: "waitron-recovery-document",
     version: 1,
-    installationCodes: ["0CNPG"],
+    installationCodes: ["0CNNW"],
     scope: { taxpayerNif: "89890001K", softwareId: "W1", environment: "preproduction" },
     taxpayerName: "Olivo",
     venueName: "Centro",
@@ -775,7 +774,6 @@ it("binds an exact public recovery statement to its staged node and frozen setup
   const statement = {
     kind: "waitron-recovery-document",
     version: 1,
-    installationCodes: ["0CNNW"],
     scope: { taxpayerNif: "89890001K", softwareId: "W1", environment: "preproduction" },
     taxpayerName: "Olivo",
     venueName: "Centro",

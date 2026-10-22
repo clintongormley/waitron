@@ -914,12 +914,8 @@ describe("selected-hour admission before archive placement", () => {
       {},
       restarted,
     )) as { id: string };
-    expect(
-      await f.invoke(
-        { action: "select", comparisonId: compared.id, installationCodes: ["0CNNY"] },
-        {},
-        restarted,
-      ),
-    ).toEqual(selected);
+    expect(await f.invoke({ action: "select", comparisonId: compared.id }, {}, restarted)).toEqual(
+      selected,
+    );
   });
 });

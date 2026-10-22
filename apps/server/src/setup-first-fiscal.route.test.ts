@@ -208,7 +208,6 @@ async function recoveryDocument(
   const statement = {
     kind: "waitron-recovery-document",
     version: 1,
-    installationCodes: [input.allocation.installationIdentity],
     scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "production" },
     taxpayerName: request.legalName,
     venueName: request.location.name,

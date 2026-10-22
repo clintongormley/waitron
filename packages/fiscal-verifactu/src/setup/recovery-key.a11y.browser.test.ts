@@ -68,7 +68,6 @@ for (const theme of ["light", "dark"] as const)
               const bytes = await renderRecoveryPdf(
                 {
                   kind: "waitron-recovery-document",
-                  installationCodes: ["0CNNW"],
                   version: 1,
                   scope: { taxpayerNif: "B12345674", softwareId: "W1", environment: "production" },
                   taxpayerName: "Olivo Restauración SL",

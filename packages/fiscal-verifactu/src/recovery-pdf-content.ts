@@ -19,7 +19,6 @@ export async function renderRecoveryPdfWithFont(
 ): Promise<Uint8Array<ArrayBuffer>> {
   const document = await parseRecoveryDocument(input);
   if (locale !== "en" && locale !== "es") refuseRecovery();
-  if (document.installationCodes.length !== 1) refuseRecovery();
   if (typeof timeZone !== "string" || timeZone === "") refuseRecovery();
   let created: string;
   try {
@@ -118,7 +117,6 @@ export async function renderRecoveryPdfWithFont(
   row(en ? "Software ID" : "ID del software", document.scope.softwareId);
   row(en ? "Node ID" : "ID del nodo", shortNodeId(document.nodeKey.nodeId));
   row(en ? "Key name" : "Nombre de la clave", document.nodeKey.name);
-  row(en ? "Installation code" : "Código de instalación", document.installationCodes[0]!);
   row(en ? "Created" : "Creado", created);
   pdf.moveDown();
   if (pdf.y > pdf.page.height - pdf.page.margins.bottom - 120) pdf.addPage();

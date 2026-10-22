@@ -315,7 +315,6 @@ it.each(["key", "manager"])(
       {
         action: "select",
         comparisonId,
-        installationCodes: ["0CNNY"],
       },
       { onBox: true },
     )) as { input: unknown };
@@ -341,7 +340,7 @@ it.each(["key", "manager"])(
   },
 );
 
-it("requires the sheet's newer code even when it is missing from the database", async () => {
+it("refuses a selection that still carries an installation code, writing nothing", async () => {
   const s = await service();
   await admit(s);
   await compare(s);
@@ -351,33 +350,14 @@ it("requires the sheet's newer code even when it is missing from the database", 
       binding,
       { breakGlass: key.secret },
       context,
-      {
-        action: "select",
-        comparisonId,
-        installationCodes: ["0cnqx"],
-      },
+      { action: "select", comparisonId, installationCodes: ["0CNQX"] },
       { onBox: true },
     ),
   ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T12:46:00Z") },
+    params: { reason: "event_mismatch" },
   });
   expect(await rows()).toEqual(before);
-  vi.setSystemTime(new Date("2026-10-16T13:00:00Z"));
-  await compare(s);
-  expect(
-    await s.prepare(
-      binding,
-      { breakGlass: key.secret },
-      context,
-      {
-        action: "select",
-        comparisonId,
-        installationCodes: ["0cnqx"],
-      },
-      { onBox: true },
-    ),
-  ).toMatchObject({ identity: "0CNRC", reportedIdentities: ["0CNQX"] });
 });
 
 it.each(["key", "isolation", "parallel", "source", "node"])(
@@ -430,7 +410,6 @@ it("retains the selected hour across restart but discards transient comparison a
     {
       action: "select",
       comparisonId,
-      installationCodes: ["0CNNY"],
     },
     { onBox: true },
   )) as { input: unknown };
@@ -449,7 +428,6 @@ it("retains the selected hour across restart but discards transient comparison a
       {
         action: "select",
         comparisonId,
-        installationCodes: ["0CNNY"],
       },
       { onBox: true },
     ),
@@ -601,7 +579,7 @@ it("serves clock, sheet-code selection and authenticated promotion through the m
     });
     const selected = await send("/preparation", {
       ...body,
-      proposal: { action: "select", comparisonId: compared.id, installationCodes: ["0CNNY"] },
+      proposal: { action: "select", comparisonId: compared.id },
     });
     expect(selected).toMatchObject({ status: "selected", identity: "0CNQR" });
     const plain = await app.request("http://box.test/management-api/promote", {
@@ -669,7 +647,6 @@ it("re-registers through provisionNode with the matching key and frozen hour", a
     {
       action: "select",
       comparisonId,
-      installationCodes: ["0CNNY"],
     },
     { onBox: true },
   )) as { input: unknown };
@@ -755,7 +732,6 @@ async function selectedRegistrationCommand(derived = false) {
     {
       action: "select",
       comparisonId,
-      installationCodes: ["0CNNY"],
     },
     { onBox: true },
   )) as { input: unknown };
@@ -1092,7 +1068,6 @@ it("invalidates an earlier comparison when the named recovery key changes", asyn
       {
         action: "select",
         comparisonId,
-        installationCodes: ["0CNNY"],
       },
       { onBox: true },
     ),
@@ -1106,7 +1081,6 @@ it("invalidates an earlier comparison when the named recovery key changes", asyn
       {
         action: "select",
         comparisonId,
-        installationCodes: ["0CNNY"],
       },
       { onBox: true },
     ),
@@ -1184,7 +1158,7 @@ it("the real mirror boot serves preparation over verified HTTPS and promotes the
     });
     const selected = await send("/preparation", {
       ...body,
-      proposal: { action: "select", comparisonId: compared.id, installationCodes: ["0CNNY"] },
+      proposal: { action: "select", comparisonId: compared.id },
     });
     expect(selected).toMatchObject({ identity: "0CNQR" });
     expect(
@@ -1214,7 +1188,6 @@ it.each(["key", "manager"])(
       {
         action: "select",
         comparisonId,
-        installationCodes: ["0CNNY"],
       },
       { onBox: true },
     )) as { input: unknown };
@@ -1481,7 +1454,6 @@ it.each(["identity", "allocation-id", "bases", "purpose", "approval", "binding"]
       {
         action: "select",
         comparisonId,
-        installationCodes: ["0CNNY"],
       },
       { onBox: true },
     )) as {

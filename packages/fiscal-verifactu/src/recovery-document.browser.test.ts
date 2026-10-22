@@ -10,7 +10,6 @@ import {
 export function fixture(): RecoveryDocument {
   return {
     kind: "waitron-recovery-document",
-    installationCodes: ["0CNNW"],
     version: 1,
     scope: { taxpayerNif: "B12345674", softwareId: "W1", environment: "production" },
     taxpayerName: "Olivo Restauración SL",
@@ -30,7 +29,7 @@ describe("key-only recovery document", () => {
     Object.assign(input.nodeKey, { name: "changed" });
     expect(parsed.nodeKey.name).toBe("Caja principal");
     expect(new TextDecoder().decode(recoveryDocumentBytes(parsed))).toBe(
-      '{"createdAt":"2026-10-17T12:30:00.000Z","installationCodes":["0CNNW"],"kind":"waitron-recovery-document","nodeKey":{"name":"Caja principal","nodeId":"node-1","secret":"AbCdEfGhIjKlMnOpQrStUvWxYz012345"},"scope":{"environment":"production","softwareId":"W1","taxpayerNif":"B12345674"},"taxpayerName":"Olivo Restauración SL","venueName":"Olivo Centro","version":1}',
+      '{"createdAt":"2026-10-17T12:30:00.000Z","kind":"waitron-recovery-document","nodeKey":{"name":"Caja principal","nodeId":"node-1","secret":"AbCdEfGhIjKlMnOpQrStUvWxYz012345"},"scope":{"environment":"production","softwareId":"W1","taxpayerNif":"B12345674"},"taxpayerName":"Olivo Restauración SL","venueName":"Olivo Centro","version":1}',
     );
   });
   it("public projection has exact public keys and refuses a secret", () => {

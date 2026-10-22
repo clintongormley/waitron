@@ -131,7 +131,7 @@ it("the real HTTPS trading listener replaces a lost key, includes retained recov
           "utf8",
         ),
       );
-      expect(document.installationCodes).toEqual(["0CNNW"]);
+      expect(document).not.toHaveProperty("installationCodes");
       expect(document.nodeKey.nodeId).toBe(node.nodeId);
       key = document.nodeKey.secret;
     } finally {

@@ -783,7 +783,7 @@ describe("selected-hour admission before archive placement", () => {
           action: "compare-clocks",
           browser: { challengeId: challenge.id, instantMs: Date.now() },
         });
-        return send({ action: "select", comparisonId: compared.id, installationCodes: ["0CNNY"] });
+        return send({ action: "select", comparisonId: compared.id });
       });
       expect(selected).toMatchObject({
         status: "selected",

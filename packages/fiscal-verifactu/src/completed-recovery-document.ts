@@ -48,7 +48,6 @@ export const FISCAL_RECOVERY_DOCUMENT: NonNullable<
       venueName: venue.name,
       createdAt: context.createdAt,
       nodeKey: context.nodeKey,
-      installationCodes: [sif.numeroInstalacion],
     },
     context.locale,
     venue.timeZone,

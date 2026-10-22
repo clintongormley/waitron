@@ -242,11 +242,9 @@ export async function host() {
     return compared;
   };
   /** One select naming the last comparison, with no wait. */
-  const select = (installationCodes: readonly string[] = ["0CNNY"]) =>
-    prepare({ action: "select", comparisonId, installationCodes });
+  const select = () => prepare({ action: "select", comparisonId });
   /** Compares and selects, repeated past the restore's settle wait. */
-  const selectPastWaits = (installationCodes: readonly string[] = ["0CNNY"]) =>
-    recoverySelectPastWaits(clock, service, { installationCodes }, client());
+  const selectPastWaits = () => recoverySelectPastWaits(clock, service, client());
   return {
     configured,
     facts,
@@ -345,12 +343,7 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
     readIsolation: async () => isolation,
   };
   const service = createSelectedRecoveryPreparation(options);
-  const outcome = (await recoverySelectPastWaits(
-    clock,
-    service,
-    { installationCodes: ["0CNNY"] },
-    client(),
-  )) as {
+  const outcome = (await recoverySelectPastWaits(clock, service, client())) as {
     input: unknown;
   };
   return { ...f, restore, options, isolation, service, outcome, database, entries };
@@ -451,12 +444,7 @@ export async function bucketCommand() {
     binding: operationBinding,
     selected,
   });
-  const outcome = (await recoverySelectPastWaits(
-    clock,
-    service,
-    { installationCodes: ["0CNNY"] },
-    client(),
-  )) as {
+  const outcome = (await recoverySelectPastWaits(clock, service, client())) as {
     input: unknown;
   };
   await writeFile(
@@ -766,7 +754,7 @@ export async function interactiveHost() {
   };
   /** One select naming the last comparison, with no wait. */
   const select = (override: Partial<typeof request> = {}, current = session) =>
-    invoke({ action: "select", comparisonId, installationCodes: ["0CNNY"] }, override, current);
+    invoke({ action: "select", comparisonId }, override, current);
   /** Compares and selects, repeated past the restore's settle wait. */
   const selectPastWaits = (override: Partial<typeof request> = {}) =>
     selectPastWaits_(clock, async () => {

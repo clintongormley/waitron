@@ -250,7 +250,6 @@ it.each(["direct", "supervised"])(
       );
       const statement = {
         kind: "waitron-recovery-document",
-        installationCodes: [input.allocation.installationIdentity],
         version: 1,
         scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "preproduction" },
         taxpayerName: request.legalName,
