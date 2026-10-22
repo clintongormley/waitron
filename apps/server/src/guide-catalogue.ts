@@ -12,6 +12,7 @@ export const GUIDE_PAGES = [
   "aeat-certificate",
   "table-service",
   "staff",
+  "purchases",
 ] as const;
 
 export function guideRoot(): string {

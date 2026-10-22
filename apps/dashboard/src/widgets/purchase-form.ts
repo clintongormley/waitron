@@ -193,12 +193,18 @@ export class PurchaseForm extends LitElement {
         font-size: var(--wt-font-size-sm);
         margin: 0 0 var(--wt-space-3);
       }
+      .number-warning {
+        color: var(--wt-color-text);
+        margin: 0 0 var(--wt-space-3);
+      }
     `,
   ];
 
   @property({ type: Boolean, reflect: true }) open = false;
 
   @property({ attribute: false }) invoice: PurchaseInvoice | null = null;
+
+  @property({ attribute: false }) invoices: readonly PurchaseInvoice[] = [];
 
   @property({ type: Boolean }) busy = false;
 
@@ -549,6 +555,24 @@ export class PurchaseForm extends LitElement {
     </div>`;
   }
 
+  #reusedYears(): string[] {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(this.issuedOn)) return [];
+    const year = this.issuedOn.slice(0, 4);
+    return [
+      ...new Set(
+        this.invoices
+          .filter(
+            (invoice) =>
+              invoice.id !== this.invoice?.id &&
+              invoice.supplierTaxId === this.supplierTaxId &&
+              invoice.supplierInvoiceNumber === this.supplierInvoiceNumber &&
+              invoice.issuedOn.slice(0, 4) !== year,
+          )
+          .map((invoice) => invoice.issuedOn.slice(0, 4)),
+      ),
+    ].sort();
+  }
+
   override render() {
     const validation = this.attempted ? this.#validate() : {};
     const s = saveActionState(this.#scope);
@@ -601,6 +625,7 @@ export class PurchaseForm extends LitElement {
           @wt-change=${(e: CustomEvent<{ value: string }>) =>
             this.#onFieldChange(e, "supplierInvoiceNumber")}
         ></wt-input>
+        ${this.#reusedYears().map((year) => html`<p class="number-warning" role="status" data-test="number-year-warning">${t("purchase.number_used_in_year").replace("{year}", year)}</p>`)}
         <wt-input
           class="field"
           ?disabled=${this.busy}

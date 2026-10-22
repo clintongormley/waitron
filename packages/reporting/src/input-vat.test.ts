@@ -26,6 +26,23 @@ function run(opts: { year: number; month: number }): Promise<InputVatReturn> {
 }
 
 describe("computeInputVat", () => {
+  it("counts reused supplier numbers separately and keeps the deduction in the receipt month", async () => {
+    for (const issuedOn of ["2025-12-31", "2026-01-01"]) {
+      await seedPurchaseInvoice(suite.db, {
+        supplierInvoiceNumber: "REUSED-001",
+        issuedOn,
+        receivedOn: "2026-02-01",
+        total: "121.00",
+        lines: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
+      });
+    }
+    expect((await run({ year: 2025, month: 12 })).byRate).toEqual([]);
+    expect((await run({ year: 2026, month: 1 })).byRate).toEqual([]);
+    expect((await run({ year: 2026, month: 2 })).byRate).toEqual([
+      { rate: "21.00", base: "200.00", tax: "42.00", kind: "ordinary" },
+    ]);
+  });
+
   it("sums the filed per-invoice tax exactly, never round(Σ base × rate)", async () => {
     // Two received invoices whose supplier filed a difference-method cuota: 20.99, not
     // round(100 × 21%) = 21.00. The deducible aggregate must sum the FILED cuotas (20.99 + 20.99 =

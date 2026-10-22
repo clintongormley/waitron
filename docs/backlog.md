@@ -291,9 +291,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **Product decision to take before production:** The €0 comped sale settles at the settlement
   instant, not backdated to `issued_at` — is a comp ever finalised long after the invoice printed?
 
-- **Product decision to take before production:** The duplicate purchase-invoice key
-  `(supplier_tax_id, supplier_invoice_number)` is unique forever — per-year versus forever is the
-  asesor's.
+- **Adviser confirmation: supplier invoice numbers by issue year.** Confirm the owner's A981
+  rule in [Q18(b)](compliance/asesor-questions.md): the same supplier's number is refused within
+  one issue year and accepted in another with a warning. The receipt date still sets the VAT
+  reporting period.
 
 - **Reporting — the fiscal remainder (parked)** — left open by the modelo 303 work (#76, #91, #98,
   #1106). Two pre-filing caveats a human must clear before the first LIVE 303 filing: validate the

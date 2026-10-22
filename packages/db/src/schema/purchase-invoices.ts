@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   day,
   enumCheck,
@@ -77,10 +77,13 @@ export const purchaseInvoices = table(
     updatedAt: ts("updated_at").notNull().$defaultFn(now),
   },
   (t) => [
-    // Refuse entering the same supplier invoice twice — the `libro-registro` no-duplicate default.
-    // Whether a supplier may legitimately reuse a number across YEARS (making this per-year rather
-    // than forever) is an asesor-fiscal question; the conservative forever-unique default is chosen.
-    unique("purchase_invoices_supplier_number_key").on(t.supplierTaxId, t.supplierInvoiceNumber),
+    // Remove this expression index before generating a table rebuild; restore it in a separate
+    // generation (docs/developers/conventions-data.md, expression-index rebuild limitation).
+    uniqueIndex("purchase_invoices_supplier_number_key").on(
+      t.supplierTaxId,
+      t.supplierInvoiceNumber,
+      sql`cast(${t.issuedOn} as integer)`,
+    ),
     // Supports the monthly deducible aggregate's `received_on` bucketing.
     index("purchase_invoices_tenant_received_idx").on(t.receivedOn),
     check("purchase_invoices_regime_ck", enumCheck(t.regime)),
