@@ -2741,6 +2741,11 @@ and the staffing grid's block editor in the A761 entry):
   bytes to free (it then reads "Nothing to free"), on a mirror or a fenced node, and after a press
   until the box is read again; `primary` once it can act, keeping `primary` while its own deletion
   is being sent.
+  A758-6 brought the till's two Refund buttons under it, on a receipt's Refund a payment and on
+  Give back a payment: drawn `secondary` while no reason is chosen or the reasons are loading (and,
+  on a receipt's refund, while no payment is picked), `primary` once a reason is chosen, keeping
+  `primary` while their own refund is being sent. They stay enabled and explain a missing reason on
+  press.
   Not covered: a button disabled only while a request is being sent, an action blocked by its own
   field checks and the sign-in screens. Nothing guards it across screens.
 

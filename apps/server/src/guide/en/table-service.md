@@ -86,9 +86,9 @@ time. A card keyed on a separate terminal always asks for the PIN, because there
 the terminal refund was done.
 
 When the chosen payment holds less than the dishes' total, the amount is what it holds, and a line
-such as **€2.00 left to refund from another payment** says what remains. It counts
-from the amount in the window, so it also appears, or grows, when you lower the amount. To refund the rest, choose
-**Refund a payment** again and pick another payment. That window is not filled in: enter the amount
+such as **€2.00 left to refund from another payment** says what remains. It counts from the amount
+in the window, so it also appears, or grows, when you lower the amount. To refund the rest, choose
+**Refund a payment** again and pick a payment. That window is not filled in: enter the amount
 and reason yourself. If you cannot give refunds, it asks for the PIN, and the dishes' entries in the
 report do not show that part. If that payment cannot be refunded on this device, the window tells
 you to refund it at a till.

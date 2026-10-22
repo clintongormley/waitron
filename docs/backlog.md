@@ -2259,7 +2259,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A1020. The owner looks at A758-6's words and choices (left open by A758-6).** Each works as
   built; the owner may want it different: among them no Table finished on the pass, Not served
-  found by its English name, the PIN carried from the cancel to its refund, a finished table
+  found by its English name, the PIN carried from the cancel to its refund, and a finished table
   checked against all its bills' zones.
   [Detail](backlog/till.md#a1020-the-owner-looks-at-a758-6s-words-and-choices),
   [pictures as built](backlog/mockups/a758-adjustment-reasons/built/)
