@@ -3,7 +3,7 @@
 > **Approval and plan update, 2026-10-22 15:55:** Owner: “A275 looks fine”. The revised minimal
 > design and pictures are approved; plan authoring, separate fresh-context review and docs-only
 > publication are authorised. The [implementation plan](../plans/2026-10-22-a275-final-transfer-close.md)
-> is authored for that review. Build remains pending; this invocation authorises no implementation.
+> has been authored and fresh-context reviewed. Build remains pending under its separate gates.
 > RUNNER H2 and public F1/delivery/physical gates remain separate. A1003 has since landed (PR #1973);
 > the plan re-pins source and records the other release dependencies. The historical proposal body
 > below is retained unchanged, including its then-pending approval and source observations.

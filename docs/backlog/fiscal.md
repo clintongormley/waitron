@@ -235,9 +235,9 @@ Found by A231d's research. [Orden HAC/1028/2026](https://www.boe.es/buscar/doc.p
 
 ## A275. Invoice a bill paid later by transfer (full or simplified invoice) — DESIGN NOW (2026-10-17)
 
-**Design approved; plan authored, build pending (2026-10-22).** Owner, 2026-10-22 15:55:
+**Design approved; reviewed plan published, build pending (2026-10-22).** Owner, 2026-10-22 15:55:
 “A275 looks fine”. This approves the revised minimal design and authorises plan authoring,
-separate fresh-context review and docs-only publication, not a build in this invocation.
+fresh-context review and docs-only publication. The build retains its separate gates.
 
 The [approved design](../superpowers/specs/2026-10-22-a275-final-transfer-close-design.md),
 [16 synthetic pictures](mockups/a275-final-transfer-close/README.md) and
@@ -262,8 +262,9 @@ huella/inmutabilidad unedited. Design approval does not waive that gate.
 The [partial-receipts proposal](../superpowers/specs/2026-10-20-a275-invoice-now-transfer-later-design.md),
 historical research/source receipts and pictures remain unchanged. Old question 1 is retired;
 questions 2–5 are withdrawn. The revised Spanish adviser confirmation remains attached, not sent.
-A275 stays open pending build and acceptance; the parent freezes this author candidate before
-separate fresh-context review and controls publication.
+A275 stays open pending build and acceptance. The reviewed plan includes an explicit recovery read,
+party completion before its retained result, live Bills exclusion, separate delivery/closing actors
+and bounded implementation checkpoints.
 
 ## Pin the clock's future-finished sample refusal
 
