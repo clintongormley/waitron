@@ -1,5 +1,7 @@
 # A803: Bills and tables — one portion per line, one bill switcher, one picker
 
+> **2026-10-22 implementation:** independent slice 5 (Refund wording) landed in [PR #1953](https://github.com/clintongormley/waitron/pull/1953). The remaining slices below are still pending with their existing gates.
+
 > **2026-10-20 A802 update:** the [partial paid-invoice correction proposal](2026-10-20-a802-partial-paid-invoice-correction-design.md)
 > is ready for owner review. References below to A802 as still queued describe the earlier state.
 > Its new policies are proposals; they do not amend this approved design before owner approval.

@@ -1,5 +1,7 @@
 # A803 Bills and Tables Implementation Plan
 
+> **2026-10-19 owner answer, recorded here 2026-10-22:** each new seating starts a fresh bill-number sequence at Bill 1. The slice-2 numbering question below is answered; its remaining implementation gates stand.
+
 > **2026-10-22 implementation:** independent slice 5 calls payment returns Refund in English, retaining the approved Spanish wording. The table-service guide now covers this refund flow in both languages. Other slices and their gates below remain open.
 
 > **For agentic workers:** Use `superpowers:executing-plans` for inline execution, task by task. Do not automatically dispatch per-task agents. Read the approved spec and this amendment-aware plan together. Steps use checkboxes. This document authorizes no implementation during its plan-only firing.
