@@ -335,7 +335,7 @@ it("refuses a fresh recovery of the older backup whose settle wait would land on
   await f.run();
   const committed = await f.snapshot();
   const retained = f.journal();
-  // The settle wait alone ends at 12:40, the spent minute (0CNQR); only the spent-name rule moves it.
+  // The settle wait alone ends at 12:40, the spent minute (0CNQR).
   vi.setSystemTime(new Date("2026-10-16T12:38:00Z"));
   await expect(f.nextEvent()).rejects.toMatchObject({
     code: "sif.allocation_invalid",

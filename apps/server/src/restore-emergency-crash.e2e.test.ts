@@ -426,8 +426,7 @@ for (const kind of ["archive", "stream"] as const)
         });
         expect(await f.snapshot()).toEqual(original);
       }
-      // The settle wait alone ends at 12:40, the killed restore's name (0CNQR); only the
-      // spent-name rule moves it.
+      // The settle wait alone ends at 12:40, the killed restore's name (0CNQR).
       vi.setSystemTime(new Date("2026-10-16T12:38:00Z"));
       await expect(f.nextEvent()).rejects.toMatchObject({
         code: "sif.allocation_invalid",

@@ -86,8 +86,7 @@ it("retains the selected hour after a real hook transaction rolls back", async (
   ]);
   expect(f.journal()).toBe(retained);
   expect(retained).not.toContain("injected callback interruption");
-  // The settle wait alone ends at 12:42, the rolled-back restore's name (0CNQT); only the
-  // spent-name rule moves it.
+  // The settle wait alone ends at 12:42, the rolled-back restore's name (0CNQT).
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
   await expect(f.nextEvent()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
