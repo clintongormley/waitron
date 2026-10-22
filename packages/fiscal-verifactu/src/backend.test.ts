@@ -227,6 +227,26 @@ describe("the software block", () => {
     expect(row.idEmisorFactura).not.toBe("12345678Z");
     expect(row.nombreRazonEmisor).toBe("Waitron SL");
   });
+
+  it("files several taxpayers now when the software says so", async () => {
+    backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: steadyClock,
+      db: suite.db,
+      resolveClient: staticResolver(fakeClient),
+      identity: {
+        ...SOFTWARE_IDENTITY,
+        multipleTaxpayersPossible: "S",
+        multipleTaxpayersNow: "S",
+      },
+    });
+    const { saleId } = await sell();
+    const row = await storedRecord(saleId);
+    expect(row.sistemaInformatico).toMatchObject({
+      TipoUsoPosibleMultiOT: "S",
+      IndicadorMultiplesOT: "S",
+    });
+  });
 });
 
 describe("the source and device on each record", () => {

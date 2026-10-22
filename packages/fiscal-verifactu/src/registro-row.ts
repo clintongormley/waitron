@@ -50,8 +50,10 @@ export interface RegistroRowContext {
    * records differing only in `entorno` hash identically.
    */
   entorno: Entorno;
-  /** Required for an anulación, which carries no issuer name of its own; the software block's
-   * name may be the producer's, not the taxpayer's. Ignored for an alta. */
+  /**
+   * Required for an anulación, which carries no issuer name of its own; the software block's
+   * name may be the producer's, not the taxpayer's. Ignored for an alta.
+   */
   nombreRazonEmisor?: string;
 }
 
