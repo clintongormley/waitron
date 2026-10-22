@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
 import { listOpenIncidents, recordIncident } from "@waitron/core";
 import { enabledModules, parseModuleOverrides } from "@waitron/module";
-import type { StaffNotice, StaffNoticeContext, StaffNoticeSource } from "@waitron/module";
+import type { StaffNotice, StaffNoticeReadContext, StaffNoticeSource } from "@waitron/module";
 import type { Logger } from "@waitron/server-kit";
 import {
   AppError,
@@ -73,7 +73,7 @@ function failing(message: string): StaffNoticeSource {
 describe("readStaffNotices", () => {
   it("asks every source in turn with the transaction and the one reading, and orders errors, warnings, then notices", async () => {
     const order: string[] = [];
-    const seen: StaffNoticeContext[] = [];
+    const seen: StaffNoticeReadContext[] = [];
     const mk = (name: string, notices: StaffNotice[]): StaffNoticeSource => ({
       read: async (ctx) => {
         seen.push(ctx);

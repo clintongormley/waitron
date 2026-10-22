@@ -1405,6 +1405,8 @@ For the runner to file; none is acted on here.
 
 **2026-10-21:** A798-B slice 3 (#1950) closes item 4: both card paths now refuse `clock.unusable { clockAt, offsetMinutes }` before the reader, and every sale path refuses it at its issue reading. §2.5's `fiscal.record_invalid` answer and till sentence, and §8's slice 3 wording, describe the earlier code.
 
+**2026-10-22:** A798-B slice 4 (#<this pull request>) builds the `staffNotices` seat with notices only (`key`, `code`, `severity`, `params`; §5's "tone" is `severity`). The Box status page's row is not in it; slice 7 decides where it goes (`docs/backlog/box.md`, "The Box status page's rows from a module are not in the staff-notice seat"). §5's second shape describes the design before that choice.
+
 1. **`Incidencia="S"` is never sent to AEAT.** The house reading of art. 16.4 lists it among the
    duties during an outage (`verifactu-findings.md:359`); the drain raises only a local `incidencia`
    column (`drain.ts:978-993`), and the batch header it builds carries the taxpayer alone

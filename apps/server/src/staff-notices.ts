@@ -1,7 +1,7 @@
 import type { Transaction } from "@waitron/db";
 import type {
   StaffNotice,
-  StaffNoticeContext,
+  StaffNoticeReadContext,
   StaffNoticeSeverity,
   StaffNoticeSource,
 } from "@waitron/module";
@@ -18,7 +18,7 @@ export interface OwnedStaffNotice extends StaffNotice {
 }
 
 export interface StaffNoticeReadDeps {
-  readonly reading: StaffNoticeContext["reading"];
+  readonly reading: StaffNoticeReadContext["reading"];
   readonly log: Logger;
 }
 

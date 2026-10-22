@@ -83,7 +83,7 @@ export type {
 } from "./alerts.js";
 export type {
   StaffNotice,
-  StaffNoticeContext,
+  StaffNoticeReadContext,
   StaffNoticeSeverity,
   StaffNoticeSource,
 } from "./staff-notices.js";

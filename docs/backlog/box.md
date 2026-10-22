@@ -682,7 +682,7 @@ reloads the queue. Under the stop its tickets do not move and nothing says why.
 Left open by A798-B slice 4 (#<this pull request>) for slice 7. Design §5's seat was to return
 "plus a row for the Box status page"; slice 4 built only the notices. Slice 7 adds the row (the
 Hacienda row's unsent count, last accepted record and the Reintentar ahora route) as an optional
-member of `staffNotices` or a seat of its own, and its plan decides whether the page reads the staff
+member of `StaffNoticeSource` or a seat of its own, and its plan decides whether the page reads the staff
 notices at all.
 
 ## What a device shows when a module's notice check fails, and how often it is logged
@@ -692,7 +692,11 @@ Left open by A798-B slice 4 (#<this pull request>) for slice 6. `readStaffNotice
 the module in `unavailable` on every read; nothing shows it. Once slice 6 runs it on every device's
 15-second equipment read, a check that keeps failing logs that line on every read from every
 device, so slice 6 decides what a device shows and whether the line is limited or written only when
-a check starts or stops failing.
+a check starts or stops failing. Slice 6 also decides whether a guard holds every staff-notice code
+to till wording, as `scripts/ongoing-alert-codes.test.ts` does for ongoing alert codes, and whether
+`clock.unusable`'s notice shares the till's refusal sentence for that code
+(`apps/till/src/i18n/codes.ts`: "Sale not recorded: the box's clock is wrong. …") or needs words of
+its own.
 
 ## A box whose first setup was retired into a new workspace keeps that workspace's backup staging through the clean-up before the count
 

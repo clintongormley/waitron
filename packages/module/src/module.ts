@@ -1587,8 +1587,8 @@ export interface WaitronModule {
    * read from every module; sources only from enabled modules, since a disabled module's tables are
    * not migrated. */
   readonly alerts?: ModuleAlerts;
-  /** Checks whose notices the staff see on every device that sells. Read only from enabled
-   * modules, since a disabled module's tables are not migrated. */
+  /** Checks whose notices are for the staff on every device that sells. Ask only enabled
+   * modules' sources: a disabled module's tables are not migrated. */
   readonly staffNotices?: readonly StaffNoticeSource[];
   readonly backup?: ModuleBackupContribution;
   readonly configurationTransfer?: ModuleConfigurationTransfer;

@@ -59,7 +59,7 @@ staff notices at all is for slice 7's plan to decide (Departure 1).
 
 **Architecture:** three pieces.
 1. `@waitron/module` gains the seat's types in a new `src/staff-notices.ts` — `StaffNotice`
-   (`key`, `code`, `severity`, `params`), `StaffNoticeSeverity`, `StaffNoticeContext` (`tx`,
+   (`key`, `code`, `severity`, `params`), `StaffNoticeSeverity`, `StaffNoticeReadContext` (`tx`,
    `reading`) and `StaffNoticeSource` (`read(ctx)`) — and `WaitronModule.staffNotices?: readonly
    StaffNoticeSource[]`. Types only.
 2. `@waitron/fiscal-verifactu` exports `FISCAL_STAFF_NOTICES`, one source that answers a
@@ -440,7 +440,7 @@ Task 1 runs its tests unedited).
     readonly params: Readonly<Record<string, unknown>>;
   }
 
-  export interface StaffNoticeContext {
+  export interface StaffNoticeReadContext {
     readonly tx: Transaction;
     /** One reading of the box's clock for the whole ask, so every source judges the same instant. */
     readonly reading: Pick<TrustedReading, "instant" | "offsetMinutes">;
@@ -448,7 +448,7 @@ Task 1 runs its tests unedited).
 
   /** A check asked on each read of the notices. */
   export interface StaffNoticeSource {
-    read(ctx: StaffNoticeContext): Promise<readonly StaffNotice[]>;
+    read(ctx: StaffNoticeReadContext): Promise<readonly StaffNotice[]>;
   }
   ```
   (`@waitron/module` already depends on `@waitron/db` and `@waitron/fiscal`,
@@ -563,7 +563,7 @@ Task 1 runs its tests unedited).
     readonly owner: string;
   }
   export interface StaffNoticeReadDeps {
-    readonly reading: StaffNoticeContext["reading"];
+    readonly reading: StaffNoticeReadContext["reading"];
     readonly log: Logger;
   }
   export interface StaffNoticesRead {

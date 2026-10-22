@@ -54,8 +54,8 @@ export function enabledAlertSources(modules: readonly WaitronModule[]): readonly
   return modules.flatMap((m) => m.alerts?.sources ?? []);
 }
 
-/** Every staff-notice check of the modules given, named by its module. The caller passes the
- * enabled set: a disabled module's tables are not migrated. */
+/** Every staff-notice check of the modules given, named by its module. Give it the enabled set:
+ * a disabled module's tables are not migrated. */
 export function enabledStaffNoticeSources(
   modules: readonly WaitronModule[],
 ): readonly OwnedStaffNoticeSource[] {
