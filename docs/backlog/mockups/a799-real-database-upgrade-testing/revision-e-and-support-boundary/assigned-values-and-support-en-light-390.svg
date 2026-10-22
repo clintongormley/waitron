@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="3357" viewBox="0 0 390 3357" xml:lang="en">
+<title>A799 · Keep the assigned facts</title>
+<desc>E agreed · F proposed, not approved. Static design artwork, not runtime evidence.</desc>
+<rect width="390" height="3357" fill="#f7f7f8"/>
+<g font-family="Arial, sans-serif">
+<text x="18" y="34" font-size="21" fill="#16181d" font-weight="700">A799 · Keep the assigned</text>
+<text x="18" y="58" font-size="21" fill="#16181d" font-weight="700">facts</text>
+<text x="18" y="86" font-size="15" fill="#1a5fd0" font-weight="700">E agreed · F proposed, not approved</text>
+<text x="18" y="116" font-size="16" fill="#5c626e">F asks when the oldest supported</text>
+<text x="18" y="140" font-size="16" fill="#5c626e">starting point may retire. B still</text>
+<text x="18" y="164" font-size="16" fill="#5c626e">requires the oldest supported plus</text>
+<text x="18" y="188" font-size="16" fill="#5c626e">previous retained release, with</text>
+<text x="18" y="212" font-size="16" fill="#5c626e">equal endpoints counted once.</text>
+<text x="18" y="248" font-size="18" fill="#1a5fd0" font-weight="700">E · AGREED</text>
+<rect x="18" y="276" width="354" height="601" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="32" y="305" font-size="18" fill="#16181d" font-weight="700">Keep each capture exact</text>
+<rect x="32" y="337" width="326" height="122" rx="8" fill="#e3ebfb" stroke="#d6d9e0"/>
+<text x="42" y="361" font-size="15" fill="#16181d" font-weight="700">Invented capture A</text>
+<text x="42" y="385" font-size="15" fill="#5c626e">Harbour · F1 F/1042</text>
+<text x="42" y="407" font-size="15" fill="#5c626e">ID: sale-harbour-01</text>
+<text x="42" y="429" font-size="15" fill="#5c626e">2026-11-04T12:15:00.000Z</text>
+<text x="32" y="477" font-size="16" fill="#5c626e">Every upgrade reuses a copy of A</text>
+<text x="32" y="501" font-size="16" fill="#5c626e">and compares A’s exact original</text>
+<text x="32" y="525" font-size="16" fill="#5c626e">facts.</text>
+<rect x="32" y="559" width="326" height="122" rx="8" fill="#e3ebfb" stroke="#d6d9e0"/>
+<text x="42" y="583" font-size="15" fill="#16181d" font-weight="700">Fresh capture B, new version</text>
+<text x="42" y="607" font-size="15" fill="#5c626e">Harbour · F1 F/1051</text>
+<text x="42" y="629" font-size="15" fill="#5c626e">ID: sale-harbour-02</text>
+<text x="42" y="651" font-size="15" fill="#5c626e">2026-11-05T09:20:00.000Z</text>
+<text x="32" y="699" font-size="16" fill="#5c626e">B has its own independently</text>
+<text x="32" y="723" font-size="16" fill="#5c626e">reviewed expectations. Keep A and</text>
+<text x="32" y="747" font-size="16" fill="#5c626e">B; never rewrite IDs, numbers or</text>
+<text x="32" y="771" font-size="16" fill="#5c626e">dates to make them match.</text>
+<rect x="32" y="805" width="326" height="52" rx="8" fill="#1f6feb" stroke="#d6d9e0"/>
+<text x="42" y="829" font-size="15" fill="#ffffff" font-weight="700">Only E’s precise scope agreed</text>
+<text x="18" y="909" font-size="18" fill="#1a5fd0" font-weight="700">F · RECOMMENDED</text>
+<rect x="18" y="937" width="354" height="679" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="32" y="966" font-size="18" fill="#16181d" font-weight="700">Retire only by owner decision</text>
+<text x="32" y="1000" font-size="16" fill="#5c626e">PROPOSED · NOT APPROVED</text>
+<rect x="32" y="1034" width="326" height="100" rx="8" fill="#e3ebfb" stroke="#d6d9e0"/>
+<text x="42" y="1058" font-size="15" fill="#16181d" font-weight="700">One post-reset history</text>
+<text x="42" y="1082" font-size="15" fill="#5c626e">R1 · R2 · R3 · R4</text>
+<text x="42" y="1104" font-size="15" fill="#5c626e">Candidate: R5</text>
+<rect x="32" y="1150" width="326" height="78" rx="8" fill="#e3ebfb" stroke="#d6d9e0"/>
+<text x="42" y="1174" font-size="15" fill="#16181d" font-weight="700">Required sources for R5</text>
+<text x="42" y="1198" font-size="15" fill="#5c626e">R1 and R4</text>
+<text x="32" y="1246" font-size="16" fill="#5c626e">Keep R1 as the oldest supported</text>
+<text x="32" y="1270" font-size="16" fill="#5c626e">baseline until you explicitly</text>
+<text x="32" y="1294" font-size="16" fill="#5c626e">approve retirement and name its</text>
+<text x="32" y="1318" font-size="16" fill="#5c626e">replacement.</text>
+<text x="32" y="1354" font-size="16" fill="#5c626e">If you approve R2 as the</text>
+<text x="32" y="1378" font-size="16" fill="#5c626e">replacement from R5, B requires</text>
+<text x="32" y="1402" font-size="16" fill="#5c626e">R2 and R4 instead. No retirement</text>
+<text x="32" y="1426" font-size="16" fill="#5c626e">is approved here.</text>
+<text x="32" y="1462" font-size="16" fill="#5c626e">Why: another release cannot</text>
+<text x="32" y="1486" font-size="16" fill="#5c626e">silently remove the oldest</text>
+<text x="32" y="1510" font-size="16" fill="#5c626e">history from required checks.</text>
+<rect x="32" y="1544" width="326" height="52" rx="8" fill="#e3ebfb" stroke="#d6d9e0"/>
+<text x="42" y="1568" font-size="15" fill="#16181d" font-weight="700">Keep every original bundle</text>
+<text x="18" y="1648" font-size="18" fill="#1a5fd0" font-weight="700">F · ALTERNATIVE</text>
+<rect x="18" y="1676" width="354" height="609" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="32" y="1705" font-size="18" fill="#16181d" font-weight="700">Rolling three-source window</text>
+<text x="32" y="1739" font-size="16" fill="#5c626e">PROPOSED · NOT APPROVED</text>
+<rect x="32" y="1773" width="326" height="100" rx="8" fill="#e3ebfb" stroke="#d6d9e0"/>
+<text x="42" y="1797" font-size="15" fill="#16181d" font-weight="700">For candidate R5</text>
+<text x="42" y="1821" font-size="15" fill="#5c626e">Window: R2 · R3 · R4</text>
+<text x="42" y="1843" font-size="15" fill="#5c626e">Required sources: R2 and R4</text>
+<text x="32" y="1891" font-size="16" fill="#5c626e">Keep the three most recent</text>
+<text x="32" y="1915" font-size="16" fill="#5c626e">retained source releases before</text>
+<text x="32" y="1939" font-size="16" fill="#5c626e">each candidate, in the same</text>
+<text x="32" y="1963" font-size="16" fill="#5c626e">post-reset history.</text>
+<text x="32" y="1999" font-size="16" fill="#5c626e">R1 leaves the supported</text>
+<text x="32" y="2023" font-size="16" fill="#5c626e">starting-point window for R5. R3</text>
+<text x="32" y="2047" font-size="16" fill="#5c626e">stays in the window but is not a</text>
+<text x="32" y="2071" font-size="16" fill="#5c626e">required endpoint run.</text>
+<text x="32" y="2107" font-size="16" fill="#5c626e">Why: the window moves with</text>
+<text x="32" y="2131" font-size="16" fill="#5c626e">releases. It removes the oldest</text>
+<text x="32" y="2155" font-size="16" fill="#5c626e">starting point without a separate</text>
+<text x="32" y="2179" font-size="16" fill="#5c626e">retirement decision.</text>
+<rect x="32" y="2213" width="326" height="52" rx="8" fill="#e3ebfb" stroke="#d6d9e0"/>
+<text x="42" y="2237" font-size="15" fill="#16181d" font-weight="700">Keep R1 and its expectations</text>
+<text x="18" y="2317" font-size="18" fill="#16181d" font-weight="700">Both F choices keep the evidence</text>
+<text x="18" y="2345" font-size="16" fill="#5c626e">Retirement never deletes an original</text>
+<text x="18" y="2369" font-size="16" fill="#5c626e">bundle or expectation set. Every</text>
+<text x="18" y="2393" font-size="16" fill="#5c626e">selected comparison stays exact.</text>
+<text x="18" y="2417" font-size="16" fill="#5c626e">Passing R1/R4 says nothing about</text>
+<text x="18" y="2441" font-size="16" fill="#5c626e">R2/R3; passing R2/R4 says nothing</text>
+<text x="18" y="2465" font-size="16" fill="#5c626e">about R1/R3. A failing required run</text>
+<text x="18" y="2489" font-size="16" fill="#5c626e">remains a failure. Neither choice</text>
+<text x="18" y="2513" font-size="16" fill="#5c626e">changes or creates a published</text>
+<text x="18" y="2537" font-size="16" fill="#5c626e">support guarantee.</text>
+<text x="18" y="2575" font-size="18" fill="#16181d" font-weight="700">A–D stay agreed within their</text>
+<text x="18" y="2599" font-size="18" fill="#16181d" font-weight="700">precise scopes</text>
+<text x="18" y="2627" font-size="16" fill="#5c626e">A: invented data written through the</text>
+<text x="18" y="2651" font-size="16" fill="#5c626e">old product. B: oldest supported</text>
+<text x="18" y="2675" font-size="16" fill="#5c626e">plus previous retained. C: Waitron</text>
+<text x="18" y="2699" font-size="16" fill="#5c626e">GitHub Releases, checksums in Git;</text>
+<text x="18" y="2723" font-size="16" fill="#5c626e">verify private CI downloads later</text>
+<text x="18" y="2747" font-size="16" fill="#5c626e">through existing access. D: issued</text>
+<text x="18" y="2771" font-size="16" fill="#5c626e">F1 must keep its original customer</text>
+<text x="18" y="2795" font-size="16" fill="#5c626e">name and address before A799 closes.</text>
+<text x="18" y="2833" font-size="18" fill="#16181d" font-weight="700">Required work remains open</text>
+<text x="18" y="2861" font-size="16" fill="#5c626e">Missing normal-path F1 needs an</text>
+<text x="18" y="2885" font-size="16" fill="#5c626e">evidence-based prerequisite; A799</text>
+<text x="18" y="2909" font-size="16" fill="#5c626e">stays open. No unpaid order, F2,</text>
+<text x="18" y="2933" font-size="16" fill="#5c626e">restart, new sale or new fiscal</text>
+<text x="18" y="2957" font-size="16" fill="#5c626e">writer replaces it. A760 reset needs</text>
+<text x="18" y="2981" font-size="16" fill="#5c626e">separate authority. Keep post-reset</text>
+<text x="18" y="3005" font-size="16" fill="#5c626e">capture, a distinct later</text>
+<text x="18" y="3029" font-size="16" fill="#5c626e">pending-migration upgrade,</text>
+<text x="18" y="3053" font-size="16" fill="#5c626e">optional-module-off cases,</text>
+<text x="18" y="3077" font-size="16" fill="#5c626e">independent expectations, exact raw</text>
+<text x="18" y="3101" font-size="16" fill="#5c626e">fiscal bytes and node/SIF/series</text>
+<text x="18" y="3125" font-size="16" fill="#5c626e">identity. Report preservation and a</text>
+<text x="18" y="3149" font-size="16" fill="#5c626e">separate new sale distinctly.</text>
+<text x="18" y="3187" font-size="14" fill="#5c626e">Static design drawings. All examples are</text>
+<text x="18" y="3209" font-size="14" fill="#5c626e">invented. Only A–E’s precise scopes are</text>
+<text x="18" y="3231" font-size="14" fill="#5c626e">approved; F, the full design, plan and</text>
+<text x="18" y="3253" font-size="14" fill="#5c626e">build remain unapproved. Historical</text>
+<text x="18" y="3275" font-size="14" fill="#5c626e">source observations are UNVERIFIED at</text>
+<text x="18" y="3297" font-size="14" fill="#5c626e">runtime. No capture, migration, upgrade</text>
+<text x="18" y="3319" font-size="14" fill="#5c626e">or access result is shown.</text>
+</g>
+</svg>

@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1339" viewBox="0 0 1280 1339" xml:lang="es">
+<title>A799 · Conserva los hechos asignados</title>
+<desc>E acordado · F propuesto, sin aprobar. Static design artwork, not runtime evidence.</desc>
+<rect width="1280" height="1339" fill="#101216"/>
+<g font-family="Arial, sans-serif">
+<text x="32" y="34" font-size="21" fill="#eceef2" font-weight="700">A799 · Conserva los hechos asignados</text>
+<text x="32" y="62" font-size="15" fill="#78a9ff" font-weight="700">E acordado · F propuesto, sin aprobar</text>
+<text x="32" y="92" font-size="16" fill="#a1a7b3">F pregunta cuándo retirar el punto de partida más antiguo admitido. B sigue exigiendo la versión más</text>
+<text x="32" y="116" font-size="16" fill="#a1a7b3">antigua admitida y la anterior conservada, sin duplicar extremos iguales.</text>
+<text x="32" y="152" font-size="18" fill="#78a9ff" font-weight="700">E · ACORDADO</text>
+<rect x="32" y="180" width="394.667" height="601" rx="8" fill="#22262e" stroke="#333945"/>
+<text x="46" y="209" font-size="18" fill="#eceef2" font-weight="700">Cada captura sigue exacta</text>
+<rect x="46" y="241" width="366.667" height="122" rx="8" fill="#2f3a4d" stroke="#333945"/>
+<text x="56" y="265" font-size="15" fill="#eceef2" font-weight="700">Captura A inventada</text>
+<text x="56" y="289" font-size="15" fill="#a1a7b3">Harbour · F1 F/1042</text>
+<text x="56" y="311" font-size="15" fill="#a1a7b3">ID: sale-harbour-01</text>
+<text x="56" y="333" font-size="15" fill="#a1a7b3">2026-11-04T12:15:00.000Z</text>
+<text x="46" y="381" font-size="16" fill="#a1a7b3">Cada actualización usa una copia de A</text>
+<text x="46" y="405" font-size="16" fill="#a1a7b3">y compara sus hechos originales</text>
+<text x="46" y="429" font-size="16" fill="#a1a7b3">exactos.</text>
+<rect x="46" y="463" width="366.667" height="122" rx="8" fill="#2f3a4d" stroke="#333945"/>
+<text x="56" y="487" font-size="15" fill="#eceef2" font-weight="700">Nueva captura B, otra versión</text>
+<text x="56" y="511" font-size="15" fill="#a1a7b3">Harbour · F1 F/1051</text>
+<text x="56" y="533" font-size="15" fill="#a1a7b3">ID: sale-harbour-02</text>
+<text x="56" y="555" font-size="15" fill="#a1a7b3">2026-11-05T09:20:00.000Z</text>
+<text x="46" y="603" font-size="16" fill="#a1a7b3">B tiene expectativas revisadas de</text>
+<text x="46" y="627" font-size="16" fill="#a1a7b3">forma independiente. Conserva A y B;</text>
+<text x="46" y="651" font-size="16" fill="#a1a7b3">no reescribas ID, números ni fechas</text>
+<text x="46" y="675" font-size="16" fill="#a1a7b3">para igualarlos.</text>
+<rect x="46" y="709" width="366.667" height="52" rx="8" fill="#4c8dff" stroke="#333945"/>
+<text x="56" y="733" font-size="15" fill="#06101f" font-weight="700">Solo el alcance de E acordado</text>
+<text x="442.667" y="152" font-size="18" fill="#78a9ff" font-weight="700">F · RECOMENDADO</text>
+<rect x="442.667" y="180" width="394.667" height="631" rx="8" fill="#22262e" stroke="#333945"/>
+<text x="456.667" y="209" font-size="18" fill="#eceef2" font-weight="700">Retirar solo por decisión tuya</text>
+<text x="456.667" y="243" font-size="16" fill="#a1a7b3">PROPUESTO · SIN APROBAR</text>
+<rect x="456.667" y="277" width="366.667" height="100" rx="8" fill="#2f3a4d" stroke="#333945"/>
+<text x="466.667" y="301" font-size="15" fill="#eceef2" font-weight="700">Un historial tras el reinicio</text>
+<text x="466.667" y="325" font-size="15" fill="#a1a7b3">R1 · R2 · R3 · R4</text>
+<text x="466.667" y="347" font-size="15" fill="#a1a7b3">Candidata: R5</text>
+<rect x="456.667" y="393" width="366.667" height="78" rx="8" fill="#2f3a4d" stroke="#333945"/>
+<text x="466.667" y="417" font-size="15" fill="#eceef2" font-weight="700">Orígenes exigidos para R5</text>
+<text x="466.667" y="441" font-size="15" fill="#a1a7b3">R1 y R4</text>
+<text x="456.667" y="489" font-size="16" fill="#a1a7b3">Conserva R1 como base más antigua</text>
+<text x="456.667" y="513" font-size="16" fill="#a1a7b3">admitida hasta que apruebes su</text>
+<text x="456.667" y="537" font-size="16" fill="#a1a7b3">retirada y nombres la sustituta.</text>
+<text x="456.667" y="573" font-size="16" fill="#a1a7b3">Si apruebas R2 como sustituta desde</text>
+<text x="456.667" y="597" font-size="16" fill="#a1a7b3">R5, B exige R2 y R4. Aquí no se</text>
+<text x="456.667" y="621" font-size="16" fill="#a1a7b3">aprueba ninguna retirada.</text>
+<text x="456.667" y="657" font-size="16" fill="#a1a7b3">Motivo: otra versión no elimina por</text>
+<text x="456.667" y="681" font-size="16" fill="#a1a7b3">sí sola el historial más antiguo de</text>
+<text x="456.667" y="705" font-size="16" fill="#a1a7b3">las pruebas exigidas.</text>
+<rect x="456.667" y="739" width="366.667" height="52" rx="8" fill="#2f3a4d" stroke="#333945"/>
+<text x="466.667" y="763" font-size="15" fill="#eceef2" font-weight="700">Conserva cada paquete original</text>
+<text x="853.333" y="152" font-size="18" fill="#78a9ff" font-weight="700">F · ALTERNATIVA</text>
+<rect x="853.333" y="180" width="394.667" height="609" rx="8" fill="#22262e" stroke="#333945"/>
+<text x="867.333" y="209" font-size="18" fill="#eceef2" font-weight="700">Ventana móvil de tres orígenes</text>
+<text x="867.333" y="243" font-size="16" fill="#a1a7b3">PROPUESTO · SIN APROBAR</text>
+<rect x="867.333" y="277" width="366.667" height="100" rx="8" fill="#2f3a4d" stroke="#333945"/>
+<text x="877.333" y="301" font-size="15" fill="#eceef2" font-weight="700">Para la candidata R5</text>
+<text x="877.333" y="325" font-size="15" fill="#a1a7b3">Ventana: R2 · R3 · R4</text>
+<text x="877.333" y="347" font-size="15" fill="#a1a7b3">Orígenes exigidos: R2 y R4</text>
+<text x="867.333" y="395" font-size="16" fill="#a1a7b3">Admite las tres versiones de origen</text>
+<text x="867.333" y="419" font-size="16" fill="#a1a7b3">conservadas más recientes antes de</text>
+<text x="867.333" y="443" font-size="16" fill="#a1a7b3">cada candidata, en el mismo historial</text>
+<text x="867.333" y="467" font-size="16" fill="#a1a7b3">tras el reinicio.</text>
+<text x="867.333" y="503" font-size="16" fill="#a1a7b3">R1 sale de los puntos de partida</text>
+<text x="867.333" y="527" font-size="16" fill="#a1a7b3">admitidos para R5. R3 sigue en la</text>
+<text x="867.333" y="551" font-size="16" fill="#a1a7b3">ventana, pero no es un extremo de</text>
+<text x="867.333" y="575" font-size="16" fill="#a1a7b3">prueba exigido.</text>
+<text x="867.333" y="611" font-size="16" fill="#a1a7b3">Motivo: la ventana avanza con las</text>
+<text x="867.333" y="635" font-size="16" fill="#a1a7b3">versiones. Retira el origen más</text>
+<text x="867.333" y="659" font-size="16" fill="#a1a7b3">antiguo sin una decisión de retirada</text>
+<text x="867.333" y="683" font-size="16" fill="#a1a7b3">aparte.</text>
+<rect x="867.333" y="717" width="366.667" height="52" rx="8" fill="#2f3a4d" stroke="#333945"/>
+<text x="877.333" y="741" font-size="15" fill="#eceef2" font-weight="700">Conserva R1 y sus expectativas</text>
+<text x="32" y="843" font-size="18" fill="#eceef2" font-weight="700">Ambas opciones F conservan las pruebas</text>
+<text x="32" y="871" font-size="16" fill="#a1a7b3">Retirar nunca borra un paquete original ni sus expectativas. Cada comparación elegida sigue siendo exacta. Un</text>
+<text x="32" y="895" font-size="16" fill="#a1a7b3">éxito de R1/R4 no prueba R2/R3; uno de R2/R4 no prueba R1/R3. Un fallo exigido sigue siendo un fallo. Ninguna</text>
+<text x="32" y="919" font-size="16" fill="#a1a7b3">opción cambia ni crea una garantía de soporte publicada.</text>
+<text x="32" y="957" font-size="18" fill="#eceef2" font-weight="700">A–D mantienen solo su alcance acordado</text>
+<text x="32" y="985" font-size="16" fill="#a1a7b3">A: datos inventados escritos por el producto antiguo. B: versión más antigua admitida y anterior conservada.</text>
+<text x="32" y="1009" font-size="16" fill="#a1a7b3">C: GitHub Releases de Waitron, sumas de comprobación en Git; verificar después las descargas privadas en CI</text>
+<text x="32" y="1033" font-size="16" fill="#a1a7b3">con el acceso existente. D: F1 emitida debe conservar el nombre y dirección originales del cliente para cerrar</text>
+<text x="32" y="1057" font-size="16" fill="#a1a7b3">A799.</text>
+<text x="32" y="1095" font-size="18" fill="#eceef2" font-weight="700">El trabajo exigido sigue pendiente</text>
+<text x="32" y="1123" font-size="16" fill="#a1a7b3">Si no hay F1 por la vía normal, identifica el requisito previo con pruebas y deja A799 abierto. No lo cubren</text>
+<text x="32" y="1147" font-size="16" fill="#a1a7b3">un pedido sin pagar, F2, reinicio, venta nueva ni otro escritor fiscal. El reinicio A760 necesita autorización</text>
+<text x="32" y="1171" font-size="16" fill="#a1a7b3">aparte. Mantén captura tras el reinicio, actualización posterior con migraciones pendientes, casos de módulo</text>
+<text x="32" y="1195" font-size="16" fill="#a1a7b3">opcional apagado, expectativas independientes, bytes fiscales exactos e identidad de nodo/SIF/serie. Separa</text>
+<text x="32" y="1219" font-size="16" fill="#a1a7b3">conservación y venta nueva.</text>
+<text x="32" y="1257" font-size="14" fill="#a1a7b3">Dibujos estáticos con ejemplos inventados. Solo se aprueba el alcance preciso de A–E; F, el diseño completo, el plan y la</text>
+<text x="32" y="1279" font-size="14" fill="#a1a7b3">implementación siguen sin aprobar. Lecturas históricas del código SIN VERIFICAR en ejecución. No se muestra captura,</text>
+<text x="32" y="1301" font-size="14" fill="#a1a7b3">migración, actualización ni prueba de acceso real.</text>
+</g>
+</svg>

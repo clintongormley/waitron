@@ -562,6 +562,46 @@ moves the database into place, so a full disk at that move leaves the old databa
 active identity file; found by the finish-branch review's run-it seat with an injected ENOSPC,
 and it predates A538-5 too (`placeValidated`, `setAsideExistingIdentity`).
 
+## 2026-10-22 CURRENT A799 addendum: assigned values agreed; support boundary open
+
+This addendum takes precedence over the historical Upgrade testing area immediately
+below, which remains byte-for-byte intact. **Only A–E's precise scopes are approved;
+the full design, plan and build remain unapproved.**
+
+The owner answered **KEEP THE ASSIGNED VALUES** on 19 October at approximately
+21:22 in Lane F's `questions.md`. Keep each capture's old-product-assigned IDs,
+invoice numbers, dates and timestamps, comparing those exact facts on every upgrade.
+A fresh capture with different values is a new versioned bundle with independently
+reviewed expectations. Keep every original; the candidate never supplies expectations.
+
+[Question F and worked R1–R5 example](../superpowers/specs/2026-10-19-a799-real-database-upgrade-testing-design.md):
+keep the oldest supported baseline in the same post-reset history until explicit
+owner retirement with a named replacement (recommended), or propose a rolling window
+of the three most recent retained source releases? **Neither boundary is approved.**
+B still selects oldest supported plus previous retained: R1/R4 for R5 without
+retirement, or R2/R4 under the proposed R2/R3/R4 window. Deduplicate equal endpoints.
+Retirement removes a supported test starting point, never its original bundle or
+expectations. It changes no exact comparison or published guarantee; an unrun release
+has no passing evidence. [Static E/F boards](mockups/a799-real-database-upgrade-testing/revision-e-and-support-boundary/README.md)
+were rendered and individually inspected in both languages, themes and widths. Native SVG
+checks found no text outside the canvas or overlapping text. Ask only F next.
+
+A keeps an invented venue written through the frozen older product's normal paths.
+C keeps bundles/facts in their own Waitron GitHub Releases, checksums in Git and
+private CI access verification through existing access still pending. D requires an
+issued F1's original customer name/address to survive before A799 closes. If the old
+product cannot issue it normally, identify the evidence-based prerequisite and leave
+A799 open. No unpaid order, F2, restart, new sale or new fiscal writer fills that gap.
+
+A760 execution/reset remains separate. Qualifying post-reset capture and a distinct
+later candidate applying pending migrations remain required, as do optional-module-off
+cases, independent expectations, raw fiscal bytes and node/SIF/series identity.
+Preservation and a separate new sale stay distinct. Source reads at
+`87f19d4bc98d2fb7925e886228430cabfc490a9b` remain historical and **UNVERIFIED at
+runtime**. This revision supplies no runtime evidence or authority to capture or migrate.
+
+---
+
 ## Upgrade testing — blocking before go-live (owner, 2026-09-26)
 
 **A799 design proposal, 19 October 2026:** the [design](../superpowers/specs/2026-10-19-a799-real-database-upgrade-testing-design.md)

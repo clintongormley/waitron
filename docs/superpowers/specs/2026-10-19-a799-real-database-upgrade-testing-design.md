@@ -1,3 +1,96 @@
+## 2026-10-22 CURRENT precedence addendum: E agreed; support boundary F proposed
+
+**Only A–E's precise scopes are approved.** The owner answered **KEEP THE ASSIGNED
+VALUES** on 19 October 2026 at approximately 21:22 in Lane F's `questions.md`
+(line 2347 at this revision). Each frozen historical capture keeps the IDs, invoice
+numbers, dates and timestamps assigned by the old product. Every later upgrade
+compares those exact original facts. A fresh capture with different assigned values
+is its own versioned bundle with independently recorded and reviewed expectations;
+keep every original bundle and expectation set. Never rewrite assigned values,
+relax time comparisons or derive expectations from the candidate.
+
+This CURRENT addendum takes precedence over conflicting historical wording below,
+including unanswered E and earlier matrix/lifetime proposals. Every earlier byte is
+preserved as a historical suffix. The full design, implementation plan and build
+remain unapproved. Ask only F next; A–E are not reopened.
+
+### Next owner question F: when may the oldest baseline retire?
+
+A baseline is a kept release and its captured venue that later upgrade tests start from.
+
+**Should you keep the oldest supported baseline in the same post-reset migration
+history until you explicitly approve its retirement and name its replacement
+(recommended), or use a rolling window of the three most recent retained source
+releases before each candidate, retiring older baselines from that window?**
+
+Both are proposals, not an approved support window. Here retirement means removal
+from A799's supported upgrade-test starting points. It is separate from artifact
+deletion: **every original bundle and expectation set remains kept**, including
+retired ones. Neither choice changes exact comparisons, creates evidence for unrun
+releases, or introduces, withdraws or changes any published support guarantee.
+Any future published guarantee needs its own explicit decision.
+
+Recommend explicit retirement so a new release cannot silently remove the oldest
+history from required checks. Record the owner-approved retired baseline, its
+replacement and the candidate from which the decision applies before changing the
+required sources. A failing required run remains a failure under the applicable
+selection; neither proposal permits deleting it or changing its expectations to pass.
+The bounded alternative limits how far back the starting-point window reaches, but
+lets the oldest leave that window as releases accumulate. It is an author proposal,
+not an owner-approved three-release policy.
+
+### Worked example: R1 through R5
+
+Imagine qualified frozen releases R1, R2, R3 and R4, followed by candidate R5, all in
+one migration history after A760's separately authorised reset. R1 is the oldest
+supported baseline before any retirement. The labels are invented, not existing
+captures or observed passing results.
+
+| Proposed boundary | B's required checks for R5 | What stays kept |
+| --- | --- | --- |
+| **Explicit owner retirement, recommended** | **R1 to R5 and R4 to R5**, unless the owner explicitly retires R1 and names a replacement. If R2 is that approved replacement for R5, require R2 and R4 instead. No such retirement is approved here. | Every R1–R4 original bundle and expectation set, even after retirement. |
+| **Rolling last three source releases, unapproved alternative** | The window is R2/R3/R4, so B requires **R2 to R5 and R4 to R5**. R1 leaves the supported starting-point window for R5; R3 remains in it but is not a required endpoint run. | Every R1–R4 original bundle and expectation set, including R1. |
+
+**B still selects oldest supported plus previous retained**, deduplicating equal
+endpoints; F does not reopen that approved choice or require every retained release
+to run. Passing R1/R4 supplies no R2/R3 passing result; passing R2/R4 supplies no
+R1/R3 passing result. Under either proposal, each selected source uses its own frozen
+facts. E never permits comparing one capture with another capture's IDs or dates.
+
+### Preserved scope and evidence limits
+
+A selects an invented venue written through a frozen older product's normal paths,
+without private data. C selects GitHub Releases on the Waitron repository, with each
+release's bundle and facts in its own release and a checksum index in Git. Private CI
+downloads must later be verified through existing access; no new provider, token
+setup or permission expansion is authorised.
+
+D requires an issued F1, a full customer invoice, to preserve its original recorded
+customer name and address before A799 closes. Harbour's Mara Soler at 18 Market
+Street is an invented example. If a qualifying older product cannot issue F1 through
+its normal supported path, identify the prerequisite item from evidence and leave
+A799 open. An unpaid recipient-bearing order, F2 receipt, restart or new sale cannot
+replace it. No new fiscal writer, fabricated F1, workaround or F1 enablement is
+approved. Golden huella and `inmutabilidad` assertions remain unchanged.
+
+A760 keeps separate execution/reset authority. Qualifying captures begin after that
+separately authorised reset in the same resulting migration history. An actual
+upgrade requires a distinct later candidate whose normal boot applies pending
+migrations; a same-image run is restart-only. Keep optional-module-off cases,
+independent expectations frozen before candidate access, exact raw fiscal bytes and
+node/SIF/series identity. Preservation and a separate new sale remain distinct results.
+
+Original source observations remain historical reads at
+`87f19d4bc98d2fb7925e886228430cabfc490a9b`, **UNVERIFIED at runtime**. This revision
+supplies no capture, boot, migration, upgrade, preservation, new-sale, size or access
+result. The [eight E/F review boards](../../backlog/mockups/a799-real-database-upgrade-testing/revision-e-and-support-boundary/README.md)
+are static design drawings. All eight PNGs were rendered and individually inspected;
+native SVG checks found no text outside the canvas or overlapping text. These checks
+supply no runtime evidence. This design authorises no product implementation, capture,
+migration or release-bundle publication or upload.
+
+---
+
 ## 2026-10-19 precedence addendum: D requires issued F1; capture facts question E proposed
 
 **Only A–D's precise scopes are approved.** At approximately 17:08 on 2026-10-19 in
