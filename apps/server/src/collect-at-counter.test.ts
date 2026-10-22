@@ -1,11 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   orderGroupEvents,
   orderGroups,
   parties,
-  printJobs,
   products,
   ticketItems,
   workingOrderLines,
@@ -82,18 +81,19 @@ async function ticketsOf(billIds: string[]) {
   return venue.db.select().from(ticketItems).where(inArray(ticketItems.workingOrderId, billIds));
 }
 
-async function lastJobId() {
-  const jobs = await venue.db.select({ id: printJobs.id }).from(printJobs);
-  return jobs.reduce((max, job) => (job.id > max ? job.id : max), "");
+/** Print job ids are random, so the jobs since a point are told by rowid. */
+function lastJobRow() {
+  return (
+    venue.db.all<{ row: number | null }>(sql`select max(rowid) as row from print_jobs`)[0]!.row ?? 0
+  );
 }
 
-async function jobsAfter(id: string) {
-  const jobs = await venue.db
-    .select({ id: printJobs.id, payload: printJobs.payload })
-    .from(printJobs)
-    .where(gt(printJobs.id, id))
-    .orderBy(printJobs.id);
-  return jobs.map((job) => printedLines(job.payload));
+function jobsByPrinterAfter(row: number) {
+  return venue.db
+    .all<{ printerId: string; payload: Uint8Array }>(
+      sql`select printer_id as printerId, payload from print_jobs where rowid > ${row} order by rowid`,
+    )
+    .map((job) => ({ printerId: job.printerId, lines: printedLines(job.payload) }));
 }
 
 const release = (
@@ -143,7 +143,7 @@ async function cancelKeepingCharge(partyId: string, billId: string) {
 describe("releaseHeldWorkOf", () => {
   it("fires a paid bill's held group", async () => {
     const p = await paidHeld();
-    const before = await lastJobId();
+    const before = lastJobRow();
 
     await release(p.partyId, [p.billId]);
 
@@ -151,7 +151,7 @@ describe("releaseHeldWorkOf", () => {
     expect(tickets.length).toBeGreaterThan(0);
     expect(tickets.every((item) => item.firedAt !== null)).toBe(true);
     expect((await groupsOf(p.partyId)).map((group) => group.state)).toEqual(["fired"]);
-    const jobs = await jobsAfter(before);
+    const jobs = jobsByPrinterAfter(before).map((job) => job.lines);
     expect(jobs).toHaveLength(1);
     expect(jobs[0]![0]).toBe("*** FIRE ***");
     expect(jobs[0]!.join("\n")).toContain("2.000 x BURG");
@@ -204,7 +204,7 @@ describe("releaseHeldWorkOf", () => {
       .select()
       .from(orderGroupEvents)
       .where(eq(orderGroupEvents.partyId, p.partyId));
-    const before = await lastJobId();
+    const before = lastJobRow();
 
     await release(p.partyId, [p.billId]);
 
@@ -212,7 +212,7 @@ describe("releaseHeldWorkOf", () => {
     expect(
       await venue.db.select().from(orderGroupEvents).where(eq(orderGroupEvents.partyId, p.partyId)),
     ).toEqual(events);
-    expect(await jobsAfter(before)).toEqual([]);
+    expect(jobsByPrinterAfter(before)).toEqual([]);
   });
 
   it("refuses with the release's own refusal", async () => {
@@ -344,21 +344,6 @@ async function noticesOn(billId: string) {
     .from(kitchenNotices)
     .where(eq(kitchenNotices.workingOrderId, billId));
   return rows.sort((a, b) => a.lineName.localeCompare(b.lineName));
-}
-
-/** Print job ids are random, so the jobs since a point are told by rowid. */
-function lastJobRow() {
-  return (
-    venue.db.all<{ row: number | null }>(sql`select max(rowid) as row from print_jobs`)[0]!.row ?? 0
-  );
-}
-
-function jobsByPrinterAfter(row: number) {
-  return venue.db
-    .all<{ printerId: string; payload: Uint8Array }>(
-      sql`select printer_id as printerId, payload from print_jobs where rowid > ${row} order by rowid`,
-    )
-    .map((job) => ({ printerId: job.printerId, lines: printedLines(job.payload) }));
 }
 
 const toCounter = (p: { partyId: string; billId: string }) =>
