@@ -323,7 +323,9 @@ export async function cancelItem(
             .select({ id: sales.id })
             .from(sales)
             .where(eq(sales.workingOrderId, bill!.id));
-          const value = await cancellationRefundValue(tx, bill!.id, sale!.id, lineId);
+          if (sale === undefined)
+            throw new AppError("working_order.not_found", { workingOrderId: bill!.id });
+          const value = await cancellationRefundValue(tx, bill!.id, sale.id, lineId);
           if (value !== undefined)
             refundValue = cancelRefundShare(
               value,

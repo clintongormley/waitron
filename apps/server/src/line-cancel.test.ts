@@ -1400,4 +1400,20 @@ describe("What a cancel records for refunds", () => {
       { chargeKept: true, preparationStarted: false, refundHandoff: true, refundValue: null },
     ]);
   });
+
+  it("refuses a Refund tick on a settled bill that has no filed sale", async () => {
+    const order = await fixture();
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: "2026-10-22T12:00:00.000Z" })
+        .where(eq(workingOrders.id, order.billId)),
+    );
+    const ask = { ...(await askFor(order, "keep_charge", "1")), refundHandoff: true };
+    await expect(cancel(order, ask)).rejects.toMatchObject({
+      code: "working_order.not_found",
+      params: { workingOrderId: order.billId },
+    });
+    expect(await cancels(order)).toEqual([]);
+  });
 });
