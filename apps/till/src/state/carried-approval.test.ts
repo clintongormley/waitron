@@ -18,7 +18,7 @@ describe("a carried approval", () => {
     expect(carried.take("sale-1")).toEqual(marta);
   });
 
-  it("counts a sale whose refund was sent without it, and drops the PIN after the last sale", () => {
+  it("counts a sale whose refund was sent without it, and gives nothing after the last sale", () => {
     const carried = new CarriedApproval(marta, ["sale-1", "sale-2"]);
     carried.markSent("sale-1");
     expect(carried.take("sale-1")).toBeUndefined();
@@ -27,7 +27,7 @@ describe("a carried approval", () => {
     expect(other.take("sale-1")).toEqual(marta);
     other.markSent("sale-2");
     expect(other.take("sale-2")).toBeUndefined();
-    expect(other.held).toBe(false);
+    expect(other.take("sale-1")).toBeUndefined();
   });
 
   it("gives nothing once cleared", () => {

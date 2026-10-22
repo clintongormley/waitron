@@ -26,10 +26,6 @@ export class CarriedApproval {
     if (this.#waiting.delete(saleId) && this.#waiting.size === 0) this.#approver = null;
   }
 
-  get held(): boolean {
-    return this.#approver !== null;
-  }
-
   clear(): void {
     this.#approver = null;
     this.#waiting.clear();
