@@ -5330,9 +5330,13 @@ alert list, and holds no staged input.
 
 - **Rows.** One card per part, in order: Sales, Tax agency, Bucket copy, Printers, Card readers
   (left out when the payments module is off), Clock and Disk space. Each has a dot, the part's
-  name, a line of state, a muted line of detail, the sentence of each bell alert on that row, and
-  its actions at the trailing end: a Go to for the row's own screen and its alerts' screens, each
-  once, never this page, and only those the person can open.
+  name in bold, a line of state, a muted line of detail, the sentence of each bell alert on that
+  row except one whose Go to is this page (the disk alerts, whose words the row's line already
+  gives), and its actions: a Go to for the row's own screen and its alerts' screens, each once,
+  never this page, and only those the person can open. The rows share one grid, so on a wide page
+  the dots, names, words and actions each line up in a column across the rows, as picture 4 draws
+  them; where the page is 600px wide or less the name sits above the words and the actions go
+  under them.
 - **Dots.** A `--wt-space-3` circle: `--wt-color-success` for fine, `--wt-color-warning` for needs
   attention, `--wt-color-danger` for something can't be saved, with the state's words in visually
   hidden text beside it. Red is a staff notice of severity `error` (`storage.disk_full`,
