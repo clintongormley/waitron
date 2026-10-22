@@ -188,3 +188,44 @@ it("does not enable Review for a kept reply after its module draft changed", asy
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-test=next]")!.hasAttribute("disabled")).toBe(true);
 });
+it("asks for the password once across a press, its waits and the name", async () => {
+  const answers = [
+    { status: "waiting", targetMs: 1792332000000, remainingMs: 84000 },
+    { status: "waiting", targetMs: 1792332030000, remainingMs: 30000 },
+    { kind: "waitron-hour-setup", status: "selected", identity: "0CRHE" },
+  ];
+  const { el, actions, requests } = await mount(false, (path) =>
+    path.endsWith("/candidates")
+      ? Promise.resolve(Response.json({ state: initial, preparation: answers.shift() }))
+      : undefined,
+  );
+  const dialogs = () => el.shadowRoot!.querySelectorAll("[data-test=owner-password]").length;
+  const first = actions.candidates({ comparisonId: "comparison-1" });
+  await expect.poll(dialogs).toBe(1);
+  el.shadowRoot!.querySelector("[data-test=owner-password]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: venue.admin.password } }),
+  );
+  await el.updateComplete;
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=reconfirm]")!);
+  expect(await first).toMatchObject({ status: "waiting", remainingMs: 84000 });
+  await expect.poll(dialogs).toBe(0);
+  expect(await actions.candidates({ comparisonId: "comparison-2" })).toMatchObject({
+    status: "waiting",
+    remainingMs: 30000,
+  });
+  await el.updateComplete;
+  expect(dialogs()).toBe(0);
+  expect(await actions.candidates({ comparisonId: "comparison-3" })).toMatchObject({
+    status: "selected",
+  });
+  await el.updateComplete;
+  expect(dialogs()).toBe(0);
+  expect(requests.filter((r) => r.path.endsWith("/reconfirm"))).toHaveLength(1);
+  expect(requests.filter((r) => r.path.endsWith("/candidates")).map((r) => r.body)).toEqual(
+    ["comparison-1", "comparison-2", "comparison-3"].map((comparisonId) => ({
+      module: "fiscal-verifactu",
+      proposal: { comparisonId },
+      reconfirmation: "proof",
+    })),
+  );
+});
