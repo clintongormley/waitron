@@ -132,7 +132,6 @@ export async function stagedHourRestore(
         return setup.select({
           binding: initial,
           authority,
-          answer: "no",
           comparisonId: "comparison",
         });
       });
@@ -219,7 +218,7 @@ export async function stagedHourRestore(
     const outcome = (await recoverySelectPastWaits(
       clock,
       service,
-      { answer: "no", installationCodes: ["0CNNW"] },
+      { installationCodes: ["0CNNW"] },
       client,
       follow,
     )) as { input: unknown };
@@ -244,13 +243,7 @@ export async function stagedHourRestore(
         ...options,
         binding: { ...binding, eventId: binding.eventId + "-another" },
       });
-      return recoverySelectPastWaits(
-        clock,
-        next,
-        { answer: "no", installationCodes: ["0CNNW"] },
-        client,
-        follow,
-      );
+      return recoverySelectPastWaits(clock, next, { installationCodes: ["0CNNW"] }, client, follow);
     };
     const journalPath = join(roots.stateDir, "module-preparation-state.json");
     const journal = () => readFileSync(journalPath, "utf8");

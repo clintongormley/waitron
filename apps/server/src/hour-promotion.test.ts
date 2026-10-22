@@ -167,7 +167,6 @@ beforeEach(async () => {
     const selected = await setup.select({
       binding: first,
       authority,
-      answer: "no",
       comparisonId: "comparison",
     });
     if (selected.status !== "selected") throw new Error("first setup selection");

@@ -27,15 +27,13 @@ export interface HourSelectionFacts {
   readonly history: readonly HourHistorySource[];
 }
 export type HourSelectionStore = NonNullable<ModuleOperationHost["withPreparationState"]>;
-type Answer = "no" | "yes" | "unknown";
 interface SelectionRequest {
   binding: OperationBinding;
   authority: OperationAuthority;
-  answer: Answer;
   comparisonId: string;
   reportedIdentities?: readonly string[];
 }
-type BareRequest = Omit<SelectionRequest, "answer" | "comparisonId">;
+type BareRequest = Omit<SelectionRequest, "comparisonId">;
 interface EntryBase {
   softwareId: string;
   operatorId: OperationOperator;
@@ -44,7 +42,6 @@ interface EntryBase {
   bases: HourSelectionFacts["bases"];
   contextKey: string;
   continuationKey?: string;
-  answer: Answer;
   reportedIdentities?: readonly string[];
 }
 interface Intent extends EntryBase {
@@ -67,12 +64,17 @@ type ResumeRequest = BareRequest & {
   documentBinding: string;
   validate(selected: ReturnType<typeof material>): void;
 };
-const HOUR_MS = 3_600_000;
 const MINUTE_MS = 60_000;
+const WAIT_BOUND_MS = 150_000;
+const SETTLE_MS = 90_000;
+const WAIT_REUSE_MS = 60_000;
 const EPOCH_MS = Date.parse("2026-01-01T00:00:00Z");
 const END_MS = EPOCH_MS + 32 ** 5 * MINUTE_MS;
-function refuse(reason: string): never {
-  throw new AppError("sif.allocation_invalid", { reason });
+function refuse(reason: string, allowedFromMs?: number): never {
+  throw new AppError(
+    "sif.allocation_invalid",
+    allowedFromMs === undefined ? { reason } : { reason, allowedFromMs },
+  );
 }
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -138,8 +140,7 @@ function parseState(value: unknown): Entry[] {
           entry.reportedIdentities.length > 256 ||
           !entry.reportedIdentities.every(isMinuteIdentity) ||
           new Set(entry.reportedIdentities).size !== entry.reportedIdentities.length)) ||
-      !text(entry.softwareId) ||
-      !["no", "yes", "unknown"].includes(entry.answer as string)
+      !text(entry.softwareId)
     )
       return refuse("history_invalid");
     if (entry.kind === "intent" || entry.kind === "resume") {
@@ -165,11 +166,10 @@ function parseState(value: unknown): Entry[] {
         return refuse("history_invalid");
     } else if (entry.kind === "wait") {
       if (
-        entry.answer === "no" ||
         !Number.isSafeInteger(entry.targetMs) ||
         (entry.targetMs as number) < EPOCH_MS ||
         (entry.targetMs as number) > END_MS ||
-        (entry.targetMs as number) % HOUR_MS !== 0
+        (entry.targetMs as number) % MINUTE_MS !== 0
       )
         return refuse("history_invalid");
     } else return refuse("history_invalid");
@@ -185,6 +185,7 @@ function entryKey(entry: Entry) {
     entry.binding.eventId,
     entry.kind,
     ...(entry.kind === "resume" ? [entry.contextKey] : []),
+    ...(entry.kind === "wait" ? [entry.targetMs] : []),
   ]);
 }
 function reportedHistory(entries: readonly EntryBase[]) {
@@ -239,7 +240,6 @@ function fingerprint(entry: EntryBase): string {
     typeof entry.operatorId === "string"
       ? entry.operatorId
       : [entry.operatorId.kind, entry.operatorId.nodeId, entry.operatorId.eventId],
-    entry.answer,
     entry.reportedIdentities ?? [],
   ]);
 }
@@ -277,7 +277,7 @@ export function createHourSelection(options: {
   // Monotonic readings are process-local; persisted waits carry only their original UTC target.
   const timers = new Map<string, { start: number; duration: number }>();
   const perform = async (
-    supplied: BareRequest & { answer?: Answer; comparisonId?: string } & Partial<ResumeRequest>,
+    supplied: BareRequest & { comparisonId?: string } & Partial<ResumeRequest>,
     mode: "select" | "preview" | "selected" | "resume" | "committed",
   ) => {
     const persist = mode === "select";
@@ -299,11 +299,7 @@ export function createHourSelection(options: {
       return operator!.operatorId;
     };
     const operatorId = authorize();
-    if (
-      !["selected", "resume", "committed"].includes(mode) &&
-      !["no", "yes", "unknown"].includes(request.answer!)
-    )
-      refuse("event_mismatch");
+    if (mode === "select" && !text(request.comparisonId)) refuse("event_mismatch");
     return options.withState(request.binding, async (state) => {
       authorize();
       const fresh: Omit<HourSelectionFacts, "clock"> & Partial<Pick<HourSelectionFacts, "clock">> =
@@ -372,12 +368,6 @@ export function createHourSelection(options: {
           !/^[a-f0-9]{64}$/.test(request.documentBinding))
       )
         return refuse("event_mismatch");
-      const answer =
-        mode === "selected" || mode === "resume" || mode === "committed"
-          ? intent!.answer
-          : mode === "preview" && sameEvent.length > 0
-            ? sameEvent[0]!.answer
-            : request.answer!;
       const reportedIdentities =
         request.reportedIdentities ??
         intent?.reportedIdentities ??
@@ -390,7 +380,6 @@ export function createHourSelection(options: {
         bases: facts.bases,
         contextKey: facts.contextKey,
         ...(facts.waitKey === undefined ? {} : { continuationKey: facts.waitKey }),
-        answer,
         ...(reportedIdentities === undefined ? {} : { reportedIdentities }),
       };
       if (
@@ -420,18 +409,14 @@ export function createHourSelection(options: {
           return refuse("event_mismatch");
         return material(intent!);
       }
-      let wait = sameEvent.find((entry): entry is Wait => entry.kind === "wait");
+      const waits = sameEvent.filter((entry): entry is Wait => entry.kind === "wait");
+      const latestWait = waits.reduce<Wait | undefined>(
+        (latest, entry) =>
+          latest === undefined || entry.targetMs > latest.targetMs ? entry : latest,
+        undefined,
+      );
       if (facts.clock === undefined) return refuse("clock_unconfirmed");
-      if (!canSelectHour(facts.clock)) {
-        if (wait !== undefined && intent === undefined)
-          return {
-            status: "waiting" as const,
-            targetMs: wait.targetMs,
-            remainingMs: null,
-            requiresClockConfirmation: true,
-          };
-        return refuse(clockRefusal(facts.clock));
-      }
+      if (!canSelectHour(facts.clock)) return refuse(clockRefusal(facts.clock));
       const now = facts.clock.usable.find((sample) => sample.source === "box")!.lowerMs;
       const history = projectHourHistory({
         scope: facts.scope,
@@ -458,15 +443,14 @@ export function createHourSelection(options: {
         ],
       });
       if (history.contradictions.length > 0) return refuse("history_invalid");
-      const currentMinute = decodeMinuteIdentity(encodeMinuteIdentity(now));
-      const selectedMinute =
-        intent === undefined ? currentMinute : decodeMinuteIdentity(intent.identity);
       if (
-        (history.greatestSpentMinute !== null && selectedMinute <= history.greatestSpentMinute) ||
-        (history.recordedTimeFloorMs !== null && now < history.recordedTimeFloorMs) ||
-        (intent !== undefined && now < Date.parse(intent.issuedAt))
+        intent !== undefined &&
+        ((history.greatestSpentMinute !== null &&
+          decodeMinuteIdentity(intent.identity) <= history.greatestSpentMinute) ||
+          (history.recordedTimeFloorMs !== null && now < history.recordedTimeFloorMs) ||
+          now < Date.parse(intent.issuedAt))
       )
-        return refuse("hour_not_later");
+        return refuse("minute_not_later");
       const write = async (entry: Entry) => {
         authorize();
         await state.replace({ version: 1, entries: structuredClone([...entries, entry]) });
@@ -487,37 +471,71 @@ export function createHourSelection(options: {
         }
         return material(intent);
       }
-      if (answer !== "no") {
+      // A recorded wait stays current for a minute past its target; a later select gets its own.
+      const currentWait =
+        latestWait !== undefined && now <= latestWait.targetMs + WAIT_REUSE_MS
+          ? latestWait
+          : undefined;
+      const settles = ["setup", "restore"].includes(request.binding.action);
+      // A preview never offers a settle target it has not saved.
+      const settleTarget = !settles
+        ? -Infinity
+        : currentWait !== undefined
+          ? currentWait.targetMs
+          : persist
+            ? (Math.floor((now + SETTLE_MS) / MINUTE_MS) + 1) * MINUTE_MS
+            : -Infinity;
+      const earliestMs = Math.max(
+        history.greatestSpentMinute === null
+          ? -Infinity
+          : EPOCH_MS + (history.greatestSpentMinute + 1) * MINUTE_MS,
+        history.recordedTimeFloorMs ?? -Infinity,
+        settleTarget,
+      );
+      const targetMs = Math.ceil(earliestMs / MINUTE_MS) * MINUTE_MS;
+      if (targetMs >= END_MS) return refuse("minute_not_later");
+      if (targetMs - now > WAIT_BOUND_MS && targetMs !== settleTarget)
+        return refuse("minute_not_later", targetMs);
+      if (now < targetMs) {
+        let wait = waits.find((entry) => entry.targetMs === targetMs);
         if (wait === undefined) {
           wait = {
             ...base,
             contextKey: facts.waitKey ?? facts.contextKey,
             kind: "wait",
-            targetMs: (Math.floor(now / HOUR_MS) + 1) * HOUR_MS,
+            targetMs,
           };
-          if (persist) await write(wait);
+          if (persist) {
+            if (latestWait !== undefined && targetMs <= latestWait.targetMs)
+              return refuse("history_invalid");
+            await write(wait);
+          }
         }
-        const timerKey = fingerprint(wait);
+        const timerKey = JSON.stringify([fingerprint(wait), wait.targetMs]);
         const monotonic = options.monotonicNow();
         if (!Number.isFinite(monotonic) || monotonic < 0) return refuse("clock_unconfirmed");
         let timer = timers.get(timerKey);
         if (timer === undefined) {
-          timer = { start: monotonic, duration: Math.max(0, wait.targetMs - now) };
+          timer = { start: monotonic, duration: targetMs - now };
           timers.set(timerKey, timer);
         }
         if (monotonic < timer.start) return refuse("clock_unconfirmed");
-        const remainingMs = Math.max(
-          0,
-          timer.duration - (monotonic - timer.start),
-          wait.targetMs - now,
-        );
-        if (remainingMs > 0)
-          return {
-            status: "waiting" as const,
-            targetMs: wait.targetMs,
-            remainingMs,
-            requiresClockConfirmation: false,
-          };
+        return {
+          status: "waiting" as const,
+          targetMs,
+          remainingMs: Math.max(timer.duration - (monotonic - timer.start), targetMs - now),
+        };
+      }
+      if (currentWait !== undefined) {
+        const timer = timers.get(JSON.stringify([fingerprint(currentWait), currentWait.targetMs]));
+        const monotonic = options.monotonicNow();
+        if (!Number.isFinite(monotonic) || monotonic < 0) return refuse("clock_unconfirmed");
+        if (timer !== undefined) {
+          if (monotonic < timer.start) return refuse("clock_unconfirmed");
+          const remainingMs = timer.duration - (monotonic - timer.start);
+          if (remainingMs > 0)
+            return { status: "waiting" as const, targetMs: currentWait.targetMs, remainingMs };
+        }
       }
       const selected: Intent = {
         ...base,
@@ -543,7 +561,7 @@ export function createHourSelection(options: {
       return result;
     },
     select: (request: SelectionRequest) => perform(request, "select"),
-    preview: (request: BareRequest) => perform({ ...request, answer: "no" }, "preview"),
+    preview: (request: BareRequest) => perform(request, "preview"),
     async selected(request: BareRequest) {
       const result = await perform(request, "selected");
       if (result.status !== "selected") return refuse("clock_unconfirmed");

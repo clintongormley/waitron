@@ -165,7 +165,6 @@ beforeEach(async () => {
       setup.select({
         binding: first,
         authority,
-        answer: "no",
         comparisonId: "comparison",
       }),
     );
@@ -311,7 +310,7 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
   const outcome = (await recoverySelectPastWaits(
     clock,
     service,
-    { answer: "no", installationCodes: ["0CNNW"] },
+    { installationCodes: ["0CNNW"] },
     client(),
   )) as {
     input: unknown;
@@ -417,7 +416,7 @@ export async function bucketCommand() {
   const outcome = (await recoverySelectPastWaits(
     clock,
     service,
-    { answer: "no", installationCodes: ["0CNNW"] },
+    { installationCodes: ["0CNNW"] },
     client(),
   )) as {
     input: unknown;

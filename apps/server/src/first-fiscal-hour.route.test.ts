@@ -72,7 +72,6 @@ async function fixture(withStore = false) {
                         engine.select({
                           binding: context.binding,
                           authority,
-                          answer: "no",
                           comparisonId: "comparison",
                         }),
                     );

@@ -164,26 +164,8 @@ export function createHourInitialSetup(
       const preview = await actions.prepare({ action: "selection" });
       if (!record(preview)) return refuse();
       if (preview.status === "waiting") return waiting(preview.targetMs);
-      if (
-        !["selected", "preview"].includes(preview.status as string) ||
-        !["no", "yes", "unknown"].includes(preview.answer as string)
-      )
-        return refuse();
-      actions.output(
-        "Include every venue using this taxpayer's NIF, interrupted setups and recoveries. Arrange them one at a time.",
-      );
-      const answer =
-        preview.status === "selected" || preview.answer !== "no"
-          ? (preview.answer as string)
-          : (
-              await actions.prompt(
-                "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
-              )
-            )
-              .trim()
-              .toLowerCase();
-      if (!["no", "yes", "unknown"].includes(answer)) return { status: "cancelled" };
-      const selected = await actions.select({ answer, comparisonId: reviewed.comparisonId });
+      if (!["selected", "preview"].includes(preview.status as string)) return refuse();
+      const selected = await actions.select({ comparisonId: reviewed.comparisonId });
       if (record(selected) && selected.status === "waiting") return waiting(selected.targetMs);
       if (!record(selected) || selected.status !== "selected") return refuse();
       return { status: "ready", input: selected.input };
@@ -219,8 +201,7 @@ export function createHourInitialSetup(
       contextBinding(context);
       if (
         !record(proposal) ||
-        !exact(proposal, ["answer", "comparisonId"]) ||
-        !["no", "yes", "unknown"].includes(proposal.answer as string) ||
+        !exact(proposal, ["comparisonId"]) ||
         typeof proposal.comparisonId !== "string"
       )
         return refuse("malformed_allocation");
@@ -231,7 +212,6 @@ export function createHourInitialSetup(
           hostedHourPreparation(host).select({
             binding: context.binding,
             authority,
-            answer: proposal.answer as "no" | "yes" | "unknown",
             comparisonId: proposal.comparisonId as string,
           }),
       );

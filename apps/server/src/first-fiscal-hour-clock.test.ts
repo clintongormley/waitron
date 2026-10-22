@@ -81,7 +81,7 @@ async function fixture(environment: "production" | "preproduction" = "preproduct
   const context = firstSetupModuleContext(state, MODULE);
   const prepared = createHostedHourPreparation(bound);
   const owner = { ...claim.state, capability: claim.capability };
-  const select = async (comparisonId: string, answer: "no" | "yes" | "unknown" = "no") => {
+  const select = async (comparisonId: string) => {
     const reconfirmation = await host.owner.reconfirm(owner, PASSWORD, "block-use");
     return host.coordinator.run((hold) =>
       host.withPreparationAuthorization(
@@ -90,7 +90,7 @@ async function fixture(environment: "production" | "preproduction" = "preproduct
         },
         () =>
           withOperationAuthority(context.binding, context.administratorId, (authority) =>
-            prepared.select({ binding: context.binding, authority, answer, comparisonId }),
+            prepared.select({ binding: context.binding, authority, comparisonId }),
           ),
       ),
     );

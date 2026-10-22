@@ -174,66 +174,66 @@ it("also refuses reuse after the original SIF and every original series are reti
   expect(await snapshot()).toEqual(before);
 });
 
-it.each(["no", "yes", "unknown"] as const)(
-  "refuses same-hour promotion selection against actual original-box history even after a %s answer",
-  async (answer) => {
-    const f = fixture();
-    let instant = Date.parse("2026-10-16T11:50:00.000Z");
-    let value: unknown = null;
-    const writes: unknown[] = [];
-    const selector = createHourSelection({
-      withState: async (_binding, run) =>
-        run({
-          value,
-          history: writes,
-          async replace(next) {
-            value = structuredClone(next);
-            writes.push(structuredClone(next));
-          },
-        }),
-      monotonicNow: () => 0,
-      read: async () => ({
-        scope: { taxpayerNif: "89890001K", environment: "preproduction" },
-        bases,
-        contextKey: "current-promotion-scope",
-        clock: compareHourClocks(
-          ["box", "browser"].map((source) => ({
-            source: source as "box" | "browser",
-            result: "usable" as const,
-            instantMs: instant,
-            uncertaintyMs: 0,
-            wallStartedMs: instant,
-            wallFinishedMs: instant,
-            monotonicStartedMs: 0,
-            monotonicFinishedMs: 0,
-          })),
-          Date.parse("2026-10-15T00:00:00.000Z"),
-        ),
-        history: (await FISCAL_OPERATIONS.readRecoveryHistory!(suite.db)) as HourHistorySource[],
+it("a promotion waits for the minute after the original box's, and refuses one far behind it", async () => {
+  const f = fixture();
+  let instant = Date.parse("2026-10-16T11:37:00.000Z");
+  let value: unknown = null;
+  const writes: unknown[] = [];
+  const selector = createHourSelection({
+    withState: async (_binding, run) =>
+      run({
+        value,
+        history: writes,
+        async replace(next) {
+          value = structuredClone(next);
+          writes.push(structuredClone(next));
+        },
       }),
+    monotonicNow: () => instant,
+    read: async () => ({
+      scope: { taxpayerNif: "89890001K", environment: "preproduction" },
+      bases,
+      contextKey: "current-promotion-scope",
+      clock: compareHourClocks(
+        ["box", "browser"].map((source) => ({
+          source: source as "box" | "browser",
+          result: "usable" as const,
+          instantMs: instant,
+          uncertaintyMs: 0,
+          wallStartedMs: instant,
+          wallFinishedMs: instant,
+          monotonicStartedMs: 0,
+          monotonicFinishedMs: 0,
+        })),
+        Date.parse("2026-10-15T00:00:00.000Z"),
+      ),
+      history: (await FISCAL_OPERATIONS.readRecoveryHistory!(suite.db)) as HourHistorySource[],
+    }),
+  });
+  const before = await snapshot();
+  await withOperationAuthority(f.binding, f.operatorId, async (authority) => {
+    const select = () =>
+      selector.select({ binding: f.binding, authority, comparisonId: "comparison" });
+    await expect(select()).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: {
+        reason: "minute_not_later",
+        allowedFromMs: Date.parse("2026-10-16T11:41:00.000Z"),
+      },
     });
-    const before = await snapshot();
-    await withOperationAuthority(f.binding, f.operatorId, async (authority) => {
-      await expect(
-        selector.select({ binding: f.binding, authority, answer, comparisonId: "comparison" }),
-      ).rejects.toMatchObject({
-        code: "sif.allocation_invalid",
-        params: { reason: "hour_not_later" },
-      });
-      expect(writes).toEqual([]);
-      instant = Date.parse("2026-10-16T12:00:00.000Z");
-      const next = await selector.select({
-        binding: f.binding,
-        authority,
-        answer: "no",
-        comparisonId: "comparison",
-      });
-      expect(next).toMatchObject({ status: "selected", identity: "0CNPG" });
-      expect(writes).toHaveLength(1);
+    expect(writes).toEqual([]);
+    instant = Date.parse("2026-10-16T11:40:30.000Z");
+    expect(await select()).toEqual({
+      status: "waiting",
+      targetMs: Date.parse("2026-10-16T11:41:00.000Z"),
+      remainingMs: 30_000,
     });
-    expect(await snapshot()).toEqual(before);
-  },
-);
+    instant = Date.parse("2026-10-16T11:41:00.000Z");
+    expect(await select()).toMatchObject({ status: "selected", identity: "0CNNX" });
+    expect(writes).toHaveLength(2);
+  });
+  expect(await snapshot()).toEqual(before);
+});
 
 it.each([
   ["oldMachineOffline", false, "old_machine_active"],

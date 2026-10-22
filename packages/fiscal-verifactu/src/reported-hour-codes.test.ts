@@ -62,25 +62,38 @@ function fixture() {
     at: (at: string) => {
       instant = Date.parse(at);
     },
-    select: (reportedIdentities: unknown, answer: "no" | "yes" = "no") =>
+    select: (reportedIdentities: unknown) =>
       withOperationAuthority(binding, "operator", (authority) =>
-        create().select({ binding, authority, answer, reportedIdentities } as Parameters<
-          ReturnType<typeof create>["select"]
-        >[0]),
+        create().select({
+          binding,
+          authority,
+          comparisonId: "comparison",
+          reportedIdentities,
+        } as Parameters<ReturnType<typeof create>["select"]>[0]),
       ),
   };
 }
 const refused = (reason: string) => ({ code: "sif.allocation_invalid", params: { reason } });
-it.each(["0CNP6", "0cnp6", "0CNPG"])(
+it.each(["0CNPG", "0cnpg"])(
   "refuses reported %s missing from backup history before exposing an identity",
   async (code) => {
     const f = fixture();
-    await expect(f.select([code])).rejects.toMatchObject(refused("hour_not_later"));
+    await expect(f.select([code])).rejects.toMatchObject(refused("minute_not_later"));
     expect(f.writes).toEqual([]);
   },
 );
+it("waits past a reported code naming the current minute before exposing an identity", async () => {
+  const f = fixture();
+  expect(await f.select(["0cnp6"])).toEqual({
+    status: "waiting",
+    targetMs: Date.parse("2026-10-16T11:52:00Z"),
+    remainingMs: 120_000,
+  });
+});
 it("retains the entered code with the selected event and in backup evidence", async () => {
   const f = fixture();
+  f.at("2026-10-16T11:58:00Z");
+  expect(await f.select(["0cnp6"])).toMatchObject({ status: "waiting" });
   f.at("2026-10-16T12:00:00Z");
   expect(await f.select(["0cnp6"])).toMatchObject({
     status: "selected",
@@ -97,12 +110,12 @@ it("retains the entered code with the selected event and in backup evidence", as
     });
   });
   await expect(f.select(["0CNJR"])).rejects.toMatchObject(refused("event_mismatch"));
-  expect(f.writes).toHaveLength(1);
+  expect(f.writes).toHaveLength(2);
 });
 it("retains reported codes while waiting even before a fresh hour is selected", async () => {
   const f = fixture();
   f.at("2026-10-16T12:00:00Z");
-  expect(await f.select(["0CNP6"], "yes")).toMatchObject({ status: "waiting" });
+  expect(await f.select(["0CNP6"])).toMatchObject({ status: "waiting" });
   const history = projectHourHistory({ scope, sources: [publicHourSelectionHistory(f.writes)] });
   expect(history.greatestSpentMinute).toBe(415430);
   expect(history.contradictions).toEqual([]);

@@ -127,7 +127,7 @@ export function createHourPreparation(
         },
       });
     },
-    preview(request: Omit<SelectionRequest, "answer" | "comparisonId">) {
+    preview(request: Omit<SelectionRequest, "comparisonId">) {
       initialOperator(request);
       return engine.preview(request);
     },

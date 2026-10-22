@@ -1736,6 +1736,7 @@ describe("startServer, against a migrated venue directory", () => {
       preparation: {
         id: string;
         status?: string;
+        targetMs: number;
         remainingMs: number;
         clock: { secondClock: boolean; unavailable: unknown[] };
       };
@@ -1868,12 +1869,17 @@ describe("startServer, against a migrated venue directory", () => {
         });
         const taken = await send("candidates", {
           module,
-          proposal: { answer: "no", comparisonId: compared.id },
+          proposal: { comparisonId: compared.id },
           reconfirmation: grant.reconfirmation,
         });
-        // A test clock leaking into production would print `selected`, or under 90 000 here.
+        // A test clock leaking into production would print `selected`, or a target that is not a
+        // minute start 90 to 150 seconds after this process's real time.
         expect(taken).toMatchObject({ preparation: { status: "waiting" } });
-        expect(taken.preparation.remainingMs).toBeGreaterThanOrEqual(90_000);
+        expect(taken.preparation.targetMs % 60_000).toBe(0);
+        expect(taken.preparation.targetMs - Date.now()).toBeGreaterThan(85_000);
+        expect(taken.preparation.targetMs - Date.now()).toBeLessThanOrEqual(150_000);
+        expect(taken.preparation.remainingMs).toBeGreaterThan(85_000);
+        expect(taken.preparation.remainingMs).toBeLessThanOrEqual(150_000);
       });
     }, 60_000);
   });

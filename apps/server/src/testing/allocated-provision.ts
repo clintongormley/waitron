@@ -120,7 +120,7 @@ export async function provisionAllocatedTestVenue(
   });
   const held = await selectPastWaits(clock, () =>
     withOperationAuthority(binding, administratorId, (authority) =>
-      preparation.select({ binding, authority, answer: "no", comparisonId: "comparison" }),
+      preparation.select({ binding, authority, comparisonId: "comparison" }),
     ),
   );
   if (held.status !== "selected") throw new Error("synthetic hour was not selected");

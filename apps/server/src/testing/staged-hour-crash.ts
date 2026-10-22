@@ -59,7 +59,9 @@ export async function stagedHourCrash(
   } = {},
 ) {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
-  vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
+  // Each select starts two minutes before the minute it names: a setup or restore waits until a
+  // minute start 90 to 150 seconds after its check.
+  vi.setSystemTime(new Date("2026-10-16T11:38:00Z"));
   const clock = seams.clock ?? createFakeTimersHourClock();
   const client = { onBox: (seams.requestFromBox ?? (() => false))() };
   /** A clock of the suite's own keeps the faked `Date` beside it; the default one already is. */
@@ -126,7 +128,6 @@ export async function stagedHourCrash(
         return setup.select({
           binding: initial,
           authority,
-          answer: "no",
           comparisonId: "comparison",
         });
       });
@@ -152,7 +153,7 @@ export async function stagedHourCrash(
       ),
     );
     await db.update(invoiceSeries).set({ nextNumber: 123 });
-    clock.set(Date.parse("2026-10-16T12:40:00Z"));
+    clock.set(Date.parse("2026-10-16T12:38:00Z"));
     follow();
     const encryptionKey = "synthetic archive encryption key";
     const databasePath = join(root, "backup.db");
@@ -229,7 +230,7 @@ export async function stagedHourCrash(
     const outcome = (await recoverySelectPastWaits(
       clock,
       service,
-      { answer: "no", installationCodes: ["0CNNW"] },
+      { installationCodes: ["0CNNW"] },
       client,
       follow,
     )) as { input: unknown };
@@ -255,13 +256,7 @@ export async function stagedHourCrash(
         ...options,
         binding: { ...binding, eventId: binding.eventId + "-another" },
       });
-      return recoverySelectPastWaits(
-        clock,
-        next,
-        { answer: "no", installationCodes: ["0CNNW"] },
-        client,
-        follow,
-      );
+      return recoverySelectPastWaits(clock, next, { installationCodes: ["0CNNW"] }, client, follow);
     };
     const journalPath = join(roots.stateDir, "module-preparation-state.json");
     const journal = () => readFileSync(journalPath, "utf8");
@@ -297,14 +292,14 @@ export async function stagedHourCrash(
       }
     };
     const freshStage = async () => {
-      clock.set(Date.parse("2026-10-16T13:40:00Z"));
+      clock.set(Date.parse("2026-10-16T13:38:00Z"));
       follow();
       const freshBinding = { ...binding, eventId: "fresh-after-interruption" };
       const fresh = createSelectedRecoveryPreparation({ ...options, binding: freshBinding });
       const outcome = (await recoverySelectPastWaits(
         clock,
         fresh,
-        { answer: "no", installationCodes: ["0CNNW", "0CNQR"] },
+        { installationCodes: ["0CNNW", "0CNQR"] },
         client,
         follow,
       )) as { input: unknown };

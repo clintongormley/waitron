@@ -270,7 +270,10 @@ vi.mock("./hour-clock-internet.js", () => ({ observeInternetHourClock: source.in
 vi.mock("./hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
+let monotonicOffset = 0;
+const monotonicNow = () => performance.now() + monotonicOffset;
 beforeEach(() => {
+  monotonicOffset = 0;
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
   source.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
@@ -281,7 +284,7 @@ afterEach(() => {
 });
 function internetAgrees() {
   source.internet.mockImplementation(async () => {
-    const monotonic = performance.now();
+    const monotonic = monotonicNow();
     return {
       source: "internet",
       result: "usable",
@@ -294,11 +297,15 @@ function internetAgrees() {
     };
   });
 }
+// A setup's settle wait ends at a minute start 90 to 150 seconds after its check; a case that
+// starts here takes 11:40's name after it.
+const startEarly = () => vi.setSystemTime(new Date("2026-10-16T11:38:00Z"));
 function configured() {
   let value: unknown = null;
   const history: unknown[] = [];
   const host: ModuleOperationHost = {
     environment: {},
+    testClock: { wall: () => Date.now(), monotonic: monotonicNow },
     readPublicEvidence: async () => {
       throw new Error("legacy evidence read");
     },
@@ -324,8 +331,15 @@ function configured() {
   const seat = FISCAL_INITIAL_SETUP.configure!(host);
   const prepare = (proposal: unknown) => seat.preparation!(context, proposal, { onBox: true });
   let comparisonId = "none";
-  const select = async (answer = "no") =>
-    seat.request(context, await seat.candidates(context, { answer, comparisonId }));
+  const candidate = () => seat.candidates(context, { comparisonId });
+  const select = async () => {
+    const first = (await candidate()) as { status: string; targetMs: number; remainingMs: number };
+    if (first.status !== "waiting") return seat.request(context, first);
+    vi.setSystemTime(first.targetMs);
+    monotonicOffset += first.remainingMs;
+    await clock();
+    return seat.request(context, await candidate());
+  };
   const clock = async () => {
     internetAgrees();
     const challenge = (await prepare({ action: "clock-challenge" })) as { id: string };
@@ -336,9 +350,10 @@ function configured() {
     comparisonId = compared.id;
     return compared;
   };
-  return { seat, host, prepare, select, clock, history };
+  return { seat, host, prepare, candidate, select, clock, history };
 }
 it("the configured module validates, projects and prepares the same retained hour", async () => {
+  startEarly();
   const f = configured();
   await f.clock();
   const saved = await f.select();
@@ -362,17 +377,18 @@ it("the configured module validates, projects and prepares the same retained hou
       operations.prepare({ binding: context.binding, authority, input }, async () => "prepared"),
     ),
   ).toBe("prepared");
-  expect(f.history).toHaveLength(1);
+  expect(f.history).toHaveLength(2);
 });
-it("a configured declaration can persist a wait and preview it without activation input", async () => {
+it("a configured setup can persist its settle wait and preview it without activation input", async () => {
+  startEarly();
   const f = configured();
   await f.clock();
-  const wait = await f.select("unknown");
+  const wait = f.seat.request(context, await f.candidate());
   expect(f.seat.pending!(wait)).toBe(true);
   const preview = await f.prepare({ action: "selection" });
   expect(preview).toMatchObject({
     status: "waiting",
-    targetMs: Date.parse("2026-10-16T12:00:00Z"),
+    targetMs: Date.parse("2026-10-16T11:40:00Z"),
   });
   expect(preview).not.toHaveProperty("input");
   expect(f.history).toHaveLength(1);
@@ -388,9 +404,7 @@ it("the configured module takes a browser reading as the box's own until the rou
   expect(compared.clock.unavailable).toContainEqual(
     expect.objectContaining({ source: "browser", reason: "same_machine" }),
   );
-  await expect(
-    f.seat.candidates(context, { answer: "no", comparisonId: compared.id }),
-  ).rejects.toMatchObject({
+  await expect(f.seat.candidates(context, { comparisonId: compared.id })).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "second_clock_missing" },
   });
@@ -414,11 +428,10 @@ it.each([
 it.each([
   null,
   {},
-  { answer: "maybe", comparisonId: "comparison" },
-  { answer: "no" },
-  { answer: "no", comparisonId: 1 },
-  { answer: "no", comparisonId: "comparison", taxpayerNif: "injected" },
-])("refuses an unsupported taxpayer declaration %j", async (proposal) => {
+  { answer: "no", comparisonId: "comparison" },
+  { comparisonId: 1 },
+  { comparisonId: "comparison", taxpayerNif: "injected" },
+])("refuses an unsupported selection proposal %j", async (proposal) => {
   await expect(configured().seat.candidates(context, proposal)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "malformed_allocation" },
@@ -427,7 +440,7 @@ it.each([
 it("requires the module's fresh candidate rather than a copied or reused candidate", async () => {
   const f = configured();
   const compared = await f.clock();
-  const candidate = await f.seat.candidates(context, { answer: "no", comparisonId: compared.id });
+  const candidate = await f.seat.candidates(context, { comparisonId: compared.id });
   expect(() => f.seat.request(context, structuredClone(candidate))).toThrowError(
     expect.objectContaining(refusal),
   );
@@ -492,7 +505,7 @@ it("the terminal with only the box's clock explains and cancels without a questi
 it("the terminal explains and cancels when the internet's clock disagrees", async () => {
   const f = configured();
   source.internet.mockImplementation(async () => {
-    const monotonic = performance.now();
+    const monotonic = monotonicNow();
     return {
       source: "internet",
       result: "usable",
@@ -739,6 +752,7 @@ it.each([null, { status: "other", answer: "no" }, { status: "preview", answer: "
 );
 
 it("resumes an authenticated retained setup without spending another hour", async () => {
+  startEarly();
   const f = configured();
   const read = f.host.readSetupFacts!;
   let contextKey = "original-owner";
@@ -815,6 +829,7 @@ const prepareSetup = (f: ReturnType<typeof configured>) =>
   );
 
 it("a page's name is issued after another page's box-only re-check", async () => {
+  startEarly();
   const f = configured();
   await f.clock();
   expect(await f.select()).toMatchObject({ status: "selected", identity: "0CNNW" });
@@ -823,6 +838,7 @@ it("a page's name is issued after another page's box-only re-check", async () =>
 });
 
 it("issuing refuses when the only fresh reading is the box's alone", async () => {
+  startEarly();
   const f = configured();
   await f.clock();
   await f.select();
@@ -842,6 +858,7 @@ it("issuing refuses when the only fresh reading is the box's alone", async () =>
 });
 
 it("issuing refuses clock_stale when the only passing reading is older than thirty seconds", async () => {
+  startEarly();
   const f = configured();
   await f.clock();
   await f.select();
@@ -860,12 +877,11 @@ it("issuing refuses clock_stale when the only passing reading is older than thir
 });
 
 it("a select with another page's box-only comparison stays refused", async () => {
+  startEarly();
   const f = configured();
   const boxPage = await boxOnlyComparison(f);
   await f.clock();
-  await expect(
-    f.seat.candidates(context, { answer: "no", comparisonId: boxPage.id }),
-  ).rejects.toMatchObject({
+  await expect(f.seat.candidates(context, { comparisonId: boxPage.id })).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "second_clock_missing" },
   });

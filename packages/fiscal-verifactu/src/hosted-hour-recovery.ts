@@ -84,14 +84,12 @@ function createHostedHourRecovery(
     const check = () => operatorFor(operation);
     check();
     if (
-      exact(proposal, ["action", "answer", "comparisonId", "installationCodes"]) &&
+      exact(proposal, ["action", "comparisonId", "installationCodes"]) &&
       proposal.action === "select" &&
-      ["no", "yes", "unknown"].includes(proposal.answer as string) &&
       typeof proposal.comparisonId === "string"
     )
       return preparationFor(operation.binding).select({
         ...operation,
-        answer: proposal.answer as "no" | "yes" | "unknown",
         comparisonId: proposal.comparisonId,
         reportedIdentities: reportedHourCodes(proposal.installationCodes),
       });

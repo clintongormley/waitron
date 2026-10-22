@@ -152,26 +152,46 @@ async function agreed(operations: Operations, operation: Operation) {
   return compare(operations, operation);
 }
 
+async function selectAfterWait(
+  operations: Operations,
+  operation: Operation,
+  installationCodes = ["0CNJR"],
+) {
+  const select = async () =>
+    (await operations.recovery!(
+      operation,
+      {
+        action: "select",
+        comparisonId: (await agreed(operations, operation)).id,
+        installationCodes,
+      },
+      { onBox: true },
+    )) as {
+      status: string;
+      identity: string;
+      input: unknown;
+      targetMs: number;
+      remainingMs: number;
+    };
+  const first = await select();
+  if (first.status !== "waiting") return first;
+  vi.setSystemTime(first.targetMs);
+  monotonic += first.remainingMs;
+  return select();
+}
+
 it.each(["restore", "re-register", "promote"])(
   "prepares %s only from the selected hour with the correct authenticated operator",
   async (action) => {
     const f = fixture();
+    // A restore's settle wait ends at a minute start 90 to 150 seconds after its check.
+    if (action === "restore") vi.setSystemTime(NOW - 120_000);
     const operations = FISCAL_OPERATIONS.configure!(f.host);
     const selectedBinding = { ...binding, action };
     const operator = action === "promote" ? "authenticated-manager" : key;
     await withOperationAuthority(selectedBinding, operator, async (authority) => {
       const operation = { binding: selectedBinding, authority };
-      const comparison = await agreed(operations, operation);
-      const selected = (await operations.recovery!(
-        operation,
-        {
-          action: "select",
-          answer: "no",
-          comparisonId: comparison.id,
-          installationCodes: ["0cnJR"],
-        },
-        { onBox: true },
-      )) as { status: string; identity: string; input: unknown };
+      const selected = await selectAfterWait(operations, operation, ["0cnJR"]);
       expect(selected).toMatchObject({
         status: "selected",
         identity: "0CNNW",
@@ -201,7 +221,7 @@ it.each(["restore", "re-register", "promote"])(
         operations.prepare({ ...operation, input: {} }, async () => "unexpected"),
       ).rejects.toMatchObject(refusal("event_mismatch"));
     });
-    expect(f.history).toHaveLength(1);
+    expect(f.history).toHaveLength(action === "restore" ? 2 : 1);
   },
 );
 
@@ -232,7 +252,6 @@ it("takes a browser reading as the box's own when the request came from the box"
         operation,
         {
           action: "select",
-          answer: "no",
           comparisonId: displayed.id,
           installationCodes: ["0CNJR"],
         },
@@ -243,36 +262,32 @@ it("takes a browser reading as the box's own when the request came from the box"
   });
 });
 
-it.each(["yes", "unknown"])(
-  "retains a %s wait across newly configured public adapters",
-  async (answer) => {
-    const f = fixture();
-    await withOperationAuthority(binding, key, async (authority) => {
-      const operation = { binding, authority };
-      const proposal = (comparisonId: string) => ({
-        action: "select",
-        answer,
-        comparisonId,
-        installationCodes: ["0CNJR"],
-      });
-      const first = await agreed(FISCAL_OPERATIONS.configure!(f.host), operation);
-      expect(
-        await FISCAL_OPERATIONS.configure!(f.host).recovery!(operation, proposal(first.id), {
-          onBox: true,
-        }),
-      ).toMatchObject({ status: "waiting", remainingMs: 1_200_000 });
-      vi.setSystemTime(NOW + 1_200_000);
-      monotonic += 1_200_000;
-      const second = await agreed(FISCAL_OPERATIONS.configure!(f.host), operation);
-      expect(
-        await FISCAL_OPERATIONS.configure!(f.host).recovery!(operation, proposal(second.id), {
-          onBox: true,
-        }),
-      ).toMatchObject({ status: "selected", identity: "0CNPG" });
-      expect(f.history).toHaveLength(2);
+it("retains a restore's settle wait across newly configured public adapters", async () => {
+  const f = fixture();
+  await withOperationAuthority(binding, key, async (authority) => {
+    const operation = { binding, authority };
+    const proposal = (comparisonId: string) => ({
+      action: "select",
+      comparisonId,
+      installationCodes: ["0CNJR"],
     });
-  },
-);
+    const first = await agreed(FISCAL_OPERATIONS.configure!(f.host), operation);
+    expect(
+      await FISCAL_OPERATIONS.configure!(f.host).recovery!(operation, proposal(first.id), {
+        onBox: true,
+      }),
+    ).toMatchObject({ status: "waiting", targetMs: NOW + 120_000, remainingMs: 120_000 });
+    vi.setSystemTime(NOW + 120_000);
+    monotonic += 120_000;
+    const second = await agreed(FISCAL_OPERATIONS.configure!(f.host), operation);
+    expect(
+      await FISCAL_OPERATIONS.configure!(f.host).recovery!(operation, proposal(second.id), {
+        onBox: true,
+      }),
+    ).toMatchObject({ status: "selected", identity: "0CNNY" });
+    expect(f.history).toHaveLength(2);
+  });
+});
 
 it.each(["clock-challenge", "compare-clocks", "resume"])(
   "a later %s leaves an earlier page's reading usable",
@@ -294,13 +309,12 @@ it.each(["clock-challenge", "compare-clocks", "resume"])(
           operation,
           {
             action: "select",
-            answer: "no",
             comparisonId: earlier.id,
             installationCodes: ["0CNJR"],
           },
           { onBox: true },
         ),
-      ).toMatchObject({ status: "selected" });
+      ).toMatchObject({ status: "waiting", targetMs: NOW + 120_000 });
     });
   },
 );
@@ -310,17 +324,7 @@ it("resumes committed work without collecting fresh clocks or rewriting the jour
   const operations = FISCAL_OPERATIONS.configure!(f.host);
   await withOperationAuthority(binding, key, async (authority) => {
     const operation = { binding, authority };
-    const comparison = await agreed(operations, operation);
-    const selected = (await operations.recovery!(
-      operation,
-      {
-        action: "select",
-        answer: "no",
-        comparisonId: comparison.id,
-        installationCodes: ["0CNJR"],
-      },
-      { onBox: true },
-    )) as { input: unknown };
+    const selected = await selectAfterWait(operations, operation);
     Object.assign(f.facts, { priorActivation: "committed" });
     const before = structuredClone(f.history);
     vi.mocked(internet.observeInternetHourClock).mockImplementation(async () => {
@@ -341,10 +345,10 @@ it.each([
   {},
   { action: "unknown" },
   { action: "preview", extra: true },
-  { action: "select", answer: "maybe", comparisonId: "x", installationCodes: ["0CNJR"] },
-  { action: "select", answer: "no", comparisonId: "x" },
-  { action: "select", answer: "no", installationCodes: ["0CNJR"] },
-  { action: "select", answer: "no", comparisonId: 42, installationCodes: ["0CNJR"] },
+  { action: "select", answer: "no", comparisonId: "x", installationCodes: ["0CNJR"] },
+  { action: "select", comparisonId: "x" },
+  { action: "select", installationCodes: ["0CNJR"] },
+  { action: "select", comparisonId: 42, installationCodes: ["0CNJR"] },
   { action: "compare-clocks" },
   { action: "compare-clocks", browser: {} },
   { action: "compare-clocks", browser: { challengeId: 1, instantMs: NOW } },
@@ -503,7 +507,6 @@ it("rejects a comparison identifier from another host context", async () => {
         operation,
         {
           action: "select",
-          answer: "no",
           comparisonId: first.id,
           installationCodes: ["0CNJR"],
         },
@@ -554,7 +557,6 @@ it.each([
         operation,
         {
           action: "select",
-          answer: "no",
           comparisonId: comparison.id,
           installationCodes: ["0CNJR"],
         },
@@ -576,13 +578,14 @@ it("uses reported installations as a floor before saving an hour", async () => {
         operation,
         {
           action: "select",
-          answer: "no",
           comparisonId: comparison.id,
           installationCodes: ["0cnpg"],
         },
         { onBox: true },
       ),
-    ).rejects.toMatchObject(refusal("hour_not_later"));
+    ).rejects.toMatchObject({
+      params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T12:01:00Z") },
+    });
     expect(f.history).toEqual([]);
   });
 });

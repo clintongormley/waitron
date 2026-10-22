@@ -39,11 +39,13 @@ function fixture() {
     ],
     contextKey: "owner-1",
     waitKey: "identical-frozen-context",
-    clock: clock(),
+    // Two minutes before `at`, so the name taken after the setup's settle wait is `at`'s.
+    clock: clock(at - 120_000),
     history: [{ reference: "venue", complete: true, records: [] }],
   };
+  let monotonic = 0;
   const preparation = createHourPreparation({
-    monotonicNow: () => 0,
+    monotonicNow: () => monotonic,
     read: async () => facts,
     withState: async (_, body) =>
       body({
@@ -68,10 +70,17 @@ function fixture() {
     set facts(next: HourSelectionFacts) {
       facts = next;
     },
-    select: () =>
-      withOperationAuthority(binding, "admin", (authority) =>
-        preparation.select({ binding, authority, answer: "no", comparisonId: "comparison" }),
-      ),
+    async select() {
+      const run = () =>
+        withOperationAuthority(binding, "admin", (authority) =>
+          preparation.select({ binding, authority, comparisonId: "comparison" }),
+        );
+      const waiting = await run();
+      if (waiting.status !== "waiting") throw new Error("setup did not wait");
+      facts = { ...facts, clock: clock(waiting.targetMs) };
+      monotonic += waiting.remainingMs;
+      return run();
+    },
     resume: (input: unknown, digest = "a".repeat(64)) =>
       withOperationAuthority(binding, "admin", (authority) =>
         preparation.resume({ binding, authority, input }, digest),
@@ -92,9 +101,10 @@ it("explicit resumption keeps the hour and input while ordinary changed-context 
   await expect(f.prepare(selected.input)).rejects.toMatchObject(refused("event_mismatch"));
   await f.resume(selected.input);
   await expect(f.prepare(selected.input)).resolves.toBe("admitted");
-  expect(f.history).toHaveLength(2);
-  expect(f.history[1]).toMatchObject({
+  expect(f.history).toHaveLength(3);
+  expect(f.history[2]).toMatchObject({
     entries: [
+      { kind: "wait" },
       { kind: "intent", identity: "0CNNW", contextKey: "owner-1" },
       {
         kind: "resume",
@@ -118,7 +128,7 @@ it("a later authenticated resumption appends a continuous owner trail", async ()
     await f.resume(selected.input);
   }
   await expect(f.prepare(selected.input)).resolves.toBe("admitted");
-  expect(f.history).toHaveLength(3);
+  expect(f.history).toHaveLength(4);
 });
 
 it.each([
@@ -147,7 +157,7 @@ it.each([
   await expect(f.resume(input, change === "document" ? "" : "a".repeat(64))).rejects.toMatchObject({
     code: "sif.allocation_invalid",
   });
-  expect(f.history).toHaveLength(1);
+  expect(f.history).toHaveLength(2);
 });
 
 it("a second clock is still required for resumption", async () => {
@@ -174,7 +184,7 @@ it("a second clock is still required for resumption", async () => {
     ),
   };
   await expect(f.resume(selected.input)).rejects.toMatchObject(refused("second_clock_missing"));
-  expect(f.history).toHaveLength(1);
+  expect(f.history).toHaveLength(2);
 });
 
 it("a further owner cannot resume with a different document binding", async () => {
@@ -187,7 +197,7 @@ it("a further owner cannot resume with a different document binding", async () =
   await expect(f.resume(selected.input, "b".repeat(64))).rejects.toMatchObject(
     refused("event_mismatch"),
   );
-  expect(f.history).toHaveLength(2);
+  expect(f.history).toHaveLength(3);
 });
 
 it.each(["known-later-hour", "clock-rollback"])(
@@ -220,8 +230,8 @@ it.each(["known-later-hour", "clock-rollback"])(
           },
         ],
       };
-    await expect(f.resume(selected.input)).rejects.toMatchObject(refused("hour_not_later"));
-    expect(f.history).toHaveLength(1);
+    await expect(f.resume(selected.input)).rejects.toMatchObject(refused("minute_not_later"));
+    expect(f.history).toHaveLength(2);
   },
 );
 
