@@ -3,6 +3,31 @@
 The open entries are listed in [the backlog](../backlog.md), under "Replication, failover and the cloud". This file holds
 their full text.
 
+## A1018. Agree and build the hosted writer stop-proof contract
+
+**Proposed for bilateral agreement, 2026-10-22.** The
+[Waitron-side design](../superpowers/specs/2026-10-22-a1018-cloud-stop-proof-design.md)
+separates application quiescence from externally enforced runtime termination and lasting
+restart denial. It proposes stable operation intent, one durable country writer authority,
+exact runtime identity, increasing writer generations, final-data receipts and refusals for
+restart, move, machine loss and cross-cell/region failure. Source inspection is read-only;
+runtime and provider guarantees remain unverified.
+
+Next, Lane E and Cloud's Lane D must agree pinned receipt/trust/data bindings, the authority's
+cross-region failure rule and an enforcement profile that survives old disk/key clones and
+controller restart. If no provider profile can establish retirement and restart denial, refuse
+hosted continuation replacement and ask. After agreement, take the design's single worked-example
+question to the owner. Bilateral acceptance has not occurred.
+
+Cold restore remains the owner-accepted separate fresh-chain/data-loss path with no A1018 stop
+proof; preserve its existing recovery operation, key and source/sole-recovery gates. Never silently
+convert failed continuation to cold restore. Reconcile the older Cloud hosting wording explicitly.
+On-prem A947 slices 4e/5a and tail/return work remain separate integration dependencies.
+
+Publishing this design is only the documentation milestone. Owner design approval, executable
+planning, separate build authority, implementation with adversarial/deletion controls and actual
+provider qualification remain open; neither publication nor Cloud PR #294 completes this entry.
+
 ## A completed provision or adopt operation replayed on a later request still answers 200 without restarting and keeps the setup lock set
 
 - Found by #657 (`apps/server` part f2: the node, identity and setup files), outside its files
