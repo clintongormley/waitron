@@ -6377,7 +6377,7 @@ export const es: Record<StringKey, string> = {
   "box_status.part.tax": "Hacienda",
   "box_status.part.bucket": "Copia en el bucket",
   "box_status.part.printers": "Impresoras",
-  "box_status.part.readers": "Lectores de tarjeta",
+  "box_status.part.readers": "Lectores de tarjetas",
   "box_status.part.clock": "Reloj",
   "box_status.part.disk": "Espacio en disco",
   "box_status.state.ok": "Bien",
@@ -6418,10 +6418,10 @@ export const es: Record<StringKey, string> = {
   "box_status.free": "Liberar {size}",
   "box_status.free_nothing": "Nada que liberar",
   "box_status.free_read_only":
-    "Este equipo solo guarda una copia de lectura, así que aquí no puede liberar espacio.",
+    "Este equipo solo guarda una copia de solo lectura, así que aquí no puede liberar espacio.",
   "box_status.free_backup_running":
     "Hay una copia en curso, así que sus archivos de trabajo no se cuentan.",
-  "box_status.freed": "Liberados {size}.",
+  "box_status.freed": "Se han liberado {size}.",
   "box_status.free_help_label": "Qué borra Liberar",
   "box_status.free_help":
     "Liberar solo borra archivos que el equipo ya no necesita: informes de fallos de hace más de una semana, registros de actividad anteriores a los dos más recientes y lo que dejó una copia de seguridad interrumpida. Nunca toca las ventas, los ajustes ni tus copias.",
@@ -6434,7 +6434,7 @@ export const es: Record<StringKey, string> = {
   "box_status.other_alerts_one": "1 aviso más",
   "box_status.read_error": "No se ha podido leer el estado del equipo.",
   "box_status.alerts_unavailable":
-    "No se han podido leer los avisos, así que una parte puede parecer bien aunque no lo esté.",
+    "No se han podido leer los avisos, así que puede parecer que una parte está bien cuando no lo está.",
 };
 
 export const catalogues: Record<string, Partial<Record<StringKey, string>>> = {
