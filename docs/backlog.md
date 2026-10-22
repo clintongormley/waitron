@@ -6112,6 +6112,12 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **The UI showcase overflows a phone and inherits black text in its dark panel.** At a
+  390 px viewport, the panels in `packages/ui/index.html` measured 572 px wide before and after
+  A974's wording cleanup; unstyled dark-panel text resolved to black on `rgb(16, 18, 22)`.
+  Give the showcase a responsive layout and a foreground colour on each theme root, then open
+  both themes at 390 px and 1280 px. Keep the price-format examples and demo interactions.
+
 - **Find why GitHub created no workflows for A987's main merge (A1022).** The runs API
   returned no runs for `e7ce92a7c`; the cause remains unverified. Recovery and the successful-CI
   baseline do not explain the missing trigger. Retain the after-merge run check.
@@ -6715,7 +6721,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   pack already names its demo; the data set itself (`apps/server/scripts/demo-seed/data-sets/`)
   moves into `country-es`, plus region demos ("catalán demo in Catalunya"). After A918. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A974. Remaining comments, identifiers and developer UI text in general code to English.**
+- **A974. Remaining comments, identifiers and setup language labels in general code to English.**
   The audit's remaining Bucket E/F sites and the owner-held core-comment PR are listed in the
   [detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
