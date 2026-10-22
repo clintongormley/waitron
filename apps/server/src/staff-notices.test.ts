@@ -516,6 +516,22 @@ describe("createStaffNoticeLog", () => {
     expect(spy.mock.calls).toEqual([["error", UNAVAILABLE, { owner: "m", errorCode: "x" }]]);
   });
 
+  it("does not note a recovery from the latest read begun when the failure is logged", () => {
+    const spy = vi.fn<Logger>();
+    const notices = createStaffNoticeLog(spy);
+    const a = notices.begin();
+    const b = notices.begin();
+    notices.log("error", UNAVAILABLE, { owner: "m", errorCode: "x" });
+    b.settle([]);
+    a.settle(["m"]);
+    expect(spy.mock.calls).toEqual([["error", UNAVAILABLE, { owner: "m", errorCode: "x" }]]);
+    notices.begin().settle([]);
+    expect(spy.mock.calls).toEqual([
+      ["error", UNAVAILABLE, { owner: "m", errorCode: "x" }],
+      ["info", "staff_notice.source_recovered", { owner: "m" }],
+    ]);
+  });
+
   it("through the reader, reads one after another note a recovery once and a new failure", async () => {
     const lines: string[] = [];
     const logger = createStaffNoticeLog((_level, event) => lines.push(event));
