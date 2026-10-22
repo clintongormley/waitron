@@ -247,7 +247,7 @@ async function openDiscovery(el: PrintersScreen): Promise<void> {
 
 afterEach(cleanupWidgets);
 // The printers table remembers its status filter for the tab; each case starts from the default.
-afterEach(() => sessionStorage.removeItem("printers:table"));
+afterEach(() => sessionStorage.removeItem("waitron.printers.table"));
 
 // A printer-like device waiting to be paired, a device that does not look like a printer, and a
 // switched-off Bluetooth printer its agent reports paired.

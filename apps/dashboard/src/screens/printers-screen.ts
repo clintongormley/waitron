@@ -2211,7 +2211,7 @@ export class PrintersScreen extends LitElement {
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}
         data-test="agents-table"
-        viewKey="printers:agents"
+        viewKey="waitron.printers.agents.table"
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}
@@ -3090,7 +3090,7 @@ export class PrintersScreen extends LitElement {
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}
         data-test="printers-table"
-        viewKey="printers:table"
+        viewKey="waitron.printers.table"
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}
@@ -3264,7 +3264,7 @@ export class PrintersScreen extends LitElement {
       <wt-data-table
         noMatchesMessage=${tableNoMatches()}
         data-test="jobs-table"
-        viewKey="printers:jobs"
+        viewKey="waitron.printers.jobs.table"
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}

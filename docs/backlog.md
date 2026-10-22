@@ -4604,9 +4604,9 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   inside the form, where other dashboard forms receive field messages from their parent screen.
 
 - **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
-  (3) nothing checks that a NEW dashboard table offers the chooser; … (6) the printers screen's
-  view keys (`printers:agents`, `printers:table`, `printers:jobs`) are the only dashboard view keys
-  that use a colon and lack the `waitron.` prefix — cheap to rename until a venue is live.
+  (3) nothing checks that a NEW dashboard table offers the chooser; the Devices table still uses
+  `viewKey="devices"` (`apps/dashboard/src/screens/devices-screen.ts:1936`). Next: rename that
+  preference key before go-live, following the prefixed table keys.
   [Detail](backlog/dashboard.md#every-wt-data-table-list-lets-each-person-choose-its-columns-c45-834--left-open)
 
 - **A form's refusal message sits at the bottom of the form, above the buttons (C97, #961) — left

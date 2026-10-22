@@ -149,11 +149,14 @@ current target grants on reactivation. None is implemented or runtime-verified h
   four report tables on the sales screen
   (`apps/dashboard/src/screens/dashboard-sales-screen.ts`), the overdue table on the overview
   (`apps/dashboard/src/screens/dashboard-overview-screen.ts`) and the top-sellers table both of
-  those screens show (`apps/dashboard/src/widgets/top-sellers-table.ts`); (6) the printers screen's
-  view keys (`printers:agents`, `printers:table`, `printers:jobs`) are the only dashboard view keys
-  that use a colon and lack the `waitron.` prefix — cheap to rename until a venue is live; (7) the
+  those screens show (`apps/dashboard/src/widgets/top-sellers-table.ts`); (7) the
   Departments and zones list (`packages/venue-service/src/dashboard/departments-list.ts`) offers no
   chooser — **DECIDED (owner, 2026-10-15, A718): no chooser**.
+
+The Devices table still uses `viewKey="devices"`
+(`apps/dashboard/src/screens/devices-screen.ts:1936`, read during A988 review). Next: rename its
+preference key before go-live, following the prefixed table keys. This is separate from A988's
+printer keys.
 
 ## A form's refusal message sits at the bottom of the form, above the buttons (C97, #961) — left open
 
