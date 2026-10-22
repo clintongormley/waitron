@@ -6683,8 +6683,8 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
-- **A760. Squash every migration set before go-live.** The [operator plan](superpowers/plans/2026-10-16-a760-migration-squash.md)
-  and [inventory](superpowers/plans/2026-10-16-a760-migration-squash-inventory.md) are approved
+- **A760. Squash every migration set before go-live.** The [operator procedure](operations/a760-migration-squash.md)
+  and [inventory](operations/a760-migration-squash-inventory.md) are approved
   (owner, 2026-10-16), including fiscal SQL/meta and the named history-harness changes.
   The watcher starts the sole job after big work and migration branches drain, with the full
   Waitron/Cloud mutation freeze and named reset/operator roster recorded. Reset the laptop

@@ -3705,8 +3705,8 @@ query handle instead of opening a writable connection inside an owner.
 The trusted Cloud parent must still validate the complete result against the request, the actual
 child and pinned image, its current claim and deadline, and its own cleanup before catalogue
 admission. Keep snapshots unavailable until the joint release checks pass. The
-[plan](../superpowers/plans/2026-10-20-a850-backup-verification.md) records the protocol vectors,
-local checks and remaining release gates. The current host setup caller uses recovery version 1;
+[verifier release procedure](../operations/backup-verifier-release.md) records the protocol vectors,
+local checks and joint release gates. The current host setup caller uses recovery version 1;
 version 2 remains opt-in until Cloud supports the target-bound exchange.
 
 

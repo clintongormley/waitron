@@ -585,6 +585,13 @@ until A977).
 
 ## Decisions and deliberate limits
 
+**Operator procedures survive the go-live planning cleanup (owner, 2026-10-21).**
+Keep operating steps in permanent docs, outside `docs/superpowers/` and `docs/handoffs/`.
+The [procedure directory](../operations/operator-procedures.md) and its
+[22 October source audit](../operations/planning-procedure-audit.md) retain current workflows
+and A760’s approved, still-gated one-time procedure. Recheck newly added procedures before
+the go-live deletion; future design commands are not current operating instructions.
+
 **What slice 1 left (#490 and the preparation tasks):**
 
 - **Declined, with reasons:** writing `moneyNum` in `packages/workforce-es/src/convenio.ts` as
