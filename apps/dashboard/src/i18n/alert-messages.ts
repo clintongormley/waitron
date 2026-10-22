@@ -1,6 +1,6 @@
 // English and Spanish sentences for every alert code. `{name}` slots are filled from the alert's
-// params, and a `{name:money}` slot writes a decimal-string amount as euros. Kept free of imports so
-// the root guard (`scripts/alert-codes.test.ts`) can load it.
+// params; `AlertMessageTable` in `@waitron/dashboard-kit` lists the slot kinds. Kept free of imports
+// so the root guard (`scripts/alert-codes.test.ts`) can load it.
 //
 // No sentence promises a later check by the server: the daily payments check looks at a day again
 // only in some cases (`reconcilerAsDuty`, `apps/server/src/reconcile-duty.ts`), and the fiscal
@@ -108,6 +108,14 @@ export const ALERT_MESSAGES: Readonly<
   "backup.sealed_state_failed": {
     en: "The box could not update the locked copy of its own keys and settings that it keeps with your data. A box rebuilt from your bucket might come back with out-of-date keys and settings, or without them if none were ever saved. Sales continue. Contact support.",
     es: "El equipo no ha podido actualizar la copia cifrada de sus propias claves y ajustes que guarda junto con tus datos. Un equipo reconstruido desde tu bucket podría volver con claves y ajustes desactualizados, o sin ellos si nunca se llegaron a guardar. Las ventas continúan. Contacta con soporte.",
+  },
+  "storage.space_low": {
+    en: "The box has {freeBytes:bytes} of disk space left. Everything still works, but if it fills up nothing can be saved.",
+    es: "Al equipo le quedan {freeBytes:bytes} de espacio en disco. Todo sigue funcionando, pero si se llena no se podrá guardar nada.",
+  },
+  "storage.disk_full": {
+    en: "The box is out of disk space: nothing can be saved.",
+    es: "El equipo no tiene espacio en disco: no se puede guardar nada.",
   },
   "append_only.triggers_restored": {
     en: "A record protection was missing at start and was put back.",

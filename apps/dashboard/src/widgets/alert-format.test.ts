@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { AlertView, DashboardApi } from "../api/client.js";
+import { es } from "../i18n/strings.js";
 import { setLocale, t } from "../i18n/t.js";
 import {
   areaLabel,
@@ -133,6 +134,14 @@ it("labels the translations area in both languages", () => {
   expect(areaLabel("content")).toBe("Translations");
   setLocale("es-ES");
   expect(areaLabel("content")).toBe("Traducciones");
+});
+
+it("labels the box area in both languages", () => {
+  setLocale("en-GB");
+  expect(areaLabel("box")).toBe("Box");
+  setLocale("es-ES");
+  expect(areaLabel("box")).toBe(es["alerts.area.box"]);
+  expect(areaLabel("box")).not.toBe("box");
 });
 
 it("names a destination with no navigation label by its screen name", () => {

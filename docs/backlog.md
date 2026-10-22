@@ -5303,7 +5303,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
   (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; A798-B slice 2 names `ENOSPC`
   a full disk at start only (`fullDiskFailure`, `apps/server/src/boot-failure.ts`), because adding
-  it to `diskFullIn` changes every route's answer. A798-B slice 5's watch is the natural home.
+  it to `diskFullIn` changes every route's answer.
 
 - **The recovery page served at once on a full disk does not notice freed space by itself.** It
   shows the free space as it is on every load, but only Retry, which restarts the app, tries the
@@ -5504,10 +5504,21 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   2026-10-20). It adds a module seat for staff notices and one
   migration in the Veri*Factu module's set. Slice 1 of 10 (a full disk reported as
   `storage.disk_full`; nothing a body writes through the write queue after one that ended its
-  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) landed in #1950; slice 4 (a module seat for staff notices, with the Veri*Factu module's notice for a clock before 28-10-2024; nothing shows notices yet) landed in #1958; slice 5 is next. Open asesor questions:
+  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) landed in #1950; slice 4 (a module seat for staff notices, with the Veri*Factu module's notice for a clock before 28-10-2024; nothing shows notices yet) landed in #1958; slice 5 (a free-space watch every minute: the bell warns below 2 GiB and shows a full disk, and a full-disk stop lifts once space is back with no write) landed in #1963; slice 6 is next. Open asesor questions:
   [Q51](compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21)
   and
   [Q52](compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21).
+
+- **The disk warning does not point at the Box status page yet.** `storage.space_low`'s sentence
+  leaves out the design's 'See what is using it on the Box status page.' / 'Mira qué ocupa espacio
+  en Estado del equipo.' and carries no Go-to, because the page does not exist. Slice 7 adds both,
+  and deletes the two-sentence test in `apps/dashboard/src/i18n/alerts.test.ts` that keeps the
+  sentence out. Left open by A798-B slice 5 (#1963) for slice 7.
+
+- **'Equipo' names two things in the Spanish dashboard.** The bell's new area for the box is
+  'Equipo' (design §4.3), and so is the sidebar's staff group (`nav.group.team`,
+  `apps/dashboard/src/i18n/strings.ts`). The owner's picture 3 shows both. Not yet put to the owner.
+  Raised by A798-B slice 5's plan.
 
 - **The Box status page's rows from a module are not in the staff-notice seat.** Slice 4 built only
   the notices; slice 7 adds the Hacienda row, and its plan decides whether the page reads the staff
@@ -5532,12 +5543,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   in Waitron; while the stop holds, that recording is refused after the money has gone back. One
   sentence in each language, as the kitchen-service guide already has. Raised by #1950's rebase
   review, 2026-10-22.
-
-- **A full-disk stop on a box nobody writes to outlives the freed space.** It clears only when a write
-  the gate checks, or a sale or payment attempt, reads 16 MiB free (`apps/server/src/disk-full-state.ts`),
-  so the stop stays until the status strip slice 6 adds reads `full()` or slice 5's free-space watch
-  clears it.
-  Left open by A798-B slice 3 (#1950).
 
 - **A cancel's whole-invoice credit under a clock before 28-10-2024 reaches the chain without the
   clock check** (`creditWholeInvoice`, `apps/server/src/cancel-credit.ts`), and so, read not run,

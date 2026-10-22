@@ -71,6 +71,34 @@ describe("a money placeholder", () => {
   });
 });
 
+registerAlertMessages({
+  "test.space": { en: "Left: {free:bytes}.", es: "ES left: {free:bytes}." },
+});
+
+describe("a bytes placeholder", () => {
+  it("writes gigabytes with one decimal from 1 GB, with the alert's language's decimal mark", () => {
+    expect(alertMessage("test.space", { free: 1_800_000_000 }, "en-GB")).toBe("Left: 1.8 GB.");
+    expect(alertMessage("test.space", { free: 1_800_000_000 }, "es-ES")).toBe("ES left: 1,8 GB.");
+    expect(alertMessage("test.space", { free: 2_147_483_648 }, "en-GB")).toBe("Left: 2.1 GB.");
+    expect(alertMessage("test.space", { free: 12_345_678_901 }, "en-GB")).toBe("Left: 12.3 GB.");
+  });
+
+  it("writes whole megabytes below that, and gigabytes once they would round to 1000", () => {
+    expect(alertMessage("test.space", { free: 950_000_000 }, "en-GB")).toBe("Left: 950 MB.");
+    expect(alertMessage("test.space", { free: 950_000_000 }, "es-ES")).toBe("ES left: 950 MB.");
+    expect(alertMessage("test.space", { free: 999_499_999 }, "en-GB")).toBe("Left: 999 MB.");
+    expect(alertMessage("test.space", { free: 999_500_000 }, "en-GB")).toBe("Left: 1 GB.");
+    expect(alertMessage("test.space", { free: 0 }, "en-GB")).toBe("Left: 0 MB.");
+    expect(alertMessage("test.space", { free: -0 }, "en-GB")).toBe("Left: 0 MB.");
+  });
+
+  it("writes a dash for anything that is not a byte count", () => {
+    for (const free of ["1800000000", null, undefined, NaN, -1, Infinity, {}]) {
+      expect(alertMessage("test.space", { free }, "en-GB")).toBe("Left: —.");
+    }
+  });
+});
+
 registerAlertMessages({ "test.dated": { en: "On {when:date}.", es: "ES {when:date}." } });
 
 describe("a date placeholder", () => {

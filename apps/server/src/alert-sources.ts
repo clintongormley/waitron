@@ -42,6 +42,8 @@ import {
 import { PRINTER_UNPAIRED } from "@waitron/printing";
 import type { StreamView } from "@waitron/stream";
 import type { BackupStatus } from "./backup-status.js";
+import type { DiskFullState } from "./disk-full-state.js";
+import type { FreeSpaceState } from "./free-space-watch.js";
 import { type InvoiceDeliveryStatus, readInvoiceDeliveriesFor } from "./invoice-delivery-status.js";
 import type { PageTestPages } from "./page-test-pages.js";
 import type { AwaitingCertStatus } from "./pass.js";
@@ -295,6 +297,45 @@ export function appendOnlyRestoredAlertSource(holder: { restoredAt: string | nul
           params: {},
           severity: "warning",
           since: holder.restoredAt,
+        },
+      ];
+    },
+  };
+}
+
+/**
+ * The box's disk: `storage.disk_full` while the full-disk stop is noted, else `storage.space_low`
+ * while the free-space warning is on. Never both: the warning says everything still works.
+ */
+export function storageAlertSource(deps: {
+  space: Pick<FreeSpaceState, "current">;
+  disk: Pick<DiskFullState, "since">;
+}): AlertSource {
+  return {
+    area: "box",
+    permission: "system.manage",
+    async read(): Promise<readonly OngoingAlert[]> {
+      const stoppedSince = deps.disk.since();
+      if (stoppedSince !== null) {
+        return [
+          {
+            key: "storage.disk_full",
+            code: "storage.disk_full",
+            params: {},
+            severity: "error",
+            since: stoppedSince.toISOString(),
+          },
+        ];
+      }
+      const { freeBytes, lowSince } = deps.space.current();
+      if (lowSince === null) return [];
+      return [
+        {
+          key: "storage.space_low",
+          code: "storage.space_low",
+          params: { freeBytes },
+          severity: "warning",
+          since: lowSince.toISOString(),
         },
       ];
     },

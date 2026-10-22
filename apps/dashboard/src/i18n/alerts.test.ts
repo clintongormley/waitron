@@ -256,11 +256,39 @@ it("names only registered word lists in its word-list slots", () => {
   const unknown = Object.entries(ALERT_MESSAGES).flatMap(([code, { en, es }]) =>
     [en, es].flatMap((text) =>
       [...text.matchAll(/\{[A-Za-z0-9_]+:([a-z_]+)\}/g)]
-        .filter((m) => m[1] !== "money" && m[1] !== "date" && !Object.hasOwn(ALERT_WORDS, m[1]!))
+        .filter(
+          (m) =>
+            m[1] !== "money" &&
+            m[1] !== "date" &&
+            m[1] !== "bytes" &&
+            !Object.hasOwn(ALERT_WORDS, m[1]!),
+        )
         .map((m) => `${code}: ${m[0]}`),
     ),
   );
   expect(unknown).toEqual([]);
+});
+
+it("words the box's disk alerts, writing the free space in each language", () => {
+  expect(alertMessage("storage.space_low", { freeBytes: 1_800_000_000 }, "en")).toBe(
+    "The box has 1.8 GB of disk space left. Everything still works, but if it fills up nothing can be saved.",
+  );
+  const es = alertMessage("storage.space_low", { freeBytes: 1_800_000_000 }, "es");
+  expect(es).toBe(ALERT_MESSAGES["storage.space_low"]!.es.replace("{freeBytes:bytes}", "1,8 GB"));
+  expect(es).not.toContain("{");
+  expect(alertMessage("storage.disk_full", {}, "en")).toBe(
+    "The box is out of disk space: nothing can be saved.",
+  );
+  expect(alertMessage("storage.disk_full", {}, "es")).toBe(ALERT_MESSAGES["storage.disk_full"]!.es);
+  expect(hasAlertMessage("storage.space_low")).toBe(true);
+  expect(hasAlertMessage("storage.disk_full")).toBe(true);
+});
+
+it("keeps the disk warning to two sentences while there is no Box status page", () => {
+  const { en, es } = ALERT_MESSAGES["storage.space_low"]!;
+  for (const text of [en, es]) {
+    expect(text.split(/(?<=\.)\s+/).length).toBe(2);
+  }
 });
 
 describe("a backup that stopped before reaching any destination", () => {

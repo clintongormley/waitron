@@ -53,9 +53,12 @@ import {
   recordBackupOutcome,
   sealedStateAlertSource,
   STREAM_BEHIND_AFTER_MS,
+  storageAlertSource,
 } from "./alert-sources.js";
 import type { BackupStatus } from "./backup-status.js";
 import { deleteCardReader } from "./card-reader-delete.js";
+import { createDiskFullState } from "./disk-full-state.js";
+import { createFreeSpaceState } from "./free-space-watch.js";
 import { createTtlCache } from "./ttl-cache.js";
 
 const NOW = new Date("2026-09-15T12:00:00Z");
@@ -120,6 +123,83 @@ describe("appendOnlyRestoredAlertSource", () => {
       },
     ]);
     expect(await appendOnlyRestoredAlertSource({ restoredAt: null }).read(ctx)).toEqual([]);
+  });
+});
+
+describe("storageAlertSource", () => {
+  const GIB = 1024 ** 3;
+  const t1 = new Date("2026-10-22T09:00:00.000Z");
+  const t2 = new Date("2026-10-22T09:01:00.000Z");
+  const t3 = new Date("2026-10-22T09:02:00.000Z");
+  const log = () => {};
+
+  function setup() {
+    const space = createFreeSpaceState({ log });
+    const disk = createDiskFullState({
+      dir: "/venue",
+      now: () => t3,
+      log,
+      statfs: async () => ({ bavail: 0, frsize: 4096 }),
+    });
+    return { space, disk, source: storageAlertSource({ space, disk }) };
+  }
+
+  it("belongs to the box area and needs system.manage", () => {
+    const { source } = setup();
+    expect(source.area).toBe("box");
+    expect(source.permission).toBe("system.manage");
+  });
+
+  it("raises nothing while the disk has room and no save has failed", async () => {
+    const { space, source } = setup();
+    space.record(10 * GIB, t1);
+    expect(await source.read(ctx)).toEqual([]);
+  });
+
+  it("raises storage.space_low with the latest free space, since the warning began", async () => {
+    const { space, source } = setup();
+    space.record(GIB, t1);
+    space.record(GIB / 2, t2);
+    expect(await source.read(ctx)).toStrictEqual([
+      {
+        key: "storage.space_low",
+        code: "storage.space_low",
+        params: { freeBytes: GIB / 2 },
+        severity: "warning",
+        since: t1.toISOString(),
+      },
+    ]);
+  });
+
+  it("raises storage.disk_full, since the stop began, and leaves the warning out", async () => {
+    const { space, disk, source } = setup();
+    space.record(GIB, t1);
+    space.record(GIB / 2, t2);
+    disk.noteRefused();
+    expect(await source.read(ctx)).toStrictEqual([
+      {
+        key: "storage.disk_full",
+        code: "storage.disk_full",
+        params: {},
+        severity: "error",
+        since: t3.toISOString(),
+      },
+    ]);
+  });
+
+  it("raises storage.disk_full with room on the disk too", async () => {
+    const { space, disk, source } = setup();
+    space.record(10 * GIB, t1);
+    disk.noteRefused();
+    expect(await source.read(ctx)).toStrictEqual([
+      {
+        key: "storage.disk_full",
+        code: "storage.disk_full",
+        params: {},
+        severity: "error",
+        since: t3.toISOString(),
+      },
+    ]);
   });
 });
 
