@@ -66,6 +66,9 @@ describe("the order screen's help", () => {
 
 describe("the order lists' help", () => {
   const states = ["items", "unsent", "held", "waiting", "ready"] as const;
+  // \b is ASCII-only in JS, so a boundary here is "no letter on either side", accents included.
+  const wholeWord = (word: string) =>
+    new RegExp(`(?<!\\p{L})${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\p{L})`, "u");
   for (const [language, help, words] of [
     ["English", helpEn, en],
     ["Spanish", helpEs, es],
@@ -73,7 +76,7 @@ describe("the order lists' help", () => {
     for (const key of ["help.counter.parked_orders", "help.counter.waiting_orders"] as const) {
       it(`${key} in ${language} names the five counts by their chips' words`, () => {
         for (const state of states)
-          expect(help[key]).toContain(words[`order_counts.${state}`].replace("{n} ", ""));
+          expect(help[key]).toMatch(wholeWord(words[`order_counts.${state}`].replace("{n} ", "")));
       });
     }
   }
