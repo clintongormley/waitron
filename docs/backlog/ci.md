@@ -286,7 +286,7 @@ server without changing their deployed same-origin paths; this also affects setu
 ## At a load average near 60, more root guard files fail on time
 
 2026-10-22: A994 adds a root worker limit calculated from startup processor and memory headroom.
-Its simultaneous-hook experiment is described in
+Its simultaneous-root-suite experiment is described in
 [CI and gates](../developers/ci-and-gates.md#root-workers-start-from-available-headroom).
 The historical experiment below also adds eight spinning loops; repeat that workload before
 closing this entry. Its retained results describe the earlier configuration.
@@ -321,6 +321,12 @@ Each needs the same treatment A751 gave its own four files: what the bound waits
 this load with the bound lifted, and whether the case can be made cheaper.
 
 ### A668-5 normal-push recurrence, 2026-10-16
+
+2026-10-22: A994 reproduces the diagnostic failure cold and starts that fixture after self refresh,
+retaining its Docker, error, signal and 700 ms assertions. Its root worker estimate and concurrent
+validation are recorded in [CI and gates](../developers/ci-and-gates.md#root-workers-start-from-available-headroom).
+The historical recurrence below describes the earlier fixture and worker configuration. Added
+external-pressure testing remains under A751 above.
 
 2026-10-17: A770 (#1816, `d2f9bc3de08c2a3c0d2284a03efcc342319809a1`) reproduced
 paused-thread failures in the step-watch cases and changed their budgets, retaining their phase
@@ -683,3 +689,17 @@ change its earlier result. This read-back establishes that the status mismatch e
 without establishing its internal cause. Keep the incident open for recovery guidance
 and qualify the next published branch head through the normal hook and CI. No workflow,
 package code or test changed in response to the status mismatch.
+
+
+## The bundle CLI's entry predicate can skip a symlink-spelled path
+
+A994's copied CLI returned status 0 without producing output when Node received its macOS
+`/var/folders/.../scripts/bundle-node.mjs` path. Returning `realpathSync()` from the fixture helper
+made all three real-bundle cases pass. `scripts/bundle-node.mjs:75` compares the argument's file URL
+with the resolved module URL; A994 leaves that production predicate unchanged. Check which supported entry paths can use an alias before deciding whether to change this
+predicate or other CLI predicates.
+
+The failing and corrected focused commands are retained in lane G's
+`receipts/a994-20261022-022554/plain-bundle-mode-green.log` (status-zero CLI with missing files)
+and `plain-bundle-mode-green2.log` (15 passed). The copied source bytes were unchanged; only the
+fixture command path changed between those probes.

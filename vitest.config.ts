@@ -64,7 +64,7 @@ import { rootGuardWorkers } from "./scripts/root-test-budget.mjs";
 export default defineConfig({
   test: {
     globals: true,
-    maxWorkers: rootGuardWorkers(),
+    maxWorkers: process.env.CI ? undefined : rootGuardWorkers(),
     clearMocks: false,
     // Scoped deliberately. Vitest's default include is `**/*.{test,spec}.?(c|m)[jt]s?(x)`, which
     // from the repo root sweeps up every package's suite and would run the whole workspace twice —

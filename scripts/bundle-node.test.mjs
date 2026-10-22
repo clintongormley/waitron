@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -11,13 +12,27 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { URL, fileURLToPath } from "node:url";
+import { URL, fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { BUNDLE_EXTERNALS, bundle, esbuildArgs, parsePairs } from "./bundle-node.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const BANNER =
   "--banner:js=import { createRequire as __waitronCreateRequire } from 'node:module'; const require = __waitronCreateRequire(import.meta.url);";
+
+// These fixtures exercise plain bundles; appliance provenance has its own real-source CLI tests.
+function plainBundleCommand(directory) {
+  const scripts = join(directory, "scripts");
+  mkdirSync(scripts);
+  for (const file of [
+    "bundle-node.mjs",
+    "generate-hour-release.mjs",
+    "npm-bundle-notices.mjs",
+    "backup-verification-runtime.mjs",
+  ])
+    copyFileSync(join(ROOT, "scripts", file), join(scripts, file));
+  return realpathSync(join(scripts, "bundle-node.mjs"));
+}
 
 describe("the shared node bundle command", () => {
   it("leaves sharp out of every bundle", () => {
@@ -124,10 +139,19 @@ describe("the shared node bundle command", () => {
         realpathSync(join(ROOT, "packages/media/node_modules/sharp")),
         join(dir, "node_modules/sharp"),
       );
-      writeFileSync(join(dir, "entry.ts"), 'export const load = () => import("sharp");\n');
+      writeFileSync(
+        join(dir, "entry.ts"),
+        `
+export const load = () => import("sharp");
+export const provenance = {
+  hour: typeof __WAITRON_HOUR_RELEASE__ === "undefined" ? null : __WAITRON_HOUR_RELEASE__,
+  runtime: typeof __WAITRON_BACKUP_VERIFICATION_RUNTIME__ === "undefined" ? null : __WAITRON_BACKUP_VERIFICATION_RUNTIME__,
+};
+`,
+      );
       const result = spawnSync(
         process.execPath,
-        [join(ROOT, "scripts/bundle-node.mjs"), "entry.ts=dist/out.js"],
+        [plainBundleCommand(dir), "entry.ts=dist/out.js"],
         {
           cwd: dir,
           encoding: "utf8",
@@ -144,6 +168,19 @@ describe("the shared node bundle command", () => {
       expect(
         output.startsWith("import { createRequire as __waitronCreateRequire } from 'node:module';"),
       ).toBe(true);
+      const inspect = join(dir, "dist/inspect.mjs");
+      copyFileSync(join(dir, "dist/out.js"), inspect);
+      const loaded = spawnSync(
+        process.execPath,
+        [
+          "--input-type=module",
+          "-e",
+          `const entry = await import(${JSON.stringify(pathToFileURL(inspect).href)}); console.log(JSON.stringify(entry.provenance));`,
+        ],
+        { encoding: "utf8", timeout: 10_000 },
+      );
+      expect(loaded.status, loaded.stderr).toBe(0);
+      expect(JSON.parse(loaded.stdout)).toEqual({ hour: null, runtime: null });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -164,7 +201,7 @@ console.log(JSON.stringify({
       );
       const built = spawnSync(
         process.execPath,
-        [join(ROOT, "scripts/bundle-node.mjs"), "entry.ts=dist/out.mjs"],
+        [plainBundleCommand(dir), "entry.ts=dist/out.mjs"],
         {
           cwd: dir,
           encoding: "utf8",
@@ -201,7 +238,7 @@ console.log(JSON.stringify({
       );
       const result = spawnSync(
         process.execPath,
-        [join(ROOT, "scripts/bundle-node.mjs"), "entry.ts=dist/out.js"],
+        [plainBundleCommand(dir), "entry.ts=dist/out.js"],
         {
           cwd: dir,
           encoding: "utf8",

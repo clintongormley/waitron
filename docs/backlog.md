@@ -6104,19 +6104,13 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **Root guard deadlines under extreme external load (left open by A751).** A994 now selects
   root workers from a startup estimate of processor and memory headroom. Recheck A751's three-root,
   eight-spinning-loop workload before closing its five historical failures; A994's simultaneous
-  hook measurements do not cover that added external load.
+  root-suite measurements do not cover that added external load.
   [Detail](backlog/ci.md#at-a-load-average-near-60-more-root-guard-files-fail-on-time).
 
-- **The installer's timeout-diagnostic test expired before reaching Docker.** During A668-5's
-  normal push, the 700 ms case retained self-update curl/copy calls but no Docker call, and its
-  existing `/docker/` assertion failed. The menu-upgrade populated case also exceeded 30 seconds.
-  Both files then passed all 105 cases in isolation, without a code or test change; no repair is
-  claimed. Investigate the full-suite workload and the diagnostic's preparation phase.
-  A further full hook failed the mutation-shard fixture's 30-second bound and two step-watch
-  cases (a 212 ms phase against a 100 ms limit, then a missing diagnostic match). A770 (#1816)
-  reproduced paused-thread failures and changed those watchdog test budgets; A668-5 resumed on
-  that main commit. The installer, menu-upgrade and mutation-fixture timing still need investigation.
-  [Receipt](backlog/ci.md#a668-5-normal-push-recurrence-2026-10-16).
+- **The bundle CLI can return success without creating output through a symlink-spelled path.**
+  A994's temporary `/var/folders` invocation skipped its entry block; the canonical path worked.
+  Check supported entry paths before changing the production predicate.
+  [Detail](backlog/ci.md#the-bundle-clis-entry-predicate-can-skip-a-symlink-spelled-path).
 
 - **`scripts/spawn-timeout-budget.test.ts` never judges `scripts/ci-workflow.test.mjs` or
   `scripts/migration-upgrade.test.ts`.** Its `budgets()` returns `unreadable: true` for both, on
