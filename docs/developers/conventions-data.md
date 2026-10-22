@@ -2720,7 +2720,8 @@ delete" in `free-space-now.test.ts`.
 - The refusing cases name the files they plant (the venue's files, the state folder's, look-alike
   names, links, configured backup folders), not every file a box could hold.
 - Free knows only the destinations the backup supervisor holds when it runs. While the box cannot
-  read its backup settings it holds none (`backup-supervisor.test.ts`, "keeps archives off and
+  read its backup settings, or after a settings reload could not open the venue database, it holds
+  none (`backup-supervisor.ts`, `reload`; `backup-supervisor.test.ts`, "keeps archives off and
   reports the code when the settings could not be loaded", expects `destinations: []`), so a
   destination inside a `backup-encrypt-` folder is then deleted. The start's clean-up never reads
   the destinations at all ([box.md](../backlog/box.md#every-starts-clean-up-deletes-a-backup-folder-configured-inside-backup-staging-under-a-backup-encrypt--name)).

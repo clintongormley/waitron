@@ -844,11 +844,14 @@ Left open by A798-B slice 7. A `local-fs` backup destination whose folder is
 `<stateDir>/backup-staging/backup-encrypt-…`, or sits below one, is accepted by the settings
 (`WAITRON_BACKUP_DIR`, `WAITRON_BACKUP_DESTINATIONS`, the Backups screen). The clean-up that
 `runEntry` runs at every start (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) deletes that
-folder with its archives whatever the free space, because it reads no backup settings
+folder with its archives whatever the free space, unless another process holds the venue folder,
+because it reads no backup settings
 (`start-space.test.ts`, "deletes backup staging, and keeps rotated logs and old crash reports",
 deletes a `backup-encrypt-x` folder above the floor). The Box status page's Free no longer does: it
-skips a configured destination folder and any folder holding one, except while the box cannot read
-its backup settings. A fix could refuse such a folder when the settings are saved.
+skips a configured destination folder and any folder holding one, except while the box holds no
+backup settings (they cannot be read, or a reload could not open the database). Until then the
+user guide's "never touches … your backups" (`box-status.md#free-space`, English and Spanish) does
+not hold for such a folder. A fix could refuse such a folder when the settings are saved.
 
 ## A box whose first setup was retired into a new workspace keeps that workspace's backup staging through the clean-up before the count
 

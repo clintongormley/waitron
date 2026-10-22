@@ -386,7 +386,8 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
     `logBytes` the log folder; `otherBytes` the disk's used space (`(blocks − bfree) × frsize`) less
     those three, never below 0. A folder is counted only when it is on the venue folder's device
     (`stat().dev`), and a folder inside one already counted is not counted again; links are not
-    followed. `freeBytes` is `bavail × frsize` as everywhere else (`free-bytes.ts:6-15`), `totalBytes`
+    followed. Changed at finish review, 2026-10-22: each top folder is compared by its real path, so
+    a folder listed again through a link is counted once; the walk below still follows no link. `freeBytes` is `bavail × frsize` as everywhere else (`free-bytes.ts:6-15`), `totalBytes`
     is `blocks × frsize`. Any part the box cannot read is `null` and left out of the line.
 13. **Printers and card readers rows list what is set up; their problems come from the bell.**
     Active, undeleted printers (`printers`, `packages/db/src/schema/printers.ts:36-84`); active,
