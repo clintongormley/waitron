@@ -100,7 +100,7 @@ Si editas el tema de Waitron, o un tema que empezaste con **Añadir tema**, Guar
 elecciones van a convertirse en un tema propio. Su interruptor **Usarlo ya en todas las pantallas**
 empieza activado cuando editas el tema de Waitron en uso, y desactivado para un tema nuevo.
 **Guardar** en el diálogo guarda el tema nuevo y cierra el editor. **Volver** te deja en el editor
-sin guardar nada, y antes te lo pregunta si cambiaste algo en él. Las reglas de un nombre están en
+sin guardar nada, y antes te lo pregunta si cambiaste algo en el diálogo. Las reglas de un nombre están en
 «Pon nombre a un tema», más abajo.
 
 Si algo sigue leyéndose mal, Guardar abre primero el diálogo **Difícil de leer**, con una línea por

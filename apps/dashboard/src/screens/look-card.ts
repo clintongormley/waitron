@@ -336,7 +336,7 @@ export class LookCard extends LitElement {
     const inUse = this.list?.inUse;
     return editing.id === null ? editing.from === "in-use" && inUse === null : inUse === editing.id;
   }
-  /** A theme deleted elsewhere stays open under the last name the list gave it (D19). */
+  /** Keeps the last name the list gave the open theme, which outlives its deletion elsewhere (D19). */
   #followName(): void {
     const editing = this.#editing;
     if (!editing || editing.id === null) return;

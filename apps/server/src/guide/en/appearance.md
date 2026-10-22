@@ -97,7 +97,7 @@ theme** dialog, after the **Hard to read** dialog when that appears, because you
 to become a theme of their own. Its **Use it on every screen now** switch starts on when you are
 editing Waitron's theme in use, and off for a new theme. **Save** in the dialog stores the new theme
 and closes the editor. **Back** leaves you in the editor with nothing saved, asking first if you
-changed anything in it. The rules for a name are under "Name a theme" below.
+changed anything in the dialog. The rules for a name are under "Name a theme" below.
 
 When something is still hard to read, Save first opens the **Hard to read** dialog, with one line
 for each colour that is. It offers three choices:
