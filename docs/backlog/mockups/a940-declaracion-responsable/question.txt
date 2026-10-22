@@ -279,3 +279,32 @@ the night before; the upgrade switches it on at 11:15 on 1 March 2027, and the f
   A947's rule; if the box's clock were two hours fast, another of your boxes could take the same
   name two hours later without knowing.
 - Stop here — I'll write.
+
+====================================================================================================
+ANSWERED 2026-10-22 — the second revision's two questions (recorded by the third revision; nothing
+above is deleted)
+
+Second revision, question 1 — approve? A, approved (about 02:45). This also approves carrying the
+upgrade's clock reading to the moment the name is taken (design §5.6 way A, step 3).
+
+Second revision, question 2 — A993 with no internet? A, plus a phone's clock (about 02:55). The
+upgrade makes the change only while it can read the internet's clock; otherwise 1.3.2 keeps
+selling and the upgrade tries again at the next quiet hour. In the rare stuck case (a power cut
+between the database update and the change, or 1.4.0 started by hand) the page the box shows
+instead of selling also accepts a phone's or a till's clock, under A947's clock rule (within 30
+seconds, no button past it, the box's own screen never counts). Why an upgrade never waits but a
+start can: the upgrade's step runs before the new release is installed, so only a box already
+running the new release with the change unmade can be stuck.
+
+Also that night: the ~03:05 direction to ask the person for the time on the box's own screen was
+withdrawn at ~03:10 (the visiting device's clock is read automatically; nobody types a time); and
+at ~03:12 every clock wait explains itself on screen with a countdown. Design: third revision note
+at the top; picture 6 (6-stuck-page.png).
+
+One call made in the third revision that you may want to overturn: on the stuck page a phone's or
+till's clock counts only after a manager signs in on that device, as at a switch (A947). Without
+it, any device on the venue's network could supply the clock the new installation is named by.
+
+Still needed from you before the first release: your full name, your NIF, and a postal address you
+are content to publish. Item d)'s wording still waits for the asesor's answer to Q53. Next: slice
+1's build plan (docs/superpowers/plans/2026-10-22-a940-1-software-identity.md), then A993's plan.

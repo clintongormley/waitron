@@ -1,12 +1,54 @@
 # A940 — The software's declaración responsable, inside the app and outside it
 
-**Date:** 2026-10-21, revised the same day for the owner's answers and again on 2026-10-22 for his
-answers of about 22:25. **Status:** design; all four questions answered (§11); the second revision
-awaits the owner's approval and his choice on A993's offline start (its question 2), and item d)'s
-wording awaits the asesor (tax adviser) on Q53. Nothing in it is built. **Items:** A940, and A993
-for the automatic identity change (§5.6).
+**Date:** 2026-10-21, revised the same day for the owner's answers, again on 2026-10-22 for his
+answers of about 22:25, and a third time on 2026-10-22 for his answers of 02:45 to 03:12.
+**Status:** approved by the owner (2026-10-22, about 02:45); A993's offline behaviour chosen (way
+A plus a phone's or a till's clock, about 02:55). Nothing in it is built. Still needed: from the
+owner, his full name, NIF (Spanish tax number) and a postal address he is content to publish; from
+the asesor (tax adviser), the answer to Q53, which item d)'s wording waits for. Slice 1's build
+plan: [`2026-10-22-a940-1-software-identity.md`](../plans/2026-10-22-a940-1-software-identity.md).
+**Items:** A940, and A993 for the automatic identity change (§5.6).
 
 **Mock-ups:** [`docs/backlog/mockups/a940-declaracion-responsable/`](../../backlog/mockups/a940-declaracion-responsable/README.md).
+
+> **Third revision 2026-10-22 — the owner's answers of 02:45 to 03:12.** Both of the second
+> revision's questions are answered, and two further directions apply to every clock wait. What
+> changed, section by section:
+>
+> - **Status: approved.** Question 1, "approve the second revision?": A, approved (about 02:45).
+>   That also approves carrying the upgrade's step-1 clock reading to the moment the name is taken
+>   (§5.6, way A, step 3), an extension of A947's rule that a box checks the clock every time it
+>   takes a name.
+> - **§5.6, way A chosen, plus a phone's or a till's clock.** Question 2, "A993 with no internet":
+>   A, with one addition (about 02:55). The upgrade makes the change only while it can read the
+>   internet's clock; without it the old release keeps selling and the upgrade tries again at the
+>   next quiet hour. In the rare stuck case — a power cut between the step's database update and
+>   the change, or a new release started by hand — the page the box shows instead of trading
+>   («…necesita la hora de internet…») now **also accepts a phone's or a till's clock** as the
+>   second clock, under A947's clock rule (within 30 seconds, no button past it, the box's own
+>   screen never counts), so a venue without internet can get going. Ways B to D are recorded as
+>   not chosen, one line each. New paragraph, said plainly for the owner, who asked: **why an
+>   upgrade never makes a sale wait but a start can** — the upgrade's step runs before the new
+>   release is installed, so only a box already running the new release with the change unmade can
+>   be stuck. The stuck page is specified: it is served by the start itself (it is not today's
+>   failed-start page), and a visitor's clock counts only after a manager signs in on that device
+>   (**my call**, §12).
+> - **§5.6, the visitor's clock is read automatically.** The owner's direction of about 03:05, to
+>   ask the person for the time when the only screen is the box's own, was withdrawn by him at
+>   about 03:10. The page reads the visiting device's clock (a phone's, a till's, a laptop's) and
+>   the box compares it by itself; nobody types a time. The box's own screen never counts.
+> - **§5.6, every clock wait explains itself, with a countdown** (about 03:12, for A947 and A993).
+>   The stuck page says why it waits (the time has to be confirmed so that no invoice series is
+>   ever repeated), what to do, and a live countdown — or, when the wait has no fixed end, what will
+>   end it. The words are A947's (A947 §6.5, "Every wait explains itself"), reused where they fit,
+>   with a row of their own for this page. The upgrade's own waits run while the old release sells
+>   and have no screen; its report lines already say why. The «Nueva instalación fiscal» notice
+>   waits for nothing, so it has no countdown. **New picture 6.**
+> - **§8** gains the stuck page's cases: a phone's reading accepted, a reading more than 30
+>   seconds out refused, the box's own screen refused, a reading without a manager's sign-in
+>   refused. **§10**: slice 1b's dependency on the owner's answer is met; it still needs slice 1 and
+>   A947's slice 4a (open as pull request #1990, not landed). **§11** records the answers. **§12**:
+>   the start's fallback and the carried clock reading are closed; three new points are open.
 
 > **Second revision 2026-10-22 — the owner's 22:25 answers.** On 2026-10-21 at about 22:25 the
 > owner decided two things for A947 (the two-box design) that change this design too. A947 was
@@ -285,6 +327,10 @@ source and following its callers, not by running it; the citations are the recei
    name in the submission's header and decides how the sending step groups records
    (`packages/fiscal-verifactu/src/drain.ts:580-640` and `:1219-1222`). So the fix must change
    that reader in the same pull request, or cancellations would go out under the producer's name.
+   (Found for slice 1's plan, 2026-10-22: the check a restore runs on a backup's records also
+   compares the record's software-block NIF with the SIF row's, which is the taxpayer's
+   (`packages/fiscal-verifactu/src/backup-verification-chain.ts:104-110`); read, not run — the plan's
+   first test is the run. Slice 1 changes it to compare the issuer's NIF instead.)
    I believe nothing has been filed with AEAT's production service: the README says Waitron is
    "Not yet running in production anywhere" (`README.md:9`). If that holds, no wrong record sits
    at AEAT and the fix changes only what future records carry. The producer will be the owner
@@ -642,7 +688,7 @@ box's previous row (`allocation.ts:77-88` today). That is a migration on a fisca
 go-live no data is carried forward (CLAUDE.md §3, the no-backwards-compatibility rule), and a row
 opened before A993, with nothing stored, counts as different from any running identity.
 
-**What every start does — and, under the recommended timing, the upgrade's step before it**
+**What every start does — and, under the chosen timing, the upgrade's step before it**
 ("When the change is made", below), before the box trades, inside the fiscal module — **only on
 the node that files.** Today filing runs only while a node's role is primary: the drain runs behind
 `singletonPass` (`apps/server/src/boot.ts:2518-2519`), which runs the pass only when
@@ -755,7 +801,7 @@ the box can read"); so the extra wait A947 §6.7 adds for a first setup or a res
 see every earlier name, does not apply. Normally the box takes the current minute. By A947's rules
 3 and 4 it waits, at most 150 seconds, when a code it knows is a little later than its clock, and
 refuses when one is further ahead. The 150 seconds is beyond the owner's "at most for the next
-minute", as A947 discloses for its own switches; under the recommended timing below the wait runs
+minute", as A947 discloses for its own switches; under the chosen timing below the wait runs
 while the old release is still selling. The installation number must still differ from every earlier installation of
 the taxpayer, of any producer: «Deberá distinguirlo de otros posibles SIF utilizados para realizar
 la facturación del obligado a expedir facturas … incluso aunque en dichas instalaciones se emplee
@@ -766,7 +812,9 @@ same name, so the runbook (§5.4) has one taxpayer's main boxes upgraded one at 
 different minutes.
 
 **When the change is made: at the upgrade, while the box can read the internet's clock**
-(recommended; the second revision's question 2).
+(chosen: way A, the owner's answer to the second revision's question 2, about 02:55 on
+2026-10-22, with a phone's or a till's clock added for the stuck case — "Under A, what a start
+does", below).
 
 *The problem.* A947's clock check (§6.5) needs a second clock every time a box takes a name — the
 internet's, or the browser of a device that is not the box — and refuses a box clock more than 30
@@ -809,15 +857,15 @@ a sale, which CLAUDE.md §5 forbids ("Nothing EXTERNAL may block a sale").
   versión cumple con los requisitos exigidos». In plain English: a record names the producer of the
   version that is running, and that producer declares that version.
 
-*The four ways, on one example.* Bar Lucía S.L. has one box, whose screen is its counter till; it
+*The four ways weighed, on one example* (A was chosen; B to D are kept below as one line each). Bar Lucía S.L. has one box, whose screen is its counter till; it
 was set up on 16 October 2026 at 13:40 Madrid time as `0CNNW`. Release 1.4.0 names a future
 Waitron company as producer. The box fetched it the night before, and the upgrade switches it on
 at 11:15 Madrid on Monday 1 March 2027 (10:15 UTC; Madrid is one hour ahead of UTC until 28 March),
 while the fibre is down until 14:00. With the internet up, all four do the same: close `0CNNW`
 (last receipt `A-0CNNW/1234`), take `0JMV7`, first receipt `A-0JMV7/1`.
 
-- **A — recommended: the upgrade makes the change, and only while it can read the internet's clock;
-  until then the old release goes on selling.** The order is new work in slice 1b, in `waitron.sh
+- **A — chosen (the owner, about 02:55 on 2026-10-22): the upgrade makes the change, and only while
+  it can read the internet's clock; until then the old release goes on selling.** The order is new work in slice 1b, in `waitron.sh
   install`, and the same in A950's updater:
   1. **While the old release still serves**, once the new image is on the box, the upgrade runs the
      new image's one-off step in a *check* mode. It is run with the image's entrypoint overridden:
@@ -858,8 +906,8 @@ while the fibre is down until 14:00. With the internet up, all four do the same:
      check**, which applies "every time a box takes a name": here the outside reading was taken in
      step 1 and is carried to step 4 by the steady clock, seconds or, after rule 3's wait, up to
      about two and a half minutes earlier. A947 itself takes a name up to 150 seconds after its
-     check (rule 3); whether A947 accepts a reading carried this way is put to the owner with this
-     revision (§12, question 1).
+     check (rule 3). The owner approved this extension with the second revision (about 02:45 on
+     2026-10-22); A947's slice 4a has to allow a reading carried this way (§12).
   4. **Migrate, then make the change.** These are two commits, not one transaction:
      `applyMigrations` opens its own store, runs each migration set in its own drizzle transaction,
      commits it and closes (`packages/migrations/src/apply.ts:43-93`). The change is one transaction
@@ -939,30 +987,14 @@ while the fibre is down until 14:00. With the internet up, all four do the same:
   release sells. Until the change is made the box runs the old release, which its own declaration
   covers; I found nothing in the sources this design quotes that sets a date by which a venue must
   take a new release. The guard is unchanged.
-- **B — the new release sells on the old installation, under the old identity, until it can read a
-  second clock.** The guard would have to let 1.4.0 add records to a chain opened under the old
-  producer, and those records would name the owner as producer of version 1.4.0, which he has not
-  declared — the Waitron company has; §8's "records and declaration agree" test would fail too. On
-  the annex and FAQ wording above, such a record names a producer who did not produce the version
-  running. *Example:* from 11:15 the bar sells `A-0CNNW/1235` onwards on 1.4.0, each record naming
-  the owner; at 14:00 the internet returns and the box changes to `0JN0C`. *Cost:* records the
-  sources' wording does not allow, on our reading, so it would need the asesor's yes first; and two
-  guards weakened. Not recommended.
-- **C — the new release starts and waits for a till's or phone's clock.** It sells nothing until a
-  device that is not the box answers a clock check. *Example:* the bar's only till is the box's own
-  screen, which does not count, so nothing is sold until the manager opens the box's page on her
-  phone. At a venue with a separate till it ends as soon as that till answers — which is new work:
-  today only the setup and restore pages take a browser's reading
-  (`packages/fiscal-verifactu/src/hour-setup-clock.ts:96-115`). *Cost:* at a one-box venue a sale
-  waits on a phone, which CLAUDE.md §5 forbids. Not recommended.
-- **D — this one change uses only the box's own clock.** The box's own database knows every name
-  its venue has used, so the "strictly later" rule still stops a clock that is behind the newest of
-  them. Nothing stops a clock that is fast: its name lies in the future and is taken again
-  later by a box with a right clock that cannot see it (A947 §6.7, cases F1 and F2, run on today's
-  code). *Example:* the bar's box takes `0JMV7` at once at 11:15 with nothing to compare against;
-  had its clock been two hours fast, another of the business's boxes taking a name at the true
-  11:15 without knowing of it (a restore from an older backup, say) could take `0JMV7` again. *Cost:* an exception to A947's "every time a box takes a name", for a rare event. Not
-  recommended.
+- **B — not chosen: the new release sells on the old installation, under the old identity, until it
+  can read a second clock.** Its records would name the owner as producer of a version he did not
+  declare, and it would weaken two guards (the identity guard and "records and declaration agree").
+- **C — not chosen as the rule: the new release starts and waits for a till's or phone's clock.**
+  At a one-box venue whose till is the box's own screen a sale would wait on a phone, which
+  CLAUDE.md §5 forbids. Its phone-or-till reading is kept for the stuck case only (below).
+- **D — not chosen: this one change trusts the box's own clock.** A fast clock would take a name in
+  the future that a box with a right clock could take again (A947 §6.7, cases F1 and F2).
 
 A fifth way was weighed and left out: reserve the name while the old release is still running and
 the box is online, when the release is fetched, and use it at the later upgrade with no clock. It
@@ -973,13 +1005,85 @@ between (a switch to the spare, say) — more fiscal code, to save a delay that 
 upgrade through its step they match. They differ in two cases: the new release was started some
 other way, for instance `docker compose up` typed by hand; or a power cut or crash came between the
 step's migration and its change, and the app has since been brought back (way A, "A power cut or
-crash while the app is stopped"). Then the start makes the change
-itself, under A947's rules, with the internet's clock, and **until then does not trade**; its
-recovery page says «Esta versión abre una nueva instalación fiscal y necesita la hora de internet:
-conecta el equipo a internet». Disclosed: in both cases a sale does wait on something outside the
-box, as with §5.1's refusal of a test build. Whether that page should also take a phone's clock, as
-in C, is left open (§12). The first revision's decision that after a rule-4 refusal "the box keeps
-running without issuing invoices" is replaced: under A, the old release keeps selling.
+crash while the app is stopped"). Then the start makes the change itself, under A947's rules, and
+**until then does not trade**. It first tries the internet's clock (one reading, at most 5
+seconds, `packages/fiscal-verifactu/src/hour-clock-internet.ts:62-67`). If that passes A947's
+clock check, it makes the change and trades, with no page shown. If it does not, the start shows
+the stuck page below, in place of trading, until a second clock arrives. Disclosed: in both cases
+a sale waits on something outside the box — the internet, or a phone or till on the venue's
+network — as with §5.1's refusal of a test build. The first revision's decision that after a
+rule-4 refusal "the box keeps running without issuing invoices" is replaced: under A, the old
+release keeps selling.
+
+**Why an upgrade never makes a sale wait, but a start can** (the owner asked). The upgrade's step
+runs *before* the new release is installed. While it reads the clocks the old release is still
+selling, and when it cannot pass it simply leaves the old release running and tries again at the
+next quiet hour: nobody waits. A start cannot do that. A box is stuck only when it is already
+running the new release with the change unmade, and by then there is no older release to go back
+to: the database has been updated for the new release, and an older release refuses a database
+that is ahead of it (`assertNotAhead`, `apps/server/src/node-entry.ts:245`, called on every start
+at `:515`). So the start has to take the name itself, and taking a name needs a second clock.
+
+**The stuck page: the internet's clock, or a phone's or a till's** (the owner, about 02:55 on
+2026-10-22). With no internet the venue can still get going: the page also takes the clock of a
+phone or a till on the venue's network as the second clock, under A947's clock rule exactly — the
+box's clock within 30 seconds of that reading, ahead or behind, with no button past it, and the
+box's own screen never counting (A947 §6.5, the clock check's rule 1, which knows the box's own
+screen by the request's source address). The page reads the visiting device's clock by itself and
+the box compares the two; **nobody types a time**, not on a phone or a till and not on the box's
+own screen, where the page waits instead (the owner proposed asking the person for the time there at
+about 03:05 and withdrew it at about 03:10). Once a check passes, the box takes the name by A947's
+rules 1–5: normally the current minute at once; when a name it knows is a little later than its
+clock, it waits for the next allowed minute (rule 3, at most 150 seconds) with the countdown below;
+the box's own live database holds every name its venue has used (A947 §6.5, "What the box can
+read"), so the setup's and the restore's extra 90-to-150-second wait does not apply. Then it makes
+the change, in one transaction as in way A's step 4, and starts trading.
+
+- **It is served by the start, not by today's failed-start page.** Today's recovery page
+  (`recoveryApp`, `apps/server/src/recovery-surface.ts:567-598`) is shown only after starts have
+  failed past the retry threshold, or after the running server stopped itself (`:563-566`), never
+  opens the venue database (`:573`), and its
+  one action is a retry that ends the process for Docker to restart it
+  (`apps/server/src/node-entry.ts:449`). The stuck page has to hold the venue folder's lock, read
+  the name history, compare clocks and write the change, so it is served by the start itself, in
+  place of trading, the way a first setup's resolution page is (`node-entry.ts:374-388`). It keeps
+  the curated title and plain words of the recovery page's convention
+  ([conventions-ui.md](../../developers/conventions-ui.md), "The unauthenticated recovery page").
+- **A visitor's clock counts only after a manager signs in on that device** (**my call**, §12). The
+  internet's reading comes from AEAT's own server over a checked certificate
+  (`hour-clock-internet.ts:20`, `rejectUnauthorized: true`); a browser's reading is whatever the
+  device sends. Every A947 page whose browser reading leads to a name is behind a credential — the
+  setup password, the backup a restore needs, the manager's sign-in at a switch (A947 §6.2,
+  item 3) — and this page follows the switch: the manager's passkey, or password plus
+  authenticator code when one is enrolled. The sign-in is a witness for the clock only; the
+  authority for the change is still the identity-change step (above).
+- **Every wait explains itself, with a countdown** (the owner, about 03:12 on 2026-10-22, A947
+  §6.5). The page says why it waits, what to do, and a live countdown, or what will end a wait
+  with no fixed end. The box decides; the page only shows: the box returns how long is left, the
+  page counts it down, and at zero it checks the clocks again and asks again; the box takes the
+  name only if that new check passes. A refusal is not a wait and shows no countdown. A947's words
+  are reused; the what-to-do row is this page's own:
+
+| Case | What the page says (Spanish as staff see it / English) |
+| --- | --- |
+| Title, every state | «Waitron 1.4.0 abre una nueva instalación fiscal» / "Waitron 1.4.0 opens a new fiscal installation" |
+| No second clock yet (no internet; the page is on the box's own screen, or no device has signed in) | Why: «Para que ninguna serie de facturas se repita, la hora del equipo se compara con la de otro aparato o con internet.» / "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's." On the box's own screen it adds «Esta pantalla está en el propio equipo y no cuenta.» / "This screen is on the box itself, so it does not count." What to do: «Conecta el equipo a internet, o abre esta página desde un móvil o una caja del local e inicia sesión como responsable.» / "Connect the box to the internet, or open this page on a phone or till on the venue's network and sign in as a manager." What ends it: «Sigue sola cuando el equipo tenga internet, o en el móvil o la caja si sigues allí.» / "It carries on by itself once the box reaches the internet, or on the phone or till if you carry on there." No countdown; it checks again every 15 seconds. |
+| The clock check passed, waiting for the next allowed minute (rule 3) | «Esperamos a confirmar la hora para que ninguna serie de facturas se repita.» / "Waiting to confirm the time, so no invoice series is ever repeated." «No hace falta hacer nada; deja esta página abierta.» / "Nothing to do; keep this page open." «Sigue en 0:24» / "Continues in 0:24", counting down. |
+| Refused: the box and the device differ by more than 30 seconds | «Sin una hora confirmada no se crean series, para que ninguna se repita.» / "No series is made without a confirmed time, so none is ever repeated." «La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos). Prueba desde otro móvil o caja. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.» / "This box's time and this device's differ by more than 30 seconds. Try from another phone or till. If they still differ, the box's time may be wrong: ask for help.", both readings, and «Comprobar otra vez» / "Check again". No countdown. |
+| Refused by rule 4 (a name it knows is more than 150 seconds ahead) | A947's words: «Todavía no se puede abrir la nueva instalación: ya se usó un minuto posterior a la hora de este equipo. Podrás seguir a partir de las ‹HH:MM›.» / "The new installation cannot be opened yet: a later minute is already in use. You can carry on from ‹HH:MM›." No countdown. |
+| Done | «Nueva instalación fiscal: 0CNNW → 0JMV7. El equipo vuelve a vender en unos segundos.» / "New fiscal installation: 0CNNW → 0JMV7. The box starts selling again in a few seconds." |
+
+  The box's readings are labelled «Este equipo», not «Caja», which on this page means a till (the
+  ambiguity lane A reported from A947's slice 4a). Elsewhere: the upgrade's own waits (step 1's
+  clock check and rule 3's wait) run while the old release sells, with nobody looking, so they have
+  no screen; the upgrade's three report lines above already say why in plain words. The dashboard's
+  «Nueva instalación fiscal» notice comes after the change and waits for nothing, so it has no
+  countdown. Picture 6 draws the page's states.
+- **Reused from A947's slice 4a:** the shared wait-and-countdown code that slice builds for the
+  setup and restore pages (`packages/fiscal-verifactu/src/setup/clock-wait.ts` and
+  `setup/wait-countdown.ts` on its branch, `feat/a947-4a-minute-names`, pull request #1990, open and
+  not landed on 2026-10-22). If the stuck page is not built as a fiscal-module page that can use
+  them, it reuses their words and rules instead.
 
 **Why no person has to approve it, when W41s asks one for a promotion.** W41s asks for a person
 where another machine may still hold the identity being replaced. A declared restore needs the
@@ -1187,6 +1291,26 @@ migration (slice 5).
 - **A start that finds the change not made does not trade without a second clock** (§5.6, "Under
   A, what a start does"): a case that starts the new release directly under a changed identity with
   no internet and checks that no sale is recorded and the old chain gains nothing.
+- **The stuck page takes a phone's or a till's clock, under A947's rule** (§5.6, "The stuck page"),
+  run against the real start with no internet, each case built test-first:
+  - *The case that must still be served:* a manager signed in on a device that is not the box,
+    whose browser's reading is within 30 seconds of the box's clock, makes the start take the
+    current minute's name, make the change and trade; the next sale is the first record of the new
+    chain.
+  - *Refused, a clock out by more than 30 seconds:* the same with the device's reading 31 seconds
+    ahead, and 31 seconds behind; nothing is allocated, the page shows the refusal's words and both
+    readings, and no countdown.
+  - *Refused, the box's own screen:* a signed-in request whose source address is the loopback
+    address or one of the box's own addresses counts as no second clock; nothing is allocated and
+    the page shows the "no second clock" words with the "this screen is on the box itself" line.
+  - *Refused, no sign-in:* a reading within 30 seconds sent without a manager's sign-in is not used.
+  - *A wait explains itself:* with a name the box knows in the current minute, an accepted reading
+    gives a countdown to the next minute, the name is taken only after the clocks are checked
+    again at zero, and never before.
+  - Each refusing case is proven by deletion: with its check deleted (the 30-second comparison, the
+    source-address test, the sign-in requirement) the case must fail because a name is taken;
+    beside it, the served case stays green. A947's slice 4a test that a restore with a wrong clock
+    never reuses a name is extended with a stuck-page row.
 - **A restore of an old-producer backup onto a new release** (§5.6, "What each chain stores"): a
   case that restores a backup whose chain was opened under the old producer onto a box running a
   release with the new one, and checks that the restore's activation writes the new identity and
@@ -1215,8 +1339,8 @@ Each slice is one pull request.
 
 | Slice | What | Path |
 | --- | --- | --- |
-| 1 | `software-identity.ts`; the records carry the producer — the owner personally, his name and NIF, which he still has to supply — not the taxpayer; the name "Waitron"; the release's version; `TipoUsoPosibleSoloVerifactu` = S (unchanged), `TipoUsoPosibleMultiOT` = N (was S), `IndicadorMultiplesOT` = N (unchanged); the cancellation reader and the drain's grouping keep the taxpayer's name | FULL, **fiscal: the owner lands it** |
-| 1b | **A993**, the automatic identity change (§5.6): each chain stores its producer and mode; the upgrade's one-off step and every start compare; a difference opens a new installation under A947's five-symbol rules, only with a second clock (way A, if the owner chooses it); `waitron.sh install` runs the step — checking the clock while the old release serves — records the previous image and box files, and puts the old release back when the step changes nothing; the guard; the dashboard notice | FULL, **fiscal: the owner lands it** |
+| 1 | `software-identity.ts`; the records carry the producer — the owner personally, his name and NIF, which he still has to supply — not the taxpayer (until he supplies them, a marked placeholder: the records keep today's producer fields and a production start on a published image refuses, [slice 1's plan](../plans/2026-10-22-a940-1-software-identity.md)); the name "Waitron"; the build's version; `TipoUsoPosibleSoloVerifactu` = S (unchanged), `TipoUsoPosibleMultiOT` = N (was S), `IndicadorMultiplesOT` = N (unchanged); the cancellation reader, the drain's grouping and the backup check keep the taxpayer's name and NIF | FULL, **fiscal: the owner lands it** |
+| 1b | **A993**, the automatic identity change (§5.6): each chain stores its producer and mode; the upgrade's one-off step and every start compare; a difference opens a new installation under A947's five-symbol rules, only with a second clock (way A, chosen); the stuck page that takes a phone's or a till's clock, explaining every wait with a countdown; `waitron.sh install` runs the step — checking the clock while the old release serves — records the previous image and box files, and puts the old release back when the step changes nothing; the guard; the dashboard notice | FULL, **fiscal: the owner lands it** |
 | 2 | The template, `functions.md`, the renderer, the "agree" and "headings" guards, `pnpm release prepare` and `tag`, and the release runbook | FULL |
 | 3 | `/legal/declaration` (HTML, PDF, plain text) in every mode and on the landing and recovery listeners; About Waitron on the dashboard, the till's More menu, the ⓘ corners and the setup wizard; guides in English and Spanish | LIGHT |
 | 4 | CI on a `v*` tag: the version and the rendered declaration in the image, the PDF and text on the GitHub Release; `waitron.sh install v<version>` pulls the published image; production refuses an unreleased build; the "never changes" guard | FULL (the box's start path) |
@@ -1224,12 +1348,14 @@ Each slice is one pull request.
 | 6 | `@waitron/verifactu`'s own declaration, one per library release, in `waitron-io/verifactu` | That repository's own flow |
 | — | Cut `v1.0.0` with `pnpm release`, once the owner approves the revision, the asesor has answered Q53 and the producer's three facts are in | The owner |
 
-Slices 1, 2 and 6 can be built side by side. Slice 1b needs slice 1, A947's slice 4a (the
-five-symbol minute name and its clock check) and the owner's answer on the offline start (the
-second revision's question 2), and lands before the first production venue goes live; A950's
+Slices 1, 2 and 6 can be built side by side. Slice 1b needs slice 1 and A947's slice 4a (the
+five-symbol minute name, its clock check and its shared wait-and-countdown code; open as pull
+request #1990 on 2026-10-22, not landed). The owner's answer on the offline start it also waited
+for came at about 02:55 on 2026-10-22 (way A, plus a phone's or a till's clock). It lands before
+the first production venue goes live; A950's
 updater, when it is built, runs the same step. Slice 3 needs 2's renderer; slice 4 needs 2 and 3; slice 5 needs 3.
 
-## 11. Questions for the owner — all four answered 2026-10-21
+## 11. Questions for the owner — all answered
 
 Asked one at a time through the campaign watcher; the original text is in the mock-ups folder's
 `question.txt`, with the revision's own questions at its end.
@@ -1265,9 +1391,24 @@ by the second revision's question 1 (its example's hour codes and its new recove
 hold), the second withdrawn, the owner having settled the name form at about 22:25 on 2026-10-21
 (A947 §6.5).
 
-**The second revision's questions** (in `question.txt`, asked one at a time): approve this
-revision; and, for A993, what happens when the change cannot read a second clock (§5.6, ways A to
-D, A recommended).
+**The second revision's questions** (in `question.txt`, asked one at a time), both answered on
+2026-10-22 through the campaign watcher:
+
+1. **Approve the second revision? Answered: A, approved** (about 02:45). This also approves
+   carrying the upgrade's step-1 clock reading to the moment the name is taken (§5.6, way A,
+   step 3), an extension of A947's clock rule.
+2. **A993 with no internet: when does the box change? Answered: A, plus a phone's clock** (about
+   02:55). The upgrade changes only while it can read the internet's clock, and otherwise the old
+   release keeps selling and the upgrade tries again at the next quiet hour; in the stuck case the
+   page also accepts a phone's or a till's clock under A947's clock rule (§5.6, "The stuck page").
+   The owner asked why an upgrade does not wait while a restart might; §5.6 now says it plainly.
+
+**Two further directions the same night, for A947 and A993.** At about 03:05 the owner proposed
+that, when the only screen is the box's own, the box ask the person for the current time; at about
+03:10 he withdrew it ("it is probably safer to not ask the user but to wait instead, as you have
+already designed it"). The visiting device's clock is compared automatically, and the box's own
+screen never counts. At about 03:12: "But explain that on the screen and provide a countdown for
+the user to see" — every clock wait explains itself (§5.6, "The stuck page", and picture 6).
 
 ## 12. What this design does not settle, for the builder
 
@@ -1302,9 +1443,10 @@ D, A recommended).
   reused); and how long after step 1 step 3 may still rely on it before step 1 must be run again.
 - **Step 3 extends A947's clock check** (§5.6, way A): the outside reading is taken in step 1 and
   carried to the name in step 4 by the host's steady clock, rather than read at the moment of
-  taking the name. A947's own rule 3 already takes a name up to 150 seconds after its check;
-  whether A947 accepts a reading carried between two runs is for the owner, with question 1, and
-  for A947's slice 4a to allow.
+  taking the name. **Approved by the owner with the second revision** (about 02:45 on 2026-10-22).
+  Still for the builder: A947's slice 4a takes its name in the same run as its check, so slice 1b
+  has to give the admission a way to accept a reading carried between two runs, with the checks
+  step 3 lists.
 - **Bringing the app back after a cut during the upgrade** (§5.6, way A): the marker and the
   start-up service that reads it are new work in slice 1b; until they exist, a cut in steps 2 to 5
   leaves the venue selling nothing until the upgrade is run again.
@@ -1315,8 +1457,24 @@ D, A recommended).
   the first order, the restored database no longer records that the new code was spent. Nothing
   was filed under it (A950 files nothing before its check passes), and the next attempt takes a
   later minute under A947's clock check. A950's design should say so.
-- **The start's fallback** (§5.6, "Under A, what a start does"): whether its recovery page should
-  also take a phone's clock, which is new work (way C), and its exact wording.
+- **The start's fallback — closed** (the owner, about 02:55 on 2026-10-22): the stuck page takes
+  the internet's clock or a phone's or a till's, under A947's clock rule, and explains every wait
+  with a countdown; its words are in §5.6, "The stuck page".
+- **A manager's sign-in before a visitor's clock counts on the stuck page — my call, the owner may
+  overturn it.** It follows A947's switch (A947 §6.2, item 3): without it, any device on the
+  venue's network could supply the clock an installation is named by. The cost is a manager on
+  hand with their sign-in; with the internet back the page carries on with no one. If the owner
+  prefers no sign-in, the page takes any device's reading that is not the box's own, as the owner's
+  words of 02:55 read on their own.
+- **How the stuck page reaches the fiscal module.** The start's page holds the venue lock and
+  writes the change, so it lives in the trading start's path, not in `recoveryApp`; how it is
+  served without `apps/server` importing `@waitron/fiscal-verifactu` (the composition rule, §5.3)
+  — through the fiscal slot, as A947's slice 4a reaches the setup and restore pages through the
+  module operation contract — is for slice 1b's plan.
+- **The stuck page and the till app.** "Open this page from a till" assumes a till's browser can
+  open the box's address while the box is not trading. Not checked against the till app's own
+  start-up; slice 1b's plan checks it on a real till, and drops "or a till" from the words if it
+  cannot.
 - **"No new sheet" rests on A947's slice 4a.** That slice takes the installation code off the
   recovery sheet and the restore form only if its committed test passes (A947 §6.7). If it does
   not, that goes back to the owner, whose "prove it" condition it is (A947 §12) — not straight to a
@@ -1363,3 +1521,10 @@ for (const t of ["2026-10-16T11:40:00Z","2027-03-01T10:15:00Z","2027-03-01T13:00
 The hour column is the control: `06RB` is what the real function printed for that instant in A947's
 probe (A947 §6.5), and `09YA` is the hour code the first revision used for 1 March 2027 at 11:15
 Madrid. Madrid's offset that day (UTC+1) is from Node's `Intl` with the zone `Europe/Madrid`.
+
+For the third revision: the owner's answers and directions of 02:45 to 03:12 on 2026-10-22 are
+quoted from the campaign's questions file (`~/waitron-campaign/questions.md`, kept outside the
+repository; the sections from "A940 — declaración responsable: SECOND REVISION" to the end). The
+stuck page's words reuse A947's (A947 §6.5, "Every wait explains itself", on `main` at
+`556c01004`) and the strings of A947's slice 4a branch (`packages/fiscal-verifactu/src/setup/clock-wait.ts`
+at `9621f4824`, pull request #1990, open); the rows for this page are new and are drawn in picture 6.

@@ -153,8 +153,8 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
-- **A940. Waitron's declaración responsable — design revised for the owner's answers; approval
-  awaited.** The producer's statement that a version meets the Veri\*Factu rules, one per release,
+- **A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1's plan
+  written.** The producer's statement that a version meets the Veri\*Factu rules, one per release,
   readable on every terminal and before installation (compliance plan Step 8). The
   [design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md) drafts the text
   from AEAT's worked example, makes `pnpm release prepare` land each version's copy in a pull
@@ -166,15 +166,18 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   supplied); e) = «S» for this version and f) = «N»; item d) is the draft sent to the asesor as
   Q53, pending their answer; production boxes run releases only. The first slice is fiscal and the
   owner lands it: records carry the producer instead of the taxpayer's name and NIF
-  (`packages/fiscal-verifactu/src/backend.ts:641-653`), the release's version instead of `0.0.0`,
-  and `TipoUsoPosibleMultiOT = N`. The second revision (2026-10-22) folds in the owner's 22:25
-  answers — five-symbol minute names, no installation code on the recovery sheet — and its two
-  questions (approve; A993's offline start) are in the mock-ups folder's `question.txt`. No build
-  before the owner approves.
+  (`packages/fiscal-verifactu/src/backend.ts:646-658`), the build's version instead of `0.0.0`,
+  and `TipoUsoPosibleMultiOT = N`. The owner approved the second revision on 2026-10-22 (about
+  02:45) and chose A993's offline behaviour (about 02:55); the third revision folds those answers
+  in. Next: build slice 1 from its
+  [plan](superpowers/plans/2026-10-22-a940-1-software-identity.md) — until the owner supplies his
+  name and NIF it builds around a marked placeholder, and the pull request is parked for him to
+  land — then write A993's plan. Still needed: his name, NIF and publishable address, and the
+  asesor's answer to Q53.
   [Mock-ups](backlog/mockups/a940-declaracion-responsable/README.md)
 
 - **A993. A change of the system's identity opens a new installation by itself — designed in A940
-  §5.6; fiscal, the owner lands it.** AEAT identifies an invoicing system by the taxpayer's NIF,
+  §5.6, approved 2026-10-22; fiscal, the owner lands it.** AEAT identifies an invoicing system by the taxpayer's NIF,
   the two-character code and the installation number, and the code counts only together with its
   producer's NIF, so a new producer (the owner → a future Waitron company), a new code, or a move
   to another fiscal policy (the owner: one installation, one policy) makes a different system.
@@ -189,12 +192,16 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   chain; the design asks for asesor Q53(d)(2) to be widened to cover that. The name is A947's
   five-symbol UTC minute (A947 §6.5), so A947's slice 4a lands first; no new recovery sheet is
   asked for. Because A947 needs a second clock for every name and a start has nobody present, the
-  design recommends that the upgrade check the clock while the old release still serves, and make
+  design has the upgrade check the clock while the old release still serves, and make
   the change only once that check passes — otherwise the old release never stops. A sale can still
   wait on the internet after a crash between the migration and the change, or when the new release
   is started by hand; and a power cut during the upgrade's stop leaves no app running until the
-  upgrade runs again, until the restart-at-boot step the design adds is built. The owner's choice, A940's second-revision question 2. After A940's slice 1;
-  before the first production venue goes live. A move between fiscal modules stays a refused start
+  upgrade runs again, until the restart-at-boot step the design adds is built. Chosen by the owner
+  on 2026-10-22 (A940's second-revision question 2, about 02:55), with one addition: in that stuck
+  case the page the box shows instead of trading also accepts a phone's or a till's clock under
+  A947's clock rule, and explains every wait with a countdown (design §5.6, "The stuck page";
+  picture 6). Needs A940's slice 1 and A947's slice 4a (pull request #1990, open); its plan comes
+  after slice 1's, and it lands before the first production venue goes live. A move between fiscal modules stays a refused start
   until the first non-Veri\*Factu mode.
   [Design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md#56-when-the-systems-identity-changes-a-new-installation-by-itself-a993)
 
