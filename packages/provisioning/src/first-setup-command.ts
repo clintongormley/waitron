@@ -30,7 +30,7 @@ export async function resumeFirstSetupCommand(
     const reviewed = await seat.commandResume(firstSetupModuleContext(state, module), {
       output: (line) => io.stdout(line),
       prompt: (question) => io.prompt(question),
-      prepare: (proposal) => runtime.preparation.prepare(owner, module, proposal),
+      prepare: (proposal) => runtime.preparation.prepare(owner, module, proposal, { onBox: true }),
       select: async () => {
         throw new AppError("setup.attempt_conflict", {});
       },
@@ -71,7 +71,7 @@ export async function prepareFirstSetupCommand(
     const result = await command(firstSetupModuleContext(state, module), {
       output: (line) => io.stdout(line),
       prompt: (question) => io.prompt(question),
-      prepare: (proposal) => runtime.preparation.prepare(owner, module, proposal),
+      prepare: (proposal) => runtime.preparation.prepare(owner, module, proposal, { onBox: true }),
       select: async (proposal) => {
         const proof = await runtime.owner.reconfirm(
           owner,

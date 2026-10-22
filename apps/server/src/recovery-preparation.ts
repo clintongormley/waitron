@@ -8,6 +8,7 @@ import {
   configureModuleOperations,
   type ModuleRecoveryFacts,
   type OperationBinding,
+  type OperationClient,
   type ProvisionedNode,
   type WaitronModule,
 } from "@waitron/module";
@@ -74,7 +75,7 @@ type Options = BaseOptions &
   );
 export function createSelectedRecoveryPreparation(options: Options): {
   readonly modules: readonly WaitronModule[];
-  prepare(proposal: unknown): Promise<unknown>;
+  prepare(proposal: unknown, client: OperationClient): Promise<unknown>;
   runner(input: unknown, options?: { refresh: true }): RestoreOperationRunner;
 } {
   const binding = Object.freeze({ ...options.binding });
@@ -203,14 +204,14 @@ export function createSelectedRecoveryPreparation(options: Options): {
   const contribution = modules.find((module) => module.name === binding.module)?.operations;
   return {
     modules,
-    async prepare(proposal) {
+    async prepare(proposal, client) {
       checkSelection();
       if (contribution?.recovery === undefined) return refuse();
       return withRecoveryKeyAuthority(
         { db: database(), nodeId: node.nodeId },
         binding,
         secret,
-        (authority) => contribution.recovery!({ binding, authority }, proposal),
+        (authority) => contribution.recovery!({ binding, authority }, proposal, client),
       );
     },
     runner(input, entry) {
@@ -262,7 +263,8 @@ export function createInteractiveRecoveryPreparation(options: {
       copy: ValidatedArtifact,
       sourceId: string,
       supplied: RecoveryPreparationRequest,
-      hold?: FirstSetupHold,
+      hold: FirstSetupHold | undefined,
+      client: OperationClient,
     ): Promise<unknown> {
       const input = structuredClone(supplied);
       const refuse = (): never => {
@@ -327,7 +329,7 @@ export function createInteractiveRecoveryPreparation(options: {
             };
           }
           const result = await requests.run({ db: store.venue, hold: currentHold }, () =>
-            cached!.service.prepare(input.proposal),
+            cached!.service.prepare(input.proposal, client),
           );
           if (!sessions.has(key) && sessions.size === 16)
             sessions.delete(sessions.keys().next().value!);
@@ -352,13 +354,13 @@ export function createSetupRecoveryPreparation(
   },
 ): PrepareRecovery {
   const interactive = createInteractiveRecoveryPreparation(options);
-  return async (source, request, hold) => {
+  return async (source, request, hold, client) => {
     const archive = async (
       input: Pick<ValidationDeps, "artifact" | "recoveryKey" | "environment">,
     ) => {
       const copy = await validateArtifact({ ...options, ...input });
       try {
-        return await interactive.prepare(copy, copy.sourceId!, request, hold);
+        return await interactive.prepare(copy, copy.sourceId!, request, hold, client);
       } finally {
         await copy.discard();
       }
@@ -385,6 +387,7 @@ export function createSetupRecoveryPreparation(
         `stream:${kit.venueId}:${prepared.generation}`,
         request,
         hold,
+        client,
       );
     } finally {
       await prepared.discard();

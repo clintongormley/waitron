@@ -233,13 +233,25 @@ async function compare(
   auth: unknown = { breakGlass: key.secret },
   held = binding,
 ) {
-  const challenge = (await s.prepare(held, auth, context, { action: "clock-challenge" })) as {
+  const challenge = (await s.prepare(
+    held,
+    auth,
+    context,
+    { action: "clock-challenge" },
+    { onBox: true },
+  )) as {
     id: string;
   };
-  return s.prepare(held, auth, context, {
-    action: "compare-clocks",
-    browser: { challengeId: challenge.id, instantMs: Date.now() },
-  });
+  return s.prepare(
+    held,
+    auth,
+    context,
+    {
+      action: "compare-clocks",
+      browser: { challengeId: challenge.id, instantMs: Date.now() },
+    },
+    { onBox: true },
+  );
 }
 async function rows() {
   return {
@@ -288,11 +300,17 @@ it.each(["key", "manager"])(
     ]);
     const auth = method === "key" ? { breakGlass: key.secret } : credentials;
     await compare(s, auth);
-    const selected = (await s.prepare(binding, auth, context, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
-    })) as { input: unknown };
+    const selected = (await s.prepare(
+      binding,
+      auth,
+      context,
+      {
+        action: "select",
+        answer: "no",
+        installationCodes: ["0CNNW"],
+      },
+      { onBox: true },
+    )) as { input: unknown };
     expect(selected).toMatchObject({ status: "selected", identity: "0CNQR", bases });
     expect(await rows()).toEqual(before);
     expect(await promote(s, selected.input, auth)).toMatchObject({ alreadyPrimary: false });
@@ -321,21 +339,33 @@ it("requires the sheet's newer code even when it is missing from the database", 
   await compare(s);
   const before = await rows();
   await expect(
-    s.prepare(binding, { breakGlass: key.secret }, context, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["0cnqr"],
-    }),
+    s.prepare(
+      binding,
+      { breakGlass: key.secret },
+      context,
+      {
+        action: "select",
+        answer: "no",
+        installationCodes: ["0cnqr"],
+      },
+      { onBox: true },
+    ),
   ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "hour_not_later" } });
   expect(await rows()).toEqual(before);
   vi.setSystemTime(new Date("2026-10-16T13:00:00Z"));
   await compare(s);
   expect(
-    await s.prepare(binding, { breakGlass: key.secret }, context, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["0cnqr"],
-    }),
+    await s.prepare(
+      binding,
+      { breakGlass: key.secret },
+      context,
+      {
+        action: "select",
+        answer: "no",
+        installationCodes: ["0cnqr"],
+      },
+      { onBox: true },
+    ),
   ).toMatchObject({ identity: "0CNRC", reportedIdentities: ["0CNQR"] });
 });
 
@@ -360,6 +390,7 @@ it.each(["key", "isolation", "parallel", "source", "node"])(
           ...(fault === "parallel" ? { noParallelRecovery: false } : {}),
         },
         { action: "clock-challenge" },
+        { onBox: true },
       ),
     ).rejects.toMatchObject({
       code:
@@ -381,11 +412,17 @@ it("retains the selected hour across restart but discards transient comparison a
   const first = await service();
   await admit(first);
   await compare(first);
-  const selected = (await first.prepare(binding, { breakGlass: key.secret }, context, {
-    action: "select",
-    answer: "no",
-    installationCodes: ["0CNNW"],
-  })) as { input: unknown };
+  const selected = (await first.prepare(
+    binding,
+    { breakGlass: key.secret },
+    context,
+    {
+      action: "select",
+      answer: "no",
+      installationCodes: ["0CNNW"],
+    },
+    { onBox: true },
+  )) as { input: unknown };
   const next = await service();
   await expect(promote(next, selected.input)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
@@ -394,11 +431,17 @@ it("retains the selected hour across restart but discards transient comparison a
   vi.setSystemTime(new Date("2026-10-16T13:10:00Z"));
   await compare(next);
   expect(
-    await next.prepare(binding, { breakGlass: key.secret }, context, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
-    }),
+    await next.prepare(
+      binding,
+      { breakGlass: key.secret },
+      context,
+      {
+        action: "select",
+        answer: "no",
+        installationCodes: ["0CNNW"],
+      },
+      { onBox: true },
+    ),
   ).toEqual(selected);
   await promote(next, selected.input);
   expect((await rows()).allocations).toHaveLength(2);
@@ -428,6 +471,61 @@ it.each(["standard", "full", "rectificative"])(
     ).toEqual([]);
   },
 );
+
+it("never counts a browser on the box itself as the promotion's second clock", async () => {
+  const s = await service();
+  await admit(s);
+  const compare = async (requestFromBox?: () => boolean) => {
+    const app = new Hono();
+    mountPromoteApi(app, {
+      appDb: suite.db,
+      nodeId: standby.nodeId,
+      credentialKeyRing: TOTP_KEY_RING,
+      nodePreparation: s,
+      requestFromBox,
+      run: async () => {
+        throw new Error("not promoting");
+      },
+    });
+    const socket = new TLSSocket(new Socket());
+    Object.defineProperty(socket, "remoteAddress", { value: "127.0.0.1" });
+    try {
+      const send = async (proposal: unknown) => {
+        const response = await app.request(
+          "https://box.test/management-api/promote/preparation",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              ...context,
+              breakGlass: key.secret,
+              moduleOperation: { binding, input: null },
+              proposal,
+            }),
+          },
+          { incoming: { socket } },
+        );
+        expect(response.status).toBe(200);
+        return response.json();
+      };
+      const challenge = await send({ action: "clock-challenge" });
+      return (
+        await send({
+          action: "compare-clocks",
+          browser: { challengeId: challenge.id, instantMs: Date.now() },
+        })
+      ).clock as { secondClock: boolean; unavailable: unknown[] };
+    } finally {
+      socket.destroy();
+    }
+  };
+  const box = await compare();
+  expect(box.secondClock).toBe(false);
+  expect(box.unavailable).toContainEqual(
+    expect.objectContaining({ source: "browser", reason: "same_machine" }),
+  );
+  expect((await compare(() => false)).secondClock).toBe(true);
+});
 
 it("serves clock, sheet-code selection and authenticated promotion through the management routes", async () => {
   const s = await service();
@@ -527,18 +625,36 @@ it("re-registers through provisionNode with the matching key and frozen hour", a
     targetNodeId: primary.nodeId,
   };
   const auth = { breakGlass: recoveryKey.secret };
-  const challenge = (await s.prepare(recovery, auth, context, { action: "clock-challenge" })) as {
+  const challenge = (await s.prepare(
+    recovery,
+    auth,
+    context,
+    { action: "clock-challenge" },
+    { onBox: true },
+  )) as {
     id: string;
   };
-  await s.prepare(recovery, auth, context, {
-    action: "compare-clocks",
-    browser: { challengeId: challenge.id, instantMs: Date.now() },
-  });
-  const selected = (await s.prepare(recovery, auth, context, {
-    action: "select",
-    answer: "no",
-    installationCodes: ["0CNNW"],
-  })) as { input: unknown };
+  await s.prepare(
+    recovery,
+    auth,
+    context,
+    {
+      action: "compare-clocks",
+      browser: { challengeId: challenge.id, instantMs: Date.now() },
+    },
+    { onBox: true },
+  );
+  const selected = (await s.prepare(
+    recovery,
+    auth,
+    context,
+    {
+      action: "select",
+      answer: "no",
+      installationCodes: ["0CNNW"],
+    },
+    { onBox: true },
+  )) as { input: unknown };
   expect(selected).toMatchObject({ identity: "0CNQR" });
   const before = await rows();
   await s.withOperation({ binding: recovery, input: selected.input }, auth, context, (modules) =>
@@ -593,18 +709,36 @@ async function selectedRegistrationCommand(derived = false) {
     targetNodeId: primary.nodeId,
   };
   const auth = { breakGlass: recoveryKey.secret };
-  const challenge = (await s.prepare(recovery, auth, context, { action: "clock-challenge" })) as {
+  const challenge = (await s.prepare(
+    recovery,
+    auth,
+    context,
+    { action: "clock-challenge" },
+    { onBox: true },
+  )) as {
     id: string;
   };
-  await s.prepare(recovery, auth, context, {
-    action: "compare-clocks",
-    browser: { challengeId: challenge.id, instantMs: Date.now() },
-  });
-  const selected = (await s.prepare(recovery, auth, context, {
-    action: "select",
-    answer: "no",
-    installationCodes: ["0CNNW"],
-  })) as { input: unknown };
+  await s.prepare(
+    recovery,
+    auth,
+    context,
+    {
+      action: "compare-clocks",
+      browser: { challengeId: challenge.id, instantMs: Date.now() },
+    },
+    { onBox: true },
+  );
+  const selected = (await s.prepare(
+    recovery,
+    auth,
+    context,
+    {
+      action: "select",
+      answer: "no",
+      installationCodes: ["0CNNW"],
+    },
+    { onBox: true },
+  )) as { input: unknown };
   expect(selected).toMatchObject({ identity: "0CNQR" });
   const file = join(root, "operation.json");
   await writeFile(file, JSON.stringify({ binding: recovery, input: selected.input }));
@@ -925,19 +1059,31 @@ it("invalidates an earlier comparison when the named recovery key changes", asyn
   await compare(s);
   key = await mintBreakGlassKey(suite.db, standby.nodeId);
   await expect(
-    s.prepare(binding, { breakGlass: key.secret }, context, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
-    }),
+    s.prepare(
+      binding,
+      { breakGlass: key.secret },
+      context,
+      {
+        action: "select",
+        answer: "no",
+        installationCodes: ["0CNNW"],
+      },
+      { onBox: true },
+    ),
   ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "clock_stale" } });
   await compare(s);
   expect(
-    await s.prepare(binding, { breakGlass: key.secret }, context, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
-    }),
+    await s.prepare(
+      binding,
+      { breakGlass: key.secret },
+      context,
+      {
+        action: "select",
+        answer: "no",
+        installationCodes: ["0CNNW"],
+      },
+      { onBox: true },
+    ),
   ).toMatchObject({ identity: "0CNQR" });
 });
 
@@ -1035,11 +1181,17 @@ it.each(["key", "manager"])(
     const s = await service();
     await admit(s);
     await compare(s, auth);
-    const selected = (await s.prepare(binding, auth, context, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
-    })) as { input: unknown };
+    const selected = (await s.prepare(
+      binding,
+      auth,
+      context,
+      {
+        action: "select",
+        answer: "no",
+        installationCodes: ["0CNNW"],
+      },
+      { onBox: true },
+    )) as { input: unknown };
     expect(selected).toMatchObject({ identity: "0CNQR" });
     await writeMirrorConfig(suite.db, standby.nodeId, {
       relayUrl: "https://127.0.0.1:1/",
@@ -1296,11 +1448,17 @@ it.each(["identity", "allocation-id", "bases", "purpose", "approval", "binding"]
     const s = await service();
     await admit(s);
     await compare(s);
-    const selected = (await s.prepare(binding, { breakGlass: key.secret }, context, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
-    })) as {
+    const selected = (await s.prepare(
+      binding,
+      { breakGlass: key.secret },
+      context,
+      {
+        action: "select",
+        answer: "no",
+        installationCodes: ["0CNNW"],
+      },
+      { onBox: true },
+    )) as {
       input: {
         allocation: {
           installationIdentity: string;
@@ -1352,13 +1510,19 @@ it.each(["module", "operation-action", "prepare-action", "promotion-action"])(
     const operation = { binding: { ...binding, action: "setup" }, input: {} };
     await expect(
       fault === "module"
-        ? s.prepare({ ...binding, module: "unknown" }, { breakGlass: key.secret }, context, {
-            action: "clock-challenge",
-          })
+        ? s.prepare(
+            { ...binding, module: "unknown" },
+            { breakGlass: key.secret },
+            context,
+            {
+              action: "clock-challenge",
+            },
+            { onBox: true },
+          )
         : fault === "operation-action"
           ? s.withOperation(operation, credentials, context, async () => "unexpected")
           : fault === "prepare-action"
-            ? s.prepare(joinBinding, credentials, context, {})
+            ? s.prepare(joinBinding, credentials, context, {}, { onBox: true })
             : s.withPromotion(
                 { ...operation, binding: joinBinding },
                 credentials,
@@ -1410,7 +1574,11 @@ it("refuses a configured preparation module after its authenticated call ends", 
       binding,
       { kind: "recovery-key", nodeId: standby.nodeId, eventId: binding.eventId },
       (authority) =>
-        configured[0]!.operations!.recovery!({ binding, authority }, { action: "clock-challenge" }),
+        configured[0]!.operations!.recovery!(
+          { binding, authority },
+          { action: "clock-challenge" },
+          { onBox: true },
+        ),
     ),
   ).rejects.toMatchObject({ code: "module.operation_invalid" });
 });

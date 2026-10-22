@@ -4,6 +4,7 @@ import { TLSSocket } from "node:tls";
 import { afterEach, expect, it, vi } from "vitest";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
+import type { PrepareRecovery } from "./setup-recovery-preparation-api.js";
 
 const sockets: TLSSocket[] = [];
 afterEach(() => {
@@ -22,12 +23,12 @@ const preparation = {
   proposal: { action: "clock-challenge" },
 };
 const bucket = { kind: "bucket", kit: "private bucket kit", environment: "preproduction" };
-function fixture() {
+function fixture(extra: Partial<SetupDeps> = {}) {
   const app = new Hono();
   const log = vi.fn();
   const coordinator = createFirstSetupCoordinator();
-  const execute = vi.fn(async (_source, _input, hold) =>
-    coordinator.held(hold, async () => ({ id: "module-clock-challenge", expiresInMs: 5000 })),
+  const execute = vi.fn<PrepareRecovery>(async (_source, _input, hold) =>
+    coordinator.held(hold!, async () => ({ id: "module-clock-challenge", expiresInMs: 5000 })),
   );
   mountSetup(
     app,
@@ -35,6 +36,7 @@ function fixture() {
       environment: "preproduction",
       firstSetup: { coordinator, assertOtherAllowed: async () => {} },
       prepareRecovery: execute,
+      ...extra,
     } as SetupDeps,
     log,
   );
@@ -59,16 +61,31 @@ it("prepares a bucket recovery within the existing setup hold without reflecting
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ id: "module-clock-challenge", expiresInMs: 5000 });
   expect(response.headers.get("cache-control")).toBe("no-store");
-  expect(execute).toHaveBeenCalledWith(bucket, preparation, expect.any(Object));
+  expect(execute).toHaveBeenCalledWith(bucket, preparation, expect.any(Object), { onBox: true });
   expect(JSON.stringify(log.mock.calls)).not.toContain(preparation.nodeRecoverySecret);
   expect(JSON.stringify(log.mock.calls)).not.toContain(bucket.kit);
+});
+it("tells the preparation whether the request came from the box itself", async () => {
+  const from = (address: string) => {
+    const socket = new TLSSocket(new Socket());
+    sockets.push(socket);
+    Object.defineProperty(socket, "remoteAddress", { value: address });
+    return { incoming: { socket } };
+  };
+  const { app, execute } = fixture();
+  expect((await app.request(path, request(), from("127.0.0.1"))).status).toBe(200);
+  expect((await app.request(path, request(), from("192.0.2.7"))).status).toBe(200);
+  expect(execute.mock.calls.map((call) => call[3])).toEqual([{ onBox: true }, { onBox: false }]);
+  const other = fixture({ requestFromBox: () => false });
+  expect((await other.app.request(path, request(), from("127.0.0.1"))).status).toBe(200);
+  expect(other.execute.mock.calls.map((call) => call[3])).toEqual([{ onBox: false }]);
 });
 it("forwards a managed Cloud point without accepting client-supplied archive credentials", async () => {
   const { app, execute } = fixture();
   const source = { kind: "cloud", pointId: "d0000000-0000-4000-8000-000000000002" };
   const response = await app.request(path, request(source), tls());
   expect(response.status).toBe(200);
-  expect(execute).toHaveBeenCalledWith(source, preparation, expect.any(Object));
+  expect(execute).toHaveBeenCalledWith(source, preparation, expect.any(Object), { onBox: true });
 });
 it("reads archive bytes and the separate backup password from multipart input", async () => {
   const { app, execute } = fixture();
@@ -82,6 +99,7 @@ it("reads archive bytes and the separate backup password from multipart input", 
     { ...source, artifact: new Uint8Array([7, 2, 9]) },
     preparation,
     expect.any(Object),
+    { onBox: true },
   );
 });
 it.each(["plain", "forwarded", "origin", "site"])(

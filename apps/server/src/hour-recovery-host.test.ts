@@ -103,6 +103,28 @@ it("reopens the same selected hour after host restart and requires a fresh clock
   expect(await readModulePreparationHistory(next.roots, binding.module)).toHaveLength(1);
 });
 
+it("hands the module whether the recovering browser is on the box", async () => {
+  const f = await host();
+  const compare = async (onBox: boolean) => {
+    const challenge = (await f.service.prepare({ action: "clock-challenge" }, { onBox })) as {
+      id: string;
+    };
+    return (await f.service.prepare(
+      {
+        action: "compare-clocks",
+        browser: { challengeId: challenge.id, instantMs: Date.now() },
+      },
+      { onBox },
+    )) as { clock: { secondClock: boolean; unavailable: unknown[] } };
+  };
+  const box = await compare(true);
+  expect(box.clock.secondClock).toBe(false);
+  expect(box.clock.unavailable).toContainEqual(
+    expect.objectContaining({ source: "browser", reason: "same_machine" }),
+  );
+  expect((await compare(false)).clock.secondClock).toBe(true);
+});
+
 it("replays the exact restore after reading the now-committed database history", async () => {
   const f = await host();
   await f.compare();
@@ -218,7 +240,9 @@ it("binds durable host admission to the selected source and refuses a different 
     },
     readRecoveryFacts: async () => f.facts,
   });
-  await expect(service.prepare({ action: "clock-challenge" })).rejects.toMatchObject({
+  await expect(
+    service.prepare({ action: "clock-challenge" }, { onBox: true }),
+  ).rejects.toMatchObject({
     code: "module.operation_invalid",
   });
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
@@ -251,13 +275,21 @@ it("adds the selected copy's opaque public floor to surviving host evidence", as
       },
     },
   });
-  const challenge = (await service.prepare({ action: "clock-challenge" })) as { id: string };
-  await service.prepare({
-    action: "compare-clocks",
-    browser: { challengeId: challenge.id, instantMs: Date.now() },
-  });
+  const challenge = (await service.prepare({ action: "clock-challenge" }, { onBox: true })) as {
+    id: string;
+  };
+  await service.prepare(
+    {
+      action: "compare-clocks",
+      browser: { challengeId: challenge.id, instantMs: Date.now() },
+    },
+    { onBox: true },
+  );
   await expect(
-    service.prepare({ action: "select", answer: "no", installationCodes: ["0CNNW"] }),
+    service.prepare(
+      { action: "select", answer: "no", installationCodes: ["0CNNW"] },
+      { onBox: true },
+    ),
   ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "hour_not_later" },
@@ -309,7 +341,9 @@ it("refuses unknown selected filing evidence before exposing clock or hour actio
     ...f.options,
     selected: { ...f.selected, fiscalSelection: undefined },
   });
-  await expect(service.prepare({ action: "clock-challenge" })).rejects.toMatchObject({
+  await expect(
+    service.prepare({ action: "clock-challenge" }, { onBox: true }),
+  ).rejects.toMatchObject({
     code: "module.operation_invalid",
   });
   expect(() => service.runner(null)).toThrowError("module.operation_invalid");
@@ -322,7 +356,9 @@ it("refuses a selected backup whose named key no longer matches the database", a
     ...f.options,
     selected: { ...f.selected, nodeRecoveryKeyName: "another retained key" },
   });
-  await expect(service.prepare({ action: "clock-challenge" })).rejects.toMatchObject({
+  await expect(
+    service.prepare({ action: "clock-challenge" }, { onBox: true }),
+  ).rejects.toMatchObject({
     code: "module.operation_invalid",
   });
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
@@ -400,26 +436,37 @@ it("admits recovery from the real validated archive preview with its public spen
     selected,
   });
   const compare = async () => {
-    const challenge = (await service.prepare({ action: "clock-challenge" })) as { id: string };
-    await service.prepare({
-      action: "compare-clocks",
-      browser: { challengeId: challenge.id, instantMs: Date.now() },
-    });
+    const challenge = (await service.prepare({ action: "clock-challenge" }, { onBox: true })) as {
+      id: string;
+    };
+    await service.prepare(
+      {
+        action: "compare-clocks",
+        browser: { challengeId: challenge.id, instantMs: Date.now() },
+      },
+      { onBox: true },
+    );
   };
   await compare();
   await expect(
-    service.prepare({ action: "select", answer: "no", installationCodes: ["0CNNW"] }),
+    service.prepare(
+      { action: "select", answer: "no", installationCodes: ["0CNNW"] },
+      { onBox: true },
+    ),
   ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "hour_not_later" },
   });
   vi.setSystemTime(new Date("2026-10-16T14:40:00Z"));
   await compare();
-  const outcome = (await service.prepare({
-    action: "select",
-    answer: "no",
-    installationCodes: ["0CNNW"],
-  })) as {
+  const outcome = (await service.prepare(
+    {
+      action: "select",
+      answer: "no",
+      installationCodes: ["0CNNW"],
+    },
+    { onBox: true },
+  )) as {
     identity: string;
     input: unknown;
   };
@@ -511,7 +558,11 @@ it("refuses preparation through a configured module after its source binding cha
       other,
       key.secret,
       (authority) =>
-        contribution.recovery!({ binding: other, authority }, { action: "clock-challenge" }),
+        contribution.recovery!(
+          { binding: other, authority },
+          { action: "clock-challenge" },
+          { onBox: true },
+        ),
     ),
   ).rejects.toMatchObject({ code: "module.operation_invalid" });
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
@@ -520,7 +571,9 @@ it("refuses preparation through a configured module after its source binding cha
 it("refuses a selected module that has no configured recovery contribution", async () => {
   const f = await host();
   const service = createSelectedRecoveryPreparation({ ...f.options, modules: [] });
-  await expect(service.prepare({ action: "clock-challenge" })).rejects.toMatchObject({
+  await expect(
+    service.prepare({ action: "clock-challenge" }, { onBox: true }),
+  ).rejects.toMatchObject({
     code: "module.operation_invalid",
   });
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
@@ -536,7 +589,9 @@ it("refuses an unnamed recovery verifier even when its secret matches", async ()
     ...f.options,
     selected: { ...f.selected, nodeRecoveryKeyName: null },
   });
-  await expect(service.prepare({ action: "clock-challenge" })).rejects.toMatchObject({
+  await expect(
+    service.prepare({ action: "clock-challenge" }, { onBox: true }),
+  ).rejects.toMatchObject({
     code: "module.operation_invalid",
   });
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
@@ -591,13 +646,21 @@ it("binds a bucket selection to its exact activation point rather than its gener
       activationSourceId: binding.sourceId,
     },
   });
-  const challenge = (await service.prepare({ action: "clock-challenge" })) as { id: string };
-  await service.prepare({
-    action: "compare-clocks",
-    browser: { challengeId: challenge.id, instantMs: Date.now() },
-  });
+  const challenge = (await service.prepare({ action: "clock-challenge" }, { onBox: true })) as {
+    id: string;
+  };
+  await service.prepare(
+    {
+      action: "compare-clocks",
+      browser: { challengeId: challenge.id, instantMs: Date.now() },
+    },
+    { onBox: true },
+  );
   expect(
-    await service.prepare({ action: "select", answer: "no", installationCodes: ["0CNNW"] }),
+    await service.prepare(
+      { action: "select", answer: "no", installationCodes: ["0CNNW"] },
+      { onBox: true },
+    ),
   ).toMatchObject({
     status: "selected",
     identity: "0CNQR",
@@ -642,11 +705,16 @@ describe("module-owned recovery facts from the actual database", () => {
       readIsolation: async () => isolation,
     });
     const compare = async () => {
-      const challenge = (await service.prepare({ action: "clock-challenge" })) as { id: string };
-      return service.prepare({
-        action: "compare-clocks",
-        browser: { challengeId: challenge.id, instantMs: Date.now() },
-      });
+      const challenge = (await service.prepare({ action: "clock-challenge" }, { onBox: true })) as {
+        id: string;
+      };
+      return service.prepare(
+        {
+          action: "compare-clocks",
+          browser: { challengeId: challenge.id, instantMs: Date.now() },
+        },
+        { onBox: true },
+      );
     };
     return { ...f, service, compare, isolation, options };
   }
@@ -655,11 +723,14 @@ describe("module-owned recovery facts from the actual database", () => {
     const f = await databaseHost();
     const before = await suite.db.select().from(invoiceSeries);
     await f.compare();
-    const selected = (await f.service.prepare({
-      action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
-    })) as {
+    const selected = (await f.service.prepare(
+      {
+        action: "select",
+        answer: "no",
+        installationCodes: ["0CNNW"],
+      },
+      { onBox: true },
+    )) as {
       identity: string;
       input: unknown;
     };
@@ -696,11 +767,14 @@ describe("module-owned recovery facts from the actual database", () => {
   it("recognises an exact committed restore after reconstruction without trusting a caller's replay flag", async () => {
     const first = await databaseHost();
     await first.compare();
-    const selected = (await first.service.prepare({
-      action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
-    })) as {
+    const selected = (await first.service.prepare(
+      {
+        action: "select",
+        answer: "no",
+        installationCodes: ["0CNNW"],
+      },
+      { onBox: true },
+    )) as {
       input: unknown;
     };
     await runRestoreHooks({
@@ -732,7 +806,10 @@ describe("module-owned recovery facts from the actual database", () => {
     f.isolation.oldMachineOffline = false;
     await f.compare();
     await expect(
-      f.service.prepare({ action: "select", answer: "no", installationCodes: ["0CNNW"] }),
+      f.service.prepare(
+        { action: "select", answer: "no", installationCodes: ["0CNNW"] },
+        { onBox: true },
+      ),
     ).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "old_machine_active" },
@@ -750,16 +827,24 @@ describe("module-owned recovery facts from the actual database", () => {
         bases: [{ code: "WRONG", purpose: "standard" }],
       }),
     });
-    const challenge = (await service.prepare({ action: "clock-challenge" })) as { id: string };
-    await service.prepare({
-      action: "compare-clocks",
-      browser: { challengeId: challenge.id, instantMs: Date.now() },
-    });
-    const selected = await service.prepare({
-      action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
-    });
+    const challenge = (await service.prepare({ action: "clock-challenge" }, { onBox: true })) as {
+      id: string;
+    };
+    await service.prepare(
+      {
+        action: "compare-clocks",
+        browser: { challengeId: challenge.id, instantMs: Date.now() },
+      },
+      { onBox: true },
+    );
+    const selected = await service.prepare(
+      {
+        action: "select",
+        answer: "no",
+        installationCodes: ["0CNNW"],
+      },
+      { onBox: true },
+    );
     expect(selected).toMatchObject({
       input: {
         allocation: {

@@ -76,6 +76,11 @@ export function configureModuleOperations(
   });
 }
 
+/** Whether the request came from a browser running on the box itself. */
+export interface OperationClient {
+  readonly onBox: boolean;
+}
+
 export interface ModuleOperationPreparation {
   configure?(host: ModuleOperationHost): ModuleOperationPreparation;
   readRecoveryHistory?(db: Database): Promise<readonly unknown[]>;
@@ -93,6 +98,7 @@ export interface ModuleOperationPreparation {
   recovery?(
     operation: Pick<ModuleOperationInput, "binding" | "authority">,
     proposal: unknown,
+    client: OperationClient,
   ): Promise<unknown>;
   /** Rebuild transient admission checks without selecting another identity. */
   resumeRecovery?(operation: Pick<ModuleOperationInput, "binding" | "authority">): Promise<void>;

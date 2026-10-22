@@ -335,16 +335,28 @@ it("activates the current hour through production composition without signed-fil
   const { operations, history } = hourHost();
   await withOperationAuthority(binding, operatorId, async (authority) => {
     const operation = { binding, authority };
-    const compared = (await operations.recovery!(operation, {
-      action: "compare-clocks",
-      browser: null,
-    })) as { id: string };
-    await operations.recovery!(operation, { action: "confirm-clock", comparisonId: compared.id });
-    const selected = (await operations.recovery!(operation, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["0CNM0"],
-    })) as { status: string; input: unknown };
+    const compared = (await operations.recovery!(
+      operation,
+      {
+        action: "compare-clocks",
+        browser: null,
+      },
+      { onBox: true },
+    )) as { id: string };
+    await operations.recovery!(
+      operation,
+      { action: "confirm-clock", comparisonId: compared.id },
+      { onBox: true },
+    );
+    const selected = (await operations.recovery!(
+      operation,
+      {
+        action: "select",
+        answer: "no",
+        installationCodes: ["0CNM0"],
+      },
+      { onBox: true },
+    )) as { status: string; input: unknown };
     expect(selected.status).toBe("selected");
     expect(history).toHaveLength(1);
     const selectedHistory = structuredClone(history);

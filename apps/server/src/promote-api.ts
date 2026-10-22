@@ -21,6 +21,7 @@ import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
 import { TLSSocket } from "node:tls";
 import type { createNodeOperationPreparation } from "./node-operation-preparation.js";
+import { requestFromBox } from "./request-from-box.js";
 
 /**
  * `restarting` is true only for a real mirror-to-primary promote, which reboots the node; the
@@ -39,6 +40,8 @@ export interface PromoteApiDeps {
   credentialKeyRing: TotpKeyRing;
   modules?: readonly WaitronModule[];
   nodePreparation?: ReturnType<typeof createNodeOperationPreparation>;
+  /** Whether a request came from a browser on the box itself; tests replace it. */
+  requestFromBox?: (c: Context) => boolean;
   run: (
     attestation: FenceAttestation,
     operation?: PromotionOperationRunner,
@@ -94,8 +97,11 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
         throw new AppError("module.operation_invalid", {
           module: operation?.binding.module ?? "unknown",
         });
+      const onBox = (deps.requestFromBox ?? requestFromBox)(c);
       return c.json(
-        await deps.nodePreparation.prepare(operation.binding, body, body, body.proposal),
+        await deps.nodePreparation.prepare(operation.binding, body, body, body.proposal, {
+          onBox,
+        }),
       );
     }),
   );

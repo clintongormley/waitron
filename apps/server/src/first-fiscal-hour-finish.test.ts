@@ -97,7 +97,12 @@ async function fixture() {
     randomBytes(32).toString("base64url"),
   );
   let owner = { ...claim.state, capability: claim.capability };
-  await host.preparation.prepare(owner, MODULE, { action: "compare-clocks", browser: null });
+  await host.preparation.prepare(
+    owner,
+    MODULE,
+    { action: "compare-clocks", browser: null },
+    { onBox: true },
+  );
   const selected = await host.preparation.select(
     owner,
     MODULE,
@@ -325,7 +330,12 @@ it("empty never-activated hour restart retains originals and burns the entire ho
     randomBytes(32).toString("base64url"),
   );
   const owner = { ...claim.state, capability: claim.capability };
-  await next.preparation.prepare(owner, MODULE, { action: "compare-clocks", browser: null });
+  await next.preparation.prepare(
+    owner,
+    MODULE,
+    { action: "compare-clocks", browser: null },
+    { onBox: true },
+  );
   await expect(
     next.preparation.select(
       owner,
@@ -335,7 +345,12 @@ it("empty never-activated hour restart retains originals and burns the entire ho
     ),
   ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "hour_not_later" } });
   vi.setSystemTime("2026-10-16T12:01:00Z");
-  await next.preparation.prepare(owner, MODULE, { action: "compare-clocks", browser: null });
+  await next.preparation.prepare(
+    owner,
+    MODULE,
+    { action: "compare-clocks", browser: null },
+    { onBox: true },
+  );
   const selected = await next.preparation.select(
     owner,
     MODULE,

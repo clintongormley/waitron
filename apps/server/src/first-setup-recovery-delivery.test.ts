@@ -94,7 +94,12 @@ async function fixture(publicDocumentSeat = true) {
     randomBytes(32).toString("base64url"),
   );
   let owner = { ...claim.state, capability: claim.capability };
-  await host.preparation.prepare(owner, MODULE, { action: "compare-clocks", browser: null });
+  await host.preparation.prepare(
+    owner,
+    MODULE,
+    { action: "compare-clocks", browser: null },
+    { onBox: true },
+  );
   const selected = await host.preparation.select(
     owner,
     MODULE,
@@ -489,7 +494,12 @@ it("an empty never-activated setup retains its public recovery binding when star
   );
   const owner = { ...claim.state, capability: claim.capability };
   await expect(
-    next.preparation.prepare(owner, MODULE, { action: "compare-clocks", browser: null }),
+    next.preparation.prepare(
+      owner,
+      MODULE,
+      { action: "compare-clocks", browser: null },
+      { onBox: true },
+    ),
   ).resolves.toBeDefined();
 });
 

@@ -107,10 +107,15 @@ it("the bound runtime retains its recovery document after restart and prepares o
       code: "sif.allocation_invalid",
       params: { reason: "clock_stale" },
     });
-    await restarted.preparation.prepare(f.ownerAttempt, f.module, {
-      action: "compare-clocks",
-      browser: null,
-    });
+    await restarted.preparation.prepare(
+      f.ownerAttempt,
+      f.module,
+      {
+        action: "compare-clocks",
+        browser: null,
+      },
+      { onBox: true },
+    );
     await restarted.recoveryDelivery.confirmRecoveryDocumentKept(
       f.ownerAttempt,
       { ...f.staged.ref, kept: true },

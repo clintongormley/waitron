@@ -189,16 +189,24 @@ export async function stagedHourRestore(db: Database, kind: "archive" | "stream"
       }),
     };
     const service = createSelectedRecoveryPreparation(options);
-    const challenge = (await service.prepare({ action: "clock-challenge" })) as { id: string };
-    await service.prepare({
-      action: "compare-clocks",
-      browser: { challengeId: challenge.id, instantMs: Date.now() },
-    });
-    const outcome = (await service.prepare({
-      action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
-    })) as { input: unknown };
+    const challenge = (await service.prepare({ action: "clock-challenge" }, { onBox: true })) as {
+      id: string;
+    };
+    await service.prepare(
+      {
+        action: "compare-clocks",
+        browser: { challengeId: challenge.id, instantMs: Date.now() },
+      },
+      { onBox: true },
+    );
+    const outcome = (await service.prepare(
+      {
+        action: "select",
+        answer: "no",
+        installationCodes: ["0CNNW"],
+      },
+      { onBox: true },
+    )) as { input: unknown };
     const common = {
       environment: "preproduction" as const,
       recoveryOperation: { binding, input: outcome.input },
@@ -220,12 +228,20 @@ export async function stagedHourRestore(db: Database, kind: "archive" | "stream"
         ...options,
         binding: { ...binding, eventId: binding.eventId + "-another" },
       });
-      const challenge = (await next.prepare({ action: "clock-challenge" })) as { id: string };
-      await next.prepare({
-        action: "compare-clocks",
-        browser: { challengeId: challenge.id, instantMs: Date.now() },
-      });
-      return next.prepare({ action: "select", answer: "no", installationCodes: ["0CNNW"] });
+      const challenge = (await next.prepare({ action: "clock-challenge" }, { onBox: true })) as {
+        id: string;
+      };
+      await next.prepare(
+        {
+          action: "compare-clocks",
+          browser: { challengeId: challenge.id, instantMs: Date.now() },
+        },
+        { onBox: true },
+      );
+      return next.prepare(
+        { action: "select", answer: "no", installationCodes: ["0CNNW"] },
+        { onBox: true },
+      );
     };
     const journalPath = join(roots.stateDir, "module-preparation-state.json");
     const journal = () => readFileSync(journalPath, "utf8");

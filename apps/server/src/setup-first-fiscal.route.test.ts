@@ -18,8 +18,10 @@ const database = useVenueDb({ migrations: TEST_MIGRATIONS });
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
+const internet = vi.hoisted(() => ({ offline: false }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: async () => {
+    if (internet.offline) return { source: "internet", result: "unavailable", reason: "offline" };
     const wall = Date.now(),
       monotonic = performance.now();
     return {
@@ -41,11 +43,12 @@ beforeEach(() => {
 vi.mock("node:fs/promises", { spy: true });
 const dirs: string[] = [];
 afterEach(async () => {
+  internet.offline = false;
   vi.restoreAllMocks();
   vi.useRealTimers();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
-async function fixture(sendEmailTest?: SetupDeps["sendEmailTest"]) {
+async function fixture(sendEmailTest?: SetupDeps["sendEmailTest"], extra: Partial<SetupDeps> = {}) {
   const root = await mkdtemp(join(tmpdir(), "first-route-"));
   dirs.push(root);
   const stateDir = join(root, "state"),
@@ -63,6 +66,7 @@ async function fixture(sendEmailTest?: SetupDeps["sendEmailTest"]) {
     {
       environment: "production",
       sendEmailTest,
+      ...extra,
       firstFiscal: host,
       firstSetup: {
         coordinator: host.coordinator,
@@ -75,12 +79,16 @@ async function fixture(sendEmailTest?: SetupDeps["sendEmailTest"]) {
     () => {},
   );
   const nonce = randomBytes(32).toString("base64url");
-  const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
-    app.request(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify(body),
-    });
+  const post = (path: string, body: unknown, headers: Record<string, string> = {}, env?: unknown) =>
+    app.request(
+      path,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify(body),
+      },
+      env,
+    );
   const claimed = await post("/setup-api/first-setup/claim", {
     clientClaimNonce: nonce,
     venue: request,
@@ -191,6 +199,46 @@ it("rotates a lost-response owner without minting another assignment and rejects
     venue: request,
   });
   expect(competing.status).toBe(409);
+});
+it("never counts a browser on the box itself as the second clock", async () => {
+  internet.offline = true;
+  const loopback = { incoming: { socket: { remoteAddress: "127.0.0.1" } } };
+  const compare = async (f: Awaited<ReturnType<typeof fixture>>) => {
+    const challenge = await f.post(
+      "/setup-api/first-setup/preparation",
+      { module: MODULE, proposal: { action: "clock-challenge" } },
+      f.headers(),
+      loopback,
+    );
+    const response = await f.post(
+      "/setup-api/first-setup/preparation",
+      {
+        module: MODULE,
+        proposal: {
+          action: "compare-clocks",
+          browser: {
+            challengeId: (await challenge.json()).preparation.id,
+            instantMs: Date.now(),
+          },
+        },
+      },
+      f.headers(),
+      loopback,
+    );
+    expect(response.status).toBe(200);
+    return (await response.json()).preparation.clock as {
+      secondClock: boolean;
+      unavailable: unknown[];
+    };
+  };
+  const box = await compare(await fixture());
+  expect(box.secondClock).toBe(false);
+  expect(box.unavailable).toContainEqual(
+    expect.objectContaining({ source: "browser", reason: "same_machine" }),
+  );
+  expect(
+    (await compare(await fixture(undefined, { requestFromBox: () => false }))).secondClock,
+  ).toBe(true);
 });
 it("durably selects one hour before export and preserves its IDs after outside use becomes possible", async () => {
   const f = await fixture();

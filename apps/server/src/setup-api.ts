@@ -151,6 +151,8 @@ export interface SetupDeps {
     options: { oldBoxGone: boolean },
   ) => Promise<void>;
   prepareRecovery?: PrepareRecovery;
+  /** Whether a request came from a browser on the box itself; tests replace it. */
+  requestFromBox?: (c: Context) => boolean;
   previewRestore?: (request: ArchiveRestoreRequest) => Promise<RecoveryBackupPreview>;
   previewBucketRestore?: (
     input: Omit<BucketRestoreInput, "venueConfirmed">,

@@ -16,6 +16,7 @@ import type { VenueRequest } from "@waitron/provisioning";
 import { createErrorBoundary } from "@waitron/server-kit";
 import type { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
+import { requestFromBox } from "./request-from-box.js";
 import { publicFirstSetupState, type FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
@@ -456,6 +457,7 @@ export function mountSetupFirstFiscalApi(
     boundary(c, log, async () => {
       const body = exact(await readFirstFiscalBody(c), ["module", "proposal"]);
       boundedPublic(body.proposal);
+      const onBox = (deps.requestFromBox ?? requestFromBox)(c);
       return host.coordinator.run(async (hold) => {
         const owner = firstFiscalOwner(c);
         const state = await host.owner.authorize(owner);
@@ -463,6 +465,7 @@ export function mountSetupFirstFiscalApi(
           owner,
           text(body.module),
           body.proposal,
+          { onBox },
           hold,
         );
         return c.json({ state: publicFirstSetupState(state), preparation });

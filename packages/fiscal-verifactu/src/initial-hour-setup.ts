@@ -188,7 +188,7 @@ export function createHourInitialSetup(
       if (!record(selected) || selected.status !== "selected") return refuse();
       return { status: "ready", input: selected.input };
     },
-    async preparation(context, proposal) {
+    async preparation(context, proposal, client) {
       contextBinding(context);
       if (!record(proposal)) return refuse("malformed_allocation");
       const session = hostedHourPreparation(host);
@@ -207,11 +207,10 @@ export function createHourInitialSetup(
             !Number.isSafeInteger(proposal.browser.instantMs))
         )
           return refuse("malformed_allocation");
-        // Until the route says where the request came from, a browser is taken to be the box's own.
         return session.compareClocks(
           context.binding,
           proposal.browser as { challengeId: string; instantMs: number } | null,
-          { onBox: true },
+          client,
         );
       }
       return refuse("malformed_allocation");

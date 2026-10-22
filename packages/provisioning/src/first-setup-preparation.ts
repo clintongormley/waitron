@@ -5,6 +5,7 @@ import {
   initialSetupFor,
   type ModuleConfig,
   type ModuleOperationHost,
+  type OperationClient,
   type WaitronModule,
 } from "@waitron/module";
 import type { createFirstSetupOwner, FirstSetupOwnerAttempt } from "./first-setup-owner.js";
@@ -168,13 +169,14 @@ export function createFirstSetupPreparation(options: Options) {
         owner: FirstSetupOwnerAttempt,
         module: string,
         proposal: unknown,
+        client: OperationClient,
         hold?: FirstSetupHold,
       ) {
         return inside(hold, async () => {
           const state = await options.owner.authorize(owner);
           const { seat, context } = selected(state, module);
           if (seat.preparation === undefined) invalid();
-          return seat.preparation(context, proposal);
+          return seat.preparation(context, proposal, client);
         });
       },
       select(

@@ -224,7 +224,12 @@ it("reuses the exact prepared state without another question or another spent ho
 
 it("imports an already selected request without selecting another hour", async () => {
   const f = await fixture();
-  await f.runtime.preparation.prepare(f.owner, MODULE, { action: "compare-clocks", browser: null });
+  await f.runtime.preparation.prepare(
+    f.owner,
+    MODULE,
+    { action: "compare-clocks", browser: null },
+    { onBox: true },
+  );
   const proof = await f.runtime.owner.reconfirm(f.owner, PASSWORD, "block-use");
   const selected = await f.runtime.preparation.select(f.owner, MODULE, { answer: "no" }, proof);
   const before = await readFile(join(f.root, "state/module-preparation-state.json"));
@@ -455,19 +460,29 @@ it("retains the same hour wait after recovering ownership with the setup passwor
 
 it("keeps clock confirmations tied to the old owner when a durable wait survives recovery", async () => {
   const f = await fixture();
-  const comparison = (await f.runtime.preparation.prepare(f.owner, MODULE, {
-    action: "compare-clocks",
-    browser: null,
-  })) as { id: string };
+  const comparison = (await f.runtime.preparation.prepare(
+    f.owner,
+    MODULE,
+    {
+      action: "compare-clocks",
+      browser: null,
+    },
+    { onBox: true },
+  )) as { id: string };
   const recovered = await f.runtime.owner.recoverFirstSetup(randomBytes(32).toString("base64url"), {
     password: PASSWORD,
   });
   const owner = { ...recovered.state, capability: recovered.capability };
   await expect(
-    f.runtime.preparation.prepare(owner, MODULE, {
-      action: "confirm-clock",
-      comparisonId: comparison.id,
-    }),
+    f.runtime.preparation.prepare(
+      owner,
+      MODULE,
+      {
+        action: "confirm-clock",
+        comparisonId: comparison.id,
+      },
+      { onBox: true },
+    ),
   ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "clock_stale" } });
 });
 
@@ -614,10 +629,15 @@ async function resumptionFixture(kept = true) {
   const io = { ...f.io, prompt: async () => "yes" };
   const path = join(f.root, "recovery.pdf");
   await f.runtime.commandDelivery.deliver(prepared.owner, io, path, "en");
-  const oldComparison = (await f.runtime.preparation.prepare(prepared.owner, MODULE, {
-    action: "compare-clocks",
-    browser: null,
-  })) as { id: string };
+  const oldComparison = (await f.runtime.preparation.prepare(
+    prepared.owner,
+    MODULE,
+    {
+      action: "compare-clocks",
+      browser: null,
+    },
+    { onBox: true },
+  )) as { id: string };
   const inspection = await f.runtime.resolution.inspectFirstSetupResolution();
   const recovered = await f.runtime.owner.recoverFirstSetupOwner({
     inspectionId: inspection.inspectionId,
@@ -704,7 +724,12 @@ it("the module cannot write a resume outside the host's password authorization s
   const state = (await f.runtime.store.read())!;
   const seat = f.runtime.modules.find((module) => module.name === MODULE)!.provisioning!
     .initialSetup!;
-  await f.runtime.preparation.prepare(f.owner, MODULE, { action: "compare-clocks", browser: null });
+  await f.runtime.preparation.prepare(
+    f.owner,
+    MODULE,
+    { action: "compare-clocks", browser: null },
+    { onBox: true },
+  );
   await expect(
     seat.resume!(firstSetupModuleContext(state, MODULE), state.inputs[MODULE], "a".repeat(64)),
   ).rejects.toMatchObject({ code: "setup.owner_required" });
@@ -718,10 +743,15 @@ it("an old clock confirmation cannot be replayed after recovered-owner resumptio
   const f = await resumptionFixture();
   await resumeFirstSetupCommand(f.runtime, f.owner, f.io);
   await expect(
-    f.runtime.preparation.prepare(f.owner, MODULE, {
-      action: "confirm-clock",
-      comparisonId: f.oldComparison.id,
-    }),
+    f.runtime.preparation.prepare(
+      f.owner,
+      MODULE,
+      {
+        action: "confirm-clock",
+        comparisonId: f.oldComparison.id,
+      },
+      { onBox: true },
+    ),
   ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "clock_confirmation_required" },

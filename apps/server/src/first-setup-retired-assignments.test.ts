@@ -68,13 +68,23 @@ function ownerFor(state: FirstSetupState, capability: string) {
 }
 async function compare(host: Host, state: FirstSetupState, capability: string) {
   const owner = ownerFor(state, capability);
-  const challenge = (await host.preparation.prepare(owner, MODULE, {
-    action: "clock-challenge",
-  })) as { id: string };
-  await host.preparation.prepare(owner, MODULE, {
-    action: "compare-clocks",
-    browser: { challengeId: challenge.id, instantMs: Date.now() },
-  });
+  const challenge = (await host.preparation.prepare(
+    owner,
+    MODULE,
+    {
+      action: "clock-challenge",
+    },
+    { onBox: true },
+  )) as { id: string };
+  await host.preparation.prepare(
+    owner,
+    MODULE,
+    {
+      action: "compare-clocks",
+      browser: { challengeId: challenge.id, instantMs: Date.now() },
+    },
+    { onBox: true },
+  );
 }
 async function choose(host: Host, state: FirstSetupState, capability: string) {
   await compare(host, state, capability);
@@ -606,6 +616,7 @@ it.each(["reuse", "later"])(
         ownerFor(result.state, f.claim.capability),
         MODULE,
         { action: "selection" },
+        { onBox: true },
       );
       expect(preview).toMatchObject({
         status: "selected",

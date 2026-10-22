@@ -71,10 +71,15 @@ async function fixture(
   );
   let owner = { ...claim.state, capability: claim.capability };
   const compare = () =>
-    host.preparation.prepare(owner, MODULE, {
-      action: "compare-clocks",
-      browser: null,
-    });
+    host.preparation.prepare(
+      owner,
+      MODULE,
+      {
+        action: "compare-clocks",
+        browser: null,
+      },
+      { onBox: true },
+    );
   const select = async (answer = "no", proof?: string) => {
     const result = await host.preparation.select(
       owner,
@@ -208,16 +213,17 @@ it("binds preparation to the current owner capability and revision", async () =>
       { ...f.owner, capability: randomBytes(32).toString("base64url") },
       MODULE,
       { action: "selection" },
+      { onBox: true },
     ),
   ).rejects.toMatchObject({ code: "setup.owner_required" });
   const before = f.owner;
   await f.compare();
   await f.select();
   await expect(
-    f.host.preparation.prepare(before, MODULE, { action: "selection" }),
+    f.host.preparation.prepare(before, MODULE, { action: "selection" }, { onBox: true }),
   ).rejects.toMatchObject({ code: "setup.owner_required" });
   await expect(
-    f.host.preparation.prepare(f.owner, MODULE, { action: "selection" }),
+    f.host.preparation.prepare(f.owner, MODULE, { action: "selection" }, { onBox: true }),
   ).resolves.toMatchObject({ status: "selected", identity: "0CNNW" });
 });
 
@@ -254,7 +260,12 @@ it("refuses module selection drift before running another preparation", async ()
     ),
   });
   await expect(
-    changed.preparation.prepare(f.owner, MODULE, { action: "compare-clocks", browser: null }),
+    changed.preparation.prepare(
+      f.owner,
+      MODULE,
+      { action: "compare-clocks", browser: null },
+      { onBox: true },
+    ),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect((await changed.store.read())!.status).toBe("claimed");
 });
@@ -269,7 +280,7 @@ it.each([
 ])("refuses preparation for non-offering $module", async ({ module, code, params }) => {
   const f = await fixture();
   for (const result of [
-    () => f.host.preparation.prepare(f.owner, module, {}),
+    () => f.host.preparation.prepare(f.owner, module, {}, { onBox: true }),
     () => f.host.preparation.select(f.owner, module, {}, "unused"),
     () => f.host.preparation.import(f.owner, module, {}),
   ])
@@ -413,11 +424,28 @@ it("accepts a strictly later assignment in its own namespace", async () => {
   expect((await f.host.store.read())!.status).toBe("consumption-intent");
 });
 
+it("hands the module where the request came from", async () => {
+  const preparation = vi.fn(async (_context: InitialSetupContext, proposal: unknown) => proposal);
+  const f = await fixture({ modules: opaqueModules({ preparation }) });
+  await f.host.preparation.prepare(f.owner, MODULE, { step: 1 }, { onBox: false });
+  await f.host.preparation.prepare(f.owner, MODULE, { step: 2 }, { onBox: true });
+  expect(preparation.mock.calls.map((call) => call.slice(1))).toEqual([
+    [{ step: 1 }, { onBox: false }],
+    [{ step: 2 }, { onBox: true }],
+  ]);
+});
+
 it("reuses an existing owner hold for preparation and candidate selection", async () => {
   const f = await fixture({ modules: opaqueModules() });
   await expect(
     f.host.coordinator.run((hold) =>
-      f.host.preparation.prepare(f.owner, MODULE, { publicValue: "checked" }, hold),
+      f.host.preparation.prepare(
+        f.owner,
+        MODULE,
+        { publicValue: "checked" },
+        { onBox: true },
+        hold,
+      ),
     ),
   ).resolves.toEqual({ publicValue: "checked" });
   const proof = await f.host.owner.reconfirm(f.owner, PASSWORD, "block-use");

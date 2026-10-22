@@ -213,7 +213,7 @@ export async function host() {
     (secret === key.secret
       ? service
       : createSelectedRecoveryPreparation({ ...options, secret })
-    ).prepare(proposal);
+    ).prepare(proposal, { onBox: true });
   const compare = async () => {
     const challenge = (await prepare({ action: "clock-challenge" })) as { id: string };
     return prepare({
@@ -293,16 +293,24 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
     readIsolation: async () => isolation,
   };
   const service = createSelectedRecoveryPreparation(options);
-  const challenge = (await service.prepare({ action: "clock-challenge" })) as { id: string };
-  await service.prepare({
-    action: "compare-clocks",
-    browser: { challengeId: challenge.id, instantMs: Date.now() },
-  });
-  const outcome = (await service.prepare({
-    action: "select",
-    answer: "no",
-    installationCodes: ["0CNNW"],
-  })) as {
+  const challenge = (await service.prepare({ action: "clock-challenge" }, { onBox: true })) as {
+    id: string;
+  };
+  await service.prepare(
+    {
+      action: "compare-clocks",
+      browser: { challengeId: challenge.id, instantMs: Date.now() },
+    },
+    { onBox: true },
+  );
+  const outcome = (await service.prepare(
+    {
+      action: "select",
+      answer: "no",
+      installationCodes: ["0CNNW"],
+    },
+    { onBox: true },
+  )) as {
     input: unknown;
   };
   return { ...f, restore, options, isolation, service, outcome, database, entries };
@@ -403,16 +411,24 @@ export async function bucketCommand() {
     binding: operationBinding,
     selected,
   });
-  const challenge = (await service.prepare({ action: "clock-challenge" })) as { id: string };
-  await service.prepare({
-    action: "compare-clocks",
-    browser: { challengeId: challenge.id, instantMs: Date.now() },
-  });
-  const outcome = (await service.prepare({
-    action: "select",
-    answer: "no",
-    installationCodes: ["0CNNW"],
-  })) as {
+  const challenge = (await service.prepare({ action: "clock-challenge" }, { onBox: true })) as {
+    id: string;
+  };
+  await service.prepare(
+    {
+      action: "compare-clocks",
+      browser: { challengeId: challenge.id, instantMs: Date.now() },
+    },
+    { onBox: true },
+  );
+  const outcome = (await service.prepare(
+    {
+      action: "select",
+      answer: "no",
+      installationCodes: ["0CNNW"],
+    },
+    { onBox: true },
+  )) as {
     input: unknown;
   };
   await writeFile(
@@ -702,6 +718,7 @@ export async function interactiveHost() {
           f.options.selected.sourceId,
           { ...request, ...override, proposal },
           hold,
+          { onBox: true },
         ),
       );
     } finally {

@@ -322,7 +322,7 @@ function configured() {
       }),
   };
   const seat = FISCAL_INITIAL_SETUP.configure!(host);
-  const prepare = (proposal: unknown) => seat.preparation!(context, proposal);
+  const prepare = (proposal: unknown) => seat.preparation!(context, proposal, { onBox: true });
   let comparisonId = "none";
   const select = async (answer = "no") =>
     seat.request(context, await seat.candidates(context, { answer, comparisonId }));

@@ -17,6 +17,7 @@ import {
   type ModuleOperations,
   type OperationAuthority,
   type OperationBinding,
+  type OperationClient,
   type ProvisionedNode,
   type WaitronModule,
 } from "@waitron/module";
@@ -166,6 +167,7 @@ export function createNodeOperationPreparation(options: {
       credentials: unknown,
       context: Context,
       proposal: unknown,
+      client: OperationClient,
     ): Promise<unknown> {
       const binding = Object.freeze({ ...suppliedBinding });
       if (!["promote", "re-register"].includes(binding.action)) return invalid(binding);
@@ -173,7 +175,7 @@ export function createNodeOperationPreparation(options: {
       return invoke(binding, credentials, context, async (authority) => {
         const contribution = modules.find((module) => module.name === binding.module)?.operations;
         if (contribution?.recovery === undefined) return invalid(binding);
-        return contribution.recovery({ binding: { ...binding }, authority }, held);
+        return contribution.recovery({ binding: { ...binding }, authority }, held, client);
       });
     },
     async withOperation<T>(

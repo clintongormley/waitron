@@ -224,16 +224,24 @@ describe("selected-hour admission before archive placement", () => {
         stateDir: newerState,
         binding: { ...f.options.binding, eventId: "newer-surviving-target" },
       });
-      const challenge = (await newer.prepare({ action: "clock-challenge" })) as { id: string };
-      await newer.prepare({
-        action: "compare-clocks",
-        browser: { challengeId: challenge.id, instantMs: Date.now() },
-      });
-      const selected = (await newer.prepare({
-        action: "select",
-        answer: "no",
-        installationCodes: ["0CNNW"],
-      })) as {
+      const challenge = (await newer.prepare({ action: "clock-challenge" }, { onBox: true })) as {
+        id: string;
+      };
+      await newer.prepare(
+        {
+          action: "compare-clocks",
+          browser: { challengeId: challenge.id, instantMs: Date.now() },
+        },
+        { onBox: true },
+      );
+      const selected = (await newer.prepare(
+        {
+          action: "select",
+          answer: "no",
+          installationCodes: ["0CNNW"],
+        },
+        { onBox: true },
+      )) as {
         identity: string;
         input: unknown;
       };
@@ -246,11 +254,16 @@ describe("selected-hour admission before archive placement", () => {
         withModuleOperations: newer.runner(selected.input),
       });
       const before = await suite.db.select().from(invoiceSeries);
-      const fresh = (await f.service.prepare({ action: "clock-challenge" })) as { id: string };
-      await f.service.prepare({
-        action: "compare-clocks",
-        browser: { challengeId: fresh.id, instantMs: Date.now() },
-      });
+      const fresh = (await f.service.prepare({ action: "clock-challenge" }, { onBox: true })) as {
+        id: string;
+      };
+      await f.service.prepare(
+        {
+          action: "compare-clocks",
+          browser: { challengeId: fresh.id, instantMs: Date.now() },
+        },
+        { onBox: true },
+      );
       await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
       await writeFile(join(f.roots.stateDir, "trading.env"), "surviving destination identity");
       await expect(
@@ -845,6 +858,7 @@ describe("selected-hour admission before archive placement", () => {
               proposal: { action: "preview" },
             },
             hold,
+            { onBox: true },
           ),
         ),
       ).rejects.toMatchObject({

@@ -70,6 +70,7 @@ function createHostedHourRecovery(host: ModuleOperationHost) {
   const recovery: NonNullable<ModuleOperationPreparation["recovery"]> = async (
     supplied,
     proposal,
+    client,
   ) => {
     const operation = { ...supplied, binding: Object.freeze({ ...supplied.binding }) };
     const check = () => operatorFor(operation);
@@ -101,12 +102,11 @@ function createHostedHourRecovery(host: ModuleOperationHost) {
             !Number.isSafeInteger(proposal.browser.instantMs))
         )
           return refuse();
-        // Until the route says where the request came from, a browser is taken to be the box's own.
         const result = await clocks.compare(
           current.contextKey,
           current.environment,
           proposal.browser as SetupBrowserClockSample | null,
-          { onBox: true },
+          client,
         );
         check();
         return result;
