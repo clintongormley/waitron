@@ -153,6 +153,11 @@ current target grants on reactivation. None is implemented or runtime-verified h
   Departments and zones list (`packages/venue-service/src/dashboard/departments-list.ts`) offers no
   chooser — **DECIDED (owner, 2026-10-15, A718): no chooser**.
 
+The Devices table still uses `viewKey="devices"`
+(`apps/dashboard/src/screens/devices-screen.ts:1936`, read during A988 review). Next: rename its
+preference key before go-live, following the prefixed table keys. This is separate from A988's
+printer keys.
+
 ## A form's refusal message sits at the bottom of the form, above the buttons (C97, #961) — left open
 
 - **A form's refusal message sits at the bottom of the form, above the buttons (C97, #961) — left
