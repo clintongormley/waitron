@@ -4,13 +4,7 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  BluetoothTransport,
-  FakeSink,
-  NetworkTcpTransport,
-  RoutingTransport,
-  UsbTransport,
-} from "./transport.js";
+import { FakeSink, NetworkTcpTransport, RoutingTransport, UsbTransport } from "./transport.js";
 import type { PrinterTarget, Transport } from "./transport.js";
 
 function target(overrides: Partial<PrinterTarget>): PrinterTarget {
@@ -174,33 +168,6 @@ describe("UsbTransport", () => {
   });
 });
 
-describe("BluetoothTransport", () => {
-  const cleanups: (() => Promise<void>)[] = [];
-  afterEach(async () => {
-    for (const c of cleanups.splice(0)) await c();
-  });
-
-  it("writes the exact bytes to the printer's device path (the paired RFCOMM node)", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "waitron-bt-"));
-    cleanups.push(() => rm(dir, { recursive: true, force: true }));
-    const devicePath = join(dir, "rfcomm0");
-    await new BluetoothTransport().send(
-      target({ transport: "bluetooth", devicePath }),
-      new Uint8Array([0x1b, 0x40, 0x41]),
-    );
-    expect([...(await readFile(devicePath))]).toEqual([0x1b, 0x40, 0x41]);
-  });
-
-  it("rejects a bluetooth printer with no device path, with its OWN error text", async () => {
-    await expect(
-      new BluetoothTransport().send(
-        target({ transport: "bluetooth", devicePath: null }),
-        new Uint8Array([1]),
-      ),
-    ).rejects.toThrow(/bluetooth printer .* has no device path/);
-  });
-});
-
 describe("RoutingTransport", () => {
   const cleanups: (() => Promise<void>)[] = [];
   afterEach(async () => {
@@ -226,19 +193,6 @@ describe("RoutingTransport", () => {
     expect(network.seen).toEqual(["n"]);
     expect(usb.seen).toEqual(["u"]);
     expect(bluetooth.seen).toEqual(["b"]);
-  });
-
-  it("routes a bluetooth job to a device-path write", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "waitron-route-bt-"));
-    cleanups.push(() => rm(dir, { recursive: true, force: true }));
-    const devicePath = join(dir, "rfcomm0");
-    const router = new RoutingTransport({
-      network_tcp: new FakeSink(),
-      usb: new UsbTransport(),
-      bluetooth: new BluetoothTransport(),
-    });
-    await router.send(target({ id: "p", transport: "bluetooth", devicePath }), new Uint8Array([9]));
-    expect([...(await readFile(devicePath))]).toEqual([9]);
   });
 
   it("throws for a cloud_poll printer — an agent never pushes to a self-polling printer", async () => {

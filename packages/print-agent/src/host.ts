@@ -179,14 +179,10 @@ export interface Host {
    * the operator's, handed over only if the printer asks for one; it never goes into a log line, an
    * error or the result. */
   pair(mac: string, pin?: string): Promise<PairResult>;
-  /** Every bonded Bluetooth device. Throws when the Bluetooth side cannot be listed. Unlike
-   * {@link visibleDevices}, it also lists a paired device this host cannot print to. */
+  /** Every bonded Bluetooth device. Throws when the Bluetooth side cannot be listed. */
   pairedBluetooth(): Promise<PairedBluetoothDevice[]>;
   /** Removes the bond; an address BlueZ no longer knows counts as removed. */
   forgetBluetooth(mac: string): Promise<BluetoothCommandResult>;
-  /** False when this host cannot print to any paired Bluetooth printer, which the loop tells the
-   * server so it can end those printers' jobs rather than leave them waiting. */
-  bluetoothPrinting?(): boolean;
   /** Sends one A4 document to an office printer, as one copy on `media`, and follows it to an
    * outcome. `signal` aborts when the claim is lost: it stops following the job, never cuts a
    * submission short. `onHold` hears each change in why the printer is holding the job, and `null`

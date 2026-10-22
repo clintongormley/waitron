@@ -73,7 +73,7 @@ export class NetworkTcpTransport implements Transport {
 async function writeToDevicePath(
   printer: PrinterTarget,
   bytes: Uint8Array,
-  kind: "usb" | "bluetooth",
+  kind: "usb",
 ): Promise<void> {
   if (printer.devicePath === null) {
     throw new Error(`${kind} printer ${printer.id} has no device path`);
@@ -84,12 +84,6 @@ async function writeToDevicePath(
 export class UsbTransport implements Transport {
   send(printer: PrinterTarget, bytes: Uint8Array): Promise<void> {
     return writeToDevicePath(printer, bytes, "usb");
-  }
-}
-
-export class BluetoothTransport implements Transport {
-  send(printer: PrinterTarget, bytes: Uint8Array): Promise<void> {
-    return writeToDevicePath(printer, bytes, "bluetooth");
   }
 }
 

@@ -93,7 +93,7 @@ function devices(listDeadlineMs = ANSWERING_DEADLINE_MS) {
   return createLinuxDevices({
     sysfsRoot: sysfs,
     devRoot: "/dev",
-    btDevicePath: () => "/dev/rfcomm0",
+
     bluetoothListTimeoutMs: listDeadlineMs,
     log,
     now: () => clock,
@@ -284,7 +284,7 @@ describe("the Bluetooth side, checked apart from the job poll", () => {
           });
         },
       },
-      btDevicePath: () => "/dev/rfcomm0",
+
       now: () => clock,
     });
     const seen = d.visibleDevices();

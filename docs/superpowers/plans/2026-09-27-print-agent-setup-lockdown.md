@@ -1,5 +1,9 @@
 # Print Agent Setup Lockdown and Bluetooth Pairing Implementation Plan
 
+> **2026-10-22, A984:** the obsolete Bluetooth capability fallback and device-file transport
+> are retired. Linux job resolution uses the paired printer's Bluetooth address; the shipped
+> RFCOMM sender remains. The earlier implementation names below are historical.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **2026-09-30:** Bluetooth printing, which this plan leaves unbuilt, was built later by A140

@@ -3865,15 +3865,16 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [Detail](backlog/printers.md#an-unpair-outcome-that-reaches-the-server-after-it-dropped-the-command-leaves-the-printer-on)
 
 - **A Bluetooth printer no agent reports paired still waits with no reason on the job (A139's "not
-  covered")**, as a USB printer no agent sees does. A140 left this as it is: it needs two agents,
-  one of them older than A140.
+  covered")**, as a USB printer no agent sees does. No agent currently reporting the printer as
+  visible leaves its jobs waiting.
   [Detail](backlog/printers.md#a-bluetooth-printer-no-agent-reports-paired-still-waits-with-no-reason-on-the-job-a139s-not-covered)
 
 - **RFCOMM always uses channel 1.** Nothing looks up a printer's channel, so a printer whose serial
   port is on another channel fails each job with the connection error.
 
-- **Follow-ups A140's review raised, not done (owner's call):**
-  [Detail](backlog/printers.md#follow-ups-a140s-review-raised-not-done-owners-call)
+- **The paired-printer listing can be reused for ten seconds.** A printer unpaired outside the
+  agent can still resolve during that window. The window has not been measured on the box.
+  [Detail](backlog/printers.md#the-paired-printer-listing-reuse-window)
 
 **Owed at the box — nothing here has run on real hardware:**
 

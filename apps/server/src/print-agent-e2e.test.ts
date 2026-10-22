@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, locations, printJobs, printers, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -457,7 +457,6 @@ describe("print-agent end to end", () => {
         }),
         visibleDevices: () => devices.visibleDevices(),
         pairedBluetooth: () => devices.pairedBluetooth(),
-        bluetoothPrinting: () => devices.bluetoothPrinting(),
         resolve: (job) => devices.resolve(job),
         fetch: (input, init) => Promise.resolve(app.request(input, init)),
       });
@@ -503,7 +502,7 @@ describe("print-agent end to end", () => {
     }
   });
 
-  it("ends a Bluetooth calibration print failed, with its reason, when the agent has the printer paired but cannot print to it", async () => {
+  it("retries a Bluetooth calibration transport failure and ends it after the attempt limit", async () => {
     const MAC = "5A:4A:45:D4:FB:BB";
     const app = new Hono();
     const pairingMode = createPairingMode();
@@ -535,8 +534,7 @@ describe("print-agent end to end", () => {
       },
       noopLog,
     );
-    // The box's own device layer, with the radio faked and no USB printer attached, behind a host
-    // that reports it cannot print over Bluetooth.
+    // The radio is paired; only the byte sender fails.
     const sysfsRoot = await mkdtemp(join(tmpdir(), "print-agent-e2e-bt-"));
     try {
       const devices = createLinuxDevices({
@@ -548,7 +546,11 @@ describe("print-agent end to end", () => {
           forget: async () => ({ ok: false, error: "no fake" }),
         },
       });
-      const radio = new FakeSink();
+      const radio = {
+        send: vi.fn(async () => {
+          throw new Error("Bluetooth send failed");
+        }),
+      };
       const host = fakeHost({
         config: { serverUrl: BASE, name: "Bluetooth agent" },
         transport: new RoutingTransport({
@@ -558,7 +560,6 @@ describe("print-agent end to end", () => {
         }),
         visibleDevices: () => devices.visibleDevices(),
         pairedBluetooth: () => devices.pairedBluetooth(),
-        bluetoothPrinting: () => false,
         resolve: (job) => devices.resolve(job),
         fetch: (input, init) => Promise.resolve(app.request(input, init)),
       });
@@ -589,8 +590,7 @@ describe("print-agent end to end", () => {
       expect(test.status).toBe(202);
       const { jobId } = (await test.json()) as { jobId: string };
 
-      await agent.runOnce();
-      await agent.runOnce();
+      for (let attempt = 0; attempt < MAX_DELIVERY_ATTEMPTS; attempt++) await agent.runOnce();
 
       const jobs = (await (
         await send(app, "GET", "/management-api/print-jobs", { cookie: managerCookie })
@@ -602,14 +602,14 @@ describe("print-agent end to end", () => {
       }>;
       expect(jobs.find(({ id }) => id === jobId)).toMatchObject({
         status: "failed",
-        lastError: "printer.bluetooth_printing_unavailable",
+        lastError: "Bluetooth send failed",
         attempts: MAX_DELIVERY_ATTEMPTS,
       });
       const printers = (await (
         await send(app, "GET", "/management-api/printers", { cookie: managerCookie })
       ).json()) as Array<{ id: string; pendingJobs: number }>;
       expect(printers.find(({ id }) => id === printerId)?.pendingJobs).toBe(0);
-      expect(radio.written).toEqual([]);
+      expect(radio.send).toHaveBeenCalledTimes(MAX_DELIVERY_ATTEMPTS);
     } finally {
       await rm(sysfsRoot, { recursive: true, force: true });
     }
@@ -713,7 +713,6 @@ describe("a printer deleted while its agent is sending", () => {
           },
           visibleDevices: () => devices.visibleDevices(),
           pairedBluetooth: () => devices.pairedBluetooth(),
-          bluetoothPrinting: () => devices.bluetoothPrinting(),
           resolve: (job) => devices.resolve(job),
           fetch: async (input, init) => {
             const response = await app.request(input, init);

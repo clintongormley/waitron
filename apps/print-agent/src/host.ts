@@ -98,7 +98,6 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
     pairedBluetooth: devices.pairedBluetooth,
     forgetBluetooth: devices.forgetBluetooth,
     resolve: devices.resolve,
-    bluetoothPrinting: devices.bluetoothPrinting,
     printPage: (target, bytes, format, media, signal, onHold) =>
       printOverIpp({ ...target, documentFormat: format, media }, bytes, { signal, onHold }),
   };

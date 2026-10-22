@@ -31,12 +31,7 @@ import {
   PAYMENTS_MIGRATIONS,
   type ReaderStatus,
 } from "@waitron/payments";
-import {
-  BLUETOOTH_PRINTING_UNAVAILABLE,
-  MAX_DELIVERY_ATTEMPTS,
-  PRINTER_UNPAIRED,
-  resendPrintJob,
-} from "@waitron/printing";
+import { MAX_DELIVERY_ATTEMPTS, PRINTER_UNPAIRED, resendPrintJob } from "@waitron/printing";
 import {
   awaitingCertAlertSource,
   backupAlertSource,
@@ -940,7 +935,7 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
     ]);
   });
 
-  it("still counts a job ended because the box cannot print over Bluetooth", async () => {
+  it("still counts a job whose Bluetooth transport exhausted its attempts", async () => {
     await seedTenant(suite.db);
     const locationId = await seedLocation();
     const printerId = await seedPrinter({ locationId, name: "Barra" });
@@ -950,7 +945,7 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
       createdAt: minsAgo(1),
       status: "failed",
       attempts: MAX_DELIVERY_ATTEMPTS,
-      lastError: BLUETOOTH_PRINTING_UNAVAILABLE,
+      lastError: "Bluetooth send failed",
     });
     expect(await readAlerts()).toMatchObject([
       { code: "printer.jobs_waiting", params: { printer: "Barra", count: 1 } },

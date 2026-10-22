@@ -9059,8 +9059,8 @@ describe("printers-screen Bluetooth pairing", () => {
   });
 });
 
-describe("A Bluetooth printer whose agent cannot print to it", () => {
-  const UNAVAILABLE = "printer.bluetooth_printing_unavailable";
+describe("Bluetooth calibration transport outcomes", () => {
+  const TRANSPORT_FAILURE = "Bluetooth send failed";
   const bluetoothPrinter: Printer = {
     ...printers[0]!,
     id: "p5",
@@ -9082,19 +9082,27 @@ describe("A Bluetooth printer whose agent cannot print to it", () => {
     deliveredAt: null,
     ...over,
   });
-  const ended = job({ status: "failed", canResend: true, attempts: 5, lastError: UNAVAILABLE });
+  const ended = job({
+    status: "failed",
+    canResend: true,
+    attempts: 5,
+    lastError: TRANSPORT_FAILURE,
+  });
 
-  async function mountWith(overrides: Partial<DashboardApi> = {}) {
+  async function mountWith(
+    overrides: Partial<DashboardApi> = {},
+    theme: "light" | "dark" = "light",
+  ) {
     const api = stubApi({
       listPrinters: vi.fn().mockResolvedValue([...printers, bluetoothPrinter]),
       ...overrides,
     });
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api }, theme);
     await flush(el);
     return { el, api };
   }
 
-  it("shows a calibration print that failed, with the reason in the dashboard's own words", async () => {
+  it("shows the transport reason for a failed calibration print", async () => {
     const { el } = await mountWith({
       testPrint: vi.fn().mockResolvedValue({ jobId: "j11" }),
       listRecentJobs: vi.fn().mockResolvedValueOnce([]).mockResolvedValue([ended]),
@@ -9106,7 +9114,7 @@ describe("A Bluetooth printer whose agent cannot print to it", () => {
     await flush(el);
 
     expect(text(el, "[data-test=calibration-job-failed]")).toBe(
-      "No se ha impreso: El agente de impresión de esta impresora no puede imprimir en impresoras Bluetooth.",
+      t("printers.calibration_job_failed").replace("{reason}", TRANSPORT_FAILURE),
     );
     expect(q(el, "[data-test=calibration-job-failed]")!.getAttribute("role")).toBe("alert");
   });
@@ -9290,15 +9298,51 @@ describe("A Bluetooth printer whose agent cannot print to it", () => {
     }
   });
 
-  it("words a job ended because Bluetooth printing is unavailable, and counts no attempts for it", async () => {
+  it("shows a transport failure and its actual attempt count", async () => {
     const { el } = await mountWith({ listRecentJobs: vi.fn().mockResolvedValue([ended, jobs[0]]) });
 
-    expect(text(el, "[data-test=job-error-j11]")).toBe(
-      "El agente de impresión de esta impresora no puede imprimir en impresoras Bluetooth.",
-    );
-    expect(text(el, "[data-test=job-attempts-j11]")).toBe("—");
+    expect(text(el, "[data-test=job-error-j11]")).toBe(TRANSPORT_FAILURE);
+    expect(text(el, "[data-test=job-attempts-j11]")).toBe("5");
     expect(text(el, "[data-test=job-attempts-j1]")).toBe("2");
   });
+  for (const theme of ["light", "dark"] as const) {
+    for (const locale of ["en", "es-ES"] as const) {
+      it.each([390, 1280])(
+        `shows transport failures and unpaired jobs in ${locale} ${theme} at %ipx`,
+        async (width) => {
+          const before = currentLocale();
+          await page.viewport(width, 900);
+          setLocale(locale);
+          try {
+            const { el } = await mountWith(
+              {
+                listRecentJobs: vi.fn().mockResolvedValue([
+                  ended,
+                  job({
+                    id: "j12",
+                    status: "failed",
+                    attempts: 5,
+                    lastError: "printer.unpaired",
+                  }),
+                ]),
+              },
+              theme,
+            );
+            expect(text(el, "[data-test=job-error-j11]")).toBe(TRANSPORT_FAILURE);
+            expect(text(el, "[data-test=job-attempts-j11]")).toBe("5");
+            expect(text(el, "[data-test=job-error-j12]")).toBe(codeMessage("printer.unpaired"));
+            expect(text(el, "[data-test=job-attempts-j12]")).toBe("—");
+            await page.screenshot({
+              path: `__screenshots__/a984-jobs-${theme}-${locale}-${width}.png`,
+            });
+          } finally {
+            setLocale(before);
+            await page.viewport(1280, 900);
+          }
+        },
+      );
+    }
+  }
 });
 
 describe("A job ended because its printer was unpaired", () => {
