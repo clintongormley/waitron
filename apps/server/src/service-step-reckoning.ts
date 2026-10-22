@@ -103,13 +103,21 @@ export function stepsClearedByDone(
   const live = liveSteps(rules, facts, nowMs);
   const shown = live.find((step) => step.stepId === stepId);
   if (shown === undefined) return [];
+  const byId = new Map(rules.map((rule) => [rule.id, rule]));
+  // Only a `since_last_order` step's trigger moves with its own Done; any other is cleared by a
+  // Done later than its trigger.
   const clears = (step: LiveStep): boolean => {
-    const doneAt = new Map(facts.doneAt);
-    doneAt.set(step.stepId, Math.max(doneAt.get(step.stepId) ?? nowMs, nowMs));
-    const after = liveSteps(rules, { ...facts, doneAt }, nowMs).find(
-      (next) => next.stepId === step.stepId,
+    const rule = byId.get(step.stepId)!;
+    const done = Math.max(facts.doneAt.get(step.stepId) ?? nowMs, nowMs);
+    if (rule.start !== "since_last_order") return done > step.triggeredAt;
+    const last = facts.lastOrderAt!;
+    if (done <= last) return false;
+    const every = rule.minutes * MINUTE_MS;
+    const next = Math.max(
+      repeatShownAt(last, every, nowMs),
+      repeatShownAt(last, every, done) + every,
     );
-    return after?.triggeredAt !== step.triggeredAt;
+    return next !== step.triggeredAt;
   };
   if (!clears(shown)) return [];
   return live

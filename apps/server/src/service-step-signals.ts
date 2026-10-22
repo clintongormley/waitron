@@ -29,7 +29,6 @@ export interface StepParty {
 
 export interface TableSteps {
   departmentId: string;
-  ruleIds: ReadonlySet<string>;
   live: LiveStep[];
 }
 
@@ -56,11 +55,7 @@ export async function readTableSteps(
 ): Promise<Map<string, TableSteps>> {
   const found = new Map<string, TableSteps>();
   for (const [tableId, { departmentId, rules, facts }] of await readStepFacts(tx, parties)) {
-    found.set(tableId, {
-      departmentId,
-      ruleIds: new Set(rules.map((rule) => rule.id)),
-      live: liveSteps(rules, facts, nowMs),
-    });
+    found.set(tableId, { departmentId, live: liveSteps(rules, facts, nowMs) });
   }
   return found;
 }

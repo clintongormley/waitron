@@ -192,7 +192,6 @@ describe("readTableSteps", () => {
 
     expect(steps).toEqual({
       departmentId: department,
-      ruleIds: new Set(ids),
       live: [
         {
           stepId: ids[0],
@@ -413,7 +412,6 @@ describe("readTableSteps", () => {
     expect(steps.get(inside)!.live.map((step) => step.stepId)).toEqual([setUp]);
     expect(steps.get(outside)).toEqual({
       departmentId: terrace.departmentId,
-      ruleIds: new Set([water]),
       live: [
         {
           stepId: water,
@@ -489,7 +487,6 @@ describe("readTableSteps", () => {
 
     const expected = {
       departmentId: department,
-      ruleIds: new Set([setUp]),
       live: [
         {
           stepId: setUp,
