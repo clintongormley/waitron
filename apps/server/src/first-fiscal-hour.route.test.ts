@@ -155,13 +155,13 @@ it("real candidate routing reuses the shared hold and persists an owned hour bef
   const selected = state.frozen.modules.find((entry) => entry.module === MODULE)!.request as {
     selection: { identity: string; binding: unknown };
   };
-  expect(selected.selection.identity).toBe("06RB");
+  expect(selected.selection.identity).toBe("0CNNW");
   const ledger = JSON.parse(
     await readFile(join(f.options.stateDir, "module-preparation-state.json"), "utf8"),
   );
   expect(ledger.revisions).toHaveLength(1);
   expect(ledger.revisions[0].binding).toEqual(selected.selection.binding);
-  expect(ledger.revisions[0].value.entries[0].identity).toBe("06RB");
+  expect(ledger.revisions[0].value.entries[0].identity).toBe("0CNNW");
 }, 5000);
 it("the real host refuses foreign preparation bindings under the shared lock", async () => {
   const f = await fixture(true);
@@ -176,7 +176,7 @@ it("the real host refuses foreign preparation bindings under the shared lock", a
         sourceId: state.frozen.sourceId,
         targetNodeId: "foreign",
       },
-      async (store) => store.replace({ identity: "06RB" }),
+      async (store) => store.replace({ identity: "0CNNW" }),
     ),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   await expect(

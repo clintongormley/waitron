@@ -28,7 +28,7 @@ import {
   type FiscalAllocation,
   type RecoveryApproval,
 } from "@waitron/fiscal-verifactu/src/allocation-envelope.js";
-import { encodeHourIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
+import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { sealAeatSecret } from "@waitron/fiscal-verifactu/src/provisioning-secret.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu/src/backend.js";
 import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
@@ -120,10 +120,10 @@ export function useBackupVerificationFixture() {
       taxpayerNif: "89890001K",
       softwareId: "W1",
       environment: "production",
-      installationIdentity: encodeHourIdentity(Date.parse(issuedAt)),
+      installationIdentity: encodeMinuteIdentity(Date.parse(issuedAt)),
       series: bases.map((b) => ({
         ...b,
-        code: `${b.code}-${encodeHourIdentity(Date.parse(issuedAt))}`,
+        code: `${b.code}-${encodeMinuteIdentity(Date.parse(issuedAt))}`,
       })),
       source: "hour",
       reservationEvidence: null,
@@ -310,7 +310,7 @@ export function useBackupVerificationFixture() {
               environment: "production",
               softwareId: "W1",
               nodeId: "retired-node",
-              identity: encodeHourIdentity(Date.parse(verificationTime) - 4 * 3600000),
+              identity: encodeMinuteIdentity(Date.parse(verificationTime) - 4 * 3600000),
               recordedAtMs: Date.parse(verificationTime) - 4 * 3600000,
             },
           ],

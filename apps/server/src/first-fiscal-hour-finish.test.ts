@@ -343,13 +343,13 @@ it("empty never-activated hour restart retains originals and burns the entire ho
     await next.owner.reconfirm(owner, PASSWORD, "block-use"),
   );
   expect(firstSetupModuleContext(selected.state, MODULE).request).toMatchObject({
-    identity: "06RC",
+    identity: "0CNPH",
     input: {
       allocation: {
         series: [
-          { code: "B-06RC", purpose: "standard" },
-          { code: "FULL-06RC", purpose: "full" },
-          { code: "RECT-06RC", purpose: "rectificative" },
+          { code: "B-0CNPH", purpose: "standard" },
+          { code: "FULL-0CNPH", purpose: "full" },
+          { code: "RECT-0CNPH", purpose: "rectificative" },
         ],
       },
     },
@@ -634,7 +634,7 @@ it("hour Finish preserves issued records, their chain, filing outbox and advance
   const f = await fixture();
   await expect(f.activate()).rejects.toThrow("synthetic after commit");
   const series = (await suite.db.select().from(invoiceSeries)).find(
-    (row) => row.code === "A-06RB",
+    (row) => row.code === "A-0CNNW",
   )!;
   const clock = {
     ...steadyClock,

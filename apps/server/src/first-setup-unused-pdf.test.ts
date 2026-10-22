@@ -116,10 +116,10 @@ it.each(["Consumed", "Not consumed", "Unknown"] as const)(
   },
 );
 it.each([
-  { identity: "06R9", issuedAt: "2026-10-16T09:40:00.000Z", spent: true },
-  { identity: "06RA", issuedAt: "2026-10-16T10:40:00.000Z", spent: true },
-  { identity: "06RB", issuedAt: "2026-10-16T11:40:00.000Z", spent: true },
-  { identity: "06RC", issuedAt: "2026-10-16T12:40:00.000Z", spent: false },
+  { identity: "0CNJ4", issuedAt: "2026-10-16T09:40:00.000Z", spent: true },
+  { identity: "0CNM0", issuedAt: "2026-10-16T10:40:00.000Z", spent: true },
+  { identity: "0CNNW", issuedAt: "2026-10-16T11:40:00.000Z", spent: true },
+  { identity: "0CNQR", issuedAt: "2026-10-16T12:40:00.000Z", spent: false },
 ])(
   "retiring the unused PDF excludes hour $identity across changed bases, spent=$spent",
   async ({ identity, issuedAt, spent }) => {

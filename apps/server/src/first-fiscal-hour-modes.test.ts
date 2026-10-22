@@ -139,9 +139,9 @@ it.each(["demo", "prepare"])(
         nextNumber,
       })),
     ).toEqual([
-      { code: "A-06RB", purpose: "standard", nextNumber: 1 },
-      { code: "FF-06RB", purpose: "full", nextNumber: 1 },
-      { code: "R-06RB", purpose: "rectificative", nextNumber: 1 },
+      { code: "A-0CNNW", purpose: "standard", nextNumber: 1 },
+      { code: "FF-0CNNW", purpose: "full", nextNumber: 1 },
+      { code: "R-0CNNW", purpose: "rectificative", nextNumber: 1 },
     ]);
     await expect(readFile(join(stateDir, "first-setup.json"))).rejects.toMatchObject({
       code: "ENOENT",
@@ -176,9 +176,9 @@ it("owned development Live consumes its durable hour through publication without
       nextNumber,
     })),
   ).toEqual([
-    { code: "A-06RB", nextNumber: 1 },
-    { code: "FF-06RB", nextNumber: 1 },
-    { code: "R-06RB", nextNumber: 1 },
+    { code: "A-0CNNW", nextNumber: 1 },
+    { code: "FF-0CNNW", nextNumber: 1 },
+    { code: "R-0CNNW", nextNumber: 1 },
   ]);
   expect(await readFile(join(stateDir, "module-preparation-state.json"), "utf8")).toBe(before);
 });

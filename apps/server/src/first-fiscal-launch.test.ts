@@ -317,7 +317,7 @@ it.each(["direct", "supervised"])(
             environment: row.environment,
             identity: row.installationIdentity,
           })),
-        ).toEqual([{ nodeId: f.input.nodeId, environment: "preproduction", identity: "06RB" }]);
+        ).toEqual([{ nodeId: f.input.nodeId, environment: "preproduction", identity: "0CNNW" }]);
       } finally {
         await db.close();
       }
@@ -442,16 +442,16 @@ Object.defineProperty(performance, "now", { value: () => 0 });
   const stored = await openVenueDatabase(f.base.WAITRON_VENUE_DIR);
   try {
     const allocations = await stored.venue.select().from(fiscalAllocations);
-    expect(allocations.map((row) => row.installationIdentity)).toEqual(["06RB"]);
+    expect(allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW"]);
     const series = await stored.venue.select().from(invoiceSeries);
     expect(
       series
         .map((row) => ({ code: row.code, next: row.nextNumber }))
         .sort((a, b) => a.code.localeCompare(b.code)),
     ).toEqual([
-      { code: "A-06RB", next: 1 },
-      { code: "FF-06RB", next: 1 },
-      { code: "R-06RB", next: 1 },
+      { code: "A-0CNNW", next: 1 },
+      { code: "FF-0CNNW", next: 1 },
+      { code: "R-0CNNW", next: 1 },
     ]);
     expect(await readDeploymentEnvironment(stored.venue)).toBe("preproduction");
     expect(child.stdout).toContain(`node:     ${allocations[0]!.nodeId}`);

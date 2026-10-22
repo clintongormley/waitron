@@ -147,9 +147,9 @@ async function configurationArtifact() {
       nextNumber,
     })),
   ).toEqual([
-    { code: "A-06RA", nextNumber: 42 },
-    { code: "FF-06RA", nextNumber: 42 },
-    { code: "R-06RA", nextNumber: 42 },
+    { code: "A-0CNM0", nextNumber: 42 },
+    { code: "FF-0CNM0", nextNumber: 42 },
+    { code: "R-0CNM0", nextNumber: 42 },
   ]);
   setClock("2026-10-16T11:40:00Z");
   const bundle = await buildConfigurationBundle(
@@ -315,9 +315,9 @@ it.each([
               )
               .all(),
           ).toEqual([
-            { code: "FF-06RB", purpose: "full", nextNumber: 1 },
-            { code: "R-06RB", purpose: "rectificative", nextNumber: 1 },
-            { code: "A-06RB", purpose: "standard", nextNumber: 1 },
+            { code: "FF-0CNNW", purpose: "full", nextNumber: 1 },
+            { code: "R-0CNNW", purpose: "rectificative", nextNumber: 1 },
+            { code: "A-0CNNW", purpose: "standard", nextNumber: 1 },
           ]);
           expect(
             disk
@@ -325,7 +325,7 @@ it.each([
                 "select environment, installation_identity as identity from fiscal_allocations",
               )
               .all(),
-          ).toEqual([{ environment, identity: "06RB" }]);
+          ).toEqual([{ environment, identity: "0CNNW" }]);
           expect(disk.prepare("select count(*) as n from registros_facturacion").get()?.n).toBe(0);
           expect(disk.prepare("select id from nodes").all()).not.toContainEqual({
             id: sourceNodeId,

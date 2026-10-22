@@ -218,7 +218,7 @@ it("durably selects one hour before export and preserves its IDs after outside u
   expect(value.modules).toHaveLength(1);
   expect(value.modules[0].request.input.approval.targetNodeId).toBe(f.claim.state.nodeId);
   expect(value.modules[0].request.input.approval.operatorId).toBe(f.claim.state.administratorId);
-  expect([value.modules[0].request.input.allocation.installationIdentity]).toEqual(["06RB"]);
+  expect([value.modules[0].request.input.allocation.installationIdentity]).toEqual(["0CNNW"]);
   expect(JSON.stringify(value)).not.toContain("passwordHash");
   expect(JSON.stringify(value)).not.toContain("pinHash");
   const edited = await f.post(
@@ -281,7 +281,7 @@ it("imports only the frozen hour and demands a freshly confirmed kept recovery d
     { ...signed.input, validated: true },
     {
       ...signed.input,
-      allocation: { ...signed.input.allocation, installationIdentity: "06RC" },
+      allocation: { ...signed.input.allocation, installationIdentity: "0CNPG" },
     },
     { ...signed.input, approval: { ...signed.input.approval, operatorId: "other" } },
   ]) {

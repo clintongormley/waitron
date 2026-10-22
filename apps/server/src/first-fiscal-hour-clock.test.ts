@@ -114,16 +114,16 @@ it.each(["production", "preproduction"] as const)(
     const selected = await f.select();
     expect(selected).toMatchObject({
       status: "selected",
-      identity: "06RB",
+      identity: "0CNNW",
       input: {
         allocation: {
           environment,
           source: "hour",
           reservationEvidence: null,
           series: [
-            { code: "A-06RB", purpose: "standard" },
-            { code: "FF-06RB", purpose: "full" },
-            { code: "R-06RB", purpose: "rectificative" },
+            { code: "A-0CNNW", purpose: "standard" },
+            { code: "FF-0CNNW", purpose: "full" },
+            { code: "R-0CNNW", purpose: "rectificative" },
           ],
         },
       },
@@ -131,7 +131,7 @@ it.each(["production", "preproduction"] as const)(
     const journal = JSON.parse(
       await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8"),
     );
-    expect(journal.revisions[0].value.entries[0].identity).toBe("06RB");
+    expect(journal.revisions[0].value.entries[0].identity).toBe("0CNNW");
     expect(external.internet).toHaveBeenCalledWith(environment);
   },
 );
@@ -150,5 +150,5 @@ it("an unavailable browser and TLS comparison need the owner's exact displayed-c
     code: "sif.allocation_invalid",
   });
   await f.prepared.confirmClock(f.context.binding, displayed.id);
-  expect(await f.select()).toMatchObject({ status: "selected", identity: "06RB" });
+  expect(await f.select()).toMatchObject({ status: "selected", identity: "0CNNW" });
 });

@@ -97,7 +97,7 @@ it("activation-started cannot gain a new preparation revision even with a host w
               { kind: "activation-started" },
               hold,
             );
-            await store.replace({ spent: "06RB" });
+            await store.replace({ spent: "0CNNW" });
           }),
       );
     }),

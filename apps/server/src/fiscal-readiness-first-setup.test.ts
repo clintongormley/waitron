@@ -200,14 +200,14 @@ it.each([true, false])(
         {
           id: expect.any(String),
           entorno: "preproduction",
-          num_serie_factura: "A-06RB/1",
+          num_serie_factura: "A-0CNNW/1",
           huella: expect.any(String),
         },
       ]);
       expect(first.series.map(({ code, next_number }) => ({ code, next_number }))).toEqual([
-        { code: "A-06RB", next_number: 2 },
-        { code: "FF-06RB", next_number: 1 },
-        { code: "R-06RB", next_number: 1 },
+        { code: "A-0CNNW", next_number: 2 },
+        { code: "FF-0CNNW", next_number: 1 },
+        { code: "R-0CNNW", next_number: 1 },
       ]);
       await server.close();
       server = undefined;

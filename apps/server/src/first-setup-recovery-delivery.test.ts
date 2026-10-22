@@ -177,7 +177,7 @@ async function documentFixture() {
   );
   const statement = {
     kind: "waitron-recovery-document",
-    installationCodes: ["06RB"],
+    installationCodes: ["0CNNW"],
     version: 1,
     scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "preproduction" },
     taxpayerName: request.legalName,

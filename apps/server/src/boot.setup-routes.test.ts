@@ -635,7 +635,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   /** Cell 12 of the A680 plan's refusal matrix, read from the venue a Demo setup made. */
   function expectThrowawayVenue(db: Database, taxId: string): void {
     expect(db.all(sql`select numero_instalacion from registro_sif`)).toEqual([
-      { numero_instalacion: "06RB" },
+      { numero_instalacion: "0CNNW" },
     ]);
     expect(
       db.all(sql`select taxpayer_nif, environment, allocation_key from fiscal_allocations`),
@@ -647,9 +647,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       },
     ]);
     expect(db.all(sql`select code, purpose from invoice_series order by code`)).toEqual([
-      { code: "A-06RB", purpose: "standard" },
-      { code: "FF-06RB", purpose: "full" },
-      { code: "R-06RB", purpose: "rectificative" },
+      { code: "A-0CNNW", purpose: "standard" },
+      { code: "FF-0CNNW", purpose: "full" },
+      { code: "R-0CNNW", purpose: "rectificative" },
     ]);
     expect(db.all(sql`select environment from deployment`)).toEqual([
       { environment: "preproduction" },
@@ -1546,7 +1546,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         target.store.venue.all(
           sql`select code from invoice_series where retired_at is null order by code`,
         ),
-      ).toEqual([{ code: "B-06RB" }, { code: "FB-06RB" }, { code: "RB-06RB" }]);
+      ).toEqual([{ code: "B-0CNNW" }, { code: "FB-0CNNW" }, { code: "RB-0CNNW" }]);
       expect(
         target.store.venue.all(sql`select operation_description, invoice_locales from locations`),
       ).toEqual([{ operation_description: "Comida para llevar", invoice_locales: '["es-ES"]' }]);

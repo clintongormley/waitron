@@ -323,7 +323,7 @@ it.each([
       expect(prepared).toMatchObject({
         kind: "waitron-hour-setup",
         status: "selected",
-        identity: "06RB",
+        identity: "0CNNW",
       });
       const imported = await post("/setup-api/first-setup/input", {
         module: MODULE,
@@ -335,7 +335,7 @@ it.each([
       expect(keyStage.status).toBe(200);
       const statement = {
         kind: "waitron-recovery-document",
-        installationCodes: ["06RB"],
+        installationCodes: ["0CNNW"],
         version: 1,
         scope: { taxpayerNif: venue.taxId, softwareId: "W1", environment: "production" },
         taxpayerName: venue.legalName,

@@ -13,7 +13,7 @@ import {
   readFirstSetupRetirements,
   type FirstSetupState,
 } from "@waitron/provisioning";
-import { encodeHourIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
+import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { hourSetupInput } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { request, PASSWORD, MODULE } from "../test/first-fiscal.js";
 import { keepHourRecoveryDocument } from "../test/hour-recovery-delivery.js";
@@ -88,7 +88,7 @@ async function choose(host: Host, state: FirstSetupState, capability: string) {
 }
 function selectedRequest(state: FirstSetupState, index: number) {
   const context = firstSetupModuleContext(state, MODULE);
-  const identity = encodeHourIdentity(instant(index));
+  const identity = encodeMinuteIdentity(instant(index));
   return {
     kind: "waitron-hour-setup",
     status: "selected",
@@ -121,7 +121,7 @@ function retainedHour(index = 42, softwareId = "W1") {
             environment: "production",
             softwareId,
             nodeId: "retired-peer",
-            identity: encodeHourIdentity(instant(index)),
+            identity: encodeMinuteIdentity(instant(index)),
             recordedAtMs: instant(index),
           },
         ],
@@ -396,7 +396,7 @@ it.each([1, 2])(
       expect(
         (current.frozen.modules.find((m) => m.module === MODULE)!.request as { identity: string })
           .identity,
-      ).toBe("06RC");
+      ).toBe("0CNQR");
     }
   },
 );
@@ -574,7 +574,7 @@ it.each(["reuse", "later"])(
     expect(
       (previous.frozen.modules.find((m) => m.module === MODULE)!.request as { identity: string })
         .identity,
-    ).toBe("06SM");
+    ).toBe("0CR2R");
     const selection = choose(f.host, f.state, f.claim.capability);
     if (which === "reuse")
       await expect(selection).rejects.toMatchObject({
@@ -588,7 +588,7 @@ it.each(["reuse", "later"])(
         identity: string;
         input: unknown;
       };
-      expect(selected.identity).toBe("06SP");
+      expect(selected.identity).toBe("0CR6G");
       const path = join(f.old.stateDir, "module-preparation-state.json");
       const journal = await readFile(path);
       const restart = createFirstSetupModuleHost({
@@ -609,7 +609,7 @@ it.each(["reuse", "later"])(
       );
       expect(preview).toMatchObject({
         status: "selected",
-        identity: "06SP",
+        identity: "0CR6G",
         issuedAt: "2026-10-18T06:40:00.000Z",
       });
       const input = selected.input as ReturnType<typeof hourSetupInput>;

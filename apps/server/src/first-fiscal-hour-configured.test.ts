@@ -130,16 +130,16 @@ it.each(["production", "preproduction"] as const)(
     const saved = context.request as { input: unknown };
     expect(saved).toMatchObject({
       status: "selected",
-      identity: "06RB",
+      identity: "0CNNW",
       input: {
         allocation: {
           environment,
           source: "hour",
           reservationEvidence: null,
           series: [
-            { code: "A-06RB", purpose: "standard" },
-            { code: "FF-06RB", purpose: "full" },
-            { code: "R-06RB", purpose: "rectificative" },
+            { code: "A-0CNNW", purpose: "standard" },
+            { code: "FF-0CNNW", purpose: "full" },
+            { code: "R-0CNNW", purpose: "rectificative" },
           ],
         },
       },
@@ -148,7 +148,7 @@ it.each(["production", "preproduction"] as const)(
       await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8"),
     );
     expect(journal.revisions).toHaveLength(1);
-    expect(journal.revisions[0].value.entries[0].identity).toBe("06RB");
+    expect(journal.revisions[0].value.entries[0].identity).toBe("0CNNW");
     expect((await f.post("input", { module: MODULE, input: saved.input })).status).toBe(200);
     const value = await f.host.coordinator.run(() =>
       withOperationAuthority(context.binding, context.administratorId, (authority) =>
@@ -240,16 +240,16 @@ it("writes and reads back the configured hour through the real provisioning and 
   expect(result.nodeId).toBe(context.binding.targetNodeId);
   const stored = await venue.db.select().from(registroSif);
   expect(stored).toHaveLength(1);
-  expect(stored[0]!.numeroInstalacion).toBe("06RB");
+  expect(stored[0]!.numeroInstalacion).toBe("0CNNW");
   expect(
     (await venue.db.select().from(invoiceSeries)).map(({ code, nextNumber }) => ({
       code,
       nextNumber,
     })),
   ).toEqual([
-    { code: "A-06RB", nextNumber: 1 },
-    { code: "FF-06RB", nextNumber: 1 },
-    { code: "R-06RB", nextNumber: 1 },
+    { code: "A-0CNNW", nextNumber: 1 },
+    { code: "FF-0CNNW", nextNumber: 1 },
+    { code: "R-0CNNW", nextNumber: 1 },
   ]);
   const committed = await withTransaction(venue.db, (tx) =>
     initialSetupFor(f.host.modules, MODULE)!.committed(tx, context, input),
@@ -296,7 +296,7 @@ it("the configured input seat refuses changed names after the hour was frozen", 
   const input = structuredClone(
     (context.request as { input: { allocation: { installationIdentity: string } } }).input,
   );
-  input.allocation.installationIdentity = "06RC";
+  input.allocation.installationIdentity = "0CNPG";
   const result = await f.post("input", { module: MODULE, input });
   expect(result.status).toBe(400);
   expect(result.body.error.code).toBe("sif.allocation_invalid");
