@@ -174,8 +174,12 @@ export class TillFinishTableDialog extends LitElement {
       this.#scope?.commit(this.#baseline);
     }
     if (changed.has("reasons") && this.draft.reasonId !== "" && this.#reason() === undefined) {
+      const untouched = this.draft.reasonId === this.#baseline?.reasonId;
       this.draft = { ...this.draft, reasonId: "", note: "" };
-      this.#scope?.changed();
+      if (untouched) {
+        this.#baseline = { ...this.#baseline!, reasonId: "" };
+        this.#scope?.commit(this.#baseline);
+      } else this.#scope?.changed();
     }
     if (this.isConnected && this.active && !this.#scope) {
       const { scope, coordinator } = draftScopeFor<Draft>(this, {

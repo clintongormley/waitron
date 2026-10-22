@@ -186,3 +186,33 @@ it("a start reason that arrives after it opened is not an unsaved change", async
   expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("house");
   expect(unload()).toBe(false);
 });
+it("a start reason deleted while it is open is not an unsaved change", async () => {
+  const { app, form } = await mount();
+  expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("house");
+  app.reasons = [{ ...app.reasons[0]!, id: "other", name: "Other" }];
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("");
+  expect(unload()).toBe(false);
+});
+it("a chosen reason deleted while it is open stays an unsaved change", async () => {
+  const { app, form } = await mount();
+  const [house] = app.reasons;
+  app.reasons = [house!, { ...house!, id: "other", name: "Other" }];
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  form
+    .shadowRoot!.querySelector("wt-combobox")!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "other" }, bubbles: true, composed: true }),
+    );
+  await form.updateComplete;
+  app.reasons = [house!];
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("");
+  expect(unload()).toBe(true);
+});

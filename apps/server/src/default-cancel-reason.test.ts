@@ -184,6 +184,22 @@ describe("the reason Finish table starts on", () => {
     }
   });
 
+  it("marks it by its name when it has no English name", async () => {
+    const starter = await notServed();
+    await inTx(venue, (tx) =>
+      updateAdjustmentReason(tx, starter.id, {
+        ...inputOf(starter),
+        name: "Not served",
+        names: {},
+      }),
+    );
+    try {
+      expect(await marked()).toEqual([starter.id]);
+    } finally {
+      await inTx(venue, (tx) => updateAdjustmentReason(tx, starter.id, inputOf(starter)));
+    }
+  });
+
   it("with two such reasons, marks the first in the venue's order", async () => {
     const starter = await notServed();
     const second = await inTx(venue, (tx) =>

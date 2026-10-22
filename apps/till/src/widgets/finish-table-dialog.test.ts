@@ -248,6 +248,14 @@ it("takes the start reason once reasons arrive after it opened, and keeps a reas
   await el.updateComplete;
   expect(root(el).querySelector("wt-combobox")!.value).toBe("other");
 });
+it("keeps a reason chosen before the start reason arrives", async () => {
+  const el = await mount();
+  await reason(el, "other");
+  el.reasons = [house, other];
+  el.defaultReasonId = "house";
+  await el.updateComplete;
+  expect(root(el).querySelector("wt-combobox")!.value).toBe("other");
+});
 it("requires Other's note, marks a synthetic invalid submission, and sends the trimmed note", async () => {
   const el = await mount();
   await reason(el, "other");

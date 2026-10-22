@@ -10970,7 +10970,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     const notServed = {
       ...cancelReason,
       id: "r-not-served",
-      name: "No servido",
+      name: "Never reached the table",
       startsFinishTable: marked,
     };
     const pending = held();
