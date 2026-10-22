@@ -477,7 +477,6 @@ export function createHourSelection(options: {
           ? latestWait
           : undefined;
       const settles = ["setup", "restore"].includes(request.binding.action);
-      // A preview never offers a settle target it has not saved.
       const settleTarget = !settles
         ? -Infinity
         : currentWait !== undefined
@@ -496,46 +495,40 @@ export function createHourSelection(options: {
       if (targetMs >= END_MS) return refuse("minute_not_later");
       if (targetMs - now > WAIT_BOUND_MS && targetMs !== settleTarget)
         return refuse("minute_not_later", targetMs);
-      if (now < targetMs) {
-        let wait = waits.find((entry) => entry.targetMs === targetMs);
-        if (wait === undefined) {
-          wait = {
-            ...base,
-            contextKey: facts.waitKey ?? facts.contextKey,
-            kind: "wait",
-            targetMs,
-          };
-          if (persist) {
-            if (latestWait !== undefined && targetMs <= latestWait.targetMs)
-              return refuse("history_invalid");
-            await write(wait);
-          }
-        }
+      const waiting = (wait: Wait) => {
         const timerKey = JSON.stringify([fingerprint(wait), wait.targetMs]);
         const monotonic = options.monotonicNow();
         if (!Number.isFinite(monotonic) || monotonic < 0) return refuse("clock_unconfirmed");
         let timer = timers.get(timerKey);
         if (timer === undefined) {
-          timer = { start: monotonic, duration: targetMs - now };
+          timer = { start: monotonic, duration: Math.max(0, wait.targetMs - now) };
           timers.set(timerKey, timer);
         }
         if (monotonic < timer.start) return refuse("clock_unconfirmed");
-        return {
-          status: "waiting" as const,
-          targetMs,
-          remainingMs: Math.max(timer.duration - (monotonic - timer.start), targetMs - now),
-        };
-      }
-      if (currentWait !== undefined) {
-        const timer = timers.get(JSON.stringify([fingerprint(currentWait), currentWait.targetMs]));
-        const monotonic = options.monotonicNow();
-        if (!Number.isFinite(monotonic) || monotonic < 0) return refuse("clock_unconfirmed");
-        if (timer !== undefined) {
-          if (monotonic < timer.start) return refuse("clock_unconfirmed");
-          const remainingMs = timer.duration - (monotonic - timer.start);
-          if (remainingMs > 0)
-            return { status: "waiting" as const, targetMs: currentWait.targetMs, remainingMs };
+        const remainingMs = Math.max(
+          timer.duration - (monotonic - timer.start),
+          wait.targetMs - now,
+        );
+        return remainingMs > 0
+          ? { status: "waiting" as const, targetMs: wait.targetMs, remainingMs }
+          : undefined;
+      };
+      // A preview counts down only a wait already recorded, never a target it has not saved.
+      if (!persist) {
+        const recorded = currentWait === undefined ? undefined : waiting(currentWait);
+        if (recorded !== undefined) return recorded;
+      } else if (now < targetMs) {
+        let wait = waits.find((entry) => entry.targetMs === targetMs);
+        if (wait === undefined) {
+          if (latestWait !== undefined && targetMs <= latestWait.targetMs)
+            return refuse("history_invalid");
+          wait = { ...base, contextKey: facts.waitKey ?? facts.contextKey, kind: "wait", targetMs };
+          await write(wait);
         }
+        return waiting(wait)!;
+      } else if (currentWait !== undefined) {
+        const recorded = waiting(currentWait);
+        if (recorded !== undefined) return recorded;
       }
       const selected: Intent = {
         ...base,

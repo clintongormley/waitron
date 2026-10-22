@@ -850,3 +850,42 @@ it("records the intent durably before the select resolves selected", async () =>
   order.push(`resolved ${result.status}`);
   expect(order).toEqual(["replace true", "resolved selected"]);
 });
+it.each([restore, setup, binding, reRegister])(
+  "a $action preview with no recorded wait never counts down a target it has not saved",
+  async (base) => {
+    const f = fixture();
+    withHistory(f, [activationRow("0D0RW", at("2026-10-24T09:00:10Z"))]);
+    f.at(at("2026-10-24T09:00:30Z"), 0);
+    expect(await f.preview(base)).toMatchObject({ status: "preview" });
+    expect(f.writes).toEqual([]);
+  },
+);
+it("refuses a new wait whose target is not later than a recorded one", async () => {
+  const f = fixture();
+  withHistory(f, [activationRow("0D00B", at("2026-10-23T19:55:10Z"))]);
+  f.at(at("2026-10-23T19:55:50Z"), 0);
+  await f.run();
+  const value = structuredClone(f.value) as { entries: { targetMs: number }[] };
+  value.entries[0]!.targetMs = at("2026-10-23T19:57:00Z");
+  f.value = value;
+  f.writes.splice(0, f.writes.length, structuredClone(value));
+  await expect(f.run()).rejects.toMatchObject(refusal("history_invalid"));
+  expect(f.writes).toHaveLength(1);
+});
+it.each([
+  ["2026-10-24T09:03:00.000Z", { status: "selected", identity: "0D0RZ" }, 1],
+  ["2026-10-24T09:03:00.001Z", { status: "waiting", targetMs: at("2026-10-24T09:05:00Z") }, 2],
+])(
+  "a recorded wait is reused up to a minute past its target: select at %s",
+  async (when, expected, waits) => {
+    const f = fixture();
+    f.at(at("2026-10-24T09:00:04Z"), 0);
+    await f.run(setup);
+    f.restart();
+    f.at(at(when), 0);
+    expect(await f.run(setup)).toMatchObject(expected);
+    expect(
+      (f.value as { entries: { kind: string }[] }).entries.filter((entry) => entry.kind === "wait"),
+    ).toHaveLength(waits);
+  },
+);
