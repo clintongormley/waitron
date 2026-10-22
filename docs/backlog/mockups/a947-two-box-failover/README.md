@@ -6,7 +6,8 @@ Screens are in Spanish, as staff see them; captions are in English. The HTML gen
 outside the repository. The installation codes (`0CNNW`, `0CZZW`, `0D00B`, `0D0RY`) are the
 design's §6.5 five-symbol UTC-minute codes; the Friday is 23 October 2026, Madrid time. Pictures 2
 and 4 were redrawn on 2026-10-21 for the owner's answers, and 6 and 7 added then; 2 and 6 were
-redrawn again the same evening for the second revision (the owner's 22:25 answers). Picture 5
+redrawn again the same evening for the second revision (the owner's 22:25 answers). Picture 8 was
+added on 2026-10-22 for the owner's direction of about 03:12. Picture 5
 keeps question 1 as it was asked, with A679's old wording.
 
 | Picture | What it shows |
@@ -18,3 +19,4 @@ keeps question 1 as it was asked, with A679's old wording.
 | [5-q1-who-switches.png](5-q1-who-switches.png) | Question 1's worked example, as it was asked: the same Friday evening with a manager switching, and with the boxes switching by themselves (§12). Its proof line (installation code, password and code) is superseded by picture 2 |
 | [6-switch-series-worked-example.png](6-switch-series-worked-example.png) | Every series name, five symbols for the UTC minute: Friday 21:40 a switch takes `0CZZW`, 21:55 a second takes `0D00B` at once, a third in the same minute would wait 2 seconds for `0D00C`; Saturday's restore from an old backup with the box's clock wrong, refused, then `0D0RY` once the clock is right; the rules and what AEAT sees (§6.5, §6.7) |
 | [7-reaching-the-switch.png](7-reaching-the-switch.png) | Reaching the switch from any device: the QR label on each box, a reloaded handheld landing on the spare's switch page at `waitron.local`, and which sign-ins work with the internet down (§6.6) |
+| [8-waiting-explained.png](8-waiting-explained.png) | Every wait explains itself, with a countdown: the restore page during the 90 to 150 seconds after the clock check, saying why (no invoice series may ever repeat), that nothing needs doing, and «Sigue en 1:24»; a first setup on the box's own screen with no internet and so no second clock, saying what to do and what will end the wait, with no countdown; the refusal when the clocks differ by more than 30 seconds; the restore page at phone width (§6.5, §6.7; slice 4a) |

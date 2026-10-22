@@ -1,8 +1,9 @@
 # A947 — Go-live on two local boxes: a spare box that takes over
 
-**Date:** 2026-10-21, revised twice the same day for the owner's answers. **Status:** design; all
-four questions and the owner's two follow-ups of about 22:25 answered (§12); the second revision
-awaits the owner's approval. Nothing in it is built.
+**Date:** 2026-10-21, revised twice the same day for the owner's answers, amended 2026-10-22.
+**Status:** design; all four questions and the owner's two follow-ups of about 22:25 answered
+(§12); the owner approved the second revision on 2026-10-22 at about 02:40, and the amendment below
+adds the owner's direction of about 03:12. Nothing in it is built.
 **Item:** A947. **Refreshes:** the
 [topology design](2026-09-16-sqlite-litestream-topology-design.md) §4.4 (on-prem primary → on-prem
 mirror), §5 (promotion, return, tail shipper, split brain), §6 (trust and fencing) and §11 (build
@@ -11,6 +12,27 @@ rewritten, and carries a dated pointer here.
 
 **Mock-ups:** [`docs/backlog/mockups/a947-two-box-failover/`](../../backlog/mockups/a947-two-box-failover/README.md).
 
+> **Amendment 2026-10-22 — every clock wait explains itself, with a countdown.** The owner, at
+> about 03:12: "But explain that on the screen and provide a countdown for the user to see." What
+> changed:
+>
+> - **§6.5, a new rule, "Every wait explains itself"**: wherever a box waits instead of taking a
+>   name — the 90 to 150 seconds after the clock check at a setup or a restore (§6.7), a switch
+>   waiting for the next minute (§6.2), and a box with no second clock yet — the screen the person
+>   is looking at says why (the time has to be confirmed so that no invoice series is ever
+>   repeated), what to do if anything, and a live countdown to when it goes ahead; a wait with no
+>   fixed end says what will end it instead. The texts, in English and Spanish, and which slice
+>   builds which screen: 4a the setup page and the restore page, 4c the switch dialog, 4d the
+>   spare's switch page. Mock-up 8.
+> - **Said plainly** (§6.5, clock rule 1): the visiting device's clock — a phone's, a till's, a
+>   laptop's — is compared automatically, as the page's own reading; nobody types a time. The
+>   owner's direction of about 03:05, to ask the person for the time when the only screen is the
+>   box's own, was **withdrawn by the owner at about 03:10** ("it is probably safer to not ask the
+>   user but to wait instead, as you have already designed it"): the box's own screen never counts
+>   as the second clock, and nobody is asked to type a time there either.
+> - **§11** slices 4a, 4c and 4d name the screens; §13 and the provenance table gain a line each.
+>   Nothing else the owner approved changes.
+>
 > **Second revision 2026-10-21 — the owner's answers of about 22:25.** What changed, section by
 > section. (An "installation code" is the short name a box's invoices carry, such as the `0CZZW`
 > in `A-0CZZW/1`; AEAT, the tax agency, receives it as the installation number. A box "takes a
@@ -456,7 +478,9 @@ and nothing else:
    AEAT or already configured Waitron origin the third when the internet is up; a disagreement over
    30 seconds (120 today; §6.5 says why it changes) stops the switch, with «Comprobar otra vez»;
    unlike today, no confirmation gets past it (§6.5). The spare then names its series with the five-symbol code
-   of the current UTC minute (§6.5).
+   of the current UTC minute (§6.5). The till's page sends its own clock reading by itself; nobody
+   types a time. While the spare waits for the next minute, or has no second clock, the dialog says
+   why and shows a countdown or what will end the wait (§6.5, "Every wait explains itself").
 3. **The manager's own sign-in: their passkey, or their password plus their authenticator code
    when they have one enrolled** (owner, question 2: "I think we ask for the passkey or password
    (+authenticator code if configured)"). It is the dashboard's sign-in: a passkey with the
@@ -722,7 +746,10 @@ selection through (`:152-157`). The probe in §6.7 confirmed both halves on the 
    never at the name it was sent to: tills reach the spare at `waitron.local` answered by the spare
    itself, and phones at the box's own name (§6.6), and their clocks count. The app runs with the
    host's network (`network_mode: host`, `deploy/compose.yml:17`), so it sees the real source
-   address. With no second clock, the box takes no name.
+   address. With no second clock, the box takes no name. The visiting device's reading is taken
+   automatically: the page reads its own clock and sends it, so nobody types a time — not on a
+   phone or till, and not on the box's own screen, where the page waits instead (owner, about 03:05
+   and 03:10 on 2026-10-22: a typed time on the box's own screen was proposed and withdrawn).
 2. **The box's clock must lie within 30 seconds of every other usable clock's reading** (the middle
    of its range). **Behind or ahead, it is refused, and no confirmation gets past it.** The first
    version of this revision refused only a box clock that was behind, at setups and restores, and
@@ -788,6 +815,38 @@ este equipo. Podrás cambiar a partir de las 22:04» with this box's reading bes
 check the box's clock and call for help if the time looks wrong; this design adds no way round it,
 as A679 adds none. Today's code refuses every same-or-earlier hour as `hour_not_later`
 (`hour-selection.ts:464-471`); slice 4a makes that comparison by minute.
+
+**Every wait explains itself, with a countdown** (owner, about 03:12 on 2026-10-22: "But explain
+that on the screen and provide a countdown for the user to see"). Wherever a box waits instead of
+taking a name, the screen the person is looking at says three things in plain words:
+
+1. **Why it waits**: the time has to be confirmed so that no invoice series is ever repeated.
+2. **What to do**, if anything.
+3. **When it goes ahead**: a live countdown. A wait with no fixed end — no second clock yet — has
+   no countdown; it says what will end it instead.
+
+The box decides; the screen only shows. The box returns how long is left, the page counts that down
+on its own timer, and at zero the page checks the clocks again and asks for the name; the box takes
+it only if that new check passes, and a box that still needs time answers with a new countdown. The
+page never takes a name by itself when its countdown ends. A refusal is not a wait: rule 4's
+"allowed from 22:04" and the clock refusal below show no countdown, because nothing goes ahead by
+itself — rule 4 refuses rather than waits out a clock that some reference got wrong.
+
+| Case | Why | What to do, and when it goes ahead |
+| --- | --- | --- |
+| The 90 to 150 seconds after the check, at a setup or a restore (§6.7); a switch waiting for the next minute | «Esperamos a confirmar la hora para que ninguna serie de facturas se repita.» / "Waiting to confirm the time, so no invoice series is ever repeated." A switch adds the approved «Ya se usó este minuto para cambiar de equipo». | «No hace falta hacer nada; deja esta página abierta.» / "Nothing to do; keep this page open." Then «Sigue en 1:24» / "Continues in 1:24", counting down. |
+| No second clock yet: no internet, and the page is on the box's own screen (or no other device's reading arrived) | «Para que ninguna serie de facturas se repita, la hora del equipo se compara con la de otro aparato o con internet.» / "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's." On the box's own screen it adds «Esta pantalla está en el propio equipo y no cuenta.» / "This screen is on the box itself, so it does not count." | «Abre esta página desde un móvil o una caja del local, o conecta el equipo a internet.» / "Open this page on a phone or till on the venue's network, or connect the box to the internet." No countdown: «Sigue sola en cuanto el equipo tenga internet.» / "It carries on by itself once the box reaches the internet." The page checks again every 15 seconds. |
+| Refused: this box and the other clock differ by more than 30 seconds | «Sin una hora confirmada no se crean series, para que ninguna se repita.» / "No series is made without a confirmed time, so none is ever repeated." | The approved text above, «La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos). Prueba desde otra caja o móvil, o corrige la que esté mal» / "This box's time and this device's differ by more than 30 seconds. Try from another till or phone, or correct the one that is wrong", with both readings and «Comprobar otra vez» / "Check again". No countdown. |
+
+Which screens show it, by slice: **4a** the setup page and the restore page (the fiscal module's
+setup screens, which the setup app shows); **4c** the switch dialog on a till, a handheld or the
+dashboard; **4d** the spare's switch page, including on the spare's own screen, where with no
+internet the "no second clock" row applies and its what-to-do reads «Cambia desde una caja o un
+móvil del local, o conecta el equipo a internet» / "Switch from a till or phone on the venue's
+network, or connect the box to the internet". The command-line setup has no screen to count down
+on: it prints the why line and the time it will go ahead. A993's change and its recovery page
+follow the same rule in A940's design. Mock-up 8 draws the restore page waiting, and the setup page
+on the box's own screen with no second clock.
 
 **Why it can never collide with or reuse a name this box knows of.**
 
@@ -905,7 +964,8 @@ the spare's status, nothing that sells — and any device reaches it:
 3. **On the spare's own screen**, if one is plugged in (B3 asks whether a box's screen is also a
    till): it shows the switch page. That screen's browser runs on the spare and shares its clock, so
    it is not the second clock §6.5 requires: with the internet down, a switch started there is
-   refused, and the manager switches from a till or a phone instead (§13).
+   refused, and the manager switches from a till or a phone instead (§13). The page says so, and why
+   (§6.5, "Every wait explains itself").
 
 **Trap (a): a passkey works only under the name it was registered for.** The box registers every
 passkey for `waitron.local` (§2). A browser lets a page use that passkey only when its address is
@@ -1139,6 +1199,9 @@ it flags, and a confirmation passes it.
      of the check; this box's clock is at most 45 seconds slow, so the true time is at most its
      reading plus 45 seconds; that unseen name's minute begins at most 90 seconds after this box's
      reading, and the next minute to begin after that is later than it.
+
+     While it waits, the setup or restore page says why and counts down to the moment it goes
+     ahead (§6.5, "Every wait explains itself"; mock-up 8).
 
      Checked by a sweep rather than by this paragraph alone, run 2026-10-22 under Node v26.11.1:
      `node ~/waitron-campaign/a947r2-probes/restore-wait-sweep.mjs` (output beside it). It tries
@@ -1511,6 +1574,11 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
   - **Runbooks**, in the same pull request: `docs/operations/hour-recovery.md:11,40` (the typed
     four-character code) and `docs/operations/first-live-fiscal-setup.md:20,33,42` (the "last hour"
     question and the sheet's code).
+  - **The setup page and the restore page explain every wait** (§6.5, "Every wait explains
+    itself", added 2026-10-22): the why, the what-to-do and a live countdown during the 90 to 150
+    seconds; with no second clock, what will end the wait and a check every 15 seconds; at zero, a
+    fresh clock check before the box takes the name. The confirm-the-clock controls and the "last
+    hour" question go from both pages.
   - **Tests it adds**: §6.5's rules (two names in one minute, a third, a known later minute inside
     and beyond 150 seconds, the refusal naming its time, the durable record before activation); a
     five-symbol series with hyphenated and slashed prefixes beside the retired forms; and
@@ -1522,12 +1590,14 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
   **Fiscal.**
 - **4c. Devices follow, and the take-over screens.** The strip, the dialog and its refusals (a till
   or the spare still reaching the main box), the switch's proof — a passkey or a password and, when
-  enrolled, a code, on a till as on the dashboard (§6.2) — `node.promote` at the till, the venue name
+  enrolled, a code, on a till as on the dashboard (§6.2), and the dialog's explained waits and
+  countdown (§6.5, "Every wait explains itself") — `node.promote` at the till, the venue name
   and certificate on the spare after promotion, the router's switch (no "print a new sheet" prompt:
   the owner dropped it, §6.7), and the card-payment ownership rule A764 asks for. Not fiscal, but it lands after 4b.
 - **4d. Reaching the switch from any device.** The spare's switch page; the spare answering the
   venue's name with only that page while the main box is silent, and stopping when it answers; the
-  QR labels; passkeys checked against the venue's and both boxes' own origins; measured on the till
+  QR labels; the switch page's explained waits, including the "no second clock" text on the
+  spare's own screen (§6.5); passkeys checked against the venue's and both boxes' own origins; measured on the till
   hardware: two-part `.local` names, the name cache after the main box dies, and a passkey at each
   way in (§6.6). Not fiscal.
 - **4e. The hand-over.** The main box fences on request, waits for answers already due, syncs, and
@@ -1585,7 +1655,8 @@ Asked one at a time in the campaign's questions file by the watcher, each with a
    "prove it": a test showing that a restore from an old backup with the clock set behind refuses
    rather than reuses a name (→ §6.7: today's code does not, so this revision adds the floor).
 
-**What is left for the owner:** approval of this second revision before the build is planned. The
+**What is left for the owner:** approval of this second revision before the build is planned
+(given 2026-10-22 at about 02:40; the amendment of about 03:12 adds §6.5's explained waits). The
 calls marked **my call** are the ones to look at:
 
 - **The clock check** (§6.5): 30 seconds instead of 120, every time a box takes a name; a second
@@ -1641,6 +1712,12 @@ the code depends.
   (§6.6, way 3); the manager switches from a till or phone instead.
 - A reference clock (till, phone or internet) more than 15 seconds wrong can still lead to a
   repeated name at a setup or restore (§6.7); the 15-second allowance is a starting value.
+- Whether a phone can carry on a first setup begun on the box's own screen: the setup's owner
+  proof lives in the browser that started it (`firstFiscalOwner`,
+  `apps/server/src/setup-first-fiscal-api.ts`, reads it from request headers). §6.5's "no second
+  clock" text tells the person to open the page from a phone; for a restore and a setup started
+  on a phone or laptop that is the same page, but for one begun on the box's screen it is B3's
+  setup flow that has to allow it (above).
 - Sizing the UPS for two boxes.
 
 ## Provenance
@@ -1649,6 +1726,7 @@ the code depends.
 | --- | --- | --- |
 | The owner's go-live words | owner, watcher session 2026-10-21 ~08:25 | quoted in queue item A947 |
 | The owner's four answers and their follow-ups | owner, watcher session 2026-10-21 ~09:25–11:45 | quoted from the campaign's questions file |
+| Approval of the second revision; the typed time on the box's own screen proposed (~03:05) and withdrawn (~03:10); every wait explained with a countdown (~03:12) | owner, watcher session 2026-10-22 | quoted from the campaign's owner-answers file in the brief for the amendment |
 | Litestream 0.5.17 refuses a second replica | `cmd/litestream/main.go:794-795` at tag v0.5.17 | `curl` of the raw file, 2026-10-21 |
 | Follow mode exists at the pin | `cmd/litestream/restore.go:39` at tag v0.5.17 (`fs.BoolVar(&opt.Follow, "f", …)`) | `curl` of the raw file, 2026-10-21; never run in this repository |
 | versitygw is Apache-2.0 and maintained | GitHub API `repos/versity/versitygw` | `curl`, 2026-10-21 |
