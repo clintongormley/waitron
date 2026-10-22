@@ -11,8 +11,10 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   createCustomTheme,
+  deleteCustomTheme,
   listCustomThemes,
   readThemeInUse,
+  renameCustomTheme,
   saveCustomTheme,
   setThemeInUse,
 } from "./theme-store.js";
@@ -83,6 +85,14 @@ async function setup(): Promise<{ manager: string }> {
 
 function create(manager: string, name: string, theme: unknown = LEMON, inUse?: boolean) {
   return inTx((tx) => createCustomTheme(tx, { managementSessionId: manager, name, theme, inUse }));
+}
+
+function rename(manager: string, id: string, name: string) {
+  return inTx((tx) => renameCustomTheme(tx, { managementSessionId: manager, id, name }));
+}
+
+function remove(manager: string, id: string) {
+  return inTx((tx) => deleteCustomTheme(tx, { managementSessionId: manager, id }));
 }
 
 function switchTo(manager: string, customThemeId: string | null) {
@@ -337,4 +347,126 @@ describe("custom theme store against a real migrated database", () => {
     expect(await codeOf(() => saveUnknown(supervisor))).toBe("authorization.not_permitted");
     expect(await codeOf(() => saveUnknown(manager))).toBe("theme.not_found");
   });
+
+  it("renames a theme, keeping its choices, its updated stamp moving, and whether it is in use", async () => {
+    const { manager } = await setup();
+    const a = await create(manager, "A", LEMON, true);
+    const b = await create(manager, "B", DARK_GREEN);
+    await suite.db.execute(
+      sql`update custom_themes set updated_at = '2000-01-01T00:00:00.000Z' where id = ${a.id}`,
+    );
+    const bBefore = await rawRow(b.id);
+    const renamed = await rename(manager, a.id, "Summer terrace");
+    expect(renamed).toEqual({
+      id: a.id,
+      name: "Summer terrace",
+      choices: LEMON,
+      updatedAt: expect.any(String),
+    });
+    expect(renamed.updatedAt).not.toBe("2000-01-01T00:00:00.000Z");
+    expect(await idsInUse()).toEqual([a.id]);
+    expect(await rawRow(a.id)).toMatchObject({
+      name: "Summer terrace",
+      name_key: "summer terrace",
+      updated_at: renamed.updatedAt,
+    });
+    expect(await rawRow(b.id)).toEqual(bBefore);
+  });
+
+  it("a rename to another form of the theme's own name succeeds", async () => {
+    const { manager } = await setup();
+    const a = await create(manager, "Bar Lucía");
+    const renamed = await rename(manager, a.id, "BAR LUCÍA");
+    expect(renamed.name).toBe("BAR LUCÍA");
+    expect(await rowCount()).toBe(1);
+  });
+
+  it("a rename to another theme's name ignoring case and accent form is name_taken", async () => {
+    const { manager } = await setup();
+    await create(manager, "Bar Lucía");
+    const b = await create(manager, "B", DARK_GREEN);
+    const before = await rawRow(b.id);
+    const decomposed = "bar luci\u0301a";
+    expect(decomposed).not.toBe("bar lucía");
+    expect(await errorOf(() => rename(manager, b.id, decomposed))).toEqual({
+      code: "theme.name_taken",
+      params: { field: "name" },
+    });
+    expect(await rawRow(b.id)).toEqual(before);
+  });
+
+  it.each([
+    [" ", "empty"],
+    ["x".repeat(61), "too_long"],
+    ["waitron", "reserved"],
+  ])("a rename to %j is theme.invalid naming name, reason %s", async (name, reason) => {
+    const { manager } = await setup();
+    const a = await create(manager, "A");
+    const before = await rawRow(a.id);
+    expect(await errorOf(() => rename(manager, a.id, name))).toEqual({
+      code: "theme.invalid",
+      params: { field: "name", reason },
+    });
+    expect(await rawRow(a.id)).toEqual(before);
+  });
+
+  it("renames a theme this release cannot read, and still reads it as unreadable", async () => {
+    const { manager } = await setup();
+    const id = randomUUID();
+    await suite.db.execute(
+      sql`insert into custom_themes (id, name, name_key, theme, updated_at)
+          values (${id}, 'Old', 'old', '{broken', '2026-10-01T00:00:00.000Z')`,
+    );
+    const renamed = await rename(manager, id, "Older");
+    expect(renamed).toEqual({ id, name: "Older", choices: null, updatedAt: expect.any(String) });
+    expect((await inTx(listCustomThemes)).themes).toEqual([renamed]);
+    expect(((await rawRow(id)) as { theme: string }).theme).toBe("{broken");
+  });
+
+  it("deleting the theme in use leaves none in use", async () => {
+    const { manager } = await setup();
+    const a = await create(manager, "A", LEMON, true);
+    const b = await create(manager, "B", DARK_GREEN);
+    expect(await remove(manager, a.id)).toEqual({ inUse: null });
+    expect(await idsInUse()).toEqual([]);
+    expect(await rowCount()).toBe(1);
+    expect(await rawRow(a.id)).toBeUndefined();
+    expect(await rawRow(b.id)).toBeDefined();
+  });
+
+  it("deleting a theme not in use leaves the one in use", async () => {
+    const { manager } = await setup();
+    const a = await create(manager, "A", LEMON, true);
+    const b = await create(manager, "B", DARK_GREEN);
+    expect(await remove(manager, b.id)).toEqual({ inUse: a.id });
+    expect(await idsInUse()).toEqual([a.id]);
+    expect(await rowCount()).toBe(1);
+  });
+
+  it.each([randomUUID(), "x"])(
+    "rename and delete check permission before the id, for the missing id %s",
+    async (id) => {
+      const { manager } = await setup();
+      await create(manager, "A", LEMON, true);
+      const supervisor = await seedSession("supervisor");
+      expect(await codeOf(() => rename(supervisor, id, "B"))).toBe("authorization.not_permitted");
+      expect(await codeOf(() => remove(supervisor, id))).toBe("authorization.not_permitted");
+      expect(await codeOf(() => rename(manager, id, "B"))).toBe("theme.not_found");
+      expect(await codeOf(() => remove(manager, id))).toBe("theme.not_found");
+      expect(await rowCount()).toBe(1);
+    },
+  );
+
+  it.each(["supervisor", "staff"] as const)(
+    "refuses a %s's rename and delete before writing",
+    async (role) => {
+      const { manager } = await setup();
+      const a = await create(manager, "A", LEMON, true);
+      const session = await seedSession(role);
+      const before = await rawRow(a.id);
+      expect(await codeOf(() => rename(session, a.id, "B"))).toBe("authorization.not_permitted");
+      expect(await codeOf(() => remove(session, a.id))).toBe("authorization.not_permitted");
+      expect(await rawRow(a.id)).toEqual(before);
+    },
+  );
 });

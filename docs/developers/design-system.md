@@ -471,7 +471,8 @@ colour a person gave a category, a product or a menu section is painted as it is
 token. Its users are the colour chooser's palette (`apps/dashboard/src/widgets/color-field.ts`), the
 category swatches in the Products tree, the product and section swatches in a menu's Structure tree,
 the brand colour and fix shade chips on Settings → Appearance's Look card
-(`apps/dashboard/src/screens/look-card.ts`), and the till's product and section tiles (`apps/till/src/widgets/menu-browser.ts`). A painted till
+(`apps/dashboard/src/screens/look-card.ts`), the colour chips in the Themes card's rows
+(`apps/dashboard/src/screens/themes-card.ts`), and the till's product and section tiles (`apps/till/src/widgets/menu-browser.ts`). A painted till
 tile takes black or white for its labels and its icon, whichever `readableTextColor`
 (`packages/ui/src/category-color.ts`) picks for that colour, because the label still carries the
 meaning and the colour is never the only signal. `wt-lozenge` takes a colour the same way, filling
@@ -2785,6 +2786,9 @@ and nothing guards it across screens:
 - A841 slice 5: the Look card on Settings → Appearance, editing in place
   (`apps/dashboard/src/screens/look-card.ts`). Its leave cases are in `look-card.unsaved.test.ts`
   beside it;
+- A841 slice 13: the theme name dialog (`apps/dashboard/src/widgets/theme-name-dialog.ts`); Make a
+  copy and Save as new theme… open already savable. Its leave cases are in
+  `theme-name-dialog.unsaved.test.ts` beside it;
 - A231q: the mail server settings form (`apps/dashboard/src/widgets/email-settings-form.ts`); the
   order detail's invoice email form (`apps/dashboard/src/widgets/invoice-email-dialog.ts`); an office
   printer's Add (`apps/dashboard/src/widgets/page-printer-add.ts`); the office printers panel's
@@ -2846,6 +2850,8 @@ These open already savable:
   filled in from them, and turning them back on is itself the change (`#applyAction` in
   `apps/dashboard/src/screens/backup-screen.ts`);
 - the printers' name dialog (Add, or Enable for a switched-off printer): pressing it is the add;
+- the theme name dialog's Make a copy and Save as new theme…: pressing Save is the copy
+  (`savableAtOpen`, `apps/dashboard/src/widgets/theme-name-dialog.ts`);
 - the calibration wizard when an add opened it: after a fresh add it confirms a new printer's
   default settings, and after a re-add pressing Save is what keeps the printer on, because closing
   the wizard switches it off again (`#calibrationOpenedByAdd` in
@@ -4005,15 +4011,30 @@ rather than assuming this composition applies unchanged.
 
 ### Appearance (venue themes)
 
-Settings → Appearance holds one card, Look (`apps/dashboard/src/screens/look-card.ts`, A841
-slice 5), built with `settingsCard` and `settingsRows`:
+Settings → Appearance holds two cards: Look (`apps/dashboard/src/screens/look-card.ts`, A841
+slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
+(`apps/dashboard/src/screens/themes-card.ts`, A841 slice 13). The Look card:
 
 - **Saved, its rows are** Theme in use, Brand colour (a chip and the value, "Custom · " before a
   colour that is not a swatch, and the shade of each kind of screen whose fix is taken), Background,
   Corners and Colours set by hand. Below them comes one warning line for each warning the server
   sends with the theme, then the note about each screen's own Theme setting.
-- **Edit opens the editor in place**, in the same card. It is offered only to a person holding
-  `layout.configure`, and only while one of the venue's own themes is in use.
+- **Edit opens the editor in place**, in the same card. It is offered to a person holding
+  `layout.configure`, whichever theme is in use.
+- **The editor has three ways in, and its heading and top line follow the latest read** (A841
+  slice 13, D6): a stored theme (the Look card's Edit while it is in use, or a Themes row's Edit),
+  headed "Look" while it is in use and "Edit theme: {name}" otherwise; Waitron's theme while it is
+  in use (the Look card's Edit), opening on Waitron's choices and headed "Look"; and a new theme
+  (the Themes card's Add theme), opening on Waitron's choices and headed "Add theme". The line
+  above the choices reads "Theme in use: {name}. Saving changes every screen." or "Not in use.
+  Saving changes no screen until you use it." For Waitron's theme and a new theme, Save opens the
+  name dialog (switch on for Waitron's theme in use, off for a new one), since Waitron's theme is
+  never stored into. Save stays quiet and disabled until the draft changes in all three.
+- **Save as new theme… is drawn only while editing a stored theme**, in the `secondary` slot
+  before Cancel, `variant="secondary"` (D8). It is never quiet-and-disabled for an unchanged draft:
+  it is disabled only while a request is being sent, or after a save attempt while the colour code
+  fails its check. It opens the name dialog with "{name} (copy)", the switch on exactly when the
+  edited theme is in use, and leaves the edited theme as it was saved.
 - **The editor lays out by the card's width, never the window's** (container queries): the choices
   and the preview sit side by side when the form is at least 900px wide, and the preview's two
   panels sit side by side when the preview is at least 640px wide. Narrower, each stacks, the
@@ -4022,25 +4043,70 @@ slice 5), built with `settingsCard` and `settingsRows`:
   otherwise; this follows the words' real widths, so it needs no width per language. The form's
   buttons sit `--wt-space-4` below whatever comes before them: the preview in one column, the
   taller of the two columns side by side, or the Fix all line when it shows.
-- **The editor's buttons follow the design's mock-up 02**: Use Waitron's look in the `cancel` slot
-  at the start, then Cancel as `secondary`, then Save. This departs from the rule that Cancel takes
-  the `cancel` slot.
+- **The editor's buttons follow the design's mock-ups 02 and 03**: Use Waitron's look at the start,
+  then Save as new theme… and Cancel as `secondary`, then Save. Use Waitron's look sits outside
+  the `wt-form-actions`, beside it in one wrapping row, so on a narrow card it takes a line of its
+  own above the others and no button breaks its label. In English, Save as new theme… and Cancel
+  share the next line from a 358 px card, as mock-up 03 draws. Below a 300 px form (a 350 px
+  card) the buttons' side padding is `--wt-space-2` rather than `--wt-space-4`: with the wider
+  padding the Spanish Save as new theme… broke its label on CI in the 310 px card of a 390 px
+  window, and broke it the same way on macOS with DejaVu Sans Bold loaded into the test (in
+  `mcr.microsoft.com/playwright:v1.63.0-noble` with DejaVu installed, Chromium draws `system-ui`
+  in it). Measured 2026-10-22 under DejaVu Sans Bold, that button is now 241 px of the 252 its
+  line gives, and a font 5.7% larger breaks it. On macOS's font, in that card, English keeps
+  mock-up 03's rows and in Spanish Cancel joins Save on the last line. The row takes the full
+  width while it shows a message, as the Add printer dialog's address check does (Forms, above).
+  This departs from the rule that Cancel takes the `cancel` slot.
 - **The preview's Light and Dark panels are painted from the draft inside the card and nowhere
   else** (`apps/dashboard/src/widgets/theme-preview.ts`). Each panel is a theme root inside the
   preview's shadow root, painted by a constructed sheet adopted into that shadow root only. The draft
-  never reaches the page itself; the page repaints after a save, and only while the saved theme is
-  the one in use.
+  never reaches the page itself; the page repaints after a save of the theme in use, a theme
+  created with its switch on, a switch, and any delete whose answer has Waitron's theme in use
+  (including one that changed nothing, because Waitron's theme was already in use).
 - **A readability warning is drawn with the warning icon in `--wt-color-warning`, never as a field
   error**, and never disables Save. A brand-colour warning with a fix carries the fix as a button
   below it, and a fix taken shows its shade with Undo; two or more warnings with fixes add a Fix all
   line. The "·" before Undo travels with Undo: when Undo wraps onto a line of its own the "·" is
   clipped away, so no line starts with it.
-- **Save with a warning opens the Hard to read dialog**
-  (`apps/dashboard/src/widgets/hard-to-read-dialog.ts`): one line per warning, then Back, Save
+- **Save, or Save as new theme…, with a warning opens the Hard to read dialog**
+  (`apps/dashboard/src/widgets/hard-to-read-dialog.ts`) before any name dialog (D7): one line per warning, then Back, Save
   anyway and, only when fixing all would leave no warning, Fix and save. With Fix and save offered
   it is the main button and Save anyway is `secondary`; without it, Save anyway is the main button.
-- **A theme saved with warnings keeps them on the saved card**, one warning line each, in the same
-  warning colour and icon.
+- **A theme saved with warnings keeps them**: while it is the theme in use, the Look card shows one
+  warning line each, in the same warning colour and icon; its row on the Themes card shows the
+  "{count} hard to read" tag whether or not it is in use.
+
+The Themes card lists Waitron's theme first, then the venue's own, in a `wt-data-table`:
+
+- **Its columns are Name, Colours and Status, then Actions.** Name carries a "built in" tag on
+  Waitron's row, painted `--wt-color-surface-lifted`, so it shows as a pill on the white card of
+  the light scheme. Colours shows three chips (the brand colour, the light and the dark page
+  colour), painted as data in each chip's `style`. Status carries "In use" and "{count} hard to
+  read" tags. Chips and tags are styled through `::part()`, never a class (Primitives, above).
+- **The columns follow the card's own width, never the window's** (a `ResizeObserver` on the
+  card), and the table is `wrap-to-fit`, so it never scrolls sideways: Colours shows from a 480 px
+  card, Status has its own column from 400 px, and narrower still the status tags follow the name
+  in the Name cell. Measured in Spanish, the wider language, the four columns need a 429 px card
+  and Name, Status and Actions a 360 px one; each threshold leaves about a tenth more for a larger
+  font. A 390 px window gives a 310 px card, an 800 px window with the side menu open a 420 px one.
+- **The Actions column and Add theme are for `layout.configure` only**; a person without it sees
+  the list alone. The row menu offers Use on every screen (not on the row in use), Edit and Rename
+  (not on Waitron's row), Make a copy, and Delete in the danger colour (not on Waitron's row, and
+  not on the row of the theme open in the editor). Add theme sits in the card's action slot as
+  `secondary`.
+- **The name dialog** (`apps/dashboard/src/widgets/theme-name-dialog.ts`) serves the first save,
+  Save as new theme…, Make a copy and Rename. It takes a draft scope; Make a copy and Save as new
+  theme… open already savable (`saveActionState`'s `savableAtOpen`), while Rename and the first save
+  open quiet. Every kind but Rename shows the
+  "Use it on every screen now" switch, and while that switch is on and the theme has warnings, the
+  dialog lists them under "Hard to read:". A name refusal (`theme.name_taken`, or `theme.invalid`
+  naming the name field) shows under the field; any other refusal shows at the bottom.
+- **The switch dialog** (`apps/dashboard/src/widgets/theme-switch-dialog.ts`) asks "Use {name} on
+  every screen?", lists the theme's warnings when it has any, and never refuses a theme for them;
+  Back and Use it, with a refusal shown at the bottom.
+- **The delete dialog is `wt-delete-dialog`, its impact built from the card's live list**
+  (`themeDeleteImpact`, `apps/dashboard/src/widgets/theme-delete.ts:7`) rather than read from the
+  server: deleting the theme in use lists one change, that Waitron's theme goes on every screen.
 
 ## Event discipline
 
@@ -4980,7 +5046,8 @@ and enabled. While its own delete is sent (`submitting`) it stays `danger`, disa
 Cancel and Escape do nothing. The screen owns the requests: it sets `submitting` inside its
 `wt-delete-confirm` listener, reads again on `wt-delete-retry`, and closes the dialog itself after a
 delete succeeds. A failed read goes in `readError` and a refused delete in `actionError`, which
-alone leaves Delete usable.
+alone leaves Delete usable. The Themes card builds its impact on the screen instead of reading it;
+see "Appearance (venue themes)" above.
 
 A printer offers both. **Disable** switches the printer off and keeps its id, and Enable brings it
 back. **Delete** is permanent: it ends the printer's waiting work and removes the settings that name

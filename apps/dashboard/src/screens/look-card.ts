@@ -2,11 +2,9 @@ import { LitElement, css, html, nothing, type PropertyValues, type TemplateResul
 import { customElement, property, state } from "lit/decorators.js";
 import {
   CATEGORY_PALETTE,
-  applyVenueTheme,
   baseStyles,
   draftScopeFor,
   focusFirstInvalid,
-  readVenueTheme,
   saveActionState,
   submitOnEnter,
   type DraftScope,
@@ -37,6 +35,7 @@ import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
 import { colorField, colorFieldStyles } from "../widgets/color-field.js";
+import { repaintVenueTheme } from "../widgets/venue-theme-repaint.js";
 import {
   codeInvalid,
   isWaitronLook,
@@ -49,10 +48,14 @@ import {
   waitronLook,
   type LookDraft,
 } from "../widgets/look-draft.js";
+import { copyName } from "../widgets/theme-names.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
 import "../widgets/hard-to-read-dialog.js";
+import "../widgets/theme-name-dialog.js";
+import type { ThemeNameDialog } from "../widgets/theme-name-dialog.js";
 import "../widgets/theme-preview.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import type { ThemeEdit, ThemesChanged } from "./themes-card.js";
 import {
   brandFixLabel,
   brandFixedText,
@@ -64,6 +67,9 @@ import {
 } from "../widgets/theme-words.js";
 
 const PRIMARY = "--wt-color-primary";
+
+type Editing = { id: string; name: string } | { id: null; from: "in-use" | "new" };
+type Target = "save" | "save-as-new";
 
 function chip(colour: string): TemplateResult {
   return html`<span class="chip" aria-hidden="true" style="background:${colour}"></span>`;
@@ -187,8 +193,25 @@ export class LookCard extends LitElement {
         gap: var(--wt-space-4);
         min-width: 0;
       }
-      wt-form-actions {
+      .buttons {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: var(--wt-space-2);
         margin-top: var(--wt-space-4);
+      }
+      .buttons > wt-form-actions {
+        flex: 1 1 auto;
+        width: auto;
+      }
+      .buttons > wt-form-actions.with-message {
+        flex-basis: 100%;
+      }
+      /* Room on a phone for fonts wider than macOS's system font, such as Linux's DejaVu Sans. */
+      @container (width < 300px) {
+        .buttons wt-button::part(button) {
+          padding-inline: var(--wt-space-2);
+        }
       }
       @container (min-width: 900px) {
         .editor {
@@ -206,13 +229,14 @@ export class LookCard extends LitElement {
   @state() private actionError = "";
   @state() private submitting = false;
   @state() private asking = false;
-  #editing?: { id: string; name: string };
+  #editing?: Editing;
   #expected?: LookDraft;
   #derived?: DerivedTheme;
   #derivedFrom?: ThemeChoices;
   #scope?: DraftScope<LookDraft>;
   #leave?: LeaveCoordinator;
   #generation = 0;
+  #target: Target = "save";
 
   constructor() {
     super();
@@ -234,26 +258,102 @@ export class LookCard extends LitElement {
   }
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("canEdit") && !this.canEdit) this.#cancel();
-    if (changed.has("list")) this.#adopt();
+    if (changed.has("list")) {
+      this.#followName();
+      this.#adopt();
+    }
     const choices = this.draft?.choices;
     if (choices && choices !== this.#derivedFrom) {
       this.#derivedFrom = choices;
       this.#derived = deriveTheme(choices);
     }
   }
-  #begin(view: ThemeView): void {
-    this.#editing = { id: view.id, name: view.name };
-    this.#expected = openDraft(view.choices);
+  edit(target: ThemeEdit): void {
+    if (!this.canEdit || this.submitting) return;
+    let open: () => void;
+    if ("kind" in target) {
+      open = () => this.#begin({ id: null, from: "new" }, null);
+    } else {
+      const view = this.list?.themes.find((theme) => theme.id === target.id);
+      if (!view) return;
+      if (this.draft && this.#editing?.id === view.id) {
+        this.#scrollIntoPlace();
+        return;
+      }
+      open = () => {
+        // Deleted while the question was open, it still opens as last read (D19).
+        const latest = this.list?.themes.find((theme) => theme.id === view.id) ?? view;
+        this.#begin({ id: latest.id, name: latest.name }, latest.choices);
+      };
+    }
+    const leave = this.#leave;
+    if (!this.#scope || !leave) {
+      open();
+      this.#scrollIntoPlace();
+      return;
+    }
+    // A Discard closes the editor through the scope's restore before `proceed`; closing it any
+    // other way while the question is open disposes the scope, and the coordinator drops the answer.
+    void leave.request({
+      scopes: [this],
+      reason: "navigation",
+      proceed: () => {
+        open();
+        this.#scrollIntoPlace();
+      },
+    });
+  }
+  #scrollIntoPlace(): void {
+    this.scrollIntoView({ block: "start" });
+  }
+  #begin(editing: Editing, choices: ThemeChoices | null): void {
+    this.#nameDialog()?.dismiss();
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#editing = editing;
+    this.#expected = openDraft(choices);
     this.draft = this.#expected;
     this.submitted = false;
     this.refusedCode = "";
     this.actionError = "";
+    this.asking = false;
     this.#registerDraft();
+    this.#announce(editing.id);
+  }
+  #announce(id: string | null): void {
+    this.dispatchEvent(
+      new CustomEvent<{ id: string | null }>("look-editing", {
+        detail: { id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+  #changed(detail: ThemesChanged): void {
+    this.dispatchEvent(
+      new CustomEvent<ThemesChanged>("themes-changed", { detail, bubbles: true, composed: true }),
+    );
+  }
+  #nameDialog(): ThemeNameDialog | null {
+    return this.shadowRoot?.querySelector("dashboard-theme-name-dialog") ?? null;
+  }
+  /** Whether the editor's theme is the one every screen shows, by the latest read. */
+  #inUse(editing: Editing): boolean {
+    const inUse = this.list?.inUse;
+    return editing.id === null ? editing.from === "in-use" && inUse === null : inUse === editing.id;
+  }
+  /** Keeps the last name the list gave the open theme, which outlives its deletion elsewhere (D19). */
+  #followName(): void {
+    const editing = this.#editing;
+    if (!editing || editing.id === null) return;
+    const name = this.list?.themes.find((theme) => theme.id === editing.id)?.name;
+    if (name !== undefined) editing.name = name;
   }
   #adopt(): void {
     const editing = this.#editing;
     const expected = this.#expected;
-    if (!this.draft || !editing || !expected || !sameDraft(this.draft, expected)) return;
+    if (!this.draft || !editing || editing.id === null || !expected) return;
+    if (!sameDraft(this.draft, expected)) return;
     const view = this.list?.themes.find((theme) => theme.id === editing.id);
     if (!view) return;
     const next = openDraft(view.choices);
@@ -261,13 +361,6 @@ export class LookCard extends LitElement {
     this.#expected = next;
     this.draft = next;
     this.#scope?.commit(next);
-  }
-  #repaint(): void {
-    void readVenueTheme(() => this.api.getVenueTheme()).then(
-      ({ answer, sentAt }) => applyVenueTheme(answer, sentAt),
-      // The shell's live read follows the same change, so a failed read here costs only the wait.
-      () => {},
-    );
   }
   #registerDraft(): void {
     if (!this.isConnected || !this.draft || !this.#expected || this.#scope) return;
@@ -283,6 +376,8 @@ export class LookCard extends LitElement {
     scope.commit(this.#expected);
   }
   #cancel(): void {
+    const wasEditing = this.#editing !== undefined;
+    this.#nameDialog()?.dismiss();
     this.#scope?.dispose();
     this.#scope = undefined;
     this.draft = undefined;
@@ -292,6 +387,7 @@ export class LookCard extends LitElement {
     this.refusedCode = "";
     this.actionError = "";
     this.asking = false;
+    if (wasEditing) this.#announce(null);
   }
   #requestCancel(): void {
     if (this.submitting) return;
@@ -382,10 +478,11 @@ export class LookCard extends LitElement {
       >
     </p>`;
   }
-  async #save(): Promise<void> {
+  async #save(target: Target): Promise<void> {
     const draft = this.draft;
     if (this.submitting || !draft || !this.#editing) return;
-    if (saveActionState(this.#scope).unchanged) return;
+    if (target === "save" && saveActionState(this.#scope).unchanged) return;
+    this.#target = target;
     this.submitted = true;
     this.refusedCode = "";
     this.actionError = "";
@@ -406,16 +503,18 @@ export class LookCard extends LitElement {
     const editing = this.#editing;
     this.asking = false;
     if (this.submitting || !draft || !editing) return;
+    if (editing.id === null || this.#target === "save-as-new") {
+      this.#askName(draft, editing);
+      return;
+    }
     const generation = this.#generation;
     const scope = this.#scope;
     this.submitting = true;
     try {
       const answer = await this.api.saveTheme(editing.id, normaliseChoices(draft.choices));
       if (generation !== this.#generation) return;
-      if (this.list?.inUse === editing.id) this.#repaint();
-      this.dispatchEvent(
-        new CustomEvent("look-saved", { detail: answer, bubbles: true, composed: true }),
-      );
+      if (this.list?.inUse === editing.id) repaintVenueTheme(this.api);
+      this.#changed({ kind: "saved", theme: answer });
       if (scope === this.#scope) this.#cancel();
     } catch (error) {
       if (generation !== this.#generation || scope !== this.#scope) return;
@@ -430,6 +529,36 @@ export class LookCard extends LitElement {
       if (generation === this.#generation) this.submitting = false;
     }
   }
+  #askName(draft: LookDraft, editing: Editing): void {
+    const choices = normaliseChoices(draft.choices);
+    const scope = this.#scope;
+    const asNew = editing.id !== null;
+    this.#nameDialog()?.show({
+      kind: asNew ? "save-as-new" : "first-save",
+      name: asNew ? copyName(this.#name(editing)) : "",
+      inUse: this.#inUse(editing),
+      warningLines: deriveTheme(draft.choices).warnings.map((warning) =>
+        saveDialogLine(warning, draft.choices),
+      ),
+      opener: this.#targetButton(),
+      submit: async ({ name, inUse }) => {
+        const generation = this.#generation;
+        this.submitting = true;
+        try {
+          const created = await this.api.createTheme({ name, theme: choices, inUse });
+          if (generation !== this.#generation) return;
+          if (inUse) repaintVenueTheme(this.api);
+          this.#changed({ kind: "created", theme: created, inUse });
+          if (scope === this.#scope) this.#cancel();
+        } finally {
+          if (generation === this.#generation) this.submitting = false;
+        }
+      },
+    });
+  }
+  #targetButton(): HTMLElement | null {
+    return this.shadowRoot?.querySelector<HTMLElement>(`[data-test=${this.#target}]`) ?? null;
+  }
   async #focusInvalid(): Promise<void> {
     await this.updateComplete;
     const form = this.shadowRoot!.querySelector("form");
@@ -441,7 +570,7 @@ export class LookCard extends LitElement {
       .open=${this.asking}
       .lines=${warnings.map((warning) => saveDialogLine(warning, draft.choices))}
       .canFix=${this.asking && canFixAll(WAITRON_DEFAULTS, draft.choices)}
-      .opener=${this.shadowRoot?.querySelector<HTMLElement>("[data-test=save]") ?? null}
+      .opener=${this.#targetButton()}
       @hard-to-read-back=${() => {
         this.asking = false;
       }}
@@ -451,10 +580,11 @@ export class LookCard extends LitElement {
   }
   #form(draft: LookDraft): TemplateResult {
     const editing = this.#editing!;
-    const inUse = this.list?.inUse === editing.id;
-    const name = this.list?.themes.find((theme) => theme.id === editing.id)?.name ?? editing.name;
+    const inUse = this.#inUse(editing);
+    const name = this.#name(editing);
     const badCode = this.submitted && codeInvalid(draft);
     const codeError = badCode ? t("appearance.bad_code") : this.refusedCode;
+    const message = codeError ? t("form.fix_fields") : this.actionError;
     const saveAction = saveActionState(this.#scope);
     const busy = this.submitting;
     return html`<p class="editing-line" data-test="editing-line">
@@ -463,7 +593,7 @@ export class LookCard extends LitElement {
       <form
         @submit=${(event: Event) => {
           event.preventDefault();
-          void this.#save();
+          void this.#save("save");
         }}
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
@@ -523,44 +653,72 @@ export class LookCard extends LitElement {
           <dashboard-theme-preview .theme=${this.#derived!} .name=${name}></dashboard-theme-preview>
         </div>
         ${this.#fixAllLine(busy)}
-        <wt-form-actions .error=${codeError ? t("form.fix_fields") : this.actionError}>
+        <div class="buttons">
           <wt-button
-            slot="cancel"
             data-test="use-waitron"
             variant="secondary"
             ?disabled=${busy || isWaitronLook(draft)}
             @click=${() => this.#change(() => waitronLook(), true)}
             >${t("appearance.use_waitron")}</wt-button
           >
-          <wt-button
-            slot="secondary"
-            data-test="cancel"
-            variant="secondary"
-            ?disabled=${busy}
-            @click=${() => this.#requestCancel()}
-            >${t("action.cancel")}</wt-button
-          >
-          <wt-button
-            data-test="save"
-            variant=${saveAction.variant}
-            ?loading=${busy}
-            ?disabled=${saveAction.unchanged || busy || badCode}
-            @click=${() => void this.#save()}
-            >${t("action.save")}</wt-button
-          >
-        </wt-form-actions>
+          <wt-form-actions class=${message ? "with-message" : ""} .error=${message}>
+            ${
+              editing.id === null
+                ? nothing
+                : html`<wt-button
+                    slot="secondary"
+                    data-test="save-as-new"
+                    variant="secondary"
+                    ?disabled=${busy || badCode}
+                    @click=${() => void this.#save("save-as-new")}
+                    >${t("appearance.save_as_new")}</wt-button
+                  >`
+            }
+            <wt-button
+              slot="secondary"
+              data-test="cancel"
+              variant="secondary"
+              ?disabled=${busy}
+              @click=${() => this.#requestCancel()}
+              >${t("action.cancel")}</wt-button
+            >
+            <wt-button
+              data-test="save"
+              variant=${saveAction.variant}
+              ?loading=${busy}
+              ?disabled=${saveAction.unchanged || busy || badCode}
+              @click=${() => void this.#save("save")}
+              >${t("action.save")}</wt-button
+            >
+          </wt-form-actions>
+        </div>
       </form>
       ${this.#dialog(draft)}`;
+  }
+
+  #name(editing: Editing): string {
+    if (editing.id === null) {
+      return editing.from === "in-use" ? BUILT_IN_THEME_NAME : t("appearance.add_theme");
+    }
+    return editing.name;
+  }
+  #heading(editing: Editing): string {
+    if (this.#inUse(editing)) return t("appearance.look");
+    if (editing.id === null) return t("appearance.add_theme");
+    return fill("appearance.edit_theme_heading", { name: this.#name(editing) });
   }
 
   override render() {
     const list = this.list;
     if (list === undefined) return nothing;
+    return html`${this.#card(list)}<dashboard-theme-name-dialog></dashboard-theme-name-dialog>`;
+  }
+  #card(list: ThemeList): TemplateResult {
     const draft = this.draft;
     if (draft) {
       return settingsCard({
         id: "look-card",
-        heading: t("appearance.look"),
+        heading: this.#heading(this.#editing!),
         editing: true,
         action: nothing,
         body: this.#form(draft),
@@ -574,12 +732,16 @@ export class LookCard extends LitElement {
       id: "look-card",
       heading: t("appearance.look"),
       editing: false,
-      action:
-        view && this.canEdit
-          ? html`<wt-button data-test="edit" @click=${() => this.#begin(view)}
-              >${t("action.edit")}</wt-button
-            >`
-          : nothing,
+      action: this.canEdit
+        ? html`<wt-button
+            data-test="edit"
+            @click=${() =>
+              view
+                ? this.#begin({ id: view.id, name: view.name }, view.choices)
+                : this.#begin({ id: null, from: "in-use" }, WAITRON_CHOICES)}
+            >${t("action.edit")}</wt-button
+          >`
+        : nothing,
       body: html`${settingsRows([
           {
             label: t("appearance.theme_in_use"),

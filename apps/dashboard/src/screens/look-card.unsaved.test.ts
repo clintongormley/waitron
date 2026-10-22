@@ -6,7 +6,7 @@ import type { ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
 import "./look-card.js";
 
 class LookLeaveApp extends LitElement {
@@ -55,7 +55,14 @@ async function mount() {
     id,
     choices,
   }));
-  const api = { saveTheme } as unknown as DashboardApi;
+  const createTheme = vi.fn(async ({ name, theme }: { name: string; theme: ThemeChoices }) => ({
+    ...lucia,
+    id: "t-new",
+    name,
+    choices: theme,
+  }));
+  const getVenueTheme = vi.fn(async () => ({ hash: "h2", css: "", logo: null }));
+  const api = { saveTheme, createTheme, getVenueTheme } as unknown as DashboardApi;
   const { el: app } = await mountWidget<LookLeaveApp>("look-card-leave-test-app", {
     api,
     list: { themes: [lucia], inUse: lucia.id },
@@ -64,7 +71,7 @@ async function mount() {
   await card.updateComplete;
   await userEvent.click(q(card, "[data-test=edit]")!);
   await card.updateComplete;
-  return { app, card, saveTheme };
+  return { app, card, saveTheme, createTheme };
 }
 const q = (card: Card, selector: string) => card.shadowRoot!.querySelector<HTMLElement>(selector);
 const corners = (card: Card) =>
@@ -166,4 +173,46 @@ it("an edit made before the card is taken out still counts once it is put back",
   await expect.poll(() => corners(card)?.value).toBe("square");
   expect(save(card).disabled).toBe(false);
   expect(unload()).toBe(true);
+});
+
+const nameDialog = (card: Card) =>
+  q(card, "dashboard-theme-name-dialog")!.shadowRoot!.querySelector<
+    HTMLElementTagNameMap["wt-dialog"]
+  >("wt-dialog[data-test=name-dialog]")!;
+async function openSaveAsNew(card: Card) {
+  await userEvent.click(q(card, "[data-test=save-as-new]")!);
+  const dialog = nameDialog(card);
+  await expect.poll(() => dialog.open).toBe(true);
+  return dialog;
+}
+
+it("Back in Save as new theme's name dialog returns to the editor, which still asks", async () => {
+  const { app, card, createTheme } = await mount();
+  await square(card);
+  const dialog = await openSaveAsNew(card);
+  const closed = dialogClosed(dialog);
+  dialog.querySelector<HTMLElement>("wt-button[data-test=name-back]")!.click();
+  await closed;
+  await card.updateComplete;
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  expect(editing(card)).toBe(true);
+  expect(corners(card).value).toBe("square");
+  expect(createTheme).not.toHaveBeenCalled();
+  expect(unload()).toBe(true);
+  const request = leave(app);
+  await choose(app, "keep");
+  expect(await request).toBe("kept");
+  expect(corners(card).value).toBe("square");
+});
+
+it("after a successful Save as new theme, leaving asks nothing", async () => {
+  const { app, card, createTheme, saveTheme } = await mount();
+  await square(card);
+  const dialog = await openSaveAsNew(card);
+  dialog.querySelector<HTMLElement>("wt-button[data-test=name-save]")!.click();
+  await expect.poll(() => editing(card)).toBe(false);
+  expect(createTheme).toHaveBeenCalledTimes(1);
+  expect(saveTheme).not.toHaveBeenCalled();
+  expect(unload()).toBe(false);
+  expect(await leave(app)).toBe("proceeded");
 });

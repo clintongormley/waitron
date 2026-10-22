@@ -22,17 +22,28 @@ choices it is made of:
 
 The note at the bottom of the card explains that one look covers the dashboard and every till.
 Each theme has a light version and a dark version, and each screen shows one of them, as its own
-**Theme** setting says: Light, Dark or Follow device.
+**Theme** setting says: Light, Dark or Follow device. The **Themes** card under it lists the
+venue's themes.
 
-Anyone whose role is **Supervisor** or above can open this page and read the card. Only a
+Anyone whose role is **Supervisor** or above can open this page and read both cards. Only a
 **Manager** or an **Admin** can change the look.
 
-## Edit the look {#edit}
+## Edit a theme {#edit}
 
-The card shows **Edit** to a **Manager** or an **Admin** while one of the venue's own themes is in
-use. While Waitron's theme is in use, the card has no **Edit**.
+The Look card shows **Edit** to a **Manager** or an **Admin**, whichever theme is in use. It opens
+the theme in use. To edit one of the venue's other themes, or to start a new one, use the
+**Themes** card below it.
 
-Press **Edit** and the card opens its three choices in place:
+While Waitron's theme is in use, Edit opens on Waitron's choices. Waitron's own theme never
+changes, so when you save, Save asks for a name and stores your choices as a new theme. That is
+how a venue makes its first theme.
+
+A line at the top of the editor says what saving does. Editing the theme in use, it reads "Theme
+in use:" with the theme's name, and "Saving changes every screen." Editing any other theme, it
+reads "Not in use. Saving changes no screen until you use it.", and the card's heading names the
+theme, or reads **Add theme**.
+
+The editor opens the theme's three choices in place:
 
 - **Brand colour**: pick **Waitron's**, one of the swatches, or **Custom** to choose any colour.
   You can also type a code such as `#1e5b3a` into the box beside **Custom**. A code must be `#`
@@ -52,7 +63,7 @@ Nothing else on the page, and no other screen, changes until you save. **Use Wai
 every choice back to Waitron's: Waitron's brand colour, Neutral, Standard corners, and no colours
 set by hand. It saves nothing by itself, and it is greyed out while the choices already are
 Waitron's look. **Cancel** closes the editor without saving. If you have changed something, Cancel,
-and leaving the page, ask you first.
+leaving the page, and opening another theme from the Themes card ask you first.
 
 ## When a colour is hard to read {#hard-to-read}
 
@@ -74,10 +85,19 @@ are hard to read and offers **Fix all**, which takes every fix at once.
 Waitron never refuses a colour. A warning is advice: you can save the colour you chose and live
 with it.
 
-## Save the look {#save}
+## Save a theme {#save}
 
-**Save** is greyed out until you change something. When nothing is hard to read, Save stores the
-theme and closes the editor.
+**Save** is greyed out until you change something. What it does next depends on the theme you are
+editing.
+
+Editing one of the venue's own themes, Save stores your changes to it and closes the editor.
+
+Editing Waitron's theme, or a theme you started with **Add theme**, Save opens the **Name this
+theme** dialog, after the **Hard to read** dialog when that appears, because your choices are about
+to become a theme of their own. Its **Use it on every screen now** switch starts on when you are
+editing Waitron's theme in use, and off for a new theme. **Save** in the dialog stores the new theme
+and closes the editor. **Back** leaves you in the editor with nothing saved, asking first if you
+changed anything in the dialog. The rules for a name are under "Name a theme" below.
 
 When something is still hard to read, Save first opens the **Hard to read** dialog, with one line
 for each colour that is. It offers three choices:
@@ -87,11 +107,80 @@ for each colour that is. It offers three choices:
 - **Fix and save** takes every fix, then saves. The dialog offers it only when fixing everything
   would leave no warning at all.
 
+Where Save asks for a name, **Save anyway** and **Fix and save** open the name dialog rather than
+saving at once. While its switch is on, the name dialog lists the colours that are still hard to
+read, so you see them before the theme goes on every screen.
+
 When the theme you saved is the one in use, the dashboard you are using changes to the new look at
 once. Other dashboards open at the same time follow on their own, and a signed-in till follows the
 next time it checks its menu for changes. A handheld phone or tablet, and a cash register set up
 for counter service, check every 15 seconds. Any other cash register checks every 15 seconds while
 a table's order is open on it, and otherwise follows when it next opens one, or when it restarts.
+Saving a theme that is not in use changes no screen until you put it in use.
 
-If you saved anyway, the Look card keeps a warning line for each colour that is still hard to read,
-so the next person who opens the page sees it too.
+If you saved anyway, the Themes card's row for that theme shows a tag such as "2 hard to read", and
+while it is the theme in use the Look card also keeps a warning line for each colour that is still
+hard to read, so the next person who opens the page sees it too.
+
+While you edit one of the venue's own themes, the editor also offers **Save as new theme…**. It
+opens the name dialog with the theme's name followed by "(copy)", stores your choices under the name
+you give, leaves the theme you were editing as it was last saved, and closes the editor. Its **Use
+it on every screen now** switch starts on when the theme you are editing is in use. When a colour is
+still hard to read, the **Hard to read** dialog comes first, as it does for Save. Like Save, it
+tells you under the field when a colour code you typed is not valid, and saves nothing until you fix
+it.
+
+## The venue's themes {#themes}
+
+The **Themes** card lists every theme the venue has, Waitron's first. Each row shows the theme's
+**Name**, its **Colours** and its **Status**. The colours are three dots: the brand colour, then
+the page colour of the light version and of the dark version. When the card is narrow, as on a
+phone or beside the side menu on a small screen, it leaves the colours out, and on a phone the
+status tags sit after the theme's name instead of in a column of their own. The status tags say
+which theme is **In use** and how many of a theme's colours are hard to read, such as "2 hard to
+read". Waitron's theme carries the tag **built in**.
+
+A **Manager** or an **Admin** sees **Add theme** on the card, which opens the editor on Waitron's
+choices for a theme that is not yet stored, and a menu on each row:
+
+- **Edit** opens that theme in the Look card's editor. A theme that is not in use opens with the
+  line "Not in use. Saving changes no screen until you use it."
+- **Rename** gives the theme a new name.
+- **Make a copy** stores a copy of the theme under a new name. The name dialog proposes the theme's
+  name followed by "(copy)". The copy is not in use unless you turn on **Use it on every screen
+  now** before you save.
+- **Use on every screen** puts the theme in use. The row of the theme in use does not offer it.
+- **Delete** removes the theme. The row of the theme open in the editor does not offer it.
+
+Waitron's row offers only **Make a copy**, and **Use on every screen** while another theme is in
+use, because Waitron's theme cannot be edited, renamed or deleted. A **Supervisor** sees the list,
+without Add theme and without the menus.
+
+## Name a theme {#names}
+
+The **Name this theme** dialog asks for a name whenever a theme is stored under a new one: the first
+save of Waitron's theme or of a new theme, Save as new theme…, Make a copy, and Rename. A name is 1
+to 60 characters long, and spaces at either end are dropped. Two themes cannot share a name,
+whatever their capitals: while a theme called "Terrace" exists, naming another one "terrace" is
+refused with "A theme with this name already exists." No theme may be called "Waitron", in any
+capitals, because that is the built-in theme's name.
+
+Every way in but Rename shows the **Use it on every screen now** switch. Rename has no switch, and
+renaming a theme changes no screen's look.
+
+## Put a theme in use {#switch}
+
+**Use on every screen** asks first, with a question such as "Use Terrace on every screen?" When
+the theme has colours that are hard to read, the question lists them under "Hard to read:".
+**Use it** puts the theme in use, and **Back** changes nothing.
+
+Once a theme is in use, the dashboard you are using changes to it at once and other dashboards
+open at the same time follow on their own. Signed-in tills follow as they do when you save the
+theme in use, as "Save a theme" above describes. Waitron never refuses a theme for being hard to
+read: the list is there so that you choose knowing it.
+
+## Delete a theme {#delete}
+
+**Delete** asks first, naming the theme and saying the delete cannot be undone. When the theme is
+the one in use, the dialog says so under "What changes": deleting it puts Waitron's theme on every
+screen, and the screens change as they do when you put a theme in use.

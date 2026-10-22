@@ -304,6 +304,14 @@ it("has English and Spanish copy for each menu section code", () => {
   }
 });
 
+it("has English and Spanish copy for each theme code", () => {
+  for (const code of ["theme.name_taken", "theme.not_found"]) {
+    expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
+  }
+});
+
 it("has English and Spanish copy for each Device Home Page code", () => {
   for (const code of ["menu.shortcut_unreachable", "menu.home_display_invalid"]) {
     expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));

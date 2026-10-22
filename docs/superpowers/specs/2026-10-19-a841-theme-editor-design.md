@@ -1754,6 +1754,9 @@ in", "{n} hard to read"), and a row menu column keyed `actions` and pinned to th
 screen**, **Edit**, **Rename**, **Make a copy** and **Delete**; Waitron's offers **Use on every
 screen** and **Make a copy**; the theme in use offers no Use. Pictures
 `31-themes-{light,dark}.png`, phone `32-themes-phone-light.png`.
+(2026-10-22, slice 13: the build reads **Add theme** («Añadir tema») wherever this design says
+New theme, on the button and as the unnamed editor's heading, under the Wording rule in
+`docs/developers/design-system.md` that a create button reads "Add …", never "New …".)
 
 **Editing.** Edit on the Look card edits the theme in use; Edit on another theme's row opens the
 same editor for that theme, headed "Edit theme: {name}", with the line "Not in use. Saving changes

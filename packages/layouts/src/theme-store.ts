@@ -42,6 +42,12 @@ function choicesOf(text: string | null): ThemeChoices | null {
   }
 }
 
+function nameTakenOr(error: unknown): unknown {
+  return isUniqueViolation(error) && sameTarget(constraintTarget(error), NAME_KEY)
+    ? new AppError("theme.name_taken", { field: "name" })
+    : error;
+}
+
 function authorize(tx: Transaction, managementSessionId: string) {
   return authorizeManager(tx, { managementSessionId, permission: "layout.configure" });
 }
@@ -111,10 +117,7 @@ export async function createCustomTheme(
       .returning({ id: customThemes.id });
     id = row!.id;
   } catch (error) {
-    if (isUniqueViolation(error) && sameTarget(constraintTarget(error), NAME_KEY)) {
-      throw new AppError("theme.name_taken", { field: "name" });
-    }
-    throw error;
+    throw nameTakenOr(error);
   }
   if (input.inUse === true) await switchInUse(tx, id, updatedAt);
   return { id, name, choices, updatedAt };
@@ -133,6 +136,43 @@ export async function saveCustomTheme(
     .set({ theme: choices, updatedAt })
     .where(eq(customThemes.id, input.id));
   return { id: input.id, name, choices, updatedAt };
+}
+
+export async function renameCustomTheme(
+  tx: Transaction,
+  input: { managementSessionId: string; id: string; name: string },
+): Promise<StoredTheme> {
+  await authorize(tx, input.managementSessionId);
+  await requireTheme(tx, input.id);
+  const { name, key } = parseThemeName(input.name);
+  const updatedAt = nowIso();
+  let theme: string | null;
+  try {
+    const [row] = await tx
+      .update(customThemes)
+      .set({ name, nameKey: key, updatedAt })
+      .where(eq(customThemes.id, input.id))
+      .returning({ theme: THEME_TEXT });
+    theme = row!.theme;
+  } catch (error) {
+    throw nameTakenOr(error);
+  }
+  return { id: input.id, name, choices: choicesOf(theme), updatedAt };
+}
+
+/** Deleting the theme in use puts Waitron's own theme in use. */
+export async function deleteCustomTheme(
+  tx: Transaction,
+  input: { managementSessionId: string; id: string },
+): Promise<{ inUse: string | null }> {
+  await authorize(tx, input.managementSessionId);
+  await requireTheme(tx, input.id);
+  await tx.delete(customThemes).where(eq(customThemes.id, input.id));
+  const [inUse] = await tx
+    .select({ id: customThemes.id })
+    .from(customThemes)
+    .where(eq(customThemes.inUse, 1));
+  return { inUse: inUse?.id ?? null };
 }
 
 /** `null` puts Waitron's own theme in use. */

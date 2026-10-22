@@ -3,7 +3,7 @@ import { afterEach, expect, it } from "vitest";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
-import { setLocale } from "../i18n/t.js";
+import { fill, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./look-card.js";
 
@@ -36,6 +36,11 @@ const twoFixes = theme("t-hand", "By hand", {
 const outlasts = theme("t-out", "Outlasts", {
   ...WAITRON_CHOICES,
   handSet: { light: { text: "#aaaaaa", "surface-sunken": "#555555" }, dark: {} },
+});
+const christmas = theme("t-xmas", "Christmas", {
+  ...WAITRON_CHOICES,
+  brandColor: "#7a1f2b",
+  brandFix: { dark: true },
 });
 const inUse = (view: ThemeView): ThemeList => ({ themes: [view], inUse: view.id });
 
@@ -94,6 +99,37 @@ const states: Record<string, { list: ThemeList; reach: (el: Card) => Promise<str
       await userEvent.click(square);
       await el.updateComplete;
       return openSaveDialog(el, false);
+    },
+  },
+  "the editor showing Save as new theme…": {
+    list: inUse(lucia),
+    reach: async () => "[data-test=save-as-new]",
+  },
+  "the editor headed Edit theme: Christmas": {
+    list: { themes: [lucia, christmas], inUse: lucia.id },
+    reach: async (el) => {
+      el.edit({ id: christmas.id });
+      await el.updateComplete;
+      expect(q(el, "section.settings-card header > h2")?.textContent?.trim()).toBe(
+        fill("appearance.edit_theme_heading", { name: "Christmas" }),
+      );
+      return "[data-test=save-as-new]";
+    },
+  },
+  "the first save's name dialog open over the editor": {
+    list: { themes: [lucia], inUse: null },
+    reach: async (el) => {
+      await userEvent.click(q(el, 'button.swatch[data-color="#dd5f5f"]')!);
+      await el.updateComplete;
+      await press(el, "save");
+      const host = q(el, "dashboard-theme-name-dialog")!;
+      await expect
+        .poll(
+          () =>
+            host.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>("wt-dialog")!.open,
+        )
+        .toBe(true);
+      return "dashboard-theme-name-dialog";
     },
   },
   "the code field's error": {

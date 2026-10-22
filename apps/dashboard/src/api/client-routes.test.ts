@@ -515,6 +515,41 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("creates, renames, deletes and switches themes", async () => {
+    const LEMON: ThemeChoices = { ...WAITRON_CHOICES, brandColor: "#f2d300" };
+    const created = {
+      id: "t1",
+      name: "Christmas",
+      updatedAt: "2026-10-21T10:00:00.000Z",
+      choices: LEMON,
+      light: { "--wt-color-primary": "#f2d300" },
+      dark: { "--wt-color-primary": "#f2d300" },
+      warnings: [],
+    };
+    const renamed = { ...created, name: "Winter" };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(created))
+      .mockResolvedValueOnce(jsonResponse(renamed))
+      .mockResolvedValueOnce(jsonResponse({ inUse: "t2" }))
+      .mockResolvedValueOnce(jsonResponse({ inUse: null }));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(
+      api.createTheme({ name: "Christmas", theme: LEMON, inUse: false }),
+    ).resolves.toEqual(created);
+    await expect(api.renameTheme("t1", "Winter")).resolves.toEqual(renamed);
+    await expect(api.deleteTheme("t1")).resolves.toEqual({ inUse: "t2" });
+    await expect(api.useTheme(null)).resolves.toEqual({ inUse: null });
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/themes", "POST", { name: "Christmas", theme: LEMON, inUse: false }],
+      ["/management-api/themes/t1", "PATCH", { name: "Winter" }],
+      ["/management-api/themes/t1", "DELETE", undefined],
+      ["/management-api/theme-in-use", "PUT", { customThemeId: null }],
+    ]);
+  });
+
   it("keeps background POST previews active unless the preview explicitly requests passive activity", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ preview: {}, marks: { headerSubtitle: null, footerMessage: null } }),

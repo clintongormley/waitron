@@ -1,0 +1,497 @@
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
+import { baseStyles, type DataTableColumn } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-data-table.js";
+import "@waitron/ui/src/components/wt-delete-dialog.js";
+import "@waitron/ui/src/components/wt-icon.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
+import { BUILT_IN_THEME_NAME, WAITRON_CHOICES } from "@waitron/ui-core/theme";
+import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
+import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
+import { t } from "../i18n/t.js";
+import { LocaleChangeController } from "../state/locale-controller.js";
+import { countOf } from "../widgets/count-text.js";
+import { settingsCard, settingsCardStyles } from "../widgets/settings-card.js";
+import { themeDeleteCopy, themeDeleteImpact } from "../widgets/theme-delete.js";
+import "../widgets/theme-name-dialog.js";
+import type { ThemeNameDialog, ThemeNameRequest } from "../widgets/theme-name-dialog.js";
+import { copyName } from "../widgets/theme-names.js";
+import "../widgets/theme-switch-dialog.js";
+import { saveDialogLine } from "../widgets/theme-words.js";
+import { repaintVenueTheme } from "../widgets/venue-theme-repaint.js";
+
+export type ThemesChanged =
+  | { kind: "saved"; theme: ThemeView }
+  | { kind: "created"; theme: ThemeView; inUse: boolean }
+  | { kind: "renamed"; theme: ThemeView }
+  | { kind: "deleted"; id: string; inUse: string | null }
+  | { kind: "switched"; inUse: string | null };
+
+export type ThemeEdit = { id: string } | { kind: "new" };
+
+const WAITRON_KEY = "waitron";
+const PRIMARY = "--wt-color-primary";
+const BG = "--wt-color-bg";
+/** Card widths, in px, measured with `wrap-to-fit` in Spanish, the wider of the two languages: the
+ * four columns need a 429 px card and Name, Status and Actions a 360 px one. Each threshold leaves
+ * about a tenth more for a larger font. */
+const COLOURS_FROM = 480;
+const STATUS_COLUMN_FROM = 400;
+
+type Band = "colours" | "status" | "narrow";
+
+function bandOf(width: number): Band {
+  if (width >= COLOURS_FROM) return "colours";
+  return width >= STATUS_COLUMN_FROM ? "status" : "narrow";
+}
+
+interface Row {
+  key: string;
+  name: string;
+  builtIn: boolean;
+  inUse: boolean;
+  colours: [string, string, string];
+  warnings: number;
+  /** null on Waitron's row. */
+  view: ThemeView | null;
+}
+
+interface Switching {
+  /** null for Waitron's theme. */
+  id: string | null;
+  name: string;
+  lines: string[];
+}
+
+function coloursOf(view: ThemeView | null): [string, string, string] {
+  const brand = view?.choices?.brandColor ?? WAITRON_DEFAULTS.light[PRIMARY]!;
+  const light = (view?.choices && view.light) || WAITRON_DEFAULTS.light;
+  const dark = (view?.choices && view.dark) || WAITRON_DEFAULTS.dark;
+  return [brand, light[BG]!, dark[BG]!];
+}
+
+function rowsOf(list: ThemeList): Row[] {
+  return [
+    {
+      key: WAITRON_KEY,
+      name: BUILT_IN_THEME_NAME,
+      builtIn: true,
+      inUse: list.inUse === null,
+      colours: coloursOf(null),
+      warnings: 0,
+      view: null,
+    },
+    ...list.themes.map((view) => ({
+      key: view.id,
+      name: view.name,
+      builtIn: false,
+      inUse: list.inUse === view.id,
+      colours: coloursOf(view),
+      warnings: view.warnings.length,
+      view,
+    })),
+  ];
+}
+
+function warningLinesOf(row: Row): string[] {
+  const choices = row.view?.choices ?? null;
+  return choices === null
+    ? []
+    : row.view!.warnings.map((warning) => saveDialogLine(warning, choices));
+}
+
+@customElement("dashboard-themes-card")
+export class ThemesCard extends LitElement {
+  static override styles = [
+    baseStyles,
+    settingsCardStyles,
+    css`
+      :host {
+        display: block;
+        min-width: 0;
+      }
+      wt-data-table::part(chip) {
+        display: inline-block;
+        vertical-align: middle;
+        width: var(--wt-space-4);
+        height: var(--wt-space-4);
+        margin-inline-end: var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-full);
+      }
+      wt-data-table::part(tag) {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+        padding: 0 var(--wt-space-2);
+        border: 1px solid transparent;
+        border-radius: var(--wt-radius-full);
+        font-size: var(--wt-font-size-sm);
+        white-space: nowrap;
+      }
+      wt-data-table::part(name-cell) {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-1) var(--wt-space-2);
+        min-width: 0;
+        max-width: 100%;
+      }
+      wt-data-table::part(name) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      wt-data-table::part(tags) {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-1);
+      }
+      wt-data-table::part(tag built-in) {
+        background: var(--wt-color-surface-lifted);
+        color: var(--wt-color-text);
+      }
+      wt-data-table::part(tag in-use) {
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      wt-data-table::part(tag hard-to-read) {
+        border-color: var(--wt-color-warning);
+        color: var(--wt-color-warning);
+      }
+    `,
+  ];
+  @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) list: ThemeList | undefined;
+  @property({ attribute: false }) canEdit = false;
+  /** The stored theme the Look card's editor has open. */
+  @property({ attribute: false }) editingId: string | null = null;
+  @state() private band: Band | null = null;
+  @state() private submitting = false;
+  @state() private switching: Switching | null = null;
+  @state() private switchError = "";
+  @state() private deleting: { id: string; name: string } | null = null;
+  @state() private deleteError = "";
+  #opener: HTMLElement | null = null;
+  /** Waits a frame: the new columns change the card's height, and a change made inside the
+   * callback makes Chromium report "ResizeObserver loop completed with undelivered notifications". */
+  readonly #resize = new ResizeObserver(([entry]) => {
+    const band = bandOf(entry!.contentRect.width);
+    cancelAnimationFrame(this.#frame);
+    if (band === this.band) return;
+    this.#frame = requestAnimationFrame(() => {
+      this.band = band;
+    });
+  });
+  #frame = 0;
+
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#resize.observe(this);
+  }
+
+  override disconnectedCallback(): void {
+    this.#resize.disconnect();
+    cancelAnimationFrame(this.#frame);
+    super.disconnectedCallback();
+  }
+
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (this.band === null && this.isConnected) {
+      this.band = bandOf(this.getBoundingClientRect().width);
+    }
+    if (changed.has("canEdit") && !this.canEdit) {
+      this.switching = null;
+      this.deleting = null;
+    }
+  }
+
+  #columns(): DataTableColumn<Row>[] {
+    const band = this.band ?? "narrow";
+    const statusColumn = band !== "narrow";
+    const columns: DataTableColumn<Row>[] = [
+      {
+        key: "name",
+        label: t("appearance.themes_name"),
+        cell: (row) =>
+          html`<span part="name-cell"
+            ><span part="name" data-test=${`theme-row-${row.key}`}>${row.name}</span>${
+              row.builtIn
+                ? html`<span part="tag built-in" data-test="tag-built-in"
+                    >${t("appearance.built_in")}</span
+                  >`
+                : nothing
+            }${statusColumn ? nothing : this.#status(row)}</span
+          >`,
+      },
+    ];
+    if (band === "colours") {
+      columns.push({
+        key: "colours",
+        label: t("appearance.themes_colours"),
+        cell: (row) =>
+          row.colours.map(
+            (colour) =>
+              html`<span part="chip" aria-hidden="true" style="background:${colour}"></span>`,
+          ),
+      });
+    }
+    if (statusColumn) {
+      columns.push({
+        key: "status",
+        label: t("appearance.themes_status"),
+        cell: (row) => this.#status(row),
+      });
+    }
+    if (this.canEdit) {
+      columns.push({
+        key: "actions",
+        label: t("appearance.theme_actions"),
+        pinned: "end",
+        cell: (row) => this.#menu(row),
+      });
+    }
+    return columns;
+  }
+
+  #item(
+    row: Row,
+    kind: string,
+    label: string,
+    onClick: (menu: HTMLElement | null) => void,
+  ): TemplateResult {
+    return html`<wt-button
+      align="start"
+      data-test=${`${kind}-${row.key}`}
+      variant=${kind === "delete" ? "danger" : "ghost"}
+      ?disabled=${this.submitting}
+      @click=${(event: Event) =>
+        onClick(
+          (event.currentTarget as HTMLElement)
+            .closest("wt-row-actions")!
+            .shadowRoot!.querySelector<HTMLElement>("button"),
+        )}
+      >${label}</wt-button
+    >`;
+  }
+
+  #menu(row: Row): TemplateResult {
+    const view = row.view;
+    return html`<wt-row-actions label=${`${t("appearance.theme_actions")}: ${row.name}`}>
+      ${row.inUse ? nothing : this.#item(row, "use", t("appearance.use_everywhere"), (menu) => this.#askSwitch(row, menu))}
+      ${
+        view === null
+          ? nothing
+          : html`${this.#item(row, "edit", t("action.edit"), () => this.#edit({ id: view.id }))}
+            ${this.#item(row, "rename", t("appearance.rename"), (menu) => this.#rename(view, menu))}`
+      }
+      ${this.#item(row, "copy", t("appearance.make_copy"), (menu) => this.#copy(row, menu))}
+      ${
+        view === null || view.id === this.editingId
+          ? nothing
+          : this.#item(row, "delete", t("action.delete"), (menu) => {
+              this.#opener = menu;
+              this.deleteError = "";
+              this.deleting = { id: view.id, name: view.name };
+            })
+      }
+    </wt-row-actions>`;
+  }
+
+  #edit(detail: ThemeEdit): void {
+    this.dispatchEvent(
+      new CustomEvent<ThemeEdit>("theme-edit", { detail, bubbles: true, composed: true }),
+    );
+  }
+
+  #changed(detail: ThemesChanged): void {
+    this.dispatchEvent(
+      new CustomEvent<ThemesChanged>("themes-changed", { detail, bubbles: true, composed: true }),
+    );
+  }
+
+  #nameDialog(): ThemeNameDialog | null {
+    return this.renderRoot.querySelector("dashboard-theme-name-dialog");
+  }
+
+  /** Set before the request's first await: the menus stay disabled until it answers. */
+  async #write<T>(send: () => Promise<T>): Promise<T> {
+    this.submitting = true;
+    try {
+      return await send();
+    } finally {
+      this.submitting = false;
+    }
+  }
+
+  #ask(request: ThemeNameRequest): void {
+    this.#nameDialog()?.show(request);
+  }
+
+  #rename(view: ThemeView, opener: HTMLElement | null): void {
+    this.#ask({
+      kind: "rename",
+      name: view.name,
+      inUse: false,
+      warningLines: [],
+      opener,
+      submit: async ({ name }) => {
+        const renamed = await this.#write(() => this.api.renameTheme(view.id, name));
+        this.#changed({ kind: "renamed", theme: renamed });
+      },
+    });
+  }
+
+  #copy(row: Row, opener: HTMLElement | null): void {
+    const choices = row.view?.choices ?? null;
+    this.#ask({
+      kind: "copy",
+      name: copyName(row.name),
+      inUse: false,
+      warningLines: warningLinesOf(row),
+      opener,
+      submit: async ({ name, inUse }) => {
+        const created = await this.#write(() =>
+          this.api.createTheme({ name, theme: choices ?? WAITRON_CHOICES, inUse }),
+        );
+        this.#changed({ kind: "created", theme: created, inUse });
+        if (inUse) repaintVenueTheme(this.api);
+      },
+    });
+  }
+
+  #askSwitch(row: Row, opener: HTMLElement | null): void {
+    this.#opener = opener;
+    this.switchError = "";
+    this.switching = {
+      id: row.view?.id ?? null,
+      name: row.name,
+      lines: warningLinesOf(row),
+    };
+  }
+
+  async #switch(): Promise<void> {
+    const target = this.switching;
+    if (this.submitting || target === null || !this.canEdit) return;
+    this.switchError = "";
+    try {
+      const { inUse } = await this.#write(() => this.api.useTheme(target.id));
+      if (this.switching === target) this.switching = null;
+      this.#changed({ kind: "switched", inUse });
+      repaintVenueTheme(this.api);
+    } catch (error) {
+      if (this.switching === target) this.switchError = codeMessage(codeOf(error));
+    }
+  }
+
+  async #delete(id: string): Promise<void> {
+    const target = this.deleting;
+    if (this.submitting || target === null || target.id !== id || !this.canEdit) return;
+    this.deleteError = "";
+    try {
+      const { inUse } = await this.#write(() => this.api.deleteTheme(id));
+      // The row menu that opened the dialog goes with the theme.
+      this.#opener = this.renderRoot.querySelector<HTMLElement>("[data-test=new-theme]");
+      if (this.deleting === target) this.deleting = null;
+      this.#changed({ kind: "deleted", id, inUse });
+      if (inUse === null) repaintVenueTheme(this.api);
+    } catch (error) {
+      if (this.deleting === target) this.deleteError = codeMessage(codeOf(error));
+    }
+  }
+
+  #dialogs(list: ThemeList): TemplateResult {
+    const switching = this.switching;
+    const deleting = this.deleting;
+    return html`<dashboard-theme-name-dialog></dashboard-theme-name-dialog>
+      <dashboard-theme-switch-dialog
+        .open=${switching !== null}
+        .name=${switching?.name ?? ""}
+        .lines=${switching?.lines ?? []}
+        .busy=${this.submitting}
+        .error=${this.switchError}
+        .opener=${this.#opener}
+        @theme-switch-confirm=${(event: Event) => {
+          event.stopPropagation();
+          void this.#switch();
+        }}
+        @theme-switch-back=${(event: Event) => {
+          event.stopPropagation();
+          this.switching = null;
+        }}
+      ></dashboard-theme-switch-dialog>
+      <wt-delete-dialog
+        .open=${deleting !== null}
+        .impact=${deleting === null ? null : themeDeleteImpact(deleting, list.inUse === deleting.id)}
+        .submitting=${this.submitting}
+        .actionError=${this.deleteError}
+        .copy=${themeDeleteCopy()}
+        .opener=${this.#opener}
+        @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) => {
+          event.stopPropagation();
+          void this.#delete(event.detail.id);
+        }}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          this.deleting = null;
+        }}
+      ></wt-delete-dialog>`;
+  }
+
+  #status(row: Row): TemplateResult | typeof nothing {
+    const tags: TemplateResult[] = [];
+    if (row.inUse) {
+      tags.push(
+        html`<span part="tag in-use" data-test="tag-in-use">${t("appearance.in_use")}</span>`,
+      );
+    }
+    if (row.warnings > 0) {
+      tags.push(
+        html`<span part="tag hard-to-read" data-test="tag-hard-to-read"
+          ><wt-icon name="warning"></wt-icon>${countOf(
+            "appearance.hard_to_read_count",
+            row.warnings,
+          )}</span
+        >`,
+      );
+    }
+    return tags.length === 0 ? nothing : html`<span part="tags">${tags}</span>`;
+  }
+
+  override render() {
+    if (this.list === undefined) return nothing;
+    return html`${settingsCard({
+      id: "themes-card",
+      heading: t("appearance.themes"),
+      editing: false,
+      action: this.canEdit
+        ? html`<wt-button
+            data-test="new-theme"
+            variant="secondary"
+            @click=${() => this.#edit({ kind: "new" })}
+            >${t("appearance.add_theme")}</wt-button
+          >`
+        : nothing,
+      body: html`<wt-data-table
+        wrap-to-fit
+        aria-label=${t("appearance.themes_table")}
+        .rows=${rowsOf(this.list)}
+        .columns=${this.#columns()}
+        .rowKey=${(row: Row) => row.key}
+      ></wt-data-table>`,
+    })}${this.canEdit ? this.#dialogs(this.list) : nothing}`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "dashboard-themes-card": ThemesCard;
+  }
+}

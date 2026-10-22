@@ -86,8 +86,10 @@ export {
 export { validateThemeConfiguration } from "./theme-configuration.js";
 export {
   createCustomTheme,
+  deleteCustomTheme,
   listCustomThemes,
   readThemeInUse,
+  renameCustomTheme,
   saveCustomTheme,
   setThemeInUse,
 } from "./theme-store.js";
