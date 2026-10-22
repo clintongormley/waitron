@@ -250,6 +250,18 @@ describe("the till's comp words follow the Comp window's (design D10)", () => {
   it.each([
     ["en", en],
     ["es", es],
+  ])("titles the bill's comp with the Comp window's word (%s)", (_, strings) => {
+    const word = strings["comp.title"].replace(/…$/, "");
+    expect(strings["table.discount_bill"].startsWith(word)).toBe(true);
+    expect(strings["adjust.discount_bill_title"].startsWith(word)).toBe(true);
+    expect(Object.keys(en)).not.toContain("adjust.kind");
+    expect(Object.keys(en)).not.toContain("adjust.kind_percent");
+    expect(Object.keys(en)).not.toContain("adjust.kind_amount");
+  });
+
+  it.each([
+    ["en", en],
+    ["es", es],
   ])("names a free comp with the Free choice's word (%s)", (_, strings) => {
     const free = strings["comp.free"].toLowerCase();
     expect(strings["comp.make_free"].toLowerCase()).toContain(free);

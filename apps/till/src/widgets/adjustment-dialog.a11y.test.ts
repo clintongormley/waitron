@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import "./adjustment-dialog.js";
 import type { AdjustmentChoice, AdjustTarget, TillAdjustmentDialog } from "./adjustment-dialog.js";
 import type { AdjustmentPreview, AdjustmentReason } from "../api/client.js";
@@ -81,6 +81,22 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     const { el, host } = await mount({ kind: "cancel", target: { ...steaks, started: true } });
     await pressed(el, 'input[name="reason"]');
     await pressed(el, "[data-adjust-continue]");
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations comping the whole bill with Free chosen", async () => {
+    const { el, host } = await mount({
+      kind: "discount",
+      target: {
+        lineId: null,
+        name: t("adjust.whole_bill"),
+        quantity: null,
+        total: "40.00",
+        unitTotal: null,
+      },
+    });
+    await pressed(el, 'input[name="discountKind"][value="free"]');
+    await pressed(el, 'input[name="reason"][value="queja"]');
     await expectNoA11yViolations(host);
   });
 

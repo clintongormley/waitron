@@ -6,18 +6,39 @@ import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./adjustment-dialog.js";
-import type { AdjustmentChoice, TillAdjustmentDialog } from "./adjustment-dialog.js";
+import type { AdjustmentChoice, AdjustTarget, TillAdjustmentDialog } from "./adjustment-dialog.js";
+import type { AdjustmentReason } from "../api/client.js";
+
+const regular: AdjustmentReason = {
+  id: "regular",
+  name: "Regular",
+  kind: "comp",
+  actions: ["discount_percent", "discount_amount"],
+  noteRequired: false,
+  maxPercentBp: null,
+  maxAmount: null,
+  applyRoles: ["staff", "supervisor", "manager", "admin"],
+  approverRoles: ["manager", "admin"],
+};
 
 class AdjustmentLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   closes = 0;
+  target: AdjustTarget = {
+    lineId: "line-2",
+    name: "Steak",
+    quantity: "2",
+    total: "50.00",
+    unitTotal: "25.00",
+  };
+  reasons: AdjustmentReason[] = [regular];
   previews: AdjustmentChoice[] = [];
   confirms: AdjustmentChoice[] = [];
   override render() {
     return html`<till-adjustment-dialog
         kind="discount"
-        .target=${{ lineId: "line-2", name: "Steak", quantity: "2", total: "50.00", unitTotal: "25.00" }}
-        .reasons=${[{ id: "regular", name: "Regular", kind: "comp", actions: ["discount_percent", "discount_amount"], noteRequired: false, maxPercentBp: null, maxAmount: null, applyRoles: ["staff", "supervisor", "manager", "admin"], approverRoles: ["manager", "admin"] }]}
+        .target=${this.target}
+        .reasons=${this.reasons}
         @adjust-close=${() => this.closes++}
         @adjust-preview=${(event: CustomEvent<AdjustmentChoice>) => this.previews.push(event.detail)}
         @adjust-confirm=${(event: CustomEvent<AdjustmentChoice>) => this.confirms.push(event.detail)}
@@ -28,8 +49,8 @@ class AdjustmentLeaveApp extends LitElement {
 customElements.define("adjustment-leave-test-app", AdjustmentLeaveApp);
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
-async function mount() {
-  const { el: app } = await mountWidget<AdjustmentLeaveApp>("adjustment-leave-test-app", {});
+async function mount(over: Partial<Pick<AdjustmentLeaveApp, "target" | "reasons">> = {}) {
+  const { el: app } = await mountWidget<AdjustmentLeaveApp>("adjustment-leave-test-app", over);
   const form = app.shadowRoot!.querySelector("till-adjustment-dialog")!;
   await form.updateComplete;
   await form.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
@@ -229,4 +250,31 @@ it("an accepted adjustment aborts a pending discard without restoring or asking 
   expect(input.value).toBe("Accepted note");
   expect(unload()).toBe(false);
   expect(app.closes).toBe(0);
+});
+it("choosing Free on the bill is a change, and % again is not", async () => {
+  const { app, form } = await mount({
+    target: {
+      lineId: null,
+      name: t("adjust.whole_bill"),
+      quantity: null,
+      total: "40.00",
+      unitTotal: null,
+    },
+    reasons: [
+      { ...regular, id: "complaint", name: "Complaint", actions: ["comp", "discount_percent"] },
+    ],
+  });
+  await pick(form, "discountKind", "free");
+  expect(unload()).toBe(true);
+  click(form, "[data-adjust-close]");
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await expect.poll(() => q.open).toBe(false);
+  expect(app.closes).toBe(0);
+  await pick(form, "discountKind", "percent");
+  expect(unload()).toBe(false);
+  click(form, "[data-adjust-close]");
+  await expect.poll(() => app.closes).toBe(1);
+  expect((await question(app)).open).toBe(false);
 });

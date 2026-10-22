@@ -942,6 +942,24 @@ describe("till-app: giving away a dish on a stored counter order", () => {
     expect(api.previewAdjustment).toHaveBeenCalledWith("wo-9", { ...ask, quantity: "1" });
   });
 
+  it("comps the whole stored order free", async () => {
+    const el = await retrieved();
+    await press(el, inBasket(el, "[data-discount-bill]")!);
+    await press(el, inDialog(el, 'input[name="discountKind"][value="free"]'));
+    await chooseReason(el, "Complaint");
+    await press(el, inDialog(el, "[data-adjust-continue]"));
+
+    expect(api.previewAdjustment).toHaveBeenCalledWith("wo-9", {
+      expectedEdit: null,
+      expectedRevision: 4,
+      lineId: null,
+      reasonId: "r-complaint",
+      note: null,
+      action: "discount_percent",
+      percentBp: 10000,
+    });
+  });
+
   it("offers the adjustments once the order's lines are read, Cancel only on what the kitchen has", async () => {
     const el = await retrieved();
 
