@@ -503,3 +503,79 @@ describe("dashboard-box-status-screen", () => {
     expect(api.freeBoxSpace).not.toHaveBeenCalled();
   });
 });
+
+describe("dashboard-box-status-screen's layout", () => {
+  const box = (el: BoxStatusScreen, selector: string) =>
+    (q(el, selector) as HTMLElement).getBoundingClientRect();
+
+  async function mountAt(width: number, api: DashboardApi) {
+    const mounted = await mount(api, () => true);
+    mounted.host.style.width = `${width}px`;
+    await flush(mounted.el);
+    return mounted;
+  }
+
+  it("on a wide page puts the name, the words and the actions side by side, as picture 4 does", async () => {
+    const { el } = await mountAt(1000, stubApi({}, health(), [PRINTER_ALERT]));
+    const name = box(el, "[data-test=row-printers] .name");
+    const line = box(el, "[data-test=row-printers] .line");
+    const goTo = box(el, "[data-test=row-printers] [data-test=go-to]");
+    expect(name.right).toBeLessThanOrEqual(line.left);
+    expect(Math.abs(name.top - line.top)).toBeLessThan(name.height);
+    expect(goTo.left).toBeGreaterThanOrEqual(line.right);
+    expect(box(el, "[data-test=row-sales] .line").left).toBe(line.left);
+  });
+
+  it("on a phone puts the name above the words and the actions below them, across the row", async () => {
+    const { el } = await mountAt(358, stubApi({}, health(), [PRINTER_ALERT]));
+    const name = box(el, "[data-test=row-printers] .name");
+    const line = box(el, "[data-test=row-printers] .line");
+    const detail = box(el, "[data-test=row-printers] .detail");
+    const goTo = box(el, "[data-test=row-printers] [data-test=go-to]");
+    expect(name.bottom).toBeLessThanOrEqual(line.top);
+    expect(goTo.top).toBeGreaterThanOrEqual(detail.bottom);
+    expect(goTo.left).toBeGreaterThanOrEqual(line.left);
+    expect(box(el, "[data-test=row-disk] [data-test=free]").top).toBeGreaterThanOrEqual(
+      box(el, "[data-test=row-disk] .detail").bottom,
+    );
+  });
+
+  it("draws the part's name in bold", async () => {
+    const { el, host } = await mount(stubApi());
+    const probe = document.createElement("span");
+    probe.style.fontWeight = "var(--wt-font-weight-bold)";
+    host.appendChild(probe);
+    expect(getComputedStyle(q(el, "[data-test=row-disk] .name")!).fontWeight).toBe(
+      getComputedStyle(probe).fontWeight,
+    );
+  });
+
+  it("keeps the read-only sentence as close to the details as the details are to the line", async () => {
+    const { el } = await mount(stubApi({}, health({ canFree: false })));
+    const detail = box(el, "[data-test=row-disk] .detail");
+    const line = box(el, "[data-test=row-disk] .line");
+    const aside = box(el, "[data-test=row-disk] [data-test=read-only]");
+    expect(aside.top - detail.bottom).toBe(detail.top - line.bottom);
+  });
+
+  it("does not repeat on this page the sentence of an alert that sends people to this page", async () => {
+    const answer = health({
+      notices: [
+        {
+          key: "storage.space_low",
+          code: "storage.space_low",
+          severity: "warning",
+          params: {},
+          owner: "box",
+        },
+      ],
+    });
+    const lowDisk = alert("storage.space_low", "box", {
+      params: { freeBytes: 1_800_000_000 },
+      screen: "box-status",
+    });
+    const { el } = await mount(stubApi({}, answer, [lowDisk]));
+    expect(q(el, "[data-test=row-disk]")!.getAttribute("data-state")).toBe("attention");
+    expect(qa(el, "[data-test=row-disk] [data-test=row-alert]")).toHaveLength(0);
+  });
+});

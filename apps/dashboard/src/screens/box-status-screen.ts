@@ -27,6 +27,7 @@ export class BoxStatusScreen extends LitElement {
     css`
       :host {
         display: block;
+        container-type: inline-size;
         color: var(--wt-color-text);
       }
       .title {
@@ -44,11 +45,14 @@ export class BoxStatusScreen extends LitElement {
         margin: 0 0 var(--wt-space-4);
         padding: 0;
         display: grid;
+        grid-template-columns: auto minmax(0, 1fr) minmax(0, 3fr) auto;
         gap: var(--wt-space-2);
       }
       .rows > li {
+        grid-column: 1 / -1;
         display: grid;
-        grid-template-columns: auto 1fr auto;
+        grid-template-columns: subgrid;
+        grid-template-areas: "dot name words actions";
         gap: var(--wt-space-3);
         align-items: start;
         padding: var(--wt-space-3);
@@ -57,6 +61,7 @@ export class BoxStatusScreen extends LitElement {
         border-radius: var(--wt-radius-md);
       }
       .dot {
+        grid-area: dot;
         display: inline-block;
         width: var(--wt-space-3);
         height: var(--wt-space-3);
@@ -76,11 +81,16 @@ export class BoxStatusScreen extends LitElement {
         ${visuallyHiddenStyles}
       }
       .name {
-        font-weight: var(--wt-font-weight-medium);
+        grid-area: name;
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .words {
+        grid-area: words;
       }
       .line,
       .detail,
-      .alert {
+      .alert,
+      .aside {
         margin: 0;
       }
       .detail,
@@ -93,11 +103,28 @@ export class BoxStatusScreen extends LitElement {
         color: var(--wt-color-text-muted);
       }
       .actions {
+        grid-area: actions;
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
         align-items: center;
         justify-content: flex-end;
+      }
+      @container (max-width: 600px) {
+        .rows {
+          grid-template-columns: auto minmax(0, 1fr);
+        }
+        .rows > li {
+          grid-template-areas:
+            "dot name"
+            ". words"
+            ". actions";
+          row-gap: var(--wt-space-1);
+        }
+        .actions {
+          justify-content: flex-start;
+          margin-top: var(--wt-space-1);
+        }
       }
       .free {
         display: flex;
@@ -256,9 +283,12 @@ export class BoxStatusScreen extends LitElement {
   }
 
   #renderRow(row: PartRow, health: BoxHealth): TemplateResult {
+    // An alert that sends people to this page would only send them here again.
     const sentences = [
       ...new Set(
-        row.alerts.map((alert) => alertMessage(alert.code, alert.params, currentLocale())),
+        row.alerts
+          .filter((alert) => alert.screen !== "box-status")
+          .map((alert) => alertMessage(alert.code, alert.params, currentLocale())),
       ),
     ].filter((sentence) => sentence !== row.line);
     const disk = row.id === "disk";
@@ -266,8 +296,8 @@ export class BoxStatusScreen extends LitElement {
       <span class="dot ${row.state}"
         ><span class="state-words">${t(`box_status.state.${row.state}` as StringKey)}</span></span
       >
-      <div>
-        <div class="name">${t(`box_status.part.${row.id}` as StringKey)}</div>
+      <div class="name">${t(`box_status.part.${row.id}` as StringKey)}</div>
+      <div class="words">
         <p class="line">${row.line}</p>
         ${
           row.details.length === 0
