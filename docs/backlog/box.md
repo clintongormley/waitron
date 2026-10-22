@@ -702,25 +702,31 @@ Not closed in slice 1, because product writes go through `withTransaction`, whic
 - a root guard refusing a bare `.transaction(` on the venue database outside `withWriteLock` in
   product code.
 
-## Till surfaces that still show their own message for a full disk, and the station screen's silence
+## Till write surfaces not checked for a full-disk refusal's words
 
-Left open by A798-B slice 3 (#1950), for slice 6. Since slice 3, once a save has
-failed for a full disk, or the box started with less than 16 MiB free, every till write except the open ones answers `507 storage.disk_full` until
-the venue folder has 16 MiB free
+Left open by A798-B slice 6 (#<this pull request>), from design §4.6 item 2. Since slice 3, once a
+save has failed for a full disk, or the box started with less than 16 MiB free, every till write
+except the open ones answers `507 storage.disk_full` until the venue folder has 16 MiB free
 ([conventions-data.md](../developers/conventions-data.md#a-full-disk-stops-the-tills-writes)). The
-surfaces slice 3's plan named (its decision 12) show a full-disk sentence for it ("Not saved: the box is out of disk space…", or for a sale "Sale not recorded: the box is out of disk space…"). The others
-still show their own fallback, and now meet it whenever the stop holds, not only when a save does
-not fit:
+draft save's refusals and the unpaid departure already say "Not saved: the box is out of disk
+space…" (measured 2026-10-22, slice 6's plan), and since slice 6 the station screen does too, on a
+kitchen display and on a till's Station tab. The rest were not checked: audit the catch sites in
+`apps/till/src` that do not fall back to `codeMessage(code)`. The pass screens on a kitchen display,
+which has no strip, were not checked either.
 
-- the draft save's refusals (`DraftRefused` in `apps/till/src/state/draft-sync.ts`, and the
-  handlers that read them);
-- the unpaid departure (`#onDepartureContinue` in `apps/till/src/till-app.ts`);
-- any other till write surface decision 12 does not name.
+## On a full disk, a till read whose route opens a withTransaction is refused while a change waits
 
-The station screen shows nothing for a refused bump, on a kitchen display and on a till's own
-Station tab (`apps/till/src/till-app.ts` renders the same `till-station-screen`): `#advance` in
-`apps/till/src/screens/till-station-screen.ts` swallows every refusal but a changed screen and
-reloads the queue. Under the stop its tickets do not move and nothing says why.
+Left open by A798-B slice 6 (#<this pull request>). `withTransaction` ends every body with the
+change-log drain (`delete from change_log returning payload`, `packages/db/src/change-log.ts`),
+which is a write. Measured 2026-10-22 on a migrated venue on a small full disk, with one
+`change_log` row waiting: a read-only `withTransaction` was refused `storage.disk_full`, a write-lock
+turn holding the same read answered, and a turn holding only the drain's statement was refused. So
+the equipment read, which reads in turns, answers; `GET /api/till`, which opens its own
+`withTransaction` around `readTillSetup`, and the session-checked till reads (`GET
+/api/working-orders` among them) answered `507` with a change waiting — with no change waiting, and
+since slice 6 even with a last-seen stamp due, they answer 200. Which step refused them with a change
+waiting was not isolated. PIN sign-in is refused on a full disk in every case, with no session
+written.
 
 ## The Box status page's rows from a module are not in the staff-notice seat
 
@@ -729,20 +735,6 @@ Left open by A798-B slice 4 (#1958) for slice 7. Design §5's seat was to return
 Hacienda row's unsent count, last accepted record and the Reintentar ahora route) as an optional
 member of `StaffNoticeSource` or a seat of its own, and its plan decides whether the page reads the staff
 notices at all.
-
-## What a device shows when a module's notice check fails, and how often it is logged
-
-Left open by A798-B slice 4 (#1958) for slice 6. `readStaffNotices`
-(`apps/server/src/staff-notices.ts`) logs `staff_notice.source_unavailable` at `error` and names
-the module in `unavailable` on every read; nothing shows it. Once slice 6 runs it on every device's
-15-second equipment read, a check that keeps failing logs that line on every read from every
-device, so slice 6 decides what a device shows and whether the line is limited or written only when
-a check starts or stops failing. Slice 6 also decides whether a guard holds every staff-notice code
-to till wording, as `scripts/ongoing-alert-codes.test.ts` holds ongoing alert codes to the
-dashboard's (reading text in the files it lists), and whether
-`clock.unusable`'s notice shares the till's refusal sentence for that code
-(`apps/till/src/i18n/codes.ts`: "Sale not recorded: the box's clock is wrong. …") or needs words of
-its own.
 
 ## A box whose first setup was retired into a new workspace keeps that workspace's backup staging through the clean-up before the count
 
