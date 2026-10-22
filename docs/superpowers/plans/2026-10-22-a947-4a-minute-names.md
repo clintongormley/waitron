@@ -97,7 +97,10 @@ reviews, then the full `/finish-branch` wave with the Codex run-it seat run twic
   add one): it allocates through paper fixtures (`apps/server/src/testing/stream-loop-scenario.ts:470`)
   and slice 4a changes nothing that streams. Recorded as a decision (Driver steps).
 - **No test-time setting is reachable from the environment.** The wait is a fiscal safety wait;
-  tests control time only through Task 6a's injected clock, which production never sets.
+  tests control time and pose as a phone only through Task 6a's seams (constructor options,
+  `StartServerSeams`, a test preload), which production never passes; fiscal code never reads a
+  clock or a test switch from `host.environment`. Two production-path tests say what a leak would
+  print (Task 6a).
 - Browser suites run in real Chromium: check `memory_pressure | grep free` first and run beside
   another session's browser run only when free memory is well above 15%.
 
@@ -348,6 +351,12 @@ kept); no second clock → `second_clock_missing`; disagreement → `clock_disag
   - `hour-setup-clock.test.ts`: `compare(key, env, sample, { onBox: true })` with a perfect browser
     sample and the internet unavailable → `secondClock` false and the browser's unavailable reason
     is `same_machine`; the same sample with `{ onBox: false }` → `secondClock` true (control).
+  - "two comparisons in flight at once" (`hour-setup-clock.test.ts`): today's race check is
+    session-wide (`state.comparison !== comparison` across the `await internet(...)`,
+    `hour-setup-clock.ts:89-91,117-119`), so an overlapping compare makes the other fail
+    `clock_stale`. It becomes per comparison. Case: B's and A's compares both awaiting a delayed
+    internet observation (a deferred promise), resolved in the order A, B: both readings are
+    stored, B's has `secondClock` true;
   - "two pages keep their own readings" (`hour-setup-clock.test.ts`): page B (`onBox: false`)
     takes a challenge, page A (`onBox: true`) takes one, B compares, A compares, A takes another
     challenge (its 15-second re-check); `read(key, B's comparison id)` still has `secondClock`
@@ -407,7 +416,7 @@ preparation?(context: InitialSetupContext, proposal: unknown, client: OperationC
 ```
 
 The three routes' deps gain an optional `requestFromBox?: (c: Context) => boolean`, defaulting to
-the real function; tests inject it (Task 6a). `addressIsBox`: strips a `::ffff:` prefix and an IPv6 zone (`%eth0`); true for `undefined`, any
+the real function; only `StartServerSeams` or a test's own deps set it (Task 6a). `addressIsBox`: strips a `::ffff:` prefix and an IPv6 zone (`%eth0`); true for `undefined`, any
 `127.0.0.0/8` address, `::1`, and any address on ANY interface `networkInterfaces()` lists —
 internal ones and Docker bridges included (not `listBoxIpv4`, `box-reach.ts:75`, which keeps only
 the default route's). `requestFromBox` reads `getConnInfo(c).remote.address`
@@ -444,52 +453,74 @@ Every setup and restore will wait 90 to 150 seconds (Task 6b). About 50 test fil
 fiscal package select a name through real routes or helpers on real time and expect it at once
 (`git grep -l -E "allocatedProvision|allocated-provision|staged-hour-crash|staged-hour-restore|owned-hour-setup|hour-recovery-host|hour-first-fiscal|answer: \"(no|yes|unknown)\"" -- 'apps/*' packages/provisioning packages/composition`
 printed 51 paths on the base, one of them `apps/server/test-durations.json`: 43 under `apps/server`,
-4 provisioning, 3 setup, 1 composition). This task gives them a clock to move.
+4 provisioning, 3 setup, 1 composition). And every server test reaches the routes from
+`127.0.0.1`, so after Task 5 every test browser is "the box". This task gives tests a clock to move
+and a way to pose as a phone — as seams only a test passes, never as anything production reads.
+
+**The rule:** fiscal code never reads a clock or a test switch from `host.environment` (the module
+host carries the whole process environment, `first-setup-runtime.ts:43-44`,
+`node-operation-preparation.ts:111`, and the fiscal module takes its configuration from it,
+`allocation-configuration.ts:127-242` — so an environment variable is the tempting shortcut, and
+is forbidden here). The seams travel only by:
+
+1. **a constructor option** — `createHostedHourPreparation(host, { readClock, monotonicNow })`
+   already takes one, and its production caller passes none (`hour-preparation.ts:144-152,215`);
+   it gains `wall?: () => number`, and `createHostedHourRecovery` (`hosted-hour-recovery.ts:30-42`)
+   gains the same `{ wall?, monotonicNow? }`;
+2. **the module host, as a neutral test seam** — `ModuleOperationHost` gains `readonly testClock?:
+   { wall(): number; monotonic(): number }` (a clock, no fiscal term, `packages/module`'s generic
+   contract — CLAUDE.md §3), which `hostedHourPreparation(host)` and `hostedHourRecovery(host)`
+   hand to the constructor options. It is set only where a host is really built, and only from a
+   test seam: `packages/provisioning/src/first-setup-runtime.ts:33,92` (setup),
+   `apps/server/src/recovery-preparation.ts:201` (restore), `apps/server/src/node-operation-preparation.ts:111`
+   (promote, re-register);
+3. **`StartServerSeams`** (`apps/server/src/boot.ts:774-777`, "Test seams; production leaves them
+   unset"; its one production caller, `node-entry.ts:521`, passes only `(env, baseEnv)`) gains
+   `testClock?` and `requestFromBox?: (c: Context) => boolean`, threaded to the three host builders
+   and the three routes (Task 5's deps);
+4. **for a child process**, the existing `--import <preload>` test module
+   (`restore-emergency-crash.e2e.test.ts:339`) installs the seams; never an environment variable.
+   A child-process test that cannot take a preload is narrowed as `first-fiscal-launch` is
+   (Task 6c).
 
 **Files:**
-- Modify: `packages/module/src/operation-preparation.ts:27-40` — `ModuleOperationHost` gains
-  `readonly hourClock?: HourTestClock`;
-  `packages/fiscal-verifactu/src/hour-preparation.ts:146-170` (`createHostedHourPreparation`
-  already takes `monotonicNow`; it now reads `host.hourClock` for `wall` and `monotonic` and hands
-  both to `createSetupHourClock`, `hour-setup-clock.ts:33-37`, and to `monotonicNow`);
-  `hosted-hour-recovery.ts:33,42` (the same); `apps/server/src/module-operation-host.ts` (an
-  `hourClock` option, passed through; production callers never pass it)
+- Modify: `packages/module/src/operation-preparation.ts:27-40`;
+  `packages/fiscal-verifactu/src/hour-preparation.ts:144-170,215`; `hosted-hour-recovery.ts:30-42`;
+  `packages/provisioning/src/first-setup-runtime.ts:33-92`; `apps/server/src/recovery-preparation.ts:201`;
+  `apps/server/src/node-operation-preparation.ts:111`; `apps/server/src/boot.ts:774-777` and the
+  paths from `startServer` to those three builders and to the three routes
 - Create: `apps/server/src/testing/hour-test-clock.ts` — `createHourTestClock(startMs: number):
-  HourTestClock & { advance(ms: number): void; set(ms: number): void }`
-- Every server test reaches the routes from `127.0.0.1`, so after Task 5 every test browser is
-  "the box" and its reading is discarded. The three routes' deps take an optional
-  `requestFromBox?: (c: Context) => boolean` (Task 5; default the real one), and the helpers below
-  pass `() => false` — a test posing as a phone — except in the cases that test the box's own
-  screen. Production never passes it (the same `git grep` check as `hourClock`).
+  { wall(): number; monotonic(): number; advance(ms: number): void; set(ms: number): void }`
 - Modify: the helpers `apps/server/src/testing/allocated-provision.ts:117-119`,
   `staged-hour-crash.ts:100-101`, `staged-hour-restore.ts`, `apps/server/test/owned-hour-setup.ts:66-72`,
-  `hour-first-fiscal.ts`, `hour-recovery-host.ts` — each takes an optional `clock` and, when it
-  gets "waiting", advances it past `targetMs` and asks again
-- Test: `apps/server/src/testing/hour-test-clock.test.ts`, `apps/server/src/module-operation-host.test.ts`
+  `hour-first-fiscal.ts`, `hour-recovery-host.ts` — each takes an optional `clock` and
+  `requestFromBox` (default `() => false`, a test posing as a phone, except where a case tests the
+  box's own screen) and, on "waiting", advances the clock past `targetMs` and asks again; the
+  restore crash test's preload installs both
+- Test: `apps/server/src/testing/hour-test-clock.test.ts`; two production-path tests in
+  `apps/server/src/boot.test.ts`
 
-**Interfaces — produces:**
+The helpers' loop is part of this task; moving the test files onto it is Tasks 6d and 6e.
 
-```ts
-// packages/module
-export interface HourTestClock { wall(): number; monotonic(): number }
-```
-
-The helpers' loop is part of this task; moving the test files onto the helpers' new parameter is
-Tasks 6d and 6e. Production refuses the seam: `bootServer`'s module host is built without
-`hourClock`, and nothing reads it from the environment.
-
-- [ ] **Step 1: Write the failing tests:** `createHourTestClock(T)` — `wall()` is `T`, `advance(90_000)`
-  moves `wall` and `monotonic` together; a module host built with `hourClock` makes
-  `compare-clocks` read the box at that clock's `wall` (assert the decision's box range equals `T`);
-  "production builds no test clock": find the production construction of the module host with
-  `git grep -n "createModuleOperationHost" -- apps/server/src ':!*.test.ts'` and assert in its test
-  that it passes no `hourClock`; and `git grep -n "hourClock" -- apps/server/src ':!*.test.ts'
-  ':!apps/server/src/testing'` lists only `module-operation-host.ts`'s option.
+- [ ] **Step 1: Write the failing tests:**
+  - `createHourTestClock(T)`: `wall()` is `T`; `advance(90_000)` moves `wall` and `monotonic`
+    together; a setup host built with it makes `compare-clocks` read the box at `T`.
+  - **"a server started with no seams counts its own browser as the box"** (`boot.test.ts`,
+    `startServer(env, base)` with no third argument): a real HTTPS `compare-clocks` post from
+    `127.0.0.1` with a perfect browser sample, the internet clock unavailable, answers
+    `secondClock: false` with the browser `same_machine`. **If the phone switch leaked into
+    production, this prints `secondClock: true`.**
+  - **"a server started with no seams waits at a setup on real time"**: a setup at real time, the
+    internet clock mocked usable as `boot.test.ts:1630` does, answers `waiting` with `remainingMs ≥
+    90_000`. **If the test clock leaked, this prints `selected`, or a `remainingMs` under 90 000.**
 - [ ] **Step 2: Run, expect failure:** `pnpm --filter @waitron/server exec vitest run
-  src/testing/hour-test-clock.test.ts src/module-operation-host.test.ts` — module not found.
-- [ ] **Step 3: Implement.** **Step 4: re-run** — PASS; `pnpm -r --filter @waitron/module --filter
-  @waitron/fiscal-verifactu --filter @waitron/server typecheck` exits 0.
-- [ ] **Step 5: Commit** — `test: an injected clock for the setup and restore selection`.
+  src/testing/hour-test-clock.test.ts src/boot.test.ts -t "no seams"` — the module is missing, and
+  the box-switch case fails until Task 5's rule is wired (if Task 5 is in, it passes at once: say
+  so) and the wait case until Task 6b (it stays red until then — name it in the commit body).
+- [ ] **Step 3: Implement.** **Step 4: re-run** — the clock test file passes; typecheck `pnpm -r
+  --filter @waitron/module --filter @waitron/provisioning --filter @waitron/fiscal-verifactu
+  --filter @waitron/server typecheck` exits 0.
+- [ ] **Step 5: Commit** — `test: a test-only clock and phone switch, passed only by test seams`.
 
 ## Task 6b: The selection's minute rules, and the setup and restore wait
 
@@ -542,9 +573,10 @@ and a second is `history_invalid`, `:175-177`); the current wait is the one with
 `targetMs`, and a new wait's target must be greater than every earlier one's, else
 `history_invalid`. A restart inside the 60 seconds keeps the target (review focus 3).
 
-**`preview` during the settle wait** (setup and restore, the page's first look) answers
-`{ status: "waiting", targetMs, remainingMs: targetMs - now }` computed without persisting
-anything.
+**`preview`** writes nothing. With a wait already recorded for the event (a reload in the middle
+of one) it answers `{ status: "waiting", targetMs, remainingMs }` from that wait; with none it
+answers today's `preview` (no wait yet) — never a target it does not save, or the page would count
+down once and then record a second 90–150 s at zero.
 
 - [ ] **Step 1: Write the failing tests** in `hour-selection.test.ts` (Task 6a's clock; history rows
   built as `hour-history-reader.ts:107-133` emits them):
@@ -571,7 +603,8 @@ anything.
     at `10:00:04Z` answers waiting with target `10:02:00Z`, not selected; one at `09:02:59Z`
     (inside the 60 s) selects;
   - **a name already recorded** is returned again with no new wait;
-  - **preview during the settle wait** answers waiting and writes nothing (`replace` not called);
+  - **preview with a recorded wait** answers waiting with that wait's target; **preview with
+    none** answers `preview`, not waiting; neither calls `replace`;
   - **the durable record before activation**: `replace` has been called with the intent before
     `select` resolves `selected` (rule 5);
   - a saved wait whose `targetMs` is not a minute start is `history_invalid`; two saved waits with
@@ -599,7 +632,7 @@ tests `initial-hour-setup.test.ts`, `packages/provisioning/src/cli-same-hour-ent
 
 - [ ] **Step 1: Write the failing tests:** the command never calls `actions.prompt` for a question;
   a waiting answer prints `Waiting to confirm the time, so no invoice series is ever repeated.` and
-  `Continues at <ISO time>; run the command again then.` and returns `{ status: "waiting" }`; run
+  `Continues at <ISO time>; run the command again within a minute after that time (later, it waits again).` and returns `{ status: "waiting" }`; run
   again after the target (Task 6a's clock, in process), it selects. The child-process launch test
   (`first-fiscal-launch.test.ts`, which cannot share an injected clock) asserts the waiting lines
   and exit, and no longer expects a selected name from that process; the continuation is covered
@@ -680,8 +713,12 @@ slice 4c's, which must apply the same rule.
   purpose?: "wait" | "intent")` (default `"intent"`: an unmarked write still needs the grant);
   `packages/provisioning/src/module-preparation-state.ts:124-140` — call `authorizeReplacement`
   only for `"intent"`, still `authorize(binding)` for both;
-  `packages/provisioning/src/first-setup-preparation.ts:192-209` — a pending answer returns without
-  `confirm()`; `packages/fiscal-verifactu/src/hour-selection.ts` (`write` passes `"wait"` for wait
+  `packages/provisioning/src/first-setup-preparation.ts:192-209` — a pending answer CHECKS the
+  grant without spending it (new `checkReconfirmation(owner, nonce, purpose)` in
+  `first-setup-owner.ts`, the same tests as `consumeReconfirmation` at `:463-480` — it exists,
+  matches the attempt, revision, generation, purpose and boot, and has not expired — without the
+  delete), so a waiting call still needs the password but does not use it up; the take keeps the
+  unconditional `confirm()` at `:222`; `packages/fiscal-verifactu/src/hour-selection.ts` (`write` passes `"wait"` for wait
   entries); `apps/setup/src/screens/initial-setup-screen.ts:151-157` and
   `apps/setup/src/first-setup-session.ts` — one password prompt per press; the grant is kept in
   memory (never in storage) and re-sent on the automatic retries; a refused or expired grant
@@ -697,6 +734,13 @@ slice 4c's, which must apply the same rule.
     `setup.owner_required` (it was spent once, by the take);
   - a clock refusal (`clock_disagreement`) leaves the grant unspent: the next `candidates` with the
     same grant succeeds;
+  - a waiting call with a garbage grant (`"x".repeat(43)`) is refused `setup.owner_required`, and
+    writes no wait;
+  - after two waits, a take with a grant older than 5 minutes (the test clock of
+    `first-setup-owner.ts`'s `now`, advanced 300 001 ms) is refused and spends nothing, and a fresh
+    grant then takes the name;
+  - proof by deletion: remove the `confirm()` at `first-setup-preparation.ts:222` and the
+    expired-grant take selects — the case fails; restore;
   - `module-preparation-state.test.ts`: `replace(v, "wait")` writes without calling
     `authorizeReplacement`; `replace(v)` calls it;
   - `first-setup-session.test.ts`, the real session over the test server: two waiting answers then
@@ -887,14 +931,14 @@ setup page's row):
   `candidates({ comparisonId })` again by itself: `selected` → the series; `waiting` → a new
   countdown; a refusal → its explanation. It never imports a name without the server's `selected`.
 - **A reload during a wait**: on connect the page asks `preview`, which answers waiting with the
-  server's time left (Task 6b); it shows that countdown and starts no new 90 s.
+  recorded wait's time left (Task 6b); it shows that countdown and starts no new 90 s. With no
+  wait recorded, `preview` answers no wait, and the page shows no countdown until a press.
 - **No second clock**: the why, plus the "on the box itself" sentence only when the browser's
   unavailable reason is `same_machine`; the setup row's what-to-do and what-ends-it; no countdown.
   A `setInterval` of 15 000 ms compares again and, once a comparison passes, continues to
-  `candidates` by itself. The what-to-do names "cancel this setup" only if the page shows a cancel
-  control at this step (the `abandon` action, `setup-first-fiscal-api.ts:472`): Step 1 checks
-  whether it does; if not, the text names only the internet (design §6.5, "Why the setup page says
-  'start again'").
+  `candidates` by itself. The what-to-do is the setup row's: connect the box to the internet, or
+  open this page on a phone or till and enter the setup password (design §6.5, "Why the setup page
+  says 'enter the setup password'").
 - **Clock refusal**: the spec's refusal sentence, the setup row's what-to-do, both readings, «Comprobar
   otra vez» / "Check again"; no countdown, no automatic retry.
 - **`minute_not_later`**: «Todavía no se puede crear las series: ya se usó un minuto posterior a
@@ -938,10 +982,20 @@ right after a `vi.waitFor`, which advances faked timers itself on each poll.
   - "a later minute in use names its time and does not count down".
   - **The password, through the real setup screen** (review H1; a stubbed `candidates` cannot see
     it): in `apps/setup/src/screens/initial-setup-hour.test.ts`, the real `initial-setup-screen`
-    and `FirstSetupSession` over the setup app's browser test server
-    (`apps/setup/test/first-setup-browser.ts`), the server double answering waiting, waiting,
-    selected: the password dialog opens exactly once. Task 6f's real-route test pins the server
-    side.
+    and `FirstSetupSession` over the setup app's fixture double
+    (`apps/setup/test/first-setup-browser.ts`), answering waiting, waiting, selected: the password
+    dialog opens exactly once. This half runs the real app against a double, and Task 6f's half
+    runs the real route; nothing in this slice runs the real app against the real server — the
+    visual check (Task 15) is the nearest, and says so.
+  - **A takeover in the middle of a wait** (`apps/server/src/setup-first-fiscal.route.test.ts`,
+    Task 6a's clock): browser A presses and gets waiting; browser B, with no session, recovers the
+    attempt with the setup password (`POST /setup-api/first-setup/resolution/recover`, as the
+    setup app does at `apps/setup/src/setup-app.ts:1190-1204`); B's `candidates`, after the
+    target, takes the name — the recorded wait survives (it is keyed by `continuationKey`, which
+    leaves out the owner generation, `hour-preparation.ts:170`, `hour-selection.ts:394,414,496`,
+    while the setup's `contextKey` includes it, `first-setup-runtime.ts:221-225` — read, so this
+    test is the check); A's next call is refused (its grant died with the takeover,
+    `first-setup-owner.ts:476-477`).
   - a11y: each of the four states, both themes (the file's existing axe helper).
 - [ ] **Step 2: Run, expect failure:** `pnpm --filter @waitron/fiscal-verifactu exec vitest run
   --project browser src/setup/wait-countdown.browser.test.ts src/setup/first-hour.browser.test.ts
@@ -950,7 +1004,7 @@ right after a `vi.waitFor`, which advances faked timers itself on each poll.
 - [ ] **Step 3: Implement**; **Step 4: re-run** (and `first-hour-reissue.browser.test.ts`) — PASS.
 - [ ] **Step 5: Commit** — `setup: the setup page explains every clock wait, with a countdown`.
 
-## Task 10a: A restore uploads its backup once; the clock requests carry no file
+## Task 10a: The restore's clock requests carry no backup file
 
 Today every restore preparation call — clock challenge, comparison, select, and each re-check —
 re-sends the whole backup file (`apps/setup/src/screens/recovery-copy.ts:62-76` builds an archive
@@ -967,9 +1021,14 @@ clock. The 5-second rule does not change.
   recoveryKey, environment } }` and `artifact`), which runs `validateArtifact` once and keeps the
   checked copy under the staging directory (`createSetupRecoveryPreparation`'s `stagingDir`,
   `recovery-preparation.ts:347-349`), answering `{ stagedId }`; `/setup-api/recovery/preparation`
-  accepts `source: { kind: "staged", stagedId }` as JSON. One staged copy at a time; it is
-  discarded when the restore finishes, when it is replaced, on start-again, and after 60 minutes
-  unused. `apps/server/src/recovery-preparation.ts:353-363` (the `staged` branch reuses the copy,
+  accepts `source: { kind: "staged", stagedId }` as JSON. The preview and the final restore still
+  upload the file as today (`apps/setup/src/api/client.ts:336-357,411-425`); only the clock and
+  selection requests stop carrying it. One staged copy per restore event: a new upload replaces it
+  only after the new copy validates, and only for the same restore event — another page's upload
+  for a different event is refused while one is staged. It is discarded when the restore finishes,
+  on start-again, and after 60 minutes unused; a staged copy holds a decrypted venue database, so
+  boot also clears the staging directory (today nothing does; each validated copy lives for one
+  request, `recovery-preparation.ts:359-363`). `apps/server/src/recovery-preparation.ts:353-363` (the `staged` branch reuses the copy,
   no second validation).
 - Modify: `apps/setup/src/api/client.ts` (`stageRecovery(file, key, environment)`),
   `apps/setup/src/screens/recovery-copy.ts:62-76` (stage once when the file is chosen; every
@@ -984,12 +1043,15 @@ have the internet, whose clock counts.
   and `select` bodies are JSON under 2 KiB with no artifact; `validateArtifact` runs once for a
   stage and three preparation calls (spy); a `stagedId` from another attempt, or after discard, is
   refused `setup.restore_invalid` (or the sibling code the route already uses for a bad source —
-  grep `invalid(` in the file); the setup app stages once and sends `kind: "staged"` thereafter.
+  grep `invalid(` in the file); the setup app stages once and sends `kind: "staged"` thereafter;
+  the staged `venue.db`'s SHA-256 is unchanged after the three preparation calls (the take reads
+  its history from that copy); a second upload that fails validation leaves the first staged copy
+  usable; boot removes a leftover staging directory.
 - [ ] **Step 2: Run, expect failure:** `pnpm --filter @waitron/server exec vitest run
   src/setup-recovery-preparation-api.test.ts` and `pnpm --filter @waitron/setup exec vitest run
   src/screens/recovery-copy.test.ts` — no stage route.
-- [ ] **Step 3: Implement. Step 4: re-run** — PASS. **Step 5: Commit** — `restore: upload the backup
-  once; the clock requests carry no file`.
+- [ ] **Step 3: Implement. Step 4: re-run** — PASS. **Step 5: Commit** — `restore: the clock
+  requests carry no backup file`.
 
 ## Task 10b: Measure the restore's clock gap with a real backup (before Task 11)
 
@@ -1005,14 +1067,28 @@ A measurement, not a feature. Its scripts live outside the repository, in
   made from seeded data; if not, say so.
 - [ ] **Step 3: Measure** with the workspace's Playwright Chromium driving the real restore page,
   the link throttled by CDP `Network.emulateNetworkConditions` (20 Mbit/s up and down, 20 ms
-  latency, a phone on venue Wi-Fi), the internet clock unreachable, and a temporary uncommitted log
-  line printing the gap at `hour-setup-clock.ts:93-94`: five runs on the staged path, and five on
-  the old per-call upload (the commit before Task 10a, in a throwaway worktree — CLAUDE.md §4,
-  never by swapping files). Print each gap.
-- [ ] **Step 4: Decide.** Staged gaps all under 5 000 ms: write the numbers in the ledger for the
-  PR description and carry on to Task 11. **Any staged gap over 5 000 ms: STOP.** Do not change
-  the 5-second rule and do not build Task 11; report the numbers — the approved offline restore
-  then needs the owner's decision.
+  latency, a phone on venue Wi-Fi), the internet clock unreachable. The dev stack's Vite proxy
+  makes every browser the box (Task 15), whose reading is discarded, so start the server in the
+  measuring script's own process with `StartServerSeams.requestFromBox: () => false` (Task 6a) and
+  open the built setup app from it. A temporary uncommitted log line prints, per comparison: the
+  gap at `hour-setup-clock.ts:93-94`, whether the browser reading was usable, and the server-side
+  share — from the request's arrival to the box sample at `:92` (opening the staged copy and the
+  two or three scrypt checks of the recovery key, `recovery-preparation.ts:124-131,197-205,286-291`;
+  `secret-hash.ts:46-50`). Five runs on the staged path, and five on the old per-call upload (the
+  commit before Task 10a, in a throwaway worktree — CLAUDE.md §4, never by swapping files).
+- [ ] **Step 3b: Which machine.** This runs on the development Mac, which is not the box: its CPU
+  is faster than a box's (an assumption, not measured), so the network share is representative of
+  a phone on Wi-Fi but the server share is understated. So also time one scrypt check of the
+  recovery key alone on the Mac (a three-line script calling `secret-hash.ts`'s verifier), and, if
+  a box is reachable, on the box with the same script; report the server share and the scrypt
+  times side by side. With no box, the report says the server share is the Mac's and names it.
+- [ ] **Step 4: Decide.** Carry on to Task 11 only if **five staged gaps were printed, every one at
+  most 5 000 ms, each from a comparison whose browser reading was usable** (no
+  `unavailable:challenge`). Otherwise — a gap over 5 000 ms, fewer than five printed, or any
+  unusable reading — **STOP**: do not change the 5-second rule and do not build Task 11; report
+  the numbers, because the approved offline restore then needs the owner's decision. Gaps between
+  2 000 and 5 000 ms also go to the owner with the numbers (a box's slower CPU could push them
+  over), though the work carries on.
 
 ## Task 11: The restore page explains its waits, with a countdown
 
@@ -1193,8 +1269,7 @@ Step 0 proves the fake takes in browser mode first, with an injected `now` as th
 - **Backlog:** the A947 entry (`docs/backlog.md:5857`) — slice 4a built and parked for the owner to
   land; next, slice 3a. New short entries: rename the `hour-*` files and the stored `source:
   "hour"` to minute names (a pre-live rename, Global constraints); whether `fiscal-verifactu` gets
-  a Stryker config; how a phone carries on a first setup begun on the box's own screen (spec §13,
-  B3's).
+  a Stryker config.
 - **The PR's first lines:** "**Fiscal — the owner lands this.** A947 slice 4a: every installation
   code is five symbols for the UTC minute; a name needs a second clock within 30 seconds; a setup or
   restore waits 90 to 150 seconds, with a countdown; the recovery sheet and the restore form lose
@@ -1206,13 +1281,20 @@ Step 0 proves the fake takes in browser mode first, with an injected `now` as th
   existed — squash merging removes that commit from `main`, and CI never runs it.
 - **Task 10b's measured gaps** in the PR description.
 - **FYI to the owner** (not a question): the clock refusal's approved «…o corrige la que esté mal»
-  is replaced by his own 03:12 words (design amendment); the setup page tells a person on the box's
-  screen to cancel and start again from a phone, because a phone cannot carry on that setup.
+  becomes «Prueba desde otro móvil o caja. Si siguen sin coincidir, puede que la hora del equipo
+  esté mal: pide ayuda.» — nobody can correct the box's clock, and under the 30-second rule connecting
+  the box to the internet does not clear a disagreement (a wrong phone still disagrees; a wrong box
+  disagrees with the internet too). His 03:12
+  example ("open this page from a phone or a till, or connect the box to the internet") was first
+  moved onto that refusal and is now back on the no-second-clock wait it was written for. The setup
+  page on the box's own screen says to open the page on a phone or till and enter the setup
+  password: the server moves an open setup to a browser that has the password.
 - **Decisions to record** in the spec's §6.5 or the fiscal area's "Decisions and deliberate
   limits": the stream loop test gains no step in 4a (it allocates through paper fixtures); a
   recorded wait expires 60 s after its target; a wait spends no password; the restore stages its
-  backup once; a kiosk browser in a container on a Docker bridge would count as another device
-  (design §13, for B3); the browser counts as the box by its source address on any interface, Docker bridges
+  backup per restore event for the clock requests; a kiosk browser in a container on a Docker
+  bridge, or a browser on a host running the server under a bridge network or Docker Desktop, would
+  count as another device (design §13; the box uses the host's network, where the rule holds); the browser counts as the box by its source address on any interface, Docker bridges
   included; the 15-second re-check with no second clock; the settle target taken from the box
   reading at the first select (never earlier than the checked reading); the command-line setup
   prints the time instead of counting down; file names and the stored `"hour"` label kept for now.
