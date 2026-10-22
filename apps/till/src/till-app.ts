@@ -15335,6 +15335,7 @@ export class TillApp extends LitElement {
               .refunds=${open.refunds}
               .refundAtTill=${open.refundAtTill}
               .reasons=${open.reasons}
+              .defaultReasonId=${open.reasons?.find((reason) => reason.startsFinishTable)?.id ?? ""}
               .reasonsLoading=${open.reasonsLoading}
               .busy=${open.busy || open.approval !== undefined}
               .refusal=${open.refusal}

@@ -163,6 +163,16 @@ export class TillFinishTableDialog extends LitElement {
       this.sending = false;
       this.#scope?.commit(this.#baseline);
     }
+    if (
+      (changed.has("reasons") || changed.has("defaultReasonId")) &&
+      this.draft.reasonId === "" &&
+      this.#baseline?.reasonId === "" &&
+      this.#reasons().some((reason) => reason.id === this.defaultReasonId)
+    ) {
+      this.draft = { ...this.draft, reasonId: this.defaultReasonId };
+      this.#baseline = { ...this.#baseline, reasonId: this.defaultReasonId };
+      this.#scope?.commit(this.#baseline);
+    }
     if (changed.has("reasons") && this.draft.reasonId !== "" && this.#reason() === undefined) {
       this.draft = { ...this.draft, reasonId: "", note: "" };
       this.#scope?.changed();

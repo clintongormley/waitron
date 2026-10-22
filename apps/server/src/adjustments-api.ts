@@ -2,7 +2,12 @@ import { withIssuanceTransaction } from "@waitron/core";
 import { parseBillEditExpected } from "./bill-editing.js";
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { ADJUSTMENT_ACTIONS, isRoleList, listAdjustmentReasons } from "@waitron/adjustments";
+import {
+  ADJUSTMENT_ACTIONS,
+  isRoleList,
+  listAdjustmentReasons,
+  NOT_SERVED_REASON,
+} from "@waitron/adjustments";
 import { withTransaction, type Database } from "@waitron/db";
 import {
   listActivePersonsWithRoles,
@@ -263,7 +268,14 @@ export function mountAdjustmentsApi(
           .select({ locale: persons.locale })
           .from(persons)
           .where(eq(persons.id, personId));
-        return (await listAdjustmentReasons(tx)).map((reason) => ({
+        const listed = await listAdjustmentReasons(tx);
+        const start = listed.find(
+          (reason) =>
+            reason.kind === "void" &&
+            reason.actions.includes("cancel") &&
+            (reason.names.en ?? reason.name) === NOT_SERVED_REASON,
+        );
+        return listed.map((reason) => ({
           id: reason.id,
           name: reasonNameIn(reason, person?.locale ?? null, deps.venueLocale),
           kind: reason.kind,
@@ -273,6 +285,7 @@ export function mountAdjustmentsApi(
           maxAmount: reason.maxAmount,
           applyRoles: reason.applyRoles,
           approverRoles: reason.approverRoles,
+          startsFinishTable: reason === start,
         }));
       });
       return c.json(reasons);

@@ -917,6 +917,7 @@ export interface AdjustmentReason {
   applyRoles: PersonRole[];
   /** Who may approve it for someone else. */
   approverRoles: PersonRole[];
+  startsFinishTable?: boolean;
 }
 
 /** Whose PIN an adjustment needs: holders of the reason's approver roles, holders of the roles that

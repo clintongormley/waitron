@@ -10,6 +10,7 @@ import type { WtCombobox, WtDialog, WtRowActions } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import {
   adjustmentStubs,
+  cancelReason,
   cancelThroughDialog,
   cleanupWidgets,
   expectNoA11yViolations,
@@ -10960,6 +10961,31 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     await flush(el);
     expect(finishDialog(el)!.reasons).toEqual([]);
     expect(finishDialog(el)!.refusal).toBe("");
+  });
+
+  it.each([
+    ["starts Finish table's reason on Not served", true],
+    ["starts it empty when no reason is marked", false],
+  ])("%s", async (_name, marked) => {
+    const notServed = {
+      ...cancelReason,
+      id: "r-not-served",
+      name: "No servido",
+      startsFinishTable: marked,
+    };
+    const pending = held();
+    const { el } = await mountFinish({ listAdjustmentReasons: pending.call });
+    const dialog = await openFinish(el);
+    expect(dialog!.reasons).toBeNull();
+    pending.answer.settle([{ ...cancelReason, startsFinishTable: false }, notServed]);
+    await flush(el, 6);
+    const opened = finishDialog(el)!;
+    await opened.updateComplete;
+    const expected = marked ? "r-not-served" : "";
+    expect(opened.defaultReasonId).toBe(expected);
+    expect(opened.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="reason"]')!.value).toBe(
+      expected,
+    );
   });
 
   it.each(["getCancellation", "getRefundableTenders", "listAdjustmentReasons"])(

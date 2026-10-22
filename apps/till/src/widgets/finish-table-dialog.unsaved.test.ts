@@ -171,3 +171,18 @@ it("required reason notes are staged and returning to the opened note clears the
   await form.updateComplete;
   expect(unload()).toBe(false);
 });
+it("a start reason that arrives after it opened is not an unsaved change", async () => {
+  const reasons = new FinishLeaveApp().reasons;
+  const { el: app } = await mountWidget<FinishLeaveApp>("finish-leave-test-app", {
+    reasons: null as unknown as AdjustmentReason[],
+  });
+  const form = app.shadowRoot!.querySelector("till-finish-table-dialog")!;
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("");
+  app.reasons = reasons;
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("house");
+  expect(unload()).toBe(false);
+});

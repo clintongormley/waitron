@@ -235,6 +235,19 @@ it("uses only an explicitly identified offered default reason", async () => {
   expect(root(el).querySelector("wt-combobox")!.value).toBe("");
   expect(button(el).disabled).toBe(true);
 });
+it("takes the start reason once reasons arrive after it opened, and keeps a reason chosen since", async () => {
+  const el = await mount({ reasons: null });
+  expect(root(el).querySelector("wt-combobox")!.value).toBe("");
+  el.reasons = [house, other];
+  el.defaultReasonId = "house";
+  await el.updateComplete;
+  expect(root(el).querySelector("wt-combobox")!.value).toBe("house");
+  expect(button(el).disabled).toBe(false);
+  await reason(el, "other");
+  el.reasons = [house, other];
+  await el.updateComplete;
+  expect(root(el).querySelector("wt-combobox")!.value).toBe("other");
+});
 it("requires Other's note, marks a synthetic invalid submission, and sends the trimmed note", async () => {
   const el = await mount();
   await reason(el, "other");
