@@ -130,9 +130,9 @@ export async function runRejoin(deps: {
           closed = true;
         }),
       wipeDatabase: async () => {
+        await rm(join(stateDir, REBUILD_MARKER), { force: true });
         await wipeVenueDatabases(venueDir);
         await migrate(venueDir);
-        await rm(join(stateDir, REBUILD_MARKER), { force: true });
         await clearTradingEnv(stateDir);
       },
       log,

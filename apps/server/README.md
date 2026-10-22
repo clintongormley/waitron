@@ -244,12 +244,13 @@ what the command prints, and what it refuses.
 When a failed on-prem box is replaced by a promoted cloud primary and later comes back, it returns as a
 FENCED ex-primary (membership rejoin R1) — it cannot sell, because the cloud is now the serving primary.
 `waitron-rejoin rejoin` wipes that box's local database so you can re-adopt it as a secondary of the
-current primary. There is no artifact input: the wipe deletes both database files, their write-ahead
+current primary. After checking the held chart, it removes any pending restored-first-start marker
+before wiping the database. If that removal fails, your database and `trading.env` stay in place.
+There is no artifact input: the wipe deletes both database files, their write-ahead
 sidecars and Litestream's `.venue.db-litestream/` folder out of the venue directory
 (`src/db-wipe.ts`; a committed row can live in a `-wal` file alone, so the sidecars go too — see
 `SIDE_FILE_SUFFIXES` in `packages/store/src/index.ts`),
-re-migrates the directory from source and clears `trading.env` and any pending restored-first-start
-marker. You then re-adopt the box from setup. The old restore must not reissue a certificate or
+re-migrates the directory from source and clears `trading.env`. You then re-adopt the box from setup. The old restore must not reissue a certificate or
 sign another membership term for the replacement database.
 The whole command runs holding the venue folder's lock (`venue.lock`). `migrations.lock` and
 `venue.lock` (with `venue.lock-journal` while it is held) are deliberately left in place: they hold no
