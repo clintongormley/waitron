@@ -63,11 +63,11 @@ const panel = (theme: "light" | "dark") => `
     <h2>${theme}</h2>
     <wt-segmented-control label="Ordered on its own by" value="public"></wt-segmented-control>
     <div class="row">
-      <wt-button variant="primary">Cobrar</wt-button>
-      <wt-button variant="secondary">Cancelar</wt-button>
-      <wt-button variant="danger">Anular</wt-button>
-      <wt-button variant="ghost"><wt-icon name="cart"></wt-icon> Cesta</wt-button>
-      <wt-button shape="round" variant="primary" aria-label="Añadir"
+      <wt-button variant="primary">Pay</wt-button>
+      <wt-button variant="secondary">Cancel</wt-button>
+      <wt-button variant="danger">Void</wt-button>
+      <wt-button variant="ghost"><wt-icon name="cart"></wt-icon> Basket</wt-button>
+      <wt-button shape="round" variant="primary" aria-label="Add"
         ><wt-icon name="plus"></wt-icon
       ></wt-button>
     </div>
@@ -77,10 +77,10 @@ const panel = (theme: "light" | "dark") => `
       <wt-button size="lg">lg</wt-button>
     </div>
     <div class="row">
-      <wt-button loading>Buscando…</wt-button>
-      <wt-spinner size="sm" label="Cargando"></wt-spinner>
-      <wt-spinner label="Cargando"></wt-spinner>
-      <wt-spinner size="lg" label="Cargando"></wt-spinner>
+      <wt-button loading>Searching…</wt-button>
+      <wt-spinner size="sm" label="Loading"></wt-spinner>
+      <wt-spinner label="Loading"></wt-spinner>
+      <wt-spinner size="lg" label="Loading"></wt-spinner>
     </div>
     <div class="row">
       <wt-count-badge count="3"></wt-count-badge>
@@ -112,10 +112,10 @@ const panel = (theme: "light" | "dark") => `
     </p>
     <wt-card raised>
       <span slot="header">Ticket</span>
-      <wt-input label="Peso (kg)" value="1.25"></wt-input>
+      <wt-input label="Weight (kg)" value="1.25"></wt-input>
       <div class="row" style="margin-top:16px">
-        <wt-switch label="Modo formación"></wt-switch>
-        <wt-switch label="Activado" checked></wt-switch>
+        <wt-switch label="Training mode"></wt-switch>
+        <wt-switch label="Enabled" checked></wt-switch>
       </div>
       <div class="row" style="margin-top:16px">
         <wt-slider label="Columns" name="columns" min="2" max="6" value="4"></wt-slider>
@@ -156,31 +156,31 @@ const panel = (theme: "light" | "dark") => `
     <wt-floor-plan-canvas style="height: 240px; margin-top: 16px"></wt-floor-plan-canvas>
     <wt-floor-plan-preview label="Floor plan: Terrace" style="width: 240px; margin-top: 16px"></wt-floor-plan-preview>
     <wt-floor-map style="height: 240px; margin-top: 16px"></wt-floor-map>
-    <wt-sheet heading="Mesas" style="margin-top: 16px">
-      <p>Mesa 1 · Mesa 2 · Mesa 3</p>
+    <wt-sheet heading="Tables" style="margin-top: 16px">
+      <p>Table 1 · Table 2 · Table 3</p>
     </wt-sheet>
     <div class="row" style="margin-top:16px; flex-direction:column; align-items:stretch">
-      <wt-disclosure heading="Cocina" summary="Sin opciones">
-        <wt-input label="Nota para cocina"></wt-input>
+      <wt-disclosure heading="Kitchen" summary="No options">
+        <wt-input label="Kitchen note"></wt-input>
       </wt-disclosure>
-      <wt-textarea label="Descripción" hint="La ve el cliente en la carta."></wt-textarea>
-      <wt-textarea label="Nota para cocina" value="Sin cebolla" maxlength="200" required></wt-textarea>
-      <wt-textarea label="Alérgenos" error="Escribe como mucho 200 caracteres."></wt-textarea>
-      <wt-textarea label="Nota anterior" value="Sin sal" disabled></wt-textarea>
-      <wt-disclosure heading="Descriptores" summary="2 etiquetas" open>
-        <wt-switch label="Vegetariano" checked></wt-switch>
+      <wt-textarea label="Description" hint="Shown to customers on the menu."></wt-textarea>
+      <wt-textarea label="Kitchen note" value="No onion" maxlength="200" required></wt-textarea>
+      <wt-textarea label="Allergens" error="Enter no more than 200 characters."></wt-textarea>
+      <wt-textarea label="Previous note" value="No salt" disabled></wt-textarea>
+      <wt-disclosure heading="Descriptors" summary="2 tags" open>
+        <wt-switch label="Vegetarian" checked></wt-switch>
       </wt-disclosure>
-      <wt-disclosure heading="Información nutricional" summary="Revisa este campo" has-error>
-        <wt-input label="Calorías" invalid error="Introduce un número."></wt-input>
+      <wt-disclosure heading="Nutritional information" summary="Check this field" has-error>
+        <wt-input label="Calories" invalid error="Enter a number."></wt-input>
       </wt-disclosure>
     </div>
     <div class="row" style="margin-top:16px; flex-direction:column; align-items:stretch">
       <wt-price-input
         class="demo-price"
-        label="Precio"
-        name="precio"
+        label="Price (comma decimal)"
+        name="price-comma"
         value="1,80"
-        unit="ud"
+        unit="ea"
         locale="es-ES"
       >
       </wt-price-input>
@@ -195,33 +195,33 @@ const panel = (theme: "light" | "dark") => `
       </wt-price-input>
       <wt-price-input
         class="demo-price"
-        label="Precio por peso"
-        name="precio-peso"
+        label="Price by weight"
+        name="price-by-weight"
         unit="kg"
-        error="Introduce un precio."
+        error="Enter a price."
       >
       </wt-price-input>
     </div>
     <div class="row" style="margin-top:16px">
       <wt-number-stepper
-        label="Mínimo"
-        name="minimo"
+        label="Minimum"
+        name="minimum"
         min="1"
         clearable
-        placeholder="Ninguna"
+        placeholder="None"
       >
       </wt-number-stepper>
       <wt-number-stepper
-        label="Máximo"
-        name="maximo"
+        label="Maximum"
+        name="maximum"
         min="1"
         clearable
-        placeholder="Ninguna"
+        placeholder="None"
       >
       </wt-number-stepper>
       <wt-number-stepper
-        label="Cantidad"
-        name="cantidad"
+        label="Quantity"
+        name="quantity"
         value="1"
         min="1"
         max="1"
@@ -266,12 +266,12 @@ const panel = (theme: "light" | "dark") => `
       </section>
     </wt-tabs>
     <div class="row" style="margin-top:16px">
-      <wt-button class="open-dialog">Abrir diálogo</wt-button>
+      <wt-button class="open-dialog">Open dialog</wt-button>
       <wt-button class="open-modal">Open form modal</wt-button>
     </div>
-    <wt-dialog heading="Anular venta">
-      Esto generará un registro rectificativo.
-      <wt-button slot="footer" variant="danger">Anular</wt-button>
+    <wt-dialog heading="Void sale">
+      This creates a corrective record.
+      <wt-button slot="footer" variant="danger">Void</wt-button>
     </wt-dialog>
     <wt-modal size="standard" heading="Add printer">
       <wt-input name="printer-name" label="Printer name" value="Kitchen"></wt-input>
@@ -440,10 +440,10 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   searchTable.sortDirection = "ascending";
   searchTable.rows = [
     { name: "Espresso", category: "Drinks", price: 1.8 },
-    { name: "Cortado", category: "Drinks", price: 2.0 },
+    { name: "Flat white", category: "Drinks", price: 2.0 },
     { name: "Croissant", category: "Bakery", price: 2.2 },
-    { name: "Ensaimada", category: "Bakery", price: 2.6 },
-    { name: "Tortilla", category: "Food", price: 4.5 },
+    { name: "Bun", category: "Bakery", price: 2.6 },
+    { name: "Omelette", category: "Food", price: 4.5 },
   ];
   searchTable.columns = [
     {
@@ -531,7 +531,7 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
     }) as EventListener);
   }
 
-  const PRICE_UNITS = ["ud", "kg", "l"];
+  const PRICE_UNITS = ["ea", "kg", "l"];
   for (const price of el.querySelectorAll<HTMLElementTagNameMap["wt-price-input"]>(
     "wt-price-input",
   )) {
@@ -546,8 +546,8 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   for (const stepper of el.querySelectorAll<HTMLElementTagNameMap["wt-number-stepper"]>(
     "wt-number-stepper",
   )) {
-    stepper.decreaseLabel = (label) => `Reducir ${label}`;
-    stepper.increaseLabel = (label) => `Aumentar ${label}`;
+    stepper.decreaseLabel = (label) => `Decrease ${label}`;
+    stepper.increaseLabel = (label) => `Increase ${label}`;
   }
 }
 
