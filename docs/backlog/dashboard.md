@@ -3,6 +3,17 @@
 The open entries are listed in [the backlog](../backlog.md), under "Users, sign-in and the dashboard shell". This file holds
 their full text.
 
+## Non-admin sign-in authority
+
+Decide whether staff management includes changing a non-admin's sign-in details. A manager can
+change a non-admin's email, then receive and complete a reset sent to that address. Restricting
+all other people's email, PIN and login resets to admins would change this staff-management
+workflow. A998's owner instructions explicitly protect admins and retain non-admin management,
+but also say managers never receive another person's reset link; the broader policy needs an
+owner decision. Admin targets, captured messages and saved account-mail relays are protected
+separately. The non-admin email case is exercised in
+`packages/identity/src/staff-authority.test.ts`.
+
 ## `date-utils.test.ts` has a test titled as guarding "against a vacuous pass"
 
 - Found by #612 (the rest of `apps/dashboard`), not fixable in a comments-only change.

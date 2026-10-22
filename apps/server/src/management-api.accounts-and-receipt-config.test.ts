@@ -2830,3 +2830,77 @@ it("rechecks an invitation target promoted to admin after the manager preflight"
     spy.mockRestore();
   }
 });
+
+it("refuses a manager suspending an admin through details with the same email", async () => {
+  const { staffId } = await setupTenant();
+  await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, staffId));
+  const before = await suite.db.select().from(persons).where(eq(persons.id, staffId));
+  const app = mountApp();
+  const cookie = await login(app, MANAGER_EMAIL);
+  const response = await app.request(`/management-api/staff/${staffId}`, {
+    method: "PUT",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify(
+      invitationBody("Existing Admin", STAFF_EMAIL, { role: "admin", status: "suspended" }),
+    ),
+  });
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({
+    error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+  });
+  expect(await suite.db.select().from(persons).where(eq(persons.id, staffId))).toEqual(before);
+});
+
+it("retires a pre-promotion invitation and lets an admin issue its replacement", async () => {
+  await setupTenant();
+  const sent: Parameters<AccountEmailSender>[0][] = [];
+  const app = mountApp(async (message) => {
+    sent.push(message);
+  });
+  const managerCookie = await login(app, MANAGER_EMAIL);
+  const adminCookie = await login(app, "owner@example.test", "dashPass123");
+  const body = invitationBody("Future Admin", "manager-alias@example.test");
+  const invited = await app.request("/management-api/staff", {
+    method: "POST",
+    headers: { cookie: managerCookie, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  expect(invited.status).toBe(201);
+  const { id } = (await invited.json()) as { id: string };
+  expect(sent).toHaveLength(1);
+  const oldToken = new URL(sent[0]!.actionUrl).searchParams.get("token")!;
+  const promoted = await app.request(`/management-api/staff/${id}`, {
+    method: "PUT",
+    headers: { cookie: adminCookie, "content-type": "application/json" },
+    body: JSON.stringify({ ...body, role: "admin", status: "pending" }),
+  });
+  expect(promoted.status).toBe(204);
+  const complete = (token: string) =>
+    app.request("/management-api/account-actions/complete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        token,
+        purpose: "invitation",
+        password: "new owner password",
+        pin: "4321",
+      }),
+    });
+  const refused = await complete(oldToken);
+  expect(refused.status).toBe(400);
+  expect(await refused.json()).toMatchObject({ error: { code: "account_action.invalid" } });
+  expect(refused.headers.get("set-cookie")).toBeNull();
+  const resent = await app.request(`/management-api/staff/${id}/invitation`, {
+    method: "POST",
+    headers: { cookie: adminCookie },
+  });
+  expect(resent.status).toBe(200);
+  expect(await resent.json()).toEqual({ invitationSent: true });
+  expect(sent).toHaveLength(2);
+  const freshToken = new URL(sent[1]!.actionUrl).searchParams.get("token")!;
+  expect(freshToken).not.toBe(oldToken);
+  const completed = await complete(freshToken);
+  expect(completed.status).toBe(200);
+  expect(await completed.json()).toEqual({ personId: id, authenticated: true });
+  expect(completed.headers.get("set-cookie")).toContain("waitron_management_session=");
+});

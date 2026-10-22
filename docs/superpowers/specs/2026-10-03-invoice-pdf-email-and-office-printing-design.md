@@ -1,5 +1,9 @@
 # Full invoices by email as a PDF, and on an office printer (A231d)
 
+> 2026-10-22: A998 supersedes the saved SMTP settings permission in this historical document.
+> Saving a relay now requires `person.admin` because account-reset links use it too. Managers
+> retain redacted settings reads and tests sent to their own address.
+
 > **2026-10-15, A661:** a location no longer has one invoice printer. The
 > `page_printers.invoice_default` flag, the Printers tab's choice and
 > `PUT /management-api/page-printers/invoice-printer` are gone. Each device profile lists its

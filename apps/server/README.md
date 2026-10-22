@@ -421,6 +421,9 @@ links. Managers see the delivery mode without captured messages. Changing the sa
 also needs an admin: account links go through that relay. Managers can read its redacted settings
 and send a test to their own address.
 
+Changing a role to or from admin retires unused account links, so an earlier invitation or reset
+cannot gain admin access. Send a new invitation or request a new reset after the role change.
+
 `pnpm dev:setup`, `pnpm dev:reset`, `pnpm dev:onboard`, `pnpm dev:reset:onboard`, and the `wa-wt`
 worktree launcher also start Mailpit. During local development you can inspect its own UI at
 `http://127.0.0.1:8025`. The development venue is a directory of SQLite files under the same state

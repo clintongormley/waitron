@@ -6,6 +6,11 @@ import { openManagementSession, seedPerson } from "../test/fixtures.js";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { persons } from "./schema/persons.js";
 import {
+  completeAccountAction,
+  inspectAccountAction,
+  issueAccountAction,
+} from "./account-action.js";
+import {
   clearPersonPin,
   createPerson,
   deactivatePerson,
@@ -239,3 +244,153 @@ describe("manager staff changes remain available", () => {
     expect((await row(target)).email).toBe("changed-manager@example.test");
   });
 });
+
+describe("account links across admin role changes", () => {
+  it.each([
+    { method: "details", purpose: "password_reset" },
+    { method: "details", purpose: "invitation" },
+    { method: "setRole", purpose: "password_reset" },
+    { method: "setRole", purpose: "invitation" },
+  ] as const)(
+    "refuses a $purpose link issued before $method promotes the person",
+    async ({ method, purpose }) => {
+      const actor = await openManagementSession(suite.db, "admin");
+      const target = await seedPerson(
+        suite.db,
+        "manager",
+        purpose === "invitation" ? "pending" : "active",
+      );
+      await suite.db
+        .update(persons)
+        .set({ email: "manager-controlled@example.test" })
+        .where(eq(persons.id, target));
+      const issued = await run((tx) => issueAccountAction(tx, { personId: target, purpose }));
+      const person = await row(target);
+      await run((tx) =>
+        method === "setRole"
+          ? setRole(tx, { managementSessionId: actor.token, personId: target, role: "admin" })
+          : updatePersonDetails(tx, {
+              managementSessionId: actor.token,
+              personId: target,
+              displayName: person.displayName,
+              firstNames: "Future",
+              lastNames: "Admin",
+              telephone: null,
+              email: person.email!,
+              role: "admin",
+              status: person.status,
+            }),
+      );
+      const promoted = await row(target);
+      await expect(
+        run((tx) =>
+          completeAccountAction(tx, {
+            token: issued.token,
+            purpose,
+            password: "manager chosen password",
+            pin: "4321",
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "account_action.invalid" });
+      expect(await row(target)).toEqual(promoted);
+      await expect(
+        run((tx) => inspectAccountAction(tx, { token: issued.token, purpose })),
+      ).rejects.toMatchObject({ code: "account_action.invalid" });
+    },
+  );
+});
+
+it("serves an invitation issued after an admin approves the promotion", async () => {
+  const actor = await openManagementSession(suite.db, "admin");
+  const target = await seedPerson(suite.db, "manager", "pending");
+  await suite.db
+    .update(persons)
+    .set({ email: "future-owner@example.test" })
+    .where(eq(persons.id, target));
+  await run((tx) =>
+    setRole(tx, { managementSessionId: actor.token, personId: target, role: "admin" }),
+  );
+  const issued = await run((tx) =>
+    issueAccountAction(tx, { personId: target, purpose: "invitation" }),
+  );
+  const completed = await run((tx) =>
+    completeAccountAction(tx, {
+      token: issued.token,
+      purpose: "invitation",
+      password: "new owner password",
+      pin: "4321",
+    }),
+  );
+  expect(completed).toMatchObject({
+    personId: target,
+    session: { personId: target, token: expect.any(String) },
+  });
+  expect((await row(target)).role).toBe("admin");
+  expect((await row(target)).status).toBe("active");
+});
+
+it("preserves an unused reset when a non-admin becomes a manager", async () => {
+  const actor = await openManagementSession(suite.db, "admin");
+  const target = await seedPerson(suite.db, "staff");
+  await suite.db
+    .update(persons)
+    .set({ email: "future-manager@example.test" })
+    .where(eq(persons.id, target));
+  const issued = await run((tx) =>
+    issueAccountAction(tx, { personId: target, purpose: "password_reset" }),
+  );
+  await run((tx) =>
+    setRole(tx, { managementSessionId: actor.token, personId: target, role: "manager" }),
+  );
+  await expect(
+    run((tx) =>
+      completeAccountAction(tx, {
+        token: issued.token,
+        purpose: "password_reset",
+        password: "new manager password",
+      }),
+    ),
+  ).resolves.toEqual({ personId: target, session: null });
+  expect((await row(target)).role).toBe("manager");
+});
+
+it.each(["details", "setRole"] as const)(
+  "retires an admin's unused reset on demotion through %s",
+  async (method) => {
+    const actor = await openManagementSession(suite.db, "admin");
+    const target = await seedPerson(suite.db, "admin");
+    await suite.db
+      .update(persons)
+      .set({ email: "former-admin@example.test" })
+      .where(eq(persons.id, target));
+    const issued = await run((tx) =>
+      issueAccountAction(tx, { personId: target, purpose: "password_reset" }),
+    );
+    const person = await row(target);
+    await run((tx) =>
+      method === "setRole"
+        ? setRole(tx, { managementSessionId: actor.token, personId: target, role: "manager" })
+        : updatePersonDetails(tx, {
+            managementSessionId: actor.token,
+            personId: target,
+            displayName: person.displayName,
+            firstNames: "Former",
+            lastNames: "Admin",
+            telephone: null,
+            email: person.email!,
+            role: "manager",
+            status: "active",
+          }),
+    );
+    await expect(
+      run((tx) =>
+        completeAccountAction(tx, {
+          token: issued.token,
+          purpose: "password_reset",
+          password: "new manager password",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "account_action.invalid" });
+    expect((await row(target)).role).toBe("manager");
+  },
+);

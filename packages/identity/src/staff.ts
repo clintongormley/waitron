@@ -141,7 +141,16 @@ export async function authorizePersonLoginChange(
     .from(persons)
     .where(eq(persons.id, settleId(input.personId)));
   if (person !== undefined) requireAdminAuthority(actor.role, person.role);
-  return actor;
+  return { ...actor, targetRole: person?.role };
+}
+
+async function invalidatePersonAccountActions(tx: Transaction, personId: string): Promise<void> {
+  await tx
+    .update(managementAccountActions)
+    .set({ usedAt: nowIso() })
+    .where(
+      and(eq(managementAccountActions.personId, personId), isNull(managementAccountActions.usedAt)),
+    );
 }
 
 async function revokePersonAccess(tx: Transaction, personId: string): Promise<void> {
@@ -153,12 +162,7 @@ async function revokePersonAccess(tx: Transaction, personId: string): Promise<vo
     .update(managementSessions)
     .set({ endedAt: nowIso() })
     .where(and(eq(managementSessions.personId, personId), isNull(managementSessions.endedAt)));
-  await tx
-    .update(managementAccountActions)
-    .set({ usedAt: nowIso() })
-    .where(
-      and(eq(managementAccountActions.personId, personId), isNull(managementAccountActions.usedAt)),
-    );
+  await invalidatePersonAccountActions(tx, personId);
 }
 
 /**
@@ -248,6 +252,8 @@ export async function updatePersonDetails(
   }
   if (email !== person.email || input.status !== person.status)
     await revokePersonAccess(tx, person.id);
+  else if (input.role !== person.role && (input.role === "admin" || person.role === "admin"))
+    await invalidatePersonAccountActions(tx, person.id);
 }
 
 export async function deactivatePerson(
@@ -492,12 +498,14 @@ export async function setRole(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; role: PersonRoleValue },
 ): Promise<void> {
-  const { role: actorRole } = await authorizePersonLoginChange(tx, input);
+  const { role: actorRole, targetRole } = await authorizePersonLoginChange(tx, input);
   requireAdminAuthority(actorRole, input.role);
   await tx
     .update(persons)
     .set({ role: input.role })
     .where(eq(persons.id, settleId(input.personId)));
+  if (input.role !== targetRole && (input.role === "admin" || targetRole === "admin"))
+    await invalidatePersonAccountActions(tx, settleId(input.personId));
 }
 
 export async function resetPin(
