@@ -1,7 +1,7 @@
 // Side-effect only: registers this package's error codes on the shared `ErrorParams` registry.
 import "./errors.js";
 import { eq } from "drizzle-orm";
-import { recordIncident } from "@waitron/core";
+import { IssuanceRefusal, recordIncident } from "@waitron/core";
 import { AppError } from "@waitron/shared";
 import type { NodeId, SaleId, SaleOrigin } from "@waitron/shared";
 import { isUniqueViolation, type Transaction } from "@waitron/db";
@@ -174,19 +174,15 @@ async function attemptAppend(
       ? buildAltaRecord({ ...registro.input, Encadenamiento: encadenamiento })
       : buildAnulacionRecord({ ...registro.input, Encadenamiento: encadenamiento });
 
-  // Refuse a record AEAT could not accept, or with a malformed fingerprint, BEFORE it reaches the
-  // append-only table. This is the one seam every record type passes through (alta and anulación,
-  // so sale, void, correction and substitution alike), and the first moment the COMPLETE record
-  // exists — the chain pointer and the huella are filled in above — so what is checked is what
-  // will be stored.
-  //
-  // Errors REFUSE, and so do `REFUSED_WARNINGS`. `@waitron/verifactu` makes a check a warning when
-  // AEAT accepts the record anyway, so blocking a sale for one would refuse a record the authority
-  // would have taken; they are raised as incidents after the insert below.
-  //
-  // Dates are judged against the trusted instant the record was generated from, never the wall
-  // clock, which on a box can disagree with the trusted clock.
+  // Check the complete new record before row conversion, using its trusted generation instant.
+  // A refused issuance needs its incident recorded by the owner after this transaction rolls back.
   const issues = validate(record, { now: registro.input.generadoEn });
+  if (issues.some((issue) => issue.code === "HUELLA_MISMATCH")) {
+    throw new IssuanceRefusal(new AppError("fiscal.fingerprint_mismatch", {}), {
+      origin: registro.origin,
+      detectedAt: registro.input.generadoEn,
+    });
+  }
   const blocking = issues.filter(
     (issue) => issue.severity === "error" || REFUSED_WARNINGS.has(issue.code),
   );

@@ -87,34 +87,32 @@ describe("a malformed fingerprint warning refuses the record like an error", () 
 });
 
 describe("any other warning files the record with its own incident, never as a totals mismatch", () => {
-  it.each<ValidationCode>([
-    "HUELLA_MISMATCH",
-    "FECHA_HORA_FUTURE",
-    "CLAVE_REGIMEN_REQUIRED",
-    "CLAVE_REGIMEN_VALUE",
-  ])("%s", async (code) => {
-    injected.issues = [warning(code)];
-    await append();
+  it.each<ValidationCode>(["FECHA_HORA_FUTURE", "CLAVE_REGIMEN_REQUIRED", "CLAVE_REGIMEN_VALUE"])(
+    "%s",
+    async (code) => {
+      injected.issues = [warning(code)];
+      await append();
 
-    expect(await suite.db.select().from(registrosFacturacion)).toHaveLength(1);
-    expect(await incidents()).toEqual([
-      {
-        code: "fiscal.record_flagged",
-        severity: "warning",
-        params: { fields: [`field-of-${code}`], codes: [code] },
-      },
-    ]);
-  });
+      expect(await suite.db.select().from(registrosFacturacion)).toHaveLength(1);
+      expect(await incidents()).toEqual([
+        {
+          code: "fiscal.record_flagged",
+          severity: "warning",
+          params: { fields: [`field-of-${code}`], codes: [code] },
+        },
+      ]);
+    },
+  );
 
   it("raises each kind once, side by side, when both arrive together", async () => {
-    injected.issues = [warning("CUOTA_TOTAL_MISMATCH"), warning("HUELLA_MISMATCH")];
+    injected.issues = [warning("CUOTA_TOTAL_MISMATCH"), warning("FECHA_HORA_FUTURE")];
     await append();
 
     expect(await incidents()).toEqual([
       {
         code: "fiscal.record_flagged",
         severity: "warning",
-        params: { fields: ["field-of-HUELLA_MISMATCH"], codes: ["HUELLA_MISMATCH"] },
+        params: { fields: ["field-of-FECHA_HORA_FUTURE"], codes: ["FECHA_HORA_FUTURE"] },
       },
       {
         code: "fiscal.record_totals_disagree",

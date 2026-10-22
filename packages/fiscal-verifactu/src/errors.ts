@@ -89,6 +89,7 @@ declare module "@waitron/shared" {
      * (`apps/server/src/recovery-surface.ts`), so an operator's data must never travel here.
      */
     "fiscal.record_invalid": { fields: string[]; codes: string[] };
+    "fiscal.fingerprint_mismatch": Record<string, never>;
 
     /**
      * `attemptAppend` (./chain.ts) wrote a record whose stated totals disagree with its own VAT

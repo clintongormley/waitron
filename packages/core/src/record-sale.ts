@@ -201,8 +201,7 @@ export async function recordSale(
   // write transaction runs on the venue file at a time (`withTransaction`,
   // packages/db/src/tenancy.ts).
   const verification = await backend.checkIntegrity(tx, input.nodeId);
-  // Nothing branches on `verification.ok`: a failed check records an incident and the sale is
-  // chained anyway, because no fiscal condition may block a sale.
+  // A failed stored-predecessor check records an incident without refusing the new sale.
   //
   // One incident per failed check, carrying every issue in `params.issues`, and recorded once
   // `saleId` exists so the incident names the receipt the customer holds.
