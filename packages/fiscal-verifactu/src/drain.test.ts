@@ -1023,9 +1023,14 @@ describe("drain — Route B's lookup and the write transaction", () => {
     await requeue(seeded.registroIds);
 
     const venue = await seedTenantWithSif(suite.db);
+    // After the seeded envíos' own record time, or the chain refuses the sale as behind them.
+    const afterSeeded = {
+      ...steadyClock,
+      now: () => ({ ...steadyClock.now(), instant: new Date("2026-07-21T12:00:00+01:00") }),
+    };
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
-      clock: steadyClock,
+      clock: afterSeeded,
       db: suite.db,
       resolveClient: staticResolver(aeat.client()),
     });
@@ -1058,7 +1063,9 @@ describe("drain — Route B's lookup and the write transaction", () => {
           throw new Error("the pass ended without a lookup");
         }),
       ]);
-      sale = withTransaction(suite.db, (tx) => recordSale(tx, backend, saleInput(venue)));
+      sale = withTransaction(suite.db, (tx) =>
+        recordSale(tx, backend, saleInput({ ...venue, clock: afterSeeded })),
+      );
       const stillWaiting = new Promise<"still waiting">((resolve) => {
         timer = setTimeout(() => resolve("still waiting"), 2_000);
       });
