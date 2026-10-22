@@ -501,9 +501,10 @@ called weaker than its name, the topic file lists what it does not see.
   transactions is a commented decision, never a default.** **Queries on one transaction are awaited
   in turn, never `Promise.all`.** No guard enforces it.
 - **A housekeeping write on a read path must not take the read down on a full disk.** The
-  last-seen stamp gives way to a full disk (`readDeviceProof`, `requireSession`); a read that must
-  answer while a change waits reads in `withWriteLock` turns with no drain, as the equipment read
-  does — a stated exception to one `withTransaction` per route. Cost: the equipment read and every
+  last-seen stamp gives way to a full disk (`readDeviceProof`, `requireSession`, and the session
+  checks of the Box status routes in `box-health-api.ts` and the bell's reads in `alerts-api.ts`); a
+  read that must answer while a change waits reads in `withWriteLock` turns with no drain, as the
+  equipment, Box status and alert reads do — a stated exception to one `withTransaction` per route. Cost: the equipment read and every
   non-passive session-checked read answered 507 on a full disk once a stamp was due (A798-B slice
   6). Guard: the full-disk cases in `apps/server/src/start-full-disk.e2e.test.ts`, weaker than the
   rule — they cover the routes they name. Receipt:
@@ -544,6 +545,14 @@ called weaker than its name, the topic file lists what it does not see.
   `packages/store/src/venue-lock.test.ts` and `apps/server/src/recovery-race.test.ts`, weaker than
   their names — each proves the lock, not that every caller takes it. The Litestream child, the
   holder file and the watchdog are in [conventions-data.md](docs/developers/conventions-data.md).
+- **Anything that writes or deletes in `<state>/backup-staging` does it inside the staging turn**
+  (`apps/server/src/backup-staging-turn.ts`), **except the start's clean-up (`freeSpaceAtStart`),
+  which runs before the backup supervisor exists**: a backup run through `runBackup`, Liberar
+  through `ifNoBackup`; a page's read takes none. Cost: deleting a dump a run reads frees nothing
+  until the run closes it and can fail the run (A798-B slice 7 plan, M3). Guard:
+  `scripts/backup-staging-touchers.test.ts`, weaker than its name — it reads text and never checks
+  that a file takes the turn; the turn is in-process only. Receipt:
+  [conventions-data.md](docs/developers/conventions-data.md#a-read-on-a-full-disk-must-not-fail-on-its-own-housekeeping-write).
 - **A duty `bootServer` starts pushes its stop onto `undoOnFailure` as soon as it exists, before
   the next step that can throw** (`apps/server/src/boot.ts`), or a failed start leaves it running on
   a store the unwind has just closed. The landing listener, started last, is the one step not on the

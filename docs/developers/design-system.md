@@ -2735,6 +2735,10 @@ and the staffing grid's block editor in the A761 entry):
   translated, and keeps its own variant while its own press is being sent.
   A841 slice 5 brought the Look card's Use Waitron's look under it: drawn `secondary` throughout,
   and disabled while the draft already is Waitron's look or a save is under way.
+  A798-B slice 7 brought the Box status page's Free ("Liberar") under it: drawn `secondary` and
+  disabled while the box's read has not answered, while it has under 500,000 bytes to free (it
+  then reads "Nothing to free"), on a mirror or a fenced node, and after a press until the box is
+  read again; `primary` once it can act, keeping `primary` while its own deletion is being sent.
   Not covered: a button disabled only while a request is being sent, an action blocked by its own
   field checks and the sign-in screens. Nothing guards it across screens.
 
@@ -5314,6 +5318,43 @@ mode line stay where they are.
 
 Cases: `apps/till/src/widgets/notice-strip.test.ts`, its `notice-strip.a11y.test.ts`, "the notices
 slot" in `apps/till/src/widgets/till-shell.test.ts`, and `apps/till/src/till-app.notices.test.ts`.
+
+### Box status page (dashboard)
+
+`dashboard-box-status-screen` (`apps/dashboard/src/screens/box-status-screen.ts`, rows worked out
+in `box-status-rows.ts`) is under Settings, before Diagnostics, for people with `system.manage`. It
+reads `GET /api/box/health` every 15 seconds (passively after the first read) and the bell's own
+alert list, and holds no staged input.
+
+- **Rows.** One card per part, in order: Sales, Tax agency, Bucket copy, Printers, Card readers
+  (left out when the payments module is off), Clock and Disk space. Each has a dot, the part's
+  name, a line of state, a muted line of detail, the sentence of each bell alert on that row, and
+  its actions at the trailing end: a Go to for the row's own screen and its alerts' screens, each
+  once, never this page, and only those the person can open.
+- **Dots.** A `--wt-space-3` circle: `--wt-color-success` for fine, `--wt-color-warning` for needs
+  attention, `--wt-color-danger` for something can't be saved, with the state's words in visually
+  hidden text beside it. Red is a staff notice of severity `error` (`storage.disk_full`,
+  `clock.unusable`); amber is any other notice and any bell alert on that row, whatever the alert's
+  own severity, because amber means everything still works. The legend says "red: something can't
+  be saved", not "nothing", because an unusable clock refuses sales while orders still save.
+- **Under the rows.** A note when a staff-notice check could not be made; a note when the bell's
+  alerts could not be read (the rows still show, from the box's read); "{n} other alerts" with
+  See all alerts when some alert or notice belongs to no row; and how to free more space, and who
+  can. What fills the disk (database, backups on the box, logs, the rest of the disk) is the Disk
+  space row's detail.
+- **Free.** On the Disk space row, "Free {size}" with the figure the box would free, and a help-mode
+  "?" that opens the guide. Its states follow the button rule (Forms, above): quiet and disabled
+  under 500,000 bytes ("Nothing to free"), on a mirror or a fenced node (with "This box only keeps
+  a read-only copy, so it can't free space here." under the row), and after a press until the box is
+  read again; `primary` with `loading` while its own deletion is sent. No confirmation dialog:
+  nothing it deletes is something the box cannot make again. After a press, "Freed {size}." is
+  announced and every open read, the bell's too, is read again. While a backup runs, a line says
+  its working files are not counted.
+- **Errors.** A refused press shows its message above the rows; a failed box read shows the read
+  error there, never replacing a press's refusal.
+
+Cases: `apps/dashboard/src/screens/box-status-screen.test.ts`, its `box-status-screen.a11y.test.ts`,
+and `box-status-rows.test.ts`.
 
 ### Counter basket and payment space
 

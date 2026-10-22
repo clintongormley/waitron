@@ -2490,7 +2490,9 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   answers `storage.disk_full`. The provider's row stays `attempting`, for its pending pass to
   capture. A full disk on any other save inside `collect` still answers `storage.disk_full`; for the
   attempt's own first row, `card-charged-not-recorded.test.ts` pins it.
-- Not gated: every route outside those three mounts, among them every dashboard route, the print
+- Not gated: every route outside those three mounts, among them every dashboard route (the Box
+  status page's free-space deletion, `POST /api/box/free-space`, is one, and is how a manager frees
+  the disk), the print
   agent's routes (`print-api.ts`), the provider webhook and node enrolment; and the background
   duties. Their writes that do not fit fail by themselves and note the stop.
 
@@ -2547,6 +2549,14 @@ it was asked for. The measurements are the slice plan's M2, M6 and M10
 a small real filesystem; the cases that now pin them are in
 `apps/server/src/start-full-disk.e2e.test.ts`.
 
+Since A798-B slice 7, four dashboard routes answer on a full disk too, with a change waiting or a
+last-seen stamp due: the Box status read (`GET /api/box/health`), free-space deletion
+(`POST /api/box/free-space`), both in `apps/server/src/box-health-api.ts`, and the bell's two alert
+reads (`GET /management-api/alerts` and `GET /management-api/alerts/handled`,
+`apps/server/src/alerts-api.ts`). The Box status page is how a manager frees the disk, and the bell
+is how a manager learns it is full, so neither can be refused by its own housekeeping write. They
+are described below under "The dashboard's full-disk reads".
+
 **What refused them.**
 
 - **The last-seen stamp.** A device-checked request writes the device's `last_seen_at` when a
@@ -2595,6 +2605,87 @@ notice reader answers on a full disk with a change waiting, and a source that wr
 and "the equipment read answers with the red notice on a full disk with a change waiting". They run
 on macOS through `hdiutil` and in CI on a tmpfs, and skip on a Linux machine without
 `WAITRON_FULL_DISK_DIR` (see [testing-guide.md](testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem)).
+
+**The dashboard's full-disk reads (A798-B slice 7).** Measured for the slice
+([plan](../superpowers/plans/2026-10-22-a798-7-box-status-page.md#measured-for-this-plan)), on the
+small real filesystem: the existing `GET /api/box/status` answered `507 storage.disk_full` on a
+full disk when the read was not passive (the session's last-seen write) and, with one row waiting
+in `change_log`, when it was passive too (the drain at the end of `withTransaction`) (M1); and a
+manager's session checked with `touch: false` outside any transaction, or inside `withWriteLock`,
+answered `ok` there while the same check inside `withTransaction` was refused (M2). So:
+
+- **The session check falls back once.** Each route checks the session in the usual transaction
+  and, only when that is refused `storage.disk_full` (`diskFullIn`), runs the same lookup, status
+  and permission checks again with no stamp: `authorizeSystemManager` in `box-health-api.ts`,
+  outside any transaction, and the list reads in `alerts-api.ts`, inside one `withWriteLock` turn
+  that also holds the read. Every other error is thrown as before, so an ended, expired or
+  suspended session is refused on a full disk too, the Box status routes still refuse a person
+  without `system.manage`, and the alert reads still show nothing to a person holding no alert
+  permission.
+- **The Box status read opens no `withTransaction`.** Its rows are read in a `withWriteLock` turn
+  (`apps/server/src/box-health.ts`) and the staff notices through `readStaffNoticesInTurns`, as the
+  equipment read does above.
+- **Free-space deletion writes nothing to the database.** It deletes files (below), then takes a
+  fresh free-space reading so a full-disk stop can lift at once. Dashboard routes are not behind
+  the till's full-disk gate (above, "Not gated").
+
+Cases: "is left alone on a full disk, read or deletion, passive or not" and "answers the box's real
+health read, passive or not, and leaves the change waiting" in
+`apps/server/src/box-health-api.test.ts`; the "on a full disk" and "answered by the full-disk retry
+alone" groups in `apps/server/src/alerts-api.full-disk.test.ts`, each through a stand-in database
+that refuses the stamp or the drain; and, on the real small disk in
+`apps/server/src/start-full-disk.e2e.test.ts`, "the box health read answers on a full disk with a
+change waiting, passive and not", "a manager's ordinary alert read answers on a full disk with a
+change waiting", "free-space deletion frees a rotated log on a full disk, and the stop lifts" and
+"a supervisor is refused on a full disk".
+
+**What free-space deletion deletes.** Only what the box can make again: in
+`<stateDir>/backup-staging`, a staged dump (`STAGED_DUMP`, also its `.partial`) and a real folder
+whose name starts `backup-encrypt-`; in `<logDir>`, rotated logs `waitron.log.<n>` with `n ≥ 2`,
+so the current log and the newest rotated one stay; in `<logDir>/crash-reports`, a
+`holder-frozen-*.json` older than seven days (`CRASH_REPORT_KEEP_MS`). That is the start's forced
+clean-up set (`freeSpaceAtStart`, `apps/server/src/start-space.ts`, whose name rules it reuses),
+minus symbolic links: a folder or an entry that is a link is skipped, because `rm` would remove only
+the link and its size is not space freed. Every path is built with `join` and the path `lstat`
+judges is the path `rm` removes: a trailing separator makes `lstat` describe a link's target, and
+`rm` of `link/` deleted the target's files (the slice plan's M4). The page's figure is the same set
+summed without deleting (`surveyLeftovers`); a press runs `deleteLeftovers` through
+`createSpaceFreer`, one at a time, and empties the disk-usage walk's cache afterwards
+(`ttl-cache.ts`'s `clear()`), so the next read walks again. All in
+`apps/server/src/free-space-now.ts`; the refusing cases are under "what the deletion must never
+delete" in `free-space-now.test.ts`.
+
+**Backup staging is touched only inside the staging turn** (`apps/server/src/backup-staging-turn.ts`).
+A backup run holds the turn from its first step to the end of its own clean-up (`runBackup`, taken
+by the sweep's `tick` in `backup-sweep.ts`); a free-space deletion takes it through `ifNoBackup`,
+which answers `{ ran: false }` at once, and the deletion skips staging and says
+`backupRunning: true`, while a run holds the turn or waits for it — a deletion never waits for a
+run. A page's survey takes no turn: it measures staging best-effort and leaves it out while a run
+holds the turn, so a refresh can never keep a press out. Why: deleting a file a process holds open
+frees nothing until the file is closed — on the small disk, an unlinked 1 MiB file held open for
+reading left free space at `0` until `close`, then `1048576` (the slice plan's M3) — so deleting a
+dump a run reads frees nothing until the run closes it, and can fail the run. The start's clean-up
+(`freeSpaceAtStart`) takes no turn: it runs before the backup supervisor exists. Cases:
+`apps/server/src/backup-staging-turn.test.ts`, and the turn shared with the backups in
+`free-space-now.test.ts` and `boot.box-health.test.ts`. Guard: `scripts/backup-staging-touchers.test.ts`,
+which allows exactly `start-space.ts`, `backup-supervisor.ts` and `free-space-now.ts` to name
+`BACKUP_STAGING_DIR` or `"backup-staging"`.
+`apps/server/scripts/cloud-backup-fixture.ts`, a development fixture, calls `runOnce` outside any
+turn on its own scratch root; it is outside the guard's `apps/*/src` scan.
+
+**Weaker than the rule.**
+
+- The refusing cases name the files they plant (the venue's files, the state folder's, look-alike
+  names, links, configured backup folders), not every file a box could hold.
+- The staging turn is in-process only. Another process writing backup staging is not kept out by
+  it; the only other product writer found is the start, which a held venue folder stops (A978).
+  Found by `grep -rn "BACKUP_STAGING_DIR\|stagingDir"` over `apps` and `packages`, not run.
+- The guard reads text: a staging path built another way escapes it (`backup-sweep.ts` receives
+  the folder as `stagingDir` and names neither), and it never checks that a listed file takes the
+  turn. The sweep's `stagingTurn` is optional; boot passes it.
+- `start-space.ts` still builds the log folder's paths without the `resolve()` that
+  `free-space-now.ts` gained, so a log folder configured as a link with a trailing separator could
+  let the start's clean-up reach the link's target. Read, not run.
 
 **Still refused.**
 
