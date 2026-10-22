@@ -1,9 +1,17 @@
 import { createServer, type Socket, type AddressInfo } from "node:net";
 import { once } from "node:events";
-import { createServer as createTlsServer } from "node:tls";
+import { createServer as createTlsServer, TLSSocket, createSecureContext } from "node:tls";
 import { mintSelfSignedServerCert } from "../self-signed-cert.js";
 
-type Reply = "accepted" | "recipient-refused" | "data-refused" | "lost-ack" | "silent";
+type Reply =
+  | "accepted"
+  | "recipient-refused"
+  | "data-refused"
+  | "lost-ack"
+  | "silent"
+  | "no-greeting"
+  | "login-refused"
+  | "login-required";
 
 export const smtpTestTls = mintSelfSignedServerCert({
   hostnames: ["localhost"],
@@ -11,7 +19,21 @@ export const smtpTestTls = mintSelfSignedServerCert({
   now: new Date(),
 });
 
-export async function smtpRig(reply: Reply, secure = false) {
+export const smtpWrongHostTls = mintSelfSignedServerCert({
+  hostnames: ["localhost"],
+  ipAddresses: [],
+  now: new Date(),
+});
+
+export async function smtpRig(
+  reply: Reply,
+  secure = false,
+  options: {
+    starttls?: true | 454 | 502;
+    wrongHostname?: boolean;
+  } = {},
+) {
+  const material = options.wrongHostname ? smtpWrongHostTls : smtpTestTls;
   const sockets = new Set<Socket>();
   const messages: string[] = [];
   const authentications: string[] = [];
@@ -23,15 +45,10 @@ export async function smtpRig(reply: Reply, secure = false) {
   const dataReceived = new Promise<void>((resolve) => {
     received = resolve;
   });
-  const handle = (socket: Socket) => {
-    sockets.add(socket);
-    socket.on("close", () => {
-      sockets.delete(socket);
-      closed();
-    });
+  const handle = (socket: Socket, upgraded = false) => {
     socket.on("error", () => {});
     socket.setEncoding("utf8");
-    socket.write("220 invoice-test ESMTP\r\n");
+    if (!upgraded && reply !== "no-greeting") socket.write("220 invoice-test ESMTP\r\n");
     let buffer = "";
     let data: string[] | undefined;
     socket.on("data", (chunk: string) => {
@@ -52,12 +69,20 @@ export async function smtpRig(reply: Reply, secure = false) {
           else if (reply === "data-refused") socket.write("550 secret-smtp-password rejected\r\n");
           else if (reply === "accepted") socket.write("250 accepted\r\n");
         } else if (line.startsWith("EHLO") || line.startsWith("HELO")) {
-          socket.write("250-invoice-test\r\n250 AUTH PLAIN\r\n");
+          socket.write(
+            `250-invoice-test\r\n${options.starttls === true && !upgraded ? "250-STARTTLS\r\n" : ""}250 AUTH PLAIN\r\n`,
+          );
         } else if (line.startsWith("AUTH PLAIN ")) {
           authentications.push(
             Buffer.from(line.slice("AUTH PLAIN ".length), "base64").toString("utf8"),
           );
-          socket.write("235 authenticated\r\n");
+          socket.write(
+            reply === "login-refused"
+              ? "535 secret-smtp-password refused\r\n"
+              : "235 authenticated\r\n",
+          );
+        } else if (line.startsWith("MAIL") && reply === "login-required") {
+          socket.write("530 secret-smtp-password authentication required\r\n");
         } else if (line.startsWith("RCPT")) {
           socket.write(
             reply === "recipient-refused"
@@ -68,7 +93,20 @@ export async function smtpRig(reply: Reply, secure = false) {
           data = [];
           socket.write("354 send message\r\n");
         } else if (line === "STARTTLS") {
-          socket.write("454 TLS unavailable\r\n");
+          if (options.starttls === true) {
+            socket.write("220 begin TLS\r\n");
+            socket.removeAllListeners("data");
+            const encrypted = new TLSSocket(socket, {
+              isServer: true,
+              secureContext: createSecureContext({
+                key: material.serverKeyPem,
+                cert: material.serverCertPem,
+              }),
+            });
+            handle(encrypted, true);
+            return;
+          }
+          socket.write(`${options.starttls ?? 454} TLS unavailable\r\n`);
         } else if (line === "QUIT") {
           socket.end("221 bye\r\n");
         } else socket.write("250 ok\r\n");
@@ -76,8 +114,16 @@ export async function smtpRig(reply: Reply, secure = false) {
     });
   };
   const server = secure
-    ? createTlsServer({ key: smtpTestTls.serverKeyPem, cert: smtpTestTls.serverCertPem }, handle)
+    ? createTlsServer({ key: material.serverKeyPem, cert: material.serverCertPem }, handle)
     : createServer(handle);
+  server.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.on("close", () => {
+      sockets.delete(socket);
+      closed();
+    });
+    socket.on("error", () => {});
+  });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   return {

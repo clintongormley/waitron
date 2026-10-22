@@ -368,7 +368,10 @@ describe("SMTP settings test request", () => {
         from: "venue@example.test",
       });
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ accepted: false, code: "email.test_refused" });
+      expect(await response.json()).toEqual({
+        accepted: false,
+        code: "email.test_starttls_refused",
+      });
       expect(rig.messages).toHaveLength(0);
       expect(await suite.db.select().from(tenantCredentials)).toHaveLength(0);
     } finally {

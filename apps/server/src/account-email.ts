@@ -1,4 +1,5 @@
-import nodemailer from "nodemailer";
+import { sendSmtpMessage, type SmtpConnection, type SmtpTransport } from "./smtp-send.js";
+import type { SmtpTestCode } from "./smtp-failure.js";
 import type { AccountActionPurpose } from "@waitron/identity";
 
 export interface AccountEmail {
@@ -15,14 +16,14 @@ export interface AccountEmail {
 
 export type AccountEmailSender = (message: AccountEmail) => Promise<void>;
 
-interface MailTransport {
-  sendMail(message: {
-    from: string;
-    to: string;
-    subject: string;
-    text: string;
-    html: string;
-  }): Promise<unknown>;
+export class AccountEmailFailure extends Error {
+  constructor(
+    readonly problem: "email.unconfigured" | "email.send_refused" | "email.send_timeout",
+    readonly reason: SmtpTestCode | undefined,
+    readonly uncertain: boolean,
+  ) {
+    super(problem);
+  }
 }
 
 function escapeHtml(value: string): string {
@@ -71,10 +72,10 @@ const COPY = {
   },
 } as const;
 
-/** Build an SMTP-backed sender. The optional transport is the unit-test seam. */
 export function createAccountEmailSender(
-  config: { url: string; from: string; timeZone: string },
-  transport: MailTransport = nodemailer.createTransport(config.url),
+  config: { url: string; from: SmtpConnection["from"]; timeZone: string },
+  transport?: SmtpTransport,
+  options: { timeoutMs?: number; ca?: string } = {},
 ): AccountEmailSender {
   return async (message) => {
     const copy = message.locale.startsWith("es") ? COPY.es : COPY.en;
@@ -140,12 +141,22 @@ ${
     ? ""
     : `<p><a href="${escapeHtml(message.privacyNoticeUrl)}">${escapeHtml(copy.privacy)}</a></p>`
 }`;
-    await transport.sendMail({
-      from: config.from,
-      to: message.email,
-      subject,
-      text,
-      html,
-    });
+    const outcome = await sendSmtpMessage(
+      config,
+      {
+        to: message.email,
+        subject,
+        text,
+        html,
+      },
+      { ...options, transport },
+    );
+    if (outcome.status !== "sent") {
+      throw new AccountEmailFailure(
+        outcome.reason === "email.test_timeout" ? "email.send_timeout" : "email.send_refused",
+        outcome.reason,
+        outcome.status === "unknown",
+      );
+    }
   };
 }

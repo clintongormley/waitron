@@ -419,7 +419,9 @@ configuration export carries no mail settings or secrets. Settings → Email ser
 Live; saved-relay changes and captured messages remain admin-only. The sender display uses the
 venue location's name. Keep current invoice documents, outbox outcomes and public reset privacy.
 
-Build SMTP and the unlinked Demo mailbox first, checking source reservations before each cut.
+Cut A supplies the structured failure classifier, bounded account sends and reminder adapters;
+its diagnostics preserve rejected versus unknown outcomes. Continue at Cut B's diagnostic screens,
+then the settings and atomic Prepare wizard/routing cut, checking source reservations before each.
 Cloud delivery, including Demo with a Cloud account, waits for D102's released interface and
 joint tests. An unavailable Cloud route cannot satisfy setup or silently fall back to capture.
 The setup-test network-target issue below remains separate open work.

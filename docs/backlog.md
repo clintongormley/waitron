@@ -5863,8 +5863,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **A venue preparing to go live sends real email through SMTP (A987) — BUILD.** The owner approved
   Cloud email or your own SMTP server; Cloud is optional. Build the local SMTP route from the
-  [reviewed plan](superpowers/plans/2026-10-22-a987-prepare-venue-email.md); Cloud and linked-Demo
-  delivery wait for D102's released contract and joint tests.
+  [reviewed plan](superpowers/plans/2026-10-22-a987-prepare-venue-email.md), from Cut B's diagnostic
+  screens onward. Cut A bounds account SMTP sends and shares safe diagnostics with the test and
+  reminder senders. Cloud and linked-Demo delivery wait for D102's released contract and joint tests.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
 
 - **Support an office SMTP server's own certificate authority — OPEN.** A987 keeps certificate

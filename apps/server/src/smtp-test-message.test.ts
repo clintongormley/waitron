@@ -61,7 +61,7 @@ describe("SMTP setup test message", () => {
     try {
       expect(await sendSmtpTestMessage(rig.config, "admin@example.test")).toEqual({
         accepted: false,
-        code: "email.test_refused",
+        code: "email.test_certificate_untrusted",
       });
       expect(rig.messages).toHaveLength(0);
     } finally {
@@ -76,7 +76,7 @@ describe("SMTP setup test message", () => {
           { ...rig.config, url: rig.config.url + "?requireTLS=true" },
           "admin@example.test",
         ),
-      ).toEqual({ accepted: false, code: "email.test_refused" });
+      ).toEqual({ accepted: false, code: "email.test_starttls_refused" });
       expect(rig.messages).toHaveLength(0);
     } finally {
       await rig.close();
