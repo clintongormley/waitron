@@ -1,7 +1,15 @@
 import { and, eq, or } from "drizzle-orm";
-import { billPaymentRefunds, tenderRefunds, tenders, type Transaction } from "@waitron/db";
+import { linkRefundToCancels, readCancelsForRefund } from "@waitron/adjustments";
+import { billPaymentRefunds, sales, tenderRefunds, tenders, type Transaction } from "@waitron/db";
 import { assertReversible, payments } from "@waitron/payments";
-import { AppError, centsToDecimal, decimal, decimalToCents, isUuid } from "@waitron/shared";
+import {
+  AppError,
+  centsToDecimal,
+  decimal,
+  decimalToCents,
+  isUuid,
+  type Decimal,
+} from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
 import { fingerprint } from "./parties.js";
@@ -22,6 +30,56 @@ function uuid(value: unknown, field: string): string {
   return canonicaliseUuid(value)!;
 }
 
+function cancellationIdsOf(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length === 0 || value.length > 100)
+    throw invalid("cancellationIds");
+  const ids = value.map((id: unknown) => {
+    if (typeof id !== "string" || !isUuid(id)) throw invalid("cancellationIds");
+    return canonicaliseUuid(id)!;
+  });
+  if (new Set(ids).size !== ids.length) throw invalid("cancellationIds");
+  return ids;
+}
+
+/**
+ * Checks that each named cancel was handed to a refund on this sale's bill with a cap, and splits
+ * `amount` across them in the order named. Answers the links and what the cancels could still take.
+ */
+async function allocateToCancels(
+  tx: Transaction,
+  saleId: string,
+  ids: readonly string[],
+  amount: number,
+): Promise<{ links: { adjustmentId: string; amount: Decimal }[]; canStillTake: number }> {
+  const [sale] = await tx
+    .select({ workingOrderId: sales.workingOrderId })
+    .from(sales)
+    .where(eq(sales.id, saleId));
+  const found = new Map((await readCancelsForRefund(tx, ids)).map((row) => [row.id, row]));
+  let left = amount;
+  let canStillTake = 0;
+  const links: { adjustmentId: string; amount: Decimal }[] = [];
+  for (const id of ids) {
+    const cancel = found.get(id);
+    if (
+      cancel === undefined ||
+      cancel.action !== "cancel" ||
+      !cancel.refundHandoff ||
+      cancel.refundValue === null ||
+      sale?.workingOrderId == null ||
+      cancel.workingOrderId !== sale.workingOrderId
+    )
+      throw invalid("cancellationIds");
+    const open = Math.max(0, decimalToCents(cancel.refundValue) - decimalToCents(cancel.linked));
+    canStillTake += open;
+    const share = Math.min(open, left);
+    if (share > 0) links.push({ adjustmentId: id, amount: centsToDecimal(share) });
+    left -= share;
+  }
+  return { links, canStillTake };
+}
+
 // The command must authorize before calling this write path. Cash/manual completion and its
 // audited effects belong in the same transaction; a reservation alone reports no returned money.
 export async function reserveTenderRefund(
@@ -31,7 +89,13 @@ export async function reserveTenderRefund(
   request: TenderRefundRequest,
   actor: { requestedBy: string; authorizedBy: string },
   createdAt: string,
-): Promise<{ refund: typeof tenderRefunds.$inferSelect; replayed: boolean }> {
+): Promise<{
+  refund: typeof tenderRefunds.$inferSelect;
+  replayed: boolean;
+  /** What the named cancels could still take before this refund; only on a new refund naming
+   * cancels. */
+  cancelsCanStillTake?: string;
+}> {
   const submissionId = uuid(request.submissionId, "submissionId");
   const tenderId = uuid(request.tenderId, "tenderId");
   const appliedAmount = moneyCents(request.appliedAmount, "appliedAmount");
@@ -49,6 +113,7 @@ export async function reserveTenderRefund(
   for (const field of ["cashConfirmed", "manualConfirmed"] as const) {
     if (request[field] !== undefined && typeof request[field] !== "boolean") throw invalid(field);
   }
+  const cancellationIds = cancellationIdsOf(request.cancellationIds);
   const reason = request.reason.trim();
   const print = fingerprint({
     saleId,
@@ -58,6 +123,7 @@ export async function reserveTenderRefund(
     reason,
     cashConfirmed: request.cashConfirmed === true,
     manualConfirmed: request.manualConfirmed === true,
+    ...(cancellationIds === undefined ? {} : { cancellationIds: [...cancellationIds].sort() }),
   });
   await resolveTransactionScope(tx, cfg, saleId);
   const [earlier] = await tx
@@ -147,6 +213,10 @@ export async function reserveTenderRefund(
       });
     }
   }
+  const allocation =
+    cancellationIds === undefined
+      ? undefined
+      : await allocateToCancels(tx, saleId, cancellationIds, appliedAmount);
   const [refund] = await tx
     .insert(tenderRefunds)
     .values({
@@ -171,5 +241,13 @@ export async function reserveTenderRefund(
       createdAt,
     })
     .returning();
-  return { refund: refund!, replayed: false };
+  if (allocation !== undefined)
+    await linkRefundToCancels(tx, { tenderRefundId: refund!.id, links: allocation.links });
+  return {
+    refund: refund!,
+    replayed: false,
+    ...(allocation === undefined
+      ? {}
+      : { cancelsCanStillTake: centsToDecimal(allocation.canStillTake) }),
+  };
 }

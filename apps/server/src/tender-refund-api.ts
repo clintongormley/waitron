@@ -111,6 +111,9 @@ function parseRequest(body: Record<string, unknown>): TenderRefundRequest {
     ...(body.manualConfirmed === undefined
       ? {}
       : { manualConfirmed: body.manualConfirmed as boolean }),
+    ...(body.cancellationIds === undefined
+      ? {}
+      : { cancellationIds: body.cancellationIds as string[] }),
     override: overrideOf(body),
   };
 }
