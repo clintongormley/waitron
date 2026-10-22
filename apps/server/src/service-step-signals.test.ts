@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -27,11 +27,14 @@ import { fireGroup } from "./order-groups.js";
 import { readTableSteps, stepSignal, type StepParty } from "./service-step-signals.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
+import { joinTables } from "./testing/table-action-fixture.js";
 import {
   commandFor,
   inTx,
+  join,
   OPERATOR,
   orderForParty,
+  pay,
   seatWithNoAllergies as seat,
   setupPartyVenue,
   split,
@@ -126,15 +129,18 @@ async function setCourse(v: PartyVenue, courseId: string, lineIds: string[]): Pr
 }
 
 async function lastOrderAt(v: PartyVenue, partyId: string): Promise<number> {
-  const [row] = await inTx(v, (tx) =>
+  const rows = await inTx(v, (tx) =>
     tx
       .select({ at: orderGroupEvents.createdAt })
       .from(orderGroupEvents)
-      .where(eq(orderGroupEvents.partyId, partyId))
-      .orderBy(desc(orderGroupEvents.createdAt))
-      .limit(1),
+      .where(
+        and(
+          eq(orderGroupEvents.partyId, partyId),
+          inArray(orderGroupEvents.kind, ["submitted", "joined"]),
+        ),
+      ),
   );
-  return Date.parse(row!.at);
+  return Math.max(...rows.map((row) => Date.parse(row.at)));
 }
 
 function draftLine(v: PartyVenue, name: string) {
@@ -390,7 +396,7 @@ describe("readTableSteps", () => {
     expect(await liveAt(v, partyId, tableId)).toEqual([]);
   });
 
-  it("a party at tables of two departments gets each table's own steps", async () => {
+  it("each table reads its own zone's department", async () => {
     const v = await venue();
     const [setUp] = await setSteps(v, await tablesDepartment(v), [seated("Set up")]);
     const terrace = await inTx(v, async (tx) => {
@@ -454,14 +460,102 @@ describe("readTableSteps", () => {
     const v = await venue();
     const department = await tablesDepartment(v);
     await inTx(v, (tx) => addStarterServiceSteps(tx, v.cfg, department));
+    const [first] = await inTx(v, (tx) =>
+      tx
+        .select({ id: serviceSteps.id, name: serviceSteps.name })
+        .from(serviceSteps)
+        .where(eq(serviceSteps.departmentId, department))
+        .orderBy(asc(serviceSteps.position))
+        .limit(1),
+    );
     const tableId = await v.table("Mesa 1");
     const { partyId } = await seat(v, tableId);
     await setOpenedAt(v, partyId, OPENED);
 
-    const live = await liveAt(v, partyId, tableId);
+    expect(await liveAt(v, partyId, tableId)).toEqual([
+      {
+        stepId: first!.id,
+        name: first!.name,
+        triggeredAt: Date.parse(OPENED),
+        dueAt: Date.parse(OPENED),
+      },
+    ]);
+  });
 
-    expect(live).toHaveLength(1);
-    expect(live![0]).toMatchObject({ name: "Montar mesa", dueAt: Date.parse(OPENED) });
+  it("a party at two tables of one department gets the same steps on both", async () => {
+    const v = await venue();
+    const department = await tablesDepartment(v);
+    const [setUp] = await setSteps(v, department, [seated("Set up")]);
+    const mesa1 = await v.table("Mesa 1");
+    const mesa2 = await v.table("Mesa 2");
+    const { partyId } = await seat(v, mesa1);
+    await join(v, partyId, mesa2);
+    await setOpenedAt(v, partyId, OPENED);
+
+    const steps = await stepsOf(v, [partyId]);
+
+    const expected = {
+      departmentId: department,
+      ruleIds: new Set([setUp]),
+      live: [
+        {
+          stepId: setUp,
+          name: "Set up",
+          triggeredAt: Date.parse(OPENED),
+          dueAt: Date.parse(OPENED),
+        },
+      ],
+    };
+    expect(steps.get(mesa1)).toEqual(expected);
+    expect(steps.get(mesa2)).toEqual(expected);
+  });
+
+  it("a party merged into another brings its orders and dishes", async () => {
+    const v = await venue();
+    const [setUp, drinks, anything] = await setSteps(v, await tablesDepartment(v), [
+      seated("Set up"),
+      { name: "Drinks?", start: "since_last_order", courseId: null, minutes: 20 },
+      { name: "Anything else?", start: "all_served", courseId: null, minutes: 10 },
+    ]);
+    const mesa1 = await v.table("Mesa 1");
+    const mesa2 = await v.table("Mesa 2");
+    const a = await seat(v, mesa1);
+    await setOpenedAt(v, a.partyId, OPENED);
+    const b = await seat(v, mesa2);
+    const { tabId } = await orderForParty(v, b.partyId, ["Agua"]);
+    const servedAt = await serve(v, tabId, "Agua");
+    // A paid bill stays with the party merged away.
+    await pay(v, tabId, "2.00");
+    const ordered = await lastOrderAt(v, b.partyId);
+    expect((await liveAt(v, a.partyId, mesa1))!.map((step) => step.stepId)).toEqual([setUp]);
+
+    const into = await commandFor(v, a.partyId);
+    const from = await commandFor(v, b.partyId);
+    await inTx(v, (tx) =>
+      joinTables(tx, v.cfg, a.partyId, mesa2, {
+        ...into,
+        bills: "merge",
+        otherPartyId: b.partyId,
+        expectedOtherPartyRevision: from.expectedPartyRevision,
+      }),
+    );
+
+    const live = [
+      {
+        stepId: anything,
+        name: "Anything else?",
+        triggeredAt: servedAt,
+        dueAt: servedAt + 10 * MINUTE,
+      },
+      {
+        stepId: drinks,
+        name: "Drinks?",
+        triggeredAt: ordered + 20 * MINUTE,
+        dueAt: ordered + 20 * MINUTE,
+      },
+    ];
+    expect(await liveAt(v, a.partyId, mesa1, ordered + 25 * MINUTE)).toEqual(live);
+    expect(await liveAt(v, a.partyId, mesa2, ordered + 25 * MINUTE)).toEqual(live);
   });
 
   it("reads every fact once, whatever the number of parties", async () => {
