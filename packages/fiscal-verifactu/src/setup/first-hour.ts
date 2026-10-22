@@ -7,19 +7,18 @@ import type {
 } from "@waitron/module/src/setup-contract.js";
 import type { createRecoveryDelivery } from "../recovery-delivery.js";
 import { WAITRON_ID_SISTEMA } from "../software.js";
-import type { HourClockDecision } from "../hour-clock.js";
+import { isMinuteIdentity } from "../hour-identity.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { createWaitCountdown } from "./wait-countdown.js";
 import {
+  ClockWait,
   clockProblem,
-  createSecondClockPoll,
+  readClocks,
+  record,
   renderClockProblem,
-  renderWait,
-  settleRefusal,
   validWait,
-  type ClockProblem,
+  type ClockComparison,
 } from "./clock-wait.js";
 
 interface Draft {
@@ -39,22 +38,14 @@ interface Context {
     location: { name: string; city: string; fiscalTerritory: string; timeZone: string };
   };
 }
-interface Comparison {
-  id: string;
-  clock: HourClockDecision;
+interface Selected {
+  status: "selected";
+  identity: string;
+  input: {
+    allocation: { installationIdentity: string; series: { code: string; purpose: string }[] };
+  };
 }
-type Result =
-  | { status: "waiting"; targetMs: number; remainingMs: number }
-  | {
-      status: "selected";
-      identity: string;
-      input: {
-        allocation: { installationIdentity: string; series: { code: string; purpose: string }[] };
-      };
-    };
 const empty = (): Draft => ({ reviewed: false, recoveryRevision: 0 });
-const record = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
 @customElement("vf-first-setup-hour")
 export class FirstSetupHour extends LitElement {
   static override styles = [
@@ -105,8 +96,7 @@ export class FirstSetupHour extends LitElement {
   @property({ attribute: false }) api!: InitialSetupActions;
   @property() locale: "en" | "es" = "en";
   @state() private draft = empty();
-  @state() private comparison?: Comparison;
-  @state() private result?: Result;
+  @state() private comparison?: ClockComparison;
   @state() private busy = false;
   @state() private error = false;
   @state() private pdfUrl?: string;
@@ -114,21 +104,7 @@ export class FirstSetupHour extends LitElement {
   @state() private kept = false;
   #delivery?: ReturnType<typeof createRecoveryDelivery<void>>;
   #reference?: InitialSetupRecoveryReference;
-  @state() private problem?: ClockProblem;
-  #countdown = createWaitCountdown(this, () => void this.#select(true));
-  #poll = createSecondClockPoll(this, () => {
-    if (!this.busy) void this.#select(true);
-  });
-  #stopWait(): void {
-    this.#countdown.stop();
-    this.#poll.stop();
-  }
-  #waitForSecondClock(): void {
-    this.result = undefined;
-    this.#countdown.stop();
-    this.problem = { kind: "second-clock" };
-    this.#poll.start();
-  }
+  #wait = new ClockWait<Selected>(this, () => void this.#select(true));
   #generation = 0;
   #scope?: DraftScope<Draft>;
   override connectedCallback(): void {
@@ -164,7 +140,6 @@ export class FirstSetupHour extends LitElement {
     super.disconnectedCallback();
   }
   #disposeDelivery(): void {
-    this.#stopWait();
     this.#delivery?.dispose();
     this.#delivery = undefined;
     this.#reference = undefined;
@@ -178,9 +153,7 @@ export class FirstSetupHour extends LitElement {
     this.busy = false;
     this.draft = empty();
     this.comparison = undefined;
-    this.result = undefined;
-    this.problem = undefined;
-    this.#stopWait();
+    this.#wait.show();
     this.error = false;
     this.#changed();
   }
@@ -192,9 +165,7 @@ export class FirstSetupHour extends LitElement {
     ++this.#generation;
     this.busy = false;
     this.draft = { ...this.draft, ...change };
-    this.result = undefined;
-    this.problem = undefined;
-    this.#stopWait();
+    this.#wait.show();
     this.error = false;
     this.#changed();
   }
@@ -202,37 +173,7 @@ export class FirstSetupHour extends LitElement {
     const clock = this.comparison?.clock;
     return Boolean(this.draft.reviewed && clock && !clock.releaseBlocked && !clock.rangeBlocked);
   }
-  async #readClocks(
-    api: InitialSetupActions,
-    current: () => boolean,
-  ): Promise<Comparison | undefined> {
-    const challenge = await api.preparation!({ action: "clock-challenge" });
-    if (!current()) return undefined;
-    if (!record(challenge) || typeof challenge.id !== "string")
-      throw new Error("invalid challenge");
-    const compared = await api.preparation!({
-      action: "compare-clocks",
-      browser: { challengeId: challenge.id, instantMs: Date.now() },
-    });
-    if (
-      !record(compared) ||
-      typeof compared.id !== "string" ||
-      !record(compared.clock) ||
-      !Array.isArray(compared.clock.usable) ||
-      !Array.isArray(compared.clock.unavailable)
-    )
-      throw new Error("invalid comparison");
-    return compared as unknown as Comparison;
-  }
-  /** Replaces what the page explains: a problem, a server answer, or neither. */
-  #show(problem: ClockProblem | undefined, result?: Result): void {
-    this.#stopWait();
-    this.problem = problem;
-    this.result = result;
-    if (result?.status === "waiting") this.#countdown.start(result.remainingMs);
-  }
-  async #compare(): Promise<void> {
-    if (!this.api?.preparation || this.busy) return;
+  #begin() {
     const generation = ++this.#generation,
       api = this.api,
       context = this.context;
@@ -241,28 +182,27 @@ export class FirstSetupHour extends LitElement {
       generation === this.#generation &&
       api === this.api &&
       context === this.context;
+    const send = async (proposal: unknown) => {
+      const answer = await api.preparation!(proposal);
+      if (!current()) throw new Error("stale setup");
+      return answer;
+    };
+    return { api, context, current, send };
+  }
+  async #compare(): Promise<void> {
+    if (!this.api?.preparation || this.busy) return;
+    const { context, current, send } = this.#begin();
     this.busy = true;
     this.error = false;
     this.comparison = undefined;
-    this.result = undefined;
-    this.problem = undefined;
-    this.#stopWait();
+    this.#wait.show();
     this.draft = { ...this.draft, reviewed: false };
     this.#changed();
     try {
-      const comparison = await this.#readClocks(api, current);
-      if (!comparison || !current()) return;
+      const comparison = await readClocks(send);
       this.comparison = comparison;
       if (context.status !== "claimed" || comparison.clock.releaseBlocked) return;
-      const preview = await api.preparation!({ action: "selection" });
-      if (!current()) return;
-      if (
-        record(preview) &&
-        preview.status === "waiting" &&
-        validWait(preview) &&
-        (preview.remainingMs as number) > 0
-      )
-        this.#show(undefined, preview as unknown as Result);
+      this.#wait.showPreview(await send({ action: "selection" }));
     } catch (error) {
       if (current() && clockProblem(error) === undefined) this.error = true;
     } finally {
@@ -270,28 +210,20 @@ export class FirstSetupHour extends LitElement {
     }
   }
   async #select(automatic = false): Promise<void> {
-    if (this.busy || this.result?.status === "selected") return;
+    if (this.busy || this.#wait.result?.status === "selected") return;
     if (!automatic && !this.#canSelect) return;
-    const generation = ++this.#generation,
-      api = this.api,
-      context = this.context;
-    const current = () =>
-      this.isConnected &&
-      generation === this.#generation &&
-      api === this.api &&
-      context === this.context;
+    const { api, context, current, send } = this.#begin();
     this.busy = true;
     this.error = false;
     // An automatic re-check leaves the current explanation up until its answer replaces it.
-    if (!automatic) this.#show(undefined, undefined);
+    if (!automatic) this.#wait.show();
     try {
       let result: unknown;
       if (context.status === "claimed") {
-        const comparison = await this.#readClocks(api, current);
-        if (!comparison || !current()) return;
+        const comparison = await readClocks(send);
         this.comparison = comparison;
-        if (!comparison.clock.secondClock) return this.#waitForSecondClock();
-        if (comparison.clock.disagreement) return this.#show({ kind: "disagreement" });
+        if (!comparison.clock.secondClock) return this.#wait.waitForSecondClock();
+        if (comparison.clock.disagreement) return this.#wait.show({ kind: "disagreement" });
         result = await api.candidates({ comparisonId: comparison.id });
       } else result = await api.request();
       if (!current()) return;
@@ -301,8 +233,7 @@ export class FirstSetupHour extends LitElement {
       } else if (result.status === "selected") {
         if (
           result.kind !== "waitron-hour-setup" ||
-          typeof result.identity !== "string" ||
-          !/^[0-9A-HJKMNP-TV-Z]{5}$/.test(result.identity) ||
+          !isMinuteIdentity(result.identity) ||
           !record(result.input) ||
           !record(result.input.allocation) ||
           result.input.allocation.installationIdentity !== result.identity ||
@@ -312,39 +243,29 @@ export class FirstSetupHour extends LitElement {
         await api.importInput(result.input);
         if (!current()) return;
       } else throw new Error("invalid selection");
-      this.#show(undefined, result as unknown as Result);
+      this.#wait.show(undefined, result as unknown as Selected);
     } catch (error) {
-      if (!current()) return;
-      settleRefusal(error, automatic && this.#poll.running, {
-        waitForSecondClock: () => this.#waitForSecondClock(),
-        show: (problem) => this.#show(problem),
-        fail: () => {
+      if (current())
+        this.#wait.settle(error, automatic, () => {
           this.error = true;
-        },
-      });
+        });
     } finally {
       if (current()) this.busy = false;
     }
   }
   async #preparePdf(replace = false): Promise<void> {
+    const result = this.#wait.result;
     if (
       this.busy ||
-      this.result?.status !== "selected" ||
+      result?.status !== "selected" ||
       (!replace && this.pdfUrl) ||
       !(replace ? this.api.reissueNodeKey : this.api.stageNodeKey) ||
       !this.api.registerRecoveryDocument ||
       !this.api.confirmRecoveryDocument
     )
       return;
-    const generation = ++this.#generation,
-      api = this.api,
-      context = this.context,
-      input = this.result.input;
-    const current = () =>
-      this.isConnected &&
-      generation === this.#generation &&
-      api === this.api &&
-      context === this.context;
+    const input = result.input;
+    const { api, context, current } = this.#begin();
     this.busy = true;
     this.error = false;
     if (replace) {
@@ -545,8 +466,9 @@ export class FirstSetupHour extends LitElement {
         timeZone: venue.location.timeZone,
       }).format(ms);
     const box = clock?.usable.find((r) => r.source === "box");
-    const locked = this.busy || this.result?.status === "selected";
-    const waits = this.result?.status === "waiting" || this.problem?.kind === "second-clock";
+    const result = this.#wait.result;
+    const locked = this.busy || result?.status === "selected";
+    const waits = this.#wait.waiting;
     return html`<h2>${t.heading}</h2>
       <dl data-test="venue-review">
         <dt>${t.environment}</dt>
@@ -596,21 +518,21 @@ export class FirstSetupHour extends LitElement {
             </section>`
           : nothing
       }
-      ${renderClockProblem(this.problem, t, clock, this.locale, venue.location.timeZone)}
+      ${renderClockProblem(this.#wait.problem, t, clock, this.locale, venue.location.timeZone)}
       ${
-        this.result?.status === "waiting"
-          ? renderWait(t, this.#countdown)
-          : this.result?.status === "selected"
+        result?.status === "waiting"
+          ? this.#wait.renderWait(t)
+          : result?.status === "selected"
             ? html`<section data-test="selected-hour">
-                <p role="status">${t.chosen}: <strong>${this.result.identity}</strong></p>
+                <p role="status">${t.chosen}: <strong>${result.identity}</strong></p>
                 <ul>
-                  ${this.result.input.allocation.series.map((s) => html`<li>${s.code}</li>`)}
+                  ${result.input.allocation.series.map((s) => html`<li>${s.code}</li>`)}
                 </ul>
               </section>`
             : nothing
       }
       ${
-        this.result?.status === "selected"
+        result?.status === "selected"
           ? html`<section aria-label=${t.next}>
               <h3>${t.next}</h3>
               ${
@@ -672,7 +594,7 @@ export class FirstSetupHour extends LitElement {
       }
       <wt-form-actions data-failed=${String(this.error)} .error=${this.error ? t.failed : ""}
         >${
-          this.result?.status === "selected"
+          result?.status === "selected"
             ? nothing
             : html`<wt-button
                   data-test="compare"

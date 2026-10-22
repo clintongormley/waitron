@@ -5,18 +5,17 @@ import type {
   ModuleRecoveryCredentials,
   SetupContribution,
 } from "@waitron/module/src/setup-contract.js";
-import type { HourClockDecision } from "../hour-clock.js";
+import { isMinuteIdentity } from "../hour-identity.js";
 import "./recovery-key.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { createWaitCountdown } from "./wait-countdown.js";
 import {
-  createSecondClockPoll,
+  ClockWait,
+  readClocks,
+  record,
   renderClockProblem,
-  renderWait,
-  settleRefusal,
   validWait,
-  type ClockProblem,
+  type ClockComparison,
 } from "./clock-wait.js";
 
 type Context = Parameters<NonNullable<SetupContribution["createRecovery"]>>[0];
@@ -25,16 +24,10 @@ interface Draft {
   soleRecovery: boolean;
 }
 const empty = (): Draft => ({ oldBoxGone: false, soleRecovery: false });
-interface Comparison {
-  id: string;
-  clock: HourClockDecision;
-}
-type Result =
-  | { status: "selected"; identity: string; input: unknown }
-  | { status: "waiting"; targetMs: number; remainingMs: number };
-
-function record(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+interface Selected {
+  status: "selected";
+  identity: string;
+  input: unknown;
 }
 @customElement("vf-recovery-hour")
 export class RecoveryHourEntry extends LitElement {
@@ -78,20 +71,15 @@ export class RecoveryHourEntry extends LitElement {
   @property() refusedField?: string;
   @state() private draft = empty();
   @state() private busy = false;
-  @state() private comparison?: Comparison;
-  @state() private result?: Result;
+  @state() private comparison?: ClockComparison;
   @state() private error = false;
   @state() private keyError = false;
-  @state() private problem?: ClockProblem;
   @state() private attempted = false;
   @state() private refusalDismissed = false;
   #secret?: string;
   #generation = 0;
   #scope?: DraftScope<Draft>;
-  #countdown = createWaitCountdown(this, () => void this.#select(true));
-  #poll = createSecondClockPoll(this, () => {
-    if (!this.busy) void this.#select(true);
-  });
+  #wait = new ClockWait<Selected>(this, () => void this.#select(true));
   override connectedCallback(): void {
     super.connectedCallback();
     this.#register();
@@ -132,27 +120,9 @@ export class RecoveryHourEntry extends LitElement {
     ++this.#generation;
     this.busy = false;
     this.comparison = undefined;
-    this.result = undefined;
     this.error = false;
     this.keyError = false;
-    this.#show(undefined);
-  }
-  #stopWait(): void {
-    this.#countdown.stop();
-    this.#poll.stop();
-  }
-  /** Replaces what the page explains: a problem, a server answer, or neither. */
-  #show(problem: ClockProblem | undefined, result?: Result): void {
-    this.#stopWait();
-    this.problem = problem;
-    this.result = result;
-    if (result?.status === "waiting") this.#countdown.start(result.remainingMs);
-  }
-  #waitForSecondClock(): void {
-    this.result = undefined;
-    this.#countdown.stop();
-    this.problem = { kind: "second-clock" };
-    this.#poll.start();
+    this.#wait.show();
   }
   #edit(change: Partial<Draft>): void {
     this.#edited("recoveryOperation");
@@ -187,13 +157,13 @@ export class RecoveryHourEntry extends LitElement {
       !this.#secret ||
       !this.draft.oldBoxGone ||
       !this.draft.soleRecovery ||
-      this.result?.status !== "selected"
+      this.#wait.result?.status !== "selected"
     )
       return null;
     return {
       recoveryOperation: {
         binding: { ...this.context.binding },
-        input: structuredClone(this.result.input),
+        input: structuredClone(this.#wait.result.input),
       },
       nodeRecoverySecret: this.#secret,
       recoveryContext: {
@@ -228,24 +198,6 @@ export class RecoveryHourEntry extends LitElement {
       nodeRecoverySecret: this.#secret!,
     };
   }
-  async #readClocks(call: (proposal: unknown) => Promise<unknown>): Promise<Comparison> {
-    const challenge = await call({ action: "clock-challenge" });
-    if (!record(challenge) || typeof challenge.id !== "string")
-      throw new Error("invalid challenge");
-    const compared = await call({
-      action: "compare-clocks",
-      browser: { challengeId: challenge.id, instantMs: Date.now() },
-    });
-    if (
-      !record(compared) ||
-      typeof compared.id !== "string" ||
-      !record(compared.clock) ||
-      !Array.isArray(compared.clock.usable) ||
-      !Array.isArray(compared.clock.unavailable)
-    )
-      throw new Error("invalid comparison");
-    return compared as unknown as Comparison;
-  }
   #begin(): { call: (proposal: unknown) => Promise<unknown>; current: () => boolean } {
     const generation = ++this.#generation;
     const context = this.context;
@@ -262,13 +214,6 @@ export class RecoveryHourEntry extends LitElement {
     this.keyError = false;
     return { call, current };
   }
-  #settle(cause: unknown, retryingQuietly: boolean): void {
-    settleRefusal(cause, retryingQuietly, {
-      waitForSecondClock: () => this.#waitForSecondClock(),
-      show: (problem) => this.#show(problem),
-      fail: (error) => this.#failed(error),
-    });
-  }
   #failed(cause: unknown): void {
     this.error = true;
     this.keyError =
@@ -280,21 +225,14 @@ export class RecoveryHourEntry extends LitElement {
     if (this.busy || !this.#canCompare) return;
     const { call, current } = this.#begin();
     this.comparison = undefined;
-    this.#show(undefined);
+    this.#wait.show();
     this.#notify();
     try {
-      this.comparison = await this.#readClocks(call);
+      this.comparison = await readClocks(call);
       if (this.comparison.clock.releaseBlocked) return;
-      const preview = await call({ action: "preview" });
-      if (
-        record(preview) &&
-        preview.status === "waiting" &&
-        validWait(preview) &&
-        (preview.remainingMs as number) > 0
-      )
-        this.#show(undefined, preview as unknown as Result);
+      this.#wait.showPreview(await call({ action: "preview" }));
     } catch (cause) {
-      if (current()) this.#settle(cause, false);
+      if (current()) this.#wait.settle(cause, false, (error) => this.#failed(error));
     } finally {
       if (current()) {
         this.busy = false;
@@ -303,18 +241,18 @@ export class RecoveryHourEntry extends LitElement {
     }
   }
   async #select(automatic = false): Promise<void> {
-    if (this.busy || this.result?.status === "selected") return;
+    if (this.busy || this.#wait.result?.status === "selected") return;
     if (!(automatic ? this.#canCompare : this.#canSelect)) return;
     const { call, current } = this.#begin();
     const context = this.context;
     // An automatic re-check leaves the current explanation up until its answer replaces it.
-    if (!automatic) this.#show(undefined);
+    if (!automatic) this.#wait.show();
     this.#notify();
     try {
-      const comparison = await this.#readClocks(call);
+      const comparison = await readClocks(call);
       this.comparison = comparison;
-      if (!comparison.clock.secondClock) return this.#waitForSecondClock();
-      if (comparison.clock.disagreement) return this.#show({ kind: "disagreement" });
+      if (!comparison.clock.secondClock) return this.#wait.waitForSecondClock();
+      if (comparison.clock.disagreement) return this.#wait.show({ kind: "disagreement" });
       const selected = await call({ action: "select", comparisonId: comparison.id });
       if (!record(selected)) throw new Error("invalid selection");
       if (selected.status === "selected") {
@@ -322,16 +260,15 @@ export class RecoveryHourEntry extends LitElement {
         if (
           !record(selectedBinding) ||
           Object.entries(context.binding).some(([key, value]) => selectedBinding[key] !== value) ||
-          typeof selected.identity !== "string" ||
-          !/^[0-9A-HJKMNP-TV-Z]{5}$/.test(selected.identity) ||
+          !isMinuteIdentity(selected.identity) ||
           selected.input === undefined
         )
           throw new Error("invalid selection");
       } else if (selected.status !== "waiting" || !validWait(selected))
         throw new Error("invalid wait");
-      this.#show(undefined, selected as unknown as Result);
+      this.#wait.show(undefined, selected as unknown as Selected);
     } catch (cause) {
-      if (current()) this.#settle(cause, automatic && this.#poll.running);
+      if (current()) this.#wait.settle(cause, automatic, (error) => this.#failed(error));
     } finally {
       if (current()) {
         this.busy = false;
@@ -424,8 +361,9 @@ export class RecoveryHourEntry extends LitElement {
       }).format(ms);
     const utc = (ms: number) => new Date(ms).toISOString();
     const clock = this.comparison?.clock;
-    const waits = this.result?.status === "waiting" || this.problem?.kind === "second-clock";
-    const canSelect = this.#canSelect && !this.busy && !waits && this.result?.status !== "selected";
+    const result = this.#wait.result;
+    const canSelect =
+      this.#canSelect && !this.busy && !this.#wait.waiting && result?.status !== "selected";
     return html`<h3>${words.heading}</h3>
       <vf-recovery-key
         .selection=${this.context.selection}
@@ -491,13 +429,13 @@ export class RecoveryHourEntry extends LitElement {
             </section>`
           : nothing
       }
-      ${renderClockProblem(this.problem, words, clock, this.locale, this.context.selection.timeZone)}
+      ${renderClockProblem(this.#wait.problem, words, clock, this.locale, this.context.selection.timeZone)}
       ${
-        this.result?.status === "waiting"
-          ? renderWait(words, this.#countdown)
-          : this.result?.status === "selected"
+        result?.status === "waiting"
+          ? this.#wait.renderWait(words)
+          : result?.status === "selected"
             ? html`<p role="status" data-test="selected-hour">
-                ${words.chosen}: <strong>${this.result.identity}</strong>
+                ${words.chosen}: <strong>${result.identity}</strong>
               </p>`
             : nothing
       }
@@ -509,7 +447,7 @@ export class RecoveryHourEntry extends LitElement {
           variant=${this.#canCompare ? "primary" : "secondary"}
           ?disabled=${this.busy || !this.#canCompare}
           @click=${() => void this.#compare()}
-          >${this.comparison || this.result ? words.again : words.compare}</wt-button
+          >${this.comparison || result ? words.again : words.compare}</wt-button
         >
         <wt-button
           data-test="select"
