@@ -1311,7 +1311,7 @@ describe("What a cancel records for refunds", () => {
     const value = await filedValue(order);
     expect(value).toEqual({ quantity: "3.000", gross: "36.00" });
     const shown = [];
-    for (const _ of [1, 2]) {
+    for (let round = 0; round < 2; round++) {
       const ask = { ...(await askFor(order, "keep_charge", "1")), refundHandoff: true };
       const before = ask.expectedContext.components.find(
         (row) => row.lineId === order.parent.id,
