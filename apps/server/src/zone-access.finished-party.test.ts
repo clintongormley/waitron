@@ -1,6 +1,7 @@
-import { randomUUID } from "node:crypto";
+import crypto, { randomUUID } from "node:crypto";
+import { syncBuiltinESMExports } from "node:module";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { devices, parties } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -204,38 +205,53 @@ describe("a finished party's dishes are checked against its family's bills' zone
     expect(both.status, JSON.stringify(both.json)).toBe(200);
   });
 
-  it("leaves out a bill emptied by a merge, whatever zone it was recorded in", async () => {
-    const p = await servedParty();
-    const water = p.lines.find((line) => line.name === "Water")!;
-    const moved = await inTx(venue, async (tx) =>
-      splitBill(tx, venue.cfg, p.billId, [{ lineNo: water.lineNo }], {
-        operatorId: venue.staffId,
-        expectedPartyRevision: await revisionOf(p.partyId),
-        expectedEdit: await readBillEditState(tx, p.billId),
-      }),
-    );
-    // Merging needs one service mode, so the emptied bill sits in another zone like the tables'.
-    const patio = await patioZone();
-    await inTx(venue, (tx) =>
-      VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, moved.billId, patio),
-    );
-    await inTx(venue, async (tx) =>
-      mergeBills(tx, venue.cfg, p.billId, moved.billId, {
-        operatorId: venue.staffId,
-        expectedPartyRevision: await revisionOf(p.partyId),
-        expectedEdits: [
-          await readBillEditState(tx, p.billId),
-          await readBillEditState(tx, moved.billId),
-        ],
-      }),
-    );
-    await pay(p.billId);
-    await finish(p.partyId, [p.billId, moved.billId]);
-    const burger = p.lines.find((line) => line.name === "Burger")!;
-    const answer = await withZones([venue.tables.zoneId], () => read(p.partyId, burger.id));
-    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    expect(await withZones([patio], () => read(p.partyId, burger.id))).toMatchObject(refused);
-  });
+  it.each(["ascending", "descending"] as const)(
+    "leaves out a bill emptied by a merge, whatever zone it was recorded in (bill IDs %s)",
+    async (order) => {
+      let sequence = 0x10000;
+      const ids = vi.spyOn(crypto, "randomUUID").mockImplementation(() => {
+        sequence += order === "ascending" ? 1 : -1;
+        return `a1023${order === "ascending" ? "000" : "001"}-0000-4000-8000-${sequence.toString(16).padStart(12, "0")}`;
+      });
+      syncBuiltinESMExports();
+      try {
+        const p = await servedParty();
+        const water = p.lines.find((line) => line.name === "Water")!;
+        const moved = await inTx(venue, async (tx) =>
+          splitBill(tx, venue.cfg, p.billId, [{ lineNo: water.lineNo }], {
+            operatorId: venue.staffId,
+            expectedPartyRevision: await revisionOf(p.partyId),
+            expectedEdit: await readBillEditState(tx, p.billId),
+          }),
+        );
+        expect(p.billId < moved.billId).toBe(order === "ascending");
+        // Merging needs one service mode, so the emptied bill sits in another zone like the tables'.
+        const patio = await patioZone();
+        await inTx(venue, (tx) =>
+          VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, moved.billId, patio),
+        );
+        await inTx(venue, async (tx) =>
+          mergeBills(tx, venue.cfg, p.billId, moved.billId, {
+            operatorId: venue.staffId,
+            expectedPartyRevision: await revisionOf(p.partyId),
+            expectedEdits: [
+              await readBillEditState(tx, p.billId),
+              await readBillEditState(tx, moved.billId),
+            ].sort((left, right) => left.billId.localeCompare(right.billId)),
+          }),
+        );
+        await pay(p.billId);
+        await finish(p.partyId, [p.billId, moved.billId]);
+        const burger = p.lines.find((line) => line.name === "Burger")!;
+        const answer = await withZones([venue.tables.zoneId], () => read(p.partyId, burger.id));
+        expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+        expect(await withZones([patio], () => read(p.partyId, burger.id))).toMatchObject(refused);
+      } finally {
+        ids.mockRestore();
+        syncBuiltinESMExports();
+      }
+    },
+  );
 
   it("refuses a merged party's dish read through the finished party it joined", async () => {
     const survivor = await servedParty();
