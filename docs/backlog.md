@@ -153,8 +153,8 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
-- **A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1's plan
-  written.** The producer's statement that a version meets the Veri\*Factu rules, one per release,
+- **A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1 built,
+  waiting for the owner to land it.** The producer's statement that a version meets the Veri\*Factu rules, one per release,
   readable on every terminal and before installation (compliance plan Step 8). The
   [design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md) drafts the text
   from AEAT's worked example, makes `pnpm release prepare` land each version's copy in a pull
@@ -165,15 +165,20 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   2026-10-21: he is the producer (his name, NIF and a publishable postal address are still to be
   supplied); e) = «S» for this version and f) = «N»; item d) is the draft sent to the asesor as
   Q53, pending their answer; production boxes run releases only. The first slice is fiscal and the
-  owner lands it: records carry the producer instead of the taxpayer's name and NIF
-  (`packages/fiscal-verifactu/src/backend.ts:646-658`), the build's version instead of `0.0.0`,
-  and `TipoUsoPosibleMultiOT = N`. The owner approved the second revision on 2026-10-22 (about
-  02:45) and chose A993's offline behaviour (about 02:55); the third revision folds those answers
-  in. Next: build slice 1 from its
-  [plan](superpowers/plans/2026-10-22-a940-1-software-identity.md) — until the owner supplies his
-  name and NIF it builds around a marked placeholder, and the pull request is parked for him to
-  land — then write A993's plan. Still needed: his name, NIF and publishable address, and the
-  asesor's answer to Q53.
+  owner lands it. The owner approved the second revision on 2026-10-22 (about 02:45) and chose
+  A993's offline behaviour (about 02:55); the third revision folds those answers in. Slice 1 is
+  built from its [plan](superpowers/plans/2026-10-22-a940-1-software-identity.md) (pull request
+  number added when opened), parked for the owner: every record kind's software block, built in
+  `buildSistemaInformatico` (`packages/fiscal-verifactu/src/backend.ts`), names "Waitron", the
+  build's version (`0.0.0-dev`, plus the build's commit on a published build) instead of `0.0.0`,
+  and `TipoUsoPosibleMultiOT = N`. The producer is a marked placeholder until the owner supplies
+  his name and NIF: meanwhile records still carry the taxpayer's name and NIF there, and a
+  published build set to production refuses to trade (`sif.producer_unset`). Two test checks
+  changed with it: the Spanish practice sales were re-recorded (only their software block moved),
+  and the pinned digest of the shipped XML in `apps/server/src/full-comp.fiscal-identity.test.ts`
+  changed (owner to confirm). Still open: the producer's name and NIF (Task 8 of the plan), then
+  slices 1b to 6, and A993's plan. Still needed from outside: his name, NIF and publishable
+  address, and the asesor's answer to Q53.
   [Mock-ups](backlog/mockups/a940-declaracion-responsable/README.md)
 
 - **A993. A change of the system's identity opens a new installation by itself — designed in A940
