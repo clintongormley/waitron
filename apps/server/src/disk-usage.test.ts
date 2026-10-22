@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -246,7 +246,7 @@ describe("readDiskUsage", () => {
     expect(usage.databaseBytes).toBe(0);
   });
 
-  it("leaves an unreadable database out of the rest of the disk", async () => {
+  it("does not subtract an unreadable database from the rest of the disk", async () => {
     const notAFolder = join(root, "venue-file");
     await fill(notAFolder, 1000);
     await fill(join(logDir, "waitron.log"), 300);
@@ -268,5 +268,63 @@ describe("readDiskUsage", () => {
     expect(usage.totalBytes).toBeGreaterThan(0);
     expect(usage.freeBytes).toBeGreaterThan(0);
     expect(usage.freeBytes!).toBeLessThanOrEqual(usage.totalBytes!);
+  });
+
+  it("answers null for backups when a backup folder on this disk cannot be read", async () => {
+    const readable = join(root, "backups");
+    await mkdir(readable);
+    await fill(join(readable, "a.tar"), 5000);
+    const notAFolder = join(root, "backup-file");
+    await fill(notAFolder, 2000);
+
+    const usage = await readDiskUsage({
+      venueDir,
+      logDir,
+      backupDirs: [readable, notAFolder],
+      statfs: disk(100000, 40000, 30000),
+    });
+
+    expect(usage.backupsBytes).toBeNull();
+  });
+
+  it("counts a file or folder that vanishes during the walk as gone", async () => {
+    await fill(join(venueDir, "venue.db"), 1000);
+    await fill(join(venueDir, "venue.db-shm"), 700);
+    await mkdir(join(venueDir, "stream"));
+    await fill(join(venueDir, "stream", "segment"), 400);
+    const enoent = () => Object.assign(new Error("gone"), { code: "ENOENT" });
+
+    const usage = await readDiskUsage({
+      venueDir,
+      logDir,
+      backupDirs: [],
+      statfs: disk(100000, 40000, 30000),
+      lstat: async (path) => {
+        if (path === join(venueDir, "venue.db-shm")) throw enoent();
+        return lstat(path);
+      },
+      readdir: async (path) => {
+        if (path === join(venueDir, "stream")) throw enoent();
+        return readdir(path);
+      },
+    });
+
+    expect(usage.databaseBytes).toBe(1000);
+  });
+
+  it("answers null for a part when an entry inside it cannot be read", async () => {
+    await fill(join(venueDir, "venue.db"), 1000);
+
+    const usage = await readDiskUsage({
+      venueDir,
+      logDir,
+      backupDirs: [],
+      statfs: disk(100000, 40000, 30000),
+      lstat: async () => {
+        throw Object.assign(new Error("denied"), { code: "EACCES" });
+      },
+    });
+
+    expect(usage.databaseBytes).toBeNull();
   });
 });
