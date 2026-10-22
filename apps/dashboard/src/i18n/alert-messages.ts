@@ -101,6 +101,14 @@ export const ALERT_MESSAGES: Readonly<
     en: "Your bucket is refusing this box: its access key may no longer work, or the bucket may no longer support the check Waitron uses to stop two boxes overwriting each other's copy. Check the bucket settings on the Backups page.",
     es: "Tu bucket está rechazando este equipo: puede que su clave de acceso ya no funcione, o que el bucket ya no admita la comprobación que usa Waitron para evitar que dos equipos sobrescriban la copia del otro. Revisa los ajustes del bucket en la página de Copias.",
   },
+  "storage.space_low": {
+    en: "The box has {freeBytes:bytes} of disk space left. Everything still works, but if it fills up nothing can be saved.",
+    es: "Al equipo le quedan {freeBytes:bytes} de espacio en disco. Todo sigue funcionando, pero si se llena no se podrá guardar nada.",
+  },
+  "storage.disk_full": {
+    en: "The box is out of disk space: nothing can be saved.",
+    es: "El equipo no tiene espacio en disco: no se puede guardar nada.",
+  },
   "backup.stream_stopped": {
     en: "The bucket copy is not running, so new changes are not reaching your bucket. Sales continue. Contact support.",
     es: "La copia en el bucket no está en marcha, así que los cambios nuevos no llegan a tu bucket. Las ventas continúan. Contacta con soporte.",

@@ -269,6 +269,28 @@ it("names only registered word lists in its word-list slots", () => {
   expect(unknown).toEqual([]);
 });
 
+it("words the box's disk alerts, writing the free space in each language", () => {
+  expect(alertMessage("storage.space_low", { freeBytes: 1_800_000_000 }, "en")).toBe(
+    "The box has 1.8 GB of disk space left. Everything still works, but if it fills up nothing can be saved.",
+  );
+  const es = alertMessage("storage.space_low", { freeBytes: 1_800_000_000 }, "es");
+  expect(es).toBe(ALERT_MESSAGES["storage.space_low"]!.es.replace("{freeBytes:bytes}", "1,8 GB"));
+  expect(es).not.toContain("{");
+  expect(alertMessage("storage.disk_full", {}, "en")).toBe(
+    "The box is out of disk space: nothing can be saved.",
+  );
+  expect(alertMessage("storage.disk_full", {}, "es")).toBe(ALERT_MESSAGES["storage.disk_full"]!.es);
+  expect(hasAlertMessage("storage.space_low")).toBe(true);
+  expect(hasAlertMessage("storage.disk_full")).toBe(true);
+});
+
+it("keeps the disk warning to two sentences while there is no Box status page", () => {
+  const { en, es } = ALERT_MESSAGES["storage.space_low"]!;
+  for (const text of [en, es]) {
+    expect(text.split(/(?<=\.)\s+/).length).toBe(2);
+  }
+});
+
 describe("a backup that stopped before reaching any destination", () => {
   const LEAD_EN =
     "The last backup stopped before reaching any destination, so no new copy was saved. Sales continue.";
