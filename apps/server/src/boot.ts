@@ -1,4 +1,4 @@
-import { createSetupRecoveryPreparation } from "./recovery-preparation.js";
+import { clearStagedRecoveries, createSetupRecoveryPreparation } from "./recovery-preparation.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import type { WaitronModule } from "@waitron/module";
 import { createHash } from "node:crypto";
@@ -975,6 +975,7 @@ async function bootServer(
   if (restoredTriggers.length > 0) {
     log("warn", "append_only.triggers_restored", { triggers: restoredTriggers });
   }
+  await clearStagedRecoveries(join(config.stateDir, RESTORE_STAGING_DIR));
 
   // Drift visibility: log the enabled set against what the database has actually migrated. A
   // soft-disabled module's data is kept; it is simply not migrated.
@@ -1079,6 +1080,18 @@ async function bootServer(
       coordinator: firstSetupCoordinator,
       assertOtherAllowed: async () => assertOtherSetupAllowed(await firstSetupStore.read()),
     };
+    const recoveryPreparation = createSetupRecoveryPreparation({
+      testClock: seams.testClock,
+      stateDir: config.stateDir,
+      venueDir: config.venueDir,
+      stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
+      migrationsRoot: config.migrationsRoot,
+      // Recovery configures its own host; first setup's instances are already bound.
+      modules: ALL_MODULES,
+      coordinator: firstSetupCoordinator,
+      cloudRecovery,
+      bucket: { litestreamBin: config.litestreamBin, now, log, openStore: openBoundedBucket },
+    });
     mountSetup(
       app,
       {
@@ -1092,18 +1105,10 @@ async function bootServer(
         }),
         cloudRecovery,
         requestFromBox: seams.requestFromBox,
-        prepareRecovery: createSetupRecoveryPreparation({
-          testClock: seams.testClock,
-          stateDir: config.stateDir,
-          venueDir: config.venueDir,
-          stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
-          migrationsRoot: config.migrationsRoot,
-          // Recovery configures its own host; first setup's instances are already bound.
-          modules: ALL_MODULES,
-          coordinator: firstSetupCoordinator,
-          cloudRecovery,
-          bucket: { litestreamBin: config.litestreamBin, now, log, openStore: openBoundedBucket },
-        }),
+        prepareRecovery: recoveryPreparation,
+        stageRecovery: recoveryPreparation.stage,
+        discardStagedRecovery: recoveryPreparation.discard,
+        clearStagedRecovery: recoveryPreparation.clearStaged,
         previewRestore: (request) =>
           previewRecoveryArchive({
             ...request,

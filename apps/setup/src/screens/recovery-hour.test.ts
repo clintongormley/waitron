@@ -43,8 +43,18 @@ async function mounted(kind: "archive" | "bucket" | "cloud") {
     preparation: Record<string, unknown>;
     artifact?: Blob;
   }> = [];
+  const stages: Array<{ request: unknown; artifact: Blob }> = [];
   const transport = vi.fn<typeof fetch>(async (url, init) => {
     if (String(url).endsWith("/preview")) return Response.json(preview);
+    if (String(url).endsWith("/recovery/stage")) {
+      const form = init!.body as FormData;
+      stages.push({
+        request: JSON.parse(String(form.get("request"))),
+        artifact: form.get("artifact") as Blob,
+      });
+      return Response.json({ stagedId: "5c1d6c43-4f61-4c4a-9e0b-0a8f2f8d9a11" });
+    }
+    if (String(url).endsWith("/recovery/stage/discard")) return Response.json({ discarded: true });
     if (String(url).endsWith("/recovery/preparation")) {
       const body =
         init!.body instanceof FormData
@@ -90,7 +100,7 @@ async function mounted(kind: "archive" | "bucket" | "cloud") {
   const entry = allocation.shadowRoot!.querySelector<LitElement>("vf-recovery-hour");
   expect(entry, "the selected source offers the module's hour form").not.toBeNull();
   await entry!.updateComplete;
-  return { el, entry: entry!, requests, artifact };
+  return { el, entry: entry!, requests, artifact, stages };
 }
 async function fill(entry: LitElement) {
   const key = entry.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
@@ -131,7 +141,7 @@ async function fill(entry: LitElement) {
 it.each(["archive", "bucket", "cloud"] as const)(
   "prepares %s recovery through the real client and forwards bound credentials",
   async (kind) => {
-    const { el, entry, requests, artifact } = await mounted(kind);
+    const { el, entry, requests, artifact, stages } = await mounted(kind);
     await fill(entry);
     await vi.waitFor(() =>
       expect(el.readCredentials()?.recoveryOperation.input).toEqual({ server: "selected-input" }),
@@ -159,12 +169,20 @@ it.each(["archive", "bucket", "cloud"] as const)(
       });
       expect(request.source).toEqual(
         kind === "archive"
-          ? { kind, recoveryKey: "archive password", environment: "production" }
+          ? { kind: "staged", stagedId: "5c1d6c43-4f61-4c4a-9e0b-0a8f2f8d9a11" }
           : kind === "bucket"
             ? { kind, kit: "private selected kit", environment: "production" }
             : { kind, pointId: "selected-cloud-point" },
       );
-      if (kind === "archive") expect(await request.artifact!.text()).toBe(await artifact.text());
+      expect(request.artifact).toBeUndefined();
+    }
+    expect(stages).toHaveLength(kind === "archive" ? 1 : 0);
+    if (kind === "archive") {
+      expect(stages[0]!.request).toEqual({
+        eventId: credentials.recoveryOperation.binding.eventId,
+        source: { kind, recoveryKey: "archive password", environment: "production" },
+      });
+      expect(await stages[0]!.artifact.text()).toBe(await artifact.text());
     }
     if (kind === "bucket") el.bucketKit = "different kit";
     else if (kind === "cloud") el.selectionId = "approval-2";

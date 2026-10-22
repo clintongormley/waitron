@@ -59,6 +59,7 @@ export class SetupRecoveryCopy extends LitElement {
   @state() private error?: "key" | "environment" | "file" | "kit" | "failed";
   #attempt = 0;
   #previewCurrent?: () => boolean;
+  #staged?: { eventId: string; api: SetupApi; id: Promise<string> };
   #prepare: NonNullable<SetupRecoveryAllocation["prepare"]> = async (request) => {
     const current = this.#previewCurrent;
     if (!current?.()) throw new Error("Selected recovery copy changed");
@@ -67,16 +68,39 @@ export class SetupRecoveryCopy extends LitElement {
         ? { kind: "bucket" as const, kit: this.bucketKit, environment: this.environment }
         : this.cloudPointId !== undefined
           ? { kind: "cloud" as const, pointId: this.cloudPointId }
-          : {
-              kind: "archive" as const,
-              artifact: this.artifact!,
-              recoveryKey: this.recoveryKey,
-              environment: this.environment,
-            };
+          : { kind: "staged" as const, stagedId: await this.#stage(request.binding.eventId) };
+    if (!current()) throw new Error("Selected recovery copy changed");
     const result = await this.api.prepareRecovery(source, request);
     if (!current()) throw new Error("Selected recovery copy changed");
     return result;
   };
+  #stage(eventId: string): Promise<string> {
+    if (this.#staged?.eventId !== eventId) {
+      this.#discardStaged();
+      const staged = {
+        eventId,
+        api: this.api,
+        id: this.api
+          .stageRecovery(this.artifact!, this.recoveryKey, this.environment, eventId)
+          .then(({ stagedId }) => stagedId),
+      };
+      staged.id.catch(() => {
+        if (this.#staged === staged) this.#staged = undefined;
+      });
+      this.#staged = staged;
+    }
+    return this.#staged.id;
+  }
+  #discardStaged(): void {
+    const staged = this.#staged;
+    this.#staged = undefined;
+    void staged?.id
+      .then(
+        (stagedId) => staged.api.discardStagedRecovery(stagedId),
+        () => {},
+      )
+      .catch(() => {});
+  }
 
   constructor() {
     super();
@@ -105,6 +129,7 @@ export class SetupRecoveryCopy extends LitElement {
     super.disconnectedCallback();
   }
   #invalidate(): void {
+    this.#discardStaged();
     this.#attempt += 1;
     this.preview = undefined;
     this.#previewCurrent = undefined;

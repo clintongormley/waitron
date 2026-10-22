@@ -1,6 +1,8 @@
 import {
   mountRecoveryPreparationApi,
   type PrepareRecovery,
+  type StageRecovery,
+  type DiscardStagedRecovery,
 } from "./setup-recovery-preparation-api.js";
 import { mountSetupFirstFiscalApi, type FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import type { FirstSetupCoordinator, FirstSetupHold } from "@waitron/provisioning";
@@ -151,6 +153,9 @@ export interface SetupDeps {
     options: { oldBoxGone: boolean },
   ) => Promise<void>;
   prepareRecovery?: PrepareRecovery;
+  stageRecovery?: StageRecovery;
+  discardStagedRecovery?: DiscardStagedRecovery;
+  clearStagedRecovery?: () => Promise<void>;
   /** Whether a request came from a browser on the box itself; tests replace it. */
   requestFromBox?: (c: Context) => boolean;
   previewRestore?: (request: ArchiveRestoreRequest) => Promise<RecoveryBackupPreview>;
@@ -1360,6 +1365,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
             { artifact, recoveryKey, environment: rawEnvironment, ...credentials },
             { oldBoxGone },
           );
+          await deps.clearStagedRecovery?.();
           const response = c.json({ restoreStaged: true, restarting: true }, 202);
           setTimeout(() => requestRestart(), 0);
           return response;

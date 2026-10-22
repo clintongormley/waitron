@@ -5,7 +5,7 @@ import type { Hono } from "hono";
 import { createServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
@@ -394,7 +394,10 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       stateDir: string;
       extraPorts: number[];
     }) => Promise<void>,
-    { extraPortCount = 0 } = {},
+    {
+      extraPortCount = 0,
+      beforeStart,
+    }: { extraPortCount?: number; beforeStart?: (stateDir: string) => Promise<void> } = {},
   ): Promise<void> {
     const [port, ...drawn] = await freePorts(1 + extraPortCount);
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-routes-"));
@@ -426,6 +429,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         monotonicFinishedMs: testClock.monotonic(),
       }));
     try {
+      await beforeStart?.(stateDir);
       await withMockedKill(async (kills) => {
         const server = await startServer(
           {
@@ -793,6 +797,33 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         });
         expect(kills).toEqual([]);
       });
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("removes a decrypted copy a restore page left staged before the box stopped", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const leftover = (stateDir: string) =>
+      join(stateDir, "restore-staging", "staged-recovery", "archive-validate-left");
+    try {
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ stateDir }) => {
+          await expect(readdir(dirname(leftover(stateDir)))).rejects.toMatchObject({
+            code: "ENOENT",
+          });
+        },
+        {
+          beforeStart: async (stateDir) => {
+            await mkdir(leftover(stateDir), { recursive: true });
+            await writeFile(join(leftover(stateDir), "venue.db"), "decrypted venue");
+          },
+        },
+      );
     } finally {
       await venue.store.close();
       await rm(venue.directory, { recursive: true, force: true });

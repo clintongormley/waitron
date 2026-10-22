@@ -22,9 +22,9 @@ import {
 import { AppError, isAppError } from "@waitron/shared";
 import { isDeepStrictEqual } from "node:util";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { lstat } from "node:fs/promises";
+import { lstat, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
 import {
   readArtifactIdentity,
@@ -37,6 +37,8 @@ import {
 import type {
   RecoveryPreparationRequest,
   PrepareRecovery,
+  StageRecovery,
+  DiscardStagedRecovery,
 } from "./setup-recovery-preparation-api.js";
 import { prepareStreamRestore, type PrepareStreamDeps } from "./restore-stream.js";
 import { parseRecoveryKit } from "@waitron/stream";
@@ -355,15 +357,64 @@ export function createInteractiveRecoveryPreparation(options: {
   };
 }
 
+/** Inside `stagingDir`; boot removes it whole, since each copy in it is a decrypted venue database. */
+export const STAGED_RECOVERY_DIR = "staged-recovery";
+export const STAGED_RECOVERY_UNUSED_MS = 60 * 60_000;
+export async function clearStagedRecoveries(stagingDir: string): Promise<void> {
+  await rm(join(stagingDir, STAGED_RECOVERY_DIR), { recursive: true, force: true });
+}
+
+interface StagedCopy {
+  readonly id: string;
+  readonly eventId: string;
+  readonly copy: ValidatedArtifact & { readonly sourceId: string };
+  usedAt: number;
+  users: number;
+  retired: boolean;
+}
+
 export function createSetupRecoveryPreparation(
   options: Parameters<typeof createInteractiveRecoveryPreparation>[0] & {
     stagingDir: string;
     cloudRecovery?: Pick<ReturnType<typeof createCloudRecoveryClient>, "preview">;
     bucket: Omit<PrepareStreamDeps, "kit" | "stateDir" | "migrationsRoot" | "oldBoxGone">;
   },
-): PrepareRecovery {
+): PrepareRecovery & {
+  stage: StageRecovery;
+  discard: DiscardStagedRecovery;
+  clearStaged(): Promise<void>;
+} {
   const interactive = createInteractiveRecoveryPreparation(options);
-  return async (source, request, hold, client) => {
+  const stagedDir = join(options.stagingDir, STAGED_RECOVERY_DIR);
+  let staged: StagedCopy | undefined;
+  let expiry: NodeJS.Timeout | undefined;
+  const release = async (entry: StagedCopy) => {
+    entry.retired = true;
+    if (entry.users === 0) await entry.copy.discard();
+  };
+  const drop = async (entry: StagedCopy) => {
+    if (staged !== entry) return;
+    staged = undefined;
+    clearTimeout(expiry);
+    await release(entry);
+  };
+  const touch = (entry: StagedCopy) => {
+    entry.usedAt = Date.now();
+    clearTimeout(expiry);
+    expiry = setTimeout(() => void drop(entry), STAGED_RECOVERY_UNUSED_MS + 1);
+    expiry.unref();
+  };
+  // Read at each use as well as by the timer, so a clock moved past the hour is refused at once.
+  const live = async () => {
+    const entry = staged;
+    if (entry !== undefined && Date.now() - entry.usedAt > STAGED_RECOVERY_UNUSED_MS)
+      await drop(entry);
+    return staged;
+  };
+  const refuseStaged = (): never => {
+    throw new AppError("setup.request_invalid", { field: "stagedId" });
+  };
+  const prepare: PrepareRecovery = async (source, request, hold, client) => {
     const archive = async (
       input: Pick<ValidationDeps, "artifact" | "recoveryKey" | "environment">,
     ) => {
@@ -374,6 +425,24 @@ export function createSetupRecoveryPreparation(
         await copy.discard();
       }
     };
+    if (source.kind === "staged") {
+      const entry = await live();
+      if (
+        entry === undefined ||
+        entry.id !== source.stagedId ||
+        entry.eventId !== request.binding.eventId
+      )
+        return refuseStaged();
+      entry.users += 1;
+      touch(entry);
+      try {
+        return await interactive.prepare(entry.copy, entry.copy.sourceId, request, hold, client);
+      } finally {
+        entry.users -= 1;
+        if (entry.retired) await release(entry);
+        else touch(entry);
+      }
+    }
     if (source.kind === "archive") return archive(source);
     if (source.kind === "cloud") {
       if (options.cloudRecovery === undefined) throw new AppError("setup.not_ready", {});
@@ -402,4 +471,44 @@ export function createSetupRecoveryPreparation(
       await prepared.discard();
     }
   };
+  const busy = (eventId: string, entry: StagedCopy | undefined) => {
+    if (entry !== undefined && entry.eventId !== eventId)
+      throw new AppError("setup.already_provisioning", {});
+  };
+  const stage: StageRecovery = async (eventId, source) => {
+    busy(eventId, await live());
+    const copy = await validateArtifact({ ...options, ...source, stagingDir: stagedDir });
+    const previous = await live();
+    try {
+      // The first open rewrites the file's header into WAL mode; doing it here leaves every
+      // preparation reading a file no request changes.
+      await (await openVenueDatabase(dirname(copy.databasePath))).close();
+      busy(eventId, previous);
+    } catch (error) {
+      await copy.discard();
+      throw error;
+    }
+    const entry: StagedCopy = {
+      id: randomUUID(),
+      eventId,
+      copy,
+      usedAt: Date.now(),
+      users: 0,
+      retired: false,
+    };
+    staged = entry;
+    touch(entry);
+    if (previous !== undefined) await release(previous);
+    return { stagedId: entry.id };
+  };
+  const discard: DiscardStagedRecovery = async (stagedId) => {
+    const entry = staged;
+    if (entry !== undefined && entry.id === stagedId) await drop(entry);
+  };
+  const clearStaged = async () => {
+    const entry = staged;
+    if (entry !== undefined) await drop(entry);
+    await clearStagedRecoveries(options.stagingDir);
+  };
+  return Object.assign(prepare, { stage, discard, clearStaged });
 }

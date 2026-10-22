@@ -25,7 +25,14 @@ export type RecoveryPreparationSource =
       environment: "production" | "preproduction";
     }
   | { kind: "bucket"; kit: string; environment: "production" | "preproduction" }
-  | { kind: "cloud"; pointId: string };
+  | { kind: "cloud"; pointId: string }
+  | { kind: "staged"; stagedId: string };
+export type ArchivePreparationSource = Extract<RecoveryPreparationSource, { kind: "archive" }>;
+export type StageRecovery = (
+  eventId: string,
+  source: ArchivePreparationSource,
+) => Promise<{ stagedId: string }>;
+export type DiscardStagedRecovery = (stagedId: string) => Promise<void>;
 export type PrepareRecovery = (
   source: RecoveryPreparationSource,
   input: RecoveryPreparationRequest,
@@ -101,6 +108,51 @@ async function readMultipart(c: Context, limit: number): Promise<FormData> {
   }
 }
 
+function assertOwnerTransport(c: Context): void {
+  const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
+  const origin = c.req.header("Origin"),
+    site = c.req.header("Sec-Fetch-Site");
+  if (
+    !(socket instanceof TLSSocket) ||
+    !socket.encrypted ||
+    (origin !== undefined && origin !== new URL(c.req.url).origin) ||
+    (site !== undefined && !["same-origin", "none"].includes(site))
+  )
+    throw new AppError("setup.owner_required", {});
+}
+async function readUpload(
+  c: Context,
+  uploadLimit: number,
+): Promise<{ payload: unknown; artifact: Uint8Array | undefined }> {
+  const declared = Number(c.req.header("Content-Length"));
+  if (Number.isFinite(declared) && declared > uploadLimit + 262144) invalid("artifact");
+  const form = await readMultipart(c, uploadLimit + 262144);
+  if (
+    [...form.keys()].some((key) => !["request", "artifact"].includes(key)) ||
+    form.getAll("request").length !== 1 ||
+    form.getAll("artifact").length > 1
+  )
+    invalid("body");
+  const raw = text(form.get("request"), "body", 131072);
+  let payload: unknown;
+  try {
+    payload = JSON.parse(raw) as unknown;
+  } catch {
+    invalid("body");
+  }
+  const file = form.get("artifact");
+  if (file === null) return { payload, artifact: undefined };
+  if (!(file instanceof Blob) || file.size === 0 || file.size > uploadLimit) invalid("artifact");
+  return { payload, artifact: new Uint8Array(await file.arrayBuffer()) };
+}
+function stagedId(value: unknown): string {
+  if (typeof value !== "string" || !isUuid(value)) invalid("stagedId");
+  return value;
+}
+function contentType(c: Context): string | undefined {
+  return c.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase();
+}
+
 export function mountRecoveryPreparationApi(
   app: Hono,
   deps: SetupDeps,
@@ -112,46 +164,53 @@ export function mountRecoveryPreparationApi(
     run(c: Context, log: Logger, execute: () => Promise<Response>): Promise<Response>;
   },
 ): void {
+  app.post("/setup-api/recovery/stage", (c) =>
+    options.run(c, log, async () => {
+      c.header("Cache-Control", "no-store");
+      assertOwnerTransport(c);
+      if (deps.stageRecovery === undefined) throw new AppError("setup.not_ready", {});
+      if (options.busy()) throw new AppError("setup.already_provisioning", {});
+      if (contentType(c) !== "multipart/form-data") invalid("body");
+      const { payload, artifact } = await readUpload(c, options.uploadLimit);
+      const body = exact(payload, ["eventId", "source"]);
+      const eventId = text(body.eventId, "eventId", 256);
+      const raw = exact(body.source, ["kind", "recoveryKey", "environment"]);
+      if (raw.kind !== "archive") invalid("body");
+      if (artifact === undefined) invalid("artifact");
+      return c.json(
+        await deps.stageRecovery(eventId, {
+          kind: "archive",
+          artifact,
+          recoveryKey: text(raw.recoveryKey, "recoveryKey", 4096),
+          environment: environment(raw.environment),
+        }),
+      );
+    }),
+  );
+  app.post("/setup-api/recovery/stage/discard", (c) =>
+    options.run(c, log, async () => {
+      c.header("Cache-Control", "no-store");
+      assertOwnerTransport(c);
+      if (deps.discardStagedRecovery === undefined) throw new AppError("setup.not_ready", {});
+      if (contentType(c) !== "application/json") invalid("body");
+      const body = exact(await readFirstFiscalBody(c, 2048), ["stagedId"]);
+      await deps.discardStagedRecovery(stagedId(body.stagedId));
+      return c.json({ discarded: true });
+    }),
+  );
   app.post("/setup-api/recovery/preparation", (c) =>
     options.run(c, log, async () => {
       c.header("Cache-Control", "no-store");
-      const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-      const origin = c.req.header("Origin"),
-        site = c.req.header("Sec-Fetch-Site");
-      if (
-        !(socket instanceof TLSSocket) ||
-        !socket.encrypted ||
-        (origin !== undefined && origin !== new URL(c.req.url).origin) ||
-        (site !== undefined && !["same-origin", "none"].includes(site))
-      )
-        throw new AppError("setup.owner_required", {});
+      assertOwnerTransport(c);
       if (deps.prepareRecovery === undefined || deps.firstSetup === undefined)
         throw new AppError("setup.not_ready", {});
       if (options.busy()) throw new AppError("setup.already_provisioning", {});
-      const type = c.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase();
+      const type = contentType(c);
       let payload: unknown;
       let artifact: Uint8Array | undefined;
       if (type === "multipart/form-data") {
-        const declared = Number(c.req.header("Content-Length"));
-        if (Number.isFinite(declared) && declared > options.uploadLimit + 262144)
-          invalid("artifact");
-        const form = await readMultipart(c, options.uploadLimit + 262144);
-        if (
-          [...form.keys()].some((key) => !["request", "artifact"].includes(key)) ||
-          form.getAll("request").length !== 1 ||
-          form.getAll("artifact").length !== 1
-        )
-          invalid("body");
-        const raw = text(form.get("request"), "body", 131072);
-        try {
-          payload = JSON.parse(raw) as unknown;
-        } catch {
-          invalid("body");
-        }
-        const file = form.get("artifact");
-        if (!(file instanceof Blob) || file.size === 0 || file.size > options.uploadLimit)
-          invalid("artifact");
-        artifact = new Uint8Array(await file.arrayBuffer());
+        ({ payload, artifact } = await readUpload(c, options.uploadLimit));
+        if (artifact === undefined) invalid("body");
       } else if (type === "application/json") {
         payload = await readFirstFiscalBody(c);
       } else invalid("body");
@@ -168,6 +227,10 @@ export function mountRecoveryPreparationApi(
           recoveryKey: text(raw.recoveryKey, "recoveryKey", 4096),
           environment: environment(raw.environment),
         };
+      } else if (rawSource?.kind === "staged") {
+        const raw = exact(rawSource, ["kind", "stagedId"]);
+        if (artifact !== undefined) invalid("artifact");
+        source = { kind: "staged", stagedId: stagedId(raw.stagedId) };
       } else if (rawSource?.kind === "bucket") {
         const raw = exact(rawSource, ["kind", "kit", "environment"]);
         if (artifact !== undefined) invalid("artifact");
