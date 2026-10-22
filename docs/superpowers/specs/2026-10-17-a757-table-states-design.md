@@ -420,7 +420,7 @@ decimal places — counts as one item. Dishes saved in a bill's New order panel 
 unsent. Requested will count as held, because the reader treats a kitchen item with no `fired_at` as
 held and A773-2's plan keeps Requested's `fired_at` null
 (`docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md:88`). Transfers rows show the counts
-without a total, and only while the tab is the viewer's department's and in its profile's zones, or
+without a total, and only while the tab is the viewer's department's and in its profile's zones or in no zone, or
 to the desk it is offered to (`withCounts`, `apps/server/src/department-transfer-api.ts:85`).
 Held orders (now Parked orders) dropped its per-station ready chip.
 
@@ -649,7 +649,7 @@ Each slice is one pull request one implementer can finish well under ~100 tool c
    colour tokens, the zone tabs and the toolbar edge; the 28 px check of section 6 on Santet's plan.
 6. **Item counts by state** — the server sends each order's counts by state with the held-orders
    summary and the Waiting and Transfers lists; the till rows show them. FULL review (a till read
-   path) (built).
+   path; built).
 7. **Service steps: the settings** — the venue-service tables (migration), the list in A756's
    Service tab, the starter set for a new venue. FULL review (migration).
 8. **Service steps on the floor** — the server's step signal, the Done route and its permission, the
