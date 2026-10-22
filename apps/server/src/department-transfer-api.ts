@@ -89,7 +89,7 @@ async function withCounts<T extends TransferRow>(
   viewer: { departmentId: string; profileId: string } | "receiver",
 ): Promise<(T & { counts?: OrderStateCounts })[]> {
   if (rows.length === 0) return [];
-  let visible = (_row: T) => true;
+  let visible: (row: T) => boolean = () => true;
   if (viewer !== "receiver") {
     const scope = await readZoneScope(tx, deps.cfg, viewer.profileId);
     const zones = await VENUE_SERVICE.findOrderZones(
