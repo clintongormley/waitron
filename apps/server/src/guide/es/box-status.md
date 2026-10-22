@@ -27,17 +27,16 @@ Cada parte tiene una fila con un punto de color:
   tan incorrecta que no se puede registrar una venta. Cualquiera de los dos pone también en rojo
   **Ventas**.
 
-Una fila muestra los avisos que la campana muestra para esa parte, con las mismas palabras. Las
-filas **Copia en el bucket**, **Impresoras** y **Lectores de tarjeta** tienen un botón **Ir a** que
-abre su propia página cuando puedes abrirla, y un aviso que tiene su propia página añade un botón
-para esa página. Los avisos que no corresponden a ninguna fila se cuentan bajo las filas, junto a
-**Ver todos los avisos**.
+Cada fila muestra los mismos avisos que la campana para esa parte, con las mismas palabras. Las
+filas **Copia en el bucket**, **Impresoras** y **Lectores de tarjeta** tienen un botón **Ir a …**,
+como **Ir a Copias de seguridad**, que abre su propia página cuando puedes abrirla, y un aviso que
+tiene su propia página añade un botón para esa página. Los avisos que no corresponden a ninguna fila
+se cuentan bajo las filas, junto a **Ver todos los avisos**.
 
 Cuando no pasa nada, cada fila dice:
 
 - **Ventas**: **Se registran con normalidad**, y cuándo fue la última venta.
 - **Hacienda**: **Se envían con normalidad**. Un equipo que no envía registros a Hacienda lo dice.
-  Cuando hay registros pendientes, dice cuántos y que el equipo reintenta solo.
 - **Copia en el bucket**: **Al día**, y cuándo se confirmó el último envío. Dice **No
   configurada** cuando no hay ninguna copia configurada, y cuántos minutos de retraso lleva
   cuando se retrasa.
@@ -46,9 +45,13 @@ Cuando no pasa nada, cada fila dice:
   página no comprueba si cada lector está encendido: solo muestra los problemas que el equipo ya
   conoce. Esta fila no aparece cuando los pagos con tarjeta están desactivados.
 - **Reloj**: **Correcto**, y cuándo comparó el equipo su hora con la de Hacienda por última vez.
-  Hasta que las compare, dice **Aún no se ha comparado con Hacienda**.
+  Cuando no tiene una comparación reciente, por ejemplo justo después de arrancar el equipo, dice
+  **Aún no se ha comparado con Hacienda**.
 - **Espacio en disco**: cuánto espacio queda libre del total, y cuánto ocupan la base de datos,
   las copias guardadas en el equipo, los registros de actividad y el resto del disco.
+
+Después de que falle un envío a Hacienda, la fila **Hacienda** dice cuántos registros esperan, y si
+el equipo los reintenta solo o el encargado tiene que resolver alguno.
 
 Si no se han podido leer los avisos, la página sigue mostrando todas las filas y avisa de que una
 parte puede parecer bien aunque no lo esté. Si algunas comprobaciones no se han podido hacer, la
@@ -60,7 +63,7 @@ El botón **Liberar** de la fila **Espacio en disco** muestra cuánto puede libe
 pulses, por ejemplo **Liberar 120 MB**. Cuando no hay casi nada que liberar, dice **Nada que
 liberar** y no se puede pulsar.
 
-**Liberar** solo borra archivos que el equipo puede volver a crear:
+**Liberar** solo borra archivos que el equipo ya no necesita:
 
 - informes de fallos de hace más de una semana
 - registros de actividad anteriores a los dos más recientes
@@ -69,10 +72,11 @@ liberar** y no se puede pulsar.
 Nunca toca las ventas, los ajustes ni tus copias de seguridad. Cuando termina, la página dice
 cuánto ha liberado.
 
-Mientras se está haciendo una copia de seguridad, **Liberar** no toca sus archivos de trabajo, y
-la página dice que no se cuentan.
+Mientras se está haciendo una copia de seguridad, **Liberar** no toca la carpeta de trabajo de las
+copias, ni siquiera lo que dejó en ella una copia interrumpida, y la página dice que esos archivos
+no se cuentan.
 
-Si no basta, la página explica cómo ganar más espacio: guardar menos copias en el equipo, en la
+Al final, la página siempre explica cómo ganar más espacio: guardar menos copias en el equipo, en la
 página **Copias de seguridad**, o pedir a quien instaló el equipo que borre versiones anteriores
 de Waitron o ponga un disco mayor. Los tamaños bajo **Espacio en disco** muestran qué está
 llenando el disco.

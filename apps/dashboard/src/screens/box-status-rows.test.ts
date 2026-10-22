@@ -241,6 +241,34 @@ describe("boxStatusRows", () => {
     expect(row(one, "tax").line).toBe(t("box_status.tax.unsent_one"));
   });
 
+  it("says a manager must act, not that the box retries, while any unsent record is held", () => {
+    const many = boxStatusRows(
+      quietHealth({
+        notices: [notice("fiscal.records_unsent", "warning", { count: 12, held: 2 })],
+      }),
+      [],
+    ).rows;
+    expect(row(many, "tax")).toMatchObject({
+      state: "attention",
+      line: fill("box_status.tax.unsent_held", { count: "12" }),
+    });
+    expect(row(many, "tax").line).toMatch(/^12 records not yet sent · a manager/);
+    const one = boxStatusRows(
+      quietHealth({
+        notices: [notice("fiscal.records_unsent", "warning", { count: 1, held: 1 })],
+      }),
+      [],
+    ).rows;
+    expect(row(one, "tax").line).toBe(t("box_status.tax.unsent_held_one"));
+    const none = boxStatusRows(
+      quietHealth({
+        notices: [notice("fiscal.records_unsent", "warning", { count: 3, held: 0 })],
+      }),
+      [],
+    ).rows;
+    expect(row(none, "tax").line).toBe(fill("box_status.tax.unsent", { count: "3" }));
+  });
+
   it("draws a bell error on a row as amber, never red, with the bell's sentence", () => {
     const stuck = alert("printer.jobs_waiting", "printing", {
       severity: "error",

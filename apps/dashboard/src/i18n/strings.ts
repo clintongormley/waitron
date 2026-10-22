@@ -3153,6 +3153,8 @@ export const en = {
   "box_status.tax.not_filing": "This box does not send records to the tax agency",
   "box_status.tax.unsent": "{count} records not yet sent · the box retries by itself",
   "box_status.tax.unsent_one": "1 record not yet sent · the box retries by itself",
+  "box_status.tax.unsent_held": "{count} records not yet sent · a manager needs to sort them out",
+  "box_status.tax.unsent_held_one": "1 record not yet sent · a manager needs to sort it out",
   "box_status.bucket.off": "Not set up",
   "box_status.bucket.starting": "Starting",
   "box_status.bucket.ok": "Up to date",
@@ -3180,7 +3182,7 @@ export const en = {
   "box_status.freed": "Freed {size}.",
   "box_status.free_help_label": "What Free deletes",
   "box_status.free_help":
-    "Free deletes only files the box can make again: crash reports older than a week, log files older than the two newest, and what a backup that was cut off left behind. Sales, settings and your backups are never touched.",
+    "Free deletes only files the box no longer needs: crash reports older than a week, log files older than the two newest, and what a backup that was cut off left behind. Sales, settings and your backups are never touched.",
   "box_status.free_help_guide": "More about freeing space",
   "box_status.fillers":
     "To free more space: keep fewer backups on this box (on Backups), or ask whoever installed the box to remove old versions of Waitron or fit a bigger disk.",
@@ -6391,6 +6393,8 @@ export const es: Record<StringKey, string> = {
   "box_status.tax.not_filing": "Este equipo no envía registros a Hacienda",
   "box_status.tax.unsent": "{count} registros sin enviar · el equipo reintenta solo",
   "box_status.tax.unsent_one": "1 registro sin enviar · el equipo reintenta solo",
+  "box_status.tax.unsent_held": "{count} registros sin enviar · el encargado tiene que resolverlos",
+  "box_status.tax.unsent_held_one": "1 registro sin enviar · el encargado tiene que resolverlo",
   "box_status.bucket.off": "No configurada",
   "box_status.bucket.starting": "Arrancando",
   "box_status.bucket.ok": "Al día",
@@ -6420,7 +6424,7 @@ export const es: Record<StringKey, string> = {
   "box_status.freed": "Liberados {size}.",
   "box_status.free_help_label": "Qué borra Liberar",
   "box_status.free_help":
-    "Liberar solo borra archivos que el equipo puede volver a crear: informes de fallos de hace más de una semana, registros de actividad anteriores a los dos más recientes y lo que dejó una copia de seguridad interrumpida. Nunca toca las ventas, los ajustes ni tus copias.",
+    "Liberar solo borra archivos que el equipo ya no necesita: informes de fallos de hace más de una semana, registros de actividad anteriores a los dos más recientes y lo que dejó una copia de seguridad interrumpida. Nunca toca las ventas, los ajustes ni tus copias.",
   "box_status.free_help_guide": "Más sobre liberar espacio",
   "box_status.fillers":
     "Para ganar más espacio: guarda menos copias en este equipo (en Copias de seguridad), o pide a quien instaló el equipo que borre versiones anteriores de Waitron o ponga un disco mayor.",

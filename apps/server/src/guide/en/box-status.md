@@ -25,25 +25,31 @@ Each part has a row with a coloured dot:
   sale. Either of these also turns **Sales** red.
 
 A row shows the alerts the bell shows for that part, in the bell's words. The **Bucket copy**,
-**Printers** and **Card readers** rows have a **Go to** button that opens their own page when you
-can open it, and an alert that has a page of its own adds a button for that page too. Alerts
-that belong to none of the rows are counted below the rows, beside **See all alerts**.
+**Printers** and **Card readers** rows have a **Go to …** button, such as **Go to Backups**, that
+opens their own page when you can open it, and an alert that has a page of its own adds a button for
+that page too. Alerts that belong to none of the rows are counted below the rows, beside **See all
+alerts**.
 
 When nothing is wrong, each row says:
 
 - **Sales**: **Recorded normally**, and when the last sale was made.
 - **Tax agency**: **Sent normally**. A box that does not send records to the tax agency says so
-  instead. When records are waiting, it says how many, and that the box retries by itself.
+  instead.
 - **Bucket copy**: **Up to date**, and when the last upload was confirmed. It says **Not set up**
   when no copy is set up, and how many minutes behind the copy is when it falls behind.
 - **Printers**: **No problems reported**, and the names of the printers set up.
 - **Card readers**: **No problems reported**, and the names of the readers set up. The page does
   not check whether each reader is switched on: it only shows problems the box already knows about.
   This row is not there when card payments are turned off.
-- **Clock**: **Correct**, and when the box last compared its clock with the tax agency's. Until it
-  has compared them, it says **Not yet compared with the tax agency**.
+- **Clock**: **Correct**, and when the box last compared its clock with the tax agency's. When it
+  has no recent comparison, for example just after the box starts, it says **Not yet compared with
+  the tax agency**.
 - **Disk space**: how much space is free out of the total, and how much the database, the backups
   kept on the box, the logs and the rest of the disk take.
+
+After a send to the tax agency has failed, the **Tax agency** row says how many records are
+waiting, and whether the box is retrying them by itself or a manager needs to sort some of them
+out.
 
 If the alerts could not be read, the page still shows every row and says that a part may look
 fine when it is not. If some checks could not be made, the page says it may not show every
@@ -55,7 +61,7 @@ The **Free** button on the **Disk space** row shows how much it can free before 
 example **Free 120 MB**. When there is almost nothing to free, it reads **Nothing to free** and
 cannot be pressed.
 
-**Free** deletes only files the box can make again:
+**Free** deletes only files the box no longer needs:
 
 - crash reports older than a week
 - log files older than the two newest
@@ -64,10 +70,10 @@ cannot be pressed.
 It never touches your sales, your settings or your backups. When it has finished, the page says how
 much it freed.
 
-While a backup is running, **Free** leaves that backup's working files alone, and the page says
-they are not counted.
+While a backup is running, **Free** leaves the backup's working folder alone, including anything a
+cut-off backup left there, and the page says those files are not counted.
 
-If that is not enough, the page says how to free more: keep fewer backups on the box, on the
+At the bottom, the page always says how to free more: keep fewer backups on the box, on the
 **Backups** page, or ask whoever installed the box to remove old versions of Waitron or fit a
 bigger disk. The sizes under **Disk space** show what is filling the disk.
 

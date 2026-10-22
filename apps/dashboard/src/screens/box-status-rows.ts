@@ -171,7 +171,12 @@ function taxLine(health: BoxHealth, notices: readonly Notice[]): string {
   if (!health.filing) return t("box_status.tax.not_filing");
   const unsent = notices.find((notice) => notice.code === "fiscal.records_unsent");
   if (unsent === undefined) return t("box_status.tax.ok");
-  const count = unsent.params.count;
+  const { count, held } = unsent.params;
+  // A held record waits for a person to resolve its filing case, so it is not retried.
+  if (typeof held === "number" && held > 0)
+    return count === 1
+      ? t("box_status.tax.unsent_held_one")
+      : fill("box_status.tax.unsent_held", { count: String(count) });
   return count === 1
     ? t("box_status.tax.unsent_one")
     : fill("box_status.tax.unsent", { count: String(count) });
