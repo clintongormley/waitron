@@ -5480,11 +5480,12 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **When a nightly report job exists, the backup slot should fire after it** — left open by the "backups off or stale" reminder (#371).
 
-- **A823. Check which cold-restore steps still lack an operator surface, then list only those
-  (owner, 2026-10-17).** Promote Slice 4 named connection rebinding, an advertised origin and an
-  authenticated entry, and nothing in the code shows which of them is still missing. Walk the
-  restore steps in a test, then rewrite this entry to name only the real gaps, or delete it if
-  none is missing.
+- **Guide replacement address settings after a cold restore.** Replace manual configuration of
+  the advertised origin and dashboard origin/passkey domain with a recovery step that checks they
+  match the replacement's address. Local certificate repair and authenticated restore entry already
+  have surfaces; Cloud tunnel and staff-certificate installation remain under the Cloud integration
+  loose ends below. Coordinate naming with A917 and failover addressing with A947.
+  [Tested steps and remaining limits](developers/cold-restore-surfaces.md).
 
 - **Reconsider the backup container against off-the-shelf tools** (a brainstorm): `WBA1` plus
   `WBK1` is restorable only by Waitron code. Scheduled local archives stream through protected
