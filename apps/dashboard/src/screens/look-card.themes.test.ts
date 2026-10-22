@@ -693,7 +693,30 @@ describe("Save as new theme…", () => {
     expect(nameDialogOf(el).open).toBe(false);
     expect(hardDialog(el).open).toBe(false);
     expect(codeField(el).error).toBe(t("appearance.bad_code"));
+    expect(button(el, "save-as-new").disabled).toBe(true);
     expect(createTheme).not.toHaveBeenCalled();
+    await typeInCode(el, "#225588");
+    expect(button(el, "save-as-new").disabled).toBe(false);
+  });
+
+  it("Fix and save asks the name with the fixed draft", async () => {
+    setLocale("en-GB");
+    const { el, createTheme } = await mount(luciaInUse);
+    el.edit({ id: "t-lucia" });
+    await el.updateComplete;
+    await typeInCode(el, "#f2d300");
+    await userEvent.click(button(el, "save-as-new"));
+    await expect.poll(() => hardDialog(el).open).toBe(true);
+    await userEvent.click(hardButton(el, "fix-and-save"));
+    const dialog = await nameDialog(el);
+    expect(nameInput(dialog).value).toBe("Bar Lucía (copy)");
+    expect(toggle(dialog).checked).toBe(true);
+    expect(nameWarnings(dialog)).toEqual([]);
+    await userEvent.click(nameSave(dialog));
+    await expect.poll(() => createTheme.mock.calls.length).toBe(1);
+    expect(createTheme.mock.calls[0]![0].theme).toEqual(
+      normaliseChoices({ ...LUCIA, brandColor: "#f2d300", brandFix: { light: true } }),
+    );
   });
 
   it("while a save is sent it is disabled", async () => {

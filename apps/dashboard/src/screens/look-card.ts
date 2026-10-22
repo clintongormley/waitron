@@ -640,7 +640,7 @@ export class LookCard extends LitElement {
                   slot="secondary"
                   data-test="save-as-new"
                   variant="secondary"
-                  ?disabled=${busy}
+                  ?disabled=${busy || badCode}
                   @click=${() => void this.#save("save-as-new")}
                   >${t("appearance.save_as_new")}</wt-button
                 >`

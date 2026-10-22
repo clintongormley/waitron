@@ -3,7 +3,7 @@ import { afterEach, expect, it } from "vitest";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
-import { setLocale } from "../i18n/t.js";
+import { fill, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./look-card.js";
 
@@ -110,6 +110,9 @@ const states: Record<string, { list: ThemeList; reach: (el: Card) => Promise<str
     reach: async (el) => {
       el.edit({ id: christmas.id });
       await el.updateComplete;
+      expect(q(el, "section.settings-card header > h2")?.textContent?.trim()).toBe(
+        fill("appearance.edit_theme_heading", { name: "Christmas" }),
+      );
       return "[data-test=save-as-new]";
     },
   },
