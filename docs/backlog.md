@@ -3909,10 +3909,9 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   A739's payment window (An amount) and the bill payments design's tips. Not designed.
 
 - **Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
-  the SumUp provider's `resolvePending`) do not both succeed**: #558's review measured
-  `["fulfilled","payment.not_found"]`, so the second pass throws partway instead of skipping the
-  rows the first resolved. The comment at `listAttempting` now says so. Found by #558 while pruning
-  comments.
+  the SumUp provider's `resolvePending`) do not both succeed**: the second pass throws partway
+  instead of skipping the rows the first resolved.
+  [Detail](backlog/payments.md#two-concurrent-passes-over-listattempting-packagespaymentssrcstorets-its-one-caller-is-the-sumup-providers-resolvepending-do-not-both-succeed)
 
 - **Loose ends left by A633.**
   - `packages/payments-stripe`'s `tenant-scoping.test.ts` is named for tenant scoping but guards
@@ -3925,17 +3924,14 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   before any card payment is taken through a Stripe webhook.
   [Detail](backlog/payments.md#the-stripe-webhook-endpoint-still-has-to-be-repointed-by-hand-at-stripe)
 
-- **Lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive.** SumUp's
-  older `refund` call still parses a 2xx or 4xx body as JSON
-  (`packages/payments-sumup/src/sumup-client.ts`, `refund` through `call`), so a 404 answered with
-  an HTML page throws `SyntaxError`. Its one caller is `reverseViaSumUp`; fold it into the neutral
-  reversal primitive. Left open by A632.
+- **Lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive.**
+  SumUp's older `refund` call still parses a 2xx or 4xx body as JSON, so a 404 answered with
+  an HTML page throws `SyntaxError`. Left open by A632.
+  [Detail](backlog/payments.md#lift-reverseviastripe-and-reverseviasumup-into-one-neutral-reversal-primitive)
 
 - **Turn off Stripe's on-reader tip screen, or read the tip back.** Backlog only; SumUp is the
-  go-live provider (owner, 2026-10-21). If tipping is switched on in
-  Stripe's Dashboard, every tipped reader payment would be charged more than Waitron records. **Next
-  action:** pass `process_config[skip_tipping]=true` from `processPaymentIntent`, tested against
-  Stripe's sandbox. Left open by A846.
+  go-live provider (owner, 2026-10-21). Next: pass `process_config[skip_tipping]=true` from
+  `processPaymentIntent`, tested against Stripe's sandbox. Left open by A846.
   [Detail](backlog/payments.md#turn-off-stripes-on-reader-tip-screen-or-read-the-tip-back)
 
 - **The payments check ignores the currency Stripe reports.** `stripeReportClient` never reads
@@ -3946,55 +3942,39 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   held alert comes back at midnight UTC, and smaller choices from the plan, the browser look and the review. Each stays open until the owner
   answers it. [Detail](backlog/payments.md#a846s-points-for-the-owner-at-land-held-card-payments)
 
-- **The reconciler's card reversal records only after the provider call, with a fresh key each time.** **Next
-  action:** give the reconciler's reversal the same durable-attempt rule.
-  Post-invoice returns use the durable `tender_refunds` path (A737 Part 2). The reversal remains
-  open from the service, ordering and billing plan.
+- **The reconciler's card reversal records only after the provider call, with a fresh key each time.**
+  Next: give the reconciler's reversal the same durable-attempt rule. Post-invoice returns use
+  the durable `tender_refunds` path (A737 Part 2).
   [Detail](backlog/payments.md#the-card-refund-path-records-only-after-the-provider-call-with-a-fresh-key-each-time)
 
 - **Loose ends left by B28's review (#1005), not acted on, under service Task 17 (#991).**
-  - The reader pay's `tipOf` (`apps/server/src/till-sale.ts`) treats a `null` tip as no tip,
-    against CLAUDE.md §3's rule that a default applies only when the field is absent; it predates
-    B28, and paying a non-zero bill on the reader is believed to accept it the same way (read, not
-    run). Next: a route case sending `tip: null` to `POST /api/pay`, then decide refuse or accept.
-  - After a free sale settles on the reader, a stale card-attempt mark on the order is left in
-    place; manual Pay is believed to leave it the same way (read, not run).
+  Next: a route case sending `tip: null` to `POST /api/pay`, then decide refuse or accept.
+  A stale card-attempt mark after a free sale also remains unchecked (read, not run).
+  [Detail](backlog/payments.md#loose-ends-left-by-b28s-review-1005-not-acted-on-under-service-task-17-991)
 
 - **A placed order with no invoice is not checked against stored card payments when it is
   cancelled.** Its cancel sees a card running at the reader in this process, but not a stored
-  payment its provider has not resolved, nor one captured and not yet filed; the cancel had no
-  payment check at all before C126. (Its collect, card payment and unpaid departure do check both
-  since A526.) Left open by C126 (cancelling an order whose invoice was issued credits it, #1030).
+  payment its provider has not resolved, nor one captured and not yet filed. Left open by C126.
+  [Detail](backlog/payments.md#a-placed-order-with-no-invoice-is-not-checked-against-stored-card-payments-when-it-is-cancelled)
 
 - **Task 4 (#832, every paper names all of a party's tables).** Not yet checked: the payment API's
   `/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
-  `/management-api/payments/bill-refunds` queries (`apps/server/src/payments-api.ts`), which read
-  the same column. Left open by the table actions plan.
-  [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
+  `/management-api/payments/bill-refunds` queries, which read the same column.
+  [Detail](backlog/payments.md#task-4-832-every-paper-names-all-of-a-partys-tables)
 
-- **A875. Check two writes the bill payments design says a pending card refund refuses.** The
-  design's §8 test 17 lists "a move" among the writes refused `bill.refund_in_progress`, and §5.2
-  lists "transfer". Read, not run (A847's review, #1860): neither moving guests nor moving a bill
-  appears to check for a pending refund, and the test covering test 17 makes no move; a transfer
-  between bills appears to be refused earlier, `bill.payments_received`, because the refunded
-  payment is still on the bill. Next: one route case each during a pending refund, then fix the
-  design's wording, or the code if a move can change what a bill charges (ask the owner first).
+- **A875. Check two writes the bill payments design says a pending card refund refuses.**
+  Next: one route case each during a pending refund, then fix the design's wording, or the code
+  if a move can change what a bill charges (ask the owner first). Read, not run.
+  [Detail](backlog/payments.md#a875-check-two-writes-the-bill-payments-design-says-a-pending-card-refund-refuses)
 
-- **The SumUp Solo experiments** ([runbook](research/2026-09-10-sumup-solo-experiments.md)). Still
-  open: supplied-reference lookup and deduplication, actual webhook headers, signature-card
-  handling, and fresh full/partial-refund observations. **A949, 2026-10-22:** the replacement API key
-  passed account, reader and transaction reads; the Solo reports `OFFLINE`. Affiliate credentials
-  are present but untested in a checkout. Historical payment/refund rows are readable; current
-  refund units still need the live control. Bring the Solo online with the operator and follow
-  [the checklist](research/2026-09-10-sumup-solo-experiments.md#9-a949-authenticated-baseline-2026-10-22).
+- **The SumUp Solo experiments.** Still open: supplied-reference lookup and deduplication, actual
+  webhook headers, signature-card handling, and fresh full/partial-refund observations. Bring the
+  Solo online with the operator and follow the checklist; A949's 2026-10-22 checkpoint is in detail.
   [Detail](backlog/payments.md#the-sumup-solo-experiments)
 
-- **The deli's outage card machine** (the deli hardware design §5). Buy the standalone machine.
-  **A949, owner 2026-10-21:** match manual payments on a second Solo on the same account by amount
-  and time, listing unmatched ones for a manager. Other providers' manual payments are reconciled
-  outside Waitron; the till, day report and accountant exports must identify that path with the
-  operation number and machine. Check cash-only service when no backup machine exists. Replace
-  the design's estimated prices with real quotes.
+- **The deli's outage card machine.** Buy the standalone machine. A949's owner-decided matching,
+  outside-Waitron payments and cash-only cases remain open. Replace the design's estimated
+  prices with real quotes.
   [Detail](backlog/payments.md#the-delis-outage-card-machine)
 
 - **The printer-cradle experiment** (hardware not yet owned). SumUp's OpenAPI has no `print` and no
@@ -4006,11 +3986,9 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   same moment (an accepted race); Stripe's reader list is one page; status never refreshes by
   itself, and polling must go through the passive-session controller.
 
-- **The SumUp reconciler** — settlement-report audit and orphan self-heal. `resolvePending` is the
-  interim backstop; without an affiliate key a create whose response is lost resolves `failed` and
-  raises `payment.pending_outcome_unactionable` for a human.
-  A949 also includes durable reversal attempts (W44) and the owner's backup-machine matching
-  contract. Its experiment checkpoint leaves the live reference and refund-unit questions open.
+- **The SumUp reconciler** — settlement-report audit and orphan self-heal. A949 also includes
+  durable reversal attempts (W44) and the owner's backup-machine matching contract. Its experiment
+  checkpoint leaves the live reference and refund-unit questions open.
   [Detail](backlog/payments.md#the-sumup-reconciler)
 
 - **A SumUp API drift-detection suite** on a Virtual Solo in a sandbox merchant account — would have
@@ -4037,15 +4015,9 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   `apps/server/src/guide/` covers it.
 
 - **The next identical bill payment can be answered with one that got a server error** (narrowed
-  by A796). A payment that got no answer, or is still being sent, now holds the bill on its locked
-  confirmation (A773-1, #1897, and A796). What is left: a first send answered with a 5xx or an
-  error with no code keeps its submission without holding the bill (`unansweredAfter`,
-  `apps/till/src/state/bill-payment.ts`), so if the server did record it, the next
-  identical payment on that bill from this phone reuses its id (`submissionFor`, same
-  file) and the server replays the first (`beginBillPayment`, `apps/server/src/bill-payments.ts`):
-  the second guest's payment is never recorded. A796's plan ran the scratch case (a contribution
-  refused `server.internal` with status 502 left the dialog unlocked) and chose not to hold the
-  bill, because a server that kept failing would hold it for good (plan, decision 1, B5).
+  by A796). What is left: a first send answered with a 5xx or an error with no code keeps its
+  submission without holding the bill, so the second guest's identical payment may be replayed.
+  [Detail](backlog/payments.md#the-next-identical-bill-payment-can-be-answered-with-one-that-got-a-server-error)
 
 - **A796 does not hold a bill across phones while a payment is out.** The hold is the phone's own:
   "no new payment … can be started on that bill from this phone" (A796 design §4, "The phone loses
@@ -4053,23 +4025,17 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   payment on the same bill meanwhile.
 
 - **A payment whose read shows it settled the bill needs one press of Comprobar de nuevo to show
-  the ticket.** A bill read that lists a held payment frees the bill, except when that payment
-  settled it: the locked confirmation stays, and its Comprobar de nuevo replays the payment and
-  shows the ticket (`apps/till/src/till-app-bill-payments.test.ts`, "keeps the locked
-  confirmation when the payment settled the bill, and Comprobar de nuevo shows the ticket").
+  the ticket.** The locked confirmation stays, and its Comprobar de nuevo replays the payment
+  and shows the ticket.
+  [Detail](backlog/payments.md#a-payment-whose-read-shows-it-settled-the-bill-needs-one-press-of-comprobar-de-nuevo-to-show-the-ticket)
 
 - **Check first: on a venue with no fiscal module, replaying a settled bill may throw** (read, not
-  run; found by A796's Task 23 review). `readSettledTicket`, which rebuilds the ticket for a
-  replay, throws when the backend has no filed record (`apps/server/src/till-sale.ts:840-846`),
-  and the no-fiscal backend's `filedReceiptFor` always answers `undefined`
-  (`packages/fiscal-none/src/backend.ts:67`). First run a replay on such a venue to see whether it
-  is reached.
+  run; found by A796's Task 23 review). First run a replay on such a venue to see whether it is reached.
+  [Detail](backlog/payments.md#check-first-on-a-venue-with-no-fiscal-module-replaying-a-settled-bill-may-throw)
 
 - **On a venue with no fiscal module, a handheld shows the ticket view after a presented bill is
-  paid, not the paid screen** (known limit of A796; read, not run). The paid screen shows only for
-  an `F2` result (the `paid` check in `apps/till/src/till-app.ts`), and the presented path takes its invoice
-  type from `readReceiptIssuer`, which returns none when the backend has no filed record
-  (`apps/server/src/receipt-issuer.ts:8-9`).
+  paid, not the paid screen** (known limit of A796; read, not run).
+  [Detail](backlog/payments.md#on-a-venue-with-no-fiscal-module-a-handheld-shows-the-ticket-view-after-a-presented-bill-is-paid-not-the-paid-screen)
 
 - **Loose ends left by W102 (NFC and equipment labels).**
   - **Check NFC pick-up on the box's address.** On the OnePlus 13, grant NFC at
@@ -4089,21 +4055,18 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   BEHIND the `AsyncPaymentProvider` seam and is therefore provider-neutral — building it against the
   Stripe Checkout adapter that already exists forecloses no cheaper provider later.
 
-- **A guest paying from their own phone** (owner idea 2026-09-18, parked — the surface it needs does
-  not exist). The waiter hands a greeted table a QR code standing for its newly opened tab; the
-  diner scans it, reads the menu, orders, watches what has been served and what is still coming, and
-  settles at the end. This is now the payment part of A508; the ordering surface is A508 and A509.
+- **A guest paying from their own phone** (owner idea 2026-09-18, parked; the surface it needs does
+  not exist). This is now the payment part of A508; the ordering surface is A508 and A509.
   [Detail](backlog/payments.md#a-guest-paying-from-their-own-phone)
 
 - **Routing by BILL SIZE is allowed but is the smallest lever** (owner idea 2026-09-18, arithmetic
-  in the research note). The card mix moves the crossover further than the bill size does, and the
-  deli's own mix is a query once it trades, not a research question.
+  in the research note). The card mix moves the crossover further than the bill size does, and
+  the deli's own mix is a query once it trades, not a research question.
   [Detail](backlog/payments.md#routing-by-bill-size-is-allowed-but-is-the-smallest-lever)
 
 - **Some card payments ask the cardholder to sign instead of enter a PIN — open question, nothing
-  built.** Start by reading what the SumUp Solo actually does on a signature-required card (it
-  belongs with the SumUp Solo experiments above), because if the reader owns the whole step there
-  may be nothing for us to build.
+  built.** Start by reading what the SumUp Solo actually does on a signature-required card,
+  because if the reader owns the whole step there may be nothing for us to build.
   [Detail](backlog/payments.md#some-card-payments-ask-the-cardholder-to-sign-instead-of-enter-a-pin--open-question-nothing-built)
 
 - **If demos use multiple tills at once, add a till label to each pending amount so the manager can
@@ -4119,45 +4082,27 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **A793 — tips: who a tip belongs to, how it is shared out, and what payroll gets** — NOT
   APPROVED: the owner (2026-10-18, on Q38): "Leave this for now. Back to the backlog. It needs a
   bigger brainstorm." Next: that brainstorm with the owner, before any build or further question.
-  A first design is kept as input ([design](superpowers/specs/2026-10-18-a793-tips-design.md), pictures in
-  [mockups/a793-tips/](backlog/mockups/a793-tips/), research in
-  [compliance/research/2026-10-18-a793-tips.md](compliance/research/2026-10-18-a793-tips.md)); not
-  built. A shared pot per business day split by hours clocked (kitchen included) or each person
-  keeping their own, chosen on a new Tips tab in Venue settings that also replaces
-  `WAITRON_TILL_TIPS`; cash tips handed out at the day's close (once a close counts the drawer,
-  A239, and the asesor's L6(g) allows it), card tips paid with wages; a Tips page under Team by day
-  and by pay period, frozen when a pay period closes (once the product has a step that closes one).
-  The first design had six build slices (its §7), the first a fix (next entry). Replaces the old "Tip-collection UI" entry: cash and
-  typed-card tips already arrived with bill payments (#956).
+  [Detail](backlog/payments.md#a793--tips-who-a-tip-belongs-to-how-it-is-shared-out-and-what-payroll-gets)
 
-- **A whole-order card payment does not refuse a negative tip** (found by A793's design, read, not
-  run). With tips on, a request that did not come from the till's own form (which refuses it) can
-  carry `tip: "-5.00"`: `POST /api/pay` never checks `tip` (`apps/server/src/till-api.ts:1682-1737`)
-  and `decimal()` accepts it (`packages/shared/src/money.ts:14-25`), so the reader would be asked for
-  the bill less €5.00 and the tender would then fail its `tip_amount >= 0` check after the card was
-  charged.
-  A tip with more than two decimals is not checked either; the bill payment routes refuse both
-  (`apps/server/src/bill-payments-api.ts:32`). Next: a route case sending `tip: "-5.00"`, then refuse
-  it before the reader is asked. A793's slice 1. Full review (money).
+- **A whole-order card payment does not refuse a negative tip** (found by A793's design, read,
+  not run). A tip with more than two decimals is not checked either. Next: a route case sending
+  `tip: "-5.00"`, then refuse it before the reader is asked. A793's slice 1. Full review (money).
+  [Detail](backlog/payments.md#a-whole-order-card-payment-does-not-refuse-a-negative-tip)
 
-- **A whole-order payment records the amount it expected, not the amount captured** (found by A793's
-  design, read). A capture that differs from bill plus till tip is written as bill plus till tip
-  (`apps/server/src/till-sale.ts:1568`, and `:1879` for an order already placed); only the recovery
-  path reads the captured amount and calls the excess a tip. The only cause found is a reader whose
-  own tip screen was switched on outside Waitron; other causes were not checked. Next: compare the captured amount at capture time, as the bill payment loop does
-  (`payment.bill_capture_mismatch`).
+- **A whole-order payment records the amount it expected, not the amount captured** (found by
+  A793's design, read). Next: compare the captured amount at capture time, as the bill payment
+  loop does (`payment.bill_capture_mismatch`).
+  [Detail](backlog/payments.md#a-whole-order-payment-records-the-amount-it-expected-not-the-amount-captured)
 
-- **Three small tip display gaps** (found by A793's design, read): the dashboard's order detail shows
-  a bill payment's applied amount without its tip (`apps/dashboard/src/widgets/order-detail-dialog.ts:398`);
-  the card slip's words are fixed Spanish (`apps/server/src/payment-slip.ts:55-59`); and the Spanish
-  refund slip says "Propina" where the English says "Tip returned"
-  (`apps/server/src/tender-refund-receipt.ts:79-92`).
+- **Three small tip display gaps** (found by A793's design, read): the dashboard's order detail
+  shows a bill payment's applied amount without its tip; the card slip's words are fixed Spanish;
+  and the Spanish refund slip says "Propina" where the English says "Tip returned".
+  [Detail](backlog/payments.md#three-small-tip-display-gaps)
 
-- **A848. Show a clear message when the till pays, sends or moves an empty order.** `#onPayTab`
-  (`apps/till/src/till-app.ts`) shows `sale.error` for any server code it does not name, which
-  hides `sale.empty_basket`. On the till, try paying, sending and moving an empty order; where no
-  clear message shows, add one in English and Spanish. Done when each of the three has been tried
-  and shows a clear message.
+- **A848. Show a clear message when the till pays, sends or moves an empty order.**
+  On the till, try paying, sending and moving an empty order; where no clear message shows,
+  add one in English and Spanish.
+  [Detail](backlog/payments.md#a848-show-a-clear-message-when-the-till-pays-sends-or-moves-an-empty-order)
 
 - **The practice-mode simulator writes no `attempting` row**, so a switch during a practice card
   payment is never refused (read, not run). Left open by W97 (#1311), beside the owner's decision
@@ -4183,16 +4128,14 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   (`apps/server/src/payments-api.ts`). The route restriction is read, not run here. Left open by A526.
 
 - **`finalizeCapture`'s duplicate fallback can show a receipt for an order that is not settled**,
-  while the card's charge stays on no sale (`apps/server/src/till-sale.ts`). Measured before A526 by
-  the plan's reviewer, through an unpaid departure that A526 now refuses; no other way to reach it
-  is known. Left open by A526.
+  while the card's charge stays on no sale. Measured before A526 through an unpaid departure
+  that A526 now refuses; no other way to reach it is known. Left open by A526.
   [Detail](backlog/payments.md#finalizecaptures-duplicate-fallback-can-show-a-receipt-for-an-order-that-is-not-settled)
 
 - **An offline card payment that forwarding moved to `settled` with no sale no longer holds its
-  placed order**: once no card payment of the order runs in this process, a collect is accepted
-  (`ordersWithUnfiledPayment`, `apps/server/src/till-sale.ts`, counts no `settled` row). A526's
-  review measured it with `FakePaymentProvider.forward`; of the adapters, only
-  `StripeOnDeviceProvider`, which no app builds, settles forwarded rows. Left open by A526.
+  placed order**: once no card payment of the order runs in this process, a collect is accepted.
+  Left open by A526.
+  [Detail](backlog/payments.md#an-offline-card-payment-that-forwarding-moved-to-settled-with-no-sale-no-longer-holds-its-placed-order)
 
 ### Users, sign-in and the dashboard shell
 
