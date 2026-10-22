@@ -1772,6 +1772,23 @@ export interface DeviceEquipment {
   roles: RoleEquipment[];
 }
 
+/** One notice for staff, as `GET /api/device/equipment` sends it: worded by the till from `code`. */
+export interface StaffNotice {
+  owner: string;
+  key: string;
+  code: string;
+  severity: "error" | "warning" | "notice";
+  params: Record<string, unknown>;
+}
+
+/** `GET /api/device/equipment` success. The two notice keys are optional: a read without them
+ * has no notices. */
+export interface DeviceEquipmentRead extends DeviceEquipment {
+  notices?: StaffNotice[];
+  /** Owners whose notice check failed on this read. */
+  noticesUnavailable?: string[];
+}
+
 /** `PUT /api/device/equipment`'s body. A `scan`, or a `list` choice sent with `takeOver`, takes an
  * item another device holds; a `list` choice without it is refused `device.equipment_held`. */
 export type EquipmentChange =
@@ -3438,8 +3455,8 @@ export class TillApi {
   }
 
   /** The device's equipment → `GET /api/device/equipment`, as the device the cookie names. */
-  getDeviceEquipment(options: ReadOptions = {}): Promise<DeviceEquipment> {
-    return this.#request<DeviceEquipment>(
+  getDeviceEquipment(options: ReadOptions = {}): Promise<DeviceEquipmentRead> {
+    return this.#request<DeviceEquipmentRead>(
       "/api/device/equipment",
       "GET",
       undefined,
