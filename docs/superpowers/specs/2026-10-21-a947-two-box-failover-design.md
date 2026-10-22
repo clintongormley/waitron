@@ -32,13 +32,20 @@ rewritten, and carries a dated pointer here.
 >   as the second clock, and nobody is asked to type a time there either.
 > - **§11** slices 4a, 4c and 4d name the screens; §13 and the provenance table gain a line each.
 >   Nothing else the owner approved changes.
-> - **After the plan's review, the same day**: each page's what-to-do names only a way that works
->   on that page today (a setup belongs to the browser that started it, so the setup page says
->   "cancel and start again from a phone", and a restore page names a device "that has the
->   backup"); and the approved clock refusal's «…o corrige la que esté mal» ("or correct the one that
->   is wrong") is replaced by the owner's own 03:12 words, «Abre esta página desde otra caja o móvil,
->   o conecta el equipo a internet», because nobody can correct the box's clock (§13). **An FYI to
->   the owner**, not a question. §13 gains a line on a kiosk browser in a container.
+> - **After the plan's review and its claim check, the same day**: each page's what-to-do names
+>   only a way that works on that page today. A setup can be carried on from a phone with the
+>   setup password (the server's recovery path moves the attempt to the new browser — run by the
+>   claim check on a real server), so the setup page says so; a restore page names a device "that
+>   has the backup". The owner's 03:12 example of what to do — "open this page from a phone or a
+>   till, or connect the box to the internet" — is used where it works, on the no-second-clock
+>   wait. The approved clock refusal's «…o corrige la que esté mal» ("or correct the one that is
+>   wrong") asked for a correction nobody can make on the box (§13); it becomes «Prueba desde otro
+>   móvil o caja. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.»,
+>   because neither of the owner's two suggestions clears a disagreement under the 30-second rule
+>   (a wrong phone still disagrees when the internet arrives; a wrong box disagrees with the
+>   internet too). **An FYI to the owner**, not a question: his 03:12 wording was first moved onto
+>   the refusal, and is now back on the wait it was written for. §13 gains a line on browsers that
+>   reach the box through a Docker bridge.
 >
 > **Second revision 2026-10-21 — the owner's answers of about 22:25.** What changed, section by
 > section. (An "installation code" is the short name a box's invoices carry, such as the `0CZZW`
@@ -791,11 +798,13 @@ taken until one of them is put right — and the box cannot tell which one is wr
 - **A spare whose clock has drifted cannot be switched to** — the hard one, mid-service.
 - **A till or phone whose clock has drifted blocks a box whose clock is right**: the switch or the
   restore is refused although the box is fine. So the refusal must not say the box is wrong. It
-  says «La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos). Abre
-  esta página desde otra caja o móvil, o conecta el equipo a internet», with both readings, and a
-  manager can try from another device. (Amended 2026-10-22: the approved «…o corrige la que esté
-  mal» asked for a correction nobody can make on the box — there is no set-the-clock action, §13
-  — so it now gives the owner's own 03:12 words for what to do. An FYI to the owner.)
+  says «La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos). Prueba
+  desde otro móvil o caja. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide
+  ayuda.», with both readings, and a manager can try from another device. (Amended 2026-10-22: the
+  approved «…o corrige la que esté mal» asked for a correction nobody can make on the box — there
+  is no set-the-clock action, §13 — and connecting the box to the internet does not clear a
+  disagreement either: a wrong device still disagrees, and a wrong box disagrees with the internet
+  too. An FYI to the owner.)
 - **The main box's clock drifting goes unseen.** If the main box runs 20 seconds fast and the spare
   31 seconds fast, they differ by 11 seconds, no spare-against-main alert fires, and a switch checked
   against a right till is refused. And a main box out by more than 30 seconds blocks its own
@@ -851,19 +860,18 @@ What to do, by page — each names only a way that works on that page today:
 
 | Page | No second clock: what to do | No second clock: what ends the wait | Clocks differ: what to do |
 | --- | --- | --- | --- |
-| Setup page | «Conecta el equipo a internet, o cancela esta configuración y empiézala de nuevo desde un móvil o un portátil del local.» / "Connect the box to the internet, or cancel this setup and start it again from a phone or laptop on the venue's network." | «Sigue sola cuando el equipo tenga internet, o en el móvil si empiezas allí.» / "It carries on by itself once the box reaches the internet, or on the phone if you start there." | «Cancela esta configuración y empiézala desde otro móvil o portátil, o conecta el equipo a internet.» / "Cancel this setup and start it from another phone or laptop, or connect the box to the internet." |
-| Restore page | «Conecta el equipo a internet, o abre esta página desde un móvil o un portátil del local que tenga la copia.» / "Connect the box to the internet, or open this page on a phone or laptop on the venue's network that has the backup." | «Sigue sola cuando el equipo tenga internet, o en el otro aparato si sigues allí.» / "It carries on by itself once the box reaches the internet, or on the other device if you carry on there." | «Abre esta página desde otro móvil o portátil que tenga la copia, o conecta el equipo a internet.» / "Open this page from another phone or laptop that has the backup, or connect the box to the internet." |
-| Switch dialog and switch page (4c, 4d) | «Cambia desde una caja o un móvil del local, o conecta el equipo a internet.» / "Switch from a till or phone on the venue's network, or connect the box to the internet." | «Sigue sola cuando el equipo tenga internet.» / "It carries on by itself once the box reaches the internet." | «Abre esta página desde otra caja o móvil, o conecta el equipo a internet.» / "Open this page from another till or phone, or connect the box to the internet." (the owner's words, 03:12) |
+| Setup page | «Conecta el equipo a internet, o abre esta página desde un móvil o una caja del local y escribe la contraseña de la configuración.» / "Connect the box to the internet, or open this page on a phone or till on the venue's network and enter the setup password." | «Sigue sola cuando el equipo tenga internet, o en el móvil si sigues allí.» / "It carries on by itself once the box reaches the internet, or on the phone if you carry on there." | «Prueba desde otro móvil o caja. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.» / "Try from another phone or till. If they still differ, the box's time may be wrong: ask for help." |
+| Restore page | «Conecta el equipo a internet, o abre esta página desde un móvil o un portátil del local que tenga la copia.» / "Connect the box to the internet, or open this page on a phone or laptop on the venue's network that has the backup." | «Sigue sola cuando el equipo tenga internet, o en el otro aparato si sigues allí.» / "It carries on by itself once the box reaches the internet, or on the other device if you carry on there." | «Prueba desde otro móvil o portátil que tenga la copia. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.» / "Try from another phone or laptop that has the backup. If they still differ, the box's time may be wrong: ask for help." |
+| Switch dialog and switch page (4c, 4d) | «Cambia desde una caja o un móvil del local, o conecta el equipo a internet.» / "Switch from a till or phone on the venue's network, or connect the box to the internet." | «Sigue sola cuando el equipo tenga internet.» / "It carries on by itself once the box reaches the internet." | «Prueba desde otra caja o móvil. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.» / "Try from another till or phone. If they still differ, the box's time may be wrong: ask for help." |
 
-Why the setup page says "start again": a setup belongs to the browser that started it (its owner
-proof is sent in request headers, `firstFiscalOwner`, `apps/server/src/setup-first-fiscal-api.ts`),
-so a phone cannot carry on a setup begun elsewhere. It can start one afresh once the first is
-abandoned: the claim route checks no device (`setup-first-fiscal-api.ts:330`), and a new claim is
-refused only while another attempt is still open (`assertOtherSetupAllowed`,
-`packages/provisioning/src/first-setup-state.ts:507-516`, which admits an abandoned one) — read
-2026-10-22, not run; slice 4a's plan tests both, and if the setup page offers no way to cancel at
-that step, its texts name only the internet. Why the restore page names "that has the backup": a restore from a
-backup file needs the file on the device doing it.
+Why the setup page says "enter the setup password": a browser with no setup of its own that opens
+the setup page is offered the recovery path (`apps/setup/src/setup-app.ts:1190-1204`), and with the
+owner's setup password the server moves the open attempt to it — the claim check of 2026-10-22 ran
+it on a real `startServer` in preproduction: a second browser with only the password got
+`200 {"sameAttempt":true,"status":"claimed"}`, its clock challenge was served, the first
+browser's was refused `403`, and a wrong password was refused `403` (the control). That run was
+the server's route, not the setup app on a phone. Why the restore page names "that has the
+backup": a restore from a backup file needs the file on the device doing it.
 
 Which screens show it, by slice: **4a** the setup page and the restore page (the fiscal module's
 setup screens, which the setup app shows); **4c** the switch dialog on a till, a handheld or the
@@ -1737,15 +1745,14 @@ the code depends.
   (§6.6, way 3); the manager switches from a till or phone instead.
 - A reference clock (till, phone or internet) more than 15 seconds wrong can still lead to a
   repeated name at a setup or restore (§6.7); the 15-second allowance is a starting value.
-- A phone cannot carry on a first setup begun on the box's own screen: the setup's owner proof
-  lives in the browser that started it (`firstFiscalOwner`,
-  `apps/server/src/setup-first-fiscal-api.ts`, reads it from request headers). So §6.5's setup
-  page tells the person to start again from a phone, not to carry on there; letting a phone take
-  over is B3's setup flow to allow (above).
 - A browser in a container on a Docker bridge network — a kiosk B3 might run — has an address that
   is none of the host's own, so it would count as another device's clock while sharing the box's.
   Slice 4a's rule looks only at the host's own addresses; B3 must not run a kiosk that way, or must
-  extend the rule.
+  extend the rule. The same holds for the server itself run under a bridge network or Docker
+  Desktop (`deploy/compose.yml:21-24`): a browser on that host arrives from the bridge's gateway,
+  which is not one of the container's own addresses, so the host's own screen would count as
+  another device. The box runs with the host's network (`deploy/compose.yml:17`), where the rule
+  holds.
 - Sizing the UPS for two boxes.
 
 ## Provenance
