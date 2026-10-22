@@ -6657,7 +6657,9 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
     snapshot files at all is an owner decision.
 
 - **`node-forge` has a high-severity security alert with no fixed version** — OPEN (Dependabot alert
-  #20, 2026-10-01). Every version up to 1.4.0, the one in the lockfile, accepts some RSA signatures
+  #20, 2026-10-01; rechecked with `gh api repos/clintongormley/waitron/dependabot/alerts/20`
+  on 2026-10-22: still open, no patched version). Every version up to 1.4.0, the one in the lockfile,
+  accepts some RSA signatures
   it should reject when checking them. It is a direct dependency of `packages/server-kit`,
   `apps/server` and `apps/print-agent`. **Next action:** bump it when a fixed version is published,
   and run the certificate suites in those three packages.

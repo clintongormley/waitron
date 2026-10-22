@@ -99,7 +99,7 @@
     "@types/nodemailer": "^8.0.2",
     "@types/pdfkit": "^0.17.6",
     "@types/qrcode": "^1.5.5",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^4.1.12",
     "@waitron/print-agent-app": "workspace:*",
     "@waitron/setup": "workspace:*",
     "@waitron/verifactu": "^0.2.1",
@@ -111,6 +111,6 @@
     "pdfjs-dist": "^6.4.299",
     "tsx": "^4.23.15",
     "typescript": "^7.0.0",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   }
 }

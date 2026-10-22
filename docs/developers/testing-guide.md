@@ -423,6 +423,16 @@ project limit peaked at 4. Configs here depend on the project value winning — 
 **A cap that must apply to every project still belongs on the outer config**, which a project
 setting none of its own falls back to.
 
+**Rechecked 2026-10-22 on Vitest 4.1.12, Node v26.11.1, macOS (A1015).**
+Four scratch test files each recorded its process id before and after a 700 ms wait.
+`node node_modules/vitest/vitest.mjs run --config <fixture>` with outer `maxWorkers: 4`
+and project `maxWorkers: 1` passed all four tests with peak concurrency 1; removing the
+project limit passed all four with peak concurrency 4. Each run recorded four distinct
+worker processes. Reversing the limits (outer 1, project 4) also passed four tests with peak
+concurrency 4; removing that project limit passed four with peak 1. The reversed pair distinguishes
+project precedence from choosing the smaller limit. These checks cover these arrangements, not
+every pool or project shape.
+
 This section came from Vitest 3, where moving `maxForks: 4`
 inside fiscal-verifactu's project in #286 started 17 workers on the local host, observed during a
 Sync migration stall; `ps -axo pid,ppid,etime,pcpu,command` counted them, and #291 moved the limit
@@ -512,6 +522,20 @@ in vitest 4.1.11: the session timer reads `project.vitest.config.browser.connect
 forced-failure probe used the command-line flag and passed, which is how this was found. A change
 that raises the limit belongs in the outer `test.browser` block, and a test of that change needs
 that block's failure as its control.
+
+**Rechecked 2026-10-22 on Vitest 4.1.12, Node v26.11.1, macOS (A1015).**
+A scratch Chromium project containing one DOM test passed with no connection limit override,
+with `--browser.connectTimeout=1`, and with `connectTimeout: 1` in the project's browser block
+(one test in each run). Setting the outer `test.browser.connectTimeout: 1` instead returned
+exit 1, `Tests no tests`, and `Failed to connect to the browser session … within the timeout`.
+Each run used `node node_modules/vitest/vitest.mjs run --config <fixture>`; the outer failure
+is the control for the other placements' passing result.
+
+The command-line result depends on the layout. With the same Chromium test in the top-level
+`test.browser` block, the baseline and `--browser.connectTimeout=60000` each passed one test;
+`--browser.connectTimeout=1` failed twice with the connection-timeout message and no tests.
+The command-line flag is therefore ignored in the measured project layout, and honoured in the
+measured top-level layout. The earlier receipt tested only the project layout.
 
 ## A disposable browser checkout keeps the lockfile's dependency versions
 

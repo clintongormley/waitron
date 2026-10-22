@@ -19,10 +19,10 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^4.1.12",
     "@waitron/print-agent": "workspace:*",
     "opentype.js": "^2.0.0",
     "typescript": "^7.0.0",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   }
 }
