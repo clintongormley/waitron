@@ -47,13 +47,8 @@ export async function readStaffNotices(
       const found = await tx.transaction(async () =>
         Array.from(
           await source.read({ tx, reading: deps.reading }),
-          (notice): OwnedStaffNotice => ({
-            key: notice.key,
-            code: notice.code,
-            severity: notice.severity,
-            params: notice.params,
-            owner,
-          }),
+          // `key` is named so that a null in the answer throws here; the spread keeps later fields.
+          (notice): OwnedStaffNotice => ({ ...notice, key: notice.key, owner }),
         ),
       );
       for (const notice of found) {

@@ -1,7 +1,7 @@
 import type { Transaction } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
 
-/** `error` is shown red, `warning` amber and `notice` blue on the strip of A798 design §4.2. */
+/** `error` is the red, `warning` the amber and `notice` the blue of A798 design §4.2's strip. */
 export type StaffNoticeSeverity = "error" | "warning" | "notice";
 
 /** One notice for the staff on a device that sells. It carries no words: the device is to word

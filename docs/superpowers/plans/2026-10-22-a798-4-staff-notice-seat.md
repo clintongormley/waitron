@@ -34,6 +34,14 @@
 > Critical, 2 Important, 6 Minor) and the claim check (`a798-4-plan-review/claim-check.md`, 0
 > Critical, 1 Important, 9 Minor), every finding applied as the coordinator ruled.
 
+> **After the finish-branch review (2026-10-22)** the shipped code departs from this plan's code
+> blocks in two ways. The reader reads each source's answer inside that source's savepoint
+> (`{ ...notice, key: notice.key, owner }`), so an answer that throws while being read counts as a
+> failed source and keeps none of its writes; and the comments in
+> `packages/module/src/staff-notices.ts`, `packages/module/src/module.ts` and
+> `apps/server/src/modules.ts`, and Task 4's backlog text, were narrowed. The code blocks below show
+> the text before that review.
+
 **Words used in this plan.**
 - A **staff notice** is one line the design shows on every till and handheld (design §4.2, the
   "strip"): a code the till words in its own language files, a severity, and parameters.

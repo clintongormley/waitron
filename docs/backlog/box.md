@@ -693,7 +693,8 @@ the module in `unavailable` on every read; nothing shows it. Once slice 6 runs i
 15-second equipment read, a check that keeps failing logs that line on every read from every
 device, so slice 6 decides what a device shows and whether the line is limited or written only when
 a check starts or stops failing. Slice 6 also decides whether a guard holds every staff-notice code
-to till wording, as `scripts/ongoing-alert-codes.test.ts` does for ongoing alert codes, and whether
+to till wording, as `scripts/ongoing-alert-codes.test.ts` holds ongoing alert codes to the
+dashboard's (reading text in the files it lists), and whether
 `clock.unusable`'s notice shares the till's refusal sentence for that code
 (`apps/till/src/i18n/codes.ts`: "Sale not recorded: the box's clock is wrong. …") or needs words of
 its own.

@@ -22,7 +22,10 @@ each source inside a savepoint so a failed source's writes go with it, but remov
 left every test file that reaches `readOpenAlerts` passing (nine files, 2026-10-22): their failing
 sources fail a query or throw before writing anything, so nothing is left for the savepoint to
 undo. A failing source that writes before it throws would pin it, as
-`apps/server/src/staff-notices.test.ts` does.
+`apps/server/src/staff-notices.test.ts` does. It also reads each source's answer after the
+savepoint closes, so an answer that throws part way keeps the alerts before the bad one beside
+`alert.source_unavailable`, and a `null` becomes `{ kind, area }`; `readStaffNotices` reads its
+answer inside the savepoint.
 
 ## Logging, diagnostics & one-touch bug report (A9; Slice 1 landed #192)
 
