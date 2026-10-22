@@ -99,11 +99,6 @@ async function ready(el: Entry, answer = "no") {
     input.value = value!;
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   }
-  const codes = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
-  await codes.updateComplete;
-  const codeInput = codes.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  codeInput.value = "0CNNW";
-  codeInput.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   check(el, "recovery-old-box-stopped");
   check(el, "recovery-sole-operation");
   check(el, `taxpayer-hour-${answer}`);
@@ -155,8 +150,7 @@ it("decodes the printed key and sends independent recovery declarations before s
   );
   expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
     action: "select",
-    answer: "no",
-    installationCodes: ["0CNNW"],
+    comparisonId: "comparison",
   });
   expect(el.shadowRoot!.textContent).toContain("0CSQW");
   expect(el.shadowRoot!.textContent).not.toContain("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
@@ -206,7 +200,7 @@ it("requires a fresh explicit confirmation for disagreeing readings", async () =
   await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
   expect(prepare.mock.calls.slice(-2).map(([r]) => r.proposal)).toEqual([
     { action: "confirm-clock", comparisonId: "different-reading" },
-    { action: "select", answer: "no", installationCodes: ["0CNNW"] },
+    { action: "select", comparisonId: "different-reading" },
   ]);
   button(el, "compare").click();
   await vi.waitFor(() =>
@@ -222,36 +216,30 @@ it("requires a fresh explicit confirmation for disagreeing readings", async () =
   ).toBe(false);
   expect(el.readCredentials()).toBeNull();
 });
-it.each(["yes", "unknown"])(
-  "keeps the server's %s wait and only sends the selected answer",
-  async (answer) => {
-    const prepare = vi.fn(async (request: { proposal: unknown }) => {
-      const action = (request.proposal as { action: string }).action;
-      if (action === "clock-challenge") return { id: "challenge" };
-      if (action === "compare-clocks") return { id: "comparison", clock };
-      return {
-        status: "waiting",
-        targetMs: Date.parse("2026-10-18T13:00:00Z"),
-        remainingMs: 1_800_000,
-        requiresClockConfirmation: false,
-      };
-    });
-    const { el } = await mount(prepare);
-    await ready(el, answer);
-    await compare(el);
-    button(el, "select").click();
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.textContent).toContain("2026-10-18T13:00:00.000Z"),
-    );
-    expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
-      action: "select",
-      answer,
-      installationCodes: ["0CNNW"],
-    });
-    expect(el.readCredentials()).toBeNull();
-    expect(button(el, "compare").disabled).toBe(false);
-  },
-);
+it.each(["yes", "unknown"])("keeps the server's wait after the %s answer", async (answer) => {
+  const prepare = vi.fn(async (request: { proposal: unknown }) => {
+    const action = (request.proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") return { id: "comparison", clock };
+    return {
+      status: "waiting",
+      targetMs: Date.parse("2026-10-18T13:00:00Z"),
+      remainingMs: 1_800_000,
+      requiresClockConfirmation: false,
+    };
+  });
+  const { el } = await mount(prepare);
+  await ready(el, answer);
+  await compare(el);
+  button(el, "select").click();
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("2026-10-18T13:00:00.000Z"));
+  expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
+    action: "select",
+    comparisonId: "comparison",
+  });
+  expect(el.readCredentials()).toBeNull();
+  expect(button(el, "compare").disabled).toBe(false);
+});
 it.each(["key", "answer", "isolation", "clear", "disconnect"])(
   "invalidates the selected input after %s changes",
   async (fault) => {
@@ -333,8 +321,7 @@ it("ignores a selected response after the sole-recovery declaration changes", as
   await vi.waitFor(() =>
     expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
       action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
+      comparisonId: "comparison",
     }),
   );
   check(el, "recovery-sole-operation", false);
@@ -413,8 +400,7 @@ it("drops a late selected answer after the matching printed key changes", async 
   await vi.waitFor(() =>
     expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
       action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
+      comparisonId: "comparison",
     }),
   );
   const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
@@ -595,80 +581,6 @@ it("manual confirmation never enables an ambiguous box-hour interval", async () 
   expect(button(el, "select").disabled).toBe(true);
 });
 
-it("requires the one code from the sheet and sends its normalised value to the hour selector", async () => {
-  const { el, prepare } = await mount();
-  await ready(el);
-  const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]');
-  expect(field, "public code field from the recovery sheet").not.toBeNull();
-  await field!.updateComplete;
-  const input = field!.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  input.value = "0cnnw";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  await el.updateComplete;
-  await compare(el);
-  button(el, "select").click();
-  await vi.waitFor(() =>
-    expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
-      action: "select",
-      answer: "no",
-      installationCodes: ["0CNNW"],
-    }),
-  );
-  expect(input.isConnected, "the edited control stays mounted").toBe(true);
-  expect(
-    field!.shadowRoot!.querySelector("input"),
-    "the native control survives the selection render",
-  ).toBe(input);
-  await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
-  input.value = "0CNRC";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  await el.updateComplete;
-  expect(el.readCredentials()).toBeNull();
-  expect(button(el, "select").disabled).toBe(true);
-});
-
-it("does not expose a selected result after its reported code was edited during the request", async () => {
-  let release!: (value: unknown) => void;
-  const prepare = vi.fn(async (request: { proposal: unknown }) => {
-    const action = (request.proposal as { action: string }).action;
-    if (action === "clock-challenge") return { id: "challenge" };
-    if (action === "compare-clocks") return { id: "comparison", clock };
-    return new Promise((resolve) => {
-      release = resolve;
-    });
-  });
-  const { el } = await mount(prepare);
-  await ready(el);
-  await compare(el);
-  button(el, "select").click();
-  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
-  const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
-  await field.updateComplete;
-  const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  input.value = "0CNPG";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  release(selected);
-  await el.updateComplete;
-  await Promise.resolve();
-  expect(el.readCredentials()).toBeNull();
-  expect(el.shadowRoot!.textContent).not.toContain("0CSQW");
-});
-it("marks a missing code beside its native field and keeps selection disabled", async () => {
-  const { el } = await mount();
-  await ready(el);
-  const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
-  await field.updateComplete;
-  const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  input.value = "";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  expect(el.readCredentials()).toBeNull();
-  await el.updateComplete;
-  await field.updateComplete;
-  expect(input.getAttribute("aria-invalid")).toBe("true");
-  expect(field.shadowRoot!.textContent).toContain("four-character code");
-  expect(button(el, "select").disabled).toBe(true);
-});
-
 it("explains a reported-hour clash and allows another comparison", async () => {
   const prepare = vi.fn(async (request: { proposal: unknown }) => {
     const action = (request.proposal as { action: string }).action;
@@ -689,31 +601,19 @@ it("explains a reported-hour clash and allows another comparison", async () => {
   expect(button(el, "compare").disabled).toBe(false);
 });
 
-it("opens the installation code field without a validation refusal", async () => {
-  const { el } = await mount();
-  const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
-  await field.updateComplete;
-  expect(field.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("false");
-  expect(field.shadowRoot!.querySelector("[data-error]")).toBeNull();
-});
-
-it("refuses a list of installation codes in the single-code field", async () => {
+it("sends no installation code", async () => {
   const { el, prepare } = await mount();
   await ready(el);
   await compare(el);
-  const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
-  await field.updateComplete;
-  const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  expect(button(el, "compare").disabled).toBe(false);
-  input.value = "0CNNW, 0CNPG";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  await el.updateComplete;
-  expect(button(el, "compare").disabled).toBe(true);
-  expect(button(el, "select").disabled).toBe(true);
-  expect(el.readCredentials()).toBeNull();
-  expect(
-    prepare.mock.calls.every(
-      ([request]) => (request.proposal as { action: string }).action !== "select",
-    ),
-  ).toBe(true);
+  button(el, "select").click();
+  await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
+  expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
+    action: "select",
+    comparisonId: "comparison",
+  });
+});
+
+it("has no installation-code field", async () => {
+  const { el } = await mount();
+  expect(el.shadowRoot!.querySelector('[name="recovery-installation-codes"]')).toBeNull();
 });

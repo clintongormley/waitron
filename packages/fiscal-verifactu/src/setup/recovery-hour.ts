@@ -6,23 +6,19 @@ import type {
   SetupContribution,
 } from "@waitron/module/src/setup-contract.js";
 import type { HourClockDecision } from "../hour-clock.js";
-import { reportedHourCodes } from "../reported-hour-codes.js";
 import "./recovery-key.js";
-import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 
 type Context = Parameters<NonNullable<SetupContribution["createRecovery"]>>[0];
 type Answer = "no" | "yes" | "unknown";
 interface Draft {
-  installationCodes: string;
   answer?: Answer;
   oldBoxGone: boolean;
   soleRecovery: boolean;
   confirmed: boolean;
 }
 const empty = (): Draft => ({
-  installationCodes: "",
   oldBoxGone: false,
   soleRecovery: false,
   confirmed: false,
@@ -117,7 +113,6 @@ export class RecoveryHourEntry extends LitElement {
         current: () => this.draft,
         snapshot: (value) => ({ ...value }),
         equal: (a, b) =>
-          a.installationCodes === b.installationCodes &&
           a.answer === b.answer &&
           a.oldBoxGone === b.oldBoxGone &&
           a.soleRecovery === b.soleRecovery &&
@@ -178,18 +173,10 @@ export class RecoveryHourEntry extends LitElement {
       }),
     );
   }
-  #codes(): string[] | undefined {
-    try {
-      return reportedHourCodes([this.draft.installationCodes]);
-    } catch {
-      return undefined;
-    }
-  }
   #credentials(): ModuleRecoveryCredentials | null {
     if (
       this.busy ||
       !this.#secret ||
-      !this.#codes() ||
       !this.draft.oldBoxGone ||
       !this.draft.soleRecovery ||
       this.result?.status !== "selected"
@@ -216,9 +203,7 @@ export class RecoveryHourEntry extends LitElement {
     return credentials;
   }
   get #canCompare(): boolean {
-    return Boolean(
-      this.#secret && this.#codes() && this.draft.oldBoxGone && this.draft.soleRecovery,
-    );
+    return Boolean(this.#secret && this.draft.oldBoxGone && this.draft.soleRecovery);
   }
   get #canSelect(): boolean {
     const clock = this.comparison?.clock;
@@ -287,11 +272,7 @@ export class RecoveryHourEntry extends LitElement {
       } else {
         if (this.comparison!.clock.requiresConfirmation)
           await call({ action: "confirm-clock", comparisonId: this.comparison!.id });
-        const selected = await call({
-          action: "select",
-          answer: this.draft.answer,
-          installationCodes: this.#codes(),
-        });
+        const selected = await call({ action: "select", comparisonId: this.comparison!.id });
         if (!record(selected)) throw new Error("invalid selection");
         if (selected.status === "selected") {
           const selectedBinding = selected.binding;
@@ -334,9 +315,6 @@ export class RecoveryHourEntry extends LitElement {
     const words = en
       ? {
           heading: "Recover this box",
-          codes: "Installation code",
-          codesHint: "Code on your recovery sheet",
-          codesInvalid: "Enter the four-character code from your recovery sheet.",
           stopped: "The old box is stopped and will stay offline.",
           sole: "I am the only person recovering this taxpayer, across all venues.",
           question: "Has this taxpayer started setup or recovery during this UTC hour? *",
@@ -368,9 +346,6 @@ export class RecoveryHourEntry extends LitElement {
         }
       : {
           heading: "Recuperar esta caja",
-          codes: "Código de instalación",
-          codesHint: "Código de tu hoja de recuperación",
-          codesInvalid: "Introduce el código de cuatro caracteres de tu hoja de recuperación.",
           stopped: "La caja anterior está apagada y seguirá desconectada.",
           sole: "Soy la única persona recuperando este contribuyente, en todos sus locales.",
           question:
@@ -423,18 +398,6 @@ export class RecoveryHourEntry extends LitElement {
           this.#notify();
         }}
       ></vf-recovery-key>
-      <wt-input
-        name="recovery-installation-codes"
-        required
-        label=${words.codes}
-        placeholder=${words.codesHint}
-        .value=${this.draft.installationCodes}
-        .error=${this.attempted && !this.#codes() ? words.codesInvalid : ""}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          this.#edit({ installationCodes: event.detail.value });
-        }}
-      ></wt-input>
       <label
         ><input
           type="checkbox"
