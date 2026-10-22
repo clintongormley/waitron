@@ -193,8 +193,19 @@ export class LookCard extends LitElement {
         gap: var(--wt-space-4);
         min-width: 0;
       }
-      wt-form-actions {
+      .buttons {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: var(--wt-space-2);
         margin-top: var(--wt-space-4);
+      }
+      .buttons > wt-form-actions {
+        flex: 1 1 auto;
+        width: auto;
+      }
+      .buttons > wt-form-actions.with-message {
+        flex-basis: 100%;
       }
       @container (min-width: 900px) {
         .editor {
@@ -556,6 +567,7 @@ export class LookCard extends LitElement {
     const name = this.#name(editing);
     const badCode = this.submitted && codeInvalid(draft);
     const codeError = badCode ? t("appearance.bad_code") : this.refusedCode;
+    const message = codeError ? t("form.fix_fields") : this.actionError;
     const saveAction = saveActionState(this.#scope);
     const busy = this.submitting;
     return html`<p class="editing-line" data-test="editing-line">
@@ -624,44 +636,45 @@ export class LookCard extends LitElement {
           <dashboard-theme-preview .theme=${this.#derived!} .name=${name}></dashboard-theme-preview>
         </div>
         ${this.#fixAllLine(busy)}
-        <wt-form-actions .error=${codeError ? t("form.fix_fields") : this.actionError}>
+        <div class="buttons">
           <wt-button
-            slot="cancel"
             data-test="use-waitron"
             variant="secondary"
             ?disabled=${busy || isWaitronLook(draft)}
             @click=${() => this.#change(() => waitronLook(), true)}
             >${t("appearance.use_waitron")}</wt-button
           >
-          ${
-            editing.id === null
-              ? nothing
-              : html`<wt-button
-                  slot="secondary"
-                  data-test="save-as-new"
-                  variant="secondary"
-                  ?disabled=${busy || badCode}
-                  @click=${() => void this.#save("save-as-new")}
-                  >${t("appearance.save_as_new")}</wt-button
-                >`
-          }
-          <wt-button
-            slot="secondary"
-            data-test="cancel"
-            variant="secondary"
-            ?disabled=${busy}
-            @click=${() => this.#requestCancel()}
-            >${t("action.cancel")}</wt-button
-          >
-          <wt-button
-            data-test="save"
-            variant=${saveAction.variant}
-            ?loading=${busy}
-            ?disabled=${saveAction.unchanged || busy || badCode}
-            @click=${() => void this.#save("save")}
-            >${t("action.save")}</wt-button
-          >
-        </wt-form-actions>
+          <wt-form-actions class=${message ? "with-message" : ""} .error=${message}>
+            ${
+              editing.id === null
+                ? nothing
+                : html`<wt-button
+                    slot="secondary"
+                    data-test="save-as-new"
+                    variant="secondary"
+                    ?disabled=${busy || badCode}
+                    @click=${() => void this.#save("save-as-new")}
+                    >${t("appearance.save_as_new")}</wt-button
+                  >`
+            }
+            <wt-button
+              slot="secondary"
+              data-test="cancel"
+              variant="secondary"
+              ?disabled=${busy}
+              @click=${() => this.#requestCancel()}
+              >${t("action.cancel")}</wt-button
+            >
+            <wt-button
+              data-test="save"
+              variant=${saveAction.variant}
+              ?loading=${busy}
+              ?disabled=${saveAction.unchanged || busy || badCode}
+              @click=${() => void this.#save("save")}
+              >${t("action.save")}</wt-button
+            >
+          </wt-form-actions>
+        </div>
       </form>
       ${this.#dialog(draft)}`;
   }

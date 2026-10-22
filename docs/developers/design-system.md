@@ -4040,9 +4040,14 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   otherwise; this follows the words' real widths, so it needs no width per language. The form's
   buttons sit `--wt-space-4` below whatever comes before them: the preview in one column, the
   taller of the two columns side by side, or the Fix all line when it shows.
-- **The editor's buttons follow the design's mock-up 02**: Use Waitron's look in the `cancel` slot
-  at the start, then Cancel as `secondary`, then Save. This departs from the rule that Cancel takes
-  the `cancel` slot.
+- **The editor's buttons follow the design's mock-ups 02 and 03**: Use Waitron's look at the start,
+  then Save as new theme… and Cancel as `secondary`, then Save. Use Waitron's look sits outside
+  the `wt-form-actions`, beside it in one wrapping row, so on a narrow card it takes a line of its
+  own above the others and no button breaks its label. In English, Save as new theme… and Cancel
+  share the next line from a 358 px card, as mock-up 03 draws; in the 310 px card of a 390 px
+  window they need 264 px of the 260 it gives, so Cancel joins Save on the last line. The row
+  takes the full width while it shows a message, as the Add printer dialog's address check does
+  (Forms, above). This departs from the rule that Cancel takes the `cancel` slot.
 - **The preview's Light and Dark panels are painted from the draft inside the card and nowhere
   else** (`apps/dashboard/src/widgets/theme-preview.ts`). Each panel is a theme root inside the
   preview's shadow root, painted by a constructed sheet adopted into that shadow root only. The draft

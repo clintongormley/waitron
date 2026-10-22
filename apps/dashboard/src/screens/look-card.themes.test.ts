@@ -739,3 +739,69 @@ describe("Save as new theme…", () => {
     await expect.poll(() => isEditing(el)).toBe(false);
   });
 });
+
+describe("the editor's buttons at phone and desk widths", () => {
+  const BUTTONS = ["use-waitron", "save-as-new", "cancel", "save"] as const;
+  const box = (el: Card, name: string) => button(el, name).getBoundingClientRect();
+  /** The distinct line tops of a button's label. */
+  const labelLines = (el: Card, name: string) => {
+    const range = document.createRange();
+    range.selectNodeContents(button(el, name));
+    return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+  };
+
+  async function editor(window: number, cardWidth: number, locale: "en-GB" | "es-ES") {
+    await page.viewport(window, 900);
+    setLocale(locale);
+    const { el } = await mount(luciaInUse);
+    el.edit({ id: "t-lucia" });
+    await el.updateComplete;
+    el.parentElement!.style.width = `${cardWidth}px`;
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    return el;
+  }
+
+  afterEach(async () => {
+    await page.viewport(1280, 800);
+  });
+
+  for (const locale of ["en-GB", "es-ES"] as const) {
+    it(`no button breaks its label and Use Waitron's look has a row of its own in a 310px card (${locale})`, async () => {
+      const el = await editor(390, 310, locale);
+      for (const name of BUTTONS) expect(labelLines(el, name), name).toBe(1);
+      const card = q(el, "section.settings-card")!.getBoundingClientRect();
+      for (const name of BUTTONS) expect(box(el, name).right, name).toBeLessThanOrEqual(card.right);
+      const waitron = box(el, "use-waitron");
+      for (const name of ["save-as-new", "cancel", "save"]) {
+        expect(box(el, name).top, name).toBeGreaterThanOrEqual(waitron.bottom);
+      }
+      expect(box(el, "save").top).toBeGreaterThanOrEqual(box(el, "save-as-new").bottom);
+    });
+
+    it(`all four buttons share one row in a 1000px card (${locale})`, async () => {
+      const el = await editor(1280, 1000, locale);
+      const top = box(el, "save").top;
+      for (const name of BUTTONS) expect(box(el, name).top, name).toBeCloseTo(top, 0);
+      expect(box(el, "use-waitron").left).toBeLessThan(box(el, "save-as-new").left);
+    });
+  }
+
+  it("in a 358px card the rows are picture 03's: Use Waitron's look, then Save as new theme… and Cancel, then Save", async () => {
+    const el = await editor(440, 358, "en-GB");
+    for (const name of BUTTONS) expect(labelLines(el, name), name).toBe(1);
+    expect(box(el, "save-as-new").top).toBeGreaterThanOrEqual(box(el, "use-waitron").bottom);
+    expect(box(el, "save-as-new").top).toBeCloseTo(box(el, "cancel").top, 0);
+    expect(box(el, "save").top).toBeGreaterThanOrEqual(box(el, "cancel").bottom);
+  });
+
+  it("with a message the button row takes the card's full width", async () => {
+    const el = await editor(1280, 1000, "en-GB");
+    await typeInCode(el, "#12");
+    await userEvent.click(button(el, "save"));
+    await settle(el);
+    const actions = q(el, "wt-form-actions")!.getBoundingClientRect();
+    const row = q(el, ".buttons")!.getBoundingClientRect();
+    expect(actions.width).toBeCloseTo(row.width, 0);
+    expect(actions.top).toBeGreaterThanOrEqual(box(el, "use-waitron").bottom);
+  });
+});
