@@ -113,6 +113,12 @@ export interface AdjustmentEntry {
   approvedBy: PersonRef | null;
   creditedTo: PersonRef | null;
   byGuest: boolean;
+  /** A cancel that left the dish on the bill, still charged. */
+  chargeKept: boolean;
+  /** Whether the kitchen had started the dish when it was cancelled; null when nobody knew. */
+  preparationStarted: boolean | null;
+  /** The refunds linked to this cancel, oldest first; a failed refund is left out. */
+  refunded: { amount: Decimal; state: "pending" | "completed" }[];
   workingOrderId: string;
   orderNumber: number;
 }
@@ -286,6 +292,7 @@ async function readReportRows(tx: Transaction, window: SQL) {
       approvedBy: adjustments.approvedBy,
       creditedTo: adjustments.creditedTo,
       byGuest: adjustments.byGuest,
+      chargeKept: adjustments.chargeKept,
     })
     .from(adjustments)
     .innerJoin(workingOrders, eq(workingOrders.id, adjustments.workingOrderId))
@@ -322,6 +329,8 @@ async function readEntryRows(tx: Transaction, where: SQL, limit: number) {
       approvedBy: adjustments.approvedBy,
       creditedTo: adjustments.creditedTo,
       byGuest: adjustments.byGuest,
+      chargeKept: adjustments.chargeKept,
+      preparationStarted: adjustments.preparationStarted,
       workingOrderId: adjustments.workingOrderId,
       orderNumber: workingOrders.orderNumber,
     })
@@ -339,6 +348,32 @@ async function readEntryRows(tx: Transaction, where: SQL, limit: number) {
     reduction: centsToDecimal(row.reduction),
     nominalValue: centsToDecimal(row.nominalValue),
   }));
+}
+
+/** The pending and completed refunds linked to each of `ids`, oldest first, in one read. */
+async function refundsOf(
+  tx: Transaction,
+  ids: readonly string[],
+): Promise<Map<string, AdjustmentEntry["refunded"]>> {
+  const byEntry = new Map<string, AdjustmentEntry["refunded"]>();
+  if (ids.length === 0) return byEntry;
+  const found = await tx.execute<{
+    adjustmentId: string;
+    amount: string;
+    state: "pending" | "completed";
+  }>(sql`
+    select l.adjustment_id as adjustmentId, cast(l.amount as text) as amount, r.state
+    from adjustment_refunds l
+    join tender_refunds r on r.id = l.tender_refund_id
+    where l.adjustment_id in (select value from json_each(${JSON.stringify(ids)}))
+      and r.state in ('pending', 'completed')
+    order by l.created_at, l.id`);
+  for (const row of found.rows) {
+    const list = byEntry.get(row.adjustmentId) ?? [];
+    list.push({ amount: rawCentsToDecimal(row.amount), state: row.state });
+    byEntry.set(row.adjustmentId, list);
+  }
+  return byEntry;
 }
 
 async function namesOf(tx: Transaction, ids: Set<string>): Promise<Map<string, string>> {
@@ -385,7 +420,8 @@ interface PersonAccumulator extends Accumulator {
  * The adjustments on the bills opened in the range, overall, per requesting person and for guests,
  * with each person's rate against the sales credited to them (plan D21): the lines credited to
  * them at their prices before any adjustment, and the list value of each cancellation whose line
- * was credited to them, since a cancelled line has left the bill. Who issued the invoice plays no
+ * was credited to them, since a cancelled line has left the bill; a cancel that kept the charge
+ * left its line on the bill, so it adds nothing. Who issued the invoice plays no
  * part, and neither do invoices or their voids.
  */
 export async function computeAdjustmentReport(
@@ -420,7 +456,7 @@ export async function computeAdjustmentReport(
   for (const row of rows) {
     reasonNames.set(row.reasonId, row.newestReasonName);
     tallyRow(overall, row);
-    if (row.action === "cancel") credit(row.creditedTo, row.nominalValue);
+    if (row.action === "cancel" && !row.chargeKept) credit(row.creditedTo, row.nominalValue);
     if (row.byGuest) {
       tallyRow(guests, row);
     } else {
@@ -514,9 +550,14 @@ export async function listAdjustmentEntries(
     if (row.creditedTo !== null) ids.add(row.creditedTo);
   }
   const names = await namesOf(tx, ids);
+  const refunds = await refundsOf(
+    tx,
+    rows.map((row) => row.id),
+  );
   const ref = (personId: string): PersonRef => ({ personId, name: names.get(personId) ?? null });
   const entries = rows.map((row) => ({
     ...row,
+    refunded: refunds.get(row.id) ?? [],
     requestedBy: ref(row.requestedBy),
     approvedBy: row.approvedBy === null ? null : ref(row.approvedBy),
     creditedTo: row.creditedTo === null ? null : ref(row.creditedTo),

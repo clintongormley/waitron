@@ -22,6 +22,7 @@ import {
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { policySnapshotOf, type AdjustmentAction, type AdjustmentReason } from "./policy.js";
 import { recordAdjustment } from "./record.js";
+import { linkRefundToCancels } from "./refund-links.js";
 import {
   computeAdjustmentReport,
   listAdjustmentEntries,
@@ -30,6 +31,11 @@ import {
   type EntryCursor,
 } from "./reports.js";
 import type { AdjustmentStage } from "./schema/adjustments.js";
+import { seedVenue } from "@waitron/reporting/test/fixtures.js";
+import {
+  seedRefundableSale,
+  seedTenderRefund,
+} from "@waitron/reporting/test/tender-refund-fixtures.js";
 import { seedReason } from "../test/seed.js";
 
 const suite = useVenueDb({
@@ -139,6 +145,8 @@ interface Ask {
   approvedBy?: string;
   note?: string;
   byGuest?: boolean;
+  chargeKept?: boolean;
+  preparationStarted?: boolean | null;
   /** When the row is written, which is its `created_at`. */
   at: string;
 }
@@ -178,6 +186,8 @@ async function adjust(ask: Ask): Promise<string> {
         approvedBy: ask.approvedBy ?? null,
         note: ask.note ?? null,
         byGuest: ask.byGuest ?? false,
+        chargeKept: ask.chargeKept ?? false,
+        preparationStarted: ask.preparationStarted ?? null,
       }),
     );
   } finally {
@@ -532,6 +542,9 @@ describe("the fixture day (spec §7)", () => {
         approvedBy: null,
         creditedTo: { personId: day.alex, name: "Alex" },
         byGuest: false,
+        chargeKept: false,
+        preparationStarted: null,
+        refunded: [],
         workingOrderId: day.alexBill.id,
         orderNumber: day.alexBill.orderNumber,
       },
@@ -598,6 +611,165 @@ describe("credit versus actor (plan D21)", () => {
       ratePercent: "83.3",
     });
     expect(read.overall).toMatchObject({ sales: "67.00", ratePercent: "37.3" });
+  });
+});
+
+describe("a cancel that still charges the guest (plan Decision 8)", () => {
+  /** Ana's €12.00 dish, cancelled; a still-charged cancel leaves its line on the bill. */
+  async function cancelled(opts: { chargeKept: boolean; comped?: boolean }) {
+    const ana = await person("Ana");
+    const reason = await seedReason(db);
+    const visit = await bill();
+    const unit = opts.comped === true ? "0.00" : "12.00";
+    if (opts.chargeKept) {
+      await line(visit.id, { name: "Burger", unit, list: "12.00", creditedTo: ana });
+    }
+    const dish = { name: "Burger", list: "12.00", creditedTo: ana, stage: "fired" as const };
+    if (opts.comped === true) {
+      await adjust({
+        bill: visit.id,
+        reason,
+        reasonName: "Cold food",
+        action: "comp",
+        line: dish,
+        before: "12.00",
+        after: "0.00",
+        nominal: "12.00",
+        by: ana,
+        at: "2026-09-15T18:30:00.000Z",
+      });
+    }
+    const cancelId = await adjust({
+      bill: visit.id,
+      reason,
+      reasonName: "Mistake",
+      action: "cancel",
+      line: dish,
+      before: unit,
+      after: opts.chargeKept ? unit : "0.00",
+      nominal: "12.00",
+      by: ana,
+      chargeKept: opts.chargeKept,
+      preparationStarted: false,
+      at: "2026-09-15T19:00:00.000Z",
+    });
+    return { ana, cancelId };
+  }
+
+  it("credits a still-charged cancel's dish once to the person's sales", async () => {
+    const { ana, cancelId } = await cancelled({ chargeKept: true });
+
+    const read = await report();
+
+    expect(personRow(read, ana).sales).toBe("12.00");
+    expect(read.overall.sales).toBe("12.00");
+    expect((await entries()).find((row) => row.id === cancelId)).toMatchObject({
+      chargeKept: true,
+    });
+  });
+
+  it("still credits a cancel that does not charge, whose line has left the bill, at the dish's value", async () => {
+    const { ana, cancelId } = await cancelled({ chargeKept: false });
+
+    const read = await report();
+
+    expect(personRow(read, ana).sales).toBe("12.00");
+    expect((await entries()).find((row) => row.id === cancelId)).toMatchObject({
+      chargeKept: false,
+    });
+  });
+
+  it("marks a still-charged cancel of a dish comped to €0.00 as charged, and credits nothing more", async () => {
+    const { ana, cancelId } = await cancelled({ chargeKept: true, comped: true });
+
+    const read = await report();
+
+    expect(personRow(read, ana).sales).toBe("12.00");
+    expect((await entries()).find((row) => row.id === cancelId)).toMatchObject({
+      chargeKept: true,
+      reduction: "0.00",
+    });
+  });
+
+  it("marks a cancel that does not charge, of a dish comped to €0.00, as not charged", async () => {
+    const { ana, cancelId } = await cancelled({ chargeKept: false, comped: true });
+
+    const read = await report();
+
+    expect(personRow(read, ana).sales).toBe("12.00");
+    expect((await entries()).find((row) => row.id === cancelId)).toMatchObject({
+      chargeKept: false,
+    });
+  });
+});
+
+describe("each cancel's charge, preparation and refunds (plan Decision 7)", () => {
+  it("lists each cancel's charge, preparation and refunds", async () => {
+    const ana = await person("Ana");
+    const reason = await seedReason(db);
+    const visit = await bill();
+    const venue = await seedVenue(db);
+    const cancelOf = (name: string, preparationStarted: boolean | null, at: string) =>
+      adjust({
+        bill: visit.id,
+        reason,
+        reasonName: "Mistake",
+        action: "cancel",
+        line: { name, list: "10.00", creditedTo: ana, stage: "fired" },
+        before: "10.00",
+        after: "10.00",
+        nominal: "10.00",
+        by: ana,
+        chargeKept: true,
+        preparationStarted,
+        at,
+      });
+    const completed = await cancelOf("Steak", true, "2026-09-15T19:00:00.000Z");
+    const pending = await cancelOf("Paella", false, "2026-09-15T19:10:00.000Z");
+    const failed = await cancelOf("Soup", null, "2026-09-15T19:20:00.000Z");
+    const unlinked = await cancelOf("Bread", true, "2026-09-15T19:30:00.000Z");
+    let invoiceNumber = 0;
+    const refundIn = async (state: "pending" | "completed" | "failed") => {
+      invoiceNumber += 1;
+      const sale = await seedRefundableSale(db, venue, {
+        method: "cash",
+        applied: "20.00",
+        tip: "0.00",
+        at: EVENING,
+        invoiceNumber,
+      });
+      return seedTenderRefund(db, sale, {
+        applied: "5.50",
+        tip: "0.00",
+        state,
+        createdAt: EVENING,
+        at: state === "pending" ? null : EVENING,
+      });
+    };
+    const link = (tenderRefundId: string, adjustmentId: string, amount: string) =>
+      withTransaction(db, (tx) =>
+        linkRefundToCancels(tx, {
+          tenderRefundId,
+          links: [{ adjustmentId, amount: decimal(amount) }],
+        }),
+      );
+    await link(await refundIn("completed"), completed, "5.50");
+    await link(await refundIn("pending"), pending, "2.00");
+    await link(await refundIn("failed"), failed, "3.00");
+
+    const byId = new Map((await entries()).map((row) => [row.id, row]));
+
+    expect(byId.get(completed)).toMatchObject({
+      chargeKept: true,
+      preparationStarted: true,
+      refunded: [{ amount: "5.50", state: "completed" }],
+    });
+    expect(byId.get(pending)).toMatchObject({
+      preparationStarted: false,
+      refunded: [{ amount: "2.00", state: "pending" }],
+    });
+    expect(byId.get(failed)).toMatchObject({ preparationStarted: null, refunded: [] });
+    expect(byId.get(unlinked)).toMatchObject({ refunded: [] });
   });
 });
 
