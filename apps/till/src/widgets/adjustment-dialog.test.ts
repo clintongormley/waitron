@@ -209,7 +209,7 @@ describe("till-adjustment-dialog: the form", () => {
 
     setLocale("es-ES");
     expect(hint(await mount({ kind: "discount", target: ham }))).toBe(
-      "Parte de un artículo que se vende al peso o por medida no se puede invitar ni descontar. Haz un descuento sobre la línea entera",
+      codeMessage("adjustment.weighed_partial", "es"),
     );
   });
 
@@ -220,15 +220,15 @@ describe("till-adjustment-dialog: the form", () => {
         "wt-dialog",
       )!.heading;
 
-    expect(await heading("comp", olives)).toBe("Give an extra away");
+    expect(await heading("comp", olives)).toBe("Comp an extra");
     expect(await heading("discount", olives)).toBe("Discount an extra");
     expect(await heading("cancel", olives)).toBe("Cancel an extra");
-    expect(await heading("comp", burger)).toBe("Give an item away");
+    expect(await heading("comp", burger)).toBe("Comp an item");
     expect(await heading("discount", burger)).toBe("Discount an item");
     expect(await heading("cancel", burger)).toBe("Cancel an item");
 
     setLocale("es-ES");
-    expect(await heading("comp", olives)).toBe("Invitar un extra");
+    expect(await heading("comp", olives)).toBe(t("adjust.comp_extra_title"));
     expect(await heading("discount", olives)).toBe("Descuento en un extra");
     expect(await heading("cancel", olives)).toBe("Cancelar un extra");
   });

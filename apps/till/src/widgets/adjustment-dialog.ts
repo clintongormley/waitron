@@ -37,7 +37,7 @@ export interface AdjustTarget {
   unitTotal: string | null;
   extras?: AdjustTarget[];
   started?: boolean;
-  /** Sold by weight, which the server refuses to give away or discount in part. */
+  /** Sold by weight, which the server refuses to comp in part. */
   weighed?: boolean;
   /** An extra of a dish, adjusted on its own. */
   extra?: boolean;

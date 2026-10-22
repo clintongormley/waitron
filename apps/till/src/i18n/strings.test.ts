@@ -227,3 +227,42 @@ describe("a service step's Done", () => {
     expect(es["floor.step_done"]).toBe(es["make_now.dismiss"]);
   });
 });
+
+describe("the till's comp words follow the Comp window's (design D10)", () => {
+  // Weaker than its name: it reads only the keys starting comp. or adjust., and table.discount_bill,
+  // of the catalogue in strings.ts, so a till string inviting someone to an account is not refused;
+  // codes.ts's messages are pinned in codes.test.ts.
+  const compKeys = (strings: Record<string, string>) =>
+    Object.entries(strings).filter(
+      ([key]) =>
+        key.startsWith("comp.") || key.startsWith("adjust.") || key === "table.discount_bill",
+    );
+
+  it.each([
+    ["en", en],
+    ["es", es],
+  ])("titles a comp with the Comp window's word (%s)", (_, strings) => {
+    const word = strings["comp.title"].replace(/…$/, "");
+    expect(strings["adjust.comp_title"].startsWith(word)).toBe(true);
+    expect(strings["adjust.comp_extra_title"].startsWith(word)).toBe(true);
+  });
+
+  it.each([
+    ["en", en],
+    ["es", es],
+  ])("names a free comp with the Free choice's word (%s)", (_, strings) => {
+    const free = strings["comp.free"].toLowerCase();
+    expect(strings["comp.make_free"].toLowerCase()).toContain(free);
+    expect(strings["adjust.do_comp"].toLowerCase()).toContain(free);
+  });
+
+  it("has no Spanish comp string that says invitar", () => {
+    expect(compKeys(es).filter(([, text]) => /invit/i.test(text))).toEqual([]);
+  });
+
+  it("has no English comp string that says give … away", () => {
+    expect(compKeys(en).filter(([, text]) => /\bgiv(e|en|ing)\b[^.]*\baway\b/i.test(text))).toEqual(
+      [],
+    );
+  });
+});

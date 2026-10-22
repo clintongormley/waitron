@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import type { AdjustmentChoice, AdjustTarget, TillAdjustmentDialog } from "./adjustment-dialog.js";
 import type { AdjustmentReason } from "../api/client.js";
 import "./adjustment-dialog.js";
@@ -291,6 +291,22 @@ it("labels both preview and confirmation with the actual covered quantity", asyn
   await el.updateComplete;
   expect(q(el, "[data-adjust-confirm]").textContent!.trim()).toBe("Make 2 free");
   expect(q(el, "[data-quantity-shown]").textContent!.trim()).toBe("How many: 2 of 3");
+});
+
+it("asks for approval when the server needs a PIN", async () => {
+  const el = await mount();
+  const seen = captures(el);
+  await click(el, 'input[name="reason"][value="Free"]');
+  await click(el, "[data-adjust-continue]");
+  el.choice = seen[0]!;
+  el.preview = {
+    reduction: "36.00",
+    nominalValue: "36.00",
+    needsApproval: { by: "reason", roles: ["manager", "admin"] },
+    lines: [],
+  };
+  await el.updateComplete;
+  expect(q(el, "[data-adjust-confirm]").textContent!.trim()).toBe(t("adjust.ask_approval"));
 });
 
 it("confirms the same choice when its object keys are in a different order", async () => {
