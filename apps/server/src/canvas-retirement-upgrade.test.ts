@@ -85,6 +85,7 @@ import {
   openVenueDatabase,
   type Database,
 } from "@waitron/db";
+import { ADJUSTMENTS_MIGRATIONS } from "@waitron/adjustments";
 import { deviceProfileAdmissionPersons, deviceProfileAdmissionRoles } from "@waitron/identity";
 import { cardReaders, deviceProfileCardReaders } from "@waitron/payments";
 import * as service from "@waitron/venue-service";
@@ -482,7 +483,7 @@ it("records the no-holder admission-rule loss and retains every other surviving 
     expect(before!.device_profile_admission_roles).toHaveLength(1);
     expect(actual.device_profile_admission_roles).toEqual([]);
     const journals: Record<string, unknown[]> = {};
-    for (const set of [CORE_MIGRATIONS, service.VENUE_SERVICE_MIGRATIONS]) {
+    for (const set of [CORE_MIGRATIONS, service.VENUE_SERVICE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS]) {
       const journal = set.migrationsTable;
       const oldJournal = before![journal]! as { created_at: number }[];
       const oldTimes = new Set(oldJournal.map((row) => row.created_at));
@@ -511,6 +512,7 @@ it("records the no-holder admission-rule loss and retains every other surviving 
       bill_edit_states: [],
       ticket_item_allergies: [],
       custom_themes: [],
+      adjustment_refunds: [],
     };
     delete retained.canvases;
     delete retained.table_service_statuses;
