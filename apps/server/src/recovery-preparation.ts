@@ -410,8 +410,8 @@ export function createSetupRecoveryPreparation(
   const interactive = createInteractiveRecoveryPreparation(options);
   const stagedDir = join(options.stagingDir, STAGED_RECOVERY_DIR);
   let staged: StagedCopy | undefined;
-  // Ids a later upload replaced, so their page stops rather than uploading again; any other id
-  // the box does not hold was lost to a restart, the unused hour or a discard.
+  // Ids a later upload replaced in this process, the last 64 of them, so their page stops rather
+  // than uploading again; any other id the box does not hold is answered as missing.
   const replaced = new Set<string>();
   let expiry: NodeJS.Timeout | undefined;
   const release = async (entry: StagedCopy) => {

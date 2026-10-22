@@ -15,7 +15,8 @@ authenticate the selected backup; its short typing check is not authentication.
 
 The box checks the backup once, when it is uploaded, and keeps that checked copy for the clock
 steps that follow. If a newer restore page uploads the backup again and it passes its check, that
-copy replaces the first, and the older page stops working: open restores in one page only
+copy replaces the first, and the older page stops working until the box restarts (after a
+restart, each open page uploads again once and the later upload holds the copy): open restores in one page only
 (`apps/server/src/hour-recovery-staged.test.ts`, "lets the newest restore event's checked upload
 replace the copy"). If the box restarts while the page is open, or the copy goes unused for an
 hour, the page's next clock step uploads the backup again by itself under the same restore

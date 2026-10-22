@@ -41,7 +41,8 @@ rewritten, and carries a dated pointer here.
 > 3. **A restore checks its backup once, and the newest page wins.** The page uploads the backup
 >    once (`POST /setup-api/recovery/stage`) and the clock requests that follow carry only the
 >    staged copy's id. A newer restore page's upload that passes its check replaces the staged copy,
->    and the older page's id is then refused. An id the box no longer holds — after a restart, an
+>    and the older page's id is then refused until the server restarts (it remembers the last 64
+>    replaced ids). An id the box no longer holds — after a restart, an
 >    unused hour or a discard — is answered `restore.staged_copy_missing` instead, and the page
 >    uploads again under the same restore event. A reloaded restore page starts a new 90-to-150-second
 >    wait, because the setup app makes a new restore event id each time it builds the page

@@ -89,7 +89,7 @@ export class SetupRecoveryCopy extends LitElement {
       } catch (cause) {
         if ((cause as ApiError | undefined)?.code !== "restore.staged_copy_missing" || attempt > 0)
           throw cause;
-        // The box restarted or let the copy expire; nothing is left there to discard.
+        // The box no longer holds the copy; nothing is left there to discard.
         if (this.#staged === staged) this.#staged = undefined;
       }
     }
