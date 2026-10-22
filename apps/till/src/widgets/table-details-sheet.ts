@@ -1,7 +1,7 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, renderFloorChips } from "@waitron/ui";
-import { decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
+import { decimal, formatMoney, isZeroDecimal, type ServiceStepDue } from "@waitron/shared";
 import type { TableState, UnsentDraft } from "../api/client.js";
 import { countText, currentLocale, named, t } from "../i18n/t.js";
 import { readyText } from "../state/floor-look.js";
@@ -65,7 +65,7 @@ const ACTION_LABELS = {
  * offers today's changes for the table: each sends `today-action` `{ action, tableId }`, then
  * `details-close`, except Rotate, which leaves it open to be pressed again. With `canMarkSteps`, the
  * party's due step is drawn whole with Done, which sends `service-step-done`
- * `{ partyId, stepId, tableId }`, then `details-close`.
+ * `{ partyId, stepId, dueAt, tableId }`, then `details-close`.
  */
 @customElement("till-table-details-sheet")
 export class TillTableDetailsSheet extends LitElement {
@@ -148,8 +148,9 @@ export class TillTableDetailsSheet extends LitElement {
     this.#emit("details-close");
   }
 
-  #stepDone(table: TableState, partyId: string, stepId: string): void {
-    this.#emit("service-step-done", { partyId, stepId, tableId: table.id });
+  #stepDone(table: TableState, partyId: string, step: ServiceStepDue): void {
+    const { stepId, dueAt } = step;
+    this.#emit("service-step-done", { partyId, stepId, dueAt, tableId: table.id });
     this.#emit("details-close");
   }
 
@@ -252,7 +253,7 @@ export class TillTableDetailsSheet extends LitElement {
         step === null
           ? nothing
           : html`<div class="step">
-              ${stepChip(step, { onDone: () => this.#stepDone(table, party!.id, step.stepId) })}
+              ${stepChip(step, { onDone: () => this.#stepDone(table, party!.id, step) })}
             </div>`
       }
       ${chips.length === 0 ? nothing : html`<div class="chips">${renderFloorChips(chips)}</div>`}

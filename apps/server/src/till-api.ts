@@ -1101,6 +1101,13 @@ function requireStepParam(stepId: string): string {
   return stepId.toLowerCase();
 }
 
+/** When the till showed a step as due, as the floor read sent it, in milliseconds. */
+function requireShownDueAt(value: unknown): number {
+  const at = typeof value === "string" ? Date.parse(value) : Number.NaN;
+  if (!Number.isFinite(at) || new Date(at).toISOString() !== value) throw invalid("dueAt");
+  return at;
+}
+
 /** A save's draft: null for the operator's new one, else a UUID. */
 function requireDraftId(value: unknown): string | null {
   if (value === null) return null;
@@ -2952,6 +2959,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const partyId = requirePartyParam(c.req.param("id"));
       const stepId = requireStepParam(c.req.param("stepId"));
+      const dueAt = requireShownDueAt(asObject(await readRawJsonBody<unknown>(c)).dueAt);
       const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
         return markServiceStepDone(tx, {
@@ -2959,6 +2967,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           deviceProfileId: session.device.deviceProfileId,
           partyId,
           stepId,
+          dueAt,
           personId: session.personId,
           nowMs: Date.now(),
         });

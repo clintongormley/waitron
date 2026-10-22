@@ -10,9 +10,11 @@ import "./errors.js";
 
 /**
  * Records Done for a live step and for every live step of its department due no later, the ones
- * it was hiding, at one time. A Done that would change nothing writes nothing, so a second tap is
- * harmless. Tables of one department share their steps, so one table's list names each once. The
- * table the step was found on is held to the profile's zones, as the party is by the route.
+ * it was hiding, at one time. `dueAt` is when the till showed the step as due, and binds the Done
+ * to that occurrence: a Done for an occurrence already cleared, or that would change nothing,
+ * writes nothing, so a second tap, or a second till's, is harmless. Tables of one department
+ * share their steps, so one table's list names each once. The table the step was found on is held
+ * to the profile's zones, as the party is by the route.
  */
 export async function markServiceStepDone(
   tx: Transaction,
@@ -21,11 +23,12 @@ export async function markServiceStepDone(
     deviceProfileId: string;
     partyId: string;
     stepId: string;
+    dueAt: number;
     personId: string;
     nowMs: number;
   },
 ): Promise<{ cleared: string[] }> {
-  const { cfg, deviceProfileId, partyId, stepId, personId, nowMs } = args;
+  const { cfg, deviceProfileId, partyId, stepId, dueAt, personId, nowMs } = args;
   const [party] = await tx
     .select({ state: parties.state, openedAt: parties.openedAt })
     .from(parties)
@@ -44,7 +47,7 @@ export async function markServiceStepDone(
   if (found === undefined) throw new AppError("service_step.not_found", { stepId });
   const [tableId, table] = found;
   await assertSubjectZones(tx, cfg, deviceProfileId, [{ tableId }]);
-  const cleared = stepsClearedByDone(table.rules, table.facts, stepId, nowMs);
+  const cleared = stepsClearedByDone(table.rules, table.facts, { stepId, dueAt }, nowMs);
   if (cleared.length === 0) return { cleared: [] };
   const doneAt = new Date(nowMs).toISOString();
   await recordStepCompletions(

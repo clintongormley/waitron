@@ -91,20 +91,40 @@ export function liveSteps(rules: readonly StepRule[], facts: StepFacts, nowMs: n
 }
 
 /**
- * What a Done on `stepId` at `nowMs` records: nothing when the step is not live or a Done now would
- * leave it as it is (a second tap on a repeat already done), else the step and every live step due
- * no later that a Done now would clear, the ones it was hiding.
+ * Whether the occurrence of `rule` due at `dueAt` has already been cleared: by an order sent once
+ * it was due, or by the step's own Done. A repeat of a step every N minutes comes after the
+ * order it counts from, and a Done clears the repeat showing when it was tapped, or the first.
+ */
+function occurrenceCleared(rule: StepRule, facts: StepFacts, dueAt: number): boolean {
+  const done = facts.doneAt.get(rule.id);
+  const last = facts.lastOrderAt;
+  if (rule.start !== "since_last_order") {
+    if (last !== null && last > dueAt) return true;
+    return done !== undefined && done > dueAt - rule.minutes * MINUTE_MS;
+  }
+  if (last === null || dueAt <= last) return true;
+  const every = rule.minutes * MINUTE_MS;
+  return done !== undefined && done > last && repeatShownAt(last, every, done) >= dueAt;
+}
+
+/**
+ * What a Done arriving at `nowMs` records for the occurrence of `shown.stepId` the till showed as
+ * due at `shown.dueAt`: nothing when that occurrence is already cleared, the step is not live, or
+ * a Done now would leave it as it is (a second tap on a repeat already done), else the step and
+ * every live step due no later that a Done now would clear, the ones it was hiding.
  */
 export function stepsClearedByDone(
   rules: readonly StepRule[],
   facts: StepFacts,
-  stepId: string,
+  shown: { stepId: string; dueAt: number },
   nowMs: number,
 ): string[] {
-  const live = liveSteps(rules, facts, nowMs);
-  const shown = live.find((step) => step.stepId === stepId);
-  if (shown === undefined) return [];
   const byId = new Map(rules.map((rule) => [rule.id, rule]));
+  const tapped = byId.get(shown.stepId);
+  if (tapped === undefined || occurrenceCleared(tapped, facts, shown.dueAt)) return [];
+  const live = liveSteps(rules, facts, nowMs);
+  const current = live.find((step) => step.stepId === shown.stepId);
+  if (current === undefined) return [];
   // Only a `since_last_order` step's trigger moves with its own Done; any other is cleared by a
   // Done later than its trigger.
   const clears = (step: LiveStep): boolean => {
@@ -120,9 +140,9 @@ export function stepsClearedByDone(
     );
     return next !== step.triggeredAt;
   };
-  if (!clears(shown)) return [];
+  if (!clears(current)) return [];
   return live
-    .filter((step) => step.dueAt <= shown.dueAt && clears(step))
+    .filter((step) => step.dueAt <= current.dueAt && clears(step))
     .map((step) => step.stepId);
 }
 

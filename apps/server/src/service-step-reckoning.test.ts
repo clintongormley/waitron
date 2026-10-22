@@ -240,18 +240,32 @@ describe("liveSteps", () => {
 
 describe("stepsClearedByDone", () => {
   const ordered = { firstOrderAt: at("21:00"), lastOrderAt: at("22:00") };
+  /** The occurrence a till showed: the step, due at `due`. */
+  const shown = (stepId: string, due: string) => ({ stepId, dueAt: at(due) });
 
   it("a Done on a repeat not yet due clears it, and a second Done for the same repeat clears nothing", () => {
     const rules = [rule("Drinks?", "since_last_order", 20)];
-    expect(stepsClearedByDone(rules, facts(ordered), "Drinks?", at("22:19"))).toEqual(["Drinks?"]);
+    expect(
+      stepsClearedByDone(rules, facts(ordered), shown("Drinks?", "22:20"), at("22:19")),
+    ).toEqual(["Drinks?"]);
     const doneAt = new Map([["Drinks?", at("22:19")]]);
     for (const now of ["22:19", "22:39"]) {
-      expect(stepsClearedByDone(rules, facts({ ...ordered, doneAt }), "Drinks?", at(now))).toEqual(
-        [],
-      );
+      expect(
+        stepsClearedByDone(
+          rules,
+          facts({ ...ordered, doneAt }),
+          shown("Drinks?", "22:20"),
+          at(now),
+        ),
+      ).toEqual([]);
     }
     expect(
-      stepsClearedByDone(rules, facts({ ...ordered, doneAt }), "Drinks?", at("22:40")),
+      stepsClearedByDone(
+        rules,
+        facts({ ...ordered, doneAt }),
+        shown("Drinks?", "22:40"),
+        at("22:40"),
+      ),
     ).toEqual(["Drinks?"]);
   });
 
@@ -268,13 +282,56 @@ describe("stepsClearedByDone", () => {
       "Drinks?",
       "Coffee?",
     ]);
-    expect(stepsClearedByDone(rules, served, "Coffee?", at("22:39"))).toEqual(["Check", "Coffee?"]);
+    expect(stepsClearedByDone(rules, served, shown("Coffee?", "22:41"), at("22:39"))).toEqual([
+      "Check",
+      "Coffee?",
+    ]);
+  });
+
+  it("a repeated Done for a repeat already done clears nothing once the next repeat shows", () => {
+    const rules = [rule("Drinks?", "since_last_order", 20)];
+    const doneAt = new Map([["Drinks?", at("22:39")]]);
+    const done = facts({ ...ordered, doneAt });
+    expect(liveSteps(rules, done, at("22:41"))).toEqual([live("Drinks?", "22:40", "22:40")]);
+    expect(stepsClearedByDone(rules, done, shown("Drinks?", "22:20"), at("22:41"))).toEqual([]);
+  });
+
+  it("a Done for a repeat a later order replaced clears nothing", () => {
+    const rules = [rule("Drinks?", "since_last_order", 20)];
+    const reordered = facts({ ...ordered, lastOrderAt: at("22:30") });
+    expect(stepsClearedByDone(rules, reordered, shown("Drinks?", "22:20"), at("22:31"))).toEqual(
+      [],
+    );
+  });
+
+  it("a Done for a step since started again clears nothing", () => {
+    const rules = [rule("Dessert?", "course_served", 10, "mains")];
+    const again = facts({
+      firstOrderAt: at("21:00"),
+      lastOrderAt: at("21:00"),
+      courseServedAt: new Map([["mains", at("21:50")]]),
+      doneAt: new Map([["Dessert?", at("21:45")]]),
+    });
+    expect(liveSteps(rules, again, at("21:51"))).toEqual([live("Dessert?", "21:50", "22:00")]);
+    expect(stepsClearedByDone(rules, again, shown("Dessert?", "21:42"), at("21:51"))).toEqual([]);
+    expect(stepsClearedByDone(rules, again, shown("Dessert?", "22:00"), at("21:51"))).toEqual([
+      "Dessert?",
+    ]);
+  });
+
+  it("a Done for a repeat a later repeat has taken over from clears the one showing", () => {
+    const rules = [rule("Drinks?", "since_last_order", 20)];
+    expect(
+      stepsClearedByDone(rules, facts(ordered), shown("Drinks?", "22:20"), at("22:45")),
+    ).toEqual(["Drinks?"]);
   });
 
   it("a step that is not live clears nothing", () => {
     const rules = [rule("Set up", "seated", 0)];
     const doneAt = new Map([["Set up", at("20:31")]]);
-    expect(stepsClearedByDone(rules, facts({ doneAt }), "Set up", at("20:32"))).toEqual([]);
+    expect(
+      stepsClearedByDone(rules, facts({ doneAt }), shown("Set up", "20:30"), at("20:32")),
+    ).toEqual([]);
   });
 });
 

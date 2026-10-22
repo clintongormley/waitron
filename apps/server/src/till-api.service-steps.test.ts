@@ -22,6 +22,8 @@ let personId: string;
 let token: string;
 let partyId: string;
 let stepId: string;
+/** When the till showed the step as due: a seated step with no minutes is due at the seating. */
+let dueAt: string;
 
 beforeEach(async () => {
   await seedTenant(suite.db);
@@ -64,6 +66,7 @@ beforeEach(async () => {
   )) as [string];
   const [party] = await suite.db.insert(parties).values({ openedBy: personId }).returning();
   partyId = party!.id;
+  dueAt = new Date(Date.parse(party!.openedAt)).toISOString();
   await suite.db.insert(partyTables).values({ partyId, tableId: table.id });
 });
 
@@ -96,10 +99,18 @@ function app() {
   return hono;
 }
 
-function done(party: string, step: string, cookie = true) {
+function done(
+  party: string,
+  step: string,
+  { cookie = true, body = { dueAt } as unknown }: { cookie?: boolean; body?: unknown } = {},
+) {
   return app().request(`/api/parties/${party}/service-steps/${step}/done`, {
     method: "POST",
-    headers: cookie ? { cookie: `${SESSION_COOKIE}=${token}` } : {},
+    headers: {
+      "content-type": "application/json",
+      ...(cookie ? { cookie: `${SESSION_COOKIE}=${token}` } : {}),
+    },
+    body: JSON.stringify(body),
   });
 }
 
@@ -141,6 +152,34 @@ describe("POST /api/parties/:id/service-steps/:stepId/done", () => {
     expect(await completions()).toHaveLength(1);
   });
 
+  it("refuses a Done that does not say when the step it shows was due", async () => {
+    for (const body of [
+      {},
+      { dueAt: null },
+      { dueAt: 5 },
+      { dueAt: "soon" },
+      { dueAt: "2026-10-22" },
+    ]) {
+      await expectRefusal(
+        await done(partyId, stepId, { body }),
+        400,
+        "management.request_invalid",
+        {
+          field: "dueAt",
+        },
+      );
+    }
+    await expectRefusal(
+      await done(partyId, stepId, { body: [] }),
+      400,
+      "management.request_invalid",
+      {
+        field: "body",
+      },
+    );
+    expect(await completions()).toEqual([]);
+  });
+
   it("finds a step named in upper case", async () => {
     const res = await done(partyId, stepId.toUpperCase());
 
@@ -170,7 +209,12 @@ describe("POST /api/parties/:id/service-steps/:stepId/done", () => {
   });
 
   it("refuses a request with no session", async () => {
-    await expectRefusal(await done(partyId, stepId, false), 401, "session.required", {});
+    await expectRefusal(
+      await done(partyId, stepId, { cookie: false }),
+      401,
+      "session.required",
+      {},
+    );
     expect(await completions()).toEqual([]);
   });
 });

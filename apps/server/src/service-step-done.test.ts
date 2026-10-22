@@ -39,6 +39,24 @@ const seated = (name: string, minutes = 0) =>
   ({ name, start: "seated", courseId: null, minutes }) as const;
 
 async function liveAt(v: PartyVenue, partyId: string, tableId: string, nowMs = NOW) {
+  return (await liveStepsAt(v, partyId, tableId, nowMs)).map((step) => step.stepId);
+}
+
+/** The table's live steps with when each is due, minutes after `from`. */
+async function dueMinutesAt(
+  v: PartyVenue,
+  partyId: string,
+  tableId: string,
+  nowMs: number,
+  from: number,
+) {
+  return (await liveStepsAt(v, partyId, tableId, nowMs)).map((step) => ({
+    stepId: step.stepId,
+    dueMinutes: (step.dueAt - from) / MINUTE,
+  }));
+}
+
+async function liveStepsAt(v: PartyVenue, partyId: string, tableId: string, nowMs: number) {
   return inTx(v, async (tx) => {
     const [party] = await tx
       .select({ openedAt: parties.openedAt })
@@ -53,7 +71,7 @@ async function liveAt(v: PartyVenue, partyId: string, tableId: string, nowMs = N
       [{ partyId, openedAt: party!.openedAt, tableIds: tables.map((row) => row.tableId) }],
       nowMs,
     );
-    return steps.get(tableId)!.live.map((step) => step.stepId);
+    return steps.get(tableId)!.live;
   });
 }
 
@@ -69,10 +87,12 @@ async function profile(v: PartyVenue): Promise<string> {
   return row!.id;
 }
 
+/** A till's Done on the step it shows as due at `dueAt`, arriving at `nowMs`. */
 async function done(
   v: PartyVenue,
   partyId: string,
   stepId: string,
+  dueAt: number,
   nowMs = NOW,
   deviceProfileId?: string,
 ) {
@@ -83,6 +103,7 @@ async function done(
       deviceProfileId: profileId,
       partyId,
       stepId,
+      dueAt,
       personId: OPERATOR,
       nowMs,
     }),
@@ -138,7 +159,7 @@ describe("markServiceStepDone", () => {
     const { tableId, partyId } = await seatedAtMesa1(v);
     expect(await liveAt(v, partyId, tableId)).toEqual([setUp]);
 
-    expect(await done(v, partyId, setUp!)).toEqual({ cleared: [setUp] });
+    expect(await done(v, partyId, setUp!, OPENED_MS)).toEqual({ cleared: [setUp] });
 
     expect(await completions(v, partyId)).toEqual([
       { partyId, stepId: setUp, doneAt: new Date(NOW).toISOString(), doneBy: OPERATOR },
@@ -150,9 +171,9 @@ describe("markServiceStepDone", () => {
     const v = await setupPartyVenue(suite.db);
     const [setUp] = await setSteps(v, await departmentOf(v, v.tables.zoneId), [seated("Set up")]);
     const { partyId } = await seatedAtMesa1(v);
-    await done(v, partyId, setUp!);
+    await done(v, partyId, setUp!, OPENED_MS);
 
-    expect(await done(v, partyId, setUp!, NOW + MINUTE)).toEqual({ cleared: [] });
+    expect(await done(v, partyId, setUp!, OPENED_MS, NOW + MINUTE)).toEqual({ cleared: [] });
 
     expect(await completions(v, partyId)).toHaveLength(1);
   });
@@ -166,8 +187,11 @@ describe("markServiceStepDone", () => {
     await orderForParty(v, partyId, ["Caña"]);
     const ordered = await lastOrderAt(v, partyId);
 
-    expect(await done(v, partyId, drinks!, ordered + 19 * MINUTE)).toEqual({ cleared: [drinks] });
-    expect(await done(v, partyId, drinks!, ordered + 19 * MINUTE + 30_000)).toEqual({
+    const firstRepeat = ordered + 20 * MINUTE;
+    expect(await done(v, partyId, drinks!, firstRepeat, ordered + 19 * MINUTE)).toEqual({
+      cleared: [drinks],
+    });
+    expect(await done(v, partyId, drinks!, firstRepeat, ordered + 19 * MINUTE + 30_000)).toEqual({
       cleared: [],
     });
 
@@ -180,6 +204,47 @@ describe("markServiceStepDone", () => {
       },
     ]);
     expect(await liveAt(v, partyId, tableId, ordered + 40 * MINUTE)).toEqual([drinks]);
+  });
+
+  it("a repeat of a Done on an every-N-minutes repeat that has since passed leaves the next repeat to show", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const [drinks] = await setSteps(v, await departmentOf(v, v.tables.zoneId), [
+      { name: "Drinks?", start: "since_last_order", courseId: null, minutes: 20 },
+    ]);
+    const { tableId, partyId } = await seatedAtMesa1(v);
+    await orderForParty(v, partyId, ["Caña"]);
+    const ordered = await lastOrderAt(v, partyId);
+    const shown = ordered + 20 * MINUTE;
+
+    expect(await done(v, partyId, drinks!, shown, ordered + 40 * MINUTE - 100)).toEqual({
+      cleared: [drinks],
+    });
+    expect(await done(v, partyId, drinks!, shown, ordered + 40 * MINUTE + 100)).toEqual({
+      cleared: [],
+    });
+
+    expect(await completions(v, partyId)).toHaveLength(1);
+    expect(await dueMinutesAt(v, partyId, tableId, ordered + 40 * MINUTE + 100, ordered)).toEqual([
+      { stepId: drinks, dueMinutes: 40 },
+    ]);
+  });
+
+  it("a Done on an every-N-minutes repeat a later repeat has taken over from clears the one showing", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const [drinks] = await setSteps(v, await departmentOf(v, v.tables.zoneId), [
+      { name: "Drinks?", start: "since_last_order", courseId: null, minutes: 20 },
+    ]);
+    const { tableId, partyId } = await seatedAtMesa1(v);
+    await orderForParty(v, partyId, ["Caña"]);
+    const ordered = await lastOrderAt(v, partyId);
+
+    expect(await done(v, partyId, drinks!, ordered + 20 * MINUTE, ordered + 45 * MINUTE)).toEqual({
+      cleared: [drinks],
+    });
+
+    expect(await dueMinutesAt(v, partyId, tableId, ordered + 46 * MINUTE, ordered)).toEqual([
+      { stepId: drinks, dueMinutes: 60 },
+    ]);
   });
 
   it("Done also records the due steps the shown one was hiding, so their followers start", async () => {
@@ -198,7 +263,9 @@ describe("markServiceStepDone", () => {
     const at = OPENED_MS + 7 * MINUTE;
     expect(await liveAt(v, partyId, tableId, at)).toEqual([setUp, water, coffee]);
 
-    expect(await done(v, partyId, water!, at)).toEqual({ cleared: [setUp, water] });
+    expect(await done(v, partyId, water!, OPENED_MS + 5 * MINUTE, at)).toEqual({
+      cleared: [setUp, water],
+    });
 
     expect((await completions(v, partyId)).map((row) => row.stepId).sort()).toEqual(
       [setUp, water].sort(),
@@ -213,7 +280,9 @@ describe("markServiceStepDone", () => {
     ]);
     const { tableId, partyId } = await seatedAtMesa1(v);
 
-    expect(await done(v, partyId, water!, OPENED_MS + MINUTE)).toEqual({ cleared: [water] });
+    expect(await done(v, partyId, water!, OPENED_MS + 5 * MINUTE, OPENED_MS + MINUTE)).toEqual({
+      cleared: [water],
+    });
 
     expect(await liveAt(v, partyId, tableId, OPENED_MS + 10 * MINUTE)).toEqual([]);
   });
@@ -224,7 +293,7 @@ describe("markServiceStepDone", () => {
     const { partyId } = await seatedAtMesa1(v);
     await join(v, partyId, await v.table("Mesa 2"));
 
-    expect(await done(v, partyId, setUp!)).toEqual({ cleared: [setUp] });
+    expect(await done(v, partyId, setUp!, OPENED_MS)).toEqual({ cleared: [setUp] });
 
     expect(await completions(v, partyId)).toHaveLength(1);
   });
@@ -236,7 +305,7 @@ describe("markServiceStepDone", () => {
     const [water] = await setSteps(v, outside.departmentId, [seated("Water?")]);
     const { partyId } = await seatedAtMesa1(v);
 
-    await expect(done(v, partyId, water!)).rejects.toMatchObject({
+    await expect(done(v, partyId, water!, OPENED_MS)).rejects.toMatchObject({
       code: "service_step.not_found",
       params: { stepId: water },
     });
@@ -250,7 +319,7 @@ describe("markServiceStepDone", () => {
     const { partyId } = await seatedAtMesa1(v);
     await setSteps(v, department, [seated("Water?")]);
 
-    await expect(done(v, partyId, setUp!)).rejects.toMatchObject({
+    await expect(done(v, partyId, setUp!, OPENED_MS)).rejects.toMatchObject({
       code: "service_step.not_found",
       params: { stepId: setUp },
     });
@@ -267,11 +336,11 @@ describe("markServiceStepDone", () => {
         .where(eq(parties.id, partyId)),
     );
 
-    await expect(done(v, partyId, setUp!)).rejects.toMatchObject({
+    await expect(done(v, partyId, setUp!, OPENED_MS)).rejects.toMatchObject({
       code: "party.not_open",
       params: { partyId },
     });
-    await expect(done(v, randomUUID(), setUp!)).rejects.toMatchObject({
+    await expect(done(v, randomUUID(), setUp!, OPENED_MS)).rejects.toMatchObject({
       code: "party.not_open",
     });
   });
@@ -286,7 +355,7 @@ describe("markServiceStepDone", () => {
     // `joinTables` refuses a table of another zone (`service_zone.join_mismatch`).
     await inTx(v, (tx) => tx.insert(partyTables).values({ partyId, tableId: terraceTable }));
 
-    expect(await done(v, partyId, setUp!)).toEqual({ cleared: [setUp] });
+    expect(await done(v, partyId, setUp!, OPENED_MS)).toEqual({ cleared: [setUp] });
 
     expect(await liveAt(v, partyId, tableId)).toEqual([]);
     expect(await liveAt(v, partyId, terraceTable)).toEqual([water]);
@@ -311,11 +380,13 @@ describe("markServiceStepDone", () => {
       }),
     );
 
-    await expect(done(v, partyId, water!, NOW, tablesOnly)).rejects.toMatchObject({
+    await expect(done(v, partyId, water!, OPENED_MS, NOW, tablesOnly)).rejects.toMatchObject({
       code: "service_zone.not_allowed",
       params: { zoneId: outside.zoneId },
     });
     expect(await completions(v, partyId)).toEqual([]);
-    expect(await done(v, partyId, setUp!, NOW, tablesOnly)).toEqual({ cleared: [setUp] });
+    expect(await done(v, partyId, setUp!, OPENED_MS, NOW, tablesOnly)).toEqual({
+      cleared: [setUp],
+    });
   });
 });

@@ -43,6 +43,7 @@ import {
   formatMoney,
   isZeroDecimal,
   partyTablesName,
+  type ServiceStepDue,
 } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -2841,9 +2842,10 @@ export class TillFloorScreen extends LitElement {
     );
   }
 
-  #onStepDone(table: TableState, stepId: string): void {
+  #onStepDone(table: TableState, step: ServiceStepDue): void {
     if (table.party === null) return;
-    this.#emit("service-step-done", { partyId: table.party.id, stepId, tableId: table.id });
+    const { stepId, dueAt } = step;
+    this.#emit("service-step-done", { partyId: table.party.id, stepId, dueAt, tableId: table.id });
   }
 
   #marks(table: TableState, top: TableStateKind | undefined): CardMark[] {
@@ -2896,7 +2898,7 @@ export class TillFloorScreen extends LitElement {
       if (step !== null && chip.key === "service-step") {
         marks.push({
           kind,
-          mark: stepChip(step, { onDone: () => this.#onStepDone(table, step.stepId) }),
+          mark: stepChip(step, { onDone: () => this.#onStepDone(table, step) }),
         });
       } else marks.push({ kind, mark: renderFloorChips([chip])[0]! });
     }

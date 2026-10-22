@@ -3778,13 +3778,18 @@ export class TillApi {
     await this.#request<void>(`/api/tables/${tableId}/cleared`, "POST");
   }
 
-  /** Mark a party's service step done → `POST /api/parties/:partyId/service-steps/:stepId/done`.
-   * Answers the steps it cleared, none when the step was already done; rejects
-   * `service_step.not_found`. */
-  markServiceStepDone(partyId: string, stepId: string): Promise<{ cleared: string[] }> {
+  /** Mark a party's service step done → `POST /api/parties/:partyId/service-steps/:stepId/done`,
+   * for the showing of it due at `dueAt`, as the floor read sent it. Answers the steps it cleared,
+   * none when that showing was already cleared; rejects `service_step.not_found`. */
+  markServiceStepDone(
+    partyId: string,
+    stepId: string,
+    dueAt: string,
+  ): Promise<{ cleared: string[] }> {
     return this.#request<{ cleared: string[] }>(
       `/api/parties/${encodeURIComponent(partyId)}/service-steps/${encodeURIComponent(stepId)}/done`,
       "POST",
+      { dueAt },
     );
   }
 

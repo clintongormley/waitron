@@ -155,7 +155,11 @@ it("sends Done on the card's step to the server, then reads the floor without it
 
   await userEvent.click(done(floor)!);
 
-  expect(markServiceStepDone).toHaveBeenCalledExactlyOnceWith("p9", "step-Dessert?");
+  expect(markServiceStepDone).toHaveBeenCalledExactlyOnceWith(
+    "p9",
+    "step-Dessert?",
+    "2000-01-01T00:00:00.000Z",
+  );
   await vi.waitFor(() => expect(api.getTablesState.mock.calls.length).toBe(reads + 1));
   await vi.waitFor(() => expect(done(floor)).toBeNull());
   expect(

@@ -3884,17 +3884,18 @@ describe("TillApi: a seated party", () => {
     });
   });
 
-  it("markServiceStepDone POSTs to the party's step /done route and answers what it cleared", async () => {
+  it("markServiceStepDone POSTs when the step showed as due to the party's step /done route and answers what it cleared", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ cleared: ["s1"] }));
+    const dueAt = "2026-10-22T20:20:00.000Z";
 
-    await expect(new TillApi("", fetchStub).markServiceStepDone("p1", "s1")).resolves.toEqual({
-      cleared: ["s1"],
-    });
+    await expect(
+      new TillApi("", fetchStub).markServiceStepDone("p1", "s1", dueAt),
+    ).resolves.toEqual({ cleared: ["s1"] });
 
-    expect(fetchStub).toHaveBeenCalledWith("/api/parties/p1/service-steps/s1/done", {
-      method: "POST",
-      credentials: "include",
-    });
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/parties/p1/service-steps/s1/done",
+      post({ dueAt }),
+    );
   });
 
   it("markServiceStepDone surfaces a deleted step as { code }", async () => {
@@ -3902,7 +3903,9 @@ describe("TillApi: a seated party", () => {
       .fn()
       .mockResolvedValue(jsonResponse({ error: { code: "service_step.not_found" } }, 404));
 
-    await expect(new TillApi("", fetchStub).markServiceStepDone("p1", "s1")).rejects.toMatchObject({
+    await expect(
+      new TillApi("", fetchStub).markServiceStepDone("p1", "s1", "2026-10-22T20:20:00.000Z"),
+    ).rejects.toMatchObject({
       code: "service_step.not_found",
       status: 404,
     });

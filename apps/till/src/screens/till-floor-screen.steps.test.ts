@@ -169,7 +169,9 @@ describe("till-floor-screen: a table's due service step", () => {
     const opened = record(el, "open-table");
     const done = record(el, "service-step-done");
     await userEvent.click(doneOf(el)!);
-    expect(done).toEqual([{ partyId: "p9", stepId: "step-Dessert?", tableId: "t9" }]);
+    expect(done).toEqual([
+      { partyId: "p9", stepId: "step-Dessert?", dueAt: "2000-01-01T00:00:00.000Z", tableId: "t9" },
+    ]);
     expect(opened).toEqual([]);
   });
 

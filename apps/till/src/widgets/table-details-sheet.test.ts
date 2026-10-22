@@ -564,7 +564,7 @@ describe("till-table-details-sheet", () => {
       });
       await userEvent.click(find(el, "[data-step-done]")!);
       expect(seen).toEqual([
-        'service-step-done {"partyId":"p1","stepId":"step-Dessert?","tableId":"t1"}',
+        'service-step-done {"partyId":"p1","stepId":"step-Dessert?","dueAt":"2000-01-01T00:00:00.000Z","tableId":"t1"}',
         "details-close",
       ]);
     });

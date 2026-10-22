@@ -444,6 +444,12 @@ sentences live in `apps/till/src/i18n/codes.ts`.
 
 5. **The Done route.** `POST /api/parties/:id/service-steps/:stepId/done`, no body, answering 200
    `{ cleared: string[] }` — the step ids it recorded.
+   **2026-10-22, as built (review fix):** the body is `{ dueAt }`, required — the `dueAt` the floor
+   read sent for the step the till showed, refused otherwise as `management.request_invalid`
+   `{ field: "dueAt" }`. Without it, two Done requests either side of an every-N-minutes repeat
+   both wrote a row and the second hid the next repeat. A Done for a showing already cleared — by
+   the step's own Done or an order sent once it was due — answers `{ cleared: [] }`
+   (`stepsClearedByDone`, `apps/server/src/service-step-reckoning.ts`).
    - **Who may:** a signed-in, admitted person on a device whose profile has `take-orders`
      (`requireSession(deps, c, { action: "take-orders" })`), and **no person permission** — as
      every table-service write (`/bill-request`, `/name`, `/guests`, `/finish`,

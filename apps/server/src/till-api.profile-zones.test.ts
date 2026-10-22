@@ -920,7 +920,7 @@ const ROUTES: readonly Row[] = [
     "POST /api/parties/:id/service-steps/:stepId/done",
     "POST",
     (x) => `/api/parties/${x.deliParty}/service-steps/${randomUUID()}/done`,
-    undefined,
+    () => ({ dueAt: new Date().toISOString() }),
     deliTableZone,
   ],
   [

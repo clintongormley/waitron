@@ -15907,10 +15907,12 @@ export class TillApp extends LitElement {
   }
 
   async #onServiceStepDone(event: Event): Promise<void> {
-    const { partyId, stepId } = (event as CustomEvent<{ partyId: string; stepId: string }>).detail;
+    const { partyId, stepId, dueAt } = (
+      event as CustomEvent<{ partyId: string; stepId: string; dueAt: string }>
+    ).detail;
     this.errorKey = undefined;
     try {
-      await this.api.markServiceStepDone(partyId, stepId);
+      await this.api.markServiceStepDone(partyId, stepId, dueAt);
     } catch (error) {
       this.errorKey = stepDoneError(error);
     }
