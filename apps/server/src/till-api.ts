@@ -219,6 +219,7 @@ import {
 } from "./device-session.js";
 import { requireBodyUuid, requireString, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
+import { markServiceStepDone } from "./service-step-done.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
 import { mountLineCancelApi } from "./line-cancel-api.js";
 import { mountDepartmentTransferApi } from "./department-transfer-api.js";
@@ -587,6 +588,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.split_held_line": 400,
   "party.not_open": 409,
   "party.not_found": 404,
+  "service_step.not_found": 404,
   "party.out_of_date": 409,
   "tab.cancel_context_changed": 409,
   "party.bill_outstanding": 409,
@@ -1091,6 +1093,12 @@ function requireDraftPartyParam(id: string): string {
 function requireDraftParam(draftId: string): string {
   if (!isUuid(draftId)) throw new AppError("draft.not_found", { draftId });
   return draftId.toLowerCase();
+}
+
+/** A step route's step, in lower case as ids are stored: an id that is no UUID names none. */
+function requireStepParam(stepId: string): string {
+  if (!isUuid(stepId)) throw new AppError("service_step.not_found", { stepId });
+  return stepId.toLowerCase();
 }
 
 /** A save's draft: null for the operator's new one, else a UUID. */
@@ -2934,6 +2942,24 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
         return requestBill(tx, partyId, requested, args);
+      });
+      return c.json(answer);
+    }),
+  );
+
+  app.post("/api/parties/:id/service-steps/:stepId/done", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const partyId = requirePartyParam(c.req.param("id"));
+      const stepId = requireStepParam(c.req.param("stepId"));
+      const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return markServiceStepDone(tx, {
+          partyId,
+          stepId,
+          personId: session.personId,
+          nowMs: Date.now(),
+        });
       });
       return c.json(answer);
     }),
