@@ -105,7 +105,7 @@ also provide the language choices for future online content; they do not create 
 site.
 
 Requesting the original receipt again keeps its existing print job. To print another sheet after
-it has completed, choose **Reprint**; the copy carries the same invoice number and a duplicate mark.
+it has completed, choose **Reprint** at the till; the copy carries the same invoice number and a duplicate mark.
 
 ## Add a photograph once {#upload}
 

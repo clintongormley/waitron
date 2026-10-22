@@ -511,7 +511,6 @@ export async function confirmReceiptHandover(
   return readOriginalReceiptPrint(tx, saleId);
 }
 
-/** The issuance action emits an unmarked original without opening the drawer. */
 export async function enqueueOriginalReceipt(
   tx: Transaction,
   cfg: OriginConfig,

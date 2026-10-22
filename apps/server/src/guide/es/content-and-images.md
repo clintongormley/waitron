@@ -102,7 +102,7 @@ preferencia aparte. Estos ajustes también ofrecen los idiomas para futuro conte
 no crean un sitio de pedidos en línea.
 
 Pedir de nuevo el ticket original conserva el trabajo de impresión existente. Para imprimir otra
-hoja cuando haya terminado, elige **Reimprimir**; la copia lleva el mismo número de factura y la
+hoja cuando haya terminado, elige **Reimprimir** en la caja; la copia lleva el mismo número de factura y la
 marca de duplicado.
 
 ## Sube una fotografía una sola vez {#upload}

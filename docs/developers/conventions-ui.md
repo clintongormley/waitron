@@ -1635,11 +1635,14 @@ repair permanently refused. An expired or unusable reserved CA still refuses.
 ## Receipt originals and marked copies
 
 `enqueueOriginalReceipt` keeps a sale's existing original job for both F1 and F2, including failed
-jobs. An absent printer reserves nothing, so the first later request can enqueue the original.
-A completed original and its failed predecessors cannot be resent through the printer-job action;
-an explicit reprint renders
-copy-marked bytes. `canResendPrintJob` also drives the dashboard's offered action through
-`print-api.ts`. Exhausted retries retain their bytes. The open physical-delivery limit is in
+jobs. When the receipt helper resolves no printer, it adds no job. Deleting an original's printer
+retains that original's history; an explicit reprint can send a marked copy to its replacement.
+A completed original and its failed predecessors cannot be resent through the printer-job action.
+An original with an active retry blocks another retry as well. Exhausted attempts without one of
+those reservations may retry on their retained printer, keeping their bytes.
+
+The dashboard's offered action combines `canResendPrintJob` with a sale-wide reservation read in
+`print-api.ts`; the helper alone does not read sibling jobs. The open physical-delivery limit is in
 [the fiscal backlog](../backlog/fiscal.md#uncertain-receipt-delivery).
 
 | Source, checked 2026-10-22 | Source words | Applied here |

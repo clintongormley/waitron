@@ -1378,8 +1378,8 @@ describe("invoice receipt printer deletion", () => {
 });
 
 describe("completed receipt original management actions", () => {
-  it.each(["done", "failed"] as const)(
-    "hides resend for a %s original after delivery completes",
+  it.each(["done", "failed", "queued", "printing", "retrying"] as const)(
+    "hides resend for an original while its delivery is %s",
     async (status) => {
       const ctx = await setup();
       const command = await manager(ctx);
@@ -1395,11 +1395,20 @@ describe("completed receipt original management actions", () => {
         );
         await tx
           .update(printJobs)
-          .set({ status, attempts: status === "failed" ? 5 : 0 })
+          .set({
+            status: status === "done" ? "done" : "failed",
+            attempts: status === "done" ? 0 : 5,
+          })
           .where(eq(printJobs.id, job.jobId));
-        if (status === "failed") {
+        if (status !== "done") {
           const retry = await resendPrintJob(tx, job.jobId);
-          await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, retry.jobId));
+          await tx
+            .update(printJobs)
+            .set({
+              status: status === "failed" ? "done" : status === "retrying" ? "failed" : status,
+              attempts: status === "retrying" ? 1 : 0,
+            })
+            .where(eq(printJobs.id, retry.jobId));
         }
         return job;
       });

@@ -514,3 +514,63 @@ it.each(["same original", "same copy", "other original"] as const)(
     }
   },
 );
+
+it.each(["queued", "printing", "failed"] as const)(
+  "admits only one retry while the original's successor is %s",
+  async (status) => {
+    const cfg = await setup();
+    const nodeId = await seedNode(suite.db, brandLocationId(cfg.locationId));
+    const original = await withTransaction(suite.db, async (tx) => {
+      const [series] = await tx.insert(invoiceSeries).values({ nodeId, code: "A" }).returning();
+      const [sale] = await tx
+        .insert(sales)
+        .values({
+          source: "operator_script",
+          nodeId,
+          seriesId: series!.id,
+          invoiceNumber: 1,
+          issuedAt: "2026-10-22T12:00:00.000Z",
+          issuedOffsetMinutes: 0,
+          total: 100,
+          vatBreakdown: [],
+          locale: "en-GB",
+          invoiceLocales: ["en-GB"],
+          fiscalBackend: "fake",
+          fiscalState: "not_applicable",
+        })
+        .returning();
+      const printer = await createPrinter(tx, cfg, {
+        name: "Receipt",
+        transport: "network_tcp",
+        host: "printer.test",
+      });
+      const job = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]), "document", {
+        saleId: sale!.id,
+        receiptCopy: false,
+      });
+      await tx
+        .update(printJobs)
+        .set({ status: "failed", attempts: 5 })
+        .where(eq(printJobs.id, job.jobId));
+      return job;
+    });
+    const first = await withTransaction(suite.db, (tx) => resendPrintJob(tx, original.jobId));
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(printJobs)
+        .set({ status, attempts: status === "failed" ? 1 : 0 })
+        .where(eq(printJobs.id, first.jobId)),
+    );
+    const before = await suite.db.select().from(printJobs);
+    const attempts = await Promise.allSettled([
+      withTransaction(suite.db, (tx) => resendPrintJob(tx, original.jobId)),
+      withTransaction(suite.db, (tx) => resendPrintJob(tx, original.jobId)),
+    ]);
+    for (const attempt of attempts) {
+      expect(attempt.status).toBe("rejected");
+      if (attempt.status === "rejected")
+        expect(attempt.reason).toMatchObject({ code: "print_job.not_resendable" });
+    }
+    expect(await suite.db.select().from(printJobs)).toEqual(before);
+  },
+);

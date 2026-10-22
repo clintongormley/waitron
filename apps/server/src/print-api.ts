@@ -1469,7 +1469,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             ),
           )
           .orderBy(desc(printJobs.createdAt), desc(printJobs.id));
-        const completed = await tx
+        const reserved = await tx
           .select({ saleId: printJobs.saleId })
           .from(printJobs)
           .where(
@@ -1481,15 +1481,20 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
                 ),
               ),
               eq(printJobs.receiptCopy, false),
-              eq(printJobs.status, "done"),
+              or(
+                eq(printJobs.status, "done"),
+                eq(printJobs.status, "queued"),
+                eq(printJobs.status, "printing"),
+                and(eq(printJobs.status, "failed"), lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
+              ),
             ),
           );
-        const completedSales = new Set(completed.map((job) => job.saleId));
+        const reservedSales = new Set(reserved.map((job) => job.saleId));
         return jobs.map(({ kind, printerDeletedAt, receiptCopy, saleId, ...job }) => ({
           ...job,
           canResend:
             printerDeletedAt === null &&
-            !(receiptCopy === false && completedSales.has(saleId)) &&
+            !(receiptCopy === false && reservedSales.has(saleId)) &&
             canResendPrintJob({ ...job, kind, receiptCopy }),
         }));
       });
