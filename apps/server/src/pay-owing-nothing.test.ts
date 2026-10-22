@@ -32,7 +32,7 @@ import {
   tendersOfBill,
   type BillVenue,
 } from "./testing/bill-venue.js";
-import { giveAway } from "./testing/cancel-line.js";
+import { compWholeBill, giveAway } from "./testing/cancel-line.js";
 import "./errors.js";
 
 // Paying a bill that owes nothing because every line on it was given away: the sale is filed at 0.00
@@ -179,6 +179,29 @@ describe("Pay on a bill whose every line was given away", () => {
       expect(drawerJobCount()).toBe(drawerJobs);
     },
   );
+
+  it("closes a bill comped free as a whole on a cash Pay of 0, with an invoice of 0.00, no tender and no drawer", async () => {
+    const { tabId } = await seatedWith(venue, "Caña");
+    await compWholeBill(venue, tabId, 10000);
+    const drawerJobs = drawerJobCount();
+
+    const answer = await pay(tabId, { method: "cash", amount: "0" });
+
+    expect(answer.status).toBe(200);
+    expect(answer.json).toMatchObject({ total: "0.00", tender: { method: "unpaid" } });
+    await expectClosedOwingNothing(tabId);
+    expect(drawerJobCount()).toBe(drawerJobs);
+  });
+
+  it("refuses a cash Pay of 0 on a bill comped by half, leaving it open", async () => {
+    const { tabId } = await seatedWith(venue, "Caña");
+    await compWholeBill(venue, tabId, 5000);
+
+    const answer = await pay(tabId, { method: "cash", amount: "0" });
+
+    expect([answer.status, answer.json.code]).toEqual([400, "sale.tender_shortfall"]);
+    expect(await statusOf(venue, tabId)).not.toBe("settled");
+  });
 
   it("closes the bill on a manual card Pay, with no tender and no card payment row", async () => {
     const { tabId } = await givenAwayBill();
