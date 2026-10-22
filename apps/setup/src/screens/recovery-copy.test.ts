@@ -29,7 +29,10 @@ const request = (eventId = "event-1"): RecoveryPreparationRequest => ({
   proposal: { action: "clock-challenge" },
 });
 
-async function mounted(stage: (call: number) => Response | undefined = () => undefined) {
+async function mounted(
+  stage: (call: number) => Response | undefined = () => undefined,
+  preparation: (stagedId: string) => Response | undefined = () => undefined,
+) {
   const calls: { path: string; init: RequestInit }[] = [];
   let stages = 0;
   let attempts = 0;
@@ -44,7 +47,10 @@ async function mounted(stage: (call: number) => Response | undefined = () => und
       );
     if (path === "/setup-api/recovery/stage/discard")
       return new Response(JSON.stringify({ discarded: true }));
-    return new Response(JSON.stringify({ id: "challenge" }));
+    return (
+      preparation(JSON.parse(init.body as string).source.stagedId) ??
+      new Response(JSON.stringify({ id: "challenge" }))
+    );
   });
   const { el } = await mountWidget<SetupRecoveryCopy>("setup-recovery-copy", { api });
   el.artifact = new File(["encrypted-copy"], "copy.backup");
@@ -117,4 +123,54 @@ it("stages again after a refused upload", async () => {
   await prepare()(request());
   expect(at(calls, "/setup-api/recovery/stage")).toHaveLength(2);
   expect(at(calls, "/setup-api/recovery/preparation")).toHaveLength(1);
+});
+
+const refusedStaged = (code: string, params = {}, status = 409) =>
+  new Response(JSON.stringify({ error: { code, params } }), { status });
+const sentIds = (calls: { path: string; init: RequestInit }[]) =>
+  at(calls, "/setup-api/recovery/preparation").map(
+    ({ init }) => JSON.parse(init.body as string).source.stagedId as string,
+  );
+
+it("uploads again under the same restore event when the box no longer holds the staged copy", async () => {
+  const lost = new Set<string>();
+  const { calls, prepare } = await mounted(undefined, (stagedId) =>
+    lost.has(stagedId) ? refusedStaged("restore.staged_copy_missing") : undefined,
+  );
+  await prepare()(request());
+  lost.add(stagedIds[0]!);
+  await expect(prepare()(request())).resolves.toEqual({ id: "challenge" });
+  await prepare()(request());
+  const staged = at(calls, "/setup-api/recovery/stage");
+  expect(staged).toHaveLength(2);
+  expect(JSON.parse((staged[1]!.init.body as FormData).get("request") as string).eventId).toBe(
+    "event-1",
+  );
+  expect(sentIds(calls)).toEqual([stagedIds[0], stagedIds[0], stagedIds[1], stagedIds[1]]);
+  expect(at(calls, "/setup-api/recovery/stage/discard")).toHaveLength(0);
+});
+
+it("stops, without uploading again, once another restore page's upload replaced its copy", async () => {
+  const replaced = new Set<string>();
+  const { calls, prepare } = await mounted(undefined, (stagedId) =>
+    replaced.has(stagedId)
+      ? refusedStaged("setup.request_invalid", { field: "stagedId" }, 400)
+      : undefined,
+  );
+  await prepare()(request());
+  replaced.add(stagedIds[0]!);
+  await expect(prepare()(request())).rejects.toMatchObject({ code: "setup.request_invalid" });
+  await expect(prepare()(request())).rejects.toMatchObject({ code: "setup.request_invalid" });
+  expect(at(calls, "/setup-api/recovery/stage")).toHaveLength(1);
+});
+
+it("asks once more at most when the copy it uploaded again is missing too", async () => {
+  const { calls, prepare } = await mounted(undefined, () =>
+    refusedStaged("restore.staged_copy_missing"),
+  );
+  await expect(prepare()(request())).rejects.toMatchObject({
+    code: "restore.staged_copy_missing",
+  });
+  expect(at(calls, "/setup-api/recovery/stage")).toHaveLength(2);
+  expect(sentIds(calls)).toEqual([stagedIds[0], stagedIds[1]]);
 });

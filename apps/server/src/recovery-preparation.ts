@@ -389,6 +389,9 @@ export function createSetupRecoveryPreparation(
   const interactive = createInteractiveRecoveryPreparation(options);
   const stagedDir = join(options.stagingDir, STAGED_RECOVERY_DIR);
   let staged: StagedCopy | undefined;
+  // Ids a later upload replaced, so their page stops rather than uploading again; any other id
+  // the box does not hold was lost to a restart, the unused hour or a discard.
+  const replaced = new Set<string>();
   let expiry: NodeJS.Timeout | undefined;
   const release = async (entry: StagedCopy) => {
     entry.retired = true;
@@ -417,6 +420,9 @@ export function createSetupRecoveryPreparation(
   const refuseStaged = (): never => {
     throw new AppError("setup.request_invalid", { field: "stagedId" });
   };
+  const missingStaged = (): never => {
+    throw new AppError("restore.staged_copy_missing", {});
+  };
   const prepare: PrepareRecovery = async (source, request, hold, client) => {
     const archive = async (
       input: Pick<ValidationDeps, "artifact" | "recoveryKey" | "environment">,
@@ -430,12 +436,9 @@ export function createSetupRecoveryPreparation(
     };
     if (source.kind === "staged") {
       const entry = await live();
-      if (
-        entry === undefined ||
-        entry.id !== source.stagedId ||
-        entry.eventId !== request.binding.eventId
-      )
-        return refuseStaged();
+      if (replaced.has(source.stagedId)) return refuseStaged();
+      if (entry?.id !== source.stagedId) return missingStaged();
+      if (entry.eventId !== request.binding.eventId) return refuseStaged();
       entry.users += 1;
       touch(entry);
       try {
@@ -501,7 +504,11 @@ export function createSetupRecoveryPreparation(
     };
     staged = entry;
     touch(entry);
-    if (previous !== undefined) await release(previous);
+    if (previous !== undefined) {
+      if (replaced.size === 64) replaced.delete(replaced.values().next().value!);
+      replaced.add(previous.id);
+      await release(previous);
+    }
     return { stagedId: entry.id };
   };
   const discard: DiscardStagedRecovery = async (stagedId) => {

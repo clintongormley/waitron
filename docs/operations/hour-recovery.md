@@ -17,7 +17,10 @@ The box checks the backup once, when it is uploaded, and keeps that checked copy
 steps that follow. If a newer restore page uploads the backup again and it passes its check, that
 copy replaces the first, and the older page stops working: open restores in one page only
 (`apps/server/src/hour-recovery-staged.test.ts`, "lets the newest restore event's checked upload
-replace the copy").
+replace the copy"). If the box restarts while the page is open, or the copy goes unused for an
+hour, the page's next clock step uploads the backup again by itself under the same restore
+(`apps/setup/src/screens/recovery-copy.test.ts`, "uploads again under the same restore event when
+the box no longer holds the staged copy").
 
 Confirm that the former seller is stopped and no parallel recovery is underway. Selecting a
 fresh name does not stop a copied or returning machine. Arrange recovery with the business's

@@ -184,6 +184,10 @@ const sha = async (path: string) =>
     .update(await readFile(path))
     .digest("hex");
 const refusal = { error: { code: "setup.request_invalid", params: { field: "stagedId" } } };
+const missing = {
+  status: 409,
+  body: { error: { code: "restore.staged_copy_missing", params: {} } },
+};
 
 describe("a staged backup for the restore's clock requests", () => {
   it("checks a backup from an older release once and takes the name through small JSON requests", async () => {
@@ -219,33 +223,31 @@ describe("a staged backup for the restore's clock requests", () => {
     for (const body of h.bodies) expect(Buffer.byteLength(body)).toBeLessThan(2048);
   });
 
-  it("refuses a staged id from another restore event, after a discard, and after an hour unused", async () => {
+  it("refuses a staged id from another restore event, and answers a copy it no longer holds as missing", async () => {
     const h = await stagedHost();
     const { stagedId } = await h.ok(h.stage());
     expect(await h.send(stagedId, { action: "clock-challenge" }, "another-page")).toEqual({
       status: 400,
       body: refusal,
     });
+    // An id this process never staged: what every page's id is after the box restarts.
     expect(
       await h.send("5c1d6c43-4f61-4c4a-9e0b-0a8f2f8d9a11", { action: "clock-challenge" }),
-    ).toEqual({ status: 400, body: refusal });
+    ).toEqual(missing);
     await h.ok(h.send(stagedId, { action: "clock-challenge" }));
     vi.setSystemTime(Date.now() + 60 * 60_000);
     await h.ok(h.send(stagedId, { action: "clock-challenge" }));
     vi.setSystemTime(Date.now() + 60 * 60_000 + 1);
-    expect(await h.send(stagedId, { action: "clock-challenge" })).toEqual({
-      status: 400,
-      body: refusal,
-    });
+    expect(await h.send(stagedId, { action: "clock-challenge" })).toEqual(missing);
     expect(await readdir(join(h.stagingDir, "staged-recovery"))).toEqual([]);
 
     const again = await h.ok(h.stage());
     await h.recovery.discard(again.stagedId as string);
-    expect(await h.send(again.stagedId, { action: "clock-challenge" })).toEqual({
-      status: 400,
-      body: refusal,
-    });
+    expect(await h.send(again.stagedId, { action: "clock-challenge" })).toEqual(missing);
     expect(await readdir(join(h.stagingDir, "staged-recovery"))).toEqual([]);
+
+    const resumed = await h.ok(h.stage());
+    await h.ok(h.send(resumed.stagedId, { action: "clock-challenge" }));
   });
 
   it("lets the newest restore event's checked upload replace the copy, and keeps it when an upload fails its check", async () => {

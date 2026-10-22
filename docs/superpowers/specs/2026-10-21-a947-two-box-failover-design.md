@@ -41,14 +41,17 @@ rewritten, and carries a dated pointer here.
 > 3. **A restore checks its backup once, and the newest page wins.** The page uploads the backup
 >    once (`POST /setup-api/recovery/stage`) and the clock requests that follow carry only the
 >    staged copy's id. A newer restore page's upload that passes its check replaces the staged copy,
->    and the older page's id is then refused. A reloaded restore page starts a new 90-to-150-second
+>    and the older page's id is then refused. An id the box no longer holds — after a restart, an
+>    unused hour or a discard — is answered `restore.staged_copy_missing` instead, and the page
+>    uploads again under the same restore event. A reloaded restore page starts a new 90-to-150-second
 >    wait, because the setup app makes a new restore event id each time it builds the page
 >    (`apps/setup/src/screens/recovery-allocation.ts`, `eventId: crypto.randomUUID()`) and waits are
 >    kept per event (`packages/fiscal-verifactu/src/hour-selection.ts`, `sameEvent`).
 >    Tests: `apps/server/src/hour-recovery-staged.test.ts`, "lets the newest restore event's checked
 >    upload replace the copy, and keeps it when an upload fails its check" and "refuses a staged id
->    from another restore event, after a discard, and after an hour unused". No test reloads a
->    restore page end to end.
+>    from another restore event, and answers a copy it no longer holds as missing";
+>    `apps/setup/src/screens/recovery-copy.test.ts`, "uploads again under the same restore event
+>    when the box no longer holds the staged copy". No test reloads a restore page end to end.
 > 4. **When each page explains a clock refusal.** On the restore page, pressing «Comparar relojes»
 >    / "Compare clocks" and getting a refusal shows the restore row's explanation (§6.5 tables);
 >    for no second clock it also starts the quiet 15-second re-check, and for clocks that differ it

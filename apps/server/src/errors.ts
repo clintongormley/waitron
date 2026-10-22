@@ -1457,6 +1457,11 @@ declare module "@waitron/shared" {
     "restore.archive_key_invalid": Record<string, never>;
     /** The pack's archive folder holds no archive by the name given. */
     "restore.archive_missing": Record<string, never>;
+    /** A restore's clock request names a staged backup copy this box no longer holds: it
+     * restarted, the copy went unused for an hour, or it was discarded. The page uploads the
+     * backup again under the same restore event. A copy another upload replaced is refused as
+     * `setup.request_invalid` instead, so that page stops. */
+    "restore.staged_copy_missing": Record<string, never>;
     /** The staging folder has too little free space for the archive, or the disk filled while it
      * was being downloaded. */
     "restore.archive_disk_full": Record<string, never>;

@@ -745,7 +745,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     hold: (request) => holds.get(request),
     busy: () => provisioning || fiscalTesting || configurationStaging || emailTesting(),
     run: createErrorBoundary(
-      { ...BUCKET_RESTORE_STATUS, "setup.not_ready": 503 },
+      { ...BUCKET_RESTORE_STATUS, "setup.not_ready": 503, "restore.staged_copy_missing": 409 },
       "setup.restore_failed",
     ),
   });
