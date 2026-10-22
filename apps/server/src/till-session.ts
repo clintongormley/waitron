@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { and, eq, isNull } from "drizzle-orm";
-import { AppError, deviceId as brandDeviceId, isUuid } from "@waitron/shared";
+import { AppError, deviceId as brandDeviceId, diskFullIn, isUuid } from "@waitron/shared";
 import type { DeviceId } from "@waitron/shared";
 import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -88,6 +88,7 @@ export async function signedInPersonOn(
  * throws `device.unauthorized`. Login and logout deliberately do not call this. With `permission`,
  * the session's person must also hold it (`authorize`, no override), checked in the same
  * transaction; with `action`, the device's active profile must permit it (`assertProfileAction`).
+ * When a full disk refuses that transaction, the same checks run outside it and nothing is stamped.
  */
 export async function requireSession(
   deps: { db: Database },
@@ -96,7 +97,7 @@ export async function requireSession(
 ): Promise<{ personId: string; sessionId: string; deviceId: DeviceId; device: DeviceBinding }> {
   const token = readSessionToken(c);
   if (token === null || !isUuid(token)) throw new AppError("session.required", {});
-  const row = await withTransaction(deps.db, async (tx) => {
+  const check = async (tx: Database | Transaction, stamp: boolean) => {
     const [found] = await tx
       .select({
         id: sessions.id,
@@ -114,7 +115,7 @@ export async function requireSession(
     if (found === undefined) throw new AppError("session.required", {});
     if (!found.active) throw new AppError("device.unauthorized", {});
     const seenAt = nowIso();
-    if (options.passive !== true && sightingDue(found.lastSeenAt, seenAt))
+    if (stamp && sightingDue(found.lastSeenAt, seenAt))
       await recordSighting(tx, found.deviceId, seenAt);
     if (options.permission !== undefined) {
       await authorize(tx, { sessionId: found.id, permission: options.permission });
@@ -123,7 +124,16 @@ export async function requireSession(
       assertProfileAction(toDeviceBinding(found.deviceId, found), options.action);
     }
     return found;
-  });
+  };
+  let row: Awaited<ReturnType<typeof check>>;
+  try {
+    row = await withTransaction(deps.db, (tx) => check(tx, options.passive !== true));
+  } catch (error) {
+    // A full disk refuses the stamp or the change-log drain, not the session: the same checks run
+    // again, unstamped and outside the write lock.
+    if (!diskFullIn(error)) throw error;
+    row = await check(deps.db, false);
+  }
   return {
     personId: row.personId,
     sessionId: row.id,

@@ -34,6 +34,7 @@ import { runEntry, serveRecovery, type RecoveryServeOptions } from "./node-entry
 import { FRESH, readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { escapeHtml } from "./recovery-surface.js";
+import { provisionBillVenue } from "./testing/bill-venue.js";
 import { freePorts } from "./testing/free-ports.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 
@@ -401,6 +402,61 @@ describe("a start on a real full disk", () => {
       small.unfill();
       expect(await status()).toBe(200);
       expect(await lastSeen()).not.toBe(longAgo);
+    } finally {
+      small.unfill();
+      await store.close();
+    }
+  });
+
+  it("the till's reads answer on a full disk with a stamp due, and PIN sign-in still refuses", async (ctx) => {
+    const small = needDisk(ctx);
+    const dir = realpathSync(small.folder("till-session"));
+    await applyMigrations(dir, migrationOptionsFor(manifestSets(), null));
+    const store = await openVenueDatabase(dir);
+    const db = store.venue;
+    try {
+      const venue = await provisionBillVenue(db);
+      const deviceCookie = venue.cookie
+        .split("; ")
+        .find((part) => part.startsWith("waitron_device"))!;
+      const request = (
+        path: string,
+        cookie: string,
+        init: { method?: string; body?: unknown } = {},
+      ) =>
+        venue.app.request(path, {
+          method: init.method ?? "GET",
+          headers: { cookie, "content-type": "application/json" },
+          ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+        });
+      const lastSeen = () =>
+        db.all<{ lastSeenAt: string | null }>(
+          sql`select last_seen_at as lastSeenAt from devices where id = ${venue.deviceId}`,
+        )[0]!.lastSeenAt;
+      const sessionCount = () =>
+        db.all<{ n: number }>(sql`select count(*) as n from sessions`)[0]!.n;
+
+      const longAgo = "2020-01-01T00:00:00.000Z";
+      small.unfill();
+      db.run(sql`update devices set last_seen_at = ${longAgo} where id = ${venue.deviceId}`);
+      db.all(sql`pragma wal_checkpoint(truncate)`);
+      small.fill(0);
+
+      expect((await request("/api/till", deviceCookie)).status).toBe(200);
+      expect((await request("/api/working-orders", venue.cookie)).status).toBe(200);
+      expect(lastSeen()).toBe(longAgo);
+      const before = sessionCount();
+      const signIn = await request("/api/session", deviceCookie, {
+        method: "POST",
+        body: { personId: venue.operatorId, pin: "5555" },
+      });
+      expect(signIn.status).toBe(507);
+      expect(await signIn.json()).toMatchObject({ error: { code: "storage.disk_full" } });
+      expect(sessionCount()).toBe(before);
+
+      small.unfill();
+      expect((await request("/api/working-orders", venue.cookie)).status).toBe(200);
+      expect(lastSeen()).not.toBe(longAgo);
     } finally {
       small.unfill();
       await store.close();

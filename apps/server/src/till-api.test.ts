@@ -33,6 +33,7 @@ import {
 } from "@waitron/venue-service";
 import {
   createPinThrottle,
+  deactivatePerson,
   deviceProfileAdmissionPersons,
   deviceProfileAdmissionRoles,
   endSession,
@@ -42,6 +43,7 @@ import {
   loginWithPin,
   permissionsForRole,
   persons,
+  startManagementSession,
 } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import type { ReceiptConfig } from "@waitron/layouts";
@@ -893,10 +895,12 @@ describe("the run wrapper (the shared error boundary Tasks 5 & 6 reuse)", () => 
 describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected routes)", () => {
   // A throwaway route standing in for the protected routes: it calls `requireSession` and echoes what
   // it resolved.
-  function guardApp(db: Database): Hono {
+  function guardApp(db: Database, options: Parameters<typeof requireSession>[2] = {}): Hono {
     const app = new Hono();
     const d = { db, cfg };
-    app.get("/whoami", (c) => run(c, collect([]), async () => c.json(await requireSession(d, c))));
+    app.get("/whoami", (c) =>
+      run(c, collect([]), async () => c.json(await requireSession(d, c, options))),
+    );
     return app;
   }
 
@@ -1037,6 +1041,124 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+
+  /** The venue database, except that every write turn rejects with `error`. */
+  function stampRefused(error: Error): Database {
+    return Object.create(suite.db, {
+      withWriteLock: {
+        value: async () => {
+          throw error;
+        },
+      },
+    }) as Database;
+  }
+
+  /** An open session on a freshly seeded device that has never been seen. */
+  async function sessionOnUnseenDevice() {
+    const deviceId = await seedSessionDevice(suite.db, cfg);
+    const token = await openSession(suite.db, deviceId);
+    const lastSeen = async () =>
+      (
+        await suite.db.execute<{ last_seen_at: string | null }>(
+          sql`select last_seen_at from devices where id = ${deviceId}`,
+        )
+      ).rows[0]!.last_seen_at;
+    const headers = { cookie: `${SESSION_COOKIE}=${token}` };
+    return { deviceId, token, headers, lastSeen };
+  }
+
+  it("a stamp refused for a full disk still answers the session", async () => {
+    const { deviceId, headers, lastSeen } = await sessionOnUnseenDevice();
+    const db = stampRefused(new AppError("storage.disk_full", {}));
+    const res = await guardApp(db).request("/whoami", { headers });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ personId: ana.id, deviceId });
+    expect(await lastSeen()).toBeNull();
+  });
+
+  it("an ended session is still refused", async () => {
+    const { token, headers } = await sessionOnUnseenDevice();
+    await closeSession(suite.db, token);
+    const res = await guardApp(stampRefused(new AppError("storage.disk_full", {}))).request(
+      "/whoami",
+      { headers },
+    );
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+
+  it("a deactivated person is still refused", async () => {
+    const deviceId = await seedSessionDevice(suite.db, cfg);
+    const [admin] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Admin", pinHash: hashPin("8181"), role: "admin" })
+      .returning({ id: persons.id });
+    const [leaver] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Leaver", pinHash: hashPin("8282"), role: "staff" })
+      .returning({ id: persons.id });
+    const { token } = await withTransaction(suite.db, (tx) =>
+      loginWithPin(tx, { deviceId, personId: leaver!.id, pin: "8282" }),
+    );
+    try {
+      const manager = await withTransaction(suite.db, (tx) =>
+        startManagementSession(tx, { personId: admin!.id }),
+      );
+      await withTransaction(suite.db, (tx) =>
+        deactivatePerson(tx, { managementSessionId: manager.token, personId: leaver!.id }),
+      );
+    } finally {
+      // This suite shares one database, and the staff rosters it checks list every active person.
+      await suite.db.execute(sql`update persons set status = 'suspended' where id = ${admin!.id}`);
+    }
+    const res = await guardApp(stampRefused(new AppError("storage.disk_full", {}))).request(
+      "/whoami",
+      { headers: { cookie: `${SESSION_COOKIE}=${token}` } },
+    );
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+
+  it("a revoked device is still refused", async () => {
+    const { deviceId, headers } = await sessionOnUnseenDevice();
+    await suite.db.execute(sql`update devices set active = 0 where id = ${deviceId}`);
+    const res = await guardApp(stampRefused(new AppError("storage.disk_full", {}))).request(
+      "/whoami",
+      { headers },
+    );
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
+  });
+
+  it("a missing permission is still refused", async () => {
+    const { headers } = await sessionOnUnseenDevice();
+    const db = stampRefused(new AppError("storage.disk_full", {}));
+    const res = await guardApp(db, { permission: "person.manage" }).request("/whoami", {
+      headers,
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  });
+
+  it("any other failure still fails", async () => {
+    const { headers, lastSeen } = await sessionOnUnseenDevice();
+    const app = new Hono();
+    const d = { db: stampRefused(new Error("boom")), cfg };
+    app.get("/whoami", (c) =>
+      requireSession(d, c).then(
+        () => c.text("answered"),
+        (error: unknown) => c.text(String(error)),
+      ),
+    );
+    expect(await (await app.request("/whoami", { headers })).text()).toBe("Error: boom");
+    expect(await lastSeen()).toBeNull();
+  });
+
+  it("with room, a stamp due is saved", async () => {
+    const { headers, lastSeen } = await sessionOnUnseenDevice();
+    expect((await guardApp(suite.db).request("/whoami", { headers })).status).toBe(200);
+    expect(await lastSeen()).not.toBeNull();
   });
 });
 
