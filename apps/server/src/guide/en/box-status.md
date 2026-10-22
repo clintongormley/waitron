@@ -42,7 +42,7 @@ When nothing is wrong, each row says:
   not check whether each reader is switched on: it only shows problems the box already knows about.
   This row is not there when card payments are turned off.
 - **Clock**: **Correct**, and when the box last compared its clock with the tax agency's. When it
-  has no recent comparison, for example just after the box starts, it says **Not yet compared with
+  has no usable comparison, for example just after the box starts, it says **Not yet compared with
   the tax agency**.
 - **Disk space**: how much space is free out of the total, and how much the database, the backups
   kept on the box, the logs and the rest of the disk take.

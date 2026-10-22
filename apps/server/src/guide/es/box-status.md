@@ -45,7 +45,7 @@ Cuando no pasa nada, cada fila dice:
   página no comprueba si cada lector está encendido: solo muestra los problemas que el equipo ya
   conoce. Esta fila no aparece cuando los pagos con tarjeta están desactivados.
 - **Reloj**: **Correcto**, y cuándo comparó el equipo su hora con la de Hacienda por última vez.
-  Cuando no tiene una comparación reciente, por ejemplo justo después de arrancar el equipo, dice
+  Cuando no tiene una comparación válida, por ejemplo justo después de arrancar el equipo, dice
   **Aún no se ha comparado con Hacienda**.
 - **Espacio en disco**: cuánto espacio queda libre del total, y cuánto ocupan la base de datos,
   las copias guardadas en el equipo, los registros de actividad y el resto del disco.
