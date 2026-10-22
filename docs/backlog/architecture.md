@@ -526,8 +526,11 @@ until A977).
   the existing `apps/server/src/i18n/` (it holds `kitchen-allergy.ts` already), in English with translations, and follow the venue's language rather than
   `WAITRON_TILL_LOCALE` (`apps/server/src/till-config.ts:83`; setup never writes it,
   `trading-config.ts:33–41`). Trace every reader of that setting before changing it — the card slip's
-  dates and money read it too. Which venue setting picks a kitchen's language is the plan's first
-  question; ask only if no existing setting fits.
+  dates and money read it too. The [implementation plan](../superpowers/plans/2026-10-22-a964-kitchen-language.md)
+  selects the saved default content language for frame words, with English fallback; recorded names,
+  snapshot units and card-slip formatting keep their separate inputs. Implementation remains open,
+  subject to A807/A808 and A773-2's printing reservations. A966–A968 depend on the implementation,
+  not the plan's publication.
 - **A965 — points 3(1), 3(2), 3(5) and 5's English.** `country-es`'s receipt words
   (`packages/country-es/src/receipt-labels.ts`) gain English, shown on English screens, never printed
   on a Spanish receipt; say in the plan where each is shown. The card payment slip's words

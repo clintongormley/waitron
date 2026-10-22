@@ -6617,8 +6617,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   five-digit postcode; the till appends «España». Changes printed invoice text. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A964. Kitchen tickets and the order-number slip follow the venue's language, from
-  `apps/server/src/i18n/`.** Today they follow `WAITRON_TILL_LOCALE`, which setup never writes, so
-  an installed box prints them in Spanish. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  `apps/server/src/i18n/`.** Build from the [implementation plan](superpowers/plans/2026-10-22-a964-kitchen-language.md),
+  using the saved default content language. Recheck A807/A808 and A773-2's printing reservations
+  before implementation. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A965. Spain's receipt words gain English; the card slip prints in the receipt language, and the
   refund receipt's heading moves into Spain's pack.** [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
