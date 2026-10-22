@@ -9,6 +9,11 @@ _2026-10-20: the owner answered points 2–8, and point 1 follows from earlier a
 [conventions-data.md](../developers/conventions-data.md#general-code-is-english-only) and the fixes
 are A918 and A963–A977 ([backlog](architecture.md#a913s-fix-items-general-code-english-only))._
 
+_2026-10-22, A973: the [operator script](../../apps/server/scripts/settle-invoice-first.ts)
+stores English sample line and authorizer names and describes its correction in English.
+Its [real-venue tests](../../apps/server/scripts/settle-invoice-first.test.ts) check the stored text.
+The findings below retain the earlier audit._
+
 ## In plain English
 
 The rule says Spanish (and Catalan, Galician, Basque) may appear only in the Veri\*Factu package,
