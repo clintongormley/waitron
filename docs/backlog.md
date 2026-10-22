@@ -4906,70 +4906,45 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
 
 - **A887. Find a bill's state filter still says "Held" for an order the till now calls parked.**
-  The guides and the till's Park and Parked orders agree since A738; only Find a bill's "Held" /
-  "En espera" is left.
   [Detail](backlog/languages.md#a887-find-a-bills-state-filter-still-says-held-for-an-order-the-till-now-calls-parked)
 
-- **A886. Dashboard wording: "Disabled product", "Menús", and two strings nothing reads.** The
-  image library says "Disabled product" where the product screens say "Archived", the Spanish
-  `product.refusal_menus`, `folders.delete_off_menus`, `routing.period_not_on_menus` and
-  `venue.delete_item_staff_menus` say "menús" where the neighbouring strings say "cartas", and
-  `product.disable_warning` and `product.disabled_badge` are unused.
+- **A886. Dashboard wording: "Disabled product", "Menús", and two strings nothing reads.**
   [Detail](backlog/languages.md#a886-dashboard-wording-disabled-product-menús-and-two-strings-nothing-reads)
 
-- **The dashboard's locale lookup reads inherited properties** (A626 review, 2026-10-14).
-  `pickLocale` in `packages/dashboard-kit/src/i18n.ts`, re-exported by the dashboard's
-  `i18n/t.ts`, returns a function for `"constructor"` and an object for `"__proto__"`.
-  A969 also reproduced `alertMessage` throwing `TypeError` for `"__proto__"`, `"constructor"`
-  and `"toString"` as locales in both its base and candidate; English and Spanish controls returned text.
-  **Next:** check own locale keys, test the English fallback and trace the callers.
+- **The dashboard's locale lookup reads inherited properties.** Check own locale keys, test the
+  English fallback and trace the callers.
   [Detail](backlog/languages.md#the-dashboards-locale-lookup-reads-inherited-properties)
 
-- **The recovery page's Spanish (#650) has not been read by a native speaker.** Left open by SQLite
-  slice 2 Task 3a (#566, one process per venue folder; #573; #608).
+- **The recovery page's Spanish has not been read by a native speaker.**
 
 - **The adjustment-reason and venue delete windows still use older settings, work and loading
-  wording.** Compare `adjustments.delete_*` and `venue.delete_*` with the device window in both
-  languages, then align those three fields without changing their refusal or impact details.
+  wording.** Compare them with the device window in both languages without changing their refusal
+  or impact details.
   [Detail](backlog/languages.md#the-adjustment-reason-and-venue-delete-windows-still-use-older-wording)
 
 - **The file pickers' "Choose File / No file chosen" follow the browser's language**, not the
-  chooser; the browser draws them. Left open by C42 (#837, the setup wizard in Spanish and
-  English).
+  chooser; the browser draws them.
 
-- **Restaurant menus are “carta” in the Spanish dashboard, module, setup and till wording** (owner
-  decision 2026-09-29; C55 #858, C56 #901). Account and row-action menus keep “menú”.
-  `apps/till/src/i18n/strings.test.ts` fails if a Spanish string in the till's catalogue says
-  “menú”; the till's error-code messages and allergen names (`apps/till/src/i18n/codes.ts`,
-  `apps/till/src/i18n/allergen-names.ts`) are not scanned.
+- **The till's Spanish catalogue guard does not scan error-code messages or allergen names.**
+  [Detail](backlog/languages.md#decisions-and-deliberate-limits)
 
 - **Catalan, Valencian, Galician and Basque — the receipt's words checked, and the whole app in all
-  four (C125, owner 2026-10-02) — PARKED by the owner (2026-10-02: "save the full translations for
-  much later"); taken out of the campaign queues the same day.** Nothing was written: the
-  `docs/regional-languages` branch holds no commit and no draft.
+  four (C125) — PARKED by the owner.**
   [Detail](backlog/languages.md#catalan-valencian-galician-and-basque--the-receipts-words-checked-and-the-whole-app-in-all-four-c125-owner-2026-10-02--parked)
 
-**Left open, for the owner, by A477 (#1530, delete windows in the present tense):**
+- **Future-tense lines outside the delete windows were left alone.**
+  [Detail](backlog/languages.md#future-tense-lines-outside-the-delete-windows)
 
-- **Future-tense lines outside the delete windows were left alone**: the Remove-standby
-  explanation (`servers.remove_explanation`, "It will be marked removed…"), the Spanish variant
-  badge "Se archivará al guardar", and the Spanish PIN reset confirmation
-  (`person.confirm_reset_pin`, "no podrá usar") whose English is present.
-
-**Left open, for the owner, by C113 (#1014, one receipt language per location):**
-
-- **The payment slip was left alone.** Its words («JUSTIFICANTE DE PAGO», «Importe», «Cobrado»)
-  stay Spanish (`apps/server/src/payment-slip.ts`), and its date and amounts still follow
-  `WAITRON_TILL_LOCALE` (`apps/server/src/payment-slip-print.ts`). See A964 and A965.
+- **The payment slip was left alone.** See A964 and A965.
   [Detail](backlog/languages.md#the-payment-slip-was-left-alone)
 
 - **The translations need a native or official check.** Go live with the current words; staff
   report anything that reads wrong (owner, 2026-10-21).
   [Detail](backlog/languages.md#the-translations-need-a-native-or-official-check)
 
-- The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish way
-  (`20,00 €`, `5 ago 2026`), while its words are Galician or Basque. The printed receipt is
-  formatted on the server and keeps the language's own pattern. [Detail](backlog/languages.md#the-tills-on-screen-ticket-writes-a-galician-or-basque-sales-amounts-and-date-the-spanish-way)
+- The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish way,
+  while its words are Galician or Basque.
+  [Detail](backlog/languages.md#the-tills-on-screen-ticket-writes-a-galician-or-basque-sales-amounts-and-date-the-spanish-way)
 
 - The printed Basque date is the formatter's own pattern, «2026(e)ko urt. 15(a)», and on 58 mm
   paper it drops to its own line wherever it prints in words.

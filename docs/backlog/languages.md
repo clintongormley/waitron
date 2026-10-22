@@ -9,9 +9,7 @@ their full text.
   four (C125, owner 2026-10-02) — PARKED by the owner (2026-10-02: "save the full translations for
   much later"); taken out of the campaign queues the same day.** Asked for on C113's question
   ("Land, review words later, and add full translations for catalán, valenciano, and gallego";
-  "Receipt + whole app"; Basque: "Treat it like the others"). Nothing was written: the
-  `docs/regional-languages` branch holds no commit and no draft. When it is picked up, the first
-  step is a spec and plan, ending with the owner's choices:
+  "Receipt + whole app"; Basque: "Treat it like the others"). When it is picked up, the first step is a spec and plan, ending with the owner's choices:
   - **Receipt:** every fixed word C113 added in Catalan, Galician and Basque checked against an
     official or authoritative source (for example Termcat, the Acadèmia Valenciana de la Llengua,
     the Real Academia Galega or Xunta terminology, Euskaltzaindia or Euskalterm), each with a
@@ -48,27 +46,18 @@ their full text.
 ## The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish way
 
 - The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish
-  way (`20,00 €`, `5 ago 2026`), while its words are Galician or Basque. Measured 2026-10-02:
-  Playwright's Chromium 153 resolved `gl-ES` and `eu-ES` number and date formats to `en-US`,
-  and Google Chrome 154 on macOS to `en-GB`, so the screen falls back to the registry's
-  `FALLBACK_RECEIPT_LOCALE` for any language the browser cannot format. The printed receipt is
+  way (`20,00 €`, `5 ago 2026`), while its words are Galician or Basque. The screen falls back
+  to the registry's `FALLBACK_RECEIPT_LOCALE` for any language the browser cannot format. The printed receipt is
   formatted on the server and keeps the language's own pattern.
 
 ## The dashboard's locale lookup reads inherited properties
 
-- **The dashboard's locale lookup reads inherited properties** (A626 review, 2026-10-14).
-  `pickLocale` in `packages/dashboard-kit/src/i18n.ts:65-67`, re-exported by the dashboard's
-  `i18n/t.ts`, returns a function for `"constructor"` and an object for `"__proto__"`.
-  An installed disposable-copy probe asserted both results and the Spanish control
-  (`pnpm --filter @waitron/dashboard-kit exec vitest run src/a626-driver-probe.test.ts`,
-  1 passed). Whether a real dashboard caller admits those locales is unverified.
-  A969's installed disposable-copy probe (2026-10-22) compared the base at
-  `af98f192de08da2d4b64bd04d2c4fe7a762b4549` with the candidate: an unregistered alert's
-  `alertMessage` threw `TypeError` for each of `"__proto__"`, `"constructor"` and `"toString"`
-  as its locale in both versions. The `en-GB` and `es-ES` controls returned their expected text
-  (`pnpm --filter @waitron/dashboard-kit exec vitest run src/a969-locale-probe.test.ts`,
-  5 passed). No caller-admission check was made.
-  **Next:** check own locale keys, test the English fallback and trace the callers.
+`pickLocale` in `packages/dashboard-kit/src/i18n.ts`, re-exported by the dashboard's `i18n/t.ts`,
+returns a function for `"constructor"` and an object for `"__proto__"`. `alertMessage` throws
+`TypeError` for `"__proto__"`, `"constructor"` and `"toString"` as locales. Whether a real dashboard
+caller admits those locales is unverified.
+
+**Next:** check own locale keys, test the English fallback and trace the callers.
 
 ## A886. Dashboard wording: "Disabled product", "Menús", and two strings nothing reads
 
@@ -119,3 +108,18 @@ Next, compare these windows' three fields with `devices.delete_ends`, `devices.d
 Keep the windows' refusal and impact details. A831's prep-station and staff-role fields are covered
 separately by `apps/dashboard/src/i18n/delete-dialog-wording.test.ts`; that comparison does not
 audit these two windows.
+
+## Future-tense lines outside the delete windows
+
+The Remove-standby explanation (`servers.remove_explanation`, "It will be marked removed…"), the
+Spanish variant badge "Se archivará al guardar", and the Spanish PIN reset confirmation
+(`person.confirm_reset_pin`, "no podrá usar") whose English is present were left alone by A477
+(#1530, delete windows in the present tense).
+
+## Decisions and deliberate limits
+
+- **Restaurant menus are “carta” in the Spanish dashboard, module, setup and till wording** (owner
+  decision 2026-09-29; C55 #858, C56 #901). Account and row-action menus keep “menú”.
+  `apps/till/src/i18n/strings.test.ts` fails if a Spanish string in the till's catalogue says
+  “menú”; the till's error-code messages and allergen names (`apps/till/src/i18n/codes.ts`,
+  `apps/till/src/i18n/allergen-names.ts`) are not scanned.
