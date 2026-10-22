@@ -1065,3 +1065,61 @@ it("keeps the 15-second rhythm when a re-check again finds no second clock", asy
     vi.useRealTimers();
   }
 });
+
+const formError = (el: Entry) =>
+  (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error;
+
+it.each([
+  ["challenge", { challenge: { id: 7 } }, ["clock-challenge"]],
+  [
+    "comparison",
+    { comparison: { id: "comparison", clock: {} } },
+    ["clock-challenge", "compare-clocks"],
+  ],
+])(
+  "a malformed %s from the box fails the comparison and shows no readings",
+  async (_name, answers, sent) => {
+    const prepare = vi.fn(async (request: { proposal: unknown }) => {
+      const action = (request.proposal as { action: string }).action;
+      if (action === "clock-challenge")
+        return (answers as { challenge?: unknown }).challenge ?? { id: "challenge" };
+      if (action === "compare-clocks")
+        return (answers as { comparison?: unknown }).comparison ?? { id: "comparison", clock };
+      throw new Error("unexpected proposal");
+    });
+    const { el } = await mount(prepare);
+    await ready(el);
+    button(el, "compare").click();
+    await vi.waitFor(() => expect(formError(el)).not.toBe(""));
+    expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).toBeNull();
+    expect(actionsOf(prepare)).toEqual(sent);
+    expect(el.readCredentials()).toBeNull();
+  },
+);
+
+it("a wait from the box with no target fails instead of counting down", async () => {
+  const { prepare } = scripted([{ status: "waiting", remainingMs: 90_000 }]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  button(el, "select").click();
+  await vi.waitFor(() => expect(formError(el)).not.toBe(""));
+  expect(remaining(el)).toBeUndefined();
+  expect(text(el)).not.toContain(WHY_WAIT);
+  expect(el.readCredentials()).toBeNull();
+});
+
+it("a fiscal refusal that is not about the clock fails without explaining a wait", async () => {
+  const { prepare } = scripted([
+    { code: "sif.allocation_invalid", params: { reason: "event_mismatch" } },
+  ]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  button(el, "select").click();
+  await vi.waitFor(() => expect(formError(el)).not.toBe(""));
+  expect(text(el)).not.toContain(WHY_WAIT);
+  expect(text(el)).not.toContain(WHY_REFUSED);
+  expect(text(el)).not.toContain(RESTORE_DO);
+  expect(el.readCredentials()).toBeNull();
+});

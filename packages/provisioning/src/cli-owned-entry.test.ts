@@ -261,11 +261,6 @@ it.each([false, true])(
       let output = "";
       let errors = "";
       const questions = [
-        ["The box's displayed date and time are correct? [y/N]: ", "yes"],
-        [
-          "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
-          "no",
-        ],
         ["Confirm setup password: ", "SYNTHETIC-owner-password"],
         ["Have you kept this recovery PDF? [y/N]: ", "yes"],
       ] as const;
@@ -497,11 +492,6 @@ it("the built production command checks readiness and seals settings without sen
       },
     );
     const answers = [
-      ["The box's displayed date and time are correct? [y/N]: ", "yes"],
-      [
-        "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
-        "no",
-      ],
       ["Confirm setup password: ", "SYNTHETIC-owner-password"],
       ["Have you kept this recovery PDF? [y/N]: ", "yes"],
     ] as const;
@@ -678,11 +668,6 @@ it("the built production command runs a confirmed isolated test and refuses acti
       },
     );
     const answers = [
-      ["The box's displayed date and time are correct? [y/N]: ", "yes"],
-      [
-        "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
-        "no",
-      ],
       ["Confirm setup password: ", "SYNTHETIC-owner-password"],
       ["Have you kept this recovery PDF? [y/N]: ", "yes"],
       ["Send a preproduction fiscal test? [y/N]: ", "yes"],

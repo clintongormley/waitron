@@ -1172,3 +1172,28 @@ it.each([
     }
   },
 );
+
+it("a missing second clock reported by the server starts the 15-second check", async () => {
+  let refused = false;
+  const { el, calls } = await mount({
+    select: async () => {
+      if (refused) return selected;
+      refused = true;
+      throw { code: "sif.allocation_invalid", params: { reason: "second_clock_missing" } };
+    },
+  });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(text(el)).toContain(SETUP_DO));
+    expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1);
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() => expect(calls.filter((c) => c.action === "candidates")).toHaveLength(2));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});

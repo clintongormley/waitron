@@ -219,9 +219,6 @@ it("a restarted command recovers its original wait using the setup password", as
   expect(after.frozen).toEqual(before.frozen);
   expect(after.ownerGeneration).toBe(2);
   expect(after.status).toBe("claimed");
-  expect(f.prompts).not.toContain(
-    "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
-  );
   expect(
     f.output.filter(
       (line) =>

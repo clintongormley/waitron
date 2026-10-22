@@ -742,6 +742,51 @@ it.each([null, { status: "other" }, { status: "waiting" }, { status: "waiting", 
   },
 );
 
+it.each([1.5, 8_640_000_000_060_000, -8_640_000_000_060_000])(
+  "terminal refuses a preview wait whose target %d is no time",
+  async (targetMs) => {
+    const f = configured();
+    internetAgrees();
+    const t = terminal(f, []);
+    await expect(
+      f.seat.command!(context, {
+        ...t.actions,
+        prepare: async (proposal) =>
+          (proposal as { action: string }).action === "selection"
+            ? { status: "waiting", targetMs }
+            : t.actions.prepare(proposal),
+      }),
+    ).rejects.toMatchObject(refusal);
+    expect(t.output).not.toContain(
+      "Waiting to confirm the time, so no invoice series is ever repeated.",
+    );
+    expect(f.history).toEqual([]);
+  },
+);
+
+it.each([1.5, 8_640_000_000_060_000])(
+  "terminal refuses a selection wait whose target %d is no time",
+  async (targetMs) => {
+    const f = configured();
+    internetAgrees();
+    const t = terminal(f, []);
+    await expect(
+      f.seat.command!(context, {
+        ...t.actions,
+        prepare: async (proposal) =>
+          (proposal as { action: string }).action === "selection"
+            ? { status: "preview" }
+            : t.actions.prepare(proposal),
+        select: async () => ({ status: "waiting", targetMs }),
+      }),
+    ).rejects.toMatchObject(refusal);
+    expect(t.output).not.toContain(
+      "Waiting to confirm the time, so no invoice series is ever repeated.",
+    );
+    expect(f.history).toEqual([]);
+  },
+);
+
 it("resumes an authenticated retained setup without spending another hour", async () => {
   startEarly();
   const f = configured();

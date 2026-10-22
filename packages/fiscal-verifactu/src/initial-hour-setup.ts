@@ -154,7 +154,8 @@ export function createHourInitialSetup(
       const reviewed = await reviewCommandClock(actions);
       if (reviewed.status !== "ready") return reviewed;
       const waiting = (targetMs: unknown) => {
-        if (!Number.isSafeInteger(targetMs)) return refuse();
+        if (!Number.isSafeInteger(targetMs) || Number.isNaN(new Date(targetMs as number).getTime()))
+          return refuse();
         actions.output("Waiting to confirm the time, so no invoice series is ever repeated.");
         actions.output(
           `Continues at ${new Date(targetMs as number).toISOString()}; run the command again within a minute after that time (later, it waits again).`,

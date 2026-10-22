@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createModuleOperationHost } from "@waitron/provisioning";
+import { withOperationAuthority } from "@waitron/module";
 import { hostedHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
+import { hostedHourRecovery } from "@waitron/fiscal-verifactu/src/hosted-hour-recovery.js";
 import { createHourTestClock, selectPastWaits } from "./hour-test-clock.js";
 
 const T = Date.parse("2026-10-24T09:00:04Z");
@@ -54,6 +56,49 @@ describe("createHourTestClock", () => {
     expect((await session.clockChallenge(binding)).boxInstantMs).toBe(T);
     clock.advance(90_000);
     expect((await session.clockChallenge(binding)).boxInstantMs).toBe(T + 90_000);
+  });
+
+  it("is the box's clock for a restore host built with it", async () => {
+    const clock = createHourTestClock(T);
+    const host = createModuleOperationHost(
+      {},
+      {
+        testClock: clock,
+        readRecoveryFacts: async () => ({
+          country: "ES",
+          taxId: "89890001K",
+          environment: "preproduction",
+          bases: [],
+          contextKey: "hour-test-clock",
+          history: [],
+          oldMachineOffline: true,
+          oldMachineAbsent: false,
+          noParallelRecovery: true,
+          priorActivation: "none",
+        }),
+        withPreparationState: (_binding, run) =>
+          run({ value: null, history: [], replace: async () => {} }),
+      },
+    );
+    const binding = {
+      module: "fiscal-verifactu",
+      action: "restore",
+      eventId: "event",
+      sourceId: "source",
+      targetNodeId: "node",
+    } as const;
+    const key = { kind: "recovery-key", nodeId: "node", eventId: "event" } as const;
+    const challenge = () =>
+      withOperationAuthority(binding, key, (authority) =>
+        hostedHourRecovery(host).recovery(
+          { binding, authority },
+          { action: "clock-challenge" },
+          { onBox: true },
+        ),
+      ) as Promise<{ boxInstantMs: number }>;
+    expect((await challenge()).boxInstantMs).toBe(T);
+    clock.advance(90_000);
+    expect((await challenge()).boxInstantMs).toBe(T + 90_000);
   });
 });
 

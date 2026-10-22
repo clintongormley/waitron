@@ -468,11 +468,6 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     for (const [question, answer] of [
       ["address line 2 (blank if none): ", ""],
       ["Confirm setup password: ", PASSWORD],
-      ["The box's displayed date and time are correct? [y/N]: ", "yes"],
-      [
-        "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
-        "no",
-      ],
       ["Have you kept this recovery PDF? [y/N]: ", "yes"],
     ]) {
       const count = output.split(question!).length - 1;
