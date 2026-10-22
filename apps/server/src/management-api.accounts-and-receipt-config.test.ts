@@ -2787,3 +2787,46 @@ describe("A998 staff route authority", () => {
     expect(sent).toEqual([]);
   });
 });
+
+it("rechecks an invitation target promoted to admin after the manager preflight", async () => {
+  const { staffId } = await setupTenant();
+  await suite.db.update(persons).set({ status: "pending" }).where(eq(persons.id, staffId));
+  const sent: Parameters<AccountEmailSender>[0][] = [];
+  const app = mountApp(async (message) => {
+    sent.push(message);
+  });
+  const cookie = await login(app, MANAGER_EMAIL);
+  const original = suite.db.withWriteLock.bind(suite.db);
+  let requests = 0;
+  let changing = false;
+  const spy = vi.spyOn(suite.db, "withWriteLock").mockImplementation((body) => {
+    if (!changing && ++requests === 2) {
+      changing = true;
+      return withTransaction(suite.db, async (tx) => {
+        await tx.update(persons).set({ role: "admin" }).where(eq(persons.id, staffId));
+      }).then(() => original(body));
+    }
+    return original(body);
+  });
+  try {
+    const response = await app.request(`/management-api/staff/${staffId}/invitation`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(changing).toBe(true);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+    });
+    expect(sent).toEqual([]);
+    expect(
+      (
+        await suite.db.execute(
+          sql`select id from management_account_actions where person_id = ${staffId}`,
+        )
+      ).rows,
+    ).toEqual([]);
+  } finally {
+    spy.mockRestore();
+  }
+});
