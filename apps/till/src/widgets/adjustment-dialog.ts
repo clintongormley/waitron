@@ -37,7 +37,7 @@ export interface AdjustTarget {
   unitTotal: string | null;
   extras?: AdjustTarget[];
   started?: boolean;
-  /** Sold by weight, which the server refuses to give away or discount in part. */
+  /** Sold by weight, which the server refuses to comp in part. */
   weighed?: boolean;
   /** An extra of a dish, adjusted on its own. */
   extra?: boolean;
@@ -56,14 +56,13 @@ export interface AdjustmentChoice {
   amount?: string;
 }
 
-type DiscountKind = "percent" | "amount";
-type CompKind = "free" | DiscountKind;
+type CompKind = "free" | "percent" | "amount";
 interface AdjustmentDraft {
   compKind: CompKind;
   extraId: string | null;
   count: string | null;
   quantity: "1" | "all";
-  discountKind: DiscountKind;
+  discountKind: CompKind;
   reasonId: string;
   note: string;
   value: string;
@@ -223,7 +222,7 @@ export class TillAdjustmentDialog extends LitElement {
   @state() private extraId: string | null = null;
   @state() private count: string | null = null;
   @state() private quantity: "1" | "all" = "all";
-  @state() private discountKind: DiscountKind = "percent";
+  @state() private discountKind: CompKind = "percent";
   @state() private reasonId = "";
   @state() private note = "";
   @state() private value = "";
@@ -267,17 +266,15 @@ export class TillAdjustmentDialog extends LitElement {
     const typed = draft.value.trim();
     const number = parseDecimalInput(typed) ?? typed;
     const percent = Number(number);
-    const value = !(this.combined ? draft.compKind !== "free" : this.kind === "discount")
-      ? null
-      : (this.combined ? draft.compKind : draft.discountKind) === "percent" &&
-          TYPED_AMOUNT.test(number) &&
-          percent > 0 &&
-          percent <= 100
-        ? Math.round(percent * 100)
-        : (this.combined ? draft.compKind : draft.discountKind) === "amount" &&
-            /^(0|[1-9]\d*)(\.\d{1,2})?$/.test(number)
-          ? number.replace(/\.0+$|(?<=\.[0-9])0$/, "")
-          : typed;
+    const kind = this.combined ? draft.compKind : draft.discountKind;
+    const value =
+      !(this.combined || this.kind === "discount") || kind === "free"
+        ? null
+        : kind === "percent" && TYPED_AMOUNT.test(number) && percent > 0 && percent <= 100
+          ? Math.round(percent * 100)
+          : kind === "amount" && /^(0|[1-9]\d*)(\.\d{1,2})?$/.test(number)
+            ? number.replace(/\.0+$|(?<=\.[0-9])0$/, "")
+            : typed;
     return JSON.stringify({
       action: this.combined
         ? draft.compKind
@@ -356,13 +353,16 @@ export class TillAdjustmentDialog extends LitElement {
           ? "discount_percent"
           : "discount_amount";
     if (this.kind !== "discount") return this.kind;
-    return this.discountKind === "percent" ? "discount_percent" : "discount_amount";
+    return this.discountKind === "amount" ? "discount_amount" : "discount_percent";
   }
 
-  #discountKinds(): DiscountKind[] {
-    const allows = (action: AdjustmentAction) =>
-      this.reasons.some((reason) => reason.actions.includes(action));
+  #discountKinds(): CompKind[] {
+    const allows = (...actions: AdjustmentAction[]) =>
+      this.reasons.some((reason) => actions.every((action) => reason.actions.includes(action)));
     return [
+      ...(this.target?.lineId === null && allows("comp", "discount_percent")
+        ? (["free"] as const)
+        : []),
       ...(allows("discount_percent") ? (["percent"] as const) : []),
       ...(allows("discount_amount") ? (["amount"] as const) : []),
     ];
@@ -373,8 +373,13 @@ export class TillAdjustmentDialog extends LitElement {
     return this.reasons.filter((reason) =>
       this.combined
         ? reason.actions.some((action) => action !== "cancel")
-        : reason.actions.includes(action),
+        : reason.actions.includes(action) && (!this.#billFree() || reason.actions.includes("comp")),
     );
+  }
+
+  /** Free on the whole bill: sent as a 100% percentage, under a reason allowing both. */
+  #billFree(): boolean {
+    return !this.combined && this.kind === "discount" && this.discountKind === "free";
   }
 
   #reason(): AdjustmentReason | undefined {
@@ -435,7 +440,7 @@ export class TillAdjustmentDialog extends LitElement {
         compareDecimal(decimal(this.#count()), decimal(this.target!.quantity!)) > 0)
     )
       errors.set("quantity", codeMessage("adjustment.quantity_invalid"));
-    if (this.kind === "discount" || (this.combined && this.compKind !== "free")) {
+    if (this.combined ? this.compKind !== "free" : this.kind === "discount" && !this.#billFree()) {
       const number = this.#typedNumber();
       if ((this.combined ? this.compKind : this.discountKind) === "percent") {
         const percent = Number(number);
@@ -461,7 +466,11 @@ export class TillAdjustmentDialog extends LitElement {
       ? null
       : refusalField(
           this.shownRefusal,
-          this.combined && this.compKind !== "free" ? "discount" : this.kind,
+          this.combined && this.compKind !== "free"
+            ? "discount"
+            : this.#billFree()
+              ? "comp"
+              : this.kind,
           this.#partial(),
         );
   }
@@ -505,7 +514,8 @@ export class TillAdjustmentDialog extends LitElement {
         choice.quantity = this.#count();
     } else if (this.#partial() && this.quantity === "1") choice.quantity = "1";
     const typed = this.#typedNumber();
-    if (choice.action === "discount_percent") choice.percentBp = Math.round(Number(typed) * 100);
+    if (choice.action === "discount_percent")
+      choice.percentBp = this.#billFree() ? 10000 : Math.round(Number(typed) * 100);
     if (choice.action === "discount_amount") choice.amount = typed;
     return choice;
   }
@@ -901,51 +911,51 @@ export class TillAdjustmentDialog extends LitElement {
 
   #discountFields(error: string | undefined): TemplateResult {
     const kinds = this.combined ? [] : this.#discountKinds();
-    const pickKind = (kind: DiscountKind) => {
+    const pickKind = (kind: CompKind) => {
       this.discountKind = kind;
       this.value = "";
       if (this.#reason() === undefined) this.reasonId = "";
       this.#changed("value");
     };
-    const names: Record<DiscountKind, StringKey> = {
-      percent: "adjust.kind_percent",
-      amount: "adjust.kind_amount",
-    };
     return html`${
-        kinds.length > 1
-          ? html`<fieldset class="choice" data-discount-kind ?disabled=${this.busy}>
-              <legend>${t("adjust.kind")}</legend>
-              <div class="options">
-                ${kinds.map((kind) =>
-                  this.#radio(
-                    "discountKind",
-                    kind,
-                    t(names[kind]),
-                    this.discountKind === kind,
-                    () => pickKind(kind),
-                  ),
-                )}
-              </div>
-            </fieldset>`
-          : nothing
-      }
-      <wt-input
-        name=${this.combined ? this.compKind : this.discountKind}
-        decimal-locale=${currentLocale()}
-        autocomplete="off"
-        .disabled=${this.busy}
-        required
-        .label=${t((this.combined ? this.compKind : this.discountKind) === "percent" ? "adjust.percent" : "adjust.amount")}
-        .value=${live(this.value)}
-        .error=${error ?? ""}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          if (!this.isConnected || !this.active || this.busy) return;
-          this.value = event.detail.value;
-          this.#changed("value");
-        }}
-        @keydown=${(event: KeyboardEvent) => this.#enter(event)}
-      ></wt-input>`;
+      kinds.length > 1
+        ? html`<fieldset class="choice" data-discount-kind ?disabled=${this.busy}>
+            <legend>${t("comp.how_much")}</legend>
+            <div class="options">
+              ${kinds.map((kind) =>
+                this.#radio(
+                  "discountKind",
+                  kind,
+                  kind === "free" ? t("comp.free") : kind === "percent" ? "%" : "€",
+                  this.discountKind === kind,
+                  () => pickKind(kind),
+                ),
+              )}
+            </div>
+          </fieldset>`
+        : nothing
+    }
+    ${
+      this.#billFree()
+        ? nothing
+        : html`<wt-input
+            name=${this.combined ? this.compKind : this.discountKind}
+            decimal-locale=${currentLocale()}
+            autocomplete="off"
+            .disabled=${this.busy}
+            required
+            .label=${t((this.combined ? this.compKind : this.discountKind) === "percent" ? "adjust.percent" : "adjust.amount")}
+            .value=${live(this.value)}
+            .error=${error ?? ""}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              if (!this.isConnected || !this.active || this.busy) return;
+              this.value = event.detail.value;
+              this.#changed("value");
+            }}
+            @keydown=${(event: KeyboardEvent) => this.#enter(event)}
+          ></wt-input>`
+    }`;
   }
 
   #reasonChoice(error: string | undefined): TemplateResult {

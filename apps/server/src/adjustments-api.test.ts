@@ -938,6 +938,29 @@ describe("the route's own rules", () => {
     expect(await recordedOn(billId)).toHaveLength(1);
   });
 
+  it("comps a whole bill free as a 100% percentage", async () => {
+    const { billId } = await billWith(venue, [{ name: "Steak" }, { name: "Burger" }]);
+
+    const answer = await post(
+      billId,
+      { action: "discount_percent", percentBp: 10000 },
+      { cookie: venue.cookie.staff },
+    );
+
+    expect(answer.status).toBe(200);
+    const recorded = await recordedOn(billId);
+    expect(recorded).toEqual([
+      expect.objectContaining({
+        lineId: null,
+        action: "discount_percent",
+        percentBp: 10000,
+        afterAmount: 0,
+      }),
+    ]);
+    expect(recorded[0]!.reduction).toBe(recorded[0]!.beforeAmount);
+    expect(recorded[0]!.reduction).toBeGreaterThan(0);
+  });
+
   it("maps each refusal to its status", async () => {
     const { billId } = await billWith(venue, [
       { name: "Bottle" },

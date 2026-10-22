@@ -10,8 +10,7 @@ import {
 } from "@waitron/shared";
 import { trimQuantity } from "../widgets/dish-format.js";
 import type { TabLine } from "../api/client.js";
-import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
-import type { StringKey } from "../i18n/strings.js";
+import type { AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { StoredLines } from "../widgets/basket.js";
 import type { WorkingOrderStore } from "./working-order.js";
 
@@ -39,11 +38,6 @@ export function adjustableListing(
     ? own
     : null;
 }
-
-export const LINE_ADJUSTMENTS = [
-  { kind: "comp", label: "table.comp_line" },
-  { kind: "discount", label: "table.discount_line" },
-] as const satisfies readonly { kind: AdjustKind; label: StringKey }[];
 
 /** The kitchen is making the line, or has made it. */
 export function isStarted(line: TabLine): boolean {

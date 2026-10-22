@@ -25,7 +25,7 @@ import type {
   ZoneOfferCatalogue,
 } from "./api/client.js";
 
-// Give away, Discount and Cancel on a stored counter order, through the app: the dialog is the
+// Comp…, Comp the bill and Cancel on a stored counter order, through the app: the dialog is the
 // table's, and after an answer the basket is loaded again from the server (B11c).
 
 const formFactor: FormFactor = "till";
@@ -326,11 +326,11 @@ async function placeCounter(overrides: Record<string, unknown> = {}): Promise<Ti
 async function chooseReason(el: TillApp, name: string): Promise<void> {
   const radio = [
     ...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="reason"]'),
-  ].find((candidate) => candidate.closest("label")!.textContent!.trim() === name)!;
+  ].find((candidate) => candidate.closest("label")!.textContent!.trim().split(" · ")[0] === name)!;
   await press(el, radio);
 }
 
-/** Opens Give away on the caña, chooses Complaint and presses Continue. */
+/** Opens Comp on the caña, chooses Complaint and presses Continue. */
 async function previewComp(el: TillApp): Promise<void> {
   await press(el, inBasket(el, '[data-comp-line="1"]')!);
   await chooseReason(el, "Complaint");
@@ -896,7 +896,7 @@ describe("till-app: counter station choice", () => {
   });
 });
 
-describe("till-app: giving away a dish on a stored counter order", () => {
+describe("till-app: comping a stored counter order", () => {
   it.each([false, true])(
     "identifies a counter Hold as having no table editor, changed lines=%s",
     async (changed) => {
@@ -918,6 +918,46 @@ describe("till-app: giving away a dish on a stored counter order", () => {
     expect(vi.mocked(api.previewAdjustment).mock.calls[0]![1]).toHaveProperty("expectedEdit", null);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
     expect(vi.mocked(api.applyAdjustment).mock.calls[0]![1]).toHaveProperty("expectedEdit", null);
+  });
+
+  it("opens the Comp window on a stored dish and sends one of two cañas", async () => {
+    const el = await retrieved({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(heldOrder(4, "2.50", "2.000")),
+      getTabLines: vi.fn().mockResolvedValue(listing(4, "2.50", "2.000")),
+    });
+
+    await press(el, inBasket(el, '[data-comp-line="1"]')!);
+    expect(dialog(el)!.combined).toBe(true);
+    await chooseReason(el, "Complaint");
+    const stepper = inDialog(el, '[name="adjustQuantity"]') as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    await stepper.updateComplete;
+    const input = stepper.shadowRoot!.querySelector("input")!;
+    input.value = "1";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await flush(el);
+    await press(el, inDialog(el, "[data-adjust-continue]"));
+
+    expect(api.previewAdjustment).toHaveBeenCalledWith("wo-9", { ...ask, quantity: "1" });
+  });
+
+  it("comps the whole stored order free", async () => {
+    const el = await retrieved();
+    await press(el, inBasket(el, "[data-discount-bill]")!);
+    await press(el, inDialog(el, 'input[name="discountKind"][value="free"]'));
+    await chooseReason(el, "Complaint");
+    await press(el, inDialog(el, "[data-adjust-continue]"));
+
+    expect(api.previewAdjustment).toHaveBeenCalledWith("wo-9", {
+      expectedEdit: null,
+      expectedRevision: 4,
+      lineId: null,
+      reasonId: "r-complaint",
+      note: null,
+      action: "discount_percent",
+      percentBp: 10000,
+    });
   });
 
   it("offers the adjustments once the order's lines are read, Cancel only on what the kitchen has", async () => {
@@ -1646,7 +1686,7 @@ describe("till-app: no adjustment while the order is being paid, placed or held"
       target: { lineId: "l-2", name: "Caña", quantity: "1", total: "2.50", unitTotal: null },
     });
 
-  /** Presses Give away on the caña and holds the reasons' answer until `reasons` resolves. */
+  /** Presses Comp on the caña and holds the reasons' answer until `reasons` resolves. */
   async function pressedWhileReasonsLoad(
     overrides: Record<string, unknown>,
   ): Promise<{ el: TillApp; reasons: ReturnType<typeof deferred<AdjustmentReason[]>> }> {

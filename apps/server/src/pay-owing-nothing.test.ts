@@ -32,12 +32,13 @@ import {
   tendersOfBill,
   type BillVenue,
 } from "./testing/bill-venue.js";
-import { giveAway } from "./testing/cancel-line.js";
+import { compWholeBill, giveAway } from "./testing/cancel-line.js";
 import "./errors.js";
 
-// Paying a bill that owes nothing because every line on it was given away: the sale is filed at 0.00
-// and settled with no tender, no card payment row and no cash drawer opening. Driven over HTTP
-// against a venue that files real Veri*Factu records; every case makes its own bill.
+// Paying a bill that owes nothing: the sale is filed at 0.00 and settled with no tender, no card
+// payment row and no cash drawer opening. A bill that still owes, and a refused request, appear
+// only as checks on that. Driven over HTTP against a venue that files real Veri*Factu records;
+// every case makes its own bill.
 let venue: BillVenue;
 /** A counter zone where an order pays before the kitchen sees it, offering the free Agua too. */
 let counter: ZoneOffers;
@@ -377,6 +378,30 @@ async function presentedGivenAway(): Promise<string> {
 }
 
 describe("other ways a bill owing nothing is paid", () => {
+  it("closes a bill comped free as a whole on a cash Pay of 0, with an invoice of 0.00, no tender and no drawer", async () => {
+    const { tabId } = await seatedWith(venue, "Caña");
+    await compWholeBill(venue, tabId, 10000);
+    const drawerJobs = drawerJobCount();
+
+    const answer = await pay(tabId, { method: "cash", amount: "0" });
+
+    expect(answer.status).toBe(200);
+    expect(answer.json).toMatchObject({ total: "0.00", tender: { method: "unpaid" } });
+    await expectClosedOwingNothing(tabId);
+    expect(drawerJobCount()).toBe(drawerJobs);
+  });
+
+  it("refuses a cash Pay of 0 on a bill comped only by half, which still owes, leaving it open with nothing filed", async () => {
+    const { tabId } = await seatedWith(venue, "Caña");
+    await compWholeBill(venue, tabId, 5000);
+
+    const answer = await pay(tabId, { method: "cash", amount: "0" });
+
+    expect([answer.status, answer.json.code]).toEqual([400, "sale.tender_shortfall"]);
+    expect(await statusOf(venue, tabId)).toBe("open");
+    expect(registroCount(venue, tabId)).toBe(0);
+  });
+
   it("closes a presented order given away before it was presented, on the reader without charging", async () => {
     const id = await presentedGivenAway();
     const readerCalls = venue.card.collectCalls.length;

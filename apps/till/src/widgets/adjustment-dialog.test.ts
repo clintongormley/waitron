@@ -209,7 +209,7 @@ describe("till-adjustment-dialog: the form", () => {
 
     setLocale("es-ES");
     expect(hint(await mount({ kind: "discount", target: ham }))).toBe(
-      "Parte de un artículo que se vende al peso o por medida no se puede invitar ni descontar. Haz un descuento sobre la línea entera",
+      codeMessage("adjustment.weighed_partial", "es"),
     );
   });
 
@@ -220,15 +220,15 @@ describe("till-adjustment-dialog: the form", () => {
         "wt-dialog",
       )!.heading;
 
-    expect(await heading("comp", olives)).toBe("Give an extra away");
+    expect(await heading("comp", olives)).toBe("Comp an extra");
     expect(await heading("discount", olives)).toBe("Discount an extra");
     expect(await heading("cancel", olives)).toBe("Cancel an extra");
-    expect(await heading("comp", burger)).toBe("Give an item away");
+    expect(await heading("comp", burger)).toBe("Comp an item");
     expect(await heading("discount", burger)).toBe("Discount an item");
     expect(await heading("cancel", burger)).toBe("Cancel an item");
 
     setLocale("es-ES");
-    expect(await heading("comp", olives)).toBe("Invitar un extra");
+    expect(await heading("comp", olives)).toBe(t("adjust.comp_extra_title"));
     expect(await heading("discount", olives)).toBe("Descuento en un extra");
     expect(await heading("cancel", olives)).toBe("Cancelar un extra");
   });
@@ -841,3 +841,81 @@ for (const locale of ["en", "es"]) {
     ]);
   });
 }
+
+describe("till-adjustment-dialog: comping the whole bill", () => {
+  const bill = (): AdjustTarget => ({
+    lineId: null,
+    name: t("adjust.whole_bill"),
+    quantity: null,
+    total: "40.00",
+    unitTotal: null,
+  });
+  const mountBill = () =>
+    mount({ kind: "discount", target: bill(), reasons: [complaint, regular, staffMeal] });
+  const kindRadios = (el: TillAdjustmentDialog) => [
+    ...root(el).querySelectorAll<HTMLInputElement>('input[name="discountKind"]'),
+  ];
+  const reasonChosen = (el: TillAdjustmentDialog) =>
+    [...root(el).querySelectorAll<HTMLInputElement>('input[name="reason"]')].some(
+      (radio) => radio.checked,
+    );
+
+  it("offers Free beside % and € under How much, with % chosen", async () => {
+    const el = await mountBill();
+    expect(kindRadios(el).map((radio) => radio.value)).toEqual(["free", "percent", "amount"]);
+    expect(kindRadios(el).map((radio) => radio.closest("label")!.textContent!.trim())).toEqual([
+      t("comp.free"),
+      "%",
+      "€",
+    ]);
+    expect(root(el).querySelector("[data-discount-kind] legend")!.textContent!.trim()).toBe(
+      t("comp.how_much"),
+    );
+    expect(kindRadios(el).find((radio) => radio.checked)!.value).toBe("percent");
+  });
+
+  it("sends Free as a 100% percentage, asking no value, under the reasons that allow Free and a percentage", async () => {
+    const el = await mountBill();
+    await choose(el, "discountKind", "free");
+    expect(root(el).querySelector('wt-input[name="percent"]')).toBeNull();
+    expect(root(el).querySelector('wt-input[name="amount"]')).toBeNull();
+    expect(reasonNames(el)).toEqual(["Complaint"]);
+    await chooseReason(el, "Complaint");
+    const previews = capture<AdjustmentChoice>(el, "adjust-preview");
+    await press(continueButton(el), el);
+    expect(previews).toEqual([
+      { action: "discount_percent", reasonId: "Complaint", note: null, percentBp: 10000 },
+    ]);
+
+    await choose(el, "discountKind", "percent");
+    expect(field(el, "percent")).not.toBeNull();
+    expect(field(el, "percent").shadowRoot!.querySelector("input")!.value).toBe("");
+    await chooseReason(el, "Complaint");
+    await choose(el, "discountKind", "amount");
+    expect(reasonChosen(el)).toBe(false);
+
+    cleanupWidgets();
+    const fresh = await mountBill();
+    await chooseReason(fresh, "Regular");
+    await choose(fresh, "discountKind", "free");
+    expect(reasonChosen(fresh)).toBe(false);
+  });
+
+  it("puts a free bill's refusal above the action", async () => {
+    const el = await mountBill();
+    await choose(el, "discountKind", "free");
+    await chooseReason(el, "Complaint");
+    el.refusal = "adjustment.no_reduction";
+    await el.updateComplete;
+    const message = codeMessage("adjustment.no_reduction");
+    expect(actions(el).error).toContain(message);
+    expect(
+      [...root(el).querySelectorAll("[data-error-for]")].map((error) => error.textContent!.trim()),
+    ).not.toContain(message);
+    expect(
+      [...root(el).querySelectorAll<HTMLElement & { error: string }>("wt-input")].map(
+        (input) => input.error,
+      ),
+    ).not.toContain(message);
+  });
+});

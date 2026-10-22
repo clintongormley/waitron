@@ -58,7 +58,7 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
     await expectNoA11yViolations(host);
   });
 
-  it("a stored order offering Cancel, Give away, Discount and a struck price, on a dish and on its extra, has no violations", async () => {
+  it("a stored order offering Cancel, Comp and a struck price, on a dish and on its extra, has no violations", async () => {
     const store = new WorkingOrderStore();
     store.loadFrom(
       "wo-9",

@@ -293,6 +293,22 @@ it("labels both preview and confirmation with the actual covered quantity", asyn
   expect(q(el, "[data-quantity-shown]").textContent!.trim()).toBe("How many: 2 of 3");
 });
 
+it("asks for approval when the server needs a PIN", async () => {
+  const el = await mount();
+  const seen = captures(el);
+  await click(el, 'input[name="reason"][value="Free"]');
+  await click(el, "[data-adjust-continue]");
+  el.choice = seen[0]!;
+  el.preview = {
+    reduction: "36.00",
+    nominalValue: "36.00",
+    needsApproval: { by: "reason", roles: ["manager", "admin"] },
+    lines: [],
+  };
+  await el.updateComplete;
+  expect(q(el, "[data-adjust-confirm]").textContent!.trim()).toBe("Ask for approval");
+});
+
 it("confirms the same choice when its object keys are in a different order", async () => {
   const el = await mount();
   let confirms = 0;

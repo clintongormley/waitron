@@ -42,6 +42,20 @@ export const GIVE_AWAY_REASON: AdjustmentReasonInput = {
   noteRequired: false,
 };
 
+/** A Comp reason taking a percentage off a whole bill, applied by anyone with no approval and no
+ * note. */
+export const COMP_BILL_REASON: AdjustmentReasonInput = {
+  name: "Bill comped in a test",
+  names: {},
+  kind: "comp",
+  actions: ["comp", "discount_percent"],
+  maxPercentBp: null,
+  maxAmount: null,
+  applyRoles: ["staff", "supervisor", "manager", "admin"],
+  approverRoles: ["staff", "supervisor", "manager", "admin"],
+  noteRequired: false,
+};
+
 /** `reason`'s id, created the first time a database is asked for it. */
 async function reasonIdOf(tx: Transaction, reason: AdjustmentReasonInput): Promise<string> {
   const [found] = await tx
@@ -158,4 +172,23 @@ export async function giveAway(venue: BillVenue, billId: string, lineNo: number)
     { ...body, reasonId, action: "comp" },
   );
   expect(given.status).toBe(200);
+}
+
+/** Takes `percentBp` off the whole bill through the adjustment route, under
+ * {@link COMP_BILL_REASON}: 10000 makes it free. */
+export async function compWholeBill(
+  venue: BillVenue,
+  billId: string,
+  percentBp: number,
+): Promise<void> {
+  const reasonId = await withTransaction(venue.db, (tx) => reasonIdOf(tx, COMP_BILL_REASON));
+  const body = await cancelBody(venue.db, billId, 1);
+  const comped = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    `/api/working-orders/${billId}/adjustments`,
+    { ...body, lineId: null, reasonId, action: "discount_percent", percentBp },
+  );
+  expect(comped.status).toBe(200);
 }
