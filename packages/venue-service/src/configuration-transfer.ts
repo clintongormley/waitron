@@ -589,6 +589,17 @@ function validateReceiptModes(tables: Tables): void {
   }
 }
 
+function validateServicePolicyCompleteness(tables: Tables): void {
+  for (const [parents, policies, key] of [
+    ["departments", "department_sale_policies", "department_id"],
+    ["floor_zones", "zone_service_policies", "zone_id"],
+    ["floor_zones", "zone_sale_policies", "zone_id"],
+  ] as const) {
+    const configured = new Set((tables[policies] ?? []).map((row) => row[key]));
+    if ((tables[parents] ?? []).some((row) => !configured.has(row.id))) refuse(policies);
+  }
+}
+
 function validateReceiptFields(tables: Tables): void {
   for (const row of tables.department_receipts ?? []) {
     let receipt = row.receipt;
@@ -680,6 +691,7 @@ function validateVenueServiceConfiguration(
   validateSeasonWeeks(tables, bundle);
   validateDepartmentTransfers(tables);
   validateRoutingConfiguration(tables);
+  validateServicePolicyCompleteness(tables);
 }
 
 export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
