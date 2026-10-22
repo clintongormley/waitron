@@ -1879,6 +1879,12 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
+- **A1006. A dish or station name holding `$&` or `$'` is garbled in the kitchen's
+  cross-references.** `apps/till/src/widgets/queue-crossrefs.ts` fills `{name}` and `{station}` with
+  `String.replace` and a string, so a replacement pattern in the venue's text is expanded; A757
+  slice 8 fixed the same shape in `step-chip.ts` by passing a function (`() => step.name`). The
+  fills also run one after the other, so a dish named `Tea {station}` takes the station's name.
+
 - **A756. The Kitchen tab split up (owner, 2026-10-16; changed by A773 the same day).** Left: the
   parts that wait for A773-1 — the reminder to send the next course on the department's Service
   tab, and late flags, identical dishes, held courses, MOVED slips, done on the screen and changes
@@ -2169,18 +2175,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   timing band; showing minutes needs the oldest fired dish's age in the read.
   [Detail](backlog/till.md#a936-waitings-minutes-on-the-map)
 
-- **A1005. A till a few seconds ahead taps the next every-N-minutes repeat too early (left open by
-  A757 slice 8's finish review).** The till shows the next repeat by its own clock; a Done that
-  reaches the server a moment before that repeat falls due by the server's clock answers
-  `{ cleared: [] }`, and the chip stays until a second tap. Measured by the re-read reviewer with a
-  till 2 seconds early, before and after the review fix. The plan's owner point 3 wants a till a
-  little ahead accepted; now that a Done carries the `dueAt` the till showed, the server could
-  accept a shown repeat a few seconds ahead.
-
-- **A1006. A dish or station name holding `$&` or `$1` is garbled in the till's cross-references.**
-  `apps/till/src/widgets/queue-crossrefs.ts` fills `{name}` and `{station}` with
-  `String.replace` and a string, so a replacement pattern in the venue's text is expanded. A757
-  slice 8 fixed the same shape in `step-chip.ts` by passing a function (`() => name`).
+- **A1005. A till a few seconds ahead cannot clear an every-N-minutes repeat that follows a Done
+  (left open by A757 slice 8).** Its Done answers `{ cleared: [] }` until the server's clock
+  reaches that repeat. A Done now carries the `dueAt` the till showed, so the server could accept a
+  shown repeat a few seconds ahead (the plan's Decision 5: "A live step not yet due is accepted").
 
 - **A937. Measure the owner's real floor plan once it is drawn (left open by A757 slice 5).** Slice
   5's size check ran on Santet's invented grid, where Terrace's tables show names but no cue; re-run
