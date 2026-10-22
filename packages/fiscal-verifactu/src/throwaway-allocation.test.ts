@@ -95,15 +95,15 @@ describe("the throwaway allocation seat", () => {
       const administratorId = randomUUID();
       const series = await activate(signFor(administratorId), administratorId);
       expect(suite.db.all(sql`select numero_instalacion, node_id from registro_sif`)).toEqual([
-        { numero_instalacion: "06RB", node_id: node.nodeId },
+        { numero_instalacion: "0CNNW", node_id: node.nodeId },
       ]);
       expect(suite.db.all(sql`select taxpayer_nif, environment from fiscal_allocations`)).toEqual([
         { taxpayer_nif: TAXPAYER, environment: "preproduction" },
       ]);
       expect(series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
-        { code: "A-06RB", purpose: "standard" },
-        { code: "FF-06RB", purpose: "full" },
-        { code: "R-06RB", purpose: "rectificative" },
+        { code: "A-0CNNW", purpose: "standard" },
+        { code: "FF-0CNNW", purpose: "full" },
+        { code: "R-0CNNW", purpose: "rectificative" },
       ]);
     });
 
@@ -137,7 +137,7 @@ describe("the throwaway allocation seat", () => {
       expect(allocation).toMatchObject({
         source: "hour",
         environment: "preproduction",
-        installationIdentity: "06RB",
+        installationIdentity: "0CNNW",
       });
       const sif = suite.db.all(sql`select * from registro_sif`);
       expect(sif).toHaveLength(1);

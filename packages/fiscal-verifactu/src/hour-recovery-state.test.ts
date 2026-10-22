@@ -37,7 +37,7 @@ async function seed(configuration = bases) {
   await seedTenants(suite.db);
   await stampDeployment(suite.db, "preproduction");
   const initial = { ...binding, action: "setup", eventId: "first", sourceId: "original" };
-  await activate(initial, "06RB", "2026-10-16T11:40:00.000Z", configuration);
+  await activate(initial, "0CNNW", "2026-10-16T11:40:00.000Z", configuration);
   await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
 }
 
@@ -102,7 +102,7 @@ async function activate(
 it("recognises a matching committed restore without modifying its retained result", async () => {
   await seed();
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
-  await activate(binding, "06RC", "2026-10-16T12:40:00.000Z");
+  await activate(binding, "0CNQR", "2026-10-16T12:40:00.000Z");
   const before = await suite.db.select().from(invoiceSeries);
   expect((await read()).priorActivation).toBe("committed");
   expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
@@ -128,7 +128,7 @@ it("reads each configured prefix and exact spelling without writing counters", a
       sources: facts.history,
     }),
   ).toMatchObject({
-    greatestSpentMinute: 6923,
+    greatestSpentMinute: 415420,
     contradictions: [],
   });
   expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
@@ -141,13 +141,13 @@ it("includes higher retired names on another node under another software identif
     nodeId: TENANT_A.nodeId2,
     nif: "89890001K",
     idSistemaInformatico: "OTHER",
-    numeroInstalacion: "06RD",
+    numeroInstalacion: "0CNRP",
     registradoEn: new Date("2026-10-16T13:10:00Z"),
     revocadoEn: new Date("2026-10-16T13:20:00Z"),
   });
   await suite.db.insert(invoiceSeries).values({
     nodeId: TENANT_A.nodeId2,
-    code: "different-06RD",
+    code: "different-0CNRP",
     purpose: "standard",
     retiredAt: new Date("2026-10-16T13:20:00Z"),
   });
@@ -158,7 +158,7 @@ it("includes higher retired names on another node under another software identif
       sources: facts.history,
     }),
   ).toMatchObject({
-    greatestSpentMinute: 6925,
+    greatestSpentMinute: 415510,
     recordedTimeFloorMs: Date.parse("2026-10-16T13:20:00Z"),
     contradictions: [],
   });
@@ -196,7 +196,7 @@ it("refuses a changed active series instead of treating it as newly configured b
   await suite.db
     .update(invoiceSeries)
     .set({ purpose: "rectificative" })
-    .where(eq(invoiceSeries.code, "FF-06RB"));
+    .where(eq(invoiceSeries.code, "FF-0CNNW"));
   await expect(read()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "series_mismatch" },
@@ -244,7 +244,7 @@ it("consults an exact committed re-registration without changing counters or evi
   await seed();
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
   const operation = { ...binding, action: "re-register" };
-  await activate(operation, "06RC", "2026-10-16T12:40:00.000Z");
+  await activate(operation, "0CNQR", "2026-10-16T12:40:00.000Z");
   const before = {
     allocations: await suite.db.select().from(fiscalAllocations),
     series: await suite.db.select().from(invoiceSeries),

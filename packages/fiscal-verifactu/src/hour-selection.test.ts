@@ -116,7 +116,7 @@ it("exposes an hour only after its complete bound intent is persisted", async ()
   const result = await f.run();
   expect(result).toMatchObject({
     status: "selected",
-    identity: "06RB",
+    identity: "0CNNW",
     issuedAt: "2026-10-16T11:40:00.000Z",
     binding,
     scope,
@@ -125,12 +125,14 @@ it("exposes an hour only after its complete bound intent is persisted", async ()
   expect(f.writes).toHaveLength(1);
   expect(f.writes[0]).toMatchObject({
     version: 1,
-    entries: [expect.objectContaining({ kind: "intent", identity: "06RB", binding, scope, bases })],
+    entries: [
+      expect.objectContaining({ kind: "intent", identity: "0CNNW", binding, scope, bases }),
+    ],
   });
 });
 
 const refusal = (reason: string) => ({ code: "sif.allocation_invalid", params: { reason } });
-const historyRow = (identity = "06RC", change: Record<string, unknown> = {}) => ({
+const historyRow = (identity = "0CNPG", change: Record<string, unknown> = {}) => ({
   ...scope,
   reference: "retired-other-node",
   kind: "retirement",
@@ -140,7 +142,7 @@ const historyRow = (identity = "06RC", change: Record<string, unknown> = {}) => 
   recordedAtMs: null,
   ...change,
 });
-it.each(["06RB", "06RC", "ZZZZ"])(
+it.each(["0CNNW", "0CNPG", "ZZZZZ"])(
   "refuses current/lower hour against known %s instead of inventing maximum plus one",
   async (identity) => {
     const f = fixture();
@@ -156,9 +158,9 @@ it("allows the current hour strictly later than retained epoch hour zero", async
   const f = fixture();
   f.facts = {
     ...f.facts,
-    history: [{ reference: "old", complete: true, records: [historyRow("0000")] }],
+    history: [{ reference: "old", complete: true, records: [historyRow("00000")] }],
   };
-  expect(await f.run()).toMatchObject({ status: "selected", identity: "06RB" });
+  expect(await f.run()).toMatchObject({ status: "selected", identity: "0CNNW" });
 });
 it("refuses before the recorded time floor even when the identity floor is lower", async () => {
   const f = fixture();
@@ -168,7 +170,7 @@ it("refuses before the recorded time floor even when the identity floor is lower
       {
         reference: "old",
         complete: true,
-        records: [historyRow("0000", { recordedAtMs: instant + 1 })],
+        records: [historyRow("00000", { recordedAtMs: instant + 1 })],
       },
     ],
   };
@@ -188,10 +190,10 @@ it("retains exact intent across a boundary and lost reply, without another durab
 });
 it("recalculates a preview across a boundary before persistence", async () => {
   const f = fixture();
-  expect(await f.preview()).toMatchObject({ status: "preview", identity: "06RB" });
+  expect(await f.preview()).toMatchObject({ status: "preview", identity: "0CNNW" });
   expect(f.writes).toEqual([]);
   f.at(Date.parse("2026-10-16T12:00:00Z"), 1_200_000);
-  expect(await f.run()).toMatchObject({ status: "selected", identity: "06RC" });
+  expect(await f.run()).toMatchObject({ status: "selected", identity: "0CNPG" });
 });
 it("serializes concurrent exact requests into one intent", async () => {
   const f = fixture();
@@ -205,11 +207,11 @@ it("retains abandoned or uncertain intent and demands a later current hour for i
   const next = { ...binding, eventId: "replacement", sourceId: "replacement-attempt" };
   await expect(f.run("no", next)).rejects.toMatchObject(refusal("hour_not_later"));
   f.at(Date.parse("2026-10-16T12:00:00Z"), 1_200_000);
-  expect(await f.run("no", next)).toMatchObject({ status: "selected", identity: "06RC" });
+  expect(await f.run("no", next)).toMatchObject({ status: "selected", identity: "0CNPG" });
   expect(f.value).toMatchObject({
     entries: [
-      expect.objectContaining({ identity: "06RB" }),
-      expect.objectContaining({ identity: "06RC" }),
+      expect.objectContaining({ identity: "0CNNW" }),
+      expect.objectContaining({ identity: "0CNPG" }),
     ],
   });
 });
@@ -255,7 +257,7 @@ it("requires authentic fresh clock decisions and bound confirmations", async () 
   const confirmation = confirmHourClock(f.facts.clock);
   expect(await f.run("no", binding, confirmation)).toMatchObject({
     status: "selected",
-    identity: "06RB",
+    identity: "0CNNW",
   });
 });
 it.each(["yes", "unknown"] as const)(
@@ -275,7 +277,7 @@ it.each(["yes", "unknown"] as const)(
     });
     expect(f.writes).toHaveLength(1);
     f.at(Date.parse("2026-10-16T12:00:00Z"), 1_200_000);
-    expect(await f.run(answer)).toMatchObject({ status: "selected", identity: "06RC" });
+    expect(await f.run(answer)).toMatchObject({ status: "selected", identity: "0CNPG" });
   },
 );
 it("cannot skip a recorded wait by changing the taxpayer-wide answer", async () => {
@@ -297,14 +299,14 @@ it("restart obtains fresh comparisons without trusting old monotonic readings or
   f.at(Date.parse("2026-10-16T11:50:00Z"), 10);
   expect(await f.run("yes")).toMatchObject({ status: "waiting", remainingMs: 600_000 });
   f.at(Date.parse("2026-10-16T12:00:00Z"), 600_010);
-  expect(await f.run("yes")).toMatchObject({ status: "selected", identity: "06RC" });
+  expect(await f.run("yes")).toMatchObject({ status: "selected", identity: "0CNPG" });
 });
 it("restart after a verified target has passed needs no invented extra hour", async () => {
   const f = fixture();
   await f.run("yes");
   f.restart();
   f.at(Date.parse("2026-10-16T12:10:00Z"), 0);
-  expect(await f.run("yes")).toMatchObject({ status: "selected", identity: "06RC" });
+  expect(await f.run("yes")).toMatchObject({ status: "selected", identity: "0CNPT" });
 });
 it("an unresolved restart comparison retains the wait instead of completing it", async () => {
   const f = fixture();
@@ -315,7 +317,7 @@ it("an unresolved restart comparison retains the wait instead of completing it",
   expect(f.writes).toHaveLength(1);
   expect(await f.run("yes", binding, confirmHourClock(f.facts.clock))).toMatchObject({
     status: "selected",
-    identity: "06RC",
+    identity: "0CNPT",
   });
 });
 it("a backward clock refuses existing material and retains its spent hour", async () => {
@@ -358,7 +360,7 @@ it("never returns usable material after persistence fails, before or after actua
       "lost durable reply",
     );
   });
-  expect(await f.run()).toMatchObject({ status: "selected", identity: "06RB" });
+  expect(await f.run()).toMatchObject({ status: "selected", identity: "0CNNW" });
   expect(f.writes).toHaveLength(1);
 });
 it("expired authority cannot select and expiry during persistence cannot expose material", async () => {
@@ -428,7 +430,7 @@ it("expiry while awaiting durable persistence leaves a spent hour but returns no
   release();
   await expect(pending).rejects.toMatchObject(refusal("reauthentication_required"));
   expect(f.writes).toHaveLength(1);
-  expect(await f.run()).toMatchObject({ identity: "06RB" });
+  expect(await f.run()).toMatchObject({ identity: "0CNNW" });
   expect(f.writes).toHaveLength(1);
 });
 
@@ -509,7 +511,7 @@ it("concurrent different events cannot both select the same current hour", async
     f.run(),
     f.run("no", { ...binding, eventId: "other-event", sourceId: "other-attempt" }),
   ]);
-  expect(results[0]).toMatchObject({ status: "fulfilled", value: { identity: "06RB" } });
+  expect(results[0]).toMatchObject({ status: "fulfilled", value: { identity: "0CNNW" } });
   expect(results[1]).toMatchObject({ status: "rejected", reason: refusal("hour_not_later") });
   expect(f.writes).toHaveLength(1);
 });
@@ -539,7 +541,7 @@ it("conflicting retained revisions for one exact event refuse instead of choosin
   const conflict = structuredClone(f.value) as {
     entries: { identity: string; issuedAt: string }[];
   };
-  conflict.entries[0]!.identity = "06RC";
+  conflict.entries[0]!.identity = "0CNPG";
   conflict.entries[0]!.issuedAt = "2026-10-16T12:00:00.000Z";
   f.writes.push(conflict);
   await expect(f.run()).rejects.toMatchObject(refusal("history_invalid"));
@@ -549,7 +551,7 @@ it("retains the predecessor evidence references with the durable selected intent
   f.facts = {
     ...f.facts,
     history: [
-      { reference: "predecessor-workspace", complete: true, records: [historyRow("0000")] },
+      { reference: "predecessor-workspace", complete: true, records: [historyRow("00000")] },
     ],
   };
   await f.run();
@@ -579,7 +581,7 @@ it("accepts only a matching clock confirmation from the trusted facts reader", a
   const f = fixture();
   f.at(instant, 0, instant + 300_000);
   f.facts = Object.assign({}, f.facts, { confirmation: confirmHourClock(f.facts.clock) });
-  expect(await f.run()).toMatchObject({ status: "selected", identity: "06RB" });
+  expect(await f.run()).toMatchObject({ status: "selected", identity: "0CNNW" });
   const before = f.writes.length;
   f.at(instant, 1, instant + 400_000);
   await expect(f.run()).rejects.toMatchObject(refusal("clock_unconfirmed"));
@@ -605,7 +607,7 @@ it("keeps an unspent wait's target and monotonic progress when ownership changes
   f.at(Date.parse("2026-10-16T12:00:00Z"), 1_200_000);
   expect(await f.run("unknown")).toMatchObject({
     status: "selected",
-    identity: "06RC",
+    identity: "0CNPG",
     contextKey: "owner-generation-2",
   });
   f.facts = { ...f.facts, contextKey: "owner-generation-3" };

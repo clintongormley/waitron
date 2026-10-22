@@ -34,11 +34,11 @@ const context = {
 };
 const input = {
   allocation: {
-    installationIdentity: "06TH",
+    installationIdentity: "0CSQW",
     series: [
-      { code: "A-06TH", purpose: "standard" },
-      { code: "FF-06TH", purpose: "full" },
-      { code: "R-06TH", purpose: "rectificative" },
+      { code: "A-0CSQW", purpose: "standard" },
+      { code: "FF-0CSQW", purpose: "full" },
+      { code: "R-0CSQW", purpose: "rectificative" },
     ],
   },
 };
@@ -78,7 +78,7 @@ async function mount(stage = async () => old, reissue = async () => replacement)
     },
     async candidates(value) {
       calls.push({ action: "select", value });
-      return { kind: "waitron-hour-setup", status: "selected", identity: "06TH", input };
+      return { kind: "waitron-hour-setup", status: "selected", identity: "0CSQW", input };
     },
     async request() {
       throw new Error("No reselection during key replacement");
@@ -155,7 +155,7 @@ it("offers explicit replacement after raw-key loss and delivers the new real PDF
     new Uint8Array(await (await fetch(download(el)!.href)).arrayBuffer()),
   );
   expect(decoded.document?.nodeKey).toEqual(replacement.key);
-  expect(decoded.document?.installationCodes).toEqual(["06TH"]);
+  expect(decoded.document?.installationCodes).toEqual(["0CSQW"]);
   expect(calls.filter((c) => c.action === "reissue")).toHaveLength(1);
   expect(calls.filter((c) => c.action === "select")).toEqual([
     { action: "select", value: { answer: "no" } },

@@ -76,14 +76,14 @@ for (const theme of ["light", "dark"] as const)
                   : {
                       kind: "waitron-hour-setup",
                       status: "selected",
-                      identity: "06TH",
+                      identity: "0CSQW",
                       input: {
                         allocation: {
-                          installationIdentity: "06TH",
+                          installationIdentity: "0CSQW",
                           series: [
-                            { code: "A-06TH", purpose: "standard" },
-                            { code: "FF-06TH", purpose: "full" },
-                            { code: "R-06TH", purpose: "rectificative" },
+                            { code: "A-0CSQW", purpose: "standard" },
+                            { code: "FF-0CSQW", purpose: "full" },
+                            { code: "R-0CSQW", purpose: "rectificative" },
                           ],
                         },
                       },

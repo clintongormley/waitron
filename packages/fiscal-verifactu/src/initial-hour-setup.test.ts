@@ -36,11 +36,11 @@ const input = {
     taxpayerNif: "89890001K",
     softwareId: "W1",
     environment: "preproduction",
-    installationIdentity: "06RB",
+    installationIdentity: "0CNNW",
     series: [
-      { code: "A-06RB", purpose: "standard" },
-      { code: "FF-06RB", purpose: "full" },
-      { code: "R-06RB", purpose: "rectificative" },
+      { code: "A-0CNNW", purpose: "standard" },
+      { code: "FF-0CNNW", purpose: "full" },
+      { code: "R-0CNNW", purpose: "rectificative" },
     ],
     source: "hour",
     reservationEvidence: null,
@@ -62,7 +62,7 @@ const input = {
 function fixture() {
   return structuredClone({
     ...context,
-    request: { kind: "waitron-hour-setup", status: "selected", identity: "06RB", input },
+    request: { kind: "waitron-hour-setup", status: "selected", identity: "0CNNW", input },
   });
 }
 
@@ -86,7 +86,7 @@ it.each(["en", "es"] as const)(
     });
     expect(document.statement).toEqual({
       kind: "waitron-recovery-document",
-      installationCodes: ["06RB"],
+      installationCodes: ["0CNNW"],
       version: 1,
       scope: { taxpayerNif: "89890001K", softwareId: "W1", environment: "preproduction" },
       taxpayerName: "Olivo Restauración SL",
@@ -186,7 +186,7 @@ it("dates a delayed recovery document when it is created without selecting anoth
     locale: "en",
   });
   expect(document.statement).toMatchObject({ createdAt: "2026-10-17T12:30:00.000Z" });
-  expect(saved.request.input.allocation.installationIdentity).toBe("06RB");
+  expect(saved.request.input.allocation.installationIdentity).toBe("0CNNW");
   expect(f.history).toEqual([]);
 });
 const refusal = { code: "sif.allocation_invalid", params: { reason: "event_mismatch" } };
@@ -195,7 +195,7 @@ it("checks the entire frozen request and returns a detached exact input", () => 
   const checked = readHourSetupInput(saved, structuredClone(input));
   expect(checked).toEqual(input);
   checked.allocation.series[0]!.code = "mutated";
-  expect(saved.request.input.allocation.series[0]!.code).toBe("A-06RB");
+  expect(saved.request.input.allocation.series[0]!.code).toBe("A-0CNNW");
 });
 it.each([
   ["country", "FR"],
@@ -222,11 +222,16 @@ it.each([
   [],
   {},
   { kind: "legacy" },
-  { kind: "waitron-hour-setup", status: "waiting", identity: "06RB", input },
+  { kind: "waitron-hour-setup", status: "waiting", identity: "0CNNW", input },
   { kind: "waitron-hour-setup", status: "selected", identity: "S000001", input },
-  { kind: "waitron-hour-setup", status: "selected", identity: "06RC", input },
-  { kind: "waitron-hour-setup", status: "selected", identity: "06RB", input: null },
-  { kind: "waitron-hour-setup", status: "selected", identity: "06RB", input: { allocation: null } },
+  { kind: "waitron-hour-setup", status: "selected", identity: "0CNPG", input },
+  { kind: "waitron-hour-setup", status: "selected", identity: "0CNNW", input: null },
+  {
+    kind: "waitron-hour-setup",
+    status: "selected",
+    identity: "0CNNW",
+    input: { allocation: null },
+  },
 ])("refuses unusable frozen request %j", (request) => {
   expect(() => readHourSetupInput({ ...context, request }, input)).toThrowError(
     expect.objectContaining(refusal),
@@ -322,13 +327,13 @@ it("the configured module validates, projects and prepares the same retained hou
   expect(saved).toEqual({
     kind: "waitron-hour-setup",
     status: "selected",
-    identity: "06RB",
+    identity: "0CNNW",
     input,
   });
   expect(f.seat.inspect(held, input).input).toEqual(input);
-  expect(f.seat.assignmentKeys!(held)).toEqual(['["89890001K","preproduction","hour","06RB"]']);
+  expect(f.seat.assignmentKeys!(held)).toEqual(['["89890001K","preproduction","hour","0CNNW"]']);
   expect(f.seat.assignmentPositions!(held)).toEqual([
-    { namespace: '["89890001K","preproduction","hour"]', position: 6923 },
+    { namespace: '["89890001K","preproduction","hour"]', position: 415420 },
   ]);
   expect(f.seat.pending!(saved)).toBe(false);
   expect(f.seat.resolutionEvidence!()).toEqual({ files: [], directories: [] });
@@ -361,7 +366,7 @@ it("the configured module binds manual confirmation to the displayed comparison"
     params: { reason: "clock_unconfirmed" },
   });
   await f.prepare({ action: "confirm-clock", comparisonId: compared.id });
-  expect(await f.select()).toMatchObject({ status: "selected", identity: "06RB" });
+  expect(await f.select()).toMatchObject({ status: "selected", identity: "0CNNW" });
 });
 it.each([
   null,
@@ -561,7 +566,7 @@ it("the terminal retains the original unknown answer when its monotonic wait has
     const result = await f.seat.command!(context, resumed.actions);
     expect(result).toMatchObject({
       status: "ready",
-      input: { allocation: { installationIdentity: "06RC" } },
+      input: { allocation: { installationIdentity: "0CNPG" } },
     });
     expect(resumed.prompts).toEqual(["The box's displayed date and time are correct? [y/N]: "]);
     expect(f.history).toHaveLength(2);
@@ -576,7 +581,7 @@ it("refuses a delivered sheet whose installation code differs from its frozen ac
   const statement = {
     kind: "waitron-recovery-document",
     version: 1,
-    installationCodes: ["06RC"],
+    installationCodes: ["0CNPG"],
     scope: { taxpayerNif: "89890001K", softwareId: "W1", environment: "preproduction" },
     taxpayerName: "Olivo",
     venueName: "Centro",
@@ -602,7 +607,7 @@ it.each(["standard", "full", "rectificative", "unknown"])(
   (purpose) => {
     const saved = fixture();
     saved.bases = [...saved.bases, { code: "second", purpose }];
-    saved.request.input.allocation.series.push({ code: "second-06RB", purpose });
+    saved.request.input.allocation.series.push({ code: "second-0CNNW", purpose });
     expect(() => readHourSetupInput(saved, saved.request.input)).toThrowError(
       expect.objectContaining({
         code: "sif.allocation_invalid",
@@ -661,7 +666,7 @@ it("terminal resume refuses an altered retained request before comparing clocks"
   const f = configured();
   const t = terminal(f, ["yes"]);
   const saved = fixture();
-  saved.request.identity = "06RC";
+  saved.request.identity = "0CNPG";
   await expect(f.seat.commandResume!(saved, t.actions)).rejects.toMatchObject(refusal);
   expect(t.output).toEqual([]);
   expect(t.prompts).toEqual([]);
@@ -718,7 +723,7 @@ it("binds an exact public recovery statement to its staged node and frozen setup
   const statement = {
     kind: "waitron-recovery-document",
     version: 1,
-    installationCodes: ["06RB"],
+    installationCodes: ["0CNNW"],
     scope: { taxpayerNif: "89890001K", softwareId: "W1", environment: "preproduction" },
     taxpayerName: "Olivo",
     venueName: "Centro",

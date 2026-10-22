@@ -156,12 +156,12 @@ it("selects and activates the next hour through the unchanged restore hook while
     const selected = await f.preparation.select({ binding, authority, answer: "no" });
     expect(selected.status).toBe("selected");
     if (selected.status !== "selected") throw new Error("not selected");
-    expect(selected.identity).toBe("06RC");
+    expect(selected.identity).toBe("0CNQR");
     expect(selected.input.approval.operatorId).toEqual(operator);
     expect(selected.input.allocation.series).toEqual([
-      { code: "A-06RC", purpose: "standard" },
-      { code: "FF-06RC", purpose: "full" },
-      { code: "R-06RC", purpose: "rectificative" },
+      { code: "A-0CNQR", purpose: "standard" },
+      { code: "FF-0CNQR", purpose: "full" },
+      { code: "R-0CNQR", purpose: "rectificative" },
     ]);
     await restore(f.preparation, { binding, authority, input: selected.input });
   });
@@ -176,7 +176,7 @@ it("selects and activates the next hour through the unchanged restore hook while
   );
   expect(
     after.sifs.filter((row) => row.revocadoEn === null).map((row) => row.numeroInstalacion),
-  ).toEqual(["06RC"]);
+  ).toEqual(["0CNQR"]);
   expect(after.activations).toHaveLength(2);
   expect(after.activations.find((row) => row.eventKey === "original-hour")).toEqual(
     before.activations[0],
@@ -231,7 +231,7 @@ it("allows a later surviving host floor to raise an older selected backup floor"
             nodeId: TENANT_A.nodeId2,
             softwareId: "OTHER",
             kind: "retirement",
-            identity: "06RD",
+            identity: "0CNRC",
             recordedAtMs: Date.parse("2026-10-16T13:00:00Z"),
           },
         ],
@@ -282,7 +282,7 @@ it("does not let a forward wall-clock jump complete a retained recovery wait ear
     monotonic = 1200000;
     expect(await f.preparation.select({ binding, authority, answer: "yes" })).toMatchObject({
       status: "selected",
-      identity: "06RD",
+      identity: "0CNRP",
     });
   });
 });
@@ -293,7 +293,7 @@ it("previews a later recovery hour without spending it", async () => {
   await withOperationAuthority(binding, operator, async (authority) => {
     expect(await f.preparation.preview({ binding, authority })).toMatchObject({
       status: "preview",
-      identity: "06RC",
+      identity: "0CNQR",
     });
   });
   expect(f.state.history).toEqual([]);
@@ -339,7 +339,7 @@ it.each(["context", "bases", "input", "isolation"])(
       if (part === "context") Object.assign(f.facts, { contextKey: "other-backup-or-key" });
       if (part === "bases")
         Object.assign(f.facts, { bases: [...bases, { code: "EXTRA", purpose: "standard" }] });
-      if (part === "input") input.allocation.series[0]!.code = "OTHER-06RC";
+      if (part === "input") input.allocation.series[0]!.code = "OTHER-0CNQR";
       if (part === "isolation") Object.assign(f.facts, { oldMachineOffline: false });
       await expect(restore(f.preparation, { binding, authority, input })).rejects.toMatchObject(
         refusal(part === "isolation" ? "old_machine_active" : "event_mismatch"),

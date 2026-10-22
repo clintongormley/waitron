@@ -147,16 +147,16 @@ it("builds signer-free activation material only after recording the complete sel
     input: {
       allocation: {
         allocationId: "hour/owned-hour",
-        installationIdentity: "06RB",
+        installationIdentity: "0CNNW",
         source: "hour",
         environment: "preproduction",
         reservationEvidence: null,
         issuedAt: "2026-10-16T11:40:00.000Z",
         series: [
-          { code: "A-06RB", purpose: "standard" },
-          { code: "FF-06RB", purpose: "full" },
-          { code: "R-06RB", purpose: "rectificative" },
-          { code: "a/B_1.2-3-06RB", purpose: "standard" },
+          { code: "A-0CNNW", purpose: "standard" },
+          { code: "FF-0CNNW", purpose: "full" },
+          { code: "R-0CNNW", purpose: "rectificative" },
+          { code: "a/B_1.2-3-0CNNW", purpose: "standard" },
         ],
       },
       approval: {
@@ -177,14 +177,14 @@ it("activates every exact base through the real prepared seed boundary without a
   if (selected.status !== "selected") throw new Error("selection did not finish");
   const result = await f.activate(selected.input);
   expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
-    { code: "A-06RB", purpose: "standard" },
-    { code: "FF-06RB", purpose: "full" },
-    { code: "R-06RB", purpose: "rectificative" },
-    { code: "a/B_1.2-3-06RB", purpose: "standard" },
+    { code: "A-0CNNW", purpose: "standard" },
+    { code: "FF-0CNNW", purpose: "full" },
+    { code: "R-0CNNW", purpose: "rectificative" },
+    { code: "a/B_1.2-3-0CNNW", purpose: "standard" },
   ]);
   expect(f.revisions).toHaveLength(1);
   expect((await suite.db.select().from(registroSif)).map((row) => row.numeroInstalacion)).toEqual([
-    "06RB",
+    "0CNNW",
   ]);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });
@@ -216,7 +216,7 @@ it("preparation reuses an existing intent across an ordinary hour boundary", asy
   f.facts = { ...f.facts, clock: clock(Date.parse("2026-10-16T12:01:00.000Z")) };
   await f.activate(selected.input);
   expect(f.revisions).toHaveLength(1);
-  expect((await suite.db.select().from(registroSif))[0]!.numeroInstalacion).toBe("06RB");
+  expect((await suite.db.select().from(registroSif))[0]!.numeroInstalacion).toBe("0CNNW");
 });
 
 it.each(["bases", "scope", "contextKey"] as const)(
@@ -244,7 +244,7 @@ it("a changed uploaded identity cannot recreate selection authority", async () =
   const selected = await f.select();
   if (selected.status !== "selected") throw new Error("selection did not finish");
   const input = structuredClone(selected.input);
-  input.allocation.installationIdentity = "06RC";
+  input.allocation.installationIdentity = "0CNPG";
   await expect(f.activate(input)).rejects.toMatchObject(refuse("event_mismatch"));
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
 });
@@ -459,7 +459,7 @@ it("preparation re-reads a raised historical floor before the real writer can ru
             kind: "retirement",
             softwareId: "OTHER",
             nodeId: "other-node",
-            identity: "06RC",
+            identity: "0CNPG",
             recordedAtMs: null,
           },
         ],
@@ -541,7 +541,7 @@ it.each([false, true])(
       expect.objectContaining({
         taxpayerNif: f.facts.scope.taxpayerNif,
         environment: "preproduction",
-        installationIdentity: "06RB",
+        installationIdentity: "0CNNW",
       }),
     ]);
   },

@@ -75,17 +75,17 @@ beforeEach(async () => {
 it("disposable preparation activates every exact hour base through the unchanged writer without paper evidence", async () => {
   const prepared = fresh();
   expect(prepared.input).toMatchObject({
-    allocation: { source: "hour", installationIdentity: "06RB", reservationEvidence: null },
+    allocation: { source: "hour", installationIdentity: "0CNNW", reservationEvidence: null },
   });
   const series = await activate(prepared);
   expect(series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
-    { code: "A-06RB", purpose: "standard" },
-    { code: "FF-06RB", purpose: "full" },
-    { code: "R-06RB", purpose: "rectificative" },
-    { code: "a/B_1.2-3-06RB", purpose: "standard" },
+    { code: "A-0CNNW", purpose: "standard" },
+    { code: "FF-0CNNW", purpose: "full" },
+    { code: "R-0CNNW", purpose: "rectificative" },
+    { code: "a/B_1.2-3-0CNNW", purpose: "standard" },
   ]);
   const [sif] = await suite.db.select().from(registroSif);
-  expect(sif!.numeroInstalacion).toBe("06RB");
+  expect(sif!.numeroInstalacion).toBe("0CNNW");
   expect(JSON.stringify(sif)).not.toMatch(/throwaway|custodian|privateKey/);
   const [row] = await suite.db.select().from(fiscalAllocations);
   expect(row!.allocationKey).toMatch(/^throwaway-/);
@@ -101,8 +101,8 @@ it("keeps separate disposable operation identities even during the same UTC hour
   const a = first.input as { allocation: { allocationId: string; installationIdentity: string } };
   const b = second.input as typeof a;
   expect(a.allocation.allocationId).not.toBe(b.allocation.allocationId);
-  expect(a.allocation.installationIdentity).toBe("06RB");
-  expect(b.allocation.installationIdentity).toBe("06RB");
+  expect(a.allocation.installationIdentity).toBe("0CNNW");
+  expect(b.allocation.installationIdentity).toBe("0CNNW");
 });
 it.each([
   [[], "none"],
@@ -166,7 +166,12 @@ it("detaches caller base values before returning its operation", async () => {
   const prepared = createHourThrowawayAllocation({ now: at }).prepare(supplied);
   supplied.bases[0]!.code = "changed";
   const series = await activate(prepared);
-  expect(series.map(({ code }) => code)).toEqual(["A-06RB", "FF-06RB", "R-06RB", "a/B_1.2-3-06RB"]);
+  expect(series.map(({ code }) => code)).toEqual([
+    "A-0CNNW",
+    "FF-0CNNW",
+    "R-0CNNW",
+    "a/B_1.2-3-0CNNW",
+  ]);
 });
 
 it.each(["2025-12-31T23:59:59.999Z", "2145-08-15T16:00:00.000Z", "not-a-date"])(
@@ -192,7 +197,7 @@ it("the default clock records the actual preparation time in its disposable inpu
   expect(Date.parse(value.allocation.issuedAt)).toBeGreaterThanOrEqual(before);
   expect(Date.parse(value.allocation.issuedAt)).toBeLessThanOrEqual(after);
   expect(value.approval.confirmedAt).toBe(value.allocation.issuedAt);
-  expect(value.allocation.installationIdentity).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}$/);
+  expect(value.allocation.installationIdentity).toMatch(/^[0-9A-HJKMNP-TV-Z]{5}$/);
 });
 
 it("the configured disposable seat activates without generating a signer", async () => {
@@ -201,7 +206,7 @@ it("the configured disposable seat activates without generating a signer", async
   const series = await activate(prepared);
   expect(signing.calls).toBe(before);
   expect(series).toHaveLength(bases.length);
-  expect(series.every(({ code }) => /-[0-9A-HJKMNP-TV-Z]{4}$/.test(code))).toBe(true);
+  expect(series.every(({ code }) => /-[0-9A-HJKMNP-TV-Z]{5}$/.test(code))).toBe(true);
 });
 
 it("the historical signing control reaches the observed key generator", () => {

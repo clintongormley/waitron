@@ -19,13 +19,13 @@ const bases = [
   { code: "R", purpose: "rectificative" },
 ];
 const firstSeries = [
-  { code: "A-06RB", purpose: "standard" },
-  { code: "FF-06RB", purpose: "full" },
-  { code: "R-06RB", purpose: "rectificative" },
-  { code: "a/B_1.2-3-06RB", purpose: "standard" },
+  { code: "A-0CNNW", purpose: "standard" },
+  { code: "FF-0CNNW", purpose: "full" },
+  { code: "R-0CNNW", purpose: "rectificative" },
+  { code: "a/B_1.2-3-0CNNW", purpose: "standard" },
 ];
 
-function fixture(action = "setup", identity = "06RB", eventId = "first-hour") {
+function fixture(action = "setup", identity = "0CNNW", eventId = "first-hour") {
   const binding: OperationBinding = {
     module: "fiscal-verifactu",
     action,
@@ -52,7 +52,7 @@ function fixture(action = "setup", identity = "06RB", eventId = "first-hour") {
       series: bases.map((base) => ({ ...base, code: `${base.code}-${identity}` })),
       source: "hour",
       reservationEvidence: null,
-      issuedAt: identity === "06RC" ? "2026-10-16T12:00:00.000Z" : "2026-10-16T11:40:00.000Z",
+      issuedAt: identity === "0CNPG" ? "2026-10-16T12:00:00.000Z" : "2026-10-16T11:40:00.000Z",
     },
     approval: {
       version: 1,
@@ -102,7 +102,7 @@ it("stores the first hour and every configured base through the unchanged writer
   expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual(firstSeries);
   const saved = await snapshot();
   expect(saved.sifs).toHaveLength(1);
-  expect(saved.sifs[0]!.numeroInstalacion).toBe("06RB");
+  expect(saved.sifs[0]!.numeroInstalacion).toBe("0CNNW");
   expect(saved.allocations).toHaveLength(1);
   expect(saved.allocations[0]!.bases).toEqual(bases);
   expect(saved.allocations[0]!.allocation).toEqual(fixture().input.allocation);
@@ -114,17 +114,17 @@ it.each(["restore", "re-register"])(
     await activate();
     await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
     const original = await snapshot();
-    const result = await activate(fixture(action, "06RC", "recovery-hour"));
+    const result = await activate(fixture(action, "0CNPG", "recovery-hour"));
     expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
-      { code: "A-06RC", purpose: "standard" },
-      { code: "FF-06RC", purpose: "full" },
-      { code: "R-06RC", purpose: "rectificative" },
-      { code: "a/B_1.2-3-06RC", purpose: "standard" },
+      { code: "A-0CNPG", purpose: "standard" },
+      { code: "FF-0CNPG", purpose: "full" },
+      { code: "R-0CNPG", purpose: "rectificative" },
+      { code: "a/B_1.2-3-0CNPG", purpose: "standard" },
     ]);
     const after = await snapshot();
     expect(
       after.sifs.filter((row) => row.revocadoEn === null).map((row) => row.numeroInstalacion),
-    ).toEqual(["06RC"]);
+    ).toEqual(["0CNPG"]);
     expect(after.allocations).toHaveLength(2);
     for (const old of original.series) {
       expect(after.series.find((row) => row.id === old.id)).toEqual({
@@ -152,7 +152,7 @@ it.each([
   ["noParallelRecovery", false, "parallel_recovery"],
 ] as const)("refuses recovery with %s=%s", async (key, value, reason) => {
   await activate();
-  const f = fixture("restore", "06RC", "recovery-hour");
+  const f = fixture("restore", "0CNPG", "recovery-hour");
   f.input.approval[key] = value;
   const before = await snapshot();
   await expect(activate(f)).rejects.toMatchObject({
@@ -194,10 +194,10 @@ it("refuses JSON-recreated hour admission while the real callback remains valid"
           activateModuleAllocation(tx, node, operation, evidence),
         );
         expect(result.series.map(({ code }) => code)).toEqual([
-          "A-06RB",
-          "FF-06RB",
-          "R-06RB",
-          "a/B_1.2-3-06RB",
+          "A-0CNNW",
+          "FF-0CNNW",
+          "R-0CNNW",
+          "a/B_1.2-3-0CNNW",
         ]);
       },
     );
@@ -288,10 +288,10 @@ it.each(["missing", "extra", "duplicate", "purpose", "base"])(
     const f = fixture();
     if (change === "missing") f.input.allocation.series.pop();
     if (change === "extra")
-      f.input.allocation.series.push({ code: "extra-06RB", purpose: "standard" });
+      f.input.allocation.series.push({ code: "extra-0CNNW", purpose: "standard" });
     if (change === "duplicate") f.input.allocation.series[1] = f.input.allocation.series[0]!;
     if (change === "purpose") f.input.allocation.series[2]!.purpose = "standard";
-    if (change === "base") f.input.allocation.series[1]!.code = "A/B_1.2-3-06RB";
+    if (change === "base") f.input.allocation.series[1]!.code = "A/B_1.2-3-0CNNW";
     await expect(activate(f)).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "series_mismatch" },
@@ -357,7 +357,7 @@ it("detaches admitted input, binding and base facts before invoking its callback
 
 it("keeps hour admission bound to the exact authenticated recovery action", async () => {
   await activate();
-  const f = fixture("restore", "06RC", "recovery-hour");
+  const f = fixture("restore", "0CNPG", "recovery-hour");
   const before = await snapshot();
   await withOperationAuthority(f.binding, f.operatorId, (authority) => {
     const operation = { binding: f.binding, authority, input: f.input };

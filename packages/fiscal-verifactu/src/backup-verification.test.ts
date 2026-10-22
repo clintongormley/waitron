@@ -209,7 +209,7 @@ const retainedRow = {
   environment: "preproduction",
   softwareId: "retired-software",
   nodeId: "retired-node",
-  identity: "06RC",
+  identity: "0CNPH",
   recordedAtMs: 1792152060000,
 };
 function retained(records: unknown[] = [retainedRow], extra: Record<string, unknown> = {}) {
@@ -239,7 +239,7 @@ it("accepts a real complete fiscal owner with retired hour registrations and no 
   expect(answer).toEqual(passed);
   expect(validateBackupModuleResult(answer, FISCAL_BACKUP_VERIFICATION, false)).toEqual(passed);
   for (const spy of spies) expect(spy).not.toHaveBeenCalled();
-  expect(JSON.stringify(answer)).not.toMatch(/89890001K|retired-node|passphrase|private|06RC/);
+  expect(JSON.stringify(answer)).not.toMatch(/89890001K|retired-node|passphrase|private|0CNPH/);
 });
 it("binds public trust and every classified table to the fiscal owner", () => {
   const owner = validateBackupVerificationContribution(FISCAL_BACKUP_VERIFICATION);
@@ -292,14 +292,14 @@ it("refuses malformed retained JSON", async () => {
 });
 it("detects conflicting retired references", async () => {
   await capture();
-  retained([retainedRow, { ...retainedRow, identity: "06RD" }]);
+  retained([retainedRow, { ...retainedRow, identity: "0CNRC" }]);
   expectCheck(await verify(), "entries", "invalid");
 });
 it("detects conflicts in a different taxpayer's retained history", async () => {
   await capture();
   retained([
     { ...retainedRow, taxpayerNif: "other" },
-    { ...retainedRow, taxpayerNif: "other", identity: "06RD" },
+    { ...retainedRow, taxpayerNif: "other", identity: "0CNRC" },
   ]);
   expectCheck(await verify(), "entries", "invalid");
 });
@@ -315,7 +315,7 @@ it("accepts a genuinely empty zero-schema predecessor", async () => {
 it.each(["before", "after"] as const)("checks every stored hour source in %s", async (side) => {
   await capture();
   edit(side, (db) =>
-    db.exec("update registro_sif set numero_instalacion='06RA' where revocado_en is not null"),
+    db.exec("update registro_sif set numero_instalacion='0CNJR' where revocado_en is not null"),
   );
   expect((await verify()).status).toBe("invalid");
 });
@@ -323,7 +323,7 @@ it("requires each stored series to resolve exactly one historical registration",
   await capture();
   both((db) =>
     db.exec(
-      "update invoice_series set code='unmatched-06RA' where id=(select id from invoice_series where retired_at is not null limit 1)",
+      "update invoice_series set code='unmatched-0CNJR' where id=(select id from invoice_series where retired_at is not null limit 1)",
     ),
   );
   expectCheck(await verify(), "entries", "invalid");
@@ -403,7 +403,7 @@ it("includes dormant reservation timestamps without executing the reservation", 
         "89890001K",
         "old-software",
         "preproduction",
-        "06RC",
+        "0CNPG",
         "{}",
         JSON.stringify(bases),
         "invalid-time",

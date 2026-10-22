@@ -37,15 +37,15 @@ const row = {
   environment: "preproduction",
   softwareId: "W2",
   nodeId: node.nodeId,
-  identity: "06RD",
+  identity: "0CNRC",
   recordedAtMs: Date.parse("2026-10-16T13:00:00Z"),
 };
 beforeEach(async () => {
   await seedTenants(suite.db);
   await stampDeployment(suite.db, "preproduction");
   for (const [nodeId, code] of [
-    [node.nodeId, "06RB"],
-    [TENANT_A.nodeId2, "06RC"],
+    [node.nodeId, "0CNNW"],
+    [TENANT_A.nodeId2, "0CNPG"],
   ] as const) {
     await seedFixtureSif(suite.db, {
       nodeId,
@@ -112,7 +112,7 @@ it.each(["en", "es"] as const)(
         .join(" ")
         .replace(/\s+/g, " ");
       expect(text).toContain(
-        locale === "en" ? "Installation code 06RB" : "Código de instalación 06RB",
+        locale === "en" ? "Installation code 0CNNW" : "Código de instalación 0CNNW",
       );
       const attachment = JSON.parse(
         Buffer.from((await pdf.getAttachmentContent("waitron-recovery-key-v1.json"))!).toString(
@@ -126,7 +126,7 @@ it.each(["en", "es"] as const)(
         taxpayerName: "Waitron SL",
         venueName: "Local principal",
         createdAt: "2026-10-18T12:00:00.000Z",
-        installationCodes: ["06RB"],
+        installationCodes: ["0CNNW"],
         nodeKey,
       });
       expect(text).not.toContain(nodeKey.secret);
@@ -188,8 +188,8 @@ it("unrelated and duplicate history never replace the current node code", async 
       records: [
         row,
         { ...row, reference: "duplicate" },
-        { ...row, reference: "other-taxpayer", taxpayerNif: "B12345674", identity: "ZZZZ" },
-        { ...row, reference: "other-environment", environment: "production", identity: "ZZZY" },
+        { ...row, reference: "other-taxpayer", taxpayerNif: "B12345674", identity: "ZZZZZ" },
+        { ...row, reference: "other-environment", environment: "production", identity: "ZZZZY" },
       ],
     },
   });
@@ -207,7 +207,7 @@ it("unrelated and duplicate history never replace the current node code", async 
         "utf8",
       ),
     );
-    expect(attached.installationCodes).toEqual(["06RB"]);
+    expect(attached.installationCodes).toEqual(["0CNNW"]);
   } finally {
     await task.destroy();
   }

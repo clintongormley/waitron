@@ -106,7 +106,7 @@ it("the default host clock provider reaches the unchanged real activation writer
   });
   expect(comparison.clock.usable.map((row) => row.source)).toEqual(["browser", "internet", "box"]);
   const selected = await f.select();
-  expect(selected).toMatchObject({ status: "selected", identity: "06RB" });
+  expect(selected).toMatchObject({ status: "selected", identity: "0CNNW" });
   if (selected.status !== "selected") throw new Error("expected selected hour");
   await withOperationAuthority(binding, "administrator", (authority) =>
     f.preparation.prepare({ binding, authority, input: selected.input }, (operation) =>
@@ -121,7 +121,7 @@ it("the default host clock provider reaches the unchanged real activation writer
   );
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([
     expect.objectContaining({
-      installationIdentity: "06RB",
+      installationIdentity: "0CNNW",
       environment: "preproduction",
       allocationKey: "hour/owned-hour",
     }),

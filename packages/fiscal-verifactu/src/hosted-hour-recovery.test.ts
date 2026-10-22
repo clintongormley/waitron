@@ -137,19 +137,19 @@ it.each(["restore", "re-register", "promote"])(
       const selected = (await operations.recovery!(operation, {
         action: "select",
         answer: "no",
-        installationCodes: ["06rA"],
+        installationCodes: ["0cnJR"],
       })) as { status: string; identity: string; input: unknown };
       expect(selected).toMatchObject({
         status: "selected",
-        identity: "06RB",
+        identity: "0CNNW",
         input: {
           allocation: {
             source: "hour",
-            installationIdentity: "06RB",
+            installationIdentity: "0CNNW",
             series: [
-              { code: "FF-06RB", purpose: "full" },
-              { code: "R-06RB", purpose: "rectificative" },
-              { code: "a/b_.--06RB", purpose: "standard" },
+              { code: "FF-0CNNW", purpose: "full" },
+              { code: "R-0CNNW", purpose: "rectificative" },
+              { code: "a/b_.--0CNNW", purpose: "standard" },
             ],
           },
           approval: { operatorId: operator, eventId: "recovered-hour", oldMachineOffline: true },
@@ -182,16 +182,16 @@ it("uses the challenge's browser reading without inventing a confirmation requir
     expect(displayed.clock.usable.map((sample) => sample.source)).toEqual(["browser", "box"]);
     expect(await operations.recovery!(operation, { action: "preview" })).toMatchObject({
       status: "preview",
-      identity: "06RB",
+      identity: "0CNNW",
     });
     expect(f.history).toEqual([]);
     expect(
       await operations.recovery!(operation, {
         action: "select",
         answer: "no",
-        installationCodes: ["06RA"],
+        installationCodes: ["0CNJR"],
       }),
-    ).toMatchObject({ status: "selected", identity: "06RB" });
+    ).toMatchObject({ status: "selected", identity: "0CNNW" });
   });
 });
 
@@ -202,7 +202,7 @@ it.each(["yes", "unknown"])(
     await withOperationAuthority(binding, key, async (authority) => {
       const operation = { binding, authority };
       await confirmed(FISCAL_OPERATIONS.configure!(f.host), operation);
-      const proposal = { action: "select", answer, installationCodes: ["06RA"] };
+      const proposal = { action: "select", answer, installationCodes: ["0CNJR"] };
       expect(
         await FISCAL_OPERATIONS.configure!(f.host).recovery!(operation, proposal),
       ).toMatchObject({ status: "waiting", remainingMs: 1_200_000 });
@@ -211,7 +211,7 @@ it.each(["yes", "unknown"])(
       await confirmed(FISCAL_OPERATIONS.configure!(f.host), operation);
       expect(
         await FISCAL_OPERATIONS.configure!(f.host).recovery!(operation, proposal),
-      ).toMatchObject({ status: "selected", identity: "06RC" });
+      ).toMatchObject({ status: "selected", identity: "0CNPG" });
       expect(f.history).toHaveLength(2);
     });
   },
@@ -235,7 +235,7 @@ it.each(["clock-challenge", "compare-clocks", "resume"])(
         operations.recovery!(operation, {
           action: "select",
           answer: "no",
-          installationCodes: ["06RA"],
+          installationCodes: ["0CNJR"],
         }),
       ).rejects.toMatchObject(
         refusal(action === "clock-challenge" ? "clock_stale" : "clock_unconfirmed"),
@@ -254,7 +254,7 @@ it("resumes committed work without collecting fresh clocks or rewriting the jour
     const selected = (await operations.recovery!(operation, {
       action: "select",
       answer: "no",
-      installationCodes: ["06RA"],
+      installationCodes: ["0CNJR"],
     })) as { input: unknown };
     Object.assign(f.facts, { priorActivation: "committed" });
     const before = structuredClone(f.history);
@@ -276,7 +276,7 @@ it.each([
   {},
   { action: "unknown" },
   { action: "preview", extra: true },
-  { action: "select", answer: "maybe", installationCodes: ["06RA"] },
+  { action: "select", answer: "maybe", installationCodes: ["0CNJR"] },
   { action: "select", answer: "no" },
   { action: "compare-clocks" },
   { action: "compare-clocks", browser: {} },
@@ -450,7 +450,7 @@ it("evicts old confirmations while retaining the next host context", async () =>
     Object.assign(f.facts, { contextKey: "context/1" });
     expect(await operations.recovery!(operation, { action: "preview" })).toMatchObject({
       status: "preview",
-      identity: "06RB",
+      identity: "0CNNW",
     });
     Object.assign(f.facts, { contextKey: "context/0" });
     await expect(operations.recovery!(operation, { action: "preview" })).rejects.toMatchObject(
@@ -475,7 +475,7 @@ it.each([
       operations.recovery!(operation, {
         action: "select",
         answer: "no",
-        installationCodes: ["06RA"],
+        installationCodes: ["0CNJR"],
       }),
     ).rejects.toMatchObject(refusal(reason));
     expect(f.history).toEqual([]);
@@ -492,7 +492,7 @@ it("uses reported installations as a floor before saving an hour", async () => {
       operations.recovery!(operation, {
         action: "select",
         answer: "no",
-        installationCodes: ["06rc"],
+        installationCodes: ["0cnpg"],
       }),
     ).rejects.toMatchObject(refusal("hour_not_later"));
     expect(f.history).toEqual([]);

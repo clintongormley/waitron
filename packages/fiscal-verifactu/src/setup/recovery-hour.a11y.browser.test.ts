@@ -91,7 +91,7 @@ for (const theme of ["light", "dark"] as const)
                       remainingMs: 1_800_000,
                       requiresClockConfirmation: false,
                     }
-                  : { status: "selected", identity: "06TH", binding, input: { selected: true } };
+                  : { status: "selected", identity: "0CSQW", binding, input: { selected: true } };
               },
             }) as RecoveryHourEntry;
             host.append(el);
@@ -114,7 +114,7 @@ for (const theme of ["light", "dark"] as const)
               )!;
               await codes.updateComplete;
               const codeInput = codes.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-              codeInput.value = "06RB";
+              codeInput.value = "0CNNW";
               codeInput.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
               for (const name of ["recovery-old-box-stopped", "recovery-sole-operation"]) {
                 const input = el.shadowRoot!.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
@@ -154,7 +154,7 @@ for (const theme of ["light", "dark"] as const)
                 el.shadowRoot!.querySelector<HTMLElement>("[data-test=select]")!.click();
                 await vi.waitFor(() =>
                   expect(el.shadowRoot!.textContent).toContain(
-                    state === "selected" ? "06TH" : "2026-10-18T13:00:00.000Z",
+                    state === "selected" ? "0CSQW" : "2026-10-18T13:00:00.000Z",
                   ),
                 );
               }

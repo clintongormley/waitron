@@ -95,10 +95,10 @@ it("explicit resumption keeps the hour and input while ordinary changed-context 
   expect(f.history).toHaveLength(2);
   expect(f.history[1]).toMatchObject({
     entries: [
-      { kind: "intent", identity: "06RB", contextKey: "owner-1" },
+      { kind: "intent", identity: "0CNNW", contextKey: "owner-1" },
       {
         kind: "resume",
-        identity: "06RB",
+        identity: "0CNNW",
         fromContextKey: "owner-1",
         contextKey: "owner-2",
         documentBinding: "a".repeat(64),
@@ -135,7 +135,7 @@ it.each([
   if (selected.status !== "selected") throw new Error("expected selection");
   const input = structuredClone(selected.input);
   f.facts = { ...f.facts, contextKey: "owner-2" };
-  if (change === "input") input.allocation.installationIdentity = "06RC";
+  if (change === "input") input.allocation.installationIdentity = "0CNPG";
   if (change === "administrator") input.approval.operatorId = "other";
   if (change === "taxpayer")
     f.facts = { ...f.facts, scope: { ...f.facts.scope, taxpayerNif: "89890002E" } };
@@ -213,7 +213,7 @@ it.each(["known-later-hour", "clock-rollback"])(
                 kind: "intent",
                 softwareId: "OTHER",
                 nodeId: "other",
-                identity: "06RC",
+                identity: "0CNPG",
                 recordedAtMs: null,
               },
             ],
@@ -237,7 +237,7 @@ it.each(["broken-chain", "wrong-document", "changed-hour"])(
     const resumed = latest.entries.at(-1)!;
     if (change === "broken-chain") resumed.fromContextKey = "unrelated-owner";
     if (change === "wrong-document") resumed.documentBinding = "invalid";
-    if (change === "changed-hour") resumed.identity = "06RC";
+    if (change === "changed-hour") resumed.identity = "0CNPG";
     await expect(f.prepare(selected.input)).rejects.toMatchObject(refused("history_invalid"));
   },
 );

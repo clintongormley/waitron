@@ -38,7 +38,7 @@ const clock = {
 };
 const selected = {
   status: "selected",
-  identity: "06TH",
+  identity: "0CSQW",
   binding,
   input: { selected: "server-input" },
 };
@@ -102,7 +102,7 @@ async function ready(el: Entry, answer = "no") {
   const codes = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
   await codes.updateComplete;
   const codeInput = codes.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  codeInput.value = "06RB";
+  codeInput.value = "0CNNW";
   codeInput.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   check(el, "recovery-old-box-stopped");
   check(el, "recovery-sole-operation");
@@ -156,9 +156,9 @@ it("decodes the printed key and sends independent recovery declarations before s
   expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
     action: "select",
     answer: "no",
-    installationCodes: ["06RB"],
+    installationCodes: ["0CNNW"],
   });
-  expect(el.shadowRoot!.textContent).toContain("06TH");
+  expect(el.shadowRoot!.textContent).toContain("0CSQW");
   expect(el.shadowRoot!.textContent).not.toContain("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
 });
 it("requires both explicit isolation declarations and the taxpayer-wide answer", async () => {
@@ -206,7 +206,7 @@ it("requires a fresh explicit confirmation for disagreeing readings", async () =
   await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
   expect(prepare.mock.calls.slice(-2).map(([r]) => r.proposal)).toEqual([
     { action: "confirm-clock", comparisonId: "different-reading" },
-    { action: "select", answer: "no", installationCodes: ["06RB"] },
+    { action: "select", answer: "no", installationCodes: ["0CNNW"] },
   ]);
   button(el, "compare").click();
   await vi.waitFor(() =>
@@ -246,7 +246,7 @@ it.each(["yes", "unknown"])(
     expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
       action: "select",
       answer,
-      installationCodes: ["06RB"],
+      installationCodes: ["0CNNW"],
     });
     expect(el.readCredentials()).toBeNull();
     expect(button(el, "compare").disabled).toBe(false);
@@ -334,7 +334,7 @@ it("ignores a selected response after the sole-recovery declaration changes", as
     expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
       action: "select",
       answer: "no",
-      installationCodes: ["06RB"],
+      installationCodes: ["0CNNW"],
     }),
   );
   check(el, "recovery-sole-operation", false);
@@ -343,7 +343,7 @@ it("ignores a selected response after the sole-recovery declaration changes", as
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await el.updateComplete;
   expect(el.readCredentials()).toBeNull();
-  expect(el.shadowRoot!.textContent).not.toContain("06TH");
+  expect(el.shadowRoot!.textContent).not.toContain("0CSQW");
 });
 it("marks each missing declaration and the unanswered group after an attempted recovery", async () => {
   const { el } = await mount();
@@ -414,7 +414,7 @@ it("drops a late selected answer after the matching printed key changes", async 
     expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
       action: "select",
       answer: "no",
-      installationCodes: ["06RB"],
+      installationCodes: ["0CNNW"],
     }),
   );
   const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
@@ -427,7 +427,7 @@ it("drops a late selected answer after the matching printed key changes", async 
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await el.updateComplete;
   expect(el.readCredentials()).toBeNull();
-  expect(el.shadowRoot!.textContent).not.toContain("06TH");
+  expect(el.shadowRoot!.textContent).not.toContain("0CSQW");
 });
 it("all three actions expose a visible native button", async () => {
   const { el } = await mount();
@@ -602,7 +602,7 @@ it("requires the one code from the sheet and sends its normalised value to the h
   expect(field, "public code field from the recovery sheet").not.toBeNull();
   await field!.updateComplete;
   const input = field!.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  input.value = "06rb";
+  input.value = "0cnnw";
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await el.updateComplete;
   await compare(el);
@@ -611,7 +611,7 @@ it("requires the one code from the sheet and sends its normalised value to the h
     expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
       action: "select",
       answer: "no",
-      installationCodes: ["06RB"],
+      installationCodes: ["0CNNW"],
     }),
   );
   expect(input.isConnected, "the edited control stays mounted").toBe(true);
@@ -620,7 +620,7 @@ it("requires the one code from the sheet and sends its normalised value to the h
     "the native control survives the selection render",
   ).toBe(input);
   await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
-  input.value = "06RD";
+  input.value = "0CNRC";
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await el.updateComplete;
   expect(el.readCredentials()).toBeNull();
@@ -645,13 +645,13 @@ it("does not expose a selected result after its reported code was edited during 
   const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
   await field.updateComplete;
   const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  input.value = "06RC";
+  input.value = "0CNPG";
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   release(selected);
   await el.updateComplete;
   await Promise.resolve();
   expect(el.readCredentials()).toBeNull();
-  expect(el.shadowRoot!.textContent).not.toContain("06TH");
+  expect(el.shadowRoot!.textContent).not.toContain("0CSQW");
 });
 it("marks a missing code beside its native field and keeps selection disabled", async () => {
   const { el } = await mount();
@@ -705,7 +705,7 @@ it("refuses a list of installation codes in the single-code field", async () => 
   await field.updateComplete;
   const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
   expect(button(el, "compare").disabled).toBe(false);
-  input.value = "06RB, 06RC";
+  input.value = "0CNNW, 0CNPG";
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await el.updateComplete;
   expect(button(el, "compare").disabled).toBe(true);

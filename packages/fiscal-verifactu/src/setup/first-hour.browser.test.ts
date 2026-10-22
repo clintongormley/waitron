@@ -40,14 +40,14 @@ const context = {
 const selected = {
   kind: "waitron-hour-setup",
   status: "selected",
-  identity: "06TH",
+  identity: "0CSQW",
   input: {
     allocation: {
-      installationIdentity: "06TH",
+      installationIdentity: "0CSQW",
       series: [
-        { code: "A-06TH", purpose: "standard" },
-        { code: "FF-06TH", purpose: "full" },
-        { code: "R-06TH", purpose: "rectificative" },
+        { code: "A-0CSQW", purpose: "standard" },
+        { code: "FF-0CSQW", purpose: "full" },
+        { code: "R-0CSQW", purpose: "rectificative" },
       ],
     },
   },
@@ -96,7 +96,7 @@ async function mount(
     if (action === "clock-challenge") return { id: "challenge" };
     if (action === "compare-clocks") return { id: "comparison", clock: options.decision ?? clock };
     if (action === "confirm-clock") return clock;
-    if (action === "selection") return { status: "preview", identity: "06TH", answer: "no" };
+    if (action === "selection") return { status: "preview", identity: "0CSQW", answer: "no" };
     throw new Error("unexpected action");
   };
   const api = {
@@ -215,7 +215,7 @@ it("requires the scope confirmation and taxpayer-wide answer then imports only s
   expect(calls.filter((c) => c.action === "candidates")).toEqual([
     { action: "candidates", value: { answer: "no" } },
   ]);
-  for (const code of ["A-06TH", "FF-06TH", "R-06TH"])
+  for (const code of ["A-0CSQW", "FF-0CSQW", "R-0CSQW"])
     expect(el.shadowRoot!.textContent).toContain(code);
   expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull();
 });
@@ -357,12 +357,12 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   expect(deliveries).toEqual([
     {
       stageId: "stage",
-      inputDigest: "67d6e732f26da2ae88dba5049f498bd39a4d0cdc3f35f4bd5b3b8d7aaab6c505",
+      inputDigest: "e799c91f661c00f8cf2ba285b34aaa1be7c6d4c5c8a9307e9614d920621d9253",
       bindingDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
       documentDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
       statement: {
         kind: "waitron-recovery-document",
-        installationCodes: ["06TH"],
+        installationCodes: ["0CSQW"],
         version: 1,
         scope: { taxpayerNif: "B12345674", environment: "production", softwareId: "W1" },
         taxpayerName: "Olivo SL",
@@ -503,8 +503,8 @@ it.each([
   { ...selected, identity: "S000001" },
   { ...selected, input: null },
   { ...selected, input: { allocation: [] } },
-  { ...selected, input: { allocation: { installationIdentity: "06TJ", series: [] } } },
-  { ...selected, input: { allocation: { installationIdentity: "06TH", series: {} } } },
+  { ...selected, input: { allocation: { installationIdentity: "0CSSR", series: [] } } },
+  { ...selected, input: { allocation: { installationIdentity: "0CSQW", series: {} } } },
   { status: "waiting", targetMs: instant + 0.5, remainingMs: 1000 },
   { status: "waiting", targetMs: instant, remainingMs: -1 },
   { status: "waiting", targetMs: instant, remainingMs: Infinity },

@@ -127,7 +127,7 @@ async function seedRows(
 ) {
   await seedTenants(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
-  const identity = options.identity ?? "0CNNW";
+  const identity = options.identity ?? "0CNN8";
   const [sif] = await suite.db
     .insert(registroSif)
     .values({
@@ -185,7 +185,7 @@ it("an unassignable series refuses completeness instead of disappearing", async 
   expect((await projection()).contradictions).toContain("venue:incomplete");
 });
 it("a malformed hour suffix cannot become empty history", async () => {
-  await seedRows({ identity: "06rb" });
+  await seedRows({ identity: "0cnn8" });
   expect((await projection()).contradictions.length).toBeGreaterThan(0);
 });
 it("a dormant reservation raises the floor without active series on its node", async () => {
@@ -223,29 +223,29 @@ it("an explicit reservation environment remains separate from the database stamp
     evidence: { public: "retained" },
     bases: [{ code: "A", purpose: "standard" }],
   });
-  expect((await projection()).greatestSpentMinute).toBe(415420);
+  expect((await projection()).greatestSpentMinute).toBe(415400);
   expect((await projection()).contradictions).toEqual([]);
 });
 async function seedAllocation(change: Partial<typeof fiscalAllocations.$inferInsert> = {}) {
   const ids = await seedRows();
-  const series = [{ id: ids.seriesId, code: "other-base-0CNNW", purpose: "full" }];
+  const series = [{ id: ids.seriesId, code: "other-base-0CNN8", purpose: "full" }];
   // A standard base is required by admission; retain both purposes in this synthetic receipt.
   const [standard] = await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId: TENANT_A.nodeId, code: "A-0CNNW", purpose: "standard" })
+    .values({ nodeId: TENANT_A.nodeId, code: "A-0CNN8", purpose: "standard" })
     .returning({ id: invoiceSeries.id });
-  series.push({ id: standard!.id, code: "A-0CNNW", purpose: "standard" });
+  series.push({ id: standard!.id, code: "A-0CNN8", purpose: "standard" });
   const input = {
     version: 1 as const,
     allocationId: "allocation",
     taxpayerNif: "89890001K",
     softwareId: "W1",
     environment: "preproduction" as const,
-    installationIdentity: "0CNNW",
+    installationIdentity: "0CNN8",
     series: series.map(({ code, purpose }) => ({ code, purpose })),
     source: "hour" as const,
     reservationEvidence: null,
-    issuedAt: "2026-10-16T11:40:00.000Z",
+    issuedAt: "2026-10-16T11:20:00.000Z",
   };
   const approval = {
     version: 1 as const,

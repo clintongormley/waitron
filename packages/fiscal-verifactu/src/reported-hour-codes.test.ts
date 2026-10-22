@@ -71,7 +71,7 @@ function fixture() {
   };
 }
 const refused = (reason: string) => ({ code: "sif.allocation_invalid", params: { reason } });
-it.each(["06RB", "06rb", "06RC"])(
+it.each(["0CNP6", "0cnp6", "0CNPG"])(
   "refuses reported %s missing from backup history before exposing an identity",
   async (code) => {
     const f = fixture();
@@ -82,33 +82,33 @@ it.each(["06RB", "06rb", "06RC"])(
 it("retains the entered code with the selected event and in backup evidence", async () => {
   const f = fixture();
   f.at("2026-10-16T12:00:00Z");
-  expect(await f.select(["06rb"])).toMatchObject({
+  expect(await f.select(["0cnp6"])).toMatchObject({
     status: "selected",
-    identity: "06RC",
-    reportedIdentities: ["06RB"],
+    identity: "0CNPG",
+    reportedIdentities: ["0CNP6"],
   });
   const history = projectHourHistory({ scope, sources: [publicHourSelectionHistory(f.writes)] });
-  expect(history.greatestSpentMinute).toBe(6924);
-  expect(history.references.some((reference) => reference.includes("06RB"))).toBe(true);
+  expect(history.greatestSpentMinute).toBe(415440);
+  expect(history.references.some((reference) => reference.includes("0CNP6"))).toBe(true);
   await withOperationAuthority(binding, "operator", async (authority) => {
     expect(await f.create().selected({ binding, authority })).toMatchObject({
-      identity: "06RC",
-      reportedIdentities: ["06RB"],
+      identity: "0CNPG",
+      reportedIdentities: ["0CNP6"],
     });
   });
-  await expect(f.select(["06RA"])).rejects.toMatchObject(refused("event_mismatch"));
+  await expect(f.select(["0CNJR"])).rejects.toMatchObject(refused("event_mismatch"));
   expect(f.writes).toHaveLength(1);
 });
 it("retains reported codes while waiting even before a fresh hour is selected", async () => {
   const f = fixture();
   f.at("2026-10-16T12:00:00Z");
-  expect(await f.select(["06RB"], "yes")).toMatchObject({ status: "waiting" });
+  expect(await f.select(["0CNP6"], "yes")).toMatchObject({ status: "waiting" });
   const history = projectHourHistory({ scope, sources: [publicHourSelectionHistory(f.writes)] });
-  expect(history.greatestSpentMinute).toBe(6923);
+  expect(history.greatestSpentMinute).toBe(415430);
   expect(history.contradictions).toEqual([]);
 });
 it.each(
-  [null, [], [""], ["06R!"], ["A-06RB"], [123], Array(257).fill("06RB")].map((codes) => ({
+  [null, [], [""], ["0CNP!"], ["A-0CNP6"], [123], Array(257).fill("0CNP6")].map((codes) => ({
     codes,
   })),
 )("rejects malformed reported installation codes $codes", async ({ codes }) => {

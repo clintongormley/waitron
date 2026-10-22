@@ -12,7 +12,7 @@ import { recoveryDocumentBytes, type RecoveryDocument } from "./recovery-documen
 
 const document: RecoveryDocument = {
   kind: "waitron-recovery-document",
-  installationCodes: ["06RB"],
+  installationCodes: ["0CNNW"],
   version: 1,
   scope: { taxpayerNif: "B12345674", softwareId: "W1", environment: "production" },
   taxpayerName: "Olivo Restauración SL",
@@ -150,7 +150,7 @@ it("carries its font and attachment in a relocated real Node bundle", async () =
 it.each(["en", "es"] as const)(
   "prints this box's current installation code beside public identity in %s",
   async (locale) => {
-    const input = { ...document, installationCodes: ["06RB"] };
+    const input = { ...document, installationCodes: ["0CNNW"] };
     const task = getDocument({
       data: await renderRecoveryPdf(input, locale, "Europe/Madrid"),
       useSystemFonts: false,
@@ -165,12 +165,12 @@ it.each(["en", "es"] as const)(
         .join(" ")
         .replace(/\s+/g, " ");
       expect(text).toContain(
-        locale === "en" ? "Installation code 06RB" : "Código de instalación 06RB",
+        locale === "en" ? "Installation code 0CNNW" : "Código de instalación 0CNNW",
       );
       const attached = JSON.parse(
         new TextDecoder().decode((await pdf.getAttachmentContent("waitron-recovery-key-v1.json"))!),
       );
-      expect(attached.installationCodes).toEqual(["06RB"]);
+      expect(attached.installationCodes).toEqual(["0CNNW"]);
     } finally {
       await task.destroy();
     }
@@ -179,6 +179,10 @@ it.each(["en", "es"] as const)(
 
 it("refuses an ambiguous multi-code sheet instead of picking another box's code", async () => {
   await expect(
-    renderRecoveryPdf({ ...document, installationCodes: ["06RB", "06RC"] }, "en", "Europe/Madrid"),
+    renderRecoveryPdf(
+      { ...document, installationCodes: ["0CNNW", "0CNPG"] },
+      "en",
+      "Europe/Madrid",
+    ),
   ).rejects.toThrow("Recovery PDF refused");
 });
