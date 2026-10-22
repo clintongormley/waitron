@@ -206,9 +206,8 @@ it("reads back a completed activation after a lost response and offers no second
                       upperMs: instant,
                     })),
                     unavailable: [],
+                    secondClock: true,
                     disagreement: false,
-                    requiresConfirmation: false,
-                    boundaryWait: false,
                     releaseBlocked: false,
                     rangeBlocked: false,
                   },
@@ -295,11 +294,9 @@ it("reads back a completed activation after a lost response and offers no second
   await expect
     .poll(() => hour.shadowRoot!.querySelector("[data-test=clock-readings]"))
     .not.toBeNull();
-  for (const selector of [
-    'input[name="setup-details-confirmed"]',
-    'input[name="taxpayer-hour"][value="no"]',
-  ])
-    await userEvent.click(hour.shadowRoot!.querySelector<HTMLInputElement>(selector)!);
+  await userEvent.click(
+    hour.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-details-confirmed"]')!,
+  );
   await click(hour, "select");
   await proof();
   await expect

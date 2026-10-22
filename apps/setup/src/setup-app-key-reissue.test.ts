@@ -78,9 +78,8 @@ for (const locale of ["en-GB", "es-ES"] as const)
                               upperMs: instant,
                             })),
                             unavailable: [],
+                            secondClock: true,
                             disagreement: false,
-                            requiresConfirmation: false,
-                            boundaryWait: false,
                             releaseBlocked: false,
                             rangeBlocked: false,
                           },
@@ -164,11 +163,6 @@ for (const locale of ["en-GB", "es-ES"] as const)
           await userEvent.click(
             hour.shadowRoot!.querySelector<HTMLInputElement>(
               'input[name="setup-details-confirmed"]',
-            )!,
-          );
-          await userEvent.click(
-            hour.shadowRoot!.querySelector<HTMLInputElement>(
-              'input[name="taxpayer-hour"][value="no"]',
             )!,
           );
           await userEvent.click(control(hour, "select"));
