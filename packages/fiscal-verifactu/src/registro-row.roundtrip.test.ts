@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { buildAltaRecord, serializeEnvio } from "@waitron/verifactu";
+import { buildAltaRecord, buildAnulacionRecord, serializeEnvio } from "@waitron/verifactu";
 import type { AltaInput, Cabecera, EnvioRegistro, RegistroAlta } from "@waitron/verifactu";
 import { registrosFacturacion } from "./schema/registros.js";
 import {
@@ -319,5 +319,30 @@ describe("decodeRegistroRow", () => {
     expect(typeof decoded.facturas_sustituidas).toBe("object");
     expect(typeof decoded.destinatarios).toBe("object");
     expect(decoded.primer_registro).toBe(true);
+  });
+});
+
+describe("toRegistroRow — an anulación's issuer name", () => {
+  it("refuses an anulación with no issuer name in its context", () => {
+    const record = buildAnulacionRecord({
+      IDEmisorFacturaAnulada: TEST_NIF,
+      NumSerieFacturaAnulada: "A/1",
+      FechaExpedicionFacturaAnulada: new Date("2026-07-20T00:00:00+02:00"),
+      SistemaInformatico: TEST_SISTEMA,
+      Encadenamiento: { PrimerRegistro: "S" },
+      generadoEn: new Date("2026-07-20T17:20:30+02:00"),
+      offsetMinutes: 120,
+    });
+    expect(() =>
+      toRegistroRow(record, {
+        origin: deviceOrigin(till.deviceId),
+        nodeId: till.nodeId,
+        sifId: till.sifId,
+        saleId: "s",
+        secuencia: 1,
+        offsetMinutes: 120,
+        entorno: "production",
+      }),
+    ).toThrow("an anulación needs nombreRazonEmisor");
   });
 });

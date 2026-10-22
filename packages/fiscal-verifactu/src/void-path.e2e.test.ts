@@ -8,6 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import type { NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
+import { SOFTWARE_IDENTITY } from "./software-identity.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 import { cadenas } from "./schema/cadenas.js";
@@ -138,5 +139,22 @@ describe("alta and anulación interleave in one chain", () => {
     const [head] = await suite.db.select().from(cadenas).where(eq(cadenas.nodeId, nodeId));
     expect(head?.secuencia).toBe(2);
     expect(head?.ultimaHuella).toBe(row.huella);
+  });
+});
+
+describe("a cancellation names the taxpayer, not the software's producer", () => {
+  it("a cancellation keeps the taxpayer's name when the software names a producer", async () => {
+    backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: steadyClock,
+      db: suite.db,
+      resolveClient: staticResolver(fakeClient),
+      identity: { ...SOFTWARE_IDENTITY, producer: { name: "Producer Person", nif: "12345678Z" } },
+    });
+    const a = await sell();
+    await voidSale(a.saleId);
+    const row = await rawAnulacion(a.saleId);
+    expect(row.nombre_razon_emisor).toBe("Waitron SL");
+    expect(row.sistema_informatico.NombreRazon).toBe("Producer Person");
   });
 });

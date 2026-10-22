@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/testing";
@@ -8,6 +8,8 @@ import { newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
+import { SOFTWARE_IDENTITY } from "./software-identity.js";
+import { nifWithControlLetter } from "./testing/seed.js";
 import { decodeRegistroRow, fromRegistroRow, type RegistroRow } from "./registro-row.js";
 import {
   DEFAULT_SKIP_RETRY_MS,
@@ -164,6 +166,51 @@ describe("drain — happy path, an anulación row", () => {
     expect(rows.rows).toHaveLength(2);
     expect(rows.rows.every((r) => r.estado === "aceptado")).toBe(true);
     expect(rows.rows.every((r) => r.csv !== null)).toBe(true);
+  });
+});
+
+describe("drain — a cancellation's submission header", () => {
+  it("a cancellation goes out under the taxpayer's name when the software names a producer", async () => {
+    const nif = nifWithControlLetter(30_000_001);
+    const { locationId, nodeId, seriesId } = await seedTenantWithSif(suite.db, { nif });
+    const { rows: mgr } = await suite.db.execute<{ id: string }>(
+      sql`insert into persons (id, created_at, display_name, pin_hash, role)
+          values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
+    );
+    const deviceId = (await seedDevice(suite.db, { locationId })).deviceId;
+    const voidSession = await withTransaction(suite.db, (tx) =>
+      loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
+    );
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    // Every `aeat.client()` call builds a new client, so the spy must sit on the one client
+    // shared by the backend and both passes.
+    const client = aeat.client();
+    const submit = vi.spyOn(client, "submit");
+    const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: steadyClock,
+      db: suite.db,
+      resolveClient: staticResolver(client),
+      identity: { ...SOFTWARE_IDENTITY, producer: { name: "Producer Person", nif: "12345678Z" } },
+    });
+
+    const sale = await withTransaction(suite.db, async (tx) => {
+      return recordSale(tx, backend, saleInput({ nodeId, seriesId }));
+    });
+    await withTransaction(suite.db, async (tx) => {
+      await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
+    });
+
+    const first = await drain(drainDeps(staticResolver(client)), new Date(Date.now() + 60_000));
+    expect(first.recordsSubmitted).toBe(1);
+    const second = await drain(drainDeps(staticResolver(client)), first.nextDueAt!);
+    expect(second.recordsSubmitted).toBe(1);
+
+    expect(submit).toHaveBeenCalledTimes(2);
+    expect(submit.mock.calls[1]![0].ObligadoEmision).toEqual({
+      NombreRazon: "Waitron SL",
+      NIF: nif,
+    });
   });
 });
 

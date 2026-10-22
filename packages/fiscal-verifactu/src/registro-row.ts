@@ -50,6 +50,16 @@ export interface RegistroRowContext {
    * records differing only in `entorno` hash identically.
    */
   entorno: Entorno;
+  /** Required for an anulación, which carries no issuer name of its own; the software block's
+   * name may be the producer's, not the taxpayer's. Ignored for an alta. */
+  nombreRazonEmisor?: string;
+}
+
+function anulacionEmisorName(ctx: RegistroRowContext): string {
+  if (ctx.nombreRazonEmisor === undefined) {
+    throw new Error("toRegistroRow: an anulación needs nombreRazonEmisor");
+  }
+  return ctx.nombreRazonEmisor;
 }
 
 /**
@@ -155,10 +165,7 @@ export function toRegistroRow(
     idEmisorFactura: record.IDFactura.IDEmisorFacturaAnulada,
     numSerieFactura: record.IDFactura.NumSerieFacturaAnulada,
     fechaExpedicionFactura: toIsoDate(record.IDFactura.FechaExpedicionFacturaAnulada),
-    // RegistroAnulacion carries no NombreRazonEmisor of its own (@waitron/verifactu) —
-    // this column is NOT NULL regardless of tipo_registro, purely for this package's own querying
-    // convenience, so it falls back to the one emisor name every record DOES carry.
-    nombreRazonEmisor: record.SistemaInformatico.NombreRazon,
+    nombreRazonEmisor: anulacionEmisorName(ctx),
     tipoFactura: null,
     // A RegistroAnulacion carries none of the four rectificativa and substitution fields — they
     // belong to a registro de alta (R1–R5 for the three rectificativa fields, F3 for

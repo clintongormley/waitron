@@ -343,7 +343,14 @@ export class VerifactuBackend implements FiscalBackend {
     const appended = await appendToChain(
       tx,
       nodeId,
-      { tipo: "anulacion", saleId, origin, entorno: this.deploymentEnvironment, input },
+      {
+        tipo: "anulacion",
+        saleId,
+        origin,
+        entorno: this.deploymentEnvironment,
+        nombreRazonEmisor: tenant.legalName,
+        input,
+      },
       sif,
     );
 
