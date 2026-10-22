@@ -555,6 +555,15 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   **Non-blocking while pre-production; blocking before going live.**
   [Detail](backlog/fiscal.md#no-tax-0-is-an-open-fiscal-question-and-it-must-be-answered-before-the-first-live-filing)
 
+- **Rename the `hour-*` names to minute names** — left by A947 slice 4a, which made every
+  installation code a UTC minute but kept the `packages/fiscal-verifactu/src/hour-*.ts` file names,
+  their identifiers and the `source: "hour"` label the allocations carry. Before go-live it needs
+  no compatibility code: until then any installation may be reset (CLAUDE.md §3).
+
+- **Should `packages/fiscal-verifactu` have a mutation floor?** It has no Stryker config, so the
+  minute-name rules A947 slice 4a added are covered by tests and hand-run deletions only (the
+  plan's Mutation section lists them). Decide whether it joins the mutation-tested packages.
+
 ### The setup wizard, onboarding and the demo venue
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).

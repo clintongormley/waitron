@@ -66,6 +66,67 @@ rewritten, and carries a dated pointer here.
 >    pueden», agreeing with «las series». Tests: `first-hour.browser.test.ts`, "says in Spanish that
 >    the series cannot be made yet, with the plural verb"; `recovery-hour.browser.test.ts`, "says in
 >    Spanish that the series cannot be made yet".
+> 6. **The stream loop test gains no step in slice 4a**, though §11's preamble asks each slice for
+>    one. Its two boxes take fixed test names, not minute names: box A through a fixture
+>    (`applyAllocatedTestVenue`, name `S000001`), box B, rebuilt from the bucket, through the paper
+>    path (`apps/server/src/testing/stream-loop-scenario.ts:470`,
+>    `createPaperAllocationPreparation`, name `P000042`). No test checks this;
+>    `git diff --stat origin/main...HEAD` over `apps/server/src/stream-loop.e2e.test.ts` and that
+>    scenario file printed nothing.
+> 7. **A recorded wait lapses 60 seconds after it is due; a later request starts a fresh
+>    90-to-150-second wait** (`hour-selection.ts`, `WAIT_REUSE_MS`). So a select made hours after
+>    its wait never takes a name without its own 90 seconds.
+>    Tests: `hour-selection.test.ts`, "a select more than a minute after its wait's target starts a
+>    new wait" (59 seconds past the target takes the name; an hour past waits again);
+>    `initial-hour-setup.test.ts`, "a terminal run more than a minute after its wait's target waits
+>    again" (60.001 seconds past waits again).
+> 8. **A wait spends no password; only taking the name does** (the setup page). Each request of a
+>    press checks the owner's password grant, and only the one that takes the name spends it, so
+>    the page asks for the password once across the press, its waits and the name.
+>    Tests: `packages/provisioning/src/first-setup-preparation.test.ts`, "keeps one password grant
+>    through every wait and spends it only on taking the name" and "refuses a wait with a garbage
+>    grant and records no wait"; `apps/setup/src/first-setup-session.test.ts`, "asks for the
+>    password once across two waiting answers and the taken name".
+> 9. **A browser counts as the box by its source address**: loopback, or any address one of the
+>    box's interfaces holds, Docker bridges included (`apps/server/src/request-from-box.ts`,
+>    `addressIsBox`). Its clock is then never the second clock. So a kiosk browser in a container on
+>    a Docker bridge, or a browser on a host running the server under a bridge network or Docker
+>    Desktop, would count as another device (§13); the box runs with the host's network
+>    (`deploy/compose.yml:17`), where the rule holds.
+>    Tests: `apps/server/src/request-from-box.test.ts`, "counts %s as the box itself" and "counts %s
+>    as another device"; `hour-setup-clock.test.ts`, "a browser on the box itself is never the
+>    second clock". No test runs a browser in a container.
+> 10. **With no second clock, the page checks again every 15 seconds by itself**, and carries on
+>     once a second clock appears; a re-check that again finds none keeps the 15-second rhythm
+>     (`setup/clock-wait.ts`, `createSecondClockPoll`). On the setup page this starts only once
+>     **Make the series** is pressed (item 4).
+>     Tests: `first-hour.browser.test.ts` and `recovery-hour.browser.test.ts`, each "with no second
+>     clock it explains itself and carries on when the internet arrives" and "a missing second
+>     clock reported by the server starts the 15-second check"; `recovery-hour.browser.test.ts`,
+>     "keeps the 15-second rhythm when a re-check again finds no second clock".
+> 11. **The 90-to-150-second wait at a setup or restore counts from the box's reading at the first
+>     select**, not from the comparison's; later selects keep the target that select stored. The
+>     select reads the box's clock afresh: it must come after the comparison's reading on the box's
+>     steady clock (else `clock_stale`) and match its wall-clock change to within a second (else
+>     `clock_corrected`), so its wall time can be up to a second earlier than the comparison's.
+>     Tests: `hour-setup-clock.test.ts`, "projects surviving observations forward before selecting
+>     after an hour boundary" (the select uses a box reading 2 seconds after the comparison's) and
+>     "a forward clock correction invalidates a reading"; `hour-selection.test.ts`, "setup checked
+>     at %s waits until %s" and "a restart keeps the recorded target". The two bounds were tried by
+>     a throwaway probe of `createSetupHourClock` (2026-10-22): the wall clock stepped back
+>     900 ms was accepted, 1001 ms refused `clock_corrected`, the steady clock 1 ms back refused
+>     `clock_stale`.
+> 12. **The command-line setup prints the time to come back instead of counting down**: "Continues
+>     at <time>; run the command again within a minute after that time (later, it waits again).",
+>     then exits with status 1. Run again inside that minute, it takes the name, asking nothing.
+>     Tests: `initial-hour-setup.test.ts`, "the terminal asks nothing, prints why it waits and until
+>     when, and keeps the wait" and "the terminal run again after its wait's target selects that
+>     minute's name, asking nothing"; `packages/provisioning/src/cli-first-setup.test.ts`, "the
+>     venue command claims ownership, retains its settle wait and says why and until when, before
+>     any venue write".
+> 13. **The `hour-*` file names and identifiers, and the stored `source: "hour"` label, are kept for
+>     now.** The rename is the backlog's fiscal entry "Rename the `hour-*` names to minute names".
+>     No test checks this; it is a naming choice.
 
 > **Amendment 2026-10-22 — every clock wait explains itself, with a countdown.** The owner, at
 > about 03:12: "But explain that on the screen and provide a countdown for the user to see." What
