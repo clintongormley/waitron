@@ -416,6 +416,14 @@ A987's design does not change the route
 
 ## Decisions and deliberate limits
 
+- **A counter Send pressed again during a full-disk stop is refused like any write (A798-B slice 3,
+  #1950; owner 2026-10-22: choice (a)).** The gate refuses the resend before `placeOrder` can answer
+  it with the first placement (`TILL_OPEN_WHILE_DISK_FULL`, `apps/server/src/till-api.ts`), so the
+  till says "Not saved" although the kitchen may already have the order; the order is still on the
+  bill once space is back. The owner kept this rather than opening the place route at the gate.
+  Likewise (choice (a)) the pay, bill and collect screens keep the sale's own sentence, and every
+  other screen shows the single full-disk sentence.
+
 - **Litestream's own requests are outside the Amazon S3 rehearsal's request check (A641, #1704;
   owner 2026-10-14: leave it so).** No Node code sends them, so the check in
   `apps/server/src/testing/aws-send-gate.ts` never sees them; in the pause scenario a proxy admits
