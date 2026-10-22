@@ -82,7 +82,7 @@ describe("setup wizard email test", () => {
         body({ ...email, port: Number(new URL(rig.config.url).port), encryption: "starttls" }),
       );
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ accepted: false, code: "email.test_refused" });
+      expect(await res.json()).toEqual({ accepted: false, code: "email.test_starttls_refused" });
       expect(rig.messages).toHaveLength(0);
     } finally {
       await rig.close();
