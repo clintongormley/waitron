@@ -15,6 +15,15 @@ their full text.
   not touch: "(design §3b(2))" in `set-table-status.test.ts`, "(owner decision 2026-08-02)" in
   `workforce-api.test.ts`, "(guard by deletion)" in `seed-sales.test.ts`.
 
+## The alert registry's per-source savepoint has no test that fails without it
+
+Found by A798-B slice 4 (#<this pull request>). `readOpenAlerts` (`apps/server/src/alerts.ts`) asks
+each source inside a savepoint so a failed source's writes go with it, but removing the savepoint
+left every test file that reaches `readOpenAlerts` passing (nine files, 2026-10-22): their failing
+sources fail a query or throw before writing anything, so nothing is left for the savepoint to
+undo. A failing source that writes before it throws would pin it, as
+`apps/server/src/staff-notices.test.ts` does.
+
 ## Logging, diagnostics & one-touch bug report (A9; Slice 1 landed #192)
 
 [Design](../superpowers/specs/2026-08-31-logging-diagnostics-foundation-design.md). Eventual vendor destination

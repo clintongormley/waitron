@@ -677,6 +677,23 @@ Station tab (`apps/till/src/till-app.ts` renders the same `till-station-screen`)
 `apps/till/src/screens/till-station-screen.ts` swallows every refusal but a changed screen and
 reloads the queue. Under the stop its tickets do not move and nothing says why.
 
+## The Box status page's rows from a module are not in the staff-notice seat
+
+Left open by A798-B slice 4 (#<this pull request>) for slice 7. Design §5's seat was to return
+"plus a row for the Box status page"; slice 4 built only the notices. Slice 7 adds the row (the
+Hacienda row's unsent count, last accepted record and the Reintentar ahora route) as an optional
+member of `staffNotices` or a seat of its own, and its plan decides whether the page reads the staff
+notices at all.
+
+## What a device shows when a module's notice check fails, and how often it is logged
+
+Left open by A798-B slice 4 (#<this pull request>) for slice 6. `readStaffNotices`
+(`apps/server/src/staff-notices.ts`) logs `staff_notice.source_unavailable` at `error` and names
+the module in `unavailable` on every read; nothing shows it. Once slice 6 runs it on every device's
+15-second equipment read, a check that keeps failing logs that line on every read from every
+device, so slice 6 decides what a device shows and whether the line is limited or written only when
+a check starts or stops failing.
+
 ## A box whose first setup was retired into a new workspace keeps that workspace's backup staging through the clean-up before the count
 
 When a first-setup resolution chose a new workspace (`binding` not null), the clean-up that

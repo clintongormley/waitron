@@ -4997,6 +4997,11 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 
 _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/alerts.md).
 
+- **The alert registry's per-source savepoint has no test that fails without it.** Removing the
+  savepoint in `readOpenAlerts` (`apps/server/src/alerts.ts`) left every test that reaches it
+  passing. Found by A798-B slice 4 (#<this pull request>).
+  [Detail](backlog/alerts.md#the-alert-registrys-per-source-savepoint-has-no-test-that-fails-without-it)
+
 - **`redact-secrets.ts` was written against the PostgreSQL connection-string parser** — found by
   #620 while pruning comments. `pg` is now installed only for `bench/pglite-throughput`; whether a
   credential-bearing URL can still reach the log is unchecked.
@@ -5499,10 +5504,21 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   2026-10-20). It adds a module seat for staff notices and one
   migration in the Veri*Factu module's set. Slice 1 of 10 (a full disk reported as
   `storage.disk_full`; nothing a body writes through the write queue after one that ended its
-  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) landed in #1950; slice 4 is next. Open asesor questions:
+  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) landed in #1950; slice 4 (a module seat for staff notices, with the Veri*Factu module's notice for a clock before 28-10-2024; nothing shows notices yet) landed in #<this pull request>; slice 5 is next. Open asesor questions:
   [Q51](compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21)
   and
   [Q52](compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21).
+
+- **The Box status page's rows from a module are not in the staff-notice seat.** Slice 4 built only
+  the notices; slice 7 adds the Hacienda row, and its plan decides whether the page reads the staff
+  notices at all. Left open by A798-B slice 4 (#<this pull request>) for slice 7.
+  [Detail](backlog/box.md#the-box-status-pages-rows-from-a-module-are-not-in-the-staff-notice-seat)
+
+- **What a device shows when a module's notice check fails, and how often it is logged.** Nothing
+  shows a failed check, and once slice 6 reads notices on every device's 15-second equipment read,
+  a check that keeps failing logs on every read from every device. Left open by A798-B slice 4
+  (#<this pull request>) for slice 6.
+  [Detail](backlog/box.md#what-a-device-shows-when-a-modules-notice-check-fails-and-how-often-it-is-logged)
 
 - **Till surfaces that still show their own message for a full disk, and the station screen's
   silence.** Left open by A798-B slice 3 (#1950) for slice 6: the draft save's
