@@ -29,7 +29,10 @@ import { firstFiscalFixture } from "../test/first-fiscal.js";
 import { dumpFileName } from "./backup-keys.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { loadBoxEnv } from "./box-env.js";
+import { deviceNoticeSources } from "./box-staff-notices.js";
 import { mountDeviceApi } from "./device-api.js";
+import { createDiskFullState, watchForDiskFull } from "./disk-full-state.js";
+import { createFreeSpaceState } from "./free-space-watch.js";
 import { runEntry, serveRecovery, type RecoveryServeOptions } from "./node-entry.js";
 import { FRESH, readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -533,6 +536,89 @@ describe("a start on a real full disk", () => {
       expect(db.all<{ n: number }>(sql`select count(*) as n from zz`)).toEqual([{ n: 0 }]);
       expect(db.all<{ id: string }>(sql`select id from change_log`)).toEqual([{ id: "zz1" }]);
     } finally {
+      small.unfill();
+      await store.close();
+    }
+  });
+
+  it("the equipment read answers with the red notice on a full disk with a change waiting", async (ctx) => {
+    const small = needDisk(ctx);
+    const dir = realpathSync(small.folder("equipment-notices"));
+    await applyMigrations(dir, migrationOptionsFor(manifestSets(), null));
+    const store = await openVenueDatabase(dir);
+    const db = store.venue;
+    const disk = createDiskFullState({ dir, now: () => new Date(), log: () => {} });
+    const unwatch = watchForDiskFull(disk, [store.venue, store.node]);
+    try {
+      await seedTenant(db);
+      const [location] = await db
+        .insert(locations)
+        .values({ name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Sale" })
+        .returning({ id: locations.id });
+      const { deviceId } = await seedDevice(db, {
+        locationId: brandLocationId(location!.id),
+        label: "Till 1",
+      });
+      const token = "equipment-notices-token";
+      await db
+        .update(devices)
+        .set({ tokenHash: hashSecret(token), lastSeenAt: "2020-01-01T00:00:00.000Z" })
+        .where(eq(devices.id, deviceId));
+      db.run(sql`create table zz (id integer primary key, pad blob)`);
+      const writer: OwnedStaffNoticeSource = {
+        owner: "writer",
+        source: {
+          read: ({ tx }) => {
+            tx.run(sql`insert into zz (pad) values (zeroblob(16))`);
+            return Promise.resolve([]);
+          },
+        },
+      };
+      const app = new Hono();
+      mountDeviceApi(
+        app,
+        {
+          db,
+          cfg: {} as never,
+          secureCookies: false,
+          pairingMode: createPairingMode(),
+          notices: {
+            sources: [
+              ...deviceNoticeSources({ disk, space: createFreeSpaceState({ log: () => {} }) }, []),
+              writer,
+            ],
+            clock: {
+              now: () => ({ instant: new Date(), offsetMinutes: 0, confident: true }) as never,
+            },
+            filing: () => ({ enabled: false }),
+          },
+        },
+        () => {},
+      );
+      db.run(
+        sql`insert into change_log (id, payload) values ('zz1', '{"resource":"zz","id":"1"}')`,
+      );
+      db.all(sql`pragma wal_checkpoint(truncate)`);
+      small.fill(0);
+
+      for (let i = 0; i < 2; i += 1) {
+        const res = await app.request("/api/device/equipment", {
+          headers: { cookie: `waitron_device=${deviceId}.${token}` },
+        });
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as {
+          roles: unknown;
+          notices: { key: string; owner: string }[];
+          noticesUnavailable: string[];
+        };
+        expect(Array.isArray(body.roles)).toBe(true);
+        expect(body.notices.map(({ key, owner }) => ({ key, owner }))).toEqual([
+          { key: "storage.disk_full", owner: "box" },
+        ]);
+        expect(body.noticesUnavailable).toEqual(["writer"]);
+      }
+    } finally {
+      unwatch();
       small.unfill();
       await store.close();
     }

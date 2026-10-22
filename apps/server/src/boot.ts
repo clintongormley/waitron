@@ -162,6 +162,7 @@ import {
 } from "./free-space-watch.js";
 import { mountNodeApi } from "./node-api.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
+import { deviceNoticeSources } from "./box-staff-notices.js";
 import { mountDeviceApi } from "./device-api.js";
 import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -1825,6 +1826,13 @@ async function bootServer(
         devMode: config.devMode,
         tenantDomain: config.tenantDomain,
         disk: diskFull,
+        notices: {
+          sources: deviceNoticeSources({ disk: diskFull, space: freeSpace }, setsToMigrate),
+          clock: tillClock,
+          filing: () => ({
+            enabled: fiscalDrainEnabled(config) && holders.singletonRole.current === "primary",
+          }),
+        },
       },
       log,
     );
