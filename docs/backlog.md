@@ -5712,6 +5712,11 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   ([design](superpowers/specs/2026-10-22-a987-prepare-venue-email-design.md)).
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
 
+- **The setup wizard's email test connects wherever an unauthenticated caller points it (A987
+  review, 2026-10-22) — OPEN.** In setup mode, `POST /setup-api/email-test` checks no sign-in and
+  sends to the host, port and address the request names. Read, not run.
+  [Detail](backlog/box.md#the-setup-wizards-email-test-connects-wherever-an-unauthenticated-caller-points-it-a987-review-2026-10-22--open)
+
 - **A blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }`** — left open by
   A178 (#1010 to #1019), seen while building, not changed: the same parsing is on `main` before
   A178b (`#buildSchedule`'s `split(":")`); what the server does with it was not checked.

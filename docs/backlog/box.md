@@ -399,6 +399,18 @@ this item stays open.)
 (2026-10-22, A987: design on main, waiting on the owner's decisions:
 [2026-10-22-a987-prepare-venue-email-design.md](../superpowers/specs/2026-10-22-a987-prepare-venue-email-design.md).)
 
+## The setup wizard's email test connects wherever an unauthenticated caller points it (A987 review, 2026-10-22) — OPEN
+
+**The setup wizard's email test connects wherever an unauthenticated caller points it (A987 review,
+2026-10-22) — OPEN.** While a box is in setup mode, `POST /setup-api/email-test` without the setup
+owner's header (`apps/server/src/setup-first-fiscal-api.ts:182-184`) reaches a route that checks no
+sign-in, takes the recipient from the request's `venue.admin.email` and connects to whatever host and
+port the request names (`apps/server/src/setup-email-api.ts:25-38`). Anyone who can reach such a box
+can make it send a short test message to any address through any mail server it can reach, including
+one on the venue's network that accepts local mail without a login. Read, not run. Live has it today;
+A987's design does not change the route
+([§7](../superpowers/specs/2026-10-22-a987-prepare-venue-email-design.md#7-security)).
+
 ## Decisions and deliberate limits
 
 - **Litestream's own requests are outside the Amazon S3 rehearsal's request check (A641, #1704;
