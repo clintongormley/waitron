@@ -26,7 +26,6 @@ export const stepChipStyles = css`
   .step-chip {
     display: inline-flex;
     align-items: stretch;
-    max-width: 100%;
     border: 1px solid var(--wt-color-primary);
     border-radius: var(--wt-radius-sm);
   }
@@ -41,7 +40,6 @@ export const stepChipStyles = css`
     display: inline-flex;
     align-items: center;
     gap: var(--wt-space-1);
-    min-width: 0;
     padding: var(--wt-space-1) var(--wt-space-2);
     border-radius: inherit;
     border-top-right-radius: 0;

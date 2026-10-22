@@ -496,7 +496,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     );
     const list = await mountWidget<TillFloorScreen>(
       "till-floor-screen",
-      { zones, tables: signalled, canOpenStation: true },
+      { zones, tables: signalled, canOpenStation: true, canMarkSteps: true },
       theme,
     );
     expect(list.el.shadowRoot!.querySelectorAll("[data-chip]").length).toBeGreaterThan(5);
