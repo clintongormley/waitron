@@ -7,7 +7,11 @@ import {
   type OperationOperator,
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { encodeHourIdentity, isHourAllocatedSeries, isHourIdentity } from "./hour-identity.js";
+import {
+  encodeMinuteIdentity,
+  isMinuteAllocatedSeries,
+  isMinuteIdentity,
+} from "./hour-identity.js";
 import type { AllocationOperationEvidence } from "./allocation-operation.js";
 import { parseAllocationOperator } from "./allocation-operator.js";
 import {
@@ -193,7 +197,7 @@ function allocationShape(value: unknown): value is FiscalAllocation {
     /^[A-Z0-9]{2}$/.test(value.softwareId) &&
     (value.environment === "preproduction" || value.environment === "production") &&
     (value.source === "hour"
-      ? isHourIdentity(value.installationIdentity)
+      ? isMinuteIdentity(value.installationIdentity)
       : isInstallationIdentity(value.installationIdentity)) &&
     ["initial-paper", "paper", "cloud", "emergency", "hour"].includes(value.source as string) &&
     timestamp(value.issuedAt) &&
@@ -445,7 +449,7 @@ function validateEnvelope(
       return refuse("reservation_mismatch");
     if (input.reservationEvidence !== null) return refuse("reservation_mismatch");
     try {
-      if (encodeHourIdentity(Date.parse(input.issuedAt)) !== input.installationIdentity)
+      if (encodeMinuteIdentity(Date.parse(input.issuedAt)) !== input.installationIdentity)
         return refuse("reservation_mismatch");
     } catch {
       return refuse("reservation_mismatch");
@@ -529,7 +533,7 @@ function validateEnvelope(
       return refuse("reservation_mismatch");
   }
   if (
-    !(input.source === "hour" ? isHourAllocatedSeries : isAllocatedSeries)(
+    !(input.source === "hour" ? isMinuteAllocatedSeries : isAllocatedSeries)(
       input.series,
       input.installationIdentity,
       context.requiredBases,

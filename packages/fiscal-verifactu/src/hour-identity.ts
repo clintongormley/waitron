@@ -1,41 +1,41 @@
 import { seriesMatchBases } from "./allocation-identity.js";
 
 const EPOCH_MS = Date.parse("2026-01-01T00:00:00.000Z");
-const HOUR_MS = 3_600_000;
-const HOUR_COUNT = 32 ** 4;
+const MINUTE_MS = 60_000;
+const MINUTE_COUNT = 32 ** 5;
 const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
-export function encodeHourIdentity(instantMs: number): string {
+export function encodeMinuteIdentity(instantMs: number): string {
   if (
     !Number.isSafeInteger(instantMs) ||
     instantMs < EPOCH_MS ||
-    instantMs >= EPOCH_MS + HOUR_COUNT * HOUR_MS
+    instantMs >= EPOCH_MS + MINUTE_COUNT * MINUTE_MS
   )
-    throw new RangeError("Invalid hour instant");
-  let hour = Math.floor((instantMs - EPOCH_MS) / HOUR_MS);
+    throw new RangeError("Invalid minute instant");
+  let minute = Math.floor((instantMs - EPOCH_MS) / MINUTE_MS);
   let identity = "";
-  for (let digit = 0; digit < 4; digit++) {
-    identity = ALPHABET[hour % 32]! + identity;
-    hour = Math.floor(hour / 32);
+  for (let digit = 0; digit < 5; digit++) {
+    identity = ALPHABET[minute % 32]! + identity;
+    minute = Math.floor(minute / 32);
   }
   return identity;
 }
 
-export function decodeHourIdentity(identity: string): number {
-  if (!isHourIdentity(identity)) throw new RangeError("Invalid hour identity");
-  let hour = 0;
-  for (const symbol of identity) hour = hour * 32 + ALPHABET.indexOf(symbol);
-  return hour;
+export function decodeMinuteIdentity(identity: string): number {
+  if (!isMinuteIdentity(identity)) throw new RangeError("Invalid minute identity");
+  let minute = 0;
+  for (const symbol of identity) minute = minute * 32 + ALPHABET.indexOf(symbol);
+  return minute;
 }
 
-export function isHourIdentity(value: unknown): value is string {
-  return typeof value === "string" && value.length === 4 && /^[0-9A-HJKMNP-TV-Z]{4}$/.test(value);
+export function isMinuteIdentity(value: unknown): value is string {
+  return typeof value === "string" && value.length === 5 && /^[0-9A-HJKMNP-TV-Z]{5}$/.test(value);
 }
 
-export function isHourAllocatedSeries(
+export function isMinuteAllocatedSeries(
   value: unknown,
   identity: string,
   bases: readonly { code: string; purpose: string }[],
 ): boolean {
-  return isHourIdentity(identity) && seriesMatchBases(value, identity, bases);
+  return isMinuteIdentity(identity) && seriesMatchBases(value, identity, bases);
 }

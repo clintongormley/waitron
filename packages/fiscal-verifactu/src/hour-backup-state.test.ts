@@ -73,7 +73,7 @@ it("exports abandoned and older-software intents without raw keys, PDFs or owner
   });
   expect(JSON.stringify(source)).not.toMatch(/NEVER-BACK-UP|PDF-secret|private|owner|context/);
   expect(projectHourHistory({ scope, sources: [source] })).toMatchObject({
-    greatestSpentHour: 6924,
+    greatestSpentMinute: 6924,
     recordedTimeFloorMs: 1792152060000,
     contradictions: [],
   });
@@ -83,7 +83,7 @@ it("keeps conflicting revisions visible rather than allowing an older revision t
   const low = { ...intent(), binding: high.binding };
   const source = publicHourSelectionHistory([state(high), state(low)]);
   expect(projectHourHistory({ scope, sources: [source] })).toMatchObject({
-    greatestSpentHour: 6924,
+    greatestSpentMinute: 6924,
     contradictions: ["intent/fiscal-verifactu/06RC:conflict"],
   });
 });

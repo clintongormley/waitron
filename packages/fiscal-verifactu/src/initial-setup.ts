@@ -294,7 +294,7 @@ function createInitialSetup(
         return {
           keys: [],
           positions:
-            history.greatestSpentHour === null
+            history.greatestSpentMinute === null
               ? []
               : [
                   {
@@ -303,7 +303,7 @@ function createInitialSetup(
                       history.scope.environment,
                       "hour",
                     ]),
-                    position: history.greatestSpentHour,
+                    position: history.greatestSpentMinute,
                   },
                 ],
         };

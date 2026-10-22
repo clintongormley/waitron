@@ -128,7 +128,7 @@ it("reads each configured prefix and exact spelling without writing counters", a
       sources: facts.history,
     }),
   ).toMatchObject({
-    greatestSpentHour: 6923,
+    greatestSpentMinute: 6923,
     contradictions: [],
   });
   expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
@@ -158,7 +158,7 @@ it("includes higher retired names on another node under another software identif
       sources: facts.history,
     }),
   ).toMatchObject({
-    greatestSpentHour: 6925,
+    greatestSpentMinute: 6925,
     recordedTimeFloorMs: Date.parse("2026-10-16T13:20:00Z"),
     contradictions: [],
   });

@@ -1,4 +1,4 @@
-import { isHourIdentity } from "./hour-identity.js";
+import { isMinuteIdentity } from "./hour-identity.js";
 import { encodeNodeKey } from "./paper-register-compact.js";
 import type { RegisterScope, NamedNodeKey } from "./paper-register-protocol.js";
 
@@ -62,7 +62,7 @@ function checked(value: unknown, secret: boolean): RecoveryDocument | RecoveryDo
     !Array.isArray(value.installationCodes) ||
     value.installationCodes.length === 0 ||
     value.installationCodes.length > 256 ||
-    !value.installationCodes.every(isHourIdentity) ||
+    !value.installationCodes.every(isMinuteIdentity) ||
     new Set(value.installationCodes).size !== value.installationCodes.length ||
     !label(value.taxpayerName) ||
     !label(value.venueName) ||

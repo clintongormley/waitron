@@ -9,7 +9,7 @@ import type {
 import type { BackupQuery, BackupRow, BackupValue } from "@waitron/store";
 import { isAppError } from "@waitron/shared";
 import { FISCAL_CLASSIFICATION } from "./classification.js";
-import { encodeHourIdentity, isHourAllocatedSeries } from "./hour-identity.js";
+import { encodeMinuteIdentity, isMinuteAllocatedSeries } from "./hour-identity.js";
 import { isAllocatedSeries, matchesInstallationChecksum } from "./allocation-identity.js";
 import { parseAllocationOperator } from "./allocation-operator.js";
 import { readDeclaredPaperInput } from "./declared-paper-evidence.js";
@@ -224,7 +224,7 @@ function evidence(
     case "hour": {
       if (a.reservationEvidence !== null) return "invalid";
       try {
-        return encodeHourIdentity(Date.parse(a.issuedAt)) === a.installationIdentity
+        return encodeMinuteIdentity(Date.parse(a.issuedAt)) === a.installationIdentity
           ? "passed"
           : "invalid";
       } catch (error) {
@@ -299,7 +299,7 @@ async function allocationRow(query: BackupQuery, row: BackupRow): Promise<Backup
     r.activationEventId !== row.event_key ||
     r.sifId !== row.sif_id ||
     !Array.isArray(r.series) ||
-    !(a.source === "hour" ? isHourAllocatedSeries : isAllocatedSeries)(
+    !(a.source === "hour" ? isMinuteAllocatedSeries : isAllocatedSeries)(
       a.series,
       a.installationIdentity,
       b,
@@ -338,7 +338,7 @@ async function allocationRow(query: BackupQuery, row: BackupRow): Promise<Backup
     declared.push({ code: entry.code, purpose: entry.purpose });
   }
   if (
-    !(a.source === "hour" ? isHourAllocatedSeries : isAllocatedSeries)(
+    !(a.source === "hour" ? isMinuteAllocatedSeries : isAllocatedSeries)(
       declared,
       a.installationIdentity,
       b,

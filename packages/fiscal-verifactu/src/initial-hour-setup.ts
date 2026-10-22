@@ -7,7 +7,7 @@ import {
   type ModuleOperationHost,
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { encodeHourIdentity, decodeHourIdentity, isHourIdentity } from "./hour-identity.js";
+import { encodeMinuteIdentity, decodeMinuteIdentity, isMinuteIdentity } from "./hour-identity.js";
 import { hostedHourPreparation, hourSetupInput } from "./hour-preparation.js";
 import "./errors.js";
 import { assertHourSeriesConfiguration } from "./hour-series-configuration.js";
@@ -50,7 +50,7 @@ export function readHourSetupInput(context: InitialSetupContext, input: unknown)
     !exact(request, ["kind", "status", "identity", "input"]) ||
     request.kind !== "waitron-hour-setup" ||
     request.status !== "selected" ||
-    !isHourIdentity(request.identity) ||
+    !isMinuteIdentity(request.identity) ||
     !record(request.input) ||
     !record(request.input.allocation) ||
     typeof request.input.allocation.issuedAt !== "string"
@@ -61,7 +61,7 @@ export function readHourSetupInput(context: InitialSetupContext, input: unknown)
   if (!Number.isSafeInteger(instant) || new Date(instant).toISOString() !== issuedAt) refuse();
   let identity: string;
   try {
-    identity = encodeHourIdentity(instant);
+    identity = encodeMinuteIdentity(instant);
   } catch {
     return refuse();
   }
@@ -328,7 +328,7 @@ export function createHourInitialSetup(
       return [
         {
           namespace: JSON.stringify([context.taxId, context.environment, "hour"]),
-          position: decodeHourIdentity(allocation.installationIdentity),
+          position: decodeMinuteIdentity(allocation.installationIdentity),
         },
       ];
     },

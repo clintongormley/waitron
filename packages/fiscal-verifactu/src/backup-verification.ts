@@ -12,7 +12,7 @@ import { verifyBackupFiscalHistory } from "./backup-verification-history.js";
 import { verifyBackupFiscalSecrets } from "./backup-verification-secrets.js";
 import { FISCAL_HOUR_BACKUP_STATE } from "./hour-backup-state.js";
 import { projectHourHistory, type HourHistorySource } from "./hour-history.js";
-import { isHourIdentity } from "./hour-identity.js";
+import { isMinuteIdentity } from "./hour-identity.js";
 
 const HISTORY_ENTRY = "secrets/module-evidence/fiscal-verifactu/hour-history.json";
 async function rows(query: BackupQuery, table: string): Promise<BackupRow[]> {
@@ -130,7 +130,7 @@ function projected(sources: readonly HourHistorySource[]): BackupModuleStatus {
     for (const value of source.records) {
       if (value === null || typeof value !== "object") return "invalid";
       const row = value as Record<string, unknown>;
-      if (typeof row.identity === "string" && !isHourIdentity(row.identity)) return "unsupported";
+      if (typeof row.identity === "string" && !isMinuteIdentity(row.identity)) return "unsupported";
       if (
         typeof row.taxpayerNif === "string" &&
         (row.environment === "production" || row.environment === "preproduction")

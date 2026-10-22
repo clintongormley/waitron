@@ -12,10 +12,10 @@ import "./errors.js";
 import { canSelectHour, type HourClockDecision } from "./hour-clock.js";
 import { projectHourHistory, type HourHistorySource, type HourScope } from "./hour-history.js";
 import {
-  decodeHourIdentity,
-  encodeHourIdentity,
-  isHourAllocatedSeries,
-  isHourIdentity,
+  decodeMinuteIdentity,
+  encodeMinuteIdentity,
+  isMinuteAllocatedSeries,
+  isMinuteIdentity,
 } from "./hour-identity.js";
 
 export interface HourSelectionFacts {
@@ -68,8 +68,9 @@ type ResumeRequest = Omit<SelectionRequest, "answer"> & {
   validate(selected: ReturnType<typeof material>): void;
 };
 const HOUR_MS = 3_600_000;
+const MINUTE_MS = 60_000;
 const EPOCH_MS = Date.parse("2026-01-01T00:00:00Z");
-const END_MS = EPOCH_MS + 32 ** 4 * HOUR_MS;
+const END_MS = EPOCH_MS + 32 ** 5 * MINUTE_MS;
 function refuse(reason: string): never {
   throw new AppError("sif.allocation_invalid", { reason });
 }
@@ -96,9 +97,9 @@ function validBases(value: unknown): value is HourSelectionFacts["bases"] {
     value.every(
       (base) => record(base) && typeof base.code === "string" && typeof base.purpose === "string",
     ) &&
-    isHourAllocatedSeries(
-      value.map((base) => ({ code: `${base.code}-0000`, purpose: base.purpose })),
-      "0000",
+    isMinuteAllocatedSeries(
+      value.map((base) => ({ code: `${base.code}-00000`, purpose: base.purpose })),
+      "00000",
       value,
     )
   );
@@ -135,7 +136,7 @@ function parseState(value: unknown): Entry[] {
         (!Array.isArray(entry.reportedIdentities) ||
           entry.reportedIdentities.length === 0 ||
           entry.reportedIdentities.length > 256 ||
-          !entry.reportedIdentities.every(isHourIdentity) ||
+          !entry.reportedIdentities.every(isMinuteIdentity) ||
           new Set(entry.reportedIdentities).size !== entry.reportedIdentities.length)) ||
       !text(entry.softwareId) ||
       !["no", "yes", "unknown"].includes(entry.answer as string)
@@ -145,12 +146,12 @@ function parseState(value: unknown): Entry[] {
       if (
         !Array.isArray(entry.references) ||
         !entry.references.every(text) ||
-        !isHourIdentity(entry.identity) ||
+        !isMinuteIdentity(entry.identity) ||
         typeof entry.issuedAt !== "string" ||
         !Number.isFinite(Date.parse(entry.issuedAt)) ||
         Date.parse(entry.issuedAt) < EPOCH_MS ||
         Date.parse(entry.issuedAt) >= END_MS ||
-        encodeHourIdentity(Date.parse(entry.issuedAt)) !== entry.identity
+        encodeMinuteIdentity(Date.parse(entry.issuedAt)) !== entry.identity
       )
         return refuse("history_invalid");
       if (
@@ -461,10 +462,11 @@ export function createHourSelection(options: {
         ],
       });
       if (history.contradictions.length > 0) return refuse("history_invalid");
-      const currentHour = decodeHourIdentity(encodeHourIdentity(now));
-      const selectedHour = intent === undefined ? currentHour : decodeHourIdentity(intent.identity);
+      const currentMinute = decodeMinuteIdentity(encodeMinuteIdentity(now));
+      const selectedMinute =
+        intent === undefined ? currentMinute : decodeMinuteIdentity(intent.identity);
       if (
-        (history.greatestSpentHour !== null && selectedHour <= history.greatestSpentHour) ||
+        (history.greatestSpentMinute !== null && selectedMinute <= history.greatestSpentMinute) ||
         (history.recordedTimeFloorMs !== null && now < history.recordedTimeFloorMs) ||
         (intent !== undefined && now < Date.parse(intent.issuedAt))
       )
@@ -525,7 +527,7 @@ export function createHourSelection(options: {
         ...base,
         kind: "intent",
         references: [...history.references],
-        identity: encodeHourIdentity(now),
+        identity: encodeMinuteIdentity(now),
         issuedAt: new Date(now).toISOString(),
       };
       if (!persist) return { ...material(selected), status: "preview" as const };

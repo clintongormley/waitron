@@ -12,7 +12,7 @@ import {
   type ProvisionedNode,
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { isHourAllocatedSeries } from "./hour-identity.js";
+import { isMinuteAllocatedSeries } from "./hour-identity.js";
 import { liveSeriesBases } from "./reserved-series.js";
 import { registroSif } from "./schema/sif.js";
 import { publicHourSelectionHistory } from "./hour-selection.js";
@@ -72,9 +72,9 @@ function readDormant(value: unknown): Dormant {
         typeof base.code === "string" &&
         typeof base.purpose === "string",
     ) ||
-    !isHourAllocatedSeries(
-      value.bases.map((base) => ({ code: `${base.code}-0000`, purpose: base.purpose })),
-      "0000",
+    !isMinuteAllocatedSeries(
+      value.bases.map((base) => ({ code: `${base.code}-00000`, purpose: base.purpose })),
+      "00000",
       value.bases,
     )
   )

@@ -1,49 +1,75 @@
 import { describe, expect, it } from "vitest";
 import {
-  decodeHourIdentity,
-  encodeHourIdentity,
-  isHourAllocatedSeries,
-  isHourIdentity,
+  decodeMinuteIdentity,
+  encodeMinuteIdentity,
+  isMinuteAllocatedSeries,
+  isMinuteIdentity,
 } from "./hour-identity.js";
 
-describe("UTC hour identities", () => {
+const EPOCH_MS = Date.parse("2026-01-01T00:00:00.000Z");
+
+describe("UTC minute identities", () => {
   it.each([
-    ["2026-01-01T00:00:00.000Z", "0000", 0],
-    ["2026-01-01T00:59:59.999Z", "0000", 0],
-    ["2026-01-01T01:00:00.000Z", "0001", 1],
-    ["2026-10-16T11:40:00.000Z", "06RB", 6923],
-    ["2026-10-16T12:00:00.000Z", "06RC", 6924],
-    ["2145-08-15T15:59:59.999Z", "ZZZZ", 1048575],
-  ] as const)("encodes %s as %s", (instant, identity, index) => {
-    expect(encodeHourIdentity(Date.parse(instant))).toBe(identity);
-    expect(decodeHourIdentity(identity)).toBe(index);
-    expect(isHourIdentity(identity)).toBe(true);
+    ["2026-01-01T00:00:00.000Z", "00000"],
+    ["2026-10-16T11:40:00.000Z", "0CNNW"],
+    ["2026-10-23T19:40:50.000Z", "0CZZW"],
+    ["2026-10-23T19:55:50.000Z", "0D00B"],
+    ["2026-10-23T19:56:00.000Z", "0D00C"],
+    ["2026-10-24T09:02:00.000Z", "0D0RY"],
+    ["2089-10-18T16:31:00.000Z", "ZZZZZ"],
+  ] as const)("encodes %s as %s", (instant, identity) => {
+    expect(encodeMinuteIdentity(Date.parse(instant))).toBe(identity);
+    expect(decodeMinuteIdentity(identity)).toBe(
+      Math.floor((Date.parse(instant) - EPOCH_MS) / 60_000),
+    );
+    expect(isMinuteIdentity(identity)).toBe(true);
+  });
+
+  it("decodes to minutes since the epoch", () => {
+    expect(decodeMinuteIdentity("0CZZW")).toBe(
+      Math.floor(
+        (Date.parse("2026-10-23T19:40:50Z") - Date.parse("2026-01-01T00:00:00Z")) / 60_000,
+      ),
+    );
+    expect(decodeMinuteIdentity("00000")).toBe(0);
+    expect(decodeMinuteIdentity("ZZZZZ")).toBe(32 ** 5 - 1);
+  });
+
+  it("round-trips 1 000 random instants in range", () => {
+    for (let i = 0; i < 1000; i++) {
+      const instant = EPOCH_MS + Math.floor(Math.random() * 32 ** 5 * 60_000);
+      const identity = encodeMinuteIdentity(instant);
+      expect(decodeMinuteIdentity(identity)).toBe(Math.floor((instant - EPOCH_MS) / 60_000));
+      expect(encodeMinuteIdentity(EPOCH_MS + decodeMinuteIdentity(identity) * 60_000)).toBe(
+        identity,
+      );
+    }
   });
 
   it.each([
-    Date.parse("2025-12-31T23:59:59.999Z"),
-    Date.parse("2145-08-15T16:00:00.000Z"),
-    Date.parse("2026-01-01T00:00:00.000Z") + 0.5,
+    EPOCH_MS - 1,
+    Date.parse("2089-10-18T16:32:00.000Z"),
+    EPOCH_MS + 0.5,
     NaN,
     Infinity,
     -Infinity,
   ])("refuses out-of-range or nonintegral milliseconds %s", (instant) => {
-    expect(() => encodeHourIdentity(instant)).toThrow(RangeError);
+    expect(() => encodeMinuteIdentity(instant)).toThrow(new RangeError("Invalid minute instant"));
   });
 
   it.each([
     "",
-    "000",
-    "00000",
-    "06rb",
-    "06RB\n",
-    " 06RB",
-    "06RB ",
-    "06RI",
-    "06RL",
-    "06RO",
-    "06RU",
-    "06RＢ",
+    "06XV",
+    "0CZZWX",
+    "0czzw",
+    "0CZZW\n",
+    " 0CZZW",
+    "0CZZW ",
+    "0CZZI",
+    "0CZZL",
+    "0CZZO",
+    "0CZZU",
+    "0CZZＷ",
     "S000001",
     "P000001",
     "C000001",
@@ -54,8 +80,8 @@ describe("UTC hour identities", () => {
     [],
     undefined,
   ])("refuses noncanonical internal identity %j", (identity) => {
-    expect(isHourIdentity(identity)).toBe(false);
-    expect(() => decodeHourIdentity(identity as string)).toThrow(RangeError);
+    expect(isMinuteIdentity(identity)).toBe(false);
+    expect(() => decodeMinuteIdentity(identity as string)).toThrow(RangeError);
   });
 });
 
@@ -66,35 +92,51 @@ const bases = [
   { code: "R", purpose: "rectificative" },
 ];
 const series = [
-  { code: "a/B_1.2-3-06RB", purpose: "standard" },
-  { code: "B-06RB", purpose: "standard" },
-  { code: "FF-06RB", purpose: "full" },
-  { code: "R-06RB", purpose: "rectificative" },
+  { code: "a/B_1.2-3-0CZZW", purpose: "standard" },
+  { code: "B-0CZZW", purpose: "standard" },
+  { code: "FF-0CZZW", purpose: "full" },
+  { code: "R-0CZZW", purpose: "rectificative" },
 ];
 
-describe("complete configured hour series", () => {
+describe("complete configured minute series", () => {
+  it("accepts a single base suffixed with the minute code", () => {
+    expect(
+      isMinuteAllocatedSeries([{ code: "A-0CZZW", purpose: "standard" }], "0CZZW", [
+        { code: "A", purpose: "standard" },
+      ]),
+    ).toBe(true);
+  });
+
+  it("accepts a hyphenated and slashed base", () => {
+    expect(
+      isMinuteAllocatedSeries([{ code: "F/2.x-y-0CZZW", purpose: "standard" }], "0CZZW", [
+        { code: "F/2.x-y", purpose: "standard" },
+      ]),
+    ).toBe(true);
+  });
+
   it("preserves exact spelling, multiple standard bases and FF/full in any order", () => {
-    expect(isHourAllocatedSeries([...series].reverse(), "06RB", bases)).toBe(true);
-    expect(isHourAllocatedSeries(series, "06RB", [...bases].reverse())).toBe(true);
+    expect(isMinuteAllocatedSeries([...series].reverse(), "0CZZW", bases)).toBe(true);
+    expect(isMinuteAllocatedSeries(series, "0CZZW", [...bases].reverse())).toBe(true);
   });
 
   it.each(
     [
       series.slice(0, 3),
-      [...series, { code: "extra-06RB", purpose: "standard" }],
+      [...series, { code: "extra-0CZZW", purpose: "standard" }],
       [series[0], series[0], series[2], series[3]],
-      [series[0], series[1], { code: "FF-06RB", purpose: "standard" }, series[3]],
-      [{ code: "A/B_1.2-3-06RB", purpose: "standard" }, ...series.slice(1)],
-      [{ code: "a/B_1.2-3-06RC", purpose: "standard" }, ...series.slice(1)],
+      [series[0], series[1], { code: "FF-0CZZW", purpose: "standard" }, series[3]],
+      [{ code: "A/B_1.2-3-0CZZW", purpose: "standard" }, ...series.slice(1)],
+      [{ code: "a/B_1.2-3-0CZZX", purpose: "standard" }, ...series.slice(1)],
       null,
     ].map((value) => [value]),
   )("refuses a changed complete set %#", (value) => {
-    expect(isHourAllocatedSeries(value, "06RB", bases)).toBe(false);
+    expect(isMinuteAllocatedSeries(value, "0CZZW", bases)).toBe(false);
   });
 
   it.each(["", "A".repeat(22), "A B", "A?", "Á", "A\n"])("refuses invalid base %j", (code) => {
     expect(
-      isHourAllocatedSeries([{ code: `${code}-06RB`, purpose: "standard" }], "06RB", [
+      isMinuteAllocatedSeries([{ code: `${code}-0CZZW`, purpose: "standard" }], "0CZZW", [
         { code, purpose: "standard" },
       ]),
     ).toBe(false);
@@ -102,18 +144,23 @@ describe("complete configured hour series", () => {
 
   it("retains the 21-character base and ten-digit counter limits", () => {
     expect(
-      isHourAllocatedSeries([{ code: "ABCDEFGHIJKLMNOPQRSTU-ZZZZ", purpose: "standard" }], "ZZZZ", [
-        { code: "ABCDEFGHIJKLMNOPQRSTU", purpose: "standard" },
-      ]),
+      isMinuteAllocatedSeries(
+        [{ code: "ABCDEFGHIJKLMNOPQRSTU-ZZZZZ", purpose: "standard" }],
+        "ZZZZZ",
+        [{ code: "ABCDEFGHIJKLMNOPQRSTU", purpose: "standard" }],
+      ),
     ).toBe(true);
-    expect("ABCDEFGHIJKLMNOPQRSTU-ZZZZ/9999999999").toHaveLength(37);
+    expect("ABCDEFGHIJKLMNOPQRSTU-ZZZZZ/9999999999").toHaveLength(38);
   });
 
-  it("does not admit an old protocol identity through the hour series boundary", () => {
-    expect(
-      isHourAllocatedSeries([{ code: "A-P000042", purpose: "standard" }], "P000042", [
-        { code: "A", purpose: "standard" },
-      ]),
-    ).toBe(false);
-  });
+  it.each(["S000001", "E00000000000000000000000000", "P000042", "06XV"])(
+    "does not admit a retired or four-symbol identity %s through the minute series boundary",
+    (identity) => {
+      expect(
+        isMinuteAllocatedSeries([{ code: `A-${identity}`, purpose: "standard" }], identity, [
+          { code: "A", purpose: "standard" },
+        ]),
+      ).toBe(false);
+    },
+  );
 });

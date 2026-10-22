@@ -35,8 +35,9 @@ export interface HourClockDecision {
 const decisions = new WeakMap<HourClockDecision, string>();
 const confirmations = new WeakMap<object, string>();
 const HOUR_MS = 3_600_000;
+const MINUTE_MS = 60_000;
 const EPOCH_MS = Date.parse("2026-01-01T00:00:00.000Z");
-const END_MS = EPOCH_MS + 32 ** 4 * HOUR_MS;
+const END_MS = EPOCH_MS + 32 ** 5 * MINUTE_MS;
 
 function validSample(sample: Extract<HourClockObservation, { result: "usable" }>): boolean {
   const duration = sample.monotonicFinishedMs - sample.monotonicStartedMs;

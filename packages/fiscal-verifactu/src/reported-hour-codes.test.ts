@@ -88,7 +88,7 @@ it("retains the entered code with the selected event and in backup evidence", as
     reportedIdentities: ["06RB"],
   });
   const history = projectHourHistory({ scope, sources: [publicHourSelectionHistory(f.writes)] });
-  expect(history.greatestSpentHour).toBe(6924);
+  expect(history.greatestSpentMinute).toBe(6924);
   expect(history.references.some((reference) => reference.includes("06RB"))).toBe(true);
   await withOperationAuthority(binding, "operator", async (authority) => {
     expect(await f.create().selected({ binding, authority })).toMatchObject({
@@ -104,7 +104,7 @@ it("retains reported codes while waiting even before a fresh hour is selected", 
   f.at("2026-10-16T12:00:00Z");
   expect(await f.select(["06RB"], "yes")).toMatchObject({ status: "waiting" });
   const history = projectHourHistory({ scope, sources: [publicHourSelectionHistory(f.writes)] });
-  expect(history.greatestSpentHour).toBe(6923);
+  expect(history.greatestSpentMinute).toBe(6923);
   expect(history.contradictions).toEqual([]);
 });
 it.each(

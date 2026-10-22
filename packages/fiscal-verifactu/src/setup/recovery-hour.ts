@@ -301,7 +301,7 @@ export class RecoveryHourEntry extends LitElement {
               ([key, value]) => selectedBinding[key] !== value,
             ) ||
             typeof selected.identity !== "string" ||
-            !/^[0-9A-HJKMNP-TV-Z]{4}$/.test(selected.identity) ||
+            !/^[0-9A-HJKMNP-TV-Z]{5}$/.test(selected.identity) ||
             selected.input === undefined
           )
             throw new Error("invalid selection");

@@ -31,8 +31,8 @@ it("enumerates the higher retired other-node hour that current-node readers omit
   await seedTenants(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   for (const [nodeId, identity, issuedAt] of [
-    [TENANT_A.nodeId, "06RB", "2026-10-16T11:40:00.000Z"],
-    [TENANT_A.nodeId2, "06RC", "2026-10-16T12:00:00.000Z"],
+    [TENANT_A.nodeId, "0CNNW", "2026-10-16T11:40:00.000Z"],
+    [TENANT_A.nodeId2, "0CNPG", "2026-10-16T12:00:00.000Z"],
   ] as const) {
     const binding: OperationBinding = {
       module: "fiscal-verifactu",
@@ -97,13 +97,13 @@ it("enumerates the higher retired other-node hour that current-node readers omit
     bases: await liveSeriesBases(tx, node),
     series: await readModuleAllocationSeries(tx, node, bases),
   }));
-  expect(result.series.map((s) => s.code)).not.toContain("A-06RC");
+  expect(result.series.map((s) => s.code)).not.toContain("A-0CNPG");
   const source = await readInventory();
   const history = projectHourHistory({
     scope: { taxpayerNif: "89890001K", environment: "preproduction" },
     sources: [source],
   });
-  expect(history.greatestSpentHour).toBe(6924);
+  expect(history.greatestSpentMinute).toBe(415440);
   expect(history.contradictions).toEqual([]);
   expect(
     source.records.filter(
@@ -127,7 +127,7 @@ async function seedRows(
 ) {
   await seedTenants(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
-  const identity = options.identity ?? "06RB";
+  const identity = options.identity ?? "0CNNW";
   const [sif] = await suite.db
     .insert(registroSif)
     .values({
@@ -156,15 +156,15 @@ const projection = async () =>
     sources: [await readInventory()],
   });
 it("retains revoked identities and retired series under another software ID", async () => {
-  await seedRows({ identity: "06RC", softwareId: "OTHER", retired: true });
+  await seedRows({ identity: "0CNPG", softwareId: "OTHER", retired: true });
   const result = await projection();
-  expect(result.greatestSpentHour).toBe(6924);
+  expect(result.greatestSpentMinute).toBe(415440);
   expect(result.recordedTimeFloorMs).toBe(Date.parse("2026-10-16T11:35:00Z"));
   expect(result.contradictions).toEqual([]);
 });
 it("another taxpayer's higher identity stays independent", async () => {
-  await seedRows({ identity: "ZZZZ", nif: "89890002M" });
-  expect((await projection()).greatestSpentHour).toBeNull();
+  await seedRows({ identity: "ZZZZZ", nif: "89890002M" });
+  expect((await projection()).greatestSpentMinute).toBeNull();
   expect((await projection()).contradictions).toEqual([]);
 });
 it("does not assume a nonempty unstamped database is the requested environment", async () => {
@@ -173,7 +173,7 @@ it("does not assume a nonempty unstamped database is the requested environment",
     nodeId: TENANT_A.nodeId,
     nif: "89890001K",
     idSistemaInformatico: "W1",
-    numeroInstalacion: "06RC",
+    numeroInstalacion: "0CNPG",
   });
   expect((await projection()).contradictions).toContain("venue:incomplete");
 });
@@ -181,7 +181,7 @@ it("an unassignable series refuses completeness instead of disappearing", async 
   await seedRows();
   await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId: TENANT_A.nodeId2, code: "R-06RC", purpose: "rectificative" });
+    .values({ nodeId: TENANT_A.nodeId2, code: "R-0CNPG", purpose: "rectificative" });
   expect((await projection()).contradictions).toContain("venue:incomplete");
 });
 it("a malformed hour suffix cannot become empty history", async () => {
@@ -198,13 +198,13 @@ it("a dormant reservation raises the floor without active series on its node", a
     taxpayerNif: "89890001K",
     softwareId: "OTHER",
     environment: "preproduction",
-    installationIdentity: "06RC",
+    installationIdentity: "0CNPG",
     evidence: { public: "retained" },
     bases: [{ code: "different", purpose: "standard" }],
     establishedAt: new Date("2026-10-16T12:00:00Z"),
   });
   const result = await projection();
-  expect(result.greatestSpentHour).toBe(6924);
+  expect(result.greatestSpentMinute).toBe(415440);
   expect(result.recordedTimeFloorMs).toBe(Date.parse("2026-10-16T12:00:00Z"));
   expect(result.references).toContain("fiscal_reservations/dormant");
   expect(result.contradictions).toEqual([]);
@@ -219,29 +219,29 @@ it("an explicit reservation environment remains separate from the database stamp
     taxpayerNif: "89890001K",
     softwareId: "W1",
     environment: "production",
-    installationIdentity: "ZZZZ",
+    installationIdentity: "ZZZZZ",
     evidence: { public: "retained" },
     bases: [{ code: "A", purpose: "standard" }],
   });
-  expect((await projection()).greatestSpentHour).toBe(6923);
+  expect((await projection()).greatestSpentMinute).toBe(415420);
   expect((await projection()).contradictions).toEqual([]);
 });
 async function seedAllocation(change: Partial<typeof fiscalAllocations.$inferInsert> = {}) {
   const ids = await seedRows();
-  const series = [{ id: ids.seriesId, code: "other-base-06RB", purpose: "full" }];
+  const series = [{ id: ids.seriesId, code: "other-base-0CNNW", purpose: "full" }];
   // A standard base is required by admission; retain both purposes in this synthetic receipt.
   const [standard] = await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId: TENANT_A.nodeId, code: "A-06RB", purpose: "standard" })
+    .values({ nodeId: TENANT_A.nodeId, code: "A-0CNNW", purpose: "standard" })
     .returning({ id: invoiceSeries.id });
-  series.push({ id: standard!.id, code: "A-06RB", purpose: "standard" });
+  series.push({ id: standard!.id, code: "A-0CNNW", purpose: "standard" });
   const input = {
     version: 1 as const,
     allocationId: "allocation",
     taxpayerNif: "89890001K",
     softwareId: "W1",
     environment: "preproduction" as const,
-    installationIdentity: "06RB",
+    installationIdentity: "0CNNW",
     series: series.map(({ code, purpose }) => ({ code, purpose })),
     source: "hour" as const,
     reservationEvidence: null,
@@ -289,7 +289,7 @@ it("includes the retained allocation's later commit time in the floor", async ()
 it.each([
   { allocationKey: "changed" },
   { softwareId: "OTHER" },
-  { installationIdentity: "06RC" },
+  { installationIdentity: "0CNPG" },
   { nodeId: TENANT_A.nodeId2 },
   { allocation: {} },
   { approval: {} },
@@ -312,7 +312,7 @@ it.each([{ evidence: [] }, { evidence: "bad" }, { bases: [] }, { sourceNodeId: T
       taxpayerNif: "89890001K",
       softwareId: "W1",
       environment: "preproduction",
-      installationIdentity: "06RC",
+      installationIdentity: "0CNPG",
       evidence: { public: "retained" },
       bases: [{ code: "A", purpose: "standard" }],
       ...change,

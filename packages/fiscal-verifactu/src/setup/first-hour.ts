@@ -299,7 +299,7 @@ export class FirstSetupHour extends LitElement {
         if (
           result.kind !== "waitron-hour-setup" ||
           typeof result.identity !== "string" ||
-          !/^[0-9A-HJKMNP-TV-Z]{4}$/.test(result.identity) ||
+          !/^[0-9A-HJKMNP-TV-Z]{5}$/.test(result.identity) ||
           !record(result.input) ||
           !record(result.input.allocation) ||
           result.input.allocation.installationIdentity !== result.identity ||

@@ -1,5 +1,5 @@
 import { AppError } from "@waitron/shared";
-import { isHourIdentity } from "./hour-identity.js";
+import { isMinuteIdentity } from "./hour-identity.js";
 import "./errors.js";
 
 export function reportedHourCodes(value: unknown): string[] {
@@ -10,7 +10,7 @@ export function reportedHourCodes(value: unknown): string[] {
       ? code.trim().toUpperCase().replaceAll("O", "0").replace(/[IL]/g, "1")
       : code,
   );
-  if (!codes.every(isHourIdentity))
+  if (!codes.every(isMinuteIdentity))
     throw new AppError("sif.allocation_invalid", { reason: "installation_codes_invalid" });
   return [...new Set(codes)].sort();
 }

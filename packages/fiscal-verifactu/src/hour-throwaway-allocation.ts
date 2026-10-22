@@ -5,7 +5,7 @@ import { readOperationAuthority } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { createAllocationPreparation } from "./allocation-preparation.js";
-import { encodeHourIdentity } from "./hour-identity.js";
+import { encodeMinuteIdentity } from "./hour-identity.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
 import "./errors.js";
 
@@ -31,7 +31,7 @@ export function createHourThrowawayAllocation(
       const now = (options.now ?? (() => new Date()))();
       let identity: string;
       try {
-        identity = encodeHourIdentity(now.getTime());
+        identity = encodeMinuteIdentity(now.getTime());
       } catch {
         throw new AppError("sif.allocation_invalid", { reason: "clock_unconfirmed" });
       }
