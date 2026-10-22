@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Socket } from "node:net";
 import { sendSmtpMessage } from "./smtp-send.js";
 import { smtpRig, smtpTestTls } from "./testing/smtp-settings-fixture.js";
 
@@ -306,10 +307,10 @@ it("does not let URL logging options disclose the SMTP conversation", async () =
 });
 
 it("reaches a configured bracketed IPv6 relay address", async () => {
-  const { createServer, Socket } = await import("node:net");
+  const { createServer } = await import("node:net");
   const { once } = await import("node:events");
   const { parseEmailSettings } = await import("@waitron/provisioning");
-  const sockets = new Set<InstanceType<typeof Socket>>();
+  const sockets = new Set<Socket>();
   const server = createServer((socket) => {
     sockets.add(socket);
     socket.once("close", () => sockets.delete(socket));
