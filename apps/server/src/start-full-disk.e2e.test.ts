@@ -210,6 +210,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
       now,
       staging: createStagingTurn(),
       log: () => {},
+      backupDirs: () => [],
     };
     app = new Hono();
     app.use("*", async (c, next) => {

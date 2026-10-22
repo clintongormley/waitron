@@ -1,4 +1,4 @@
-import { access, cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
@@ -13,6 +13,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import type { BackupSupervisorDeps } from "./backup-supervisor.js";
+import { backupArchiveKey } from "./backup-keys.js";
 import type { BoxHealth } from "./box-health.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
@@ -66,7 +67,10 @@ afterEach(async () => {
   holder.supervisorDeps = undefined;
 });
 
-async function start(prepare: (venue: Venue) => Promise<void> = async () => {}): Promise<Running> {
+async function start(
+  prepare: (venue: Venue) => Promise<void> = async () => {},
+  extraEnv: (scratch: string) => Promise<Record<string, string>> = async () => ({}),
+): Promise<Running> {
   beforeServerStarts();
   const venue = await setupVenue(suite.db);
   await prepare(venue);
@@ -100,6 +104,7 @@ async function start(prepare: (venue: Venue) => Promise<void> = async () => {}):
     WAITRON_TILL_LOCATION_ID: venue.cfg.locationId,
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_ENV: "preproduction",
+    ...(await extraEnv(scratch)),
   };
   const server: StartedServer = await startServer(env, env);
   cleanups.push(() => server.close());
@@ -189,6 +194,38 @@ describe("the running server's Box status read and free-space deletion", () => {
     expect(readDiskUsage).toHaveBeenCalledTimes(2);
     expect(checkTimeHealth).toHaveBeenCalledTimes(1);
   });
+
+  it("never frees a configured backup folder inside backup staging", async () => {
+    let archive = "";
+    let other = "";
+    const box = await start(undefined, async (scratch) => {
+      const destination = join(scratch, "backup-staging", "backup-encrypt-local");
+      archive = join(destination, backupArchiveKey(new Date()));
+      other = join(scratch, "backup-staging", "backup-encrypt-other");
+      await mkdir(destination, { recursive: true });
+      await writeFile(archive, Buffer.alloc(800, 1));
+      await mkdir(other);
+      await writeFile(join(other, "artifact"), Buffer.alloc(900, 1));
+      return { WAITRON_BACKUP_DIR: destination, WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" };
+    });
+    // The start's first backup run fails at once (this state folder holds no recovery files);
+    // a press during it would leave staging alone.
+    await vi.waitFor(
+      async () =>
+        expect(await readFile(join(box.logDir, "waitron.log"), "utf8")).toContain(
+          '"event":"backup.failed"',
+        ),
+      { timeout: 30_000 },
+    );
+    const turn = holder.supervisorDeps!.stagingTurn!;
+    await vi.waitFor(() => expect(turn.backupRunning()).toBe(false));
+
+    const freed = await box.free();
+    expect(freed.status).toBe(200);
+    expect(await freed.json()).toMatchObject({ backupRunning: false });
+    expect(await exists(other)).toBe(false);
+    expect(await exists(archive)).toBe(true);
+  }, 60_000);
 
   it.each(["mirror", "fenced"] as const)(
     "a %s node refuses the deletion as read-only and deletes nothing",

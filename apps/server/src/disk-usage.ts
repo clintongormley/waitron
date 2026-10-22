@@ -136,7 +136,7 @@ async function unlessGone<T>(read: Promise<T>): Promise<T | null> {
   }
 }
 
-function isWithin(path: string, folder: string): boolean {
+export function isWithin(path: string, folder: string): boolean {
   const rel = relative(folder, path);
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }

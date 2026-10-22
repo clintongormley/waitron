@@ -2239,12 +2239,15 @@ async function bootServer(
     log,
   );
 
+  const localBackupDirs = () =>
+    backupSupervisor.current().destinations.flatMap((d) => (d.kind === "local-fs" ? [d.dir] : []));
   const leftoverDeps: LeftoverDeps = {
     logDir: config.logDir,
     stateDir: config.stateDir,
     now,
     staging: stagingTurn,
     log,
+    backupDirs: localBackupDirs,
   };
   const timeHealthCache = createTtlCache<TimeHealth>({ ttlMs: 60_000, now });
   const diskUsageCache = createTtlCache<DiskUsage>({ ttlMs: 60_000, now });
@@ -2278,9 +2281,7 @@ async function bootServer(
               readDiskUsage({
                 venueDir: config.venueDir,
                 logDir: config.logDir,
-                backupDirs: backupSupervisor
-                  .current()
-                  .destinations.flatMap((d) => (d.kind === "local-fs" ? [d.dir] : [])),
+                backupDirs: localBackupDirs(),
               }),
             ),
           free: () => freeBytes(config.venueDir),

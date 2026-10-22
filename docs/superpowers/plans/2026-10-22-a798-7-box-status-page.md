@@ -330,7 +330,9 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
    backup destination configured INSIDE `backup-staging` under a `backup-encrypt-*` name would be
    deleted, as the start already deletes it today (`start-space.ts:79-80`; the destination folder is
    free text, `backup-config.ts:149-152, 175-176`) **(read)**; the claim check judged it exotic, and
-   so does this plan. A destination folder that is the log folder or `backup-staging` itself keeps its
+   so does this plan. Changed at finish review, 2026-10-22: Free now skips a configured `local-fs`
+   destination folder and any folder holding one; every start's clean-up still deletes it (backlog,
+   `docs/backlog/box.md`). A destination folder that is the log folder or `backup-staging` itself keeps its
    archives (`waitron-<stamp>-<uuid>.backup.enc`, `backup-keys.ts:25-26`, match no rule; Task 2b
    case 14).
 7. **Backup staging is touched only while no backup run is under way in this process.** A new

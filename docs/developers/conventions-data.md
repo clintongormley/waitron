@@ -2700,7 +2700,11 @@ so the current log and the newest rotated one stay; in `<logDir>/crash-reports`,
 `holder-frozen-*.json` older than seven days (`CRASH_REPORT_KEEP_MS`). That is the start's forced
 clean-up set (`freeSpaceAtStart`, `apps/server/src/start-space.ts`, whose name rules it reuses),
 minus symbolic links: a folder or an entry that is a link is skipped, because `rm` would remove only
-the link and its size is not space freed. The path `lstat` judges is the path `rm` removes, and the
+the link and its size is not space freed. Also minus a configured backup folder: a `backup-encrypt-`
+folder that is a `local-fs` backup destination's folder, or holds one, is skipped. The destinations
+are read from the backup supervisor (`current()`) at every survey and every press, and compared both
+as written and by real path (`realpath` of the deepest folder that exists), because a destination,
+or the state folder, can be reached through a link. The path `lstat` judges is the path `rm` removes, and the
 log folder is passed through `resolve()` first, which drops a trailing separator: a trailing
 separator makes `lstat` describe a link's target, and `rm` of `link/` deleted the target's
 files (the slice plan's M4). The staging folder is `join(stateDir, "backup-staging")`, which never
@@ -2715,6 +2719,11 @@ delete" in `free-space-now.test.ts`.
 
 - The refusing cases name the files they plant (the venue's files, the state folder's, look-alike
   names, links, configured backup folders), not every file a box could hold.
+- Free knows only the destinations the backup supervisor holds when it runs. While the box cannot
+  read its backup settings it holds none (`backup-supervisor.test.ts`, "keeps archives off and
+  reports the code when the settings could not be loaded", expects `destinations: []`), so a
+  destination inside a `backup-encrypt-` folder is then deleted. The start's clean-up never reads
+  the destinations at all ([box.md](../backlog/box.md#every-starts-clean-up-deletes-a-backup-folder-configured-inside-backup-staging-under-a-backup-encrypt--name)).
 - The staging turn is in-process only. Another process writing backup staging is not kept out by
   it; the only other product writer found is the start, which a held venue folder stops (A978).
   Found by `grep -rn "BACKUP_STAGING_DIR\|stagingDir"` over `apps` and `packages`, not run.

@@ -1,9 +1,10 @@
 import type { Stats } from "node:fs";
 import * as fs from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { BACKUP_ENCRYPT_DIR_PREFIX } from "./backup-keys.js";
 import type { StagingTurn } from "./backup-staging-turn.js";
 import type { DiskFullState } from "./disk-full-state.js";
+import { isWithin } from "./disk-usage.js";
 import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
@@ -22,12 +23,17 @@ export interface LeftoverDeps {
   now: () => Date;
   staging: Pick<StagingTurn, "ifNoBackup" | "backupRunning">;
   log: Logger;
+  /** The configured `local-fs` backup destinations' folders, read afresh at every survey and
+   * deletion: a staging folder that is one, or holds one, is never touched (design §4.6). */
+  backupDirs: () => readonly string[];
   /** Defaults to `node:fs/promises`' `rm`; tests inject a refusal. */
   remove?: (path: string, options: { recursive: boolean }) => Promise<void>;
   /** Defaults to `node:fs/promises`' `lstat`; tests hold one to overlap a survey with a deletion. */
   lstat?: typeof fs.lstat;
   /** Defaults to `node:fs/promises`' `readdir`; tests make a folder vanish. */
   readdir?: (path: string) => Promise<string[]>;
+  /** Defaults to `node:fs/promises`' `realpath`; tests make it fail. */
+  realpath?: (path: string) => Promise<string>;
 }
 
 /** What a deletion would free now. Takes no turn: staging's size is best-effort while a run may
@@ -54,6 +60,7 @@ interface Walk {
   deps: LeftoverDeps;
   lstat: typeof fs.lstat;
   readdir: (path: string) => Promise<string[]>;
+  realpath: (path: string) => Promise<string>;
   /** The deletion reports a skipped or unreadable folder; the survey, run on every refresh, does not. */
   report: boolean;
 }
@@ -135,6 +142,7 @@ function walkFor(deps: LeftoverDeps, report: boolean): Walk {
     deps: { ...deps, logDir: resolve(deps.logDir) },
     lstat: deps.lstat ?? fs.lstat,
     readdir: deps.readdir ?? ((path) => fs.readdir(path)),
+    realpath: deps.realpath ?? fs.realpath,
     report,
   };
 }
@@ -142,17 +150,44 @@ function walkFor(deps: LeftoverDeps, report: boolean): Walk {
 async function stagingLeftovers(walk: Walk): Promise<Leftover[]> {
   const dir = join(walk.deps.stateDir, BACKUP_STAGING_DIR);
   const found: Leftover[] = [];
-  for (const name of (await list(walk, dir, BACKUP_STAGING_DIR)) ?? []) {
+  const names = await list(walk, dir, BACKUP_STAGING_DIR);
+  if (names === null) return found;
+  const destinations = await spellings(walk, walk.deps.backupDirs());
+  for (const name of names) {
     const path = join(dir, name);
     const info = await entry(walk, path);
     if (info === null) continue;
     if (STAGED_DUMP.test(name) && info.isFile()) {
       found.push({ path, bytes: info.size, recursive: false });
     } else if (name.startsWith(BACKUP_ENCRYPT_DIR_PREFIX) && info.isDirectory()) {
+      const own = await spellings(walk, [path]);
+      if (destinations.some((d) => own.some((folder) => isWithin(d, folder)))) continue;
       found.push({ path, bytes: await folderBytes(walk, path), recursive: true });
     }
   }
   return found;
+}
+
+/** Each folder as written and as its real path: a destination reached through a link, or a state
+ * folder reached through one, names the same folder under another spelling. */
+async function spellings(walk: Walk, dirs: readonly string[]): Promise<string[]> {
+  const out: string[] = [];
+  for (const dir of dirs) out.push(resolve(dir), await realPath(walk, resolve(dir)));
+  return out;
+}
+
+/** The real path of `path`'s deepest existing folder, with the rest appended: a destination need
+ * not exist yet. Falls back to `path` itself when nothing on it can be read. */
+async function realPath(walk: Walk, path: string): Promise<string> {
+  const rest: string[] = [];
+  for (let at = path; ; at = dirname(at)) {
+    try {
+      return join(await walk.realpath(at), ...rest);
+    } catch {
+      if (dirname(at) === at) return path;
+      rest.unshift(basename(at));
+    }
+  }
 }
 
 /** Rotated logs, highest number first, then crash reports, oldest first. */

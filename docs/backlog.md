@@ -5549,6 +5549,11 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   open by A798-B slice 7.
   [Detail](backlog/box.md#on-a-box-with-card-payments-off-the-card-reader-battery-check-may-raise-alertsource_unavailable-on-every-bell-read)
 
+- **Every start deletes a backup folder configured inside backup staging under a `backup-encrypt-`
+  name.** Free skips one since slice 7's finish review; the start's clean-up reads no backup
+  settings. Left open by A798-B slice 7.
+  [Detail](backlog/box.md#every-starts-clean-up-deletes-a-backup-folder-configured-inside-backup-staging-under-a-backup-encrypt--name)
+
 - **The disk line's remainder is 'the rest of the disk', not 'outside Waitron'.** It includes the
   state folder's other files; measuring them separately would let the page name what is not
   Waitron's. Left open by A798-B slice 7.

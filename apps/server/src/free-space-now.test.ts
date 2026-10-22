@@ -51,7 +51,15 @@ const log: Logger = (level, event, fields) => {
 };
 
 function deps(overrides: Partial<LeftoverDeps> = {}): LeftoverDeps {
-  return { logDir, stateDir, now: () => NOW, staging: createStagingTurn(), log, ...overrides };
+  return {
+    logDir,
+    stateDir,
+    now: () => NOW,
+    staging: createStagingTurn(),
+    log,
+    backupDirs: () => [],
+    ...overrides,
+  };
 }
 
 async function file(path: string, bytes: number, ageMs?: number): Promise<void> {
@@ -106,6 +114,11 @@ async function expectAllPresent(paths: string[]): Promise<void> {
   for (const path of paths) if (!(await present(path))) missing.push(path);
   expect(missing).toEqual([]);
 }
+
+const ARCHIVE = backupArchiveKey(
+  new Date("2026-10-20T00:00:00Z"),
+  "8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+);
 
 const NOTHING = { freedBytes: 0, deleted: 0, failed: 0, backupRunning: false };
 
@@ -549,15 +562,103 @@ describe("what the deletion must never delete", () => {
   });
 
   it("14. a configured backup folder's archive survives in the log folder or staging", async () => {
-    const archive = backupArchiveKey(
-      new Date("2026-10-20T00:00:00Z"),
-      "8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
-    );
+    const archive = ARCHIVE;
     const paths = [join(logDir, archive), join(stagingDir, archive)];
     for (const path of paths) await file(path, 100);
     expect(await surveyLeftovers(deps())).toEqual({ bytes: 0, backupRunning: false });
     expect(await deleteLeftovers(deps())).toEqual(NOTHING);
     await expectAllPresent(paths);
+  });
+});
+
+describe("a configured backup folder inside backup staging", () => {
+  const local = () => join(stagingDir, "backup-encrypt-local");
+
+  async function expectKept(
+    dirs: string[],
+    paths: string[],
+    overrides: Partial<LeftoverDeps> = {},
+  ) {
+    for (const path of paths) await file(path, 100);
+    const kept = deps({ backupDirs: () => dirs, ...overrides });
+    expect(await surveyLeftovers(kept)).toEqual({ bytes: 0, backupRunning: false });
+    expect(await deleteLeftovers(kept)).toEqual(NOTHING);
+    await expectAllPresent(paths);
+    expect(lines).toEqual([]);
+  }
+
+  it("25. named like an encrypt folder, survives and is not counted", async () => {
+    await expectKept([local()], [join(local(), ARCHIVE)]);
+  });
+
+  it("26. nested below an encrypt folder, keeps that folder whole", async () => {
+    const parent = join(stagingDir, "backup-encrypt-x");
+    await expectKept(
+      [join(parent, "sub")],
+      [join(parent, "sub", ARCHIVE), join(parent, "artifact")],
+    );
+  });
+
+  it("27. not yet made below an encrypt folder, keeps that folder", async () => {
+    const parent = join(stagingDir, "backup-encrypt-x");
+    await expectKept([join(parent, "later", "deeper")], [join(parent, "artifact")]);
+  });
+
+  it("28. leaves an unconfigured encrypt folder beside it to be counted and deleted", async () => {
+    const other = join(stagingDir, "backup-encrypt-other", "artifact");
+    await file(join(local(), ARCHIVE), 100);
+    await file(other, 2000);
+    const kept = deps({ backupDirs: () => [local()] });
+    expect((await surveyLeftovers(kept)).bytes).toBe(2000);
+    expect(await deleteLeftovers(kept)).toEqual({ ...NOTHING, freedBytes: 2000, deleted: 1 });
+    expect(await present(dirname(other))).toBe(false);
+    await expectAllPresent([join(local(), ARCHIVE)]);
+  });
+
+  it("29. configured through a link to it, survives", async () => {
+    await mkdir(local(), { recursive: true });
+    const link = join(root, "backups-link");
+    await symlink(local(), link);
+    await expectKept([link], [join(local(), ARCHIVE)]);
+  });
+
+  it("30. configured by its real path while the state folder is reached through a link, survives", async () => {
+    const stateLink = join(root, "state-link");
+    await symlink(stateDir, stateLink);
+    const notYetMade = join(stagingDir, "backup-encrypt-y", "later");
+    const paths = [join(local(), ARCHIVE), join(dirname(notYetMade), "artifact")];
+    await expectKept([local(), notYetMade], paths, {
+      stateDir: stateLink,
+      logDir: join(stateLink, "logs"),
+    });
+  });
+
+  it("31. configured through a link inside an encrypt folder, keeps that folder and the link", async () => {
+    const elsewhere = join(root, "elsewhere");
+    await mkdir(elsewhere);
+    const parent = join(stagingDir, "backup-encrypt-x");
+    await mkdir(parent, { recursive: true });
+    await symlink(elsewhere, join(parent, "sub"));
+    await expectKept([join(parent, "sub")], [join(elsewhere, ARCHIVE), join(parent, "artifact")]);
+    expect((await lstat(join(parent, "sub"))).isSymbolicLink()).toBe(true);
+  });
+
+  it("32. is still matched by its written path when no real path can be read", async () => {
+    const realpath: LeftoverDeps["realpath"] = async () => {
+      throw errnoError("EACCES");
+    };
+    await expectKept([local()], [join(local(), ARCHIVE)], { realpath });
+  });
+
+  it("33. is read afresh at every survey and deletion", async () => {
+    await file(join(local(), ARCHIVE), 100);
+    const dirs: string[] = [];
+    const changing = deps({ backupDirs: () => dirs });
+    expect((await surveyLeftovers(changing)).bytes).toBe(100);
+    dirs.push(local());
+    expect((await surveyLeftovers(changing)).bytes).toBe(0);
+    expect(await deleteLeftovers(changing)).toEqual(NOTHING);
+    await expectAllPresent([join(local(), ARCHIVE)]);
   });
 });
 
