@@ -5275,7 +5275,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **Cloud backup qualification and target-bound recovery: integrate the released Waitron verifier.**
   Wire Cloud to the boot-free `backup-verification.js` bundle and its generated owner inventory,
-  then negotiate recovery v2 before enabling the qualified caller. Preserve the separate fiscal
+  with worker threads denied (A1004 provides the copy-only lock scope), then negotiate recovery v2
+  before enabling the qualified caller. Preserve the separate fiscal
   authority checks. Snapshots remain unavailable until the pinned capture, publication, full data
   verification, cleanup, current-claim admission and recovery proof passes with the continuous
   source absent. Qualify timeout, resource limits, wrong/missing keys, unsupported public trust,

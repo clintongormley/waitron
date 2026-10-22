@@ -2,6 +2,7 @@ import { mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { beginHolding, endHolding } from "./venue-liveness.js";
+import { isVerificationVenueCopy } from "./verification-venue-copy.js";
 
 /**
  * The file whose lock stands for the whole venue folder. It holds no data. Never unlink it: a
@@ -45,6 +46,7 @@ export interface VenueLock {
 interface Holder {
   connection: DatabaseSync;
   shares: number;
+  monitored: boolean;
 }
 
 /** One entry per folder this process holds, keyed by its real path. */
@@ -78,17 +80,22 @@ export async function lockVenueDirectory(directory: string): Promise<VenueLock> 
   const key = await realpath(directory);
   // Nothing from here to the return awaits, so two callers in this process cannot both find no
   // holder and both open the file.
+  const monitored = !isVerificationVenueCopy(key);
   let holder = holders.get(key);
   if (holder === undefined) {
     const connection = takeFileLock(join(key, VENUE_LOCK_FILE), directory);
     try {
-      beginHolding(key);
+      if (monitored) beginHolding(key);
     } catch (error) {
       closeQuietly(connection);
       throw error;
     }
-    holder = { connection, shares: 0 };
+    holder = { connection, shares: 0, monitored };
     holders.set(key, holder);
+  }
+  if (monitored && !holder.monitored) {
+    beginHolding(key);
+    holder.monitored = true;
   }
   holder.shares += 1;
   const held = holder;
@@ -101,7 +108,7 @@ export async function lockVenueDirectory(directory: string): Promise<VenueLock> 
       if (held.shares === 0) {
         holders.delete(key);
         // Before the close: once the lock is let go, the holder file may be a successor's.
-        endHolding(key);
+        if (held.monitored) endHolding(key);
         closeQuietly(held.connection);
       }
     },
