@@ -207,7 +207,8 @@ and M6; where it kept a source or a log, it is named beside the result.
   sources `a798-4-plan-review/probe-src/server-staff-notices.probe.ts` and
   `server-staff-notices.probe.test.ts`, log `a798-4-plan-review/probe-reader.log`):
   - Right version → `Tests 6 passed (6)`.
-  - Severity then key (the alert registry's own tie-break, `apps/server/src/alerts.ts:84-95`): only
+  - Severity then key (what the alert registry's `compareOpen`, `apps/server/src/alerts.ts:84-95`,
+    which sorts by severity, then `since`, then key, reduces to when no notice carries a `since`): only
     the review's case "1c source order beats key order" failed —
     `expected [ 'a-error', 'm-error', 'z-error' ] to deeply equal [ 'z-error', 'm-error', 'a-error' ]`.
     Revision 1's case 1, whose keys sort the same way as its sources, passed. Task 3 now carries
@@ -216,7 +217,9 @@ and M6; where it kept a source or a log, it is named beside the result.
     whose sources await a query and a 5 ms timer between entry and exit, failed with
     `expected [ 'p in', 'q in', 'p out', 'q out' ] to deeply equal [ 'p in', 'p out', 'q in', 'q out' ]`;
     revision 1's case 1, with no await between entry and exit, did not fail on its order (it failed
-    only because the store refused Q's overlapping savepoint and listed Q in `unavailable`; under
+    only because Q's savepoint was already gone when Q finished — releasing P's savepoint, opened
+    first, released Q's nested one: `no such savepoint: wt_sp_2`, as the round-3 check logged under
+    this deletion (`a798-4-plan-review/round3.md`, m2) — so Q was listed in `unavailable`; under
     `Promise.all` without savepoints it passed). Task 3's case 1 now awaits both.
   - No savepoint: only case 2 failed, on the incident count.
 
@@ -250,11 +253,14 @@ and M6; where it kept a source or a log, it is named beside the result.
    `{ tx, now }`) does not carry. The seat is an array, `readonly StaffNoticeSource[]`, as
    `changes` and `permissions` are on the same descriptor.
 2. **What a notice carries: `key`, `code`, `severity`, `params` — never words.** `key` is unique
-   within its source (design §4.2's printer notice names one printer, so a source may answer
-   several); `code` is a dotted code the till words; `params` are what the words need. Once the
-   reader has merged every source's answers, a notice is identified by its `owner` and `key`
-   together: the reader stamps `owner` on each notice it returns (decision 7), since two sources
-   may answer the same `key`. The design's "tone" is this `severity`, with the alerts' three
+   among every notice its owner's sources answer (a module's, or, from slice 6, the server's;
+   design §4.2's printer notice names one printer, so a source may answer several); `code` is a
+   dotted code the till words; `params` are what the words need. Once the reader has merged every
+   source's answers, a notice is identified by its `owner` and `key` together: the reader stamps
+   `owner` on each notice it returns (decision 7), since two owners may answer the same `key`. The
+   reader enforces the rule rather than trusting it: a notice whose `owner` and `key` are already in
+   the list is dropped, the first (in source order) kept, and `staff_notice.duplicate_key` logged at
+   `error` with `{ owner, key }` (Task 3 case 6). The design's "tone" is this `severity`, with the alerts' three
    values: `error` is the design's red, `warning` amber, `notice` blue. The pairing follows design
    §4.3, where each strip condition's alert has that severity (`storage.disk_full` error and red;
    `storage.space_low` warning and amber), and `AlertSeverity`'s own definition of `notice`, "news,
@@ -386,7 +392,8 @@ Task 1 runs its tests unedited).
    `Promise.all`, fails named cases (Task 3, Step 5).
 3. **The contract slice 6 builds on** (cross-package: `@waitron/module` ↔
    `@waitron/fiscal-verifactu` ↔ `@waitron/composition` ↔ `apps/server`). The notice carries no
-   words; the context carries `tx` and one reading; each merged notice carries its owner; adding a
+   words; the context carries `tx` and one reading; each merged notice carries its owner, and
+   `owner` + `key` is unique in the reader's answer (case 6); adding a
    context field or an optional notice field later breaks no source (decisions 2, 3, 7). Check the
    types against design §4.2's six notices: each fits `code` + `severity` + `params`; and against
    who sees each — every device alike, except the receipt printer's (§4.4), which decision 3 says
@@ -424,7 +431,8 @@ Task 1 runs its tests unedited).
   export type StaffNoticeSeverity = "error" | "warning" | "notice";
 
   /** One notice for the staff on a device that sells. It carries no words: the till words `code`
-   * with `params` in its own language files. `key` is unique within its source. */
+   * with `params` in its own language files. `key` is unique among the notices answered by all
+   * the sources one owner gives. */
   export interface StaffNotice {
     readonly key: string;
     readonly code: string;
@@ -572,7 +580,9 @@ Task 1 runs its tests unedited).
   Body: for each entry in turn (`for … of`), `const found = await tx.transaction(() =>
   source.read({ tx, reading: deps.reading }))`, then push each `{ ...notice, owner }`; on a throw,
   `deps.log("error", "staff_notice.source_unavailable", { owner, errorCode: codeOf(error) })` and
-  add `owner` to `unavailable` if absent. Return the notices sorted by a local rank,
+  add `owner` to `unavailable` if absent. A notice whose `owner` and `key` are already in the list
+  is not pushed; `deps.log("error", "staff_notice.duplicate_key", { owner, key })` instead
+  (decision 2). Return the notices sorted by a local rank,
   `const RANK = { error: 0, warning: 1, notice: 2 } as const satisfies Record<StaffNoticeSeverity, number>`,
   with a stable sort and no tie-break (decision 6). The savepoint's own comment, if any, says why in
   one line: a failed source's writes go with it (M2 B, E); alerts.ts's comment at `:124-126` is the
@@ -631,8 +641,10 @@ Task 1 runs its tests unedited).
        (M2 E is the probe of this shape, `[1,3]`; a rollback of the whole transaction would lose
        `"test.caller"`, and no savepoint would keep `"test.w"`, as M2 B and G show.)
     3. `"a source that throws before returning a promise is reported, and the rest are asked"`:
-       `read: () => { throw new Error("sync"); }` (owner `"s"`) beside a healthy one. Expect the
-       healthy notice, `unavailable: ["s"]`, and the log's `errorCode: "unknown"`
+       `read: () => { throw new Error("sync"); }` (owner `"s"`) beside a healthy one (owner `"h"`,
+       answering `n("h-1", "notice")`). Expect the healthy notice with its owner (`notices`
+       `toEqual` `[{ ...n("h-1", "notice"), owner: "h" }]`), `unavailable: ["s"]`, and the log's
+       `errorCode: "unknown"`
        (`codeOf`, `packages/server-kit/src/error-code.ts:7-9`).
     4. `"two failing sources of one owner list it once"`: two throwing sources, both owner `"m"`.
        Expect `unavailable: ["m"]` and the log spy called twice.
@@ -646,6 +658,14 @@ Task 1 runs its tests unedited).
        unavailable: [] }` — the notice comes from the enabled Veri\*Factu module, not from the
        reader. (`ALL_MODULES` from `./modules.js`; never import `@waitron/fiscal-verifactu` here:
        test files are outside `scripts/module-seams.test.ts`, but the case is about the seat.)
+    6. `"keeps the first of two notices one owner answers under the same key, and logs the second"`:
+       two sources, both owner `"d"`: the first answers `{ key: "k", code: "first.code", severity:
+       "warning", params: {} }`, the second `{ key: "k", code: "second.code", severity: "error",
+       params: {} }`. Expect `notices` `toEqual`
+       `[{ key: "k", code: "first.code", severity: "warning", params: {}, owner: "d" }]`,
+       `unavailable: []`, and the log spy called with
+       `("error", "staff_notice.duplicate_key", { owner: "d", key: "k" })`. The second notice's
+       higher severity is the control: a check that ran after the sort would keep it instead.
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/server exec vitest run src/staff-notices.test.ts src/modules.test.ts`.
   Expected: `staff-notices.test.ts` FAILS to resolve `./staff-notices.js`; the new
@@ -658,11 +678,13 @@ Task 1 runs its tests unedited).
   exits 0.
 - [ ] **Step 5: Proofs by deletion**, each restored and re-run to PASS before the next:
   - Replace `await tx.transaction(() => source.read(…))` with `await source.read(…)`: case 2
-    FAILS on the incident codes (`"test.w"` is kept), as M2 B and G predict; cases 1, 1c, 3, 4
-    still pass.
+    FAILS on the incident codes (`"test.w"` is kept), as M2 B and G predict; cases 1, 1c, 3, 4,
+    5 and 6 still pass (the round-3 check's run of this deletion, before case 6 existed, passed 1, 1c,
+    3, 4 and 5).
   - Remove the `try`/`catch` (let the error out): cases 2, 3 and 4 FAIL with the source's own
-    error; cases 1 and 1c pass.
+    error; cases 1, 1c, 5 and 6 pass.
   - Remove the sort: case 1 FAILS on the key order.
+  - Remove the duplicate check: case 6 FAILS with two notices for `("d", "k")`.
   - Replace the sort with severity then key (`RANK[a.severity] - RANK[b.severity] || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)`):
     case 1c FAILS with keys `["a-error", "m-error", "z-error"]` (M8).
   - Replace the `for … of` with `Promise.all` over the sources, keeping each source's savepoint and
