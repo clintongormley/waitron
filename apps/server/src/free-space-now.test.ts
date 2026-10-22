@@ -305,6 +305,7 @@ describe("surveyLeftovers and deleteLeftovers", () => {
     expect((await surveyLeftovers(deps())).bytes).toBe(2000);
     expect(await deleteLeftovers(deps())).toMatchObject({ freedBytes: 2000, deleted: 1 });
   });
+
   it("21. an encrypt folder is sized by its regular files alone", async () => {
     const encrypt = join(stagingDir, "backup-encrypt-abc");
     const venueDb = join(stateDir, "venue", "venue.db");
@@ -386,21 +387,6 @@ describe("surveyLeftovers and deleteLeftovers", () => {
 
 describe("what the deletion must never delete", () => {
   const venueDir = () => join(stateDir, "venue");
-
-  it("4. the venue folder survives", async () => {
-    const paths = [
-      "venue.db",
-      "venue.db-wal",
-      "venue.db-shm",
-      "node.db",
-      "venue.lock",
-      join(".venue.db-litestream", "generations", "x"),
-    ].map((name) => join(venueDir(), name));
-    for (const path of paths) await file(path, 100);
-    expect(await surveyLeftovers(deps())).toEqual({ bytes: 0, backupRunning: false });
-    expect(await deleteLeftovers(deps())).toEqual(NOTHING);
-    await expectAllPresent(paths);
-  });
 
   it("5. the state folder survives", async () => {
     const paths = [
@@ -518,19 +504,41 @@ describe("what the deletion must never delete", () => {
     });
   });
 
-  it("9. a log folder that is the venue or state folder loses only its rotated logs", async () => {
+  // The venue's and state folder's own files are reachable only when the log folder is one of
+  // them; each is aged past the crash-report cutoff so no age check can keep it by accident.
+  it("4 and 9. a log folder that is the venue or state folder loses only its rotated logs", async () => {
+    const venueFiles = [
+      "venue.db",
+      "venue.db-wal",
+      "venue.db-shm",
+      "node.db",
+      "venue.lock",
+      join(".venue.db-litestream", "generations", "x"),
+    ];
+    const stateFiles = [
+      "recovery.lock",
+      "recovery.json",
+      "secrets.env",
+      "modules.json",
+      join("stream", "litestream.yml"),
+      join("tls", "ca.crt"),
+      join("restore-staging", DUMP),
+      DUMP,
+    ];
     for (const [dir, kept] of [
-      [venueDir(), "venue.db"],
-      [stateDir, "recovery.json"],
+      [venueDir(), venueFiles],
+      [stateDir, stateFiles],
     ] as const) {
-      await file(join(dir, kept), 100);
+      const paths = kept.map((name) => join(dir, name));
+      for (const path of paths) await file(path, 100, 8 * DAY_MS);
       await file(join(dir, "waitron.log.2"), 300);
+      expect((await surveyLeftovers(deps({ logDir: dir }))).bytes).toBe(300);
       expect(await deleteLeftovers(deps({ logDir: dir }))).toEqual({
         ...NOTHING,
         freedBytes: 300,
         deleted: 1,
       });
-      await expectAllPresent([join(dir, kept)]);
+      await expectAllPresent(paths);
       expect(await present(join(dir, "waitron.log.2"))).toBe(false);
     }
   });

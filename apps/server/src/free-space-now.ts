@@ -92,8 +92,8 @@ export async function deleteLeftovers(deps: LeftoverDeps): Promise<LeftoverRemov
 
 function walkFor(deps: LeftoverDeps, report: boolean): Walk {
   return {
-    // A trailing separator would make `lstat` describe a linked folder's target, not the link.
-    deps: { ...deps, logDir: resolve(deps.logDir), stateDir: resolve(deps.stateDir) },
+    // A trailing separator would make `lstat` describe a linked log folder's target, not the link.
+    deps: { ...deps, logDir: resolve(deps.logDir) },
     lstat: deps.lstat ?? fs.lstat,
     readdir: deps.readdir ?? ((path) => fs.readdir(path)),
     report,
