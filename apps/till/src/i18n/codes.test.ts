@@ -434,7 +434,7 @@ it("says what to do about each refusal of an unpaid departure, in both languages
       es: "Una cuenta de esta mesa tiene artículos que cocina no está preparando: sin enviar, en espera o retirados. Cancélalos primero y vuelve a registrar la salida",
     },
     "unpaid_departure.bill_holds_payment": {
-      en: "A bill on this table already holds a payment, even if it was given back, so it cannot be left unpaid. Take the rest of that bill as a payment first",
+      en: "A bill on this table already holds a payment, even if it was refunded, so it cannot be left unpaid. Take the rest of that bill as a payment first",
       es: "Una cuenta de esta mesa ya tiene un pago, aunque se haya devuelto, así que no se puede dejar sin pagar. Cobra primero lo que queda de esa cuenta",
     },
     "unpaid_departure.nothing_outstanding": {

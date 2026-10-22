@@ -80,7 +80,7 @@ describe("the Finish table refusal for a bill that owes nothing but holds money"
   it.each([
     [
       "en-GB",
-      "A bill on this table owes nothing but still holds money. Give it back before finishing the table",
+      "A bill on this table owes nothing but still holds money. Refund it before finishing the table",
     ],
     [
       "es-ES",
@@ -93,10 +93,7 @@ describe("the Finish table refusal for a bill that owes nothing but holds money"
 
 describe("the discard refusal for a held order that still holds money", () => {
   it.each([
-    [
-      "en-GB",
-      "This order still holds money from a payment. Give it back before discarding the order",
-    ],
+    ["en-GB", "This order still holds money from a payment. Refund it before discarding the order"],
     ["es-ES", "Este pedido aún tiene dinero de un pago. Devuélvelo antes de descartar el pedido"],
   ])("says what to do in %s", (locale, message) => {
     expect(catalogues[locale]?.["held.discard_holds_money"]).toBe(message);

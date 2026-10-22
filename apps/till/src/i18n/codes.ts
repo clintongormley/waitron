@@ -151,7 +151,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Una cuenta de esta mesa tiene artículos que cocina no está preparando: sin enviar, en espera o retirados. Cancélalos primero y vuelve a registrar la salida",
   },
   "unpaid_departure.bill_holds_payment": {
-    en: "A bill on this table already holds a payment, even if it was given back, so it cannot be left unpaid. Take the rest of that bill as a payment first",
+    en: "A bill on this table already holds a payment, even if it was refunded, so it cannot be left unpaid. Take the rest of that bill as a payment first",
     es: "Una cuenta de esta mesa ya tiene un pago, aunque se haya devuelto, así que no se puede dejar sin pagar. Cobra primero lo que queda de esa cuenta",
   },
   "unpaid_departure.nothing_outstanding": {
@@ -495,11 +495,11 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ese pago ya no está en esta cuenta. Vuelve a cargar la cuenta e inténtalo de nuevo",
   },
   "bill.refund_exceeds_payment": {
-    en: "That is more than this payment can give back. A tip is given back only with the whole payment",
+    en: "That is more than can be refunded from this payment. A tip is refunded only with the whole payment",
     es: "Es más de lo que se puede devolver de este pago. La propina solo se devuelve con el pago entero",
   },
   "tender.refund_exceeds_payment": {
-    en: "That is more than this payment can give back. A tip is given back only with all the remaining payment",
+    en: "That is more than can be refunded from this payment. A tip is refunded only with all the remaining payment",
     es: "Es más de lo que se puede devolver de este pago. La propina solo se devuelve con todo lo que queda del pago",
   },
   "tender.refund_unavailable": {
@@ -519,7 +519,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Un responsable debe introducir su PIN para confirmar esta devolución en el datáfono",
   },
   "bill.refund_not_whole": {
-    en: "A payment for particular items can only be given back in full, which frees those items to be paid for again",
+    en: "A payment for particular items can only be refunded in full, which frees those items to be paid for again",
     es: "Un pago de artículos concretos solo se puede devolver entero, y así esos artículos se pueden volver a cobrar",
   },
   "bill.refund_unsupported": {
@@ -531,11 +531,11 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Un responsable debe introducir su PIN para confirmar esta devolución en el datáfono",
   },
   "payment.not_refundable": {
-    en: "This card payment can no longer be given back. Reload the bill and try again",
+    en: "This card payment can no longer be refunded. Reload the bill and try again",
     es: "Este pago con tarjeta ya no se puede devolver. Vuelve a cargar la cuenta e inténtalo de nuevo",
   },
   "payment.refund_exceeds_capture": {
-    en: "That is more than is left to give back on this card payment. Reload the bill and check the amount",
+    en: "That is more than is left to refund on this card payment. Reload the bill and check the amount",
     es: "Es más de lo que queda por devolver de este pago con tarjeta. Vuelve a cargar la cuenta y revisa el importe",
   },
   "authorization.not_permitted": {

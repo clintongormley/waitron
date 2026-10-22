@@ -3028,7 +3028,7 @@ describe("till-app: a change refused on a bill that holds money", () => {
     },
   );
 
-  it("names the excess of a split that would leave the bill owing less than it received, and offers to refund it first", async () => {
+  it("A803 refund wording names the excess of a split that would leave the bill owing less than it received, and offers to refund it first", async () => {
     const splitBill = vi.fn().mockRejectedValue({
       code: "bill.received_exceeds_total",
       status: 409,
@@ -3044,6 +3044,7 @@ describe("till-app: a change refused on a bill that holds money", () => {
       t("bill.received_exceeds_total_excess").replaceAll("{amount}", money("20.00")),
     );
     const refund = banner(el)!.querySelector<HTMLElement>("[data-refund-excess]")!;
+    expect(text(refund)).toBe(`Refund ${money("20.00")}`);
     expect(text(refund)).toBe(t("bill.refund_excess").replace("{amount}", money("20.00")));
     expectReadAgain({ bills: reads.bills, balance: reads.balance });
     expect(tableOrder(el).orderId).toBe("wo-4");

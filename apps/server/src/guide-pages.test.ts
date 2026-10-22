@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { GUIDE_PAGE_TOKENS, GUIDE_THEME_KEY, mountGuidePages } from "./guide-pages.js";
 import type { Logger } from "./logger.js";
 import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
+import { TABLE_SERVICE_GUIDE_TITLE } from "./i18n/table-service-guide.js";
 
 const EN_PRODUCTS = [
   "# Products",
@@ -85,6 +86,19 @@ function between(html: string, open: string, close: string): string {
 }
 
 describe("guide pages", () => {
+  it.each(["en", "es"] as const)("A803 serves the refund guide in %s", async (lang) => {
+    const app = new Hono();
+    mountGuidePages(app, {}, vi.fn());
+    const response = await app.request(`/help/${lang}/table-service`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain(`<html lang="${lang}">`);
+    expect(html).toContain('<section id="refund-payment"');
+    expect(html).toContain('<section id="separate-terminal"');
+    expect(html).toContain(`<title>${TABLE_SERVICE_GUIDE_TITLE[lang]} · Waitron</title>`);
+    expect(html).toContain(`<h1>${TABLE_SERVICE_GUIDE_TITLE[lang]}</h1>`);
+  });
+
   it.each(["en", "es"] as const)("serves the shipped kitchen guide in %s", async (lang) => {
     const app = new Hono();
     mountGuidePages(app, {}, vi.fn());
