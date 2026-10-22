@@ -125,7 +125,11 @@ it("names a destination whose screen name is hyphenated by its navigation label"
   setLocale("en-GB");
   expect(goToLabel("content-languages")).toBe("Go to Content languages");
   expect(goToLabel("device-profiles")).toBe("Go to Device profiles");
+  expect(goToLabel("box-status")).toBe("Go to Box status");
   setLocale("es-ES");
+  expect(goToLabel("box-status")).toBe(
+    es["alerts.go_to"].replace("{screen}", es["nav.box_status"]),
+  );
   expect(goToLabel("content-languages")).toBe("Ir a Idiomas del contenido");
 });
 

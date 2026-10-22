@@ -14,6 +14,7 @@ export const GUIDE_PAGES = [
   "staff",
   "purchases",
   "till-notices",
+  "box-status",
 ] as const;
 
 export function guideRoot(): string {

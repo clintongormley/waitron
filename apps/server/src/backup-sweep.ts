@@ -24,6 +24,7 @@ import {
   parseBackupArchiveKey,
 } from "./backup-keys.js";
 import { withDestinationCall } from "./backup-destination-call.js";
+import type { StagingTurn } from "./backup-staging-turn.js";
 import type { StorageBackend, StorageCall } from "./storage-backend.js";
 import "./errors.js";
 
@@ -98,6 +99,8 @@ export interface BackupSweepDeps {
   stagingEstimateBytes?: () => Promise<number>;
   /** DI for tests; defaults to `node:fs/promises`'s `statfs`. */
   statfs?: Statfs;
+  /** Held by each tick, so nothing else in this process touches `stagingDir` while it runs. */
+  stagingTurn?: StagingTurn;
 }
 
 /** Throws `backup.staging_space_low` when the staging folder's filesystem reports less than
@@ -302,7 +305,14 @@ export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
 
 async function tick(deps: BackupSweepDeps): Promise<void> {
   try {
-    await runOnce(deps);
+    if (deps.stagingTurn)
+      await deps.stagingTurn.runBackup(async () => {
+        // A stop that landed while this tick waited for the turn: `runOnce` would copy the whole
+        // database before it reads the signal.
+        if (deps.signal.aborted) return;
+        await runOnce(deps);
+      });
+    else await runOnce(deps);
   } catch (err) {
     if (deps.signal.aborted) return;
     deps.log("warn", "backup.failed", { errorCode: codeOf(err) });

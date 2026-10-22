@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   alertMessage,
+  formatBytes,
   hasAlertMessage,
   registerAlertMessages,
   registerAlertWords,
@@ -96,6 +97,14 @@ describe("a bytes placeholder", () => {
     for (const free of ["1800000000", null, undefined, NaN, -1, Infinity, {}]) {
       expect(alertMessage("test.space", { free }, "en-GB")).toBe("Left: —.");
     }
+  });
+});
+
+describe("formatBytes", () => {
+  it("writes a byte count as an alert's bytes placeholder does, for a screen to use", () => {
+    expect(formatBytes(1_800_000_000, "es")).toBe("1,8 GB");
+    expect(formatBytes(950_000_000, "en")).toBe("950 MB");
+    expect(formatBytes(null, "en")).toBe("—");
   });
 });
 

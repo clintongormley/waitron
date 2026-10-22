@@ -32,6 +32,7 @@ import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { BackupDestination, StorageBackend } from "./storage-backend.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { realSleep } from "./loop.js";
+import type { StagingTurn } from "./backup-staging-turn.js";
 import type { Logger } from "./logger.js";
 import { BACKUP_STAGING_DIR } from "./start-space.js";
 import "./errors.js";
@@ -144,6 +145,7 @@ export interface BackupSupervisorDeps {
   statusReadTimeoutMs?: number;
   now?: () => Date;
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+  stagingTurn?: StagingTurn;
 }
 
 /** The size of the venue database file, without its write-ahead file; a missing file counts as
@@ -257,6 +259,7 @@ export class BackupSupervisor {
         jitterSeed: this.#deps.jitterSeed,
         readClock: this.#deps.readClock,
         outcomes: this.#deps.outcomes,
+        stagingTurn: this.#deps.stagingTurn,
         signal: controller.signal,
         onScheduled: this.#deps.onScheduled,
         onDestinationResult: (result) => {

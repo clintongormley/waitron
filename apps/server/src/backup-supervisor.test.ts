@@ -15,6 +15,7 @@ import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
 import type { BackupConfig } from "./backup-config.js";
 import { backupArchiveKey } from "./backup-keys.js";
+import { createStagingTurn } from "./backup-staging-turn.js";
 import { BackupSupervisor, keyFingerprint } from "./backup-supervisor.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import type { BackupDestination } from "./storage-backend.js";
@@ -373,6 +374,68 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     } finally {
       await sup.stop();
     }
+  }, 60_000);
+
+  it("hands the staging turn it is given to the sweep, which holds it while the copy runs", async () => {
+    const dest = await makeDestDir();
+    const venueDir = await makeVenueDir();
+    const refs: Refs = {
+      config: localFsConfig([dest], STRONG_KEY_1),
+      role: "primary",
+      venueDir,
+      logs: [],
+      managed: false,
+    };
+    const turn = createStagingTurn();
+    let copyStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      copyStarted = resolve;
+    });
+    let releaseCopy!: () => void;
+    const held = new Promise<void>((resolve) => {
+      releaseCopy = resolve;
+    });
+    const sup = new BackupSupervisor({
+      buildConfig: async () => refs.config,
+      isManagedByEnvironment: () => refs.managed,
+      readSingletonRole: () => refs.role,
+      venueDir,
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir: await makeStateDir(),
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
+      log: (level, event) => refs.logs.push({ level, event }),
+      stagingTurn: turn,
+      openVenue: async (dir) => {
+        const opened = await openVenueDatabase(dir);
+        const realArchive = opened.venue.archiveTo.bind(opened.venue);
+        const venue = Object.assign(
+          Object.create(Object.getPrototypeOf(opened.venue) as object),
+          opened.venue,
+          {
+            archiveTo: async (outFile: string) => {
+              copyStarted();
+              await held;
+              await realArchive(outFile);
+            },
+          },
+        ) as typeof opened.venue;
+        return { ...opened, venue };
+      },
+    });
+    try {
+      await sup.reload();
+      await started;
+      expect(turn.backupRunning()).toBe(true);
+      await expect(turn.ifNoBackup(async () => "deleted")).resolves.toEqual({ ran: false });
+      releaseCopy();
+      await waitForArchive(dest);
+    } finally {
+      releaseCopy();
+      await sup.stop();
+    }
+    expect(turn.backupRunning()).toBe(false);
   }, 60_000);
 
   it("an old-key archive stored while reload() waits for the old sweep does NOT make archiveUnderCurrentKey true", async () => {

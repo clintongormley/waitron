@@ -11,11 +11,11 @@ export const START_FREE_SPACE_FLOOR = 256 * 1024 * 1024;
 export const CRASH_REPORT_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 export const BACKUP_STAGING_DIR = "backup-staging";
 
-const ROTATED_LOG = new RegExp(`^${LOG_FILE_NAME.replaceAll(".", "\\.")}\\.(\\d+)$`);
-const CRASH_REPORT = /^holder-frozen-.*\.json$/;
+export const ROTATED_LOG = new RegExp(`^${LOG_FILE_NAME.replaceAll(".", "\\.")}\\.(\\d+)$`);
+export const CRASH_REPORT = /^holder-frozen-.*\.json$/;
 /** `dumpFileName`'s copy, and the `.partial` name `archiveTo` writes it under first
  *  (`packages/store/src/archive.ts`). */
-const STAGED_DUMP = new RegExp(`^${BACKUP_KEY_PREFIX}\\d{8}T\\d{6}Z\\.dump(\\.partial)?$`);
+export const STAGED_DUMP = new RegExp(`^${BACKUP_KEY_PREFIX}\\d{8}T\\d{6}Z\\.dump(\\.partial)?$`);
 
 /** The lowest free space among `dirs` that can report; null when none can. */
 export async function lowestFreeBytes(

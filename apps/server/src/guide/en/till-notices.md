@@ -22,13 +22,14 @@ display shows no notice line.
 
 **Nothing can be saved: the box is out of space · Tell a manager** is red. The box has no disk
 space left, so orders, payments and other changes cannot be saved. A manager needs to free space
-on the box.
+on the box, on the [Box status page](box-status.md#free-space).
 
 **Sales can't be recorded: the box's clock is wrong · Tell a manager** is red. The box's clock is
 set too far in the past to record a sale for the tax agency. A manager needs to fix the clock.
 
 **The box is nearly out of space · Tell a manager** is amber. Work is still saved, but space is
-running out. A manager should free space before it runs out.
+running out. A manager should free space before it runs out, on the
+[Box status page](box-status.md#free-space).
 
 **12 sales not yet sent to the tax agency · Retried automatically** is blue. Sending sales to the
 tax agency has failed, and the box keeps trying by itself. The sales are recorded on the box, so

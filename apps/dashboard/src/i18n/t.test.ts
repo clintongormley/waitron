@@ -82,3 +82,14 @@ it("fill inserts each value as written, never reading it as a pattern or a place
   );
   expect(fill("floor_plan_editor.name_range", { first: "X" })).toBe("X to {last}");
 });
+
+it("words every part of the Box status page in both languages, with the same placeholders", () => {
+  const keys = Object.keys(en).filter((key) => key.startsWith("box_status."));
+  const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+  expect(keys).toEqual(expect.arrayContaining(["box_status.title", "box_status.read_error"]));
+  for (const key of keys as (keyof typeof en)[]) {
+    expect(es[key], key).toBeTruthy();
+    expect(es[key], key).not.toBe(en[key]);
+    expect(placeholders(es[key]), key).toEqual(placeholders(en[key]));
+  }
+});

@@ -93,6 +93,7 @@ import "./screens/printers-screen.js";
 import "./screens/floor-plan-editor.js";
 import "./screens/device-profiles-screen.js";
 import "./screens/diagnostics-screen.js";
+import "./screens/box-status-screen.js";
 import "./screens/backup-screen.js";
 import "./screens/servers-screen.js";
 import "./screens/cloud-services-screen.js";
@@ -141,6 +142,7 @@ const CORE_SCREENS = [
   "printers",
   "floor-plan",
   "device-profiles",
+  "box-status",
   "diagnostics",
   "backup",
   "servers",
@@ -287,6 +289,7 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "printers", labelKey: "nav.printers" },
       { screen: "payments", labelKey: "nav.payments", requiresManager: true },
       { screen: "device-profiles", labelKey: "nav.device_profiles" },
+      { screen: "box-status", labelKey: "nav.box_status", requiresPermission: "system.manage" },
       { screen: "diagnostics", labelKey: "nav.diagnostics", requiresManager: true },
       { screen: "backup", labelKey: "nav.backup", requiresManager: true },
       { screen: "servers", labelKey: "nav.servers", requiresPermission: "mirror.create" },
@@ -2578,6 +2581,15 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-device-profiles-screen
           .api=${this.api}
         ></dashboard-device-profiles-screen>`;
+      case "box-status":
+        return html`<dashboard-box-status-screen
+          .api=${this.api}
+          .canOpen=${this.#canOpenScreen}
+          @wt-alert-go-to=${(e: CustomEvent<{ screen: string }>) => {
+            e.stopPropagation();
+            this.#selectScreen(e.detail.screen);
+          }}
+        ></dashboard-box-status-screen>`;
       case "diagnostics":
         return html`<dashboard-diagnostics-screen .api=${this.api}></dashboard-diagnostics-screen>`;
       case "cloud":

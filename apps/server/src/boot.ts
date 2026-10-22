@@ -16,7 +16,12 @@ import {
   refuseTrading,
   startAppendOnlyWatch,
 } from "./append-only-watch.js";
-import { createAuthorityClockStatus, authorityClockAlertSource } from "./time-health.js";
+import {
+  createAuthorityClockStatus,
+  authorityClockAlertSource,
+  checkTimeHealth,
+  type TimeHealth,
+} from "./time-health.js";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
 import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
@@ -267,6 +272,13 @@ import {
 import { buildLandingApp } from "./landing-app.js";
 import { closeListener } from "./close-listener.js";
 import { mountBoxStatusApi } from "./box-status.js";
+import { mountBoxHealthApi } from "./box-health-api.js";
+import { collectBoxHealth } from "./box-health.js";
+import { createStagingTurn } from "./backup-staging-turn.js";
+import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
+import { createSpaceFreer, surveyLeftovers, type LeftoverDeps } from "./free-space-now.js";
+import { freeBytes } from "./free-bytes.js";
+import { createStaffNoticeLog } from "./staff-notices.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { mountRecoveryPackApi } from "./recovery-pack-api.js";
@@ -1518,13 +1530,14 @@ async function bootServer(
   // Resolved once so the mirror's ambient session and every mounted login surface agree with the
   // listener about whether cookies require HTTPS.
   const secureCookies = resolveTradingTls(config) !== undefined;
+  const isReadOnly = () => holders.mode.current === "mirror" || fenced;
   if (fencedOrMirror) {
     app.use(
       "*",
       // A mirror gates by mode, per request, so a live promotion lifts it; a fenced node gates on the
       // boot-captured `fenced`, and leaves the fence only through a fresh boot.
       readOnlyGate(
-        () => holders.mode.current === "mirror" || fenced,
+        isReadOnly,
         // Retirement and promote writes use their own authentication gates.
         (c) =>
           (fenced && c.req.method === "POST" && c.req.path === "/api/box/retire") ||
@@ -2067,6 +2080,7 @@ async function bootServer(
   const readRecoveryKey = async (): Promise<string | undefined> =>
     loadRecoveryKey(await loadBoxEnv(base, config.stateDir));
   const isBackupManagedByEnvironment = (): boolean => backupKeysInEnv(base);
+  const stagingTurn = createStagingTurn();
   const backupSupervisor = new BackupSupervisor({
     buildConfig: async () =>
       loadBackupSettings({
@@ -2091,6 +2105,7 @@ async function bootServer(
     onScheduled: (at) => {
       backupDeadlines.archive = at === null ? null : new Date(at).toISOString();
     },
+    stagingTurn,
     log,
   });
   undoOnFailure.push(() => backupSupervisor.stop());
@@ -2220,6 +2235,68 @@ async function bootServer(
       readMode: () => holders.mode.current,
       readSingletonRole: () => holders.singletonRole.current,
       readAwaitingFiscalCertificate: () => awaitingFiscalCert.current,
+    },
+    log,
+  );
+
+  const localBackupDirs = () =>
+    backupSupervisor.current().destinations.flatMap((d) => (d.kind === "local-fs" ? [d.dir] : []));
+  const leftoverDeps: LeftoverDeps = {
+    logDir: config.logDir,
+    stateDir: config.stateDir,
+    now,
+    staging: stagingTurn,
+    log,
+    backupDirs: localBackupDirs,
+  };
+  const timeHealthCache = createTtlCache<TimeHealth>({ ttlMs: 60_000, now });
+  const diskUsageCache = createTtlCache<DiskUsage>({ ttlMs: 60_000, now });
+  // Its own, so the page's notice failures are logged once per spell apart from the equipment read's.
+  const pageNoticeLog = createStaffNoticeLog(log);
+  const pageNoticeSources = deviceNoticeSources(
+    { disk: diskFull, space: freeSpace },
+    setsToMigrate,
+  );
+  const paymentsEnabled = setsToMigrate.some((module) => module.name === "payments");
+  mountBoxHealthApi(
+    app,
+    {
+      db,
+      readHealth: () =>
+        collectBoxHealth(db, {
+          now,
+          notices: {
+            sources: pageNoticeSources,
+            clock: tillClock,
+            filing: filesRecords,
+            log: pageNoticeLog,
+          },
+          stream: () => streamHost.status(),
+          authorityClock: authorityClock.read,
+          timeHealth: () => timeHealthCache.get("sync", () => checkTimeHealth()),
+          disk: diskFull,
+          space: freeSpace,
+          usage: () =>
+            diskUsageCache.get("usage", () =>
+              readDiskUsage({
+                venueDir: config.venueDir,
+                logDir: config.logDir,
+                backupDirs: localBackupDirs(),
+              }),
+            ),
+          free: () => freeBytes(config.venueDir),
+          leftovers: () => surveyLeftovers(leftoverDeps),
+          paymentsEnabled,
+          canFree: () => !isReadOnly(),
+        }),
+      freeSpace: createSpaceFreer({
+        ...leftoverDeps,
+        venueDir: config.venueDir,
+        space: freeSpace,
+        disk: diskFull,
+        // A deletion changes what the disk holds, so the next read walks it afresh.
+        onFreed: () => diskUsageCache.clear(),
+      }),
     },
     log,
   );

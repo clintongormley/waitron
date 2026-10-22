@@ -324,6 +324,7 @@ export function storageAlertSource(deps: {
             params: {},
             severity: "error",
             since: stoppedSince.toISOString(),
+            screen: "box-status",
           },
         ];
       }
@@ -336,6 +337,7 @@ export function storageAlertSource(deps: {
           params: { freeBytes },
           severity: "warning",
           since: lowSince.toISOString(),
+          screen: "box-status",
         },
       ];
     },
@@ -771,7 +773,7 @@ const BATTERY_CHECK_LIMIT_MS = 45_000;
 export function batteryAlertSource(deps: {
   providers: readonly CardProviderContribution[];
   runtimeDeps: () => CardProviderRuntimeDeps;
-  cache: TtlCache<number | null>;
+  cache: Pick<TtlCache<number | null>, "get">;
 }): AlertSource {
   return {
     area: "card_reader",

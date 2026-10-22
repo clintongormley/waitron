@@ -489,7 +489,8 @@ A987's design does not change the route
   start never deletes them while a running server holds the venue folder.)" Built in
   `freeSpaceAtStart` (`apps/server/src/start-space.ts`), which keeps them while another
   process holds the venue folder's lock. The limits that remain: a cut-off run's copy stays until
-  the next start; where the lock cannot be taken for another reason (measured on a full disk with
+  the next start, or a Free press on the Box status page while no backup run holds or waits for
+  the staging turn (A798-B slice 7); where the lock cannot be taken for another reason (measured on a full disk with
   no other holder), the holder file's heartbeat decides, so a holder that died less than 30 s
   before keeps it until a later start (`docs/developers/conventions-data.md`, "Every start takes
   the venue lock"); a box reset also deletes it (`wipe_box`, `deploy/waitron.sh`). A box whose first
@@ -829,13 +830,37 @@ drain's refusal; for `GET /api/till` it was not isolated
 ([conventions-data.md](../developers/conventions-data.md#a-read-on-a-full-disk-must-not-fail-on-its-own-housekeeping-write)). PIN sign-in is refused on a full disk in every case, with no session
 written.
 
-## The Box status page's rows from a module are not in the staff-notice seat
+## Slice 7b: Reintentar ahora, and the Hacienda row's last accepted record
 
-Left open by A798-B slice 4 (#1958) for slice 7. Design §5's seat was to return
-"plus a row for the Box status page"; slice 4 built only the notices. Slice 7 adds the row (the
-Hacienda row's unsent count, last accepted record and the Reintentar ahora route) as an optional
-member of `StaffNoticeSource` or a seat of its own, and its plan decides whether the page reads the staff
-notices at all.
+Left open by A798-B slice 7. The page's Hacienda row reads the staff notices and the bell
+(slice 7 decision 1): it shows the unsent count (`fiscal.records_unsent`) and the bell's
+tax-agency alerts (every `fiscal`-area alert but the clock's), and slice 7 added no seat to the
+module contract. 7b adds the Veri\*Factu module's own route for Reintentar ahora — which changes when records reach AEAT, so it is parked for the owner —
+and, with it, the last accepted record's time, as the module's own row on the page.
+
+## On a box with card payments off, the card-reader battery check may raise alert.source_unavailable on every bell read
+
+Left open by A798-B slice 7. `batteryAlertSource` is registered in `bootServer`'s alert
+sources whatever the module (`apps/server/src/boot.ts`), and reads `card_readers`, which does not
+exist when the payments module is off (A798-B slice 7 plan, M9: `select … from card_readers` threw
+`no such table` with the payments set left out); the registry turns a failing source into that
+alert (design §5). Read, not run on a booted box. The Box status page leaves its card readers row
+out in that case.
+
+## Every start's clean-up deletes a backup folder configured inside backup staging under a backup-encrypt- name
+
+Left open by A798-B slice 7. A `local-fs` backup destination whose folder is
+`<stateDir>/backup-staging/backup-encrypt-…`, or sits below one, is accepted by the settings
+(`WAITRON_BACKUP_DIR`, `WAITRON_BACKUP_DESTINATIONS`, the Backups screen). The clean-up that
+`runEntry` runs at every start (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) deletes that
+folder with its archives whatever the free space, unless another process holds the venue folder,
+because it reads no backup settings
+(`start-space.test.ts`, "deletes backup staging, and keeps rotated logs and old crash reports",
+deletes a `backup-encrypt-x` folder above the floor). The Box status page's Free no longer does: it
+skips a configured destination folder and any folder holding one, except while the box holds no
+backup settings (they cannot be read, or a reload could not open the database). Until then the
+user guide's "never touches … your backups" (`box-status.md#free-space`, English and Spanish) does
+not hold for such a folder. A fix could refuse such a folder when the settings are saved.
 
 ## A box whose first setup was retired into a new workspace keeps that workspace's backup staging through the clean-up before the count
 
@@ -846,7 +871,11 @@ inside the workspace's state folder is not deleted by it. The forced clean-up af
 failed on a full disk runs inside `runAdmittedEntry` with the workspace's folders, and the count
 check uses them too. Accepted for A798-B slice 2 (its plan's decision 15). Since A978
 (2026-10-21) this also means a cut-off backup run's plaintext copy in that workspace survives every
-ordinary start; only a start that fails on a full disk deletes it. Not yet put to the owner.
+ordinary start; of the starts, only one that fails on a full disk deletes it. Not yet put to the owner.
+Since A798-B slice 7, the Box status page's Liberar deletes a cut-off backup's leftovers in the
+running server's own state folder, which on such a box is the workspace's (`runEntry` starts the
+server with `WAITRON_STATE_DIR` set to the workspace's state folder, `apps/server/src/node-entry.ts`;
+read, not run).
 
 
 

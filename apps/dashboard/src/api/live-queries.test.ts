@@ -1213,3 +1213,23 @@ it("refreshes the theme list on a theme change, passively after the first read",
   expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
   expect(active).toHaveBeenCalledOnce();
 });
+
+it("refreshes the box's health every fifteen seconds, from no table, passively after the first read", async () => {
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () => new Response("{}", { status: 200 }),
+  );
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  const query = dashboardQuery(api, "getBoxHealth", []);
+  expect(query.dependencies).toEqual([]);
+  expect(query.refreshMs).toBe(15_000);
+  await query.read();
+  await query.read();
+  expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
+    "/api/box/health",
+    "/api/box/health",
+  ]);
+  expect(new Headers(fetchImpl.mock.calls[0]![1].headers).has("x-waitron-live")).toBe(false);
+  expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+  expect(active).toHaveBeenCalledOnce();
+});

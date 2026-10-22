@@ -59,6 +59,7 @@ function stubDrawerMatchMedia(): { set: (narrow: boolean) => void; restore: () =
 }
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
+import { es } from "./i18n/strings.js";
 import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import type { WtToast } from "@waitron/ui";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
@@ -3011,6 +3012,37 @@ describe("dashboard-app", () => {
     expect(navItem(mgr, "diagnostics")).toBeTruthy();
   });
 
+  it("shows Box status in Settings, directly before Diagnostics, only to a session that manages the system", async () => {
+    const { el: mgr } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["system.manage"] }),
+        listStaff: vi.fn().mockResolvedValue([]),
+      }),
+    });
+    await flush(mgr);
+    const item = navItem(mgr, "box-status");
+    expect(item!.textContent!.trim()).toBe(t("nav.box_status"));
+    const panel = mgr.shadowRoot!.querySelector("#nav-group-panel-configuration")!;
+    const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
+    expect(order).toContain("nav-box-status");
+    expect(order.indexOf("nav-diagnostics")).toBe(order.indexOf("nav-box-status") + 1);
+    mgr.remove();
+
+    const { el: sup } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({
+          ...meResponse,
+          role: "supervisor",
+          permissions: [],
+        }),
+        listStaff: vi.fn().mockResolvedValue([]),
+      }),
+    });
+    await flush(sup);
+    expect(navItem(sup, "devices")).toBeTruthy();
+    expect(navItem(sup, "box-status")).toBeNull();
+  });
+
   it("shows the Servers nav, after Backups, only to a session holding the permission it needs", async () => {
     const admin = stubApi({
       getMe: vi
@@ -4629,6 +4661,7 @@ describe("dashboard URL navigation", () => {
     ["manager", "missing", "overview"],
     ["supervisor", "diagnostics", "overview"],
     ["staff", "staff", "my-schedule"],
+    ["supervisor", "box-status", "overview"],
   ])("validates a %s session's requested %s section", async (role, requested, expected) => {
     const url = new URL(location.href);
     url.pathname = `/manage/${requested}`;
@@ -6159,6 +6192,40 @@ describe("alerts in the shell", () => {
     expect(location.pathname).toBe("/manage/printers");
   });
 
+  it("offers Go to Box status on a low-disk alert to a session that manages the system, and opens the page", async () => {
+    const api = alertsApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        sessionDefault: "en-GB",
+        permissions: ["system.manage"],
+      }),
+      getBoxHealth: vi.fn(() => new Promise(() => undefined)),
+      listAlerts: vi.fn().mockResolvedValue({
+        visible: true,
+        alerts: [
+          {
+            key: "storage.space_low",
+            kind: "ongoing",
+            code: "storage.space_low",
+            params: { freeBytes: 1_000_000 },
+            severity: "warning",
+            since: "2026-09-14T12:00:00.000Z",
+            area: "storage",
+            screen: "box-status",
+          },
+        ],
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    const goTo = bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-go-to]")!;
+    expect(goTo.textContent!.trim()).toBe("Go to Box status");
+    goTo.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-box-status-screen")).not.toBeNull();
+    expect(location.pathname).toBe("/manage/box-status");
+  });
+
   it("does not open the Alerts screen for a staff session", async () => {
     history.replaceState(null, "", "/manage/alerts");
     const api = alertsApi({
@@ -6616,6 +6683,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       listStuckTenderRefunds: async () => [],
       listStuckBillRefunds: pending(),
       listHeldPayments: pending(),
+      getBoxHealth: pending(),
       liveData: new LiveData(),
     });
 
@@ -6697,6 +6765,45 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     await flush(el);
     expect(sales(el)).not.toBeNull();
     expect(location.pathname).toBe("/manage/sales");
+    expect(escaped).not.toHaveBeenCalled();
+  });
+
+  const systemManagerFaceApi = (): DashboardApi =>
+    Object.assign(faceApi(), {
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["system.manage"] }),
+    });
+
+  it("opens Box status for a session that manages the system from its address, with the shell's api", async () => {
+    history.replaceState(null, "", "/manage/box-status");
+    const api = systemManagerFaceApi();
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    const face = el.shadowRoot!.querySelector<HTMLElement & { api: DashboardApi }>(
+      "dashboard-box-status-screen",
+    );
+    expect(face).not.toBeNull();
+    expect(face!.api).toBe(api);
+    expect(location.pathname).toMatch(/^\/manage\/box-status(\/|$)/);
+  });
+
+  it("follows a Go to from the Box status page, keeping the event inside the shell", async () => {
+    history.replaceState(null, "", "/manage/box-status");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: systemManagerFaceApi(),
+      request: stubRequest,
+    });
+    await flush(el);
+    const boxFace = el.shadowRoot!.querySelector<
+      HTMLElement & { canOpen: (screen: string) => boolean }
+    >("dashboard-box-status-screen")!;
+    expect(boxFace.canOpen("printers")).toBe(true);
+    expect(boxFace.canOpen("no-such-screen")).toBe(false);
+    const escaped = vi.fn();
+    el.addEventListener("wt-alert-go-to", escaped);
+    emit(boxFace, "wt-alert-go-to", { screen: "printers" });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-printers-screen")).not.toBeNull();
+    expect(location.pathname).toBe("/manage/printers");
     expect(escaped).not.toHaveBeenCalled();
   });
 
@@ -6923,6 +7030,18 @@ describe("the nav search", () => {
     expect(shownItems(el)).toEqual(["nav-diagnostics"]);
     await search(el, "impresoras");
     expect(shownItems(el)).toEqual(["nav-printers"]);
+  });
+
+  it("finds Box status by its label in English and in Spanish", async () => {
+    const english = await mountSession(sessionIn("en-GB", { permissions: ["system.manage"] }));
+    await search(english, "box");
+    expect(shownItems(english)).toEqual(["nav-box-status"]);
+    english.remove();
+
+    const spanish = await mountSession(sessionIn("es-ES", { permissions: ["system.manage"] }));
+    // The first word of the Spanish label, upper-cased, so the search is shown case-blind.
+    await search(spanish, es["nav.box_status"].split(" ")[0]!.toUpperCase());
+    expect(shownItems(spanish)).toEqual(["nav-box-status"]);
   });
 
   it("shows every page of a group whose name holds the term", async () => {

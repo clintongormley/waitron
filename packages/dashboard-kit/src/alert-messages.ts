@@ -52,7 +52,7 @@ function formatDay(value: unknown, l: string): string {
   }).format(at);
 }
 
-function formatBytes(value: unknown, l: string): string {
+export function formatBytes(value: unknown, l: string): string {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "—";
   const v = Math.max(0, value);
   const locale = pickLocale(DAY_LOCALES, l);

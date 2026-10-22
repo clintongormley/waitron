@@ -25,14 +25,16 @@ problema. Una pantalla de cocina no muestra la línea de avisos.
 
 **No se puede guardar nada: el equipo no tiene espacio · Avisa al encargado** es rojo. El equipo
 no tiene espacio en disco, así que no se pueden guardar pedidos, pagos ni otros cambios. El
-encargado tiene que liberar espacio en el equipo.
+encargado tiene que liberar espacio en el equipo, en la
+[página Estado del equipo](box-status.md#free-space).
 
 **No se pueden registrar ventas: la hora del equipo es incorrecta · Avisa al encargado** es rojo.
 La hora del equipo está tan atrasada que no se puede registrar una venta para Hacienda. El
 encargado tiene que corregir la hora.
 
 **Queda poco espacio en el equipo · Avisa al encargado** es ámbar. El trabajo se sigue guardando,
-pero se está acabando el espacio. El encargado debería liberar espacio antes de que se acabe.
+pero se está acabando el espacio. El encargado debería liberar espacio antes de que se acabe, en
+la [página Estado del equipo](box-status.md#free-space).
 
 **12 ventas sin enviar a Hacienda · Se reintenta solo** es azul. El envío de ventas a Hacienda ha
 fallado y el equipo sigue intentándolo por sí solo. Las ventas están registradas en el equipo, así

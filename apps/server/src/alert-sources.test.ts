@@ -162,6 +162,7 @@ describe("storageAlertSource", () => {
         params: { freeBytes: GIB / 2 },
         severity: "warning",
         since: t1.toISOString(),
+        screen: "box-status",
       },
     ]);
   });
@@ -178,6 +179,7 @@ describe("storageAlertSource", () => {
         params: {},
         severity: "error",
         since: t3.toISOString(),
+        screen: "box-status",
       },
     ]);
   });
@@ -193,6 +195,7 @@ describe("storageAlertSource", () => {
         params: {},
         severity: "error",
         since: t3.toISOString(),
+        screen: "box-status",
       },
     ]);
   });

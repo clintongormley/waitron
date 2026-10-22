@@ -101,6 +101,7 @@ describe("the running server's free-space watch", () => {
         since: expect.any(String),
         kind: "ongoing",
         area: "box",
+        screen: "box-status",
       };
 
       await tick();
@@ -118,6 +119,7 @@ describe("the running server's free-space watch", () => {
           since: expect.any(String),
           kind: "ongoing",
           area: "box",
+          screen: "box-status",
         },
       ]);
 

@@ -20,6 +20,7 @@ import {
   runOnce,
 } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
+import { createStagingTurn } from "./backup-staging-turn.js";
 import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import { ALL_MODULES } from "./modules.js";
@@ -830,6 +831,106 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
       "2026-11-05T02:36:00.000Z",
     ]);
     expect(backend.objects.size).toBe(3);
+  });
+
+  describe("the staging turn", () => {
+    it("a run whose sweep is stopped while it waits copies nothing", async () => {
+      const turn = createStagingTurn();
+      let releaseDeletion!: () => void;
+      const deletion = turn.ifNoBackup(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseDeletion = resolve;
+          }),
+      );
+      const controller = new AbortController();
+      const backend = new FakeBackend("only");
+      const archive = archiveSpy();
+      const log = vi.fn();
+      const sweep = runBackupSweep(
+        loopDeps(backend, {
+          signal: controller.signal,
+          log,
+          sleep: vi.fn(),
+          archive,
+          stagingTurn: turn,
+        }),
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      controller.abort();
+      releaseDeletion();
+      await deletion;
+      await sweep;
+
+      expect(archive).not.toHaveBeenCalled();
+      expect(await readdir(staging)).toEqual([]);
+      expect(backend.objects.size).toBe(0);
+      expect(log).not.toHaveBeenCalledWith("warn", "backup.failed", expect.anything());
+      expect(turn.backupRunning()).toBe(false);
+      await expect(turn.ifNoBackup(async () => "free")).resolves.toEqual({
+        ran: true,
+        value: "free",
+      });
+    });
+
+    it("holds the turn while the copy runs, and frees it after the tick's clean-up", async () => {
+      const turn = createStagingTurn();
+      const controller = new AbortController();
+      const backend = new FakeBackend("only");
+      const seen: Array<{ running: boolean; deletion: unknown }> = [];
+      await runBackupSweep(
+        loopDeps(backend, {
+          signal: controller.signal,
+          log: vi.fn(),
+          stagingTurn: turn,
+          archive: async (outFile) => {
+            seen.push({
+              running: turn.backupRunning(),
+              deletion: await turn.ifNoBackup(async () => "deleted"),
+            });
+            await writeFile(outFile, "DUMP-BYTES");
+          },
+          sleep: async () => {
+            controller.abort();
+          },
+        }),
+      );
+
+      expect(seen).toEqual([{ running: true, deletion: { ran: false } }]);
+      expect(backend.objects.size).toBe(1);
+      expect(await readdir(staging)).toEqual([]);
+      expect(turn.backupRunning()).toBe(false);
+      await expect(turn.ifNoBackup(async () => "free")).resolves.toEqual({
+        ran: true,
+        value: "free",
+      });
+    });
+
+    it("a tick whose copy throws frees the turn and is logged backup.failed", async () => {
+      const turn = createStagingTurn();
+      const controller = new AbortController();
+      const logged: Array<[string, string]> = [];
+      await runBackupSweep(
+        loopDeps(new FakeBackend("only"), {
+          signal: controller.signal,
+          log: (level, event) => logged.push([level, event]),
+          stagingTurn: turn,
+          archive: async () => {
+            throw new Error("the archive copy exploded");
+          },
+          sleep: async () => {
+            controller.abort();
+          },
+        }),
+      );
+
+      expect(logged).toContainEqual(["warn", "backup.failed"]);
+      expect(turn.backupRunning()).toBe(false);
+      await expect(turn.ifNoBackup(async () => "free")).resolves.toEqual({
+        ran: true,
+        value: "free",
+      });
+    });
   });
 });
 

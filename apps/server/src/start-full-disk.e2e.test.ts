@@ -19,25 +19,47 @@ import { DatabaseSync } from "node:sqlite";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { devices, locations, openVenueDatabase } from "@waitron/db";
+import { devices, locations, openVenueDatabase, withTransaction, type Database } from "@waitron/db";
 import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
-import { hashSecret } from "@waitron/identity";
+import {
+  hashPin,
+  hashSecret,
+  hashSessionToken,
+  persons,
+  startManagementSession,
+  withPassiveManagementRead,
+  type PersonRoleValue,
+} from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { openVenueStore } from "@waitron/store";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { firstFiscalFixture } from "../test/first-fiscal.js";
+import { mountAlertsApi } from "./alerts-api.js";
+import { createAlertRegistry } from "./alerts.js";
 import { dumpFileName } from "./backup-keys.js";
+import { createStagingTurn } from "./backup-staging-turn.js";
+import { mountBoxHealthApi } from "./box-health-api.js";
+import { collectBoxHealth, type BoxHealth } from "./box-health.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { loadBoxEnv } from "./box-env.js";
 import { deviceNoticeSources } from "./box-staff-notices.js";
 import { mountDeviceApi } from "./device-api.js";
-import { createDiskFullState, watchForDiskFull } from "./disk-full-state.js";
+import { createDiskFullState, watchForDiskFull, type DiskFullState } from "./disk-full-state.js";
+import { readDiskUsage } from "./disk-usage.js";
+import { freeBytes } from "./free-bytes.js";
+import { createSpaceFreer, surveyLeftovers, type FreedSpace } from "./free-space-now.js";
 import { createFreeSpaceState } from "./free-space-watch.js";
+import { ALL_ALERT_CLAIMS, ALL_MODULES, enabledAlertSources } from "./modules.js";
 import { runEntry, serveRecovery, type RecoveryServeOptions } from "./node-entry.js";
 import { FRESH, readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { escapeHtml } from "./recovery-surface.js";
-import { readStaffNoticesInTurns, type OwnedStaffNoticeSource } from "./staff-notices.js";
+import {
+  createStaffNoticeLog,
+  readStaffNoticesInTurns,
+  type OwnedStaffNoticeSource,
+} from "./staff-notices.js";
 import { provisionBillVenue } from "./testing/bill-venue.js";
 import { freePorts } from "./testing/free-ports.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
@@ -138,6 +160,216 @@ function pageOver(port: number, ca: Buffer): Promise<{ status?: number; body: st
     }).on("error", reject);
   });
 }
+
+describe("the Box status read and free-space deletion on a real full disk", () => {
+  const MIB = 1024 * 1024;
+  let root: string | undefined;
+  let store: Awaited<ReturnType<typeof openVenueDatabase>> | undefined;
+  let app: Hono;
+  let db: Database;
+  let diskState: DiskFullState;
+  let logDir: string;
+  let manager: { token: string; cookie: string };
+  let supervisor: { token: string; cookie: string };
+
+  async function seedPerson(role: PersonRoleValue, name: string) {
+    return withTransaction(db, async (tx) => {
+      const [p] = await tx
+        .insert(persons)
+        .values({ displayName: name, pinHash: hashPin("1234"), role })
+        .returning({ id: persons.id });
+      const session = await startManagementSession(tx, { personId: p!.id });
+      return { token: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
+    });
+  }
+
+  beforeAll(async () => {
+    if (disk === undefined) return;
+    root = realpathSync(disk.folder("box-status"));
+    const venueDir = join(root, "venue");
+    logDir = join(root, "logs");
+    mkdirSync(venueDir);
+    mkdirSync(logDir);
+    writeFileSync(join(logDir, "waitron.log.3"), Buffer.alloc(MIB, 65));
+    await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
+    store = await openVenueDatabase(venueDir);
+    db = store.venue;
+    await seedTenant(db);
+    await db
+      .insert(locations)
+      .values({ name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Sale" });
+    manager = await seedPerson("manager", "Marta");
+    supervisor = await seedPerson("supervisor", "Sergio");
+
+    const now = () => new Date();
+    diskState = createDiskFullState({ dir: venueDir, now, log: () => {} });
+    const space = createFreeSpaceState({ log: () => {} });
+    const leftoverDeps = {
+      logDir,
+      stateDir: root,
+      now,
+      staging: createStagingTurn(),
+      log: () => {},
+      backupDirs: () => [],
+    };
+    app = new Hono();
+    app.use("*", async (c, next) => {
+      if (c.req.method === "GET" && c.req.header("x-waitron-live") === "1") {
+        await withPassiveManagementRead(next);
+      } else await next();
+    });
+    mountBoxHealthApi(
+      app,
+      {
+        db,
+        readHealth: () =>
+          collectBoxHealth(db, {
+            now,
+            notices: {
+              sources: deviceNoticeSources({ disk: diskState, space }, ALL_MODULES),
+              clock: {
+                now: () => ({ instant: new Date(), offsetMinutes: 0, confident: true }) as never,
+              },
+              filing: () => true,
+              log: createStaffNoticeLog(() => {}),
+            },
+            stream: () => ({ state: "off" }),
+            authorityClock: () => ({
+              state: "ok",
+              driftSeconds: 0,
+              measuredAt: now().toISOString(),
+            }),
+            timeHealth: async () => ({ synced: true, source: "timedatectl", warn: false }),
+            disk: diskState,
+            space,
+            usage: () => readDiskUsage({ venueDir, logDir, backupDirs: [] }),
+            free: () => freeBytes(venueDir),
+            leftovers: () => surveyLeftovers(leftoverDeps),
+            paymentsEnabled: true,
+            canFree: () => true,
+          }),
+        freeSpace: createSpaceFreer({ ...leftoverDeps, venueDir, space, disk: diskState }),
+      },
+      () => {},
+    );
+    mountAlertsApi(
+      app,
+      {
+        db,
+        registry: createAlertRegistry({
+          claims: ALL_ALERT_CLAIMS,
+          sources: enabledAlertSources(ALL_MODULES),
+        }),
+        now,
+      },
+      () => {},
+    );
+  });
+
+  afterAll(async () => {
+    disk?.unfill();
+    try {
+      await store?.close();
+    } finally {
+      if (root !== undefined) rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  const health = (cookie: string, passive = false) =>
+    app.request("/api/box/health", {
+      headers: { cookie, ...(passive ? { "x-waitron-live": "1" } : {}) },
+    });
+  const freeSpace = (cookie: string) =>
+    app.request("/api/box/free-space", { method: "POST", headers: { cookie } });
+  const lastSeen = () =>
+    db.all<{ at: string }>(
+      sql`select last_seen_at as at from management_sessions where token_hash = ${hashSessionToken(manager.token)}`,
+    )[0]!.at;
+  /** Not through `withTransaction`, whose drain would deliver a change left waiting. */
+  const seenAMinuteAgo = () => {
+    const at = new Date(Date.now() - 60_000).toISOString();
+    db.run(
+      sql`update management_sessions set last_seen_at = ${at} where token_hash = ${hashSessionToken(manager.token)}`,
+    );
+    return at;
+  };
+
+  it("the box health read answers on a full disk with a change waiting, passive and not", async (ctx) => {
+    const small = needDisk(ctx);
+    let before = seenAMinuteAgo();
+    expect((await health(manager.cookie, true)).status).toBe(200);
+    expect(lastSeen()).toBe(before);
+    expect((await health(manager.cookie)).status).toBe(200);
+    expect(lastSeen()).not.toBe(before);
+
+    before = seenAMinuteAgo();
+    db.run(sql`insert into change_log (id, payload) values ('bs1', '{"resource":"zz","id":"1"}')`);
+    db.all(sql`pragma wal_checkpoint(truncate)`);
+    small.fill(0);
+    diskState.noteRefused();
+
+    for (const passive of [true, false]) {
+      const res = await health(manager.cookie, passive);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as BoxHealth;
+      expect(body.notices.map(({ owner, key }) => `${owner}:${key}`)).toContain(
+        "box:storage.disk_full",
+      );
+      expect(body.noticesUnavailable).toEqual([]);
+      expect(body.disk.stoppedSince).not.toBeNull();
+    }
+    expect(lastSeen()).toBe(before);
+    expect(db.all<{ id: string }>(sql`select id from change_log where id = 'bs1'`)).toEqual([
+      { id: "bs1" },
+    ]);
+  });
+
+  it("a manager's ordinary alert read answers on a full disk with a change waiting", async (ctx) => {
+    const small = needDisk(ctx);
+    const before = seenAMinuteAgo();
+    db.run(sql`insert into change_log (id, payload) values ('bs2', '{"resource":"zz","id":"2"}')`);
+    db.all(sql`pragma wal_checkpoint(truncate)`);
+    small.fill(0);
+
+    const res = await app.request("/management-api/alerts", {
+      headers: { cookie: manager.cookie },
+    });
+    expect(res.status).toBe(200);
+    expect(lastSeen()).toBe(before);
+  });
+
+  it("free-space deletion frees a rotated log on a full disk, and the stop lifts", async (ctx) => {
+    const small = needDisk(ctx);
+    const free = small.free();
+    expect(
+      free >= 22 * MIB,
+      `the small disk has ${free} bytes free, ${22 * MIB - free} short of the 22 MiB this case needs`,
+    ).toBe(true);
+    const log4 = join(logDir, "waitron.log.4");
+    writeFileSync(log4, Buffer.alloc(17 * MIB, 66));
+    db.all(sql`pragma wal_checkpoint(truncate)`);
+    small.fill(0);
+    diskState.noteRefused();
+
+    const res = await freeSpace(manager.cookie);
+    expect(res.status).toBe(200);
+    const freed = (await res.json()) as FreedSpace;
+    expect(freed.freedBytes).toBeGreaterThanOrEqual(17 * MIB);
+    expect(() => statSync(log4)).toThrow();
+    expect(diskState.noted()).toBe(false);
+    const after = await health(manager.cookie);
+    expect(after.status).toBe(200);
+    expect(((await after.json()) as BoxHealth).disk.stoppedSince).toBeNull();
+  });
+
+  it("a supervisor is refused on a full disk", async (ctx) => {
+    const small = needDisk(ctx);
+    db.all(sql`pragma wal_checkpoint(truncate)`);
+    small.fill(0);
+    expect((await health(supervisor.cookie)).status).toBe(403);
+    expect((await freeSpace(supervisor.cookie)).status).toBe(403);
+  });
+});
 
 describe("a start on a real full disk", () => {
   it("a start whose leftovers free enough counts itself and boots", async (ctx) => {

@@ -3,7 +3,7 @@ import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { findIncident, markIncidentHandled } from "@waitron/core";
 import { permissionsForRole, resolveManagementSession } from "@waitron/identity";
 import { createErrorBoundary, requireManagementSession, type Logger } from "@waitron/server-kit";
-import { AppError, isUuid } from "@waitron/shared";
+import { AppError, diskFullIn, isUuid } from "@waitron/shared";
 import {
   alertsVisible,
   claimFor,
@@ -31,7 +31,7 @@ const STATUS = {
 
 /**
  * The dashboard alerts: open alerts, recently handled ones, and marking an incident handled. Each
- * request opens one transaction.
+ * request opens one transaction; a read refused by a full disk retries in a turn with no drain.
  */
 export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "alerts.failed");
@@ -51,11 +51,24 @@ export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): voi
   const list = (read: typeof readOpenAlerts, includeExternal: boolean) => (c: Context) =>
     run(c, log, async () => {
       const now = deps.now();
-      const body = await inSession(c, async (tx, { held }) => {
+      const sessionId = requireManagementSession(c);
+      const readAs = async (tx: Transaction, touch: boolean) => {
+        const session = await resolveManagementSession(tx, sessionId, { touch });
+        const held: ReadonlySet<string> = new Set(permissionsForRole(session.role));
         if (!alertsVisible(deps.registry, held)) return { visible: false, alerts: [], held };
         const alerts = await read(tx, { registry: deps.registry, now, log }, held);
         return { visible: true, alerts, held };
-      });
+      };
+      let body: Awaited<ReturnType<typeof readAs>>;
+      try {
+        body = await withTransaction(deps.db, (tx) => readAs(tx, true));
+      } catch (error) {
+        if (!diskFullIn(error)) throw error;
+        // On a full disk the last-seen stamp or the transaction's closing change-log drain is
+        // refused, so the same checks run again with neither: the bell is how a manager learns the
+        // disk is full.
+        body = await deps.db.withWriteLock(() => readAs(deps.db, false));
+      }
       const alerts =
         body.visible && includeExternal
           ? sortAndDeduplicateOpenAlerts([

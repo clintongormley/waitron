@@ -3273,3 +3273,28 @@ it("encodes retained translation cell tuples and keeps their background read pas
   expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
   expect(active).not.toHaveBeenCalled();
 });
+
+it("reads the box's health and frees its disk through the box routes", async () => {
+  const freed = { freedBytes: 600_000, deleted: 2, failed: 0, backupRunning: false, freeBytes: 9 };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(freed));
+  const api = new DashboardApi("", fetchImpl);
+  await api.getBoxHealth();
+  expect(await api.freeBoxSpace()).toEqual(freed);
+  const calls = fetchImpl.mock.calls as [string, RequestInit][];
+  expect(calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
+    ["/api/box/health", "GET", undefined],
+    ["/api/box/free-space", "POST", "{}"],
+  ]);
+});
+
+it("never sends a free-space press as a passive read, even from the background client", async () => {
+  const freed = { freedBytes: 0, deleted: 0, failed: 0, backupRunning: false, freeBytes: 9 };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(freed));
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  await api.background.freeBoxSpace();
+  const [, init] = fetchImpl.mock.calls[0]! as [string, RequestInit];
+  expect(new Headers(init.headers).has("x-waitron-live")).toBe(false);
+  await api.freeBoxSpace();
+  expect(active).toHaveBeenCalledWith("/api/box/free-space");
+});

@@ -34,7 +34,7 @@ export interface BackupConfig {
   staleAfterMs: number;
   /** How long one destination's upload and its pruning may run before both are stopped. */
   destinationTimeoutMs: number;
-  /** `undefined` when never rotated. Reported in box status only; it gates no behaviour. */
+  /** `undefined` when never rotated. Reported in `GET /api/box/status` only; it gates no behaviour. */
   keyRotatedAt: string | undefined;
 }
 

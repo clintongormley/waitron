@@ -15,6 +15,17 @@ describe("createTtlCache", () => {
     expect(compute).toHaveBeenCalledTimes(2);
   });
 
+  it("computes again after clear, inside the window", async () => {
+    const cache = createTtlCache<number>({ ttlMs: 60_000, now: () => new Date() });
+    const compute = vi.fn(async () => 1);
+    await cache.get("a", compute);
+    await cache.get("b", compute);
+    cache.clear();
+    await cache.get("a", compute);
+    await cache.get("b", compute);
+    expect(compute).toHaveBeenCalledTimes(4);
+  });
+
   it("keeps keys apart", async () => {
     const cache = createTtlCache<string>({ ttlMs: 60_000, now: () => new Date() });
     expect(await cache.get("a", async () => "A")).toBe("A");
