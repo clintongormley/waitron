@@ -209,7 +209,10 @@ The build goes straight on with each default. The owner is away and may override
     permission and sends no PIN is not capped by it (their own permission covers any amount), and
     their excess is linked to no cancel. The till words it in `apps/till/src/i18n/codes.ts`: "This
     refund is more than the cancelled dishes' {amount}." / «Esta devolución supera los {amount} de
-    los platos cancelados.» (our words, an owner point).
+    los platos cancelados.» (our words, an owner point). `codeMessage` fills no parameters
+    (`apps/till/src/i18n/codes.ts:781-786`) and the refund dialog shows a refusal through it as is
+    (`apps/till/src/widgets/tender-refund-dialog.ts:246`), so `{amount}` is filled by the dialog
+    from the refusal's `cancelled`, or the words drop it.
 
 ---
 
@@ -415,8 +418,9 @@ the generated `drizzle/` files; new `packages/adjustments/src/refund-links.ts`; 
   `readLineCancels(tx, lineId): Promise<{ id, quantity }[]>` (the line's `cancel` rows, oldest
   first, for Task 3a's running total). Exported from the package index.
 
-- [ ] **Failing tests** (`refund-links.test.ts`, `useVenueDb` with `migrationOptionsFor(manifestSets(),
-  null)`; a sale and its refunds from `seedRefundableSale` and `seedTenderRefund` in
+- [ ] **Failing tests** (`refund-links.test.ts`, `useVenueDb({ migrations: [CORE_MIGRATIONS,
+  ADJUSTMENTS_MIGRATIONS] })` as `record.test.ts:20` and `migrations.test.ts:19` do — each set's
+  `appendOnlyTables` gets its triggers, `packages/db/src/testing/venue-db.ts:100`; a sale and its refunds from `seedRefundableSale` and `seedTenderRefund` in
   `packages/reporting/test/tender-refund-fixtures.ts:9`, `:45`, imported as
   `@waitron/reporting/test/tender-refund-fixtures.js` — `@waitron/adjustments` already depends on
   `@waitron/reporting` and `@waitron/reporting` depends on neither `@waitron/adjustments` nor anything
@@ -434,8 +438,8 @@ the generated `drizzle/` files; new `packages/adjustments/src/refund-links.ts`; 
   Expected: the module is missing; the pins name three tables.
 - [ ] **Schema, classification, descriptor, manifest.** `appendOnly("adjustment_refunds", "ledger",
   "which cancelled dishes a refund paid back, and how much of it; nothing may change or remove
-  it")`; the table in `ADJUSTMENTS_MIGRATIONS.appendOnlyTables` and the manifest's
-  `appendOnlyTables`; `immutableTables` becomes `["adjustments", "adjustment_refunds"]`
+  it")`, which also puts the table in `ADJUSTMENTS_MIGRATIONS.appendOnlyTables` (derived from the
+  classification, `migrations.ts:8`); the table in the manifest's `appendOnlyTables`; `immutableTables` becomes `["adjustments", "adjustment_refunds"]`
   (`backup-verification.ts:10`). Generate; read the SQL: one `CREATE TABLE` and its indexes. Its
   live resource follows from `ADJUSTMENTS_CHANGE_SOURCES` (`classification.ts:22-24` maps every
   classified table).
@@ -608,8 +612,8 @@ Decision 7).
 - [ ] **Readers of a €0.00 cancel row** (design §3.8 "The plan checks each of these"): list, with
   `git grep -n "from(adjustments)\|adjustments\." -- apps/server/src packages ':!*.test.ts'`, every
   reader of `adjustments` rows, and write in the task's report what each does with a charge-kept
-  cancel: `readBillAdjustments` leaves every cancel out (`record.ts:224`); the comp limits count
-  Comp reasons only; the report. A reader that changes a bill amount or a payment from such a row
+  cancel: `readBillAdjustments` leaves every cancel out (`record.ts:224`); the comp limits' reads
+  leave out every `cancel` row (`record.ts:96`, `:136`, `:176`); the report. A reader that changes a bill amount or a payment from such a row
   is a stop and a report.
 - [ ] **Run** `src/reports.test.ts src/routes.test.ts` and
   `pnpm --filter @waitron/server exec vitest run src/adjustments-report.test.ts` (whole-entry
@@ -620,7 +624,7 @@ Decision 7).
 
 **Files:** `packages/adjustments/src/dashboard/adjustment-report-screen.ts` (`entryWords`
 `:117-125`, `#entryColumns` `:685-779`), `dashboard/client.ts`, `dashboard/strings.ts`
-(`entries.void` `:164` / `:329`), `dashboard/live-queries.ts` (`entries` `:13-20`); tests in
+(`entries.void` `:164` / `:329`), `dashboard/live-queries.ts` (`entries` `:14-21`); tests in
 `adjustment-report-screen.test.ts`, `.a11y.test.ts`, a new `dashboard/live-queries.test.ts`.
 
 **Words** (§3.9; Decision 7): `adjustment_report.entries.void_charged` "Void, charged" / «Cancelado,
@@ -729,7 +733,7 @@ the draft `:29-45`; `#choice` `:133-141`; first draft `:148-153`); `apps/till/sr
 **Files:** `apps/till/src/till-app.ts` — `#openHistoricalReceipt` (`:7318-7408`),
 `#openTenderRefund` (`:7490-7516`), the refund dialog's mount (`:7647-7716`),
 `#sendItemCancellation` (`:12750-12811`); `apps/till/src/state/tender-refund.ts`
-(`normalized` `:41-63`, `prepare` `:120-131`, `#send` `:194-206`); `api/tender-refund-types.ts`
+(`normalized` `:41-63`, `prepare` `:116-136`, `#send` `:194-206`); `api/tender-refund-types.ts`
 (`cancellationIds`), `api/line-cancel-types.ts` (`refundLinks`); tests in
 `apps/till/src/till-app-adjustments.test.ts` and `apps/till/src/state/tender-refund.test.ts`.
 
@@ -898,8 +902,9 @@ checks `:292-294`, the ask `:277-280`), `apps/till/src/till-app.ts:9865-9873`; t
   fail.
 - [ ] **Code**, as Task 9; the till app loads reasons for it with the same read. The server and
   the stored text do not change.
-- [ ] **Run** the four files and `src/till-app.test.ts -t "Give back"` (or the till-app suite that
-  opens the bill refund; find it with `git grep -ln "till-bill-refund-dialog" -- apps/till/src`);
+- [ ] **Run** the four files and `src/till-app-bill-payments.test.ts` (the till-app suite that opens
+  the bill refund, by `git grep -ln "till-bill-refund-dialog" -- apps/till/src`; `till-app.test.ts`
+  names neither the dialog nor "Give back");
   typecheck; the string guards.
 - [ ] Commit — "Give back a payment's reason is the Void reasons drop-down".
 
@@ -914,10 +919,12 @@ filed record changes.
 ## Changed test checks
 
 Each changes only because the design changes what it checks. Lines are on `0abad3d7e`; an
-implementer who finds one moved records the new line. The owner's 2026-10-05 rule makes a change to
-a `scripts/` guard controversial only when a check is weakened or deleted; rows 19–22 add a new
-table to lists that pin every table by name, which is the shape-pin exception — no check is
-weakened.
+implementer who finds one moved records the new line. The owner's 2026-10-05 rule
+(`~/waitron-campaign/queue.md`, "OWNER DECISION 2026-10-05") counts a change to any guard under
+`scripts/` as controversial, weakened or not, so row 22 is asked about (A506-1 asked the same of an
+entries-only addition to `scripts/schema-constraints.test.ts`, and the owner said yes on
+2026-10-12). Rows 19–21 are package tests that pin a whole list and gain one entry each, with
+every existing value unchanged.
 
 | # | Task | Where | Old → new | Design |
 |---|---|---|---|---|
@@ -943,7 +950,7 @@ weakened.
 | 20 | 1b | `classification.test.ts:18` (`appendOnlyTables` `["adjustments"]`) | `["adjustments", "adjustment_refunds"]` — shape pin | §3.6 |
 | 21 | 1b | `packages/adjustments/src/backup-verification.test.ts:175` (the tables emptied for an honest target-only restore) | gains `adjustment_refunds` — shape pin | §3.6 |
 | 22 | 1b | `scripts/append-only-triggers.test.ts:35` (`EXPECTED`, every append-only table by name) | gains `"adjustment_refunds"` in its sorted place — shape pin, the exception named above | §3.6 |
-| 23 | 14 | `apps/till/src/widgets/bill-refund-dialog.test.ts` and `.unsaved.test.ts` cases that type a reason (7 and 2 hits of `git grep -c 'name="reason"\|reason:'` on `0abad3d7e`, which include fixture lines), and `payment-leading-zeros.test.ts` if it types one | choose from the drop-down | D15 |
+| 23 | 14 | `apps/till/src/widgets/bill-refund-dialog.test.ts` and `.unsaved.test.ts` cases that type a reason (25 and 12 hits of `git grep -c '"reason"\|reason:'` on `0abad3d7e`, which include fixture and assertion lines; the typing goes through `type(el, "reason", …)` and `fill(form, "reason", …)`), and `payment-leading-zeros.test.ts`, which types one at `:187` and `:205` | choose from the drop-down | D15 |
 
 **Unchanged, checked:** `apps/server/src/line-cancel-api.test.ts:597` and
 `apps/server/src/till-api.parties.test.ts:295` pin answers with no refund handoff, which stay `{
