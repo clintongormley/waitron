@@ -6447,9 +6447,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   the review screen now keeps such an unknown code visible.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A975. Developer tools and demo scripts to English** (`dev-setup.ts`, the `*-demo.ts` scripts,
-  Cloud fixture, receipt pictures and README examples). The developer setup's location examples
-  remain. Low priority; needed before A977 can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+- **A975. Remaining demo scripts and receipt-picture tool to English** (the `*-demo.ts` scripts
+  and `receipt-look.ts`). The demo scripts overlap A1009's retirement work. Low priority; needed
+  before A977 can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A976. The server's test venues default to English** — the first test cleanup; later ones go
   package by package from A977's list. Low priority. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)

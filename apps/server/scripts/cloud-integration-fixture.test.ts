@@ -124,6 +124,9 @@ it("the Cloud integration fixture provisions a preproduction venue and starts", 
         allocation_key: expect.stringMatching(/^throwaway-/),
       },
     ]);
+    expect(
+      store.venue.all(sql`select operation_description, address_line1 from locations`),
+    ).toEqual([{ operation_description: "Test sale", address_line1: "1 Main Street" }]);
     expect(store.venue.all(sql`select environment from deployment`)).toEqual([
       { environment: "preproduction" },
     ]);
