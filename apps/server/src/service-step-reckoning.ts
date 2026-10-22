@@ -66,8 +66,8 @@ function triggerOf(
 }
 
 /**
- * A step's trigger is the moment its start happened; it is due at its trigger plus its minutes (a
- * `since_last_order` repeat is due at its trigger). A triggered step stays live until its own Done
+ * A step's trigger is the moment its start happened, or for `since_last_order` its next repeat,
+ * which may be ahead; it is due at its trigger plus its minutes, or at the repeat itself. A triggered step stays live until its own Done
  * is later than its trigger, an order is sent later than its due time, the party's first order is
  * later than its trigger, or — before the first order — the party has an open draft. Live steps
  * come soonest due first, ties in list order.

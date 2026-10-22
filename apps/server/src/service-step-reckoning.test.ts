@@ -164,6 +164,15 @@ describe("liveSteps", () => {
     ]);
   });
 
+  it("a first order at the same instant as a step's trigger does not clear it", () => {
+    const rules = [rule("Set up", "seated", 0), rule("Take order", "after_previous", 2)];
+    const doneAt = new Map([["Set up", at("20:34")]]);
+    const ordered = { doneAt, firstOrderAt: at("20:34"), lastOrderAt: at("20:34") };
+    expect(liveSteps(rules, facts(ordered), at("20:35"))).toEqual([
+      live("Take order", "20:34", "20:36"),
+    ]);
+  });
+
   it("Dessert? survives a drinks round sent while it waits out its minutes", () => {
     const rules = [rule("Dessert?", "course_served", 10, "mains")];
     const served = {
