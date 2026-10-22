@@ -1,10 +1,15 @@
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { loadKeyRing } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
+import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { aeatClientResolver, mtlsFetch } from "./aeat-transport.js";
+import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
-import { clockNotices, FISCAL_STAFF_NOTICES } from "./staff-notices.js";
+import { clockNotices, FISCAL_STAFF_NOTICES, unsentNotices } from "./staff-notices.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -19,6 +24,53 @@ const notice = (iso: string, offsetMinutes: number) => ({
   severity: "error",
   params: { clockAt: new Date(iso).toISOString(), offsetMinutes },
 });
+
+interface EnvioSeed {
+  estado: string;
+  incidencia?: boolean;
+  technical?: boolean;
+}
+
+/** One waiting record per entry, then each `envios` row set to the entry's state and marks. */
+async function seedEnvios(rows: readonly EnvioSeed[]): Promise<void> {
+  const { registroIds } = await seedPendingEnvios(suite.db, { count: rows.length });
+  for (const [index, row] of rows.entries()) {
+    await suite.db.execute(sql`
+      update envios
+      set estado = ${row.estado},
+          incidencia = ${row.incidencia === true ? 1 : 0},
+          technical_incidence = ${row.technical === true ? 1 : 0}
+      where registro_id = ${registroIds[index]!}
+    `);
+  }
+}
+
+async function openIncident(): Promise<void> {
+  await suite.db.execute(sql`
+    insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg, technical_incident_token)
+    values (1, '2026-07-21T00:00:00.000Z', 0, 'probe')
+  `);
+}
+
+const FILING = { enabled: true };
+
+const unsent = (count: number, held: number) => ({
+  key: "fiscal.records_unsent",
+  code: "fiscal.records_unsent",
+  severity: "notice",
+  params: { count, held },
+});
+
+const readUnsent = (filing: { enabled: boolean } = FILING) =>
+  withTransaction(suite.db, (tx) => unsentNotices(tx, filing));
+
+const AFTER_FAILED_SEND: readonly EnvioSeed[] = [
+  { estado: "pendiente", incidencia: true },
+  { estado: "pendiente" },
+  { estado: "enviando" },
+  { estado: "detenido", incidencia: true },
+  { estado: "retenido", incidencia: true },
+];
 
 describe("clockNotices", () => {
   it.each([
@@ -62,5 +114,98 @@ describe("FISCAL_STAFF_NOTICES", () => {
         FISCAL_STAFF_NOTICES[0]!.read({ tx, reading: after }),
       ),
     ).toEqual([]);
+  });
+
+  it("the one source answers the clock notice before the count", async () => {
+    await seedEnvios(AFTER_FAILED_SEND);
+    const before = reading("2001-01-01T11:00:00.000Z", 60);
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        FISCAL_STAFF_NOTICES[0]!.read({ tx, reading: before, filing: FILING }),
+      ),
+    ).toEqual([notice("2001-01-01T11:00:00.000Z", 60), unsent(5, 1)]);
+  });
+});
+
+describe("unsentNotices", () => {
+  it("no waiting record, no notice", async () => {
+    expect(await readUnsent()).toEqual([]);
+    await openIncident();
+    expect(await readUnsent()).toEqual([]);
+  });
+
+  it("records waiting out a wait with no failed send show nothing", async () => {
+    await seedEnvios([{ estado: "pendiente" }, { estado: "pendiente" }]);
+    expect(await readUnsent()).toEqual([]);
+  });
+
+  it("the marks of records that no longer wait do not count", async () => {
+    await seedEnvios([
+      { estado: "aceptado", incidencia: true, technical: true },
+      { estado: "rechazado", incidencia: true, technical: true },
+      { estado: "pendiente" },
+      { estado: "pendiente" },
+    ]);
+    expect(await readUnsent()).toEqual([]);
+  });
+
+  it("after a failed send, counts every waiting record", async () => {
+    await seedEnvios(AFTER_FAILED_SEND);
+    expect(await readUnsent()).toEqual([unsent(5, 1)]);
+  });
+
+  it("an accepted or refused record is not counted", async () => {
+    await seedEnvios([
+      ...AFTER_FAILED_SEND,
+      { estado: "aceptado" },
+      { estado: "aceptado_con_errores" },
+      { estado: "rechazado" },
+    ]);
+    expect(await readUnsent()).toEqual([unsent(5, 1)]);
+  });
+
+  it("a technical mark alone shows the count", async () => {
+    await seedEnvios([
+      { estado: "pendiente", technical: true },
+      { estado: "pendiente", technical: true },
+    ]);
+    expect(await readUnsent()).toEqual([unsent(2, 0)]);
+  });
+
+  it("an open technical incident shows the count over unmarked records", async () => {
+    await seedEnvios([{ estado: "pendiente" }, { estado: "pendiente" }]);
+    await openIncident();
+    expect(await readUnsent()).toEqual([unsent(2, 0)]);
+  });
+
+  it("a real pass that could not read the certificate shows the count", async () => {
+    await seedPendingEnvios(suite.db, { count: 2 });
+    const resolver = aeatClientResolver({
+      db: suite.db,
+      ring: loadKeyRing({
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: "1",
+      }),
+      endpointFor: () => "https://example.test/soap",
+      fetchFor: mtlsFetch,
+    });
+    const result = await drain(
+      {
+        db: suite.db,
+        resolveClient: resolver.resolve,
+        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+        environment: "production",
+      },
+      new Date("2026-07-21T00:01:00Z"),
+    );
+    await resolver.closeAll();
+    expect(result.skipped).toEqual([{ errorCode: "credentials.missing" }]);
+    expect(await readUnsent()).toEqual([unsent(2, 0)]);
+  });
+
+  it("a box that does not file shows nothing", async () => {
+    await seedEnvios(AFTER_FAILED_SEND);
+    expect(await readUnsent({ enabled: false })).toEqual([]);
+    expect(await withTransaction(suite.db, (tx) => unsentNotices(tx, undefined))).toEqual([]);
   });
 });
