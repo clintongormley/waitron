@@ -286,4 +286,14 @@ describe("the Themes card fits its own width", () => {
     expect(name("waitron").querySelector("[data-test=tag-built-in]")).not.toBeNull();
     expect(name("t-xmas").querySelector("[part~=tag]")).toBeNull();
   });
+
+  it("a tag that wraps under the name lines up with it", async () => {
+    setLocale("en-GB");
+    const el = await sized(310);
+    const cell = row(el, "t-summer")!;
+    const name = cell.querySelector("[data-test=theme-row-t-summer]")!.getBoundingClientRect();
+    const tag = cell.querySelector("[data-test=tag-hard-to-read]")!.getBoundingClientRect();
+    expect(tag.top).toBeGreaterThanOrEqual(name.bottom);
+    expect(tag.left).toBeCloseTo(name.left, 0);
+  });
 });

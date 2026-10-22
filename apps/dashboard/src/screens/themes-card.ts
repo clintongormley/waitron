@@ -117,16 +117,18 @@ export class ThemesCard extends LitElement {
         font-size: var(--wt-font-size-sm);
         white-space: nowrap;
       }
+      wt-data-table::part(name-cell) {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-1) var(--wt-space-2);
+      }
       wt-data-table::part(tags) {
         display: inline-flex;
         flex-wrap: wrap;
         gap: var(--wt-space-1);
       }
-      wt-data-table::part(tags after-name) {
-        margin-inline-start: var(--wt-space-2);
-      }
       wt-data-table::part(tag built-in) {
-        margin-inline-start: var(--wt-space-2);
         background: var(--wt-color-surface-lifted);
         color: var(--wt-color-text);
       }
@@ -193,13 +195,15 @@ export class ThemesCard extends LitElement {
         key: "name",
         label: t("appearance.themes_name"),
         cell: (row) =>
-          html`<span data-test=${`theme-row-${row.key}`}>${row.name}</span>${
+          html`<span part="name-cell"
+            ><span data-test=${`theme-row-${row.key}`}>${row.name}</span>${
               row.builtIn
                 ? html`<span part="tag built-in" data-test="tag-built-in"
                     >${t("appearance.built_in")}</span
                   >`
                 : nothing
-            }${statusColumn ? nothing : this.#status(row, "tags after-name")}`,
+            }${statusColumn ? nothing : this.#status(row)}</span
+          >`,
       },
     ];
     if (width >= COLOURS_FROM) {
@@ -217,7 +221,7 @@ export class ThemesCard extends LitElement {
       columns.push({
         key: "status",
         label: t("appearance.themes_status"),
-        cell: (row) => this.#status(row, "tags"),
+        cell: (row) => this.#status(row),
       });
     }
     if (this.canEdit) {
@@ -404,7 +408,7 @@ export class ThemesCard extends LitElement {
       ></wt-delete-dialog>`;
   }
 
-  #status(row: Row, part: string): TemplateResult | typeof nothing {
+  #status(row: Row): TemplateResult | typeof nothing {
     const tags: TemplateResult[] = [];
     if (row.inUse) {
       tags.push(
@@ -421,7 +425,7 @@ export class ThemesCard extends LitElement {
         >`,
       );
     }
-    return tags.length === 0 ? nothing : html`<span part=${part}>${tags}</span>`;
+    return tags.length === 0 ? nothing : html`<span part="tags">${tags}</span>`;
   }
 
   override render() {
