@@ -6128,6 +6128,11 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **Find why GitHub created no workflows for A987's main merge (A1022).** The runs API
+  returned no runs for `e7ce92a7c`; the cause remains unverified. Recovery and the successful-CI
+  baseline do not explain the missing trigger. Retain the after-merge run check.
+  [Recovery procedure](developers/ci-and-gates.md#recover-a-main-commit-whose-ci-run-was-never-created).
+
 - **Other `uses:` steps that fetch over the network have no step time limit, and the runner's
   own action download at job set-up is bounded only by long limits of its own (left open by
   A935).** Each relies on its job's limit alone, as checkout did; a step `timeout-minutes` cannot

@@ -31,18 +31,16 @@ on:
     branches: [main]
     # Release tags, for the `publish` job alone: a `v*` push is what publishes `ghcr.io/<owner>/waitron:<version>`.
     # The rest of the workflow running on that ref is the point rather than a cost — nothing should
-    # be published from a commit whose suite has not run. `github.event.before` is all-zero on a tag
-    # push, which the `changes` job already treats as "no usable base" and fails closed to a full,
-    # unscoped run.
+    # be published from a commit whose suite has not run. Release tags take the full, unscoped path.
     tags: ["v*"]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   # A PUSH IS NEVER GROUPED: its group is unique to the run, so no push can cancel or delay another.
   #
-  # A push to `main` that changes code is the only thing that runs the unfiltered suite over the
-  # merged tree, and — until a `v*` tag is pushed at the same commit — the only thing that publishes
-  # an image for it. Grouping pushes
+  # A push to `main` that changes code runs the unfiltered suite over the merged tree and publishes
+  # an image for it. A manual recovery also runs that suite, without publishing. Grouping pushes
   # together cannot leave that alone, whatever `cancel-in-progress` says: GitHub allows only one
   # PENDING run per group and a newer arrival cancels the one already waiting, while
   # `cancel-in-progress` governs a run that has already STARTED and so never reaches that case. The
@@ -109,6 +107,9 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     outputs:
       code: ${{ steps.classify.outputs.code }}
       scope: ${{ steps.classify.outputs.scope }}
@@ -194,23 +195,15 @@ jobs:
       - id: classify
         env:
           BASE_REF: ${{ github.base_ref }}
-          BEFORE: ${{ github.event.before }}
           SHA: ${{ github.sha }}
           EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
-          if [ "$EVENT" = "pull_request" ]; then
-            git fetch --no-tags origin "$BASE_REF"
-            paths=$(git diff --name-only "origin/$BASE_REF...HEAD")
-          else
-            case "$BEFORE" in
-              # An all-zero `before` means a new branch or a force-push: no usable base, so no diff.
-              # Emit nothing and let the classifier fail closed to a full run.
-              *[!0]*) paths=$(git diff --name-only "$BEFORE" "$SHA") ;;
-              *) echo "no usable base ref ($BEFORE) — running everything" >&2; paths="" ;;
-            esac
-          fi
+          paths=$(bash scripts/ci-diff-paths.sh)
 
           # Five lines out — `code=`, `scope=` (one of documentation, root, global, packages),
           # `packages=`, `root=` and `deploy=` — from ONE classifier call, which is also the one
@@ -244,8 +237,8 @@ jobs:
           # The `image` job runs on it; a main push also runs it on `code` alone.
           deploy=$(printf '%s\n' "$out" | sed -n 's/^deploy=//p')
 
-          # main always runs the full suite: it is what verifies the pull request's narrowing. The
-          # docs verdict is left alone, so a documentation-only merge is still cheap there too.
+          # Main's code verdict covers everything since its successful CI ancestor. Only a range
+          # without code can skip the package suite; manual recovery always runs it.
           if [ "$EVENT" != "pull_request" ]; then
             scope="global"
             packages=""

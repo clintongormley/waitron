@@ -579,6 +579,10 @@ gh run view RUN_ID --json headSha,status,conclusion,jobs
 gh workflow run image-nightly.yml --ref feat/a760-migration-squash
 ```
 
+> **Update, 22 October 2026 (A1022):** the no-manual-CI statement below describes the original
+> workflow. Use the [current recovery procedure](../../developers/ci-and-gates.md#recover-a-main-commit-whose-ci-run-was-never-created)
+> for a missing main run. The exact-merge validation requirement below still applies.
+
 `RUN_ID` is replaced by the returned exact-head run identifier, never guessed. Wait for the image
 run on the same SHA too. `ci.yml` has no workflow_dispatch entry; do not invent a manual `ci.yml`
 command. Inspect its `changes` job's `code`, `scope`, `packages` and selected jobs against all

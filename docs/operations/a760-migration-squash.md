@@ -586,8 +586,9 @@ gh workflow run image-nightly.yml --ref feat/a760-migration-squash
 ```
 
 `RUN_ID` is replaced by the returned exact-head run identifier, never guessed. Wait for the image
-run on the same SHA too. `ci.yml` has no workflow_dispatch entry; do not invent a manual `ci.yml`
-command. Inspect its `changes` job's `code`, `scope`, `packages` and selected jobs against all
+run on the same SHA too. A1022 adds a manual full CI run without publishing; for a missing main
+run, follow the [recovery procedure](../developers/ci-and-gates.md#recover-a-main-commit-whose-ci-run-was-never-created).
+Inspect its `changes` job's `code`, `scope`, `packages` and selected jobs against all
 changed packages and their dependents, including migrations' consumers. Require package coverage
 or merge jobs, mutation jobs that this workflow owns, bundle checks, root guards, licence and DCO,
 and the image-smoke result. A skipped package is not a whole-workspace result. On main, code
