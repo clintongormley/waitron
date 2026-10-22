@@ -11,7 +11,7 @@ import { selectPastWaits } from "./testing/hour-test-clock.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vitest";
@@ -42,7 +42,25 @@ vi.mock("./recovery-backup-preview.js", async (original) => {
 });
 vi.mock("./restore.js", async (original) => {
   const actual = await original<typeof import("./restore.js")>();
-  return { ...actual, validateArtifact: vi.fn(actual.validateArtifact) };
+  return {
+    ...actual,
+    validateArtifact: vi.fn(actual.validateArtifact),
+    readArtifactIdentity: vi.fn(actual.readArtifactIdentity),
+  };
+});
+const recordFloor = vi.hoisted(() => ({ reads: 0 }));
+vi.mock("@waitron/fiscal-verifactu/src/hour-history-reader.js", async (original) => {
+  type Reader = typeof import("@waitron/fiscal-verifactu/src/hour-history-reader.js");
+  const actual = await original<Reader>();
+  return {
+    ...actual,
+    readHourHistoryWithRecordFloor: (
+      ...args: Parameters<Reader["readHourHistoryWithRecordFloor"]>
+    ) => {
+      recordFloor.reads += 1;
+      return actual.readHourHistoryWithRecordFloor(...args);
+    },
+  };
 });
 
 /** A backup taken by the release before fiscal-verifactu's last migration (two added columns). */
@@ -297,20 +315,57 @@ describe("a staged backup for the restore's clock requests", () => {
     expect(unhandled).toEqual([]);
   });
 
-  it("removes a request's throwaway copy when the request throws partway", async () => {
+  it("leaves no copy behind when staging throws partway, and keeps the copy usable when a request does", async () => {
     const h = await stagedHost();
-    const { stagedId } = await h.ok(h.stage());
-    const staged = await readdir(join(h.stagingDir, "staged-recovery"));
-    preview.seen.length = 0;
     preview.fail = true;
     try {
-      expect((await h.send(stagedId, { action: "clock-challenge" })).status).toBe(500);
+      expect((await h.stage()).status).toBe(500);
     } finally {
       preview.fail = false;
     }
-    expect(preview.seen).toEqual([expect.stringMatching(/^request-/)]);
+    expect(await readdir(join(h.stagingDir, "staged-recovery"))).toEqual([]);
+
+    const { stagedId } = await h.ok(h.stage());
+    const staged = await readdir(join(h.stagingDir, "staged-recovery"));
+    vi.mocked(restore.readArtifactIdentity).mockImplementationOnce(() => {
+      throw new Error("thrown partway through a staged request");
+    });
+    expect((await h.send(stagedId, { action: "clock-challenge" })).status).toBe(500);
     expect(await readdir(join(h.stagingDir, "staged-recovery"))).toEqual(staged);
     await h.ok(h.send(stagedId, { action: "clock-challenge" }));
+  });
+
+  it("reads the backup's preview and newest record once, and never writes the copy requests read", async () => {
+    const h = await stagedHost(true);
+    preview.seen.length = 0;
+    recordFloor.reads = 0;
+    const { stagedId } = await h.ok(h.stage());
+    const working = join(dirname(await h.stagedDatabase()), "working");
+    // A request that wrote would change the database file or leave rows in its write-ahead log.
+    const bytes = async () => {
+      const names = (await readdir(working)).filter((name) => /^venue\.db(-wal)?$/.test(name));
+      const hash = createHash("sha256");
+      for (const name of names.sort())
+        hash.update(name).update(await readFile(join(working, name)));
+      return hash.digest("hex");
+    };
+    const before = await bytes();
+    agreeInternet();
+    const selected = await selectPastWaits(clock, async () => {
+      const challenge = await h.ok(h.send(stagedId, { action: "clock-challenge" }));
+      const compared = await h.ok(
+        h.send(stagedId, {
+          action: "compare-clocks",
+          browser: { challengeId: challenge.id, instantMs: Date.now() },
+        }),
+      );
+      return h.ok(h.send(stagedId, { action: "select", comparisonId: compared.id }));
+    });
+    expect(selected).toMatchObject({ status: "selected" });
+    expect(h.bodies.length).toBeGreaterThanOrEqual(3);
+    expect(preview.seen).toEqual(["working"]);
+    expect(recordFloor.reads).toBe(1);
+    expect(await bytes()).toBe(before);
   });
 
   it("clears a leftover staging folder when the box starts", async () => {
