@@ -60,7 +60,8 @@ export interface CancelItemAsk {
   reasonId?: string;
   note?: string;
   approver?: AdjustmentArgs["approver"];
-  /** The person whose PIN `authorize` checked for `sale.refund`, or null when no PIN was checked. */
+  /** The person whose PIN `authorize` checked for `sale.refund`, or null when no PIN was checked.
+   * Recorded only when the refund handoff stands (ticked, on a settled bill); otherwise ignored. */
   refundApprovedBy?: string | null;
 }
 
