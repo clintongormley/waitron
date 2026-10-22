@@ -66,8 +66,6 @@ export const FISCAL_SLOT: FiscalContribution = {
       .from(envios)
       .where(eq(envios.estado, "rechazado"))
       .orderBy(envios.registroId),
-  // The stamp is read directly, not through readHourRelease(): test suites hand that function a
-  // stamp (A940 slice 1 plan, "The placeholder").
   makeBackend: (deps) => makeVerifactuBackend(deps, BUILD_COMMIT !== null),
   // The runtime submission pass. The regime OWNS its transport: it builds a per-pass mTLS resolver
   // (one TLS pool per pass with due work, released in `finally`) and hands `runDrain` only the

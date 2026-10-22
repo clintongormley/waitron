@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -86,6 +86,33 @@ describe("refuses a published production build while the producer is pending", (
   it("serves production through the slot when the run carries no build stamp", () => {
     const backend = FISCAL_SLOT.makeBackend({ db: STUB_DB, clock, environment: "production" });
     expect(backend.id).toBe("verifactu");
+  });
+
+  describe("on a build whose bundle carries a stamp", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    });
+
+    async function stampedSlot() {
+      vi.stubGlobal("__WAITRON_HOUR_RELEASE__", { sourceCommit: "a".repeat(40) });
+      vi.resetModules();
+      return (await import("./slot.js")).FISCAL_SLOT;
+    }
+
+    it("refuses production through the slot", async () => {
+      const slot = await stampedSlot();
+      expect(() => slot.makeBackend({ db: STUB_DB, clock, environment: "production" })).toThrow(
+        expect.objectContaining({ code: "sif.producer_unset" }),
+      );
+    });
+
+    it("serves preproduction through the slot", async () => {
+      const slot = await stampedSlot();
+      expect(slot.makeBackend({ db: STUB_DB, clock, environment: "preproduction" }).id).toBe(
+        "verifactu",
+      );
+    });
   });
 });
 
