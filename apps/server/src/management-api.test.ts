@@ -96,8 +96,6 @@ function nextNif(): string {
   return `${String(74_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** Names are unique and the database is not reset between tests, so every list assertion is a
- *  membership check. */
 async function stationMinutes(id: string) {
   return (
     await suite.db
@@ -111,6 +109,8 @@ async function stationMinutes(id: string) {
   )[0];
 }
 
+/** Names are unique and the database is not reset between tests, so every list assertion is a
+ *  membership check. */
 function unique(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }

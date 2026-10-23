@@ -1349,8 +1349,10 @@ own row. The two tables that held the venue value and the overrides are dropped.
    (`kitchen-timing.ts:11-13`, inserted bare at `venue-apply.ts:303`) and the Add dialog's starting
    values (`packages/venue-service/src/dashboard/prep-stations-screen.ts:158-160`, `:792-794`). One
    constant names them for code, `DEFAULT_STATION_THRESHOLDS` in `@waitron/shared`; the schema
-   keeps its literals and a test pins that a station made with no minutes reads the constant
-   (Task 20), so the two cannot drift apart unseen.
+   keeps its literals, and `apps/server/src/kitchen.test.ts`'s case "a station row given no
+   minutes takes column defaults equal to DEFAULT_STATION_THRESHOLDS" inserts a bare
+   `kitchen_stations` row and compares its three minutes with the constant (Task 20 fix round 1),
+   so a change to either one alone fails that case.
 
 3. **Validation: the three minutes are required on the station; a present value is a whole number
    1–2147483647; the order is checked against what the station already has.** Today
