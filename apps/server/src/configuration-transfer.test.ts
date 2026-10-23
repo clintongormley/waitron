@@ -65,8 +65,6 @@ import {
   floorZones,
   kitchenStations,
   kitchenCourses,
-  kitchenStationTiming,
-  kitchenTimingDefaults,
   locations,
   locationDayCutoverChanges,
   locationBusinessDaySettings,
@@ -398,7 +396,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 6,
+  version: 7,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -2324,18 +2322,11 @@ it("A725 allocates omitted imported colours after reserving explicit colours lat
     modules: ALL_MODULES,
   });
   await withTransaction(suite.db, async (tx) => {
-    const rows = await tx
-      .insert(kitchenStations)
-      .values([
-        { locationId: source.locationId, name: "Desserts", colour: "orange" },
-        { locationId: source.locationId, name: "Pastry", colour: "amber" },
-        { locationId: source.locationId, name: "Bar", colour: "blue" },
-      ])
-      .returning({ id: kitchenStations.id, name: kitchenStations.name });
-    await tx.insert(kitchenStationTiming).values({
-      stationId: rows.find(({ name }) => name === "Desserts")!.id,
-      warmAfterMinutes: 7,
-    });
+    await tx.insert(kitchenStations).values([
+      { locationId: source.locationId, name: "Desserts", colour: "orange", warmAfterMinutes: 7 },
+      { locationId: source.locationId, name: "Pastry", colour: "amber" },
+      { locationId: source.locationId, name: "Bar", colour: "blue" },
+    ]);
   });
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -2378,9 +2369,9 @@ it("A725 allocates omitted imported colours after reserving explicit colours lat
   expect(imported.every((row) => !sourceIds.has(row.id))).toBe(true);
   expect(
     await targetSuite.db
-      .select({ name: kitchenStations.name, warm: kitchenStationTiming.warmAfterMinutes })
-      .from(kitchenStationTiming)
-      .innerJoin(kitchenStations, eq(kitchenStations.id, kitchenStationTiming.stationId)),
+      .select({ name: kitchenStations.name, warm: kitchenStations.warmAfterMinutes })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.name, "Desserts")),
   ).toEqual([{ name: "Desserts", warm: 7 }]);
   expect(transferred).toEqual(before);
 });
@@ -4186,27 +4177,21 @@ it("refuses a leave-behind export it cannot pair by rowid, or whose key it canno
   }
 });
 
-it("transfers effective kitchen defaults and nullable overrides without retired column values", async () => {
+it("carries each station's own late flags to the importing venue", async () => {
   const source = await applyVenue(planVenue(venue("B13572471"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const stationId = await withTransaction(suite.db, async (tx) => {
-    await tx
-      .update(kitchenTimingDefaults)
-      .set({ warmAfterMinutes: 4, overdueAfterMinutes: 9, forgottenAfterMinutes: 14 });
-    const [station] = await tx
-      .insert(kitchenStations)
-      .values({ locationId: source.locationId, name: "Timing export" })
-      .returning({ id: kitchenStations.id });
-    await tx.insert(kitchenStationTiming).values({
-      stationId: station!.id,
+  const [station] = await suite.db
+    .insert(kitchenStations)
+    .values({
+      locationId: source.locationId,
+      name: "Timing export",
       warmAfterMinutes: 6,
-      overdueAfterMinutes: null,
+      overdueAfterMinutes: 12,
       forgottenAfterMinutes: 16,
-    });
-    return station!.id;
-  });
+    })
+    .returning({ id: kitchenStations.id });
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -4215,51 +4200,29 @@ it("transfers effective kitchen defaults and nullable overrides without retired 
     new Date("2026-10-05T12:00:00Z"),
     versions,
   );
-  expect(transferred.tables.kitchen_timing_defaults).toEqual([
-    {
-      location_id: source.locationId,
-      warm_after_minutes: 4,
-      overdue_after_minutes: 9,
-      forgotten_after_minutes: 14,
-    },
-  ]);
-  expect(transferred.tables.kitchen_station_timing).toEqual([
-    {
-      station_id: stationId,
-      warm_after_minutes: 6,
-      overdue_after_minutes: null,
-      forgotten_after_minutes: 16,
-    },
-  ]);
-  const exportedStation = transferred.tables.kitchen_stations!.find((row) => row.id === stationId)!;
-  for (const field of ["warm_after_minutes", "overdue_after_minutes", "forgotten_after_minutes"])
-    expect(exportedStation).not.toHaveProperty(field);
-  const target = await applyVenue(planVenue(venue("B97531866"), ALL_MODULES), {
+  expect(transferred.tables.kitchen_stations!.find((row) => row.id === station!.id)).toMatchObject({
+    warm_after_minutes: 6,
+    overdue_after_minutes: 12,
+    forgotten_after_minutes: 16,
+  });
+  expect(transferred.tables).not.toHaveProperty("kitchen_timing_defaults");
+  expect(transferred.tables).not.toHaveProperty("kitchen_station_timing");
+  await applyVenue(planVenue(venue("B97531866"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx, result) =>
       importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
   });
-  expect(await targetSuite.db.select().from(kitchenTimingDefaults)).toEqual([
-    {
-      locationId: target.locationId,
-      warmAfterMinutes: 4,
-      overdueAfterMinutes: 9,
-      forgottenAfterMinutes: 14,
-    },
-  ]);
-  const [importedStation] = await targetSuite.db
-    .select()
-    .from(kitchenStations)
-    .where(eq(kitchenStations.name, "Timing export"));
-  expect(await targetSuite.db.select().from(kitchenStationTiming)).toEqual([
-    {
-      stationId: importedStation!.id,
-      warmAfterMinutes: 6,
-      overdueAfterMinutes: null,
-      forgottenAfterMinutes: 16,
-    },
-  ]);
+  expect(
+    await targetSuite.db
+      .select({
+        warmAfterMinutes: kitchenStations.warmAfterMinutes,
+        overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
+        forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
+      })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.name, "Timing export")),
+  ).toEqual([{ warmAfterMinutes: 6, overdueAfterMinutes: 12, forgottenAfterMinutes: 16 }]);
 });
 
 it.each([
@@ -4270,12 +4233,10 @@ it.each([
     db: suite.db,
     modules: ALL_MODULES,
   });
-  await withTransaction(suite.db, async (tx) => {
-    const [station] = await tx
-      .insert(kitchenStations)
-      .values({ locationId: source.locationId, name: "Invalid imported timing" })
-      .returning({ id: kitchenStations.id });
-    await tx.insert(kitchenStationTiming).values({ stationId: station!.id, warmAfterMinutes: 3 });
+  await suite.db.insert(kitchenStations).values({
+    locationId: source.locationId,
+    name: "Invalid imported timing",
+    warmAfterMinutes: 3,
   });
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -4285,7 +4246,9 @@ it.each([
     new Date("2026-10-05T12:00:00Z"),
     versions,
   );
-  transferred.tables.kitchen_station_timing![0]!.warm_after_minutes = warm;
+  transferred.tables.kitchen_stations!.find(
+    (row) => row.name === "Invalid imported timing",
+  )!.warm_after_minutes = warm;
   const target = venue("B97531867");
   await expect(
     applyVenue(planVenue(target, ALL_MODULES), {
@@ -4305,8 +4268,44 @@ it.each([
       )
     ).rows[0]!.count,
   ).toBe(0);
-  expect(await targetSuite.db.select().from(kitchenTimingDefaults)).toEqual([]);
-  expect(await targetSuite.db.select().from(kitchenStationTiming)).toEqual([]);
+  expect(
+    await targetSuite.db
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.name, "Invalid imported timing")),
+  ).toEqual([]);
+});
+
+it("refuses an imported minute that is not a whole number", async () => {
+  const source = await applyVenue(planVenue(venue("B13572473"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await suite.db
+    .insert(kitchenStations)
+    .values({ locationId: source.locationId, name: "Fractional imported timing" });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-05T12:00:00Z"),
+    versions,
+  );
+  transferred.tables.kitchen_stations!.find(
+    (row) => row.name === "Fractional imported timing",
+  )!.warm_after_minutes = 2.5;
+  await expect(
+    applyVenue(planVenue(venue("B97531868"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    }),
+  ).rejects.toMatchObject({
+    code: "station.thresholds_invalid",
+    params: { field: "warmAfterMinutes", name: "Fractional imported timing" },
+  });
 });
 
 describe("venue detail edits and configuration boundaries", () => {
@@ -4521,7 +4520,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(6);
+  expect(exported.version).toBe(7);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

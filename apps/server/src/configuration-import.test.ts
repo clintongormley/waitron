@@ -46,7 +46,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 6,
+  version: 7,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -150,8 +150,26 @@ describe("staged configuration import", () => {
       },
     ],
     ["A841 pre-theme-retirement export without themes", { version: 5 }],
+    [
+      "A756 pre-late-flags export with the venue's late flags",
+      {
+        version: 6,
+        tables: {
+          ...bundle.tables,
+          kitchen_timing_defaults: [
+            {
+              location_id: "loc",
+              warm_after_minutes: 5,
+              overdue_after_minutes: 10,
+              forgotten_after_minutes: 15,
+            },
+          ],
+        },
+      },
+    ],
+    ["A756 pre-late-flags export without them", { version: 6 }],
     ["old version", { version: 1 }],
-    ["future version", { version: 7 }],
+    ["future version", { version: 8 }],
     [
       "retired drawer value",
       {

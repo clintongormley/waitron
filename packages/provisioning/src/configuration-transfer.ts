@@ -6,7 +6,6 @@ import {
   cutoverForBusinessDay,
   firstUnusedStationColour,
   isStationColour,
-  locationId as brandLocationId,
 } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type { ConfigurationTransferTable, WaitronModule } from "@waitron/module";
@@ -14,7 +13,7 @@ import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import "./errors.js";
 import { readLocationClock } from "@waitron/reporting";
-import { assertKitchenTimingStations, getKitchenTimingDefaults } from "./kitchen-timing.js";
+import { assertImportedStationTimings } from "./kitchen-timing.js";
 
 const ENTRY = "configuration.json";
 
@@ -135,7 +134,7 @@ export async function buildConfigurationBundle(
   };
   const transferred = await exportConfigurationTables(db, modules);
   return {
-    version: 6,
+    version: 7,
     createdAt: now.toISOString(),
     sourceOperatorId: source.sourceOperatorId ?? "",
     venue: {
@@ -169,7 +168,7 @@ export async function applyPreparedLocation(
 }
 
 export interface ConfigurationBundle {
-  version: 6;
+  version: 7;
   createdAt: string;
   sourceOperatorId: string;
   venue: PreparedVenue;
@@ -480,10 +479,10 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   if (!isRecord(value)) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
-  if (typeof value.version === "number" && value.version > 6) {
+  if (typeof value.version === "number" && value.version > 7) {
     throw new AppError("setup.request_invalid", { field: "version" });
   }
-  if (value.version !== 6) throw new AppError("setup.configuration_outdated", {});
+  if (value.version !== 7) throw new AppError("setup.configuration_outdated", {});
   const venue = value.venue;
   const location = isRecord(venue) ? venue.location : undefined;
   if (
@@ -624,11 +623,10 @@ export async function importConfigurationTables(
 ): Promise<void> {
   validateConfigurationBundle(bundle, modules, targetVersions);
   const incoming = checkedRows(bundle, modules);
-  const stationColours = new Set(
-    (incoming.find(([declaration]) => declaration.name === "kitchen_stations")?.[1] ?? [])
-      .map((row) => row.colour)
-      .filter(isStationColour),
-  );
+  const incomingStations =
+    incoming.find(([declaration]) => declaration.name === "kitchen_stations")?.[1] ?? [];
+  assertImportedStationTimings(incomingStations);
+  const stationColours = new Set(incomingStations.map((row) => row.colour).filter(isStationColour));
   const checked = incoming.map(
     ([declaration, rows]) =>
       [
@@ -777,10 +775,4 @@ export async function importConfigurationTables(
     const contribution = module.configurationTransfer;
     if (contribution?.kind === "tables") await contribution.afterImport?.(tx);
   }
-  const timingScope = { locationId: brandLocationId(target.locationId) };
-  await assertKitchenTimingStations(
-    tx,
-    timingScope,
-    await getKitchenTimingDefaults(tx, timingScope),
-  );
 }

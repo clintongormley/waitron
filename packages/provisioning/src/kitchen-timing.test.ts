@@ -17,6 +17,7 @@ import { applyVenue } from "./venue-apply.js";
 import { planVenue } from "./venue-plan.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import {
+  assertImportedStationTimings,
   assertStationTiming,
   getKitchenTimingDefaults,
   parseStationTimingPatch,
@@ -106,6 +107,44 @@ it("names the station and the field an edit puts out of order over its stored mi
       name: "Grill",
     }),
   ).not.toThrow();
+});
+
+it("assertImportedStationTimings reads a missing minute as its default and names the first station out of order by name", () => {
+  expect(() =>
+    assertImportedStationTimings([
+      { id: "a", name: "Grill", overdue_after_minutes: 11 },
+      { id: "b", name: "Bar", warm_after_minutes: 2, forgotten_after_minutes: 20 },
+    ]),
+  ).not.toThrow();
+  expect(() =>
+    assertImportedStationTimings([{ id: "a", name: "Grill", warm_after_minutes: 10 }]),
+  ).toThrow(
+    expect.objectContaining({
+      code: "station.thresholds_invalid",
+      params: { field: "overdueAfterMinutes", name: "Grill" },
+    }),
+  );
+  expect(() =>
+    assertImportedStationTimings([
+      { id: "z", name: "Grill", warm_after_minutes: 0 },
+      { id: "y", name: "bar", forgotten_after_minutes: 10 },
+      { id: "x", name: "bar", warm_after_minutes: 1.5 },
+    ]),
+  ).toThrow(
+    expect.objectContaining({
+      code: "station.thresholds_invalid",
+      params: { field: "warmAfterMinutes", name: "bar" },
+    }),
+  );
+  for (const value of [null, "6", 2_147_483_648])
+    expect(() =>
+      assertImportedStationTimings([{ id: "a", name: "Grill", forgotten_after_minutes: value }]),
+    ).toThrow(
+      expect.objectContaining({
+        code: "station.thresholds_invalid",
+        params: { field: "forgottenAfterMinutes", name: "Grill" },
+      }),
+    );
 });
 
 it.each([

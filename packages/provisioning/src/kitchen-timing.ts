@@ -2,7 +2,7 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import { kitchenStations, kitchenStationTiming, kitchenTimingDefaults } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, compareStationNames } from "@waitron/shared";
+import { AppError, DEFAULT_STATION_THRESHOLDS, compareStationNames } from "@waitron/shared";
 import type { StationThresholds } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 
@@ -81,6 +81,27 @@ function invalidTimingField(timing: StationThresholds): string | undefined {
   if (timing.overdueAfterMinutes <= timing.warmAfterMinutes) return "overdueAfterMinutes";
   if (timing.forgottenAfterMinutes <= timing.overdueAfterMinutes) return "forgottenAfterMinutes";
   return undefined;
+}
+
+const columns = {
+  warmAfterMinutes: "warm_after_minutes",
+  overdueAfterMinutes: "overdue_after_minutes",
+  forgottenAfterMinutes: "forgotten_after_minutes",
+} as const;
+
+/** A bundle's station ids are the exporting venue's, so a refusal names the station only. */
+export function assertImportedStationTimings(rows: readonly Record<string, unknown>[]): void {
+  const stations = rows.map((row) => ({ id: String(row.id), name: String(row.name), row }));
+  stations.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
+  for (const { name, row } of stations) {
+    const timing = {} as Record<(typeof fields)[number], unknown>;
+    for (const field of fields) {
+      const value = row[columns[field]];
+      timing[field] = value === undefined ? DEFAULT_STATION_THRESHOLDS[field] : value;
+    }
+    const field = invalidTimingField(timing as unknown as StationThresholds);
+    if (field !== undefined) throw new AppError("station.thresholds_invalid", { field, name });
+  }
 }
 
 export async function getKitchenTimingDefaults(
