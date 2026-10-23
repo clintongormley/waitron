@@ -867,8 +867,25 @@ jobs:
 
       # `merge-multiple` flattens db-blob-1/2/3 (each one file) into packages/db/.vitest-reports, where
       # `test:merge`'s `vitest --merge-reports .vitest-reports` reads them.
-      - name: Download the db coverage blobs
+      - id: download
+        name: Download the db coverage blobs
         uses: actions/download-artifact@v8
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          pattern: db-blob-*
+          path: packages/db/.vitest-reports
+          merge-multiple: true
+
+      - name: Clear the partial artifact download
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "packages/db/.vitest-reports"
+
+      - name: Download the db coverage blobs, second attempt
+        if: steps.download.outcome == 'failure'
+        uses: actions/download-artifact@v8
+        timeout-minutes: 2
         with:
           pattern: db-blob-*
           path: packages/db/.vitest-reports
@@ -1109,8 +1126,25 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Download the server coverage blobs
+      - id: download
+        name: Download the server coverage blobs
         uses: actions/download-artifact@v8
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          pattern: server-blob-*
+          path: apps/server/.vitest-reports
+          merge-multiple: true
+
+      - name: Clear the partial artifact download
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "apps/server/.vitest-reports"
+
+      - name: Download the server coverage blobs, second attempt
+        if: steps.download.outcome == 'failure'
+        uses: actions/download-artifact@v8
+        timeout-minutes: 2
         with:
           pattern: server-blob-*
           path: apps/server/.vitest-reports
@@ -1416,8 +1450,25 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Download the till coverage blobs
+      - id: download
+        name: Download the till coverage blobs
         uses: actions/download-artifact@v8
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          pattern: till-blob-*
+          path: apps/till/.vitest-reports
+          merge-multiple: true
+
+      - name: Clear the partial artifact download
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "apps/till/.vitest-reports"
+
+      - name: Download the till coverage blobs, second attempt
+        if: steps.download.outcome == 'failure'
+        uses: actions/download-artifact@v8
+        timeout-minutes: 2
         with:
           pattern: till-blob-*
           path: apps/till/.vitest-reports
@@ -1546,8 +1597,25 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Download the dashboard coverage blobs
+      - id: download
+        name: Download the dashboard coverage blobs
         uses: actions/download-artifact@v8
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          pattern: dashboard-blob-*
+          path: apps/dashboard/.vitest-reports
+          merge-multiple: true
+
+      - name: Clear the partial artifact download
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "apps/dashboard/.vitest-reports"
+
+      - name: Download the dashboard coverage blobs, second attempt
+        if: steps.download.outcome == 'failure'
+        uses: actions/download-artifact@v8
+        timeout-minutes: 2
         with:
           pattern: dashboard-blob-*
           path: apps/dashboard/.vitest-reports
@@ -1780,8 +1848,25 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Download the venue-service coverage blobs
+      - id: download
+        name: Download the venue-service coverage blobs
         uses: actions/download-artifact@v8
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          pattern: venue-service-blob-*
+          path: packages/venue-service/.vitest-reports
+          merge-multiple: true
+
+      - name: Clear the partial artifact download
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "packages/venue-service/.vitest-reports"
+
+      - name: Download the venue-service coverage blobs, second attempt
+        if: steps.download.outcome == 'failure'
+        uses: actions/download-artifact@v8
+        timeout-minutes: 2
         with:
           pattern: venue-service-blob-*
           path: packages/venue-service/.vitest-reports
@@ -2256,8 +2341,25 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Download the provisioning coverage blobs
+      - id: download
+        name: Download the provisioning coverage blobs
         uses: actions/download-artifact@v8
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          pattern: provisioning-blob-*
+          path: packages/provisioning/.vitest-reports
+          merge-multiple: true
+
+      - name: Clear the partial artifact download
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "packages/provisioning/.vitest-reports"
+
+      - name: Download the provisioning coverage blobs, second attempt
+        if: steps.download.outcome == 'failure'
+        uses: actions/download-artifact@v8
+        timeout-minutes: 2
         with:
           pattern: provisioning-blob-*
           path: packages/provisioning/.vitest-reports
