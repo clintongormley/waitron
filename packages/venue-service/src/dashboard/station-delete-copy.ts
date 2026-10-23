@@ -20,7 +20,6 @@ export function stationDeleteCopy(): DeleteDialogCopy {
         station_draft_lines: "prep.delete_station_draft_lines",
         station_printers: "prep.delete_station_printers",
         station_made_here: "prep.delete_station_made_here",
-        station_timing: "prep.delete_station_timing",
         station_routing_cells: "prep.delete_station_routing_cells",
         station_routing_periods: "prep.delete_station_routing_periods",
         station_device_screens: "prep.delete_station_device_screens",
