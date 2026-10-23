@@ -14,6 +14,7 @@ import {
   type StaffNoticeLog,
 } from "./staff-notices.js";
 import type { AuthorityClockStatus, TimeHealth } from "./time-health.js";
+import type { FiscalOutboxState } from "@waitron/fiscal";
 
 export interface BoxHealth {
   /** The box's clock when the read was made. */
@@ -23,6 +24,8 @@ export interface BoxHealth {
   noticesUnavailable: string[];
   /** Whether this box files records with the tax agency. */
   filing: boolean;
+  /** Null when the box does not file, the seat has no outbox, or its read failed. */
+  outbox: (FiscalOutboxState & { awaitingCertificate: boolean }) | null;
   stream: StreamView;
   clock: { authority: AuthorityClockStatus; sync: TimeHealth };
   printers: { id: string; name: string }[];
@@ -119,6 +122,7 @@ export async function collectBoxHealth(
     notices: read.notices,
     noticesUnavailable: read.unavailable,
     filing,
+    outbox: null,
     stream: readers.stream(),
     clock: { authority: readers.authorityClock(), sync },
     printers: rows.printers,
