@@ -101,9 +101,6 @@ export interface VenueServiceModel {
   salePolicies: { departments: DepartmentSalePolicy[]; zones: ZoneSalePolicy[] };
   readiness: VenueReadinessIssue[];
   settings: VenueServiceSettings;
-  kitchenTicketGrouping: KitchenTicketGrouping;
-  printHeldWork: boolean;
-  printMovedSlips: boolean;
   /** By active department id: minutes after the work fired before it is served that staff are
    * reminded to fire the next held group; null when that department's reminder is off. */
   releaseReminderMinutesByDepartment: Record<string, number | null>;
@@ -115,11 +112,7 @@ export interface VenueServiceModel {
 export interface VenueServiceSettings {
   editSentLines: boolean;
 }
-export type VenueServiceSettingsView = Pick<
-  VenueServiceModel,
-  "settings" | "kitchenTicketGrouping" | "printHeldWork" | "printMovedSlips"
->;
-export type KitchenTicketGrouping = "combined" | "separate";
+export type VenueServiceSettingsView = Pick<VenueServiceModel, "settings">;
 export interface VenueServiceChoices {
   floorZones: FloorZone[];
 }
@@ -294,12 +287,7 @@ export class VenueServiceApi {
 
   async loadSettings(): Promise<VenueServiceSettingsView> {
     const model = await this.#read<VenueServiceModel>("/management-api/venue-service");
-    return {
-      settings: model.settings,
-      kitchenTicketGrouping: model.kitchenTicketGrouping,
-      printHeldWork: model.printHeldWork,
-      printMovedSlips: model.printMovedSlips,
-    };
+    return { settings: model.settings };
   }
 
   loadSettingsReadOnly(): Promise<VenueServiceSettingsView> {
@@ -401,23 +389,5 @@ export class VenueServiceApi {
 
   saveSettings(settings: VenueServiceSettings): Promise<void> {
     return this.request("/management-api/venue-service/settings", "PUT", settings);
-  }
-
-  saveKitchenTicketGrouping(kitchenTicketGrouping: KitchenTicketGrouping): Promise<void> {
-    return this.request("/management-api/venue-service/settings/kitchen-ticket-grouping", "PUT", {
-      kitchenTicketGrouping,
-    });
-  }
-
-  savePrintHeldWork(printHeldWork: boolean): Promise<void> {
-    return this.request("/management-api/venue-service/settings/print-held-work", "PUT", {
-      printHeldWork,
-    });
-  }
-
-  savePrintMovedSlips(printMovedSlips: boolean): Promise<void> {
-    return this.request("/management-api/venue-service/settings/print-moved-slips", "PUT", {
-      printMovedSlips,
-    });
   }
 }

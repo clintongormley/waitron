@@ -8,9 +8,6 @@ import "./service-settings-panel.js";
 
 const initial: VenueServiceSettingsView = {
   settings: { editSentLines: true },
-  kitchenTicketGrouping: "combined",
-  printHeldWork: false,
-  printMovedSlips: true,
 };
 
 class ImmediateSettingsApp extends LitElement {
@@ -59,10 +56,6 @@ async function mount() {
   app.api = {
     loadSettings: async () => structuredClone(stored),
     saveSettings: async (settings) => write({ settings }, { settings }),
-    saveKitchenTicketGrouping: async (kitchenTicketGrouping) =>
-      write({ kitchenTicketGrouping }, { kitchenTicketGrouping }),
-    savePrintHeldWork: async (printHeldWork) => write({ printHeldWork }, { printHeldWork }),
-    savePrintMovedSlips: async (printMovedSlips) => write({ printMovedSlips }, { printMovedSlips }),
   } as VenueServiceApi;
   applyTokens(app);
   document.body.append(app);
@@ -101,24 +94,6 @@ const choices = [
     original: true,
     body: { settings: { editSentLines: false } },
   },
-  {
-    name: "kitchenTicketGrouping",
-    value: "separate",
-    original: "combined",
-    body: { kitchenTicketGrouping: "separate" },
-  },
-  {
-    name: "printHeldWork",
-    value: true,
-    original: false,
-    body: { printHeldWork: true },
-  },
-  {
-    name: "printMovedSlips",
-    value: false,
-    original: true,
-    body: { printMovedSlips: false },
-  },
 ] as const;
 
 async function change(
@@ -127,16 +102,9 @@ async function change(
 ) {
   const control = panel.shadowRoot!.querySelector<HTMLElement>(`[name=${choice.name}]`)!;
   await (control as WtCombobox).updateComplete;
-  if (typeof choice.value === "boolean") {
-    const input = control.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-    input.focus();
-    await userEvent.keyboard(" ");
-  } else {
-    const box = control as WtCombobox;
-    await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
-    const index = box.options.findIndex((option) => option.value === choice.value);
-    await userEvent.click(box.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')[index]!);
-  }
+  const input = control.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  input.focus();
+  await userEvent.keyboard(" ");
   await panel.updateComplete;
 }
 
@@ -159,13 +127,7 @@ for (const choice of choices) {
       }
       await control.updateComplete;
       const expected = outcome === "stored" ? choice.value : choice.original;
-      if (typeof expected === "boolean") {
-        expect(control.shadowRoot!.querySelector<HTMLInputElement>("input")!.checked).toBe(
-          expected,
-        );
-      } else {
-        expect(control.value).toBe(expected);
-      }
+      expect(control.shadowRoot!.querySelector<HTMLInputElement>("input")!.checked).toBe(expected);
       await leaveWithoutWarning();
       expect(writes).toEqual([choice.body]);
     });
