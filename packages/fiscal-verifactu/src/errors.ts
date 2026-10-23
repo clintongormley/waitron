@@ -370,5 +370,16 @@ declare module "@waitron/shared" {
       lastRecordAt: string;
       lastRecordOffsetMinutes: number;
     };
+
+    /**
+     * `restartAfterClockStop` (./clock-stop-restart.ts): a manager's restart of payments was not
+     * accepted. `reason` says which check refused it, in the order they run: no stop, the record
+     * named is no longer the latest, a restart of that record no longer covers the clock (with
+     * that restart's person and time), the gap is over 24 hours, a witness says the clock is
+     * wrong, or no witness says it is right.
+     */
+    "clock.restart_refused":
+      | { reason: "not_stopped" | "record_changed" | "too_far" | "contrary_proof" | "no_proof" }
+      | { reason: "stepped_back"; personId: string; restartedAt: string };
   }
 }
