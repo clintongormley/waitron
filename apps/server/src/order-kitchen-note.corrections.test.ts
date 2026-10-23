@@ -14,12 +14,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { KitchenNoteScope, KitchenNoteSnapshot } from "@waitron/module";
 import { createPrinter } from "@waitron/printing";
-import {
-  kitchenNotices,
-  listStationNotices,
-  writeKitchenNote,
-  writePrintHeldWork,
-} from "@waitron/venue-service";
+import { kitchenNotices, listStationNotices, writeKitchenNote } from "@waitron/venue-service";
 import { locationId } from "@waitron/shared";
 import {
   enqueueCorrectionSlips,
@@ -28,6 +23,7 @@ import {
 } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import {
@@ -244,7 +240,7 @@ describe("saved kitchen note corrections", () => {
     const p = await seat(v, await v.table("Held"));
     if (kind === "removed") {
       await printer();
-      await inTx(v, (tx) => writePrintHeldWork(tx, true));
+      await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     }
     await inTx(v, (tx) =>
       placeGroups(tx, v.cfg, p.partyId, {
@@ -261,7 +257,7 @@ describe("saved kitchen note corrections", () => {
 
   it("corrects still-held groups only after their HOLD ticket has been queued", async () => {
     await printer();
-    await inTx(v, (tx) => writePrintHeldWork(tx, true));
+    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const p = await seat(v, await v.table("Held"));
     await inTx(v, (tx) =>
       placeGroups(tx, v.cfg, p.partyId, {

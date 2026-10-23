@@ -35,14 +35,9 @@ import type { OriginConfig } from "./till-config.js";
 import { createTable } from "./testing/live-table.js";
 import { listStationQueues, moveOrderLines } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
-import {
-  kitchenNotices,
-  setRoutingCell,
-  writeKitchenTicketGrouping,
-  writePrintHeldWork,
-  writePrintMovedSlips,
-} from "@waitron/venue-service";
+import { kitchenNotices, setRoutingCell, writePrintMovedSlips } from "@waitron/venue-service";
 import { createStation, updateStation } from "./kitchen.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -1021,8 +1016,9 @@ async function burgerAndHeldPaella(v: PartyVenue, partyId: string, billId: strin
 }
 
 describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ruling 5)", () => {
-  const printHeldWork = (v: PartyVenue, on: boolean) => inTx(v, (tx) => writePrintHeldWork(tx, on));
-  afterEach(() => withTransaction(db, (tx) => writePrintHeldWork(tx, false)));
+  const printHeldWork = (v: PartyVenue, on: boolean) =>
+    inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: on }));
+  afterEach(() => withTransaction(db, (tx) => setStationPrinting(tx, { printHeldWork: false })));
 
   it("a party with a fired Burger and a held group 2 Paella on a HOLD ticket moving Mesa 111 to 112 prints one Grill slip listing both, the Paella under HOLD and GROUP 2", async () => {
     const v = await setupPartyVenue(db);
@@ -1178,8 +1174,8 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
 describe("a MOVED slip lays out each line by the ticket grouping and never adds two lines together (§4)", () => {
   afterEach(() =>
     withTransaction(db, async (tx) => {
-      await writeKitchenTicketGrouping(tx, "combined");
-      await writePrintHeldWork(tx, false);
+      await setStationPrinting(tx, { ticketGrouping: "combined" });
+      await setStationPrinting(tx, { printHeldWork: false });
     }),
   );
   const dishLines = (lines: readonly string[]) => lines.filter((text) => / x [A-Z]+$/.test(text));
@@ -1187,8 +1183,8 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
   it("with separate quantities, a fired 3 Burger and a held 2 Paella print one entry of 1 each, as their tickets did", async () => {
     const v = await setupPartyVenue(db);
     await inTx(v, async (tx) => {
-      await writeKitchenTicketGrouping(tx, "separate");
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { ticketGrouping: "separate" });
+      await setStationPrinting(tx, { printHeldWork: true });
     });
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
     const mesa122 = await v.table("Mesa 122");

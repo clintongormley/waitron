@@ -5,7 +5,6 @@ import { kitchenStations, printJobs, ticketItems } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
-import { writePrintHeldWork } from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
 import { submitGroups } from "./order-groups.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
@@ -21,6 +20,7 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let v: PartyVenue;
@@ -96,7 +96,7 @@ describe("A669 paper stored copies", () => {
   it.each(["fire", "hold"] as const)(
     "prints the frozen original on a %s ticket",
     async (release) => {
-      await inTx(v, (tx) => writePrintHeldWork(tx, true));
+      await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }));
       const p = await seat(v, await v.table("Kitchen allergy"));
       await send(p, release);
       const jobs = await v.db.select().from(printJobs);
@@ -109,7 +109,7 @@ describe("A669 paper stored copies", () => {
   );
 
   it("keeps old job bytes and prints the original when current instructions differ on joined reprints", async () => {
-    await inTx(v, (tx) => writePrintHeldWork(tx, true));
+    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const p = await seat(v, await v.table("Joined allergy"));
     await send(p, "fire");
     await send(p, "hold");

@@ -36,7 +36,7 @@ import {
 import { localToday, rateLines, type GrossLines, type VatClass } from "@waitron/catalogue";
 import type { PersonRoleValue } from "@waitron/identity";
 import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
-import { listStationNotices, writePrintHeldWork } from "@waitron/venue-service";
+import { listStationNotices } from "@waitron/venue-service";
 import { decimal, subtractDecimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import type { AdjustmentArgs } from "./adjustments-apply.js";
@@ -74,6 +74,7 @@ import {
 } from "./testing/adjustment-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 // Cancellations, comps and discounts applied to an open bill (service plan Task 11, spec §7),
 // against a provisioned venue that files real Veri*Factu records.
@@ -1213,7 +1214,7 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
   });
 
   it("corrects the queued HOLD ticket with +1, as a raise of a line nobody adjusted does", async () => {
-    await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     try {
       const comped = await bill([{ name: "Burger" }], { release: "hold" });
       const plain = await bill([{ name: "Burger" }], { release: "hold" });
@@ -1235,7 +1236,7 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
       expect(shape(plainJobs)).toEqual([["*** HOLD CHANGED ***", "+1.000 x BURG"]]);
       expect(shape(compedJobs)).toEqual(shape(plainJobs));
     } finally {
-      await inTx(venue, (tx) => writePrintHeldWork(tx, false));
+      await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: false }));
     }
   });
 

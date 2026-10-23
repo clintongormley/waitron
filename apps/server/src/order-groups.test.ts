@@ -70,12 +70,7 @@ import {
   type TillSaleDeps,
 } from "./working-order.js";
 import { seatTable } from "./parties.js";
-import {
-  listStationNotices,
-  writeKitchenTicketGrouping,
-  writePrintHeldWork,
-  writeEditSentLines,
-} from "@waitron/venue-service";
+import { listStationNotices, writeEditSentLines } from "@waitron/venue-service";
 import {
   bumpGroupReady,
   fireGroup,
@@ -96,6 +91,7 @@ import { splitBill, mergeBills, transferItems } from "./testing/bill-action-fixt
 import { joinTables } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 const LOCALE = "es-ES";
 const ALEX = "cccccccc-0000-4000-8000-00000000000a";
@@ -473,7 +469,7 @@ async function specExample(v: Venue): Promise<SpecExample> {
 describe("permanent group numbers on kitchen work", () => {
   it("qualifies duplicate numbers from a closed origin using its recorded tables", async () => {
     const v = await setupVenue();
-    await inTx((tx) => writePrintHeldWork(tx, true));
+    await inTx((tx) => setStationPrinting(tx, { printHeldWork: true }));
     const into = await seated(v);
     const from = await seated(v);
     await db
@@ -580,7 +576,7 @@ describe("permanent group numbers on kitchen work", () => {
 
   it("keeps original numbers on HOLD corrections after reordering", async () => {
     const v = await setupVenue();
-    await inTx((tx) => writePrintHeldWork(tx, true));
+    await inTx((tx) => setStationPrinting(tx, { printHeldWork: true }));
     const s = await specExample(v);
     await reorder(s.partyId, [s.desserts, s.warm, s.mains]);
     const before = (await printed(v)).length;
@@ -599,7 +595,7 @@ describe("permanent group numbers on kitchen work", () => {
 
   it("reprints permanent numbers in the changed firing order", async () => {
     const v = await setupVenue();
-    await inTx((tx) => writePrintHeldWork(tx, true));
+    await inTx((tx) => setStationPrinting(tx, { printHeldWork: true }));
     const s = await specExample(v);
     await reorder(s.partyId, [s.desserts, s.warm, s.mains]);
     const before = (await printed(v)).length;
@@ -615,7 +611,7 @@ describe("permanent group numbers on kitchen work", () => {
 
   it("keeps the original group number on order-note change slips", async () => {
     const v = await setupVenue();
-    await inTx((tx) => writePrintHeldWork(tx, true));
+    await inTx((tx) => setStationPrinting(tx, { printHeldWork: true }));
     const s = await specExample(v);
     await reorder(s.partyId, [s.desserts, s.warm, s.mains]);
     const before = (await printed(v)).length;
@@ -694,7 +690,7 @@ describe("per-group submission destinations", () => {
 
   it("keeps each printed HOLD correction confined to its joined destination", async () => {
     const v = await setupVenue();
-    await inTx((tx) => writePrintHeldWork(tx, true));
+    await inTx((tx) => setStationPrinting(tx, { printHeldWork: true }));
     const s = await specExample(v);
     const prior = (await printed(v)).length;
     await submit(v, s.partyId, [
@@ -4167,7 +4163,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
     await submit(v, first.partyId, [{ release: "fire", lines: [line(v, "steak", "3")] }]);
     expect(steaksOn((await printed(v)).at(-1)!)).toEqual([three("3\\.000")]);
 
-    await inTx((tx) => writeKitchenTicketGrouping(tx, "separate"));
+    await inTx((tx) => setStationPrinting(tx, { ticketGrouping: "separate" }));
     const second = await seated(v);
     await submit(v, second.partyId, [{ release: "fire", lines: [line(v, "steak", "3")] }]);
     expect(steaksOn((await printed(v)).at(-1)!)).toEqual([
@@ -4251,7 +4247,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
     expect(ofDish(combined, "K-STEAK")).toEqual([expect.stringMatching(/^2\.000 .*x K-STEAK$/)]);
     expect(ofDish(combined, "K-HAM")).toEqual(["0.375 kg x K-HAM"]);
 
-    await inTx((tx) => writeKitchenTicketGrouping(tx, "separate"));
+    await inTx((tx) => setStationPrinting(tx, { ticketGrouping: "separate" }));
     const second = await seated(v);
     await submit(v, second.partyId, [
       { release: "fire", lines: [hake("350"), line(v, "steak", "2")] },
@@ -4286,7 +4282,8 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
 });
 
 describe("advance HOLD tickets (Task 6)", () => {
-  const printHeldWork = (on: boolean) => inTx((tx) => writePrintHeldWork(tx, on));
+  const printHeldWork = (on: boolean) =>
+    inTx((tx) => setStationPrinting(tx, { printHeldWork: on }));
 
   /** What every ticket and slip for the party's tab prints under its mark. */
   const head = (v: Venue, s: Seated) => billHead(v, s, s.tabId);
@@ -5322,7 +5319,7 @@ describe("Fire now on one held dish", () => {
       isDefault: false,
     });
     await inTx(async (tx) => {
-      await writePrintHeldWork(tx, printHeld);
+      await setStationPrinting(tx, { printHeldWork: printHeld });
       await setRoutingCell(
         tx,
         v.cfg,

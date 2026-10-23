@@ -46,9 +46,9 @@ import { createOpenOrder, fireOrderLines, fireLines } from "./working-order.js";
 import {
   listStationNotices,
   writeKitchenTicketGrouping,
-  writePrintHeldWork,
   setStationToday,
 } from "@waitron/venue-service";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -1550,7 +1550,7 @@ describe("dish extras on kitchen tickets", () => {
   it("prints held chips once at Fryer and only as a reference at Grill", async () => {
     const { cfg, products, lists, printers, party, tables } = await setupSplitExtrasVenue();
     const jobs = await asApp(cfg, async (tx) => {
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       await placeGroups(tx, cfg, party.partyId, {
         operatorId: OPERATOR,
         groups: [
@@ -2249,7 +2249,7 @@ describe("a station printer that was deleted", () => {
           printerId: q,
         });
       await deletePrinter(tx, printCfg(cfg), venuePrinters.grill);
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       const known = new Set((await printJobsFor(tx)).map((job) => job.id));
       await placeGroups(tx, cfg, party.partyId, {
         operatorId: OPERATOR,

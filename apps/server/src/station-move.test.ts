@@ -33,7 +33,6 @@ import {
   setRoutingCell,
   type RouteTarget,
   writeEditSentLines,
-  writePrintHeldWork,
 } from "@waitron/venue-service";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
@@ -58,6 +57,7 @@ import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import { stillMovable } from "./station-move.js";
 import { withStationDishes } from "./station-closing.js";
 import { carveOffLines, createOpenOrder, listStationQueue, readTabLines } from "./working-order.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 let venue: PartyVenue;
 let bar: string;
@@ -290,7 +290,7 @@ describe("release", () => {
         .set({ isDefault: true })
         .where(eq(kitchenStations.id, grill));
     });
-    await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const tableId = await venue.table(`R-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
     const revision = (
@@ -489,7 +489,7 @@ describe("release", () => {
     const cell = await inTx(venue, async (tx) => {
       await setStationToday(tx, venue.cfg, bar, null, at);
       await setStationToday(tx, venue.cfg, grill, null, at);
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       return routeProduct(tx, venue.productId("Vino"), { kind: "station", stationId: grill });
     });
     const tableId = await venue.table(`F-${randomUUID().slice(0, 8)}`);
@@ -613,7 +613,7 @@ describe("release", () => {
   });
 
   it("fires a held course group at the replacement station without correcting an unprinted HOLD", async () => {
-    await inTx(venue, (tx) => writePrintHeldWork(tx, false));
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: false }));
     await inTx(venue, async (tx) => {
       const course = await createCourse(tx, venue.cfg, { name: `Course ${randomUUID()}` });
       await setProductCourse(tx, venue.cfg, venue.productId("Burger"), course.id);
@@ -946,7 +946,7 @@ describe("release", () => {
           stationId,
           printerId: printer.id,
         });
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       return { deviceId: device!.id, cell, passPrinter: printer.id };
     });
     const tableId = await venue.table(`M-${randomUUID().slice(0, 8)}`);
@@ -1130,7 +1130,7 @@ describe("release", () => {
     async (instant, closed) => {
       const tableId = await venue.table(`C-${randomUUID().slice(0, 8)}`);
       const { partyId, tabId } = await seat(venue, tableId);
-      await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+      await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
       const revision = (
         await inTx(venue, (tx) =>
           tx
@@ -1523,7 +1523,7 @@ describe("moveDishesToStation", () => {
     }
   });
   it("releases a rerouted HOLD dish on each station printer with the right correction or heading", async () => {
-    await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const downstairs = await inTx(venue, (tx) =>
       createStation(tx, venue.cfg, {
         name: `Downstairs bar ${randomUUID()}`,
@@ -1820,7 +1820,7 @@ describe("moveDishesToStation", () => {
   });
 
   it("corrects a genuinely printed HOLD ticket and fires the moved work at its new station", async () => {
-    await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const tableId = await venue.table(`H-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
     const beforeSubmitJobs = (await jobs(barPrinter)).length;

@@ -51,12 +51,12 @@ import {
 import { printingAlertSource } from "./alert-sources.js";
 import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import { printedLines } from "./testing/decode-ticket.js";
-import { writePrintHeldWork } from "@waitron/venue-service";
 import "./errors.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 // Review Focus 6: a kitchen ticket that failed or is stuck shows as a printing problem on the table
 // and on its station's card, never refuses the next order, and clears once a reprint has printed,
@@ -1626,7 +1626,7 @@ function stationSees(stationId: string, orderId: string): Promise<boolean> {
 /** A venue that prints held groups in advance. */
 async function holdingVenue(): Promise<Venue> {
   const v = await setupVenue();
-  await inTx((tx) => writePrintHeldWork(tx, true));
+  await inTx((tx) => setStationPrinting(tx, { printHeldWork: true }));
   return v;
 }
 

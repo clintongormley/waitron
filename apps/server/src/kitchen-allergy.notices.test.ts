@@ -24,7 +24,6 @@ import {
   writeProductModifiers,
   updateProduct,
 } from "@waitron/catalogue";
-import { writePrintHeldWork } from "@waitron/venue-service";
 import type { AllergyGuestInput, AllergyPatch, KitchenAllergyBlock } from "@waitron/module";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
@@ -53,6 +52,7 @@ import { attachPrinterToStation } from "./station-printers.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { KITCHEN_ALLERGY_WORDS, ALLERGEN_NAMES } from "./i18n/kitchen-allergy.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let v: PartyVenue;
@@ -333,7 +333,7 @@ describe("A669 notices", () => {
   );
   it("a queued HOLD copy notifies even after its printer is removed", async () => {
     const device = await printer();
-    await inTx(v, (tx) => writePrintHeldWork(tx, true));
+    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const p = await sent("hold");
     await v.db.update(printers).set({ active: false }).where(eq(printers.id, device.id));
     await edit(p, patch(p, { note: "Fresh tools" }));
@@ -381,7 +381,8 @@ describe("A669 notices", () => {
         return { side, list, station };
       });
       await printer();
-      if (release === "hold") await inTx(v, (tx) => writePrintHeldWork(tx, true));
+      if (release === "hold")
+        await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }));
       const p = await sent(release, true, [
         { listId: extra.list.id, picks: [{ productId: extra.side.id, quantity: 2 }] },
       ]);

@@ -18,10 +18,10 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createProduct } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, updatePrinter } from "@waitron/printing";
-import { writePrintHeldWork } from "@waitron/venue-service";
 import type { OriginConfig } from "./till-config.js";
 import { createStation, updateStation } from "./kitchen.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
@@ -136,7 +136,7 @@ async function seatAndSubmit(
   cfg: OriginConfig,
   groups: { release: "fire" | "hold"; productIds: string[] }[],
 ): Promise<string> {
-  await writePrintHeldWork(tx, true);
+  await setStationPrinting(tx, { printHeldWork: true });
   const offers = await offerProducts(tx, cfg, { zone: "tables" });
   const { id: tableId } = await createTable(tx, cfg, { label: "Mesa 7", zoneId: offers.zoneId });
   const { partyId, tabId, revision } = await seatTable(tx, cfg, {

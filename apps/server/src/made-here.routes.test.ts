@@ -28,7 +28,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
 import { createAdjustmentReason } from "@waitron/adjustments";
 import { createExtraList, writeProductModifiers } from "@waitron/catalogue";
-import { writePrintHeldWork } from "@waitron/venue-service";
 import { attachPrinterToStation } from "./station-printers.js";
 import { createCourse, createStation } from "./kitchen.js";
 import { routeProductTo } from "./testing/zone-offers.js";
@@ -46,6 +45,7 @@ import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { fireLines } from "./working-order.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 let venue: BillVenue;
 let barPrinterId: string;
@@ -319,7 +319,7 @@ describe("made-here route wiring", () => {
   });
   it("serves a made-here drink in a held group while its Grill dish waits for fire", async () => {
     const party = await seatedWith(venue);
-    await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const barBefore = await inTx(venue, (tx) =>
       tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinterId)),
     );
@@ -442,7 +442,7 @@ describe("made-here route wiring", () => {
   });
   it("keeps a drink-only held group off HOLD paper and shows it ready", async () => {
     const party = await seatedWith(venue);
-    await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const jobsBefore = await inTx(venue, (tx) =>
       tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinterId)),
     );
@@ -1053,7 +1053,7 @@ describe("made-here route wiring", () => {
   });
   it("joining a printed held group makes a drink here without a HOLD CHANGED slip or notice", async () => {
     const party = await seatedWith(venue);
-    await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const held = await send(
       venue.app,
       venue.cookie,

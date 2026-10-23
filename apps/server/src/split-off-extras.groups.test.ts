@@ -5,7 +5,6 @@ import { parties, printJobs, ticketItems, withTransaction, workingOrderLines } f
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writePrintHeldWork } from "@waitron/venue-service";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { OPERATOR } from "./testing/party-venue.js";
@@ -18,6 +17,7 @@ import {
 import { readBillSignals } from "./table-signals.js";
 import { advanceTicketItem } from "./working-order.js";
 import "./errors.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -129,7 +129,7 @@ describe("groups with split-off extras", () => {
     async (product) => {
       const v = await setupSplitExtrasVenue();
       await withTransaction(db, async (tx) => {
-        await writePrintHeldWork(tx, true);
+        await setStationPrinting(tx, { printHeldWork: true });
         const placed = await placeGroups(tx, v.cfg, v.party.partyId, {
           operatorId: OPERATOR,
           groups: [
@@ -173,7 +173,7 @@ describe("groups with split-off extras", () => {
   it("corrects the Fryer when a two-chip burger joins a queued held group", async () => {
     const v = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       const held = await placeGroups(tx, v.cfg, v.party.partyId, {
         operatorId: OPERATOR,
         groups: [{ lines: [line(v, "burger", 1)], release: "hold" }],

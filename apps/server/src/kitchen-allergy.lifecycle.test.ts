@@ -19,7 +19,6 @@ import {
 import { splitBill, mergeBills } from "./testing/bill-action-fixture.js";
 import { splitTable } from "./testing/table-action-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
-import { writePrintHeldWork } from "@waitron/venue-service";
 import {
   createExtraList,
   createProduct,
@@ -45,6 +44,7 @@ import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import { allergyTargets, applyPartyAllergyPatch, readPartyAllergyView } from "./party-allergy.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import { ALLERGEN_NAMES } from "./i18n/kitchen-allergy.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let v: PartyVenue;
@@ -309,7 +309,7 @@ describe("A669 lifecycle", () => {
   it.each([false, true])(
     "releasing corrected HOLD work delivers a correction only when rerouted (%s)",
     async (reroute) => {
-      await inTx(v, (tx) => writePrintHeldWork(tx, true));
+      await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }));
       const p = await sent("hold");
       await edit(p);
       const old = (await notices(stationId)).find((row) => row.kind === "allergy_changed")!;

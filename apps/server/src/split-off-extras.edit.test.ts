@@ -19,10 +19,11 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setRoutingCell, setStationToday, writePrintHeldWork } from "@waitron/venue-service";
+import { setRoutingCell, setStationToday } from "@waitron/venue-service";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { OPERATOR } from "./testing/party-venue.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 import { fireGroup } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
@@ -188,7 +189,7 @@ describe("editing split-off extras", () => {
   it("holds chips added to a printed held burger and prints HOLD CHANGED at Fryer", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       await placeGroups(tx, venue.cfg, venue.party.partyId, {
         operatorId: OPERATOR,
         groups: [{ lines: [line(venue, "burger")], release: "hold" }],
@@ -211,7 +212,7 @@ describe("editing split-off extras", () => {
         { row: { kind: "category", categoryId: venue.folders.sides }, zoneId: null },
         { kind: "no_preparation" },
       );
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       await placeGroups(tx, venue.cfg, venue.party.partyId, {
         operatorId: OPERATOR,
         groups: [{ lines: [line(venue, "burger", "1", 1)], release: "hold" }],
@@ -282,7 +283,7 @@ describe("editing split-off extras", () => {
   it("raises held burger and chips records proportionally with corrections at both stations", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       await placeGroups(tx, venue.cfg, venue.party.partyId, {
         operatorId: OPERATOR,
         groups: [{ lines: [line(venue, "burger", "1", 2)], release: "hold" }],
@@ -301,7 +302,7 @@ describe("editing split-off extras", () => {
   it("raises a held routed extra beside an inline extra without a record", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       await placeGroups(tx, venue.cfg, venue.party.partyId, {
         operatorId: OPERATOR,
         groups: [
@@ -423,7 +424,7 @@ describe("editing split-off extras", () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       await placeGroups(tx, venue.cfg, venue.party.partyId, {
         operatorId: OPERATOR,
         groups: [{ lines: [line(venue, "burger", "1", 1), line(venue, "water")], release: "hold" }],
@@ -441,7 +442,7 @@ describe("editing split-off extras", () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       await placeGroups(tx, venue.cfg, venue.party.partyId, {
         operatorId: OPERATOR,
         groups: [{ lines: [line(venue, "burger", "1", 1)], release: "hold" }],
@@ -458,7 +459,7 @@ describe("editing split-off extras", () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       await placeGroups(tx, venue.cfg, venue.party.partyId, {
         operatorId: OPERATOR,
         groups: [{ lines: [line(venue, "water", "1", 2)], release: "hold" }],
@@ -480,7 +481,7 @@ describe("editing split-off extras", () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
         operatorId: OPERATOR,
         groups: [{ lines: [line(venue, "water")], release: "hold" }],
@@ -504,7 +505,7 @@ describe("editing split-off extras", () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       await placeGroups(tx, venue.cfg, venue.party.partyId, {
         operatorId: OPERATOR,
         groups: [{ lines: [line(venue, "water", "1", 2), line(venue, "water")], release: "hold" }],
@@ -528,7 +529,7 @@ describe("editing split-off extras", () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       await placeGroups(tx, venue.cfg, venue.party.partyId, {
         operatorId: OPERATOR,
         groups: [{ lines: [line(venue, "water", "1", 2)], release: "hold" }],
@@ -609,7 +610,7 @@ describe("editing split-off extras", () => {
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
       await addTabRound(tx, venue.cfg, id, [line(venue, "burger")]);
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       await placeGroups(tx, venue.cfg, venue.party.partyId, {
         operatorId: OPERATOR,
         groups: [{ lines: [line(venue, "burger")], release: "hold" }],

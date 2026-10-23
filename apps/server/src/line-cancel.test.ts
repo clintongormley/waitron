@@ -21,7 +21,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { listStationNotices, setRoutingCell, writePrintHeldWork } from "@waitron/venue-service";
+import { listStationNotices, setRoutingCell } from "@waitron/venue-service";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
 import { createStation } from "./kitchen.js";
@@ -39,6 +39,7 @@ import {
   PINS,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 let venue: AdjustmentVenue;
 useVenueDb({
@@ -983,7 +984,7 @@ describe("Cancel item service command", () => {
   it.each([true, false])(
     "tells the kitchen when paid held work had printed=%s",
     async (printed) => {
-      await inTx(venue, (tx) => writePrintHeldWork(tx, printed));
+      await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: printed }));
       try {
         const order = await fixture("hold");
         await payWorkingOrder(
@@ -1011,7 +1012,7 @@ describe("Cancel item service command", () => {
           { kind: "void", quantity: "3.000", wasStarted: false },
         ]);
       } finally {
-        await inTx(venue, (tx) => writePrintHeldWork(tx, false));
+        await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: false }));
       }
     },
   );
@@ -1019,7 +1020,7 @@ describe("Cancel item service command", () => {
   it.each([true, false])(
     "tells the kitchen once when off-bill held work had printed=%s",
     async (printed) => {
-      await inTx(venue, (tx) => writePrintHeldWork(tx, printed));
+      await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: printed }));
       try {
         const order = await fixture("hold");
         const beforeJobs = await inTx(venue, (tx) => tx.select().from(printJobs));
@@ -1043,7 +1044,7 @@ describe("Cancel item service command", () => {
           expect(added).toMatchObject([{ kind: "void", quantity: "2.000", wasStarted: false }]);
         else expect(added).toEqual([]);
       } finally {
-        await inTx(venue, (tx) => writePrintHeldWork(tx, false));
+        await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: false }));
       }
     },
   );

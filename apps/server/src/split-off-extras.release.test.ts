@@ -7,7 +7,7 @@ import { printJobs, ticketItems, withTransaction, workingOrderLines } from "@wai
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { readPrintHeldWork, writePrintHeldWork } from "@waitron/venue-service";
+import { readPrintHeldWork } from "@waitron/venue-service";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
@@ -17,6 +17,7 @@ import { fireGroup, readCurrentOrders } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -116,7 +117,7 @@ describe("releasing split-off extras", () => {
     async (product) => {
       const venue = await setupSplitExtrasVenue();
       await withTransaction(db, async (tx) => {
-        await writePrintHeldWork(tx, true);
+        await setStationPrinting(tx, { printHeldWork: true });
         expect(await readPrintHeldWork(tx)).toBe(true);
         const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
           operatorId: OPERATOR,

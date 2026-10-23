@@ -7,7 +7,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { deviceProfiles, printJobs, products, withTransaction, workingOrders } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
-import { clearRoutingCell, setRoutingCell, writePrintHeldWork } from "@waitron/venue-service";
+import { clearRoutingCell, setRoutingCell } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -39,6 +39,7 @@ import "./errors.js";
 import { watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -104,7 +105,7 @@ function recordedOn(billId: string) {
 describe("corrections through order actions on a station's printers", () => {
   it("sends HOLD CHANGED and HOLD CANCELLED through the order edit routes", async () => {
     const printerId = await inTx(venue, async (tx) => {
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       const printer = await createPrinter(
         tx,
         { locationId: venue.cfg.locationId },
@@ -176,7 +177,7 @@ describe("corrections through order actions on a station's printers", () => {
           { locationId: venue.cfg.locationId },
           { stationId: venue.stationId, printerId },
         );
-        await writePrintHeldWork(tx, false);
+        await setStationPrinting(tx, { printHeldWork: false });
       });
     }
   });

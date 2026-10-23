@@ -19,8 +19,9 @@ import {
 import type { Transaction } from "@waitron/db";
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
 import { createPrinter } from "@waitron/printing";
-import { listStationNotices, writePrintHeldWork } from "@waitron/venue-service";
+import { listStationNotices } from "@waitron/venue-service";
 import { applyAdjustment } from "./adjustments-apply.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
@@ -537,7 +538,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
 
 describe("cancelling an extra of a held dish (B11g)", () => {
   it("prints a HOLD CHANGED slip naming the group when the group's HOLD ticket was queued", async () => {
-    await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     try {
       const billId = await billOf("hamburger", "hold");
       let recorded: Awaited<ReturnType<typeof notices>> = [];
@@ -566,7 +567,7 @@ describe("cancelling an extra of a held dish (B11g)", () => {
         }),
       ]);
     } finally {
-      await inTx(venue, (tx) => writePrintHeldWork(tx, false));
+      await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: false }));
     }
   });
 

@@ -23,7 +23,7 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { createPrinter } from "@waitron/printing";
-import { setRoutingCell, writePrintHeldWork } from "@waitron/venue-service";
+import { setRoutingCell } from "@waitron/venue-service";
 import type { AllergyGuestInput, AllergyPatch, KitchenAllergyBlock } from "@waitron/module";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
@@ -59,6 +59,7 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let v: PartyVenue;
@@ -394,7 +395,7 @@ describe("A669 capture", () => {
   it("freezes a queued HOLD copy and never overwrites it at later fire or exact retry", async () => {
     const p = await party();
     await printer();
-    await inTx(v, (tx) => writePrintHeldWork(tx, true));
+    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const ask = await command(p, "hold");
     const result = await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, ask));
     const old = expectCopies(p.tabId);
@@ -436,7 +437,7 @@ describe("A669 capture", () => {
   it("freezes new dishes joining an already printed HOLD group", async () => {
     const p = await party();
     await printer();
-    await inTx(v, (tx) => writePrintHeldWork(tx, true));
+    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const first = await command(p, "hold");
     const sent = await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, first));
     const next = await command(p, "hold", true, sent.groups[0]!.id);
@@ -474,7 +475,7 @@ describe("A669 capture", () => {
             stationId: extra.stationId,
             printerId: result.id,
           });
-          await writePrintHeldWork(tx, true);
+          await setStationPrinting(tx, { printHeldWork: true });
         });
       }
       const ask = await command(p, release);
@@ -821,7 +822,7 @@ describe("A669 capture", () => {
     const extra = await extraFixture(true);
     const p = await party();
     await printer();
-    await inTx(v, (tx) => writePrintHeldWork(tx, true));
+    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const ask = await command(p, "hold");
     addExtra(ask, extra);
     const result = await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, ask));
@@ -867,7 +868,7 @@ describe("A669 capture", () => {
     const p = await party();
     const id = await printer();
     await v.db.update(printers).set({ active: false }).where(eq(printers.id, id));
-    await inTx(v, (tx) => writePrintHeldWork(tx, true));
+    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const ask = await command(p, "hold");
     await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, ask));
     expect(copies(p.tabId)).toHaveLength(1);
