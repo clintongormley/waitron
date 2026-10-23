@@ -36,7 +36,9 @@ se cuentan bajo las filas, junto a **Ver todos los avisos**.
 Cuando no pasa nada, cada fila dice:
 
 - **Ventas**: **Se registran con normalidad**, y cuándo fue la última venta.
-- **Hacienda**: **Se envían con normalidad**. Un equipo que no envía registros a Hacienda lo dice.
+- **Hacienda**: **Se envían con normalidad**, y cuándo guardó el equipo por última vez una
+  aceptación de Hacienda (la hora del propio equipo cuando la guardó). Un equipo que no envía
+  registros a Hacienda lo dice.
 - **Copia en el bucket**: **Al día**, y cuándo se confirmó el último envío. Dice **No
   configurada** cuando no hay ninguna copia configurada, y cuántos minutos de retraso lleva
   cuando se retrasa.
@@ -58,6 +60,27 @@ el equipo los reintenta solo o el encargado tiene que resolver alguno.
 Si no se han podido leer los avisos, la página sigue mostrando todas las filas y avisa de que una
 parte puede parecer bien aunque no lo esté. Si algunas comprobaciones no se han podido hacer, la
 página avisa de que puede no mostrar todos los problemas.
+
+## Vuelve a intentar los registros que esperan {#retry-now}
+
+En un equipo que envía registros a Hacienda, la fila **Hacienda** tiene un botón **Reintentar
+ahora**. Después de un envío fallido, el equipo hace una pausa antes de volver a intentar los
+registros que esperan. **Reintentar ahora** los vuelve a intentar sin esperar a que acabe esa
+pausa. Solo se puede pulsar mientras la fila dice que hay registros sin enviar.
+
+Después de pulsarlo, la fila dice cuántos registros se volverán a intentar. Puede que no salgan
+enseguida: Hacienda pide una espera entre dos envíos, y los registros se intentan cuando permite el
+siguiente envío, salvo que un lote completo de 1.000 registros puede salir enseguida. Si el equipo
+sigue sin poder conectar con Hacienda, vuelven a esperar.
+
+Mientras el equipo no tenga el certificado de la AEAT, no se envía nada, así que **Reintentar
+ahora** no se puede pulsar y la fila explica por qué. Instala el certificado en **Ajustes del
+local**. El equipo lo vuelve a intentar en cinco minutos como mucho, y después el botón se puede
+pulsar mientras sigan quedando registros sin enviar.
+
+Los registros parados después de que Hacienda rechazara varios seguidos por el mismo motivo no se
+liberan con **Reintentar ahora**. El equipo sigue intentando el primero de ellos cada hora, y el
+aviso de la campana explica por qué se pararon.
 
 ## Libera espacio en el equipo {#free-space}
 
