@@ -5344,10 +5344,7 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   `apps/server/test-durations.json` has gone stale. Left open by A938.
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
-- **Fiscal-verifactu's coverage job exceeds the four-minute target.**
-  [Detail](backlog/ci.md#fiscal-coverage-outlasts-the-four-minute-job-target).
-
-- **The other sharded packages still use Vitest's file-count split.** Till, dashboard,
+- **The other sharded packages still use Vitest's file-count split.** Fiscal-verifactu, till, dashboard,
   venue-service, db and provisioning do not pack their shards by measured duration as the server
   does. Left open by A938.
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)

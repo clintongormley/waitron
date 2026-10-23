@@ -1153,17 +1153,16 @@ jobs:
       - name: Merge the server coverage blobs and enforce thresholds
         run: pnpm --filter "@waitron/server" test:merge
 
-  # packages/fiscal-verifactu alone: a Node project — a maxWorkers: 4 suite of thousands of real AEAT
-  # fixtures — and a Chromium project for its dashboard panel, so this runner installs Chromium as
-  # test-adjustments does. Its maxWorkers: 4 wants all four of a runner's cores; it was the last such
-  # package still sharing, in the light shards, where it oversubscribed its bin-mates. Measured on the
-  # two-shard run 32425078097 it was 219s inside test-light-a's 270s while the lighter test-light-b
-  # packed ten packages into 127s. See FISCAL_VERIFACTU_PACKAGE in scripts/changed-scope.mjs.
+  # Four file shards; the paired merge job enforces the package coverage thresholds.
   test-fiscal-verifactu:
     timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - id: checkout
         name: Check out the code
@@ -1219,15 +1218,90 @@ jobs:
           done
           exit 1
 
-      # The guard first, same reason as every shard: pnpm answers "nothing to do" with exit 0 and a
-      # line on stdout, so a shard whose filter selects nothing reports success having run no tests.
+      - name: Build the fiscal custody tool
+        run: pnpm --filter "@waitron/fiscal-verifactu" test:build-custodian
+
       - name: Run the fiscal-verifactu shard
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/fiscal-verifactu" ls --depth -1 --json \
-            | node scripts/changed-packages.mjs runnable test:coverage
-          node scripts/run-with-deadline.mjs 420 --diagnostics -- pnpm --filter "@waitron/fiscal-verifactu" test:coverage \
-            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
+            | node scripts/changed-packages.mjs runnable test:shard
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/fiscal-verifactu" test:shard \
+            --shard=${{ matrix.shard }}/4 \
+            --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
+            --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
+
+      - name: Upload the fiscal-verifactu coverage blob
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fiscal-verifactu-blob-${{ matrix.shard }}
+          path: packages/fiscal-verifactu/.vitest-reports/blob-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 1
+
+  test-fiscal-verifactu-merge:
+    timeout-minutes: 5
+    needs: [changes, test-fiscal-verifactu]
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+
+      - name: Set up pnpm
+        timeout-minutes: 5
+        run: bash scripts/ci-setup-pnpm.sh
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - id: download
+        name: Download the fiscal-verifactu coverage blobs
+        uses: actions/download-artifact@v8
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          pattern: fiscal-verifactu-blob-*
+          path: packages/fiscal-verifactu/.vitest-reports
+          merge-multiple: true
+
+      - name: Clear the partial artifact download
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "packages/fiscal-verifactu/.vitest-reports"
+
+      - name: Download the fiscal-verifactu coverage blobs, second attempt
+        if: steps.download.outcome == 'failure'
+        uses: actions/download-artifact@v8
+        timeout-minutes: 1
+        with:
+          pattern: fiscal-verifactu-blob-*
+          path: packages/fiscal-verifactu/.vitest-reports
+          merge-multiple: true
+
+      - name: Merge the fiscal-verifactu coverage blobs and enforce thresholds
+        run: pnpm --filter "@waitron/fiscal-verifactu" test:merge
 
   # packages/ui alone, with its own browser runner.
   #
@@ -2641,6 +2715,7 @@ jobs:
       - test-server-stream
       - test-server-merge
       - test-fiscal-verifactu
+      - test-fiscal-verifactu-merge
       - test-ui
       - test-till
       - test-till-merge
@@ -2688,6 +2763,7 @@ jobs:
           jq --unbuffered -nr '
             {
               "test-heavy-merge": { gate: "heavy", package: "@waitron/db" },
+              "test-fiscal-verifactu-merge": { gate: "fiscal_verifactu", package: "@waitron/fiscal-verifactu" },
               "test-provisioning-merge": { gate: "provisioning", package: "@waitron/provisioning" },
               "test-server-merge": { gate: "server", package: "@waitron/server" },
               "test-till-merge": { gate: "till", package: "@waitron/till" },

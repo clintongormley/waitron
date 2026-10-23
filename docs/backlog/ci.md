@@ -593,32 +593,6 @@ invoice rendering. Left open by A801. Receipts:
 [A938](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration).
 
 
-## Fiscal coverage outlasts the four-minute job target
-
-A850's run [39595996508](https://github.com/clintongormley/waitron/actions/runs/39595996508),
-`test-fiscal-verifactu` took 385 s. Its test step took
-322 s. The new backup-history, chain, secret and owner files took 43.581, 34.037, 22.040
-and 11.594 file-seconds respectively; the trust file took 0.010 s. Those file durations
-include parallel execution and are not an additive wall-clock regression measurement.
-
-Two recent successful main jobs were already above four minutes: run 39577652501 took
-316 s, with a 273 s test step; run 39576603102 took 350 s, with a 299 s test step.
-These runs used different runners. Their timings do not isolate disk or CPU as the cause.
-The current Node project uses the outer four-worker cap; its browser project follows it
-with file parallelism disabled. Profile the heavy files and the sequential browser phase
-before changing scheduling. Retain the full package coverage checks and existing fiscal
-assertions. The A850 driver recorded this as separate performance work rather than
-changing concurrency or guards without that measurement.
-
-
-A1027, 23 October 2026: A798 run
-[39902897605](https://github.com/clintongormley/waitron/actions/runs/39902897605/job/120248392824)
-took 379 seconds for the fiscal job, including a 332-second test step. A1027's
-diagnostic deadline is seven minutes for this command, leaving 88 seconds above
-that observed test step. This bounds a hang; it does not fix the package's runtime.
-The profiling and scheduling work above remains open.
-
-
 ## The bundle CLI's entry predicate can skip a symlink-spelled path
 
 A994's copied CLI returned status 0 without producing output when Node received its macOS
