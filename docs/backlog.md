@@ -4399,6 +4399,19 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   full-disk page on every start — read in the code, not run. The owner's ruling (2026-10-23): fix it
   with the small-disk test set-up the full-disk start tests use, test first.
 
+- **Every setup request re-reads every earlier "start again" archive in full.** Each retirement
+  archives the venue's original files (about 245 files, 7.7 MB in the test fixture), and
+  `readFirstSetupRetirements` (`packages/provisioning/src/first-setup-workspace.ts`) and
+  `readRetiredSetup` (`apps/server/src/module-operation-host.ts`) each call `readOriginals` on every
+  retirement for every request, to find one or a few files. Measured on #1990's branch: files opened
+  per fixture 442, then about 53,000, then about 108,000 after two retirements; the clock-challenge
+  request went from 6 ms to about 1 s. The test "successive never-activated PDFs retain every old
+  block while allowing a third replacement" (`apps/server/src/first-setup-unused-pdf.test.ts`)
+  passes alone in about 30 s but timed out at 120 s in 11 of 12 parallel copies. Not measured: whether
+  a slow box after several restarts runs out the 5 s and 30 s clock-check windows the same way. The
+  readers predate A947 slice 4a. Fix: read only the files needed, keeping whatever integrity check
+  `readOriginals` makes — fiscal-adjacent (it guards retired names), so FULL review.
+
 - **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
   (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; A798-B slice 2 names `ENOSPC`
   a full disk at start only (`fullDiskFailure`, `apps/server/src/boot-failure.ts`), because adding
