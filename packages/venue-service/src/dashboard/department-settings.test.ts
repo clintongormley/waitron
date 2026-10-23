@@ -719,7 +719,9 @@ it("None clears the receiving desk while an unavailable stored profile stays vis
   hosts[0]!.append(el);
   await el.updateComplete;
   await expect.poll(() => el.shadowRoot!.querySelector("[name=receivingProfileId]")).not.toBeNull();
-  const box = el.shadowRoot!.querySelector("wt-combobox")!;
+  const box = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "wt-combobox[name=receivingProfileId]",
+  )!;
   expect(box.value).toBe("gone");
   expect(box.options).toEqual([
     { value: "", label: "None" },
@@ -1410,7 +1412,7 @@ it("shows Needs clearing under Table states on the Service tab, off for a depart
   expect(section.getAttribute("aria-label")).toBe("Table states");
   expect(section.querySelector("h3")!.textContent!.trim()).toBe("Table states");
   const sections = [...panel.querySelectorAll("section")];
-  expect(sections.indexOf(section)).toBe(1);
+  expect(sections.indexOf(section)).toBe(2);
   expect(needsClearing(el).label).toBe("Needs clearing");
   expect(needsClearing(el).checked).toBe(false);
   expect(needsClearing(el).getAttribute("aria-invalid")).toBeNull();
