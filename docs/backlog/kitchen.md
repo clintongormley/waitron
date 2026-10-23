@@ -60,9 +60,10 @@ does not exist.
     like every correction slip: none is recorded in `kitchen_print_jobs`.
   - A printed HOLD ticket goes stale when held groups are reordered or a party is merged into
     another (both renumber `GROUP n`). Only a FIRE ticket or a Reprint can be relied on.
-  - Whether a group's HOLD ticket was queued is recorded per group, not per station, so a
-    correction, and a Reprint's REPRINT and HOLD section, can print at a station whose printer
-    never printed that group's HOLD ticket.
+  - A group's HOLD paper is recorded per station, not per printer
+    (`order_group_hold_stations`), so a correction to a station whose printer changed after its
+    HOLD ticket prints on the new printer, which never had that ticket (`printCorrectionSlips`
+    reads the station's current printers; read, not run).
 
 ## KDS corrections deferred from #191
 
@@ -208,9 +209,14 @@ Open points:
 - From PR 6: Add station sets none of a station's printing choices; a new station starts at one
   line, no held printing, MOVED slips printed.
 - From PR 6: the station editor's ticket-grouping hint ("Applies to new kitchen tickets and to
-  reprints.") is never seen, because `wt-combobox` shows a hint only while nothing is chosen and a
-  station always has a grouping — as the old Kitchen tab's dropdown did. Ask the owner whether it
-  should be a visible note.
+  reprints.") is never seen. `wt-combobox` always draws its hint visually hidden
+  (`packages/ui-core/src/field-styles.ts:153-155`) for screen readers (`packages/ui/src/components/wt-combobox.ts:1100`), and
+  shows it in the box only while nothing is chosen and there is no placeholder
+  (`wt-combobox.ts:1102`); a station always has a grouping — as the old Kitchen tab's dropdown
+  did. Ask the owner whether it should be a visible note.
+- From PR 6: a printer shared by a recorded and an unrecorded station prints one FIRE-marked
+  ticket carrying both stations' dishes (`apps/server/src/kitchen-print.ts:662-666`); ask the
+  owner whether FIRE should mark only the recorded station's part.
 
 ## A long word in a routing-grid row name still splits at 390 px
 
