@@ -488,6 +488,12 @@ unaccepted and unimplemented; the separate appliance, routing, authority and
 runtime agreements remain open. Record the accepted digest and both consumer pins
 before helper code starts.
 
+The [routing v1 proposal](../superpowers/specs/2026-10-23-a951-routing-v1-proposal.md)
+returns G6/T4's empty manifest, raw-request vectors and verified context boundary
+for Lane G review. Shared parser acceptance, upstream authentication and the separate
+diagnostic/privacy artifacts remain open. The proposal supplies no running parser
+or customer route. Record accepted bytes and both consumer pins before coding it.
+
 D88's answered recovery choice stays cold recovery when needed. A947 owns writer,
 fencing, promotion, clocks and fiscal identity; the tunnel, certificate or control
 lease grants none of that authority. Production staff issuance/replacement, runtime,

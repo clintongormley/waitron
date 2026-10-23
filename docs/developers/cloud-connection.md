@@ -408,6 +408,19 @@ G6 routing/diagnostics. Before affected code, record the accepted version/digest
 both consumer revisions and allowed scope in both repositories. The proposal's
 publication hash identifies the review material; it is not an acceptance digest.
 
+### Routing proposal for Lane G review
+
+The [routing v1 proposal](../superpowers/specs/2026-10-23-a951-routing-v1-proposal.md)
+returns the G6/T4 empty manifest, raw-request refusal vectors and local verified
+forwarding-context boundary. Lane E and Lane G must agree its exact artifact and
+consumer revisions before shared parser code. Its examples and limits are proposed
+choices, not accepted routing policy or runtime evidence. Both production customer
+manifests stay empty.
+
+G4 must separately agree the upstream peer authentication and context mapping.
+The G6/T13 diagnostic schema and A980/D101 processing acceptance remain open;
+this routing proposal settles neither. No customer product or service is enabled.
+
 ### Earlier source inventory
 
 The document digests below retain the initial inspection at Cloud
