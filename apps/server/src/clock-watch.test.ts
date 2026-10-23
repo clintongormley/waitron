@@ -51,6 +51,7 @@ function harness(
       async () => state.stop,
     ),
     readAuthorityTime: vi.fn(async () => sample),
+    assertRecordableAt: vi.fn<(reading: unknown) => void>(),
     noteClockProvedWrong: vi.fn(
       options.note ??
         (async () => ({ recorded: [] as string[], unused: [] as string[], held: [] as string[] })),
@@ -69,7 +70,7 @@ function harness(
   const watch = startClockWatch({
     backend:
       options.seat === "empty"
-        ? {}
+        ? { assertRecordableAt: () => {} }
         : (backend as unknown as Parameters<typeof startClockWatch>[0]["backend"]),
     store,
     clock: {
@@ -197,6 +198,25 @@ describe("startClockWatch", () => {
     expect(h.store.endStop).toHaveBeenCalledTimes(1);
     await h.tick();
     expect(h.store.endStop).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps AEAT's disagreements while the clock reads a date no record can carry", async () => {
+    const h = harness({ stop: null });
+    h.backend.assertRecordableAt.mockImplementation(() => {
+      throw new AppError("clock.unusable", {
+        clockAt: "2001-01-01T00:00:00.000Z",
+        offsetMinutes: 60,
+      });
+    });
+    await h.tick();
+    expect(h.backend.assertRecordableAt).toHaveBeenCalledExactlyOnceWith(
+      h.backend.clockStopState.mock.calls[0]![1],
+    );
+    expect(h.backend.readAuthorityTime).not.toHaveBeenCalled();
+    expect(h.store.endStop).not.toHaveBeenCalled();
+    h.backend.assertRecordableAt.mockReset();
+    await h.tick();
+    expect(h.store.endStop).toHaveBeenCalledTimes(1);
   });
 
   it("asks AEAT nothing on a box that does not file", async () => {
@@ -484,7 +504,7 @@ describe("startClockWatch", () => {
 
   it("runs on the real clocks and timer when none are given", async () => {
     const watch = startClockWatch({
-      backend: {},
+      backend: { assertRecordableAt: () => {} },
       store: {
         noteAuthority: vi.fn(),
         witnesses: vi.fn(() => []),

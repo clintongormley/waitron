@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -24,6 +24,7 @@ import {
   type ClockStopView,
 } from "./box-health.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
+import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
 import { createClockWitnessStore, type ClockWitnessStore } from "./clock-witnesses.js";
 import { mountDeviceApi } from "./device-api.js";
 import { DEVICE_CLOCK_HEADER } from "./device-session.js";
@@ -134,6 +135,8 @@ interface Stop {
   app: Hono;
   /** Moves the box's clock, which every route on `app` reads. */
   setClock(ms: number): void;
+  /** The box's clock that `setClock` moves. */
+  clock: TrustedClock;
   /** The Box status read over `db`, on the box's clock. */
   health(db?: Database): Promise<BoxHealth>;
 }
@@ -237,6 +240,7 @@ async function stoppedBox(gapMs: number, backend: FiscalBackend = venue.backend)
     setClock: (ms) => {
       boxMs = ms;
     },
+    clock,
     health,
   };
 }
@@ -361,6 +365,58 @@ it("refuses a person without system.manage, no session, a till's session and a b
   const control = await press(stop.app, marta.cookie, body);
   expect(control.status).toBe(200);
   expect(written()).toEqual({ restarts: before.restarts + 1, alerts: before.alerts + 1 });
+});
+
+it("still refuses a restart AEAT contradicted after the clock read a date before 28-10-2024 for one watch check", async () => {
+  const stop = await stoppedBox(14.5 * HOUR);
+  stop.witnesses.noteAuthority({
+    authorityMs: stop.behind - 30_000 + 14.5 * HOUR,
+    uncertaintyMs: 500,
+    at: { wallMs: stop.behind - 30_000, monoMs: 0 },
+  });
+  const contradicted = await press(stop.app, marta.cookie, { recordId: stop.recordId });
+  expect(contradicted.json).toEqual({
+    code: "clock.restart_refused",
+    params: { reason: "contrary_proof" },
+  });
+
+  stop.setClock(Date.parse("2001-01-01T12:00:00.000Z"));
+  let fire = (): void => {};
+  let armed = 0;
+  const watch = startClockWatch({
+    backend: venue.backend,
+    store: stop.witnesses,
+    clock: stop.clock,
+    wall: () => 0,
+    monotonic: () => 0,
+    read: (fn) => venue.db.withWriteLock(() => fn(venue.db)),
+    transaction: (fn) => withTransaction(venue.db, fn),
+    filesRecords: () => false,
+    isPrimary: () => true,
+    intervalMs: CLOCK_WATCH_MS,
+    log: () => {},
+    timer: (_ms, fn) => {
+      fire = fn;
+      armed += 1;
+      return { cancel: () => {} };
+    },
+  });
+  fire();
+  await vi.waitFor(() => expect(armed).toBe(2));
+  await watch.stop();
+
+  stop.setClock(stop.behind);
+  noteDevice(stop, 0);
+  noteDevice(stop, 0);
+  const pressed = written();
+  const answer = await press(stop.app, marta.cookie, { recordId: stop.recordId });
+
+  expect(answer.status).toBe(409);
+  expect(answer.json).toEqual({
+    code: "clock.restart_refused",
+    params: { reason: "contrary_proof" },
+  });
+  expect(written()).toEqual(pressed);
 });
 
 it("answers a second restart of the same record with the first manager's", async () => {
