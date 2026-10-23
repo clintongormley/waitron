@@ -24,6 +24,14 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
     },
   );
 
+  it("words the clock-behind stop with its own words and the tell-a-manager hint", () => {
+    setLocale(locale);
+    expect(staffNoticeText({ code: "clock.behind_chain", params: {} })).toEqual({
+      main: words["staff_notice.clock.behind_chain"],
+      hint: words["staff_notice.tell_manager"],
+    });
+  });
+
   it("words the unsent count with its number and the retried hint while nothing is held", () => {
     setLocale(locale);
     expect(

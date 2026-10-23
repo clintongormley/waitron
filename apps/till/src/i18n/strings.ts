@@ -1732,6 +1732,8 @@ export const en = {
   "staff_notice.storage.disk_full": "Nothing can be saved: the box is out of space",
   "staff_notice.clock.unusable": "Sales can't be recorded: the box's clock is wrong",
   "staff_notice.storage.space_low": "The box is nearly out of space",
+  "staff_notice.clock.behind_chain":
+    "Payments stopped: the box's clock reads earlier than its last sale",
   "staff_notice.fiscal.records_unsent": "{n} sales not yet sent to the tax agency",
   "staff_notice.fiscal.records_unsent_one": "1 sale not yet sent to the tax agency",
   "staff_notice.unknown": "The box needs attention",
@@ -3436,6 +3438,8 @@ export const es: Record<StringKey, string> = {
   "staff_notice.storage.disk_full": "No se puede guardar nada: el equipo no tiene espacio",
   "staff_notice.clock.unusable": "No se pueden registrar ventas: la hora del equipo es incorrecta",
   "staff_notice.storage.space_low": "Queda poco espacio en el equipo",
+  "staff_notice.clock.behind_chain":
+    "No se puede cobrar: la hora del equipo es anterior a la última venta",
   "staff_notice.fiscal.records_unsent": "{n} ventas sin enviar a Hacienda",
   "staff_notice.fiscal.records_unsent_one": "1 venta sin enviar a Hacienda",
   "staff_notice.unknown": "El equipo necesita atención",

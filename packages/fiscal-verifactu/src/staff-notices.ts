@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { StaffNotice, StaffNoticeReadContext, StaffNoticeSource } from "@waitron/module";
+import { clockBehindChain } from "./clock-behind.js";
 import { isBeforeFirstIssueDate } from "./first-issue-date.js";
 
 /** The clock notice for one reading: a `clock.unusable` notice before the first issue date
@@ -13,6 +14,26 @@ export function clockNotices(reading: { instant: Date; offsetMinutes: number }):
       code: "clock.unusable",
       severity: "error",
       params: { clockAt: reading.instant.toISOString(), offsetMinutes: reading.offsetMinutes },
+    },
+  ];
+}
+
+/** `clock.unusable` before the first issue date, else `clock.behind_chain` while the reading is
+ * more than the margin before the latest record, else nothing. */
+async function clockStopNotices(
+  tx: Transaction,
+  reading: { instant: Date; offsetMinutes: number },
+): Promise<StaffNotice[]> {
+  const unusable = clockNotices(reading);
+  if (unusable.length > 0) return unusable;
+  const behind = await clockBehindChain(tx, reading);
+  if (behind === null) return [];
+  return [
+    {
+      key: "clock.behind_chain",
+      code: "clock.behind_chain",
+      severity: "error",
+      params: { ...behind },
     },
   ];
 }
@@ -52,7 +73,7 @@ export async function unsentNotices(
 export const FISCAL_STAFF_NOTICES: readonly StaffNoticeSource[] = [
   {
     read: async ({ tx, reading, filing }) => [
-      ...clockNotices(reading),
+      ...(await clockStopNotices(tx, reading)),
       ...(await unsentNotices(tx, filing)),
     ],
   },
