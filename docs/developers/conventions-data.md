@@ -3548,11 +3548,26 @@ the pending replay, and every new refund); `beginSettledTenderRefund`
 (`settlePendingBillRefunds`, `apps/server/src/bill-payments-loop.ts`) ask
 `clockBehindLatestRecord` once at their top and, during the stop, touch no refund row and raise no
 unresolved alert, because a completed refund's time places it in a cash-up window
-(`clock-behind-stop.refunds.test.ts`). The pass, `settlePendingBillPayments`, runs its payment half
+(`clock-behind-stop.refunds.test.ts`). A pass that began before the stop is held by the next
+paragraph's check. The pass, `settlePendingBillPayments`, runs its payment half
 first and then its refund half; the payment half has no check of its own and keeps running. A
 completion that would file is refused by the append, and the pass then raises
 `payment.bill_settle_failed` for it (plan decision 17; `raiseSettleFailed` in
 `apps/server/src/bill-payments-loop.ts`, reached for any refusal that is not an `IssuanceRefusal`).
+
+**A card refund's send and its outcome are judged again after a provider wait.** A route's check
+and a loop's top check come before provider calls that can end after the clock has stepped back.
+So the transaction that stamps a send (`send` in `apps/server/src/tender-refund-sends.ts`,
+`sendCardRefund` in `apps/server/src/bill-refunds.ts`) and the one that records a completed or
+failed outcome (`recordOutcomeIn`, `recordRefundOutcome`) ask `clockBehindLatestRecord` again
+through `clockStopsRefund` (`bill-refunds.ts`), and date the row from that same reading. During
+the stop nothing is sent, no outcome is recorded and the refund stays pending; a failed outcome is
+held as well, as the loops' top check holds it. A manager's confirmed outcome is refused by
+`refuseWhileClockBehind` instead. Cases in `clock-behind-stop.refunds.test.ts`, each with the clock
+stepping back while the fake provider answers: the tender-refund retry and the bill refund's resend
+send nothing; each loop leaves a refund the provider made pending; a new tender refund the provider
+made stays pending, and a tender loop pass once the clock reads ahead again completes it, dated
+by that pass's reading.
 
 **A payment whose money has already moved is still stored as a payment** (plan decision 17). The Stripe webhook stores a
 hosted payment during the stop (`apps/server/src/webhook.test.ts`, "records a hosted payment while

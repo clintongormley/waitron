@@ -10,9 +10,11 @@ import { createPinThrottle } from "@waitron/identity";
 import type { RefundAnswer } from "@waitron/payments";
 import type { RefundScript } from "@waitron/payments/src/testing/fake-provider.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import { attestCardRefund } from "./bill-refunds.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { requestCfg } from "./request-config.js";
 import { recoverTenderRefunds } from "./tender-refund-recovery.js";
+import { attestTenderRefund } from "./tender-refund-sends.js";
 import { beginSettledTenderRefund } from "./tender-refunds.js";
 import { systemClock } from "./till-backend.js";
 import "./errors.js";
@@ -158,31 +160,59 @@ function unresolvedAlerts(): number {
   return row!.n;
 }
 
-/** A bill card refund taken at `ms` and left pending after its one send; answers its rows. */
+/** A bill card refund taken at `ms` and left pending after its one send; answers its rows, and
+ * the same request sent again through `app`. */
 async function pendingBillRefund(ms: number, script: RefundScript) {
   const billId = await tabWith(venue, "Paella");
   const paid = await pay(at(ms), billId, readerPart("10.00"));
   expect(paid.status).toBe(200);
   const paymentId = (paid.json.payment as { id: string }).id;
+  const body = {
+    submissionId: randomUUID(),
+    appliedAmount: "5.00",
+    tipAmount: "0.00",
+    reason: "Overcharged",
+    override: OVERRIDE(),
+  };
+  const resend = (app: Hono) =>
+    send(
+      app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
+      body,
+    );
   venue.card.scriptNextRefund(script);
-  const asked = await send(
-    at(ms),
-    venue.cookie,
-    "POST",
-    `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
-    {
-      submissionId: randomUUID(),
-      appliedAmount: "5.00",
-      tipAmount: "0.00",
-      reason: "Overcharged",
-      override: OVERRIDE(),
-    },
-  );
+  const asked = await resend(at(ms));
   expect(asked.json).toMatchObject({ refund: { state: "pending" } });
-  return () =>
+  const rowsOf = () =>
     inTx(venue, (tx) =>
       tx.select().from(billPaymentRefunds).where(eq(billPaymentRefunds.billPaymentId, paymentId)),
     );
+  return { rowsOf, resend };
+}
+
+/** A clock reading `fromMs` until `stepTo` moves it, as a box clock stepping back mid-request. */
+function steppingClock(fromMs: number) {
+  let instant = fromMs;
+  const base = systemClock();
+  const clock: TrustedClock = {
+    ...base,
+    now: () => ({ ...base.now(), instant: new Date(instant), offsetMinutes: 60 }),
+  };
+  return { clock, stepTo: (ms: number) => void (instant = ms) };
+}
+
+/** Runs `step` once the fake provider has answered each `method` call, until the answer is called. */
+function stepAfter(method: "lookupRefund" | "sendRefund", step: () => void): () => void {
+  const card = venue.card as unknown as Record<string, (query: unknown) => Promise<unknown>>;
+  const original = card[method]!.bind(venue.card);
+  card[method] = async (query) => {
+    const answer = await original(query);
+    step();
+    return answer;
+  };
+  return () => void Reflect.deleteProperty(venue.card, method);
 }
 
 const loopDeps = (clock: TrustedClock) => ({
@@ -235,7 +265,7 @@ it("the tender-refund loop leaves a pending refund untouched during the stop, an
 
 it("the bill-refund half of the pass leaves a pending refund untouched during the stop, and settles it after", async () => {
   const now = nowMs();
-  const rowsOf = await pendingBillRefund(now, { made: "completed", answer: "throw" });
+  const { rowsOf } = await pendingBillRefund(now, { made: "completed", answer: "throw" });
   const [row] = await rowsOf();
   const sends = refundSends();
   const providerRefunds = providerRefundCount();
@@ -354,7 +384,7 @@ it("sends a connected card refund a minute inside the margin, and refuses one a 
 
 it("raises no unresolved alert for a refund an hour old while the clock reads behind", async () => {
   const now = nowMs();
-  const rowsOf = await pendingBillRefund(now, { made: false, answer: LOST });
+  const { rowsOf } = await pendingBillRefund(now, { made: false, answer: LOST });
   const [row] = await rowsOf();
   await soldAt(now + 120 * MINUTE, "cash");
   const alerts = unresolvedAlerts();
@@ -389,4 +419,139 @@ it("refuses the resend of a pending connected refund and sends nothing", async (
   expect(answer.json).toEqual(behindChain(behind));
   expect(await tenderRefundRows(saleId)).toEqual([row]);
   expect(row).toMatchObject({ state: "pending", sendCount: 1 });
+});
+
+// In the cases below the clock reads past the latest record when the request or pass begins, and
+// steps back behind it while the provider is answering.
+
+it("sends nothing on a tender refund's retry when the clock steps back during its lookup", async () => {
+  const now = nowMs();
+  const { saleId, tenderId } = await soldAt(now, "card");
+  venue.card.scriptNextRefund({ made: false, answer: LOST });
+  const asked = await tenderRefund(at(now), saleId, refundBody(tenderId));
+  expect(asked.json).toMatchObject({ state: "pending" });
+  const [row] = await tenderRefundRows(saleId);
+  await soldAt(now + 30 * MINUTE, "cash");
+  const { clock, stepTo } = steppingClock(now + 31 * MINUTE);
+  const restore = stepAfter("lookupRefund", () => stepTo(now + 10 * MINUTE));
+  const sends = refundSends();
+  try {
+    const answer = await retry(venue.appAt(clock), row!.id);
+
+    expect({ status: answer.status, sends: refundSends() - sends }).toEqual({
+      status: 200,
+      sends: 0,
+    });
+    expect(answer.json).toMatchObject({ state: "pending", completedAt: null });
+    expect(await tenderRefundRows(saleId)).toMatchObject([
+      { state: "pending", sendCount: 1, completedAt: null },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+it("sends nothing on a bill refund's resend when the clock steps back during its lookup", async () => {
+  const now = nowMs();
+  const { rowsOf, resend } = await pendingBillRefund(now, { made: false, answer: LOST });
+  await soldAt(now + 30 * MINUTE, "cash");
+  const { clock, stepTo } = steppingClock(now + 31 * MINUTE);
+  const restore = stepAfter("lookupRefund", () => stepTo(now + 10 * MINUTE));
+  const sends = refundSends();
+  try {
+    const answer = await resend(venue.appAt(clock));
+
+    expect({ status: answer.status, sends: refundSends() - sends }).toEqual({
+      status: 200,
+      sends: 0,
+    });
+    expect(await rowsOf()).toMatchObject([{ state: "pending", sendCount: 1, completedAt: null }]);
+  } finally {
+    restore();
+  }
+});
+
+it("leaves a tender refund pending when the clock steps back during the loop's lookup", async () => {
+  const now = nowMs();
+  const { saleId, tenderId } = await soldAt(now, "card");
+  venue.card.scriptNextRefund({ made: "completed", answer: "throw" });
+  const asked = await tenderRefund(at(now), saleId, refundBody(tenderId));
+  expect(asked.json).toMatchObject({ state: "pending" });
+  const { clock, stepTo } = steppingClock(now + MINUTE);
+  const restore = stepAfter("lookupRefund", () => stepTo(now - 10 * MINUTE));
+  try {
+    await recoverTenderRefunds(loopDeps(clock));
+
+    expect(await tenderRefundRows(saleId)).toMatchObject([
+      { state: "pending", completedAt: null, failedAt: null },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+it("leaves a bill refund pending when the clock steps back during the loop's lookup", async () => {
+  const now = nowMs();
+  const { rowsOf } = await pendingBillRefund(now, { made: "completed", answer: "throw" });
+  const providerRefunds = providerRefundCount();
+  const { clock, stepTo } = steppingClock(now + MINUTE);
+  const restore = stepAfter("lookupRefund", () => stepTo(now - 10 * MINUTE));
+  try {
+    await settlePendingBillPayments(loopDeps(clock));
+
+    expect(await rowsOf()).toMatchObject([{ state: "pending", completedAt: null, failedAt: null }]);
+    expect(providerRefundCount()).toBe(providerRefunds);
+  } finally {
+    restore();
+  }
+});
+
+it("leaves a new tender refund pending when the clock steps back while it is sent, and the loop settles it after", async () => {
+  const now = nowMs();
+  const { saleId, tenderId } = await soldAt(now, "card");
+  const { clock, stepTo } = steppingClock(now);
+  const restore = stepAfter("sendRefund", () => stepTo(now - 10 * MINUTE));
+  const sends = refundSends();
+  try {
+    const answer = await tenderRefund(venue.appAt(clock), saleId, refundBody(tenderId));
+
+    expect(answer.status).toBe(200);
+    expect(answer.json).toMatchObject({ state: "pending", completedAt: null });
+    expect(refundSends()).toBe(sends + 1);
+    expect(await tenderRefundRows(saleId)).toMatchObject([
+      { state: "pending", sentAt: new Date(now).toISOString(), completedAt: null },
+    ]);
+  } finally {
+    restore();
+  }
+
+  await recoverTenderRefunds(loopDeps(clockAt(now + MINUTE)));
+
+  expect(await tenderRefundRows(saleId)).toMatchObject([
+    { state: "completed", completedAt: new Date(now + MINUTE).toISOString() },
+  ]);
+  expect(refundSends()).toBe(sends + 1);
+});
+
+it("refuses a manager's confirmed outcome of a bill or tender refund while the clock reads behind", async () => {
+  const now = nowMs();
+  const { rowsOf } = await pendingBillRefund(now, { made: false, answer: LOST });
+  const [billRow] = await rowsOf();
+  const { saleId, tenderId } = await soldAt(now, "card");
+  venue.card.scriptNextRefund({ made: false, answer: LOST });
+  const asked = await tenderRefund(at(now), saleId, refundBody(tenderId));
+  expect(asked.json).toMatchObject({ state: "pending" });
+  const [tenderRow] = await tenderRefundRows(saleId);
+  const behind = now - 10 * MINUTE;
+  const confirmed = { attestedBy: venue.adminId, note: "Seen on the provider's dashboard" };
+
+  await expect(
+    attestCardRefund(loopDeps(clockAt(behind)), billRow!.id, "completed", confirmed),
+  ).rejects.toMatchObject(behindChain(behind));
+  await expect(
+    attestTenderRefund(loopDeps(clockAt(behind)), tenderRow!.id, "completed", confirmed),
+  ).rejects.toMatchObject(behindChain(behind));
+
+  expect(await rowsOf()).toEqual([billRow]);
+  expect(await tenderRefundRows(saleId)).toEqual([tenderRow]);
 });

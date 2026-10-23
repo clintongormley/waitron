@@ -2,6 +2,7 @@ import { assertStillSignedIn } from "./till-session.js";
 import { and, eq, isNotNull, ne } from "drizzle-orm";
 import { billPaymentRefunds, billPayments, withTransaction, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
+import type { TrustedReading } from "@waitron/fiscal";
 import {
   authorize,
   roleHasPermission,
@@ -188,6 +189,25 @@ function providerRefundRefOf(evidence: RefundEvidence): string | null {
   return null;
 }
 
+/**
+ * Whether `reading`, which dates a refund's send or outcome in `tx`, reads behind the latest fiscal
+ * record. Judged again here because a provider wait since the request's own check can end after
+ * the clock steps back; the refund is then left pending for a pass after the stop. A manager's
+ * confirmed outcome (`evidence` attested) is refused instead, as their route refuses it.
+ */
+export async function clockStopsRefund(
+  tx: Transaction,
+  deps: Pick<BillRefundDeps, "backend">,
+  evidence: RefundEvidence | null,
+  reading: TrustedReading,
+): Promise<boolean> {
+  if (evidence?.kind === "attested") {
+    await deps.backend.refuseWhileClockBehind(tx, reading);
+    return false;
+  }
+  return (await deps.backend.clockBehindLatestRecord(tx, reading)) !== null;
+}
+
 /** The card refunds this process is driving, by id: a pending refund missing here is one nothing is
  * still sending or looking up. */
 const liveRefundsOf = perDatabase(() => new Set<string>());
@@ -244,7 +264,8 @@ async function recordRefundOutcome(
     const target = (await readCardRefund(tx, refundId))!;
     const { refund } = target;
     const outcome = refundOutcome(evidence);
-    const now = deps.clock.now().instant;
+    const reading = deps.clock.now();
+    const now = reading.instant;
     const providerRefundRef = providerRefundRefOf(evidence);
     if (refund.state !== "pending") {
       if (refund.state === "failed" && outcome === "completed") {
@@ -259,7 +280,9 @@ async function recordRefundOutcome(
       }
       return refund;
     }
-    if (outcome === "pending") return refund;
+    if (outcome === "pending" || (await clockStopsRefund(tx, deps, evidence, reading))) {
+      return refund;
+    }
     const attested = attestationColumns(attestation);
     if (outcome === "failed") {
       const [failed] = await tx
@@ -320,17 +343,20 @@ async function sendCardRefund(
       : null;
   const stamped = await withTransaction(deps.db, async (tx) => {
     const target = (await readCardRefund(tx, refundId))!;
+    const reading = deps.clock.now();
+    if (await clockStopsRefund(tx, deps, null, reading)) return { ...target, stopped: true };
     const [row] = await tx
       .update(billPaymentRefunds)
       .set({
-        sentAt: target.refund.sentAt ?? deps.clock.now().instant.toISOString(),
+        sentAt: target.refund.sentAt ?? reading.instant.toISOString(),
         sendCount: target.refund.sendCount + 1,
         ...(refsBeforeSend === null ? {} : { refsBeforeSend }),
       })
       .where(eq(billPaymentRefunds.id, refundId))
       .returning();
-    return { ...target, refund: row! };
+    return { ...target, refund: row!, stopped: false };
   });
+  if (stamped.stopped) return stamped.refund;
   const { refund, provided } = stamped;
 
   let answer: RefundAnswer;
