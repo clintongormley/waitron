@@ -1,4 +1,4 @@
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { credentialField } from "./credentials.js";
 import type { OnboardingIntent } from "./trading-config.js";
@@ -18,9 +18,15 @@ export async function resolveEmailDelivery(
   ring: KeyRing,
   practiceMode: boolean,
 ): Promise<EmailDelivery> {
-  const configured = await withTransaction(db, (tx) =>
-    tryGetCredential(tx, ring, { purpose: "email.smtp" }),
-  );
+  return withTransaction(db, (tx) => resolveEmailDeliveryIn(tx, ring, practiceMode));
+}
+
+export async function resolveEmailDeliveryIn(
+  tx: Transaction,
+  ring: KeyRing,
+  practiceMode: boolean,
+): Promise<EmailDelivery> {
+  const configured = await tryGetCredential(tx, ring, { purpose: "email.smtp" });
   if (configured !== null) {
     return {
       mode: "smtp",
