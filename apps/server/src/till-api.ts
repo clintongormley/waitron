@@ -1847,7 +1847,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           log,
           attendance: deps.attendance,
           disk: deps.disk,
-          sayCardChargedOnFullDisk: true,
+          sayCardChargedNotRecorded: true,
         },
         saleCfg,
         { ...body, zoneId, guests },

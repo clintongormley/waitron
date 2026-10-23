@@ -2483,7 +2483,7 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
 - A card charged on a connected reader whose sale then fails for a full disk answers
   `507 sale.charged_not_recorded { workingOrderId, reason: "disk_full" }`, so the till can say not
   to charge again (`afterCardCharged`, `bill-payments.ts`). Only the till's two card routes ask for
-  it (`sayCardChargedOnFullDisk`, set in `till-api.ts`'s `POST /api/pay` and
+  it (`sayCardChargedNotRecorded`, set in `till-api.ts`'s `POST /api/pay` and
   `bill-payments-api.ts`); every other caller, the dashboard's stuck-payment resolve route among
   them, still answers `storage.disk_full`. The same answer covers a charge whose capture the
   provider could not save: SumUp's and Stripe's `collect` throw `ChargeNotSavedError`

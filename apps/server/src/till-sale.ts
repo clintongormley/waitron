@@ -621,7 +621,7 @@ export type IntegratedPayDeps = TillSaleDeps & {
    * adapter's own save of the charge inside `collect` — answers `sale.charged_not_recorded`, so
    * staff are told not to charge again. Unset, it answers `storage.disk_full`.
    */
-  sayCardChargedOnFullDisk?: boolean;
+  sayCardChargedNotRecorded?: boolean;
 };
 
 /**
