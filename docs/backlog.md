@@ -2940,7 +2940,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   with Save as new theme…; Edit works while Waitron's theme is in use, so a new venue makes its first
   theme from the screen. The create button reads "Add theme", not the design's "New theme", by the
   house Wording rule (`design-system.md`). Slice
-  6 landed (#PR): Advanced, in the Look card's editor, lists the 22 colours with a Light and a Dark
+  6 landed 2026-10-23 (#2021): Advanced, in the Look card's editor, lists the 22 colours with a Light and a Dark
   value each, set by hand with a picker or a code, put back one at a time or all at once, with
   warnings and fixes under the rows; Pick a different colour for dark screens gives the dark version
   its own button colour. Until slice 11 its heading and opening line leave out text, and until slice
