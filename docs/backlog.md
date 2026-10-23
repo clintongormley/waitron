@@ -4770,8 +4770,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **Slice 7b: Reintentar ahora, and the Hacienda row's last accepted record.** The page's Hacienda
   row reads the staff notices and the bell (slice 7 decision 1); 7b adds the Veri\*Factu module's
-  own route for Reintentar ahora — which changes when records reach AEAT, so it is parked for the
-  owner — and, with it, the last accepted record's time. Left open by A798-B slice 7.
+  own route for Reintentar ahora to bring failed-send retries forward and wake the sending loop.
+  It changes when records reach AEAT, so it is parked for the owner. The same slice adds the last
+  accepted record's time. Left open by A798-B slice 7.
   [Detail](backlog/box.md#slice-7b-reintentar-ahora-and-the-hacienda-rows-last-accepted-record)
 
 - **Liberar cannot be pressed on a mirror or a fenced node.** The read-only gate refuses every
