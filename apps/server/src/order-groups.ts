@@ -57,6 +57,7 @@ import type { OriginConfig, TillConfig } from "./till-config.js";
 import {
   checkAndBumpParty,
   partyFamily,
+  partyFirstZones,
   requireBillOfParty,
   runServiceCommand,
 } from "./parties.js";
@@ -1532,9 +1533,26 @@ export function releaseReminder(
   };
 }
 
+/** Each party's reminder interval, from its department ({@link partyFirstZones}); null when none. */
+async function partyReminderMinutes(
+  tx: Transaction,
+  partyIds: readonly string[],
+): Promise<Map<string, number | null>> {
+  const zones = await partyFirstZones(tx, partyIds);
+  const byZone = await VENUE_SERVICE.readReleaseReminderMinutesByZone(tx, [
+    ...new Set(zones.values()),
+  ]);
+  return new Map(
+    partyIds.map((id) => {
+      const zoneId = zones.get(id);
+      return [id, zoneId === undefined ? null : (byZone.get(zoneId) ?? null)];
+    }),
+  );
+}
+
 /**
- * Each of these parties' release reminders ({@link releaseReminder}), keyed by party, from one read
- * of the setting and one each of the parties' groups and dish lines. A party that is not open has
+ * Each of these parties' release reminders ({@link releaseReminder}), keyed by party, from two reads
+ * of their departments' intervals and one each of the parties' groups and dish lines. A party that is not open has
  * none: it can no longer fire or snooze a group. A line on an abandoned bill is left out, as
  * {@link readCurrentOrders} leaves it out.
  */
@@ -1544,8 +1562,9 @@ export async function readReleaseReminders(
 ): Promise<Map<string, ReleaseReminder | null>> {
   const reminders = new Map<string, ReleaseReminder | null>(partyIds.map((id) => [id, null]));
   if (partyIds.length === 0) return reminders;
-  const minutes = await VENUE_SERVICE.readReleaseReminderMinutes(tx);
-  if (minutes === null) return reminders;
+  const minutes = await partyReminderMinutes(tx, partyIds);
+  const reminded = partyIds.filter((id) => minutes.get(id) !== null);
+  if (reminded.length === 0) return reminders;
   const groups = await tx
     .select({
       id: orderGroups.id,
@@ -1557,7 +1576,7 @@ export async function readReleaseReminders(
     .innerJoin(parties, eq(parties.id, orderGroups.partyId))
     .where(
       and(
-        inArray(orderGroups.partyId, [...partyIds]),
+        inArray(orderGroups.partyId, reminded),
         ne(orderGroups.state, "removed"),
         eq(parties.state, "open"),
       ),
@@ -1602,7 +1621,7 @@ export async function readReleaseReminders(
             servedAt: serviceCompletedAt(line),
             ...(line.cancelledQuantity >= line.quantity ? { fullyCancelled: true as const } : {}),
           })),
-        minutes,
+        minutes.get(partyId)!,
       ),
     );
   }
@@ -1954,7 +1973,9 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     (group?.rows ?? ungrouped).push(row);
   }
   const minutes =
-    party.state === "open" ? await VENUE_SERVICE.readReleaseReminderMinutes(tx) : null;
+    party.state === "open"
+      ? ((await partyReminderMinutes(tx, [partyId])).get(partyId) ?? null)
+      : null;
   return {
     revision: party.revision,
     hasGroups: nextDisplayNumber > 1,

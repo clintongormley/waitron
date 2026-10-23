@@ -8,7 +8,7 @@ import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   assignCatalogueToLocation,
@@ -19,7 +19,10 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import {
+  diningTables,
+  floorZones,
   orderGroups,
+  partyTables,
   kitchenCourses,
   serviceCommands,
   ticketItems,
@@ -41,7 +44,8 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
 } from "@waitron/shared";
-import { writeReleaseReminderMinutes } from "@waitron/venue-service";
+import { createDepartment, createServiceZone, departments } from "@waitron/venue-service";
+import { setReleaseReminderInEveryDepartment } from "./testing/release-reminder.js";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { submitDraft, type Draft, type DraftLineInput } from "./order-drafts.js";
@@ -635,21 +639,21 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     ]);
   });
 
-  it("shows no reminder at all while the venue has reminders off", async () => {
+  it("shows no reminder at all while its department has reminders off", async () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);
-    await inTx((tx) => writeReleaseReminderMinutes(tx, null));
+    await inTx((tx) => setReleaseReminderInEveryDepartment(tx, null));
 
     expect(await floorReminder(v, s.tableId)).toBeNull();
     expect((await currentOrders(s.partyId)).reminder).toBeNull();
   });
 
-  it("measures from the venue's interval, and shows none for a party with no held group", async () => {
+  it("measures from its department's interval, and shows none for a party with no held group", async () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);
     const bare = await seated(v);
     await group(v, bare.partyId, "fire", [line(v, "croquetas")]);
-    await inTx((tx) => writeReleaseReminderMinutes(tx, 25));
+    await inTx((tx) => setReleaseReminderInEveryDepartment(tx, 25));
 
     expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(30) });
     expect(await floorReminder(v, bare.tableId)).toBeNull();
@@ -670,6 +674,103 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
       groupId: b.g3.id,
       dueAt: null,
     });
+  });
+});
+
+// Each party below takes its orders at the venue's own table first, since a zone with no department
+// takes none; only then is its table moved by direct writes. No real path builds these shapes.
+describe("the reminder follows the party's department", () => {
+  async function otherDepartment(v: Venue, minutes: number | null): Promise<string> {
+    return inTx(async (tx) => {
+      const department = await createDepartment(tx, v.cfg, { name: `Dept ${randomUUID()}` });
+      const zone = await createServiceZone(tx, v.cfg, {
+        name: `Zone ${randomUUID()}`,
+        departmentId: department.id,
+      });
+      await tx
+        .update(departments)
+        .set({ releaseReminderMinutes: minutes })
+        .where(eq(departments.id, department.id));
+      return zone.id;
+    });
+  }
+
+  async function moveTable(tableId: string, zoneId: string): Promise<void> {
+    await inTx((tx) => tx.update(diningTables).set({ zoneId }).where(eq(diningTables.id, tableId)));
+  }
+
+  it("follows each party's department: Off for one, 10 minutes for another", async () => {
+    const v = await setupVenue();
+    const a = await servedUpToGroupTwo(v);
+    const b = await servedUpToGroupTwo(v);
+    await moveTable(b.tableId, await otherDepartment(v, null));
+
+    expect(await floorReminder(v, a.tableId)).toEqual({ groupId: a.g3.id, dueAt: T(15) });
+    expect((await currentOrders(a.partyId)).reminder).toEqual({ groupId: a.g3.id, dueAt: T(15) });
+    expect(await floorReminder(v, b.tableId)).toBeNull();
+    expect((await currentOrders(b.partyId)).reminder).toBeNull();
+  });
+
+  it("reads the department of the party's first table, and the next one's once the first is left", async () => {
+    const v = await setupVenue();
+    const a = await servedUpToGroupTwo(v);
+    const zoneB = await otherDepartment(v, 5);
+    const second = await inTx(async (tx) => {
+      const { id } = await createTable(tx, v.cfg, {
+        label: `C-${randomUUID().slice(0, 6)}`,
+        zoneId: v.zoneId,
+      });
+      await tx.update(diningTables).set({ zoneId: zoneB }).where(eq(diningTables.id, id));
+      const [first] = await tx
+        .select({ joinedAt: partyTables.joinedAt })
+        .from(partyTables)
+        .where(eq(partyTables.partyId, a.partyId));
+      const later = new Date(Date.parse(first!.joinedAt) + 60_000).toISOString();
+      await tx.insert(partyTables).values({ partyId: a.partyId, tableId: id, joinedAt: later });
+      return id;
+    });
+
+    expect(await floorReminder(v, a.tableId)).toEqual({ groupId: a.g3.id, dueAt: T(15) });
+    expect((await currentOrders(a.partyId)).reminder).toEqual({ groupId: a.g3.id, dueAt: T(15) });
+
+    await inTx((tx) =>
+      tx
+        .update(partyTables)
+        .set({ leftAt: new Date().toISOString() })
+        .where(and(eq(partyTables.partyId, a.partyId), eq(partyTables.tableId, a.tableId))),
+    );
+
+    expect(await floorReminder(v, second)).toEqual({ groupId: a.g3.id, dueAt: T(10) });
+    expect((await currentOrders(a.partyId)).reminder).toEqual({ groupId: a.g3.id, dueAt: T(10) });
+  });
+
+  it("shows no reminder for a party whose table's zone has no department", async () => {
+    const v = await setupVenue();
+    const s = await servedUpToGroupTwo(v);
+    await inTx(async (tx) => {
+      await setReleaseReminderInEveryDepartment(tx, 10);
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: v.cfg.locationId, name: `Bare ${randomUUID()}` })
+        .returning({ id: floorZones.id });
+      await tx.update(diningTables).set({ zoneId: zone!.id }).where(eq(diningTables.id, s.tableId));
+    });
+
+    expect(await floorReminder(v, s.tableId)).toBeNull();
+    expect((await currentOrders(s.partyId)).reminder).toBeNull();
+  });
+
+  it("asks venue-service once for the whole floor", async () => {
+    const v = await setupVenue();
+    await servedUpToGroupTwo(v);
+    await servedUpToGroupTwo(v);
+    const spy = vi.spyOn(VENUE_SERVICE, "readReleaseReminderMinutesByZone");
+    try {
+      await inTx((tx) => listTablesWithState(tx, v.cfg));
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 

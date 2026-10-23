@@ -11,7 +11,8 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setRoutingCell, writeReleaseReminderMinutes } from "@waitron/venue-service";
+import { setRoutingCell } from "@waitron/venue-service";
+import { setReleaseReminderInEveryDepartment } from "./testing/release-reminder.js";
 import { fireGroup, readCurrentOrders, readReleaseReminders } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { createStation } from "./kitchen.js";
@@ -364,7 +365,7 @@ describe("charged cancellation release completion", () => {
     async ({ served, servedAt, want }) => {
       const order = await fixture();
       const held = await inTx(venue, async (tx) => {
-        await writeReleaseReminderMinutes(tx, 10);
+        await setReleaseReminderInEveryDepartment(tx, 10);
         await tx
           .update(workingOrderLines)
           .set({ servedQuantity: served, servedAt })
@@ -390,7 +391,7 @@ describe("charged cancellation release completion", () => {
   it("uses the full cancellation time for both floor and Current orders reminders without fabricating serving", async () => {
     const order = await fixture(2, 2);
     const held = await inTx(venue, async (tx) => {
-      await writeReleaseReminderMinutes(tx, 10);
+      await setReleaseReminderInEveryDepartment(tx, 10);
       return placeGroups(tx, venue.cfg, order.partyId, {
         operatorId: venue.staffId,
         billId: order.billId,

@@ -14,12 +14,8 @@ import {
 import { adjustments } from "@waitron/adjustments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  listStationNotices,
-  setRoutingCell,
-  writePrintHeldWork,
-  writeReleaseReminderMinutes,
-} from "@waitron/venue-service";
+import { listStationNotices, setRoutingCell, writePrintHeldWork } from "@waitron/venue-service";
+import { setReleaseReminderInEveryDepartment } from "./testing/release-reminder.js";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import { createStation } from "./kitchen.js";
 import { readCurrentOrders, readReleaseReminders } from "./order-groups.js";
@@ -315,7 +311,7 @@ describe("off-bill cancellation beside charged service cancellation", () => {
             .update(workingOrderLines)
             .set({ servedAt })
             .where(eq(workingOrderLines.id, order.parent.id));
-        await writeReleaseReminderMinutes(tx, 10);
+        await setReleaseReminderInEveryDepartment(tx, 10);
         return placeGroups(tx, venue.cfg, order.partyId, {
           operatorId: venue.staffId,
           billId: order.billId,

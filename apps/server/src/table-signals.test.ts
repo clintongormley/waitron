@@ -27,7 +27,8 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { recordStepCompletions, writeReleaseReminderMinutes } from "@waitron/venue-service";
+import { recordStepCompletions } from "@waitron/venue-service";
+import { setReleaseReminderInEveryDepartment } from "./testing/release-reminder.js";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { requestBill } from "./bill-request.js";
@@ -308,7 +309,7 @@ describe("the floor's attention signals", () => {
   it("shows Mesa 2's ready drinks, its due held group and its bill request together; paying clears only the request, serving clears the drinks", async () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
-    await inTx(v, (tx) => writeReleaseReminderMinutes(tx, 10));
+    await inTx(v, (tx) => setReleaseReminderInEveryDepartment(tx, 10));
     const mesa2 = await v.table("Mesa 2");
     const { partyId, tabId } = await seat(v, mesa2);
     await order(v, tabId, "Caña", "Caña", "Caña");
@@ -545,7 +546,7 @@ describe("the floor's attention signals", () => {
 
   it("marks a table holding dishes with how many, with reminders off", async () => {
     const v = await setupPartyVenue(suite.db);
-    await inTx(v, (tx) => writeReleaseReminderMinutes(tx, null));
+    await inTx(v, (tx) => setReleaseReminderInEveryDepartment(tx, null));
     const mesa2 = await v.table("Mesa 2");
     const { partyId } = await seat(v, mesa2);
     await holdGroup(v, partyId, "Burger", "Burger", "Paella");
@@ -810,7 +811,7 @@ describe("the floor's attention signals", () => {
   it("reads every kind of fact once for the whole floor, not once per table", async () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
-    await inTx(v, (tx) => writeReleaseReminderMinutes(tx, 10));
+    await inTx(v, (tx) => setReleaseReminderInEveryDepartment(tx, 10));
     const lucia = await person(v, "Lucía");
     const seatBusyTable = async (label: string) => {
       const { partyId, tabId } = await seat(v, await v.table(label));

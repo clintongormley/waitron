@@ -8040,7 +8040,7 @@ export interface TableParty {
   unsentDrafts: UnsentDraft[];
   /**
    * The held group waiting to be released and when it is due; null with no held group, with
-   * reminders off, or once the party is no longer open.
+   * its department's reminders off, or once the party is no longer open.
    */
   reminder: ReleaseReminder | null;
 }
