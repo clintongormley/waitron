@@ -418,6 +418,7 @@ describe("archive boundary controls", () => {
       } catch (e) {
         error = e;
       }
+      expect(error).toBeInstanceOf(Error);
       expect(error?.message).toMatch(/^archive\.(format|placement):/);
       expect(error.message).not.toContain("SENTINEL");
       expect(io.placed.size).toBe(0);

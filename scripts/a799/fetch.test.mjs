@@ -302,6 +302,7 @@ describe("trusted fetch handoff", () => {
     } catch (e) {
       error = e;
     }
+    expect(error).toBeInstanceOf(Error);
     expect(error?.message).toMatch(/^fetch.credentials:/);
     expect(error?.message).not.toContain("SENTINEL-CREDENTIAL");
     expect(s.roots.every((r) => r.disposed)).toBe(true);
@@ -328,6 +329,7 @@ describe("trusted fetch handoff", () => {
       } catch (e) {
         error = e;
       }
+      expect(error).toBeInstanceOf(Error);
       expect(error?.message).toMatch(
         new RegExp(`^fetch.${where === "scope" ? "credentials" : where}:`),
       );
