@@ -118,6 +118,25 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     expect(row!.showsRestOfOrder).toBe(false);
   });
 
+  it("a station row given no printing choices groups identical dishes, prints no held work in advance and leaves MOVED slips null", async () => {
+    const id = await seedStation(LOCATION_A, "Printing defaults");
+    const [row] = await inTx((tx) =>
+      tx
+        .select({
+          ticketGrouping: kitchenStations.ticketGrouping,
+          printHeldWork: kitchenStations.printHeldWork,
+          printMovedSlips: kitchenStations.printMovedSlips,
+        })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.id, id)),
+    );
+    expect(row).toEqual({
+      ticketGrouping: "combined",
+      printHeldWork: false,
+      printMovedSlips: null,
+    });
+  });
+
   it("carries ordered timing thresholds with sane defaults (KDS order-timing alerts)", async () => {
     const id = await seedStation(LOCATION_A, "Timing station");
     const [row] = await inTx((tx) =>

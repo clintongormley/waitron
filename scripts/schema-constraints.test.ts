@@ -216,6 +216,8 @@ const EXPECTED_FOREIGN_KEYS = [
   ["order_group_events", ["actor_device_id"], "devices"],
   ["order_group_events", ["group_id"], "order_groups"],
   ["order_group_events", ["party_id"], "parties"],
+  ["order_group_hold_stations", ["group_id"], "order_groups"],
+  ["order_group_hold_stations", ["station_id"], "kitchen_stations"],
   ["order_groups", ["fired_by_device_id"], "devices"],
   ["order_groups", ["party_id"], "parties"],
   ["order_service_contexts", ["department_id"], "departments"],
