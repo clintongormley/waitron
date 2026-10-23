@@ -165,8 +165,7 @@ not inside the writers. The season-week and closed-week routes pass `assertSeaso
 `afterWrite` hook, which the writer runs after its writes; the special-day routes call
 `assertDatedClosuresInHours` after `saveSpecialDay` returns. A caller that passes no hook, or calls
 `saveSpecialDay` directly (tests and the demo seed today), is not checked, and a new route must
-pass or call the check itself. The plan counted 123 test set-ups that build zone states through the writers and
-would break under a check inside them. (A723 plan, Decision 1.)
+pass or call the check itself. (A723 plan, Decision 1.)
 
 ## Unticking a special date's "Closed all day" brings back its zone paint unchecked
 
@@ -304,18 +303,14 @@ of their own.
 save reads keep only each name's first date in the year (`readHolidayDates`,
 `packages/venue-service/src/holidays.ts`), so a repeating date saved on the second is stored with
 no holiday name, unless another holiday shares that day, and repeats on its month and day; in
-a later year a name with two dates is followed to the first of them, a rule nobody chose. No
-shipped list has one: a probe on 2026-10-13 over every province and area of
-`packages/country-es/src/data/es-2026.ts` read 729 holidays in 61 lists and found no name twice.
+a later year a name with two dates is followed to the first of them, a rule nobody chose.
 Re-check when a new year's list is added.
 
 ## A855. The till's zones read builds date formatters on every call
 
 **A855 (2026-10-18).** About 0.75 ms of each `GET /api/zones` goes on `new Intl.DateTimeFormat`
 inside `serviceMomentAt` and `serviceDayContext` (`packages/venue-service`), through the
-business-day helpers in `@waitron/reporting` and `@waitron/shared`. A504 took the read's median from
-1.436 to 3.004 ms on one bench. Both figures were measured before the finish review made the
-read take the clock and the day once (median about 3.1 to 2.0 ms on another bench); re-measure
+business-day helpers in `@waitron/reporting` and `@waitron/shared`. Re-measure
 before acting. Next: keep one formatter per time zone. Left open by A504.
 
 ## Loose ends left by A788
@@ -324,38 +319,56 @@ Found while building A788 (the business-day start changes at the next changeover
 says it was run, it comes from a per-task review recorded in the build's ledger and was read in the
 code, not run again here.
 
+- **A862.** Two Calendar reads draw a past day's range uncut where the Calendar cuts it: the
+  special-day painter's season days (`readSeasonDays`,
+  `packages/venue-service/src/opening-hours-calendar.ts`, passes no cut) and the named days'
+  closed flag (`packages/venue-service/src/named-days.ts`).
+- **A863.** A clash sentence names a range by its period, zone or department and its times only
+  (`clockChangeConflictText`, `packages/venue-service/src/dashboard/clock-change-conflict.ts`), so
+  a range in another department or on another weekday reads as if it were the one being edited.
 - **A864, the clash list.** `businessDayClockConflicts`
   (`packages/venue-service/src/business-day-schedule.ts`) keeps the first 20 distinct ranges with
   the season set aside, then returns every conflict row for those ranges, one per season the range
   is painted in; `conflictCount` counts distinct ranges. The dialog shows each row as its own line
   and adds what was counted beyond the list to the count (`#conflictLines`,
-  `apps/dashboard/src/screens/business-day-start-editor.ts`), with no "and N more" line. On the demo
-  venue a 21:00 start listed 91 lines under a count of 105 (A788's look check, Task 15). The cap
-  predates A788 (`git blame`: 061240c87, A506-2, 2026-10-12). The A506-3 loose end about the dialog
-  repeating the server's counting rule is the same seam.
+  `apps/dashboard/src/screens/business-day-start-editor.ts`), with no "and N more" line.
+  The A506-3 loose end about the dialog repeating the server's counting rule is the same seam.
 - **A865, the clash order.** One implementer saw the order between departments vary from run to
   run, and a review traced the order of one special day's dates to their random row ids.
+  Reported by A788's implementers, not reproduced since.
+- **A866.** A keep-open saved for tonight by a deactivated department still blocks a start change
+  (`keptOpenConflicts`, `packages/venue-service/src/business-day-schedule.ts`, reads every
+  department).
 - **A867, a crossing range hides an overlap.** A range that fails on its own is listed as crossing
   the new start; the day's other ranges are marked overlapping only when no range fails on its own
   (`overlapping` in `businessDayClockConflicts`). A review's probe: 13:00–16:00, 15:00–17:00 and
-  22:00–04:30 moving 05:00 → 03:00 lists only 22:00–04:30.
+  22:00–04:30 moving 05:00 → 03:00 lists only 22:00–04:30. No test pins either half.
+- **A868.** Renaming a special day is refused while any stored range clashes with a waiting start,
+  though renaming a period or a season is not (`saveSpecialDay`,
+  `packages/venue-service/src/special-days.ts`).
 - **A869, a one-off day after the change.** While 03:00 waits, a one-off special day on 2026-11-05
   with 04:00–12:00, which fits the 03:00 start that date will have, is refused
   `special_day.invalid` (reason `order`): `saveSpecialDay` parses one-off dates under the starts
   already in force (`settledClock`). Task 11 left it unchanged, per its implementer, read in the
   code.
+- **A871.** Branches no test pins in A788's hours writers: an unchanged week resubmitted beside a
+  stored clash (`menu-timetable.ts`), a season delete while a change waits (`seasons.ts`), and an
+  all-day range or two waiting changes in the menu-week check.
 - **A872, repeated work.** A preview or a Save (`apps/server/src/business-day-start.ts`) works the
   plan out with `planBusinessDayStart`, and `clockTransitionAt`
   (`apps/server/src/business-day-changeover.ts`) works it out again, then once more for each of up
   to 20 moments when it looks for when a Save refused across a clocks change can be made.
+- **A873.** A refused Save's message in the Business-day start dialog stops "The business-day clock
+  changed. Close and reopen to review it." from appearing when the clock then changes
+  (`business-day-start-editor.ts`, the guard in `willUpdate`).
+- **A874.** The Business day card re-reads at a waiting change's moment by the browser's clock, and
+  once more if that answer still shows the change waiting; a server clock still behind at the
+  second answer leaves the New start row up until the next refresh.
 - **A876, a long day under a special day's paint.** On a day a start change makes longer than 24
   hours, a season range past the 24th hour is cut at it when any special day is painted on that
   date, and kept whole when none is: `cutSeason` (`packages/venue-service/src/day-resolver.ts`)
   caps the day at 1440 minutes for the paint layer, which works on one 1440-minute day. Found by
-  A788's finish review, which ran it: 03:00 changing back to 05:00 on 2026-10-28, a 22:00–04:30
-  dinner on 2026-10-27 drew as 22:00–03:00 beside an unrelated special-day lunch. The test
-  "cuts a longer-than-24-hour special day's season at its own changeover, so the paint keeps it"
-  (`day-resolver.test.ts`) pins the cut. Next: teach the paint layer a day longer than 1440
+  A788's finish review, which ran it. Next: teach the paint layer a day longer than 1440
   minutes, or decide the cut is the intended drawing.
 - **A877, one answer for "settled or waiting".** A788's finish review (read only) found the
   question "which start changes have taken effect at this moment, and which still wait" answered
@@ -365,6 +378,140 @@ code, not run again here.
   `assertWaitingChangeFits` by hand, and `assertWaitingChangeFits` re-reads the venue's hours once
   per waiting change. Next: one browser-safe helper in `@waitron/shared` beside `businessDayAt`
   that every caller uses, and a write gate that runs the waiting-start check itself.
+
+## A897. Sales by department
+
+**A897. Sales by department** (left open by #297; found by A825). Each sale stores one
+department, which cannot be changed afterwards (`sale_receipt_headers`,
+`packages/venue-service/src/schema/service.ts`), but a sold line stores none (`sale_lines`,
+`packages/db/src/schema/sales.ts`), and no report groups sales by department
+(`packages/reporting/src`). Decide whether a bill that mixes departments needs a department on
+each sold line, then add a department breakdown to the sales screen, showing sales with no
+department as "Unallocated" rather than guessing a split.
+
+## Cosmetic points from A722 Part 3's look, #1834:
+
+**Cosmetic points from A722 Part 3's look, #1834:** the Spanish phone Month breaks "Sin
+pedidos" mid-word (`.no-orders` in `opening-hours-month.ts` still allows a break anywhere; a
+day's name breaks only between its words since A784); at 320 px a 45-letter station name scrolls
+Show's open list sideways (the page does not widen); a station's Month has no key naming which
+bar is which department (hover shows it; the All departments Month has none either).
+
+## A789 — last orders without an offset: a period is when its menu can be ordered
+
+**A789 — last orders without an offset: a period is when its menu can be ordered** — APPROVED
+2026-10-18 (Q39: all recommended; whether a late send needs a manager's PIN is a setting, off by
+default); building — slice 1 (the end offset retired) landed in #1948; slices 2–4 next, plan
+[2026-10-21-a789-last-orders](../superpowers/plans/2026-10-21-a789-last-orders.md);
+[design](../superpowers/specs/2026-10-18-a789-last-orders-design.md), pictures in
+[mockups/a789-last-orders/](mockups/a789-last-orders/). The period end offset
+and the period "Keep open" go (the zone one stays); a dish taken during a period and sent after it
+ends opens a window asking the waiter to check with the kitchen, and once confirmed it is sent and
+marked on the kitchen ticket. Four slices; A773-1 has landed (#1897); the till slice is built in its
+editor.
+
+## Loose ends left by A577 (#1702).
+
+**Loose ends left by A577 (#1702).**
+
+- The Opening hours Year page does not show the warning that two special days share a date; only
+  the Departments screen's readiness list does.
+- Between two special-day dates that both stand on their own terms, the earlier STORED date
+  wins: a yearly "Feria" saved on 26 March 2026 beats a one-off "Cena de empresa" on 26 March
+  2027, though a person may expect the one-off to win (`standingInYear`,
+  `packages/venue-service/src/repeat-rules.ts`). Saving refuses such a pair, so it arises only
+  from rows written another way.
+
+## Loose ends left by A720.
+
+**Loose ends left by A720.**
+
+- Look at a picked, focused today in the Month. `--wt-focus-offset` and
+  `--wt-field-line-width-active` are both 2px (`packages/ui-core/src/tokens/structure.css`), so
+  on today, picked and focused, the focus ring covers the outer half of the wider picked ring
+  (`opening-hours-month.ts`). A720 Part 4's LOOK shot focus only on other days; check in both
+  themes that this combination reads well.
+- The day box should re-place itself when its content changes. `calendar-day-box` measures its
+  content only in `show()` and on a scroll or resize, so each host (Opening hours'
+  `placeDayBox`, Staffing's month) must wait for every pending redraw first; A720 Part 5's first
+  version placed it one redraw early, off screen. Have the box re-place itself while open
+  whenever its own content changes.
+- An ignored `to` stays in the address bar. A special-day address whose `to` is earlier than its
+  date, malformed, or more than 365 days after it opens the new day on its first date alone
+  (`HOURS_RANGE_MAX_DAYS`, `opening-hours-screen.ts`), but the address still shows the `to`.
+- Try the Calendar's long press on a real phone. The long press that opens the special-day
+  editor, and the long press then drag that picks a run (`day-picking.ts`), were checked only
+  under headless Chromium's touch emulation. Check on an Android and an iOS phone that the page
+  stops scrolling, no number is selected, and no click or menu follows the lift.
+- Move the pointer-gesture commands' type declarations into `packages/ui`. They live in
+  `packages/venue-service/src/dashboard/pointer-gestures.d.ts`, beside their one user; the commands
+  themselves are in `packages/ui/src/vitest-pointer-gestures.ts`. Move them when a second package
+  uses the commands.
+
+## Loose ends left by A755 (#1809).
+
+**Loose ends left by A755 (#1809).**
+
+- The Venue card says nothing about a time zone locked by a past business-day change. The server
+  gives the reason `business_day_history` (`apps/server/src/venue-details.ts`); `REASONS` in
+  `apps/dashboard/src/screens/venue-details-panel.ts` has no sentence for it.
+- A896. The Venue details panel's Venue card keeps an open draft's unsaved-changes protection
+  when it turns read-only. Measured 2026-10-19 with a throwaway case in
+  `venue-details-panel.unsaved.test.ts`: after a Venue-card field change, setting `readOnly`
+  hid the form and the Edit button, a `beforeunload` event was still cancelled (the browser's
+  leave-page warning), and a request to navigate elsewhere in the dashboard had still not been
+  answered a second later; nothing was saved. The Defaults card drops its draft when it turns
+  read-only (`willUpdate` in `venue-defaults-panel.ts`). Left open by A824.
+
+[Mockups](mockups/a755-venue-settings/)
+
+## A per-field department policy repair changes the trading-name default.
+
+**A per-field department policy repair changes the trading-name default.** With no policy row,
+readers show the trading name off; PATCH of `orderStart` inserts a row with it on. Left open by A493's review;
+align `setDepartmentSalePolicyField` repair defaults with the existing readers, with a failing
+authenticated route case first. The combined department editor preserves the off fallback.
+
+## At 390 px the Seasons window's month picker runs off the right edge.
+
+**At 390 px the Seasons window's month picker runs off the right edge.** Seen on the demo venue
+on 2026-10-18 by A783's look: each row's month select, and the required star on "Starts on", fall
+past the right edge (`seasons-window-{light,dark}-390[-es].png` in
+`~/waitron-campaign-b/a783-shots/`; `packages/venue-service/src/dashboard/seasons-window.ts`).
+Left open by A783.
+
+## At phone width the Seasons window cuts longer colour names
+
+**At phone width the Seasons window cuts longer colour names** ("Oran…", "Turq…"; at 390 px on
+2026-10-18, Magenta and Orange in English, and Magenta, Amarillo, Naranja and Celeste in Spanish): while the table is
+narrower than 480 px, each row's colour button is capped at 120 px so the start date stays clear of the pinned bin column
+(`seasons-window.ts`, #1843). 1280 px is unchanged. Owner's call whether the cut is acceptable or the
+row should stack on a phone. Left open by A721.
+
+## A season reads two shades of its colour
+
+**A season reads two shades of its colour**: the Seasons window's colour chooser paints the solid
+palette colour (Winter `rgb(47, 85, 212)`), while the season chips, the Year's days and a viewer's
+swatches paint the paler station tint (`rgb(220, 230, 251)`); a period shows one solid colour
+everywhere. It follows from A721's Decision 10 (seasons take the station tints) meeting the shared
+`wt-colour-chooser`. Owner's call: keep, or have the chooser show the tint for seasons. Measured in
+A721's LOOK, 2026-10-18 (#1843). Left open by A721.
+
+## Loose ends left by A506-4 (#1597).
+
+**Loose ends left by A506-4 (#1597).**
+
+- A special-day line in the Business day start dialog shows its date unformatted ("2026-11-03").
+- `assertOwnPeriods` names a refused slot by its sorted position, not its position in the request
+  (`packages/venue-service/src/menu-timetable.ts`; read in the code, not run).
+- The clock-skip check runs before touching ranges are joined: two halves of one period meeting
+  at a skipped 02:30 are refused, while the joined range is accepted.
+- The special-day-then-season rule is written out in several places, and special-day paint is
+  read by separately written queries; each could collapse to one place.
+  [Detail](#the-special-day-then-season-rule-is-written-out-in-several-places)
+- `business-day-schedule.ts` copies the changeover lookup of
+  `packages/shared/src/business-day-clock.ts` (`oldCutoverOn`) to avoid validating the clock on
+  every day; a lookup exported from `shared` that validates once would remove the copy.
 
 ## Decisions and deliberate limits
 
