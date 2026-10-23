@@ -476,7 +476,8 @@ describe("selected-hour admission before archive placement", () => {
           ? { ...credentials, artifact: f.restore.artifact, recoveryKey: "archive password" }
           : { ...credentials, kind: "stream", databasePath: f.database, entries: f.entries },
       );
-      const internetModule = `export async function observeInternetHourClock() {
+      const internetModule = `export async function authenticatedHourHead() { throw new Error("this test makes no network request"); }
+      export async function observeInternetHourClock() {
         return { source: "internet", result: "usable", instantMs: Date.now(), uncertaintyMs: 0,
           wallStartedMs: Date.now(), wallFinishedMs: Date.now(),
           monotonicStartedMs: performance.now(), monotonicFinishedMs: performance.now() };
