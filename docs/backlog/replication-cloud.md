@@ -504,6 +504,13 @@ for Lane G review. Shared parser acceptance, upstream authentication and the sep
 diagnostic/privacy artifacts remain open. The proposal supplies no running parser
 or customer route. Record accepted bytes and both consumer pins before coding it.
 
+The [appliance v1 proposal](../superpowers/specs/2026-10-23-a951-appliance-v1-proposal.md)
+returns G1/T1's authenticated bytes, trust, independent counters and establishment/
+recovery boundary for Lane G review. Its publication is not acceptance. Record
+its accepted version/digest, both full consumer revisions and permitted scope
+before codec or affected state adapters; the helper/routing proposals and all
+other scoped gates remain separate.
+
 D88's answered recovery choice stays cold recovery when needed. A947 owns writer,
 fencing, promotion, clocks and fiscal identity; the tunnel, certificate or control
 lease grants none of that authority. Production staff issuance/replacement, runtime,

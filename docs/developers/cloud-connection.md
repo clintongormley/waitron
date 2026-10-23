@@ -421,6 +421,20 @@ G4 must separately agree the upstream peer authentication and context mapping.
 The G6/T13 diagnostic schema and A980/D101 processing acceptance remain open;
 this routing proposal settles neither. No customer product or service is enabled.
 
+### Appliance proposal for Lane G review
+
+The [appliance v1 proposal](../superpowers/specs/2026-10-23-a951-appliance-v1-proposal.md)
+returns G1/T1's authenticated messages, trust, counter and recovery boundary.
+Its concrete formats and limits are proposed engineering choices. Lane E and
+Lane G must record acceptance, the exact artifact digest, both full consumer
+revisions and allowed scope before the affected codec or state adapter starts.
+The helper and routing proposals remain separate, unaccepted artifacts.
+
+Keep actual A947 authority, staff-v1 policy, public-upstream trust, moves,
+diagnostic/privacy and runtime qualification as their scoped gates. Publication
+of this proposal supplies no recovery permission, writer activation or real
+remote admission. It requires no repeat owner build question.
+
 ### Earlier source inventory
 
 The document digests below retain the initial inspection at Cloud
