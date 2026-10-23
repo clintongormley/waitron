@@ -1488,15 +1488,7 @@ describe("the edit-sent-lines setting", () => {
     expect(await inTx((tx) => readEditSentLines(tx))).toBe(false);
     await inTx((tx) => writeEditSentLines(tx, true));
     expect(await inTx((tx) => readEditSentLines(tx))).toBe(true);
-    expect(await db.select().from(serviceSettings)).toEqual([
-      {
-        id: 1,
-        editSentLines: true,
-        kitchenTicketGrouping: "combined",
-        printHeldWork: false,
-        printMovedSlips: true,
-      },
-    ]);
+    expect(await db.select().from(serviceSettings)).toEqual([{ id: 1, editSentLines: true }]);
     // Raw SQL, so the stored value is read without the column's boolean mapping.
     await db.execute(sql`update service_settings set edit_sent_lines = 0`);
     expect(await inTx((tx) => readEditSentLines(tx))).toBe(false);
