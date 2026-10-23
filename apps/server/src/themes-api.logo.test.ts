@@ -442,7 +442,7 @@ describe("refusals", () => {
     expect(again!.id).not.toBe(first.image.id);
     expect(again!.revision).toBe(first.image.revision);
     expect(res.status).toBe(409);
-    expect(await res.json()).toEqual(refusal("image.changed", { imageId: first.image.id }));
+    expect(await res.json()).toEqual(refusal("image.changed", { imageId: again!.id }));
     expect(await themeRows()).toEqual(before);
   });
 });

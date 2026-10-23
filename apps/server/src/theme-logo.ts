@@ -73,7 +73,7 @@ export async function recheckThemeLogo(
   const light = found[logo.light];
   if (light === undefined) throw notFound("light");
   if (light.id !== snapshot.imageId || light.revision !== snapshot.revision) {
-    throw new AppError("image.changed", { imageId: snapshot.imageId });
+    throw new AppError("image.changed", { imageId: light.id });
   }
   if (logo.dark !== undefined && found[logo.dark] === undefined) throw notFound("dark");
 }
