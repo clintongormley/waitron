@@ -65,6 +65,38 @@ describe("withDestinationCall", () => {
     expect(parent.listeners()).toBe(0);
   });
 
+  it("keeps a later destination live while an earlier one times out and settles", async () => {
+    vi.useFakeTimers({ now: 0 });
+    const parent = countedParent();
+    const settled = { at: null as number | null };
+    let firstSignal: AbortSignal | undefined;
+    const first = withDestinationCall(parent.controller.signal, 100, (call) => {
+      firstSignal = call.signal;
+      return slowToStop(50, settled)(call);
+    }).catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(50);
+    let laterSignal: AbortSignal | undefined;
+    const later = withDestinationCall(parent.controller.signal, 100, (call) => {
+      laterSignal = call.signal;
+      return new Promise<string>((resolve) => setTimeout(() => resolve("stored"), 80));
+    });
+    await vi.advanceTimersByTimeAsync(50);
+    expect(settled.at).toBeNull();
+    expect(firstSignal?.aborted).toBe(true);
+    expect(laterSignal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(30);
+    expect(await later).toBe("stored");
+    expect(laterSignal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(20);
+    expect(await first).toMatchObject({
+      code: "backup.destination_timed_out",
+      params: { timeoutMs: 100 },
+    });
+    expect(settled.at).toBe(150);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(parent.listeners()).toBe(0);
+  });
+
   it("answers the work's value when it resolves after the time limit fired", async () => {
     vi.useFakeTimers({ now: 0 });
     const outcome = withDestinationCall(
