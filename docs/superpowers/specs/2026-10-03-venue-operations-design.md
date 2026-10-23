@@ -329,7 +329,9 @@ goes to** (the default station reads "Never closes").
   - changing a venue default that would put some station out of order is refused, and the message
     names the station.
   The database's check on the three columns cannot see the venue default, so it is replaced by
-  these two checks in code; the error codes follow the existing `station.*` codes.
+  these two checks in code; the error codes follow the existing `station.*` codes. (2026-10-23,
+  A756 PR 5: there is no venue default; a station's save is checked against its own stored
+  minutes, and the database's order check on the station's three columns stays.)
 
 ## 7. Hours
 
@@ -422,7 +424,7 @@ Each step is one queue item, with its own plan.
 2. **Departments and zones.** The table (§4), A254 §3's separate settings, the trading name on the
    receipt with the Preview link (§5), and the receipt print mode per department and zone.
 3. **Prep stations tabs.** Stations with the live numbers, Tickets, Watchers and Settings, with the
-   late-flag defaults. The Routing tab holds today's routing screen unchanged until step 4.
+   late-flag defaults (2026-10-23, A756 PR 5: gone, each station holds its own). The Routing tab holds today's routing screen unchanged until step 4.
 4. **The routing grid** (§6.2).
 5. **Hours** (§7): the week grid, special dates and the calendar.
 6. **Public holidays** (§7.1).

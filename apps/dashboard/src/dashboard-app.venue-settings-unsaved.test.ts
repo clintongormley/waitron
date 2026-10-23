@@ -514,7 +514,7 @@ it("the Receipts tab's Cancel protects the appearance before closing", async () 
     await expect.poll(() => dialog.open).toBe(decision === "keep");
     if (decision === "keep") expect(input.value).toBe("Edited heading");
   }
-  expect(input.isConnected).toBe(false);
+  await expect.poll(() => input.isConnected).toBe(false);
   expect(leaveCoordinatorFor(app.shadowRoot!.querySelector("wt-unsaved-changes")!)!.isDirty()).toBe(
     false,
   );
