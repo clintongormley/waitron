@@ -481,6 +481,13 @@ metadata fields, purpose, access, location, bounds and retention for the affecte
 flow, including staff transport metadata. Keep bodies, credentials and QR/session
 secrets out of shared diagnostics and shared private-state caches.
 
+The [versioned local-helper proposal](../superpowers/specs/2026-10-23-a951-local-helper-v1-proposal.md)
+now gives Lane G a concrete G1/T3 boundary to accept or amend. It proposes local
+framing, resource ownership, network scope and expiry/removal observations. It is
+unaccepted and unimplemented; the separate appliance, routing, authority and
+runtime agreements remain open. Record the accepted digest and both consumer pins
+before helper code starts.
+
 D88's answered recovery choice stays cold recovery when needed. A947 owns writer,
 fencing, promotion, clocks and fiscal identity; the tunnel, certificate or control
 lease grants none of that authority. Production staff issuance/replacement, runtime,

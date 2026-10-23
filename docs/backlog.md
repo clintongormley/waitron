@@ -5163,9 +5163,9 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   integration (2026-09-24; #638, #808).
 
 - **A951. The box's lasting tunnel and public-certificate client.** The complete plan and all five
-  build cuts are owner-approved. Cloud’s published Cut A review requires amendments; appliance,
-  helper and shared parser artifacts remain unaccepted. Resolve those artifacts with Lane G
-  before affected adapters; runtime and provider qualification follow.
+  build cuts are owner-approved. The [local-helper proposal](superpowers/specs/2026-10-23-a951-local-helper-v1-proposal.md)
+  awaits Lane G review; appliance, helper and shared parser artifacts remain unaccepted.
+  Resolve those artifacts before affected adapters; runtime and provider qualification follow.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
 - **Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side

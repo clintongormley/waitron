@@ -394,6 +394,20 @@ published review is a response to the request, not acceptance of those artifacts
 No repeat owner build question is needed. Keep A947's actual authority interface,
 the revised A1018 handover and D88 cold recovery as their separate dependencies.
 
+### Local helper proposal for Lane G review
+
+The [local-helper v1 proposal](../superpowers/specs/2026-10-23-a951-local-helper-v1-proposal.md)
+returns the G1/T3 process and network boundary requested by Cloud. Lane E owns this
+proposal; Lane G must accept or amend it in the canonical contract. Its proposed
+bounds and wire examples are review material, not runtime defaults or observed
+host behaviour. No helper implementation or real admission is supplied here.
+
+Keep the helper agreement separate from the G1 appliance authentication and
+recovery artifact, G2 current authority, G4 public-upstream trust, G5 moves and
+G6 routing/diagnostics. Before affected code, record the accepted version/digest,
+both consumer revisions and allowed scope in both repositories. The proposal's
+publication hash identifies the review material; it is not an acceptance digest.
+
 ### Earlier source inventory
 
 The document digests below retain the initial inspection at Cloud
