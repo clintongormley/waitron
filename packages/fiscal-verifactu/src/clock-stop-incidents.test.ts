@@ -95,9 +95,17 @@ function press(
   );
 }
 
+// When the disproof is noticed: later than any trusted time the cases use, so a case can tell the
+// two apart.
+const OBSERVED = T + 5 * H;
+
 function disprove(trustedUntil: number) {
   return withTransaction(suite.db, (tx) =>
-    noteClockProvedWrong(tx, { trustedUntil: new Date(trustedUntil), reason: "jump" }),
+    noteClockProvedWrong(tx, {
+      trustedUntil: new Date(trustedUntil),
+      observedAt: new Date(OBSERVED),
+      reason: "jump",
+    }),
   );
 }
 
@@ -194,7 +202,7 @@ describe("a restarted clock proved wrong", () => {
       restarts: count("clock_stop_restarts"),
     };
     const answer = await disprove(R + 2 * M);
-    expect(answer).toEqual({ recorded: [restartId], unused: [] });
+    expect(answer).toEqual({ recorded: [restartId], unused: [], held: [] });
     expect(incidents(DISPROVED)).toEqual([
       {
         source: "fiscal_filing",
@@ -203,7 +211,7 @@ describe("a restarted clock proved wrong", () => {
         code: DISPROVED,
         params: { restartId, from: iso(R + 2 * S), to: iso(R + 90 * S) },
         severity: "error",
-        detectedAt: iso(R + 2 * M),
+        detectedAt: iso(OBSERVED),
       },
     ]);
     expect(count("registros_facturacion")).toBe(before.registros);
@@ -213,9 +221,9 @@ describe("a restarted clock proved wrong", () => {
   it("records no second alert for the same restart, even once the first is handled", async () => {
     await restartWithThreeSales();
     await disprove(R + 2 * M);
-    expect(await disprove(R + 3 * M)).toEqual({ recorded: [], unused: [] });
+    expect(await disprove(R + 3 * M)).toEqual({ recorded: [], unused: [], held: [] });
     suite.db.run(sql`update incidents set acknowledged_at = ${iso(T)} where code = ${DISPROVED}`);
-    expect(await disprove(R + 3 * M)).toEqual({ recorded: [], unused: [] });
+    expect(await disprove(R + 3 * M)).toEqual({ recorded: [], unused: [], held: [] });
     expect(incidents(DISPROVED)).toHaveLength(1);
   });
 
@@ -235,7 +243,7 @@ describe("a restarted clock proved wrong", () => {
     await sale(T);
     const { restart } = await press(R, twoDevices(R));
     const before = count("incidents");
-    expect(await disprove(R + M)).toEqual({ recorded: [], unused: [restart.id] });
+    expect(await disprove(R + M)).toEqual({ recorded: [], unused: [restart.id], held: [] });
     expect(count("incidents")).toBe(before);
   });
 });
@@ -277,14 +285,14 @@ describe("a restart whose disproof cannot be told apart", () => {
     // Covers nothing, so the record after it is at a forward clock.
     await sale(T + M);
     const before = count("incidents");
-    expect(await disprove(R + 2 * M)).toEqual({ recorded: [], unused: [restartId] });
+    expect(await disprove(R + 2 * M)).toEqual({ recorded: [], unused: [restartId], held: [] });
     expect(count("incidents")).toBe(before);
   });
 
-  it("records nothing while another open disproof holds the named record's sale", async () => {
+  it("answers the restart held while another open disproof holds the named record's sale", async () => {
     await sale(T);
     const { saleId } = latest();
-    await press(R, twoDevices(R));
+    const { restart } = await press(R, twoDevices(R));
     await sale(R + M);
     await withTransaction(suite.db, (tx) =>
       recordIncident(tx, {
@@ -295,7 +303,7 @@ describe("a restart whose disproof cannot be told apart", () => {
         detectedAt: new Date(R),
       }),
     );
-    expect(await disprove(R + 2 * M)).toEqual({ recorded: [], unused: [] });
+    expect(await disprove(R + 2 * M)).toEqual({ recorded: [], unused: [], held: [restart.id] });
     expect(incidents(DISPROVED)).toHaveLength(1);
   });
 });
@@ -349,6 +357,7 @@ describe("two restarts of two records", () => {
     const answer = await disprove(T - H);
     expect([...answer.recorded].sort()).toEqual([first.restart.id, second.restart.id].sort());
     expect(answer.unused).toEqual([]);
+    expect(answer.held).toEqual([]);
     const rows = incidents(DISPROVED).map((row) => [row.saleId, row.params]);
     expect(rows).toEqual(
       expect.arrayContaining([

@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, asc, desc, eq, gt, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gt, lte, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { recordIncident, recordIncidentOnce } from "@waitron/core";
 import { incidents } from "@waitron/db";
@@ -52,48 +52,46 @@ function total(heads: Map<string, number>): number {
 }
 
 /** The earliest and latest generation times among the records past `heads` and at or before
- * `bound`, any chain; a node either map leaves out counts from 0. Null when there are none. */
+ * `bound`, on the chains `current` names; a node either map leaves out counts from 0. Null when
+ * there are none. */
 async function timesWrittenBetween(
   tx: Transaction,
+  current: readonly string[],
   heads: Map<string, number>,
   bound: Map<string, number> | null,
 ): Promise<{ from: Date; to: Date } | null> {
-  let from: Date | null = null;
-  let to: Date | null = null;
-  for (const node of Object.keys(await chainHeads(tx))) {
+  let from = Infinity;
+  let to = -Infinity;
+  const at = registrosFacturacion.fechaHoraHusoGenRegistro;
+  for (const node of current) {
     const conditions: SQL[] = [
       eq(registrosFacturacion.nodeId, node as NodeId),
       gt(registrosFacturacion.secuencia, heads.get(node) ?? 0),
     ];
     if (bound !== null) conditions.push(lte(registrosFacturacion.secuencia, bound.get(node) ?? 0));
-    const at = registrosFacturacion.fechaHoraHusoGenRegistro;
-    const [earliest] = await tx
-      .select({ at })
+    // Compared as stored text, as the stop's own `orderBy` on this column does.
+    const [span] = await tx
+      .select({ earliest: sql<string | null>`min(${at})`, latest: sql<string | null>`max(${at})` })
       .from(registrosFacturacion)
-      .where(and(...conditions))
-      .orderBy(asc(at), asc(registrosFacturacion.id))
-      .limit(1);
-    if (earliest === undefined) continue;
-    const [latest] = await tx
-      .select({ at })
-      .from(registrosFacturacion)
-      .where(and(...conditions))
-      .orderBy(desc(at), desc(registrosFacturacion.id))
-      .limit(1);
-    if (from === null || earliest.at.getTime() < from.getTime()) from = earliest.at;
-    if (to === null || latest!.at.getTime() > to.getTime()) to = latest!.at;
+      .where(and(...conditions));
+    // An aggregate answers one row, and both ends are null together when no record matches.
+    if (span!.earliest === null) continue;
+    from = Math.min(from, Date.parse(span!.earliest));
+    to = Math.max(to, Date.parse(span!.latest!));
   }
-  return from === null ? null : { from, to: to! };
+  return from === Infinity ? null : { from: new Date(from), to: new Date(to) };
 }
 
 /** For each restart in force at `trustedUntil` (`restarted_at ≤ trustedUntil < record_at`) with
  * no disproof alert yet, handled or not, records one naming the times written under it. A record
  * written after a later restart's stored heads belongs to that restart. A restart with no record
- * under it gets no alert and is answered in `unused`. */
+ * under it gets no alert and is answered in `unused`; one whose alert another open incident on the
+ * same sale keeps out is answered in `held`. Each alert is dated `observedAt`, when the disproof
+ * was noticed, never by the clock it disproves. */
 export async function recordDisproofs(
   tx: Transaction,
-  trustedUntil: Date,
-): Promise<{ recorded: string[]; unused: string[] }> {
+  input: { trustedUntil: Date; observedAt: Date },
+): Promise<{ recorded: string[]; unused: string[]; held: string[] }> {
   const rows = await tx
     .select({
       id: clockStopRestarts.id,
@@ -118,9 +116,11 @@ export async function recordDisproofs(
         .where(eq(incidents.code, "clock.behind_chain_disproved"))
     ).map((row) => row.restartId),
   );
-  const at = trustedUntil.getTime();
+  const current = Object.keys(await chainHeads(tx));
+  const at = input.trustedUntil.getTime();
   const recorded: string[] = [];
   const unused: string[] = [];
+  const held: string[] = [];
   for (const restart of withHeads) {
     // Negated so that an unreadable stored time (NaN) is never in force.
     if (!(restart.restartedAt.getTime() <= at && at < restart.recordAt.getTime())) continue;
@@ -132,7 +132,7 @@ export async function recordDisproofs(
     }
     const own = total(heads);
     const next = byTotal.find((other) => other.sum > own)?.heads ?? null;
-    const times = await timesWrittenBetween(tx, heads, next);
+    const times = await timesWrittenBetween(tx, current, heads, next);
     if (times === null) {
       unused.push(restart.id);
       continue;
@@ -146,9 +146,9 @@ export async function recordDisproofs(
         to: times.to.toISOString(),
       }),
       severity: "error",
-      detectedAt: trustedUntil,
+      detectedAt: input.observedAt,
     });
-    if (inserted) recorded.push(restart.id);
+    (inserted ? recorded : held).push(restart.id);
   }
-  return { recorded, unused };
+  return { recorded, unused, held };
 }

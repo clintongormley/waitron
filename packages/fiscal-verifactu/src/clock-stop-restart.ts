@@ -273,12 +273,13 @@ export async function restartAfterClockStop(
   return { restart, replayed: false };
 }
 
-/** The clock was proved wrong after `trustedUntil`: by a jump, or by AEAT disagreeing. Records one
- * `clock.behind_chain_disproved` for each restart then in force that has none yet; `recorded` and
- * `unused` (no record written under it) list restart ids. */
+/** The clock was proved wrong after `trustedUntil`: by a jump, or by AEAT disagreeing, noticed at
+ * `observedAt`. Records one `clock.behind_chain_disproved` for each restart then in force that has
+ * none yet; `recorded`, `unused` (no record written under it) and `held` (another open incident
+ * holds its sale) list restart ids. */
 export async function noteClockProvedWrong(
   tx: Transaction,
-  input: { trustedUntil: Date; reason: "jump" | "authority" },
-): Promise<{ recorded: string[]; unused: string[] }> {
-  return recordDisproofs(tx, input.trustedUntil);
+  input: { trustedUntil: Date; observedAt: Date; reason: "jump" | "authority" },
+): Promise<{ recorded: string[]; unused: string[]; held: string[] }> {
+  return recordDisproofs(tx, input);
 }
