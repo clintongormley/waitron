@@ -429,12 +429,12 @@ and cloud operations. See [documentation ownership](../cloud-ownership.md).
 
 ## A951. The box's lasting tunnel and public-certificate client
 
-The owner approved the complete revised design for preparing its implementation
-plan only on 2026-10-22 (“Yes to both”, watcher relay about 17:25). The
-[plan](../superpowers/plans/2026-10-22-a951-connection.md) is prepared for review.
-The [design](../superpowers/specs/2026-10-22-a951-box-public-access-design.md)
-records the dated approval scope above its unchanged published revision and
-historical draft. Plan approval and separate build authority remain open.
+The owner approved the complete [plan](../superpowers/plans/2026-10-22-a951-connection.md)
+and all five build cuts on 2026-10-23 (“Go ahead and build.”, watcher relay about
+06:45). The [design](../superpowers/specs/2026-10-22-a951-box-public-access-design.md)
+and plan retain their earlier approval statements beneath dated updates. Cut A's
+[build intake](../developers/cloud-connection.md#a951-build-intake) records the
+inspected contract pins and scoped acceptance still needed before affected code.
 
 The plan stages the transport foundation with an empty customer manifest, the
 existing opt-in test-only staff CSR exchange, independent customer upstream mutual

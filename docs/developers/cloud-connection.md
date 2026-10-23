@@ -336,3 +336,52 @@ Scheduled captures use `uploadCloudCaptureFile`, which streams the saved archive
 deadline capped at fourteen minutes and the temporary credentials’ expiry. Each upload call
 makes one attempt; the scheduler retries from the durable spool with backoff. It checks its
 abort signal so deliberate shutdown does not record a service outage.
+
+## A951 build intake
+
+Before you implement the lasting connection, separate the owner's build approval
+from the protocol agreement with Cloud. The owner approved the complete
+[A951 plan](../superpowers/plans/2026-10-22-a951-connection.md) and all five cuts on
+23 October 2026, answering “Go ahead and build.” (watcher relay about 06:45).
+Start with Cut A. Keep each affected adapter unstarted until its pre-code agreement
+is recorded; the plan permits isolated foundation fixtures without real admission.
+
+The Cloud source inspected for this intake is
+[`d0f89fbf105f4b15360bf21821b8b22d6fffe0d8`](https://github.com/waitron-io/waitron-cloud/tree/d0f89fbf105f4b15360bf21821b8b22d6fffe0d8).
+Its [A951 section](https://github.com/waitron-io/waitron-cloud/blob/d0f89fbf105f4b15360bf21821b8b22d6fffe0d8/docs/waitron-integration-contract.md#public-access-and-a951-proposed)
+is still labelled “PROPOSED” and states: “This is not a claim that today's gateway
+manifest is an appliance protocol.” It supplies architectural direction; the scoped
+message agreements listed below are not recorded there. The staff certificate exchange v1 has its own existing contract;
+it does not define the appliance or public-upstream exchange.
+
+| Plan gate                 | Intake status and required next agreement                                                                                                                                                                                                                                                                                                                       |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G0, owner                 | Complete plan and all cuts approved. No repeat build question is needed.                                                                                                                                                                                                                                                                                        |
+| G1, appliance and helper  | Pending named Waitron/Cloud owners, exact consumer pins and artifact digests. Agree authenticated bytes/actions, identity bindings, the three counters, certificate invalidation mapping, reports/replay and establishment/recovery. Pin helper framing, owned resources, addresses/ports, IPv4/IPv6 and expiry/removal rules before the T1 codec or T3 helper. |
+| G2, current authority     | Pending the actual A947 interface and Cloud agreement. Inspect its eventual landed source and withdrawal/freshness result before real admission. Membership, installation status and a primary-role boolean supply no substitute. Isolated authority fixtures remain permitted.                                                                                 |
+| G3, staff v1              | Reaffirm the existing opt-in, test-only exchange and response/poll/deadline/renewal limits before T7's adapter. Production issuance stays separately gated.                                                                                                                                                                                                     |
+| G4, public upstream       | Pending an independent issuer/trust, purpose, authentication, bounds, renewal/revocation and connection-closure contract before T10's adapter.                                                                                                                                                                                                                  |
+| G5, moves and replacement | Pending predecessor/phases, conditional commit/status, retirement/drain/expiry and recovery epochs before T11's adapters.                                                                                                                                                                                                                                       |
+| G6, routing and privacy   | Pending shared normalization vectors, routing context, manifest schema/digest and diagnostic bounds before cross-repository parsers or diagnostic export. A980/D101 flow acceptance precedes real metadata/traffic processing. Customer product agreements remain separate.                                                                                     |
+| G7, runtime and devices   | No runtime/device qualification is supplied by this intake. Keep real admission disabled until the applicable helper/host, executable pins, DNS/issuer and device/origin evidence is accepted.                                                                                                                                                                  |
+
+Keep timer policy explicit in synthetic fixtures. The plan's proposed ten-minute
+transport grant, one-minute attempts, 30-second drain and CSR backoff are not accepted
+runtime defaults. The existing one-hour control lease and 60-second proof window
+keep their staff-v1 meanings.
+
+Lane E owns the Waitron intake. Request Cloud's contract owner and acceptance from
+Lanes D and G in their campaign questions files. Record their reply in both sides'
+ledgers, then pin the canonical Cloud publication here with the named owners,
+consumer revisions, accepted artifact digests and scope before coding the affected
+adapter. A proposed pin or an unanswered request is not acceptance.
+
+The inspected document digests below bind this intake to source bytes. They qualify
+source inspection only, not runtime behavior. Recheck the affected section if Cloud
+publishes a replacement; retain unrelated changes and the A1018 handover revision.
+
+| Cloud document at the pin above                                     | SHA-256                                                            |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `docs/waitron-integration-contract.md`                              | `1b0f35cff8cc7a69b79d9d785fa0f6058f387f385fadec63a97c3f6f720ef4b3` |
+| `docs/product-and-platform.md`                                      | `f3ccc126d829b380d2bf31a4983406a4a15c05fc156454e8cd359ff9bbbb18ff` |
+| `docs/superpowers/specs/2026-10-22-cloud-data-protection-design.md` | `34c27c92f952b2499c140533efd9193063821348977bf8fa83003001acf459d1` |

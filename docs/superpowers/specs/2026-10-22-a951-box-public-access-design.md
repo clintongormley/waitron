@@ -1,3 +1,15 @@
+# Build authority update: 2026-10-23
+
+The owner approved the complete A951 plan and the build of all five cuts, in their
+planned order, answering “Go ahead and build.” (watcher relay about 06:45).
+The earlier planning-only statements below record the previous approval state.
+Bilateral contract acceptance, file reservations and provider/runtime gates still
+apply. Follow the [build intake](../../developers/cloud-connection.md#a951-build-intake)
+for the inspected contract pins and the affected pre-code gates. This update grants
+no provider operation, deployment or customer service switch.
+
+---
+
 # Approval update: 2026-10-22
 
 The owner approved the complete revised two-interface design **for preparing its

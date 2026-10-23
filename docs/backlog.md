@@ -5149,9 +5149,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 - **Observations are synthetic until service adapters exist.** Left open by the Cloud connection
   integration (2026-09-24; #638, #808).
 
-- **A951. The box's lasting tunnel and public-certificate client.** The owner approved the revised
-  two-interface design for planning only. Plan approval, separate build authority and pinned scoped
-  bilateral contracts remain open; runtime and provider qualification follow.
+- **A951. The box's lasting tunnel and public-certificate client.** The complete plan and all five
+  build cuts are owner-approved. Cut A starts with scoped bilateral contract acceptance; its
+  appliance/helper formats and shared routing context remain proposed. Runtime and provider
+  qualification follow.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
 - **Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side
