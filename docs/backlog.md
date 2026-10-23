@@ -3255,6 +3255,13 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   (`apps/server/src/theme-logo.ts`, `recheckThemeLogo`); `apps/server/src/department-receipt-api.ts`
   compares `revision` alone.
 
+- **A copied department receipt that names `logo` twice may split its two readers** — believed
+  from A841 slice 7's review, not run. `packages/media/src/images.ts` reads a department's logo
+  with SQLite's `json_extract`, which takes the first of two equal keys, while JavaScript takes the
+  last, and `validateReceiptFields` (`packages/venue-service/src/configuration-transfer.ts`) does
+  not look at the logo. A copied theme with a repeated key is refused
+  (`packages/layouts/src/theme-configuration.ts`); a receipt is not.
+
 - Retry spacing is the agent's batch interval rather than a per-job backoff, so a flapping printer
   burns `MAX_DELIVERY_ATTEMPTS` at loop speed — needs a next-attempt column.
 
