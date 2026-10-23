@@ -170,7 +170,10 @@ function systemClock(): TrustedClock {
 async function post(venue: Venue, path: string, body: object): Promise<Response> {
   const deps: TillApiDeps = {
     db: suite.db,
-    backend: {} as FiscalBackend,
+    backend: {
+      clockBehindLatestRecord: async () => null,
+      refuseWhileClockBehind: async () => {},
+    } as Partial<FiscalBackend> as FiscalBackend,
     clock: systemClock(),
     cfg: venue.cfg,
     secureCookies: false,

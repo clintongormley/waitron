@@ -328,8 +328,11 @@ function systemClock(): TrustedClock {
 function deps(db: Database): TillApiDeps {
   return {
     db,
-    // An empty stub: this suite's `prepay` cfg never dispatches into the fiscal backend.
-    backend: {} as FiscalBackend,
+    // Only the clock check: this suite's `prepay` cfg never files through the fiscal backend.
+    backend: {
+      clockBehindLatestRecord: async () => null,
+      refuseWhileClockBehind: async () => {},
+    } as Partial<FiscalBackend> as FiscalBackend,
     clock: systemClock(),
     cfg,
     // FALSE so the Set-Cookie is issued over the non-TLS `app.request` — it must still carry HttpOnly
