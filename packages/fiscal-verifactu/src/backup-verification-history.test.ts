@@ -157,6 +157,9 @@ async function capture(populate = true) {
     await suite.db.execute(
       sql`insert into fiscal_certificate_reminders (id,node_id,install_id,stage,person_id,status,claimed_at) values ('10000000-0000-4000-8000-000000000005',${node.nodeId},'10000000-0000-4000-8000-000000000004','warning','10000000-0000-4000-8000-000000000003','sent',${time})`,
     );
+    await suite.db.execute(
+      sql`insert into clock_stop_restarts (id,node_id,person_id,restarted_at,clock_at,registro_id,record_at,proof) select '10000000-0000-4000-8000-000000000006',${node.nodeId},'10000000-0000-4000-8000-000000000003',${time},${time},id,${time},'{"heads":{}}' from registros_facturacion`,
+    );
   }
   directory = await mkdtemp(join(tmpdir(), "waitron-backup-history-"));
   const [file] = suite.db.all<{ file: string }>(sql`pragma database_list`);
@@ -287,6 +290,8 @@ it.each([
   ["send parent", "update envios set registro_id='missing'"],
   ["ack parent", "update acks set registro_id='missing'"],
   ["certificate reminder parent", "update fiscal_certificate_reminders set install_id='missing'"],
+  ["restart node parent", "update clock_stop_restarts set node_id='missing'"],
+  ["restart record parent", "update clock_stop_restarts set registro_id='missing'"],
 ])("rejects internally damaged %s even when both copies match", async (_name, statement) => {
   await capture();
   both((db) => db.exec(statement));
