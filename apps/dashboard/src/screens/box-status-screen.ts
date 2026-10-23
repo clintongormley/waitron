@@ -189,6 +189,8 @@ export class BoxStatusScreen extends LitElement {
         this.health = health;
         this.awaitingFigure = false;
         this.awaitingRetryRead = false;
+        if ((this.retryAnswer?.waiting ?? 0) > 0 && this.#nothingToRetry(health))
+          this.retryAnswer = null;
         this.#readSucceeded("getBoxHealth");
       })
       .catch(() => undefined);
@@ -313,7 +315,11 @@ export class BoxStatusScreen extends LitElement {
     this.retryError = null;
     this.retryAnswer = null;
     try {
-      this.retryAnswer = await this.api.retryFiscalSubmissions();
+      const answer = await this.api.retryFiscalSubmissions();
+      // A read that landed while the press was sent may already show the records gone.
+      const latest = this.health;
+      this.retryAnswer =
+        answer.waiting > 0 && latest !== null && this.#nothingToRetry(latest) ? null : answer;
       this.awaitingRetryRead = true;
       this.api.liveData.refresh();
     } catch (error) {
@@ -321,6 +327,14 @@ export class BoxStatusScreen extends LitElement {
     } finally {
       this.retrying = false;
     }
+  }
+
+  /** Whether a read leaves nothing for a "will be tried again" answer to speak of. */
+  #nothingToRetry(health: BoxHealth): boolean {
+    return (
+      health.outbox?.waiting === 0 ||
+      !health.notices.some((notice) => notice.code === "fiscal.records_unsent")
+    );
   }
 
   #retriedWords(waiting: number): string {

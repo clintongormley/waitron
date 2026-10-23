@@ -266,6 +266,75 @@ describe("box-status-screen Retry now", () => {
       );
     });
 
+    describe("once the box reads again", () => {
+      const sent = () => health({ outbox: outbox({ waiting: 0 }), notices: [] });
+
+      it.each([
+        ["nothing waits", sent()],
+        ["records wait but no send has failed", health({ outbox: outbox({ waiting: 12 }) })],
+        [
+          "the unsent notice stays but nothing waits",
+          health({ outbox: outbox({ waiting: 0 }), notices: [UNSENT] }),
+        ],
+      ])("drops the answer when the read shows %s", async (_name, after) => {
+        const api = stubApi(ready());
+        vi.mocked(api.getBoxHealth).mockResolvedValueOnce(ready()).mockResolvedValue(after);
+        const { el } = await mount(api);
+        await userEvent.click(retryButton(el)!);
+        await flush(el);
+        expect(answerOf(el)).toBeNull();
+      });
+
+      it("keeps the answer while the read still shows records waiting after a failed send", async () => {
+        const { el } = await mount(stubApi(ready()));
+        await userEvent.click(retryButton(el)!);
+        await flush(el);
+        expect(text(answerOf(el))).toBe(fill("box_status.retried", { count: "12" }));
+      });
+
+      it("says nothing will be tried when nothing waited by the time the press is answered, staying blue while sent", async () => {
+        const pending = deferred<FiscalRetryView>();
+        const api = stubApi(ready());
+        vi.mocked(api.getBoxHealth).mockResolvedValueOnce(ready()).mockResolvedValue(sent());
+        vi.mocked(api.retryFiscalSubmissions).mockReturnValue(pending.promise);
+        const { el } = await mount(api);
+        await userEvent.click(retryButton(el)!);
+        api.liveData.refresh();
+        await flush(el);
+        expect(retryButton(el)!.getAttribute("variant")).toBe("primary");
+        expect(retryButton(el)!.hasAttribute("loading")).toBe(true);
+        expect(retryButton(el)!.hasAttribute("disabled")).toBe(true);
+
+        pending.resolve({ waiting: 12 });
+        await flush(el);
+        expect(answerOf(el)).toBeNull();
+      });
+
+      it("says nothing was waiting when that answer lands after a read showing nothing waiting", async () => {
+        const pending = deferred<FiscalRetryView>();
+        const api = stubApi(ready());
+        vi.mocked(api.getBoxHealth).mockResolvedValueOnce(ready()).mockResolvedValue(sent());
+        vi.mocked(api.retryFiscalSubmissions).mockReturnValue(pending.promise);
+        const { el } = await mount(api);
+        await userEvent.click(retryButton(el)!);
+        api.liveData.refresh();
+        await flush(el);
+        pending.resolve({ waiting: 0 });
+        await flush(el);
+        expect(text(answerOf(el))).toBe(t("box_status.retried_none"));
+      });
+
+      it("keeps the answer that nothing was waiting", async () => {
+        const api = stubApi(ready());
+        vi.mocked(api.getBoxHealth).mockResolvedValueOnce(ready()).mockResolvedValue(sent());
+        vi.mocked(api.retryFiscalSubmissions).mockResolvedValue({ waiting: 0 });
+        const { el } = await mount(api);
+        await userEvent.click(retryButton(el)!);
+        await flush(el);
+        expect(text(answerOf(el))).toBe(t("box_status.retried_none"));
+      });
+    });
+
     it.each(["fiscal.not_filing", "fiscal.awaiting_certificate"])(
       "shows a press refused with %s on the row, kept through a failed read and beside a refused Free",
       async (code) => {
@@ -284,6 +353,11 @@ describe("box-status-screen Retry now", () => {
         api.liveData.refresh();
         await flush(el);
         expect(text(q(el, "p.error[role=alert]"))).toBe(t("box_status.read_error"));
+        expect(text(refusalOf(el))).toBe(codeMessage(code));
+
+        api.liveData.refresh();
+        await flush(el);
+        expect(q(el, "p.error[role=alert]")).toBeNull();
         expect(text(refusalOf(el))).toBe(codeMessage(code));
 
         await userEvent.click(q(el, "[data-test=free]") as HTMLElement);
