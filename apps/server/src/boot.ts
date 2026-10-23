@@ -2345,6 +2345,12 @@ async function bootServer(
         // A deletion changes what the disk holds, so the next read walks it afresh.
         onFreed: () => diskUsageCache.clear(),
       }),
+      clockRestart: {
+        backend: tillBackend,
+        witnesses: () => clockWitnesses.witnesses(),
+        clock: tillClock,
+        nodeId: till.nodeId,
+      },
     },
     log,
   );

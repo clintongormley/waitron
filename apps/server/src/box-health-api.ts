@@ -1,9 +1,15 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { eq } from "drizzle-orm";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
-import { authorizeManager } from "@waitron/identity";
-import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
-import { diskFullIn } from "@waitron/shared";
+import type { ClockWitness, FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import { authorizeManager, persons } from "@waitron/identity";
+import {
+  createErrorBoundary,
+  readRawJsonBody,
+  requireManagementSession,
+} from "@waitron/server-kit";
+import { AppError, diskFullIn } from "@waitron/shared";
 import type { BoxHealth } from "./box-health.js";
 import type { FreedSpace } from "./free-space-now.js";
 import type { Logger } from "./logger.js";
@@ -12,6 +18,13 @@ export interface BoxHealthApiDeps {
   db: Database;
   readHealth: () => Promise<BoxHealth>;
   freeSpace: (personId: string) => Promise<FreedSpace>;
+  /** Without it, or with a seat that has no restart, there is nothing to restart and no route. */
+  clockRestart?: {
+    backend: FiscalBackend;
+    witnesses: () => readonly ClockWitness[];
+    clock: TrustedClock;
+    nodeId: string;
+  };
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -19,6 +32,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.expired": 401,
   "person.suspended": 403,
   "authorization.not_permitted": 403,
+  "clock.restart_refused": 409,
+  "clock.unusable": 409,
+  "management.request_invalid": 400,
 };
 
 /** When a full disk refuses the transaction (its last-seen stamp or its change-log drain), the same
@@ -35,7 +51,26 @@ async function authorizeSystemManager(db: Database, c: Context): Promise<string>
   }
 }
 
-/** `GET /api/box/health` and `POST /api/box/free-space`, both `system.manage`. */
+function requestedRecordId(body: unknown): string {
+  const recordId =
+    typeof body === "object" && body !== null && !Array.isArray(body)
+      ? (body as { recordId?: unknown }).recordId
+      : undefined;
+  if (typeof recordId !== "string" || recordId === "")
+    throw new AppError("management.request_invalid", { field: "recordId" });
+  return recordId;
+}
+
+async function displayNameOf(tx: Transaction, personId: string): Promise<string> {
+  const [row] = await tx
+    .select({ displayName: persons.displayName })
+    .from(persons)
+    .where(eq(persons.id, personId));
+  return row!.displayName;
+}
+
+/** `GET /api/box/health`, `POST /api/box/free-space` and `POST /api/box/clock-restart`, all
+ * `system.manage`. */
 export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger): void {
   const readRun = createErrorBoundary(STATUS, "box-health.failed");
   const freeRun = createErrorBoundary(STATUS, "box-free-space.failed");
@@ -49,6 +84,49 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
     freeRun(c, log, async () => {
       const personId = await authorizeSystemManager(deps.db, c);
       return c.json(await deps.freeSpace(personId), 200);
+    }),
+  );
+  const clockRestart = deps.clockRestart;
+  const restartAfterClockStop = clockRestart?.backend.restartAfterClockStop?.bind(
+    clockRestart.backend,
+  );
+  if (clockRestart === undefined || restartAfterClockStop === undefined) return;
+  const restartRun = createErrorBoundary(STATUS, "box-clock-restart.failed");
+  app.post("/api/box/clock-restart", (c) =>
+    restartRun(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const recordId = requestedRecordId(await readRawJsonBody<unknown>(c));
+      const answer = await withTransaction(deps.db, async (tx) => {
+        const { authorizedBy } = await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "system.manage",
+        });
+        const personName = await displayNameOf(tx, authorizedBy);
+        // Before the reading: a witness noted after it would be left out as taken after it.
+        const witnesses = clockRestart.witnesses();
+        const { instant, offsetMinutes } = clockRestart.clock.now();
+        const { restart, replayed } = await restartAfterClockStop(tx, {
+          reading: { instant, offsetMinutes },
+          witnesses,
+          personId: authorizedBy,
+          personName,
+          nodeId: clockRestart.nodeId,
+          recordId,
+        });
+        return {
+          restart: {
+            personName:
+              restart.personId === authorizedBy
+                ? personName
+                : await displayNameOf(tx, restart.personId),
+            restartedAt: restart.restartedAt,
+            clockAt: restart.clockAt,
+            lastRecordAt: restart.lastRecordAt,
+          },
+          replayed,
+        };
+      });
+      return c.json(answer, 200);
     }),
   );
 }
