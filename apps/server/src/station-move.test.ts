@@ -3184,38 +3184,40 @@ describe("moveDishesToStation", () => {
     expect(paper.some((ticket) => ticket.includes("From Fryer"))).toBe(true);
   });
   describe("held paper at the station a held dish leaves", () => {
-    /** Kitchen (own printer, prints held work), Bar (prints none) and Screen (no printer, prints
-     *  held work); Paella is made at Kitchen, Burger at Bar and Flan at Screen. */
+    /** For `fn`, a fresh Kitchen (own printer, prints held work) and Screen (no printer, prints
+     *  held work), with Bar printing no held work; Paella is made at Kitchen, Burger at Bar and
+     *  Flan at Screen. Afterwards both fresh stations are switched off and Bar is put back, so a
+     *  later case in this shared database sees neither. */
     let kitchen: string;
     let screen: string;
+    let kitchenName: string;
+    let screenName: string;
     let kitchenPrinter: string;
-    let cells: Awaited<ReturnType<typeof routeProduct>>[] = [];
 
     async function stations<T>(fn: () => Promise<T>): Promise<T> {
-      if (kitchen === undefined)
-        await inTx(venue, async (tx) => {
-          kitchen = (await createStation(tx, venue.cfg, { name: "Kitchen" })).id;
-          screen = (await createStation(tx, venue.cfg, { name: "Screen" })).id;
-          kitchenPrinter = (
-            await createPrinter(
-              tx,
-              { locationId: venue.cfg.locationId },
-              { name: "Kitchen printer", transport: "cloud_poll", pollId: randomUUID() },
-            )
-          ).id;
-          await attachPrinterToStation(tx, {
-            locationId: venue.cfg.locationId,
-            stationId: kitchen,
-            printerId: kitchenPrinter,
-          });
-        });
-      const before = await inTx(venue, (tx) =>
+      kitchenName = `Kitchen ${randomUUID().slice(0, 8)}`;
+      screenName = `Screen ${randomUUID().slice(0, 8)}`;
+      const [barBefore] = await inTx(venue, (tx) =>
         tx
-          .select({ id: kitchenStations.id, printHeldWork: kitchenStations.printHeldWork })
+          .select({ printHeldWork: kitchenStations.printHeldWork })
           .from(kitchenStations)
-          .where(inArray(kitchenStations.id, [bar, kitchen, screen])),
+          .where(eq(kitchenStations.id, bar)),
       );
-      cells = await inTx(venue, async (tx) => {
+      const cells = await inTx(venue, async (tx) => {
+        kitchen = (await createStation(tx, venue.cfg, { name: kitchenName })).id;
+        screen = (await createStation(tx, venue.cfg, { name: screenName })).id;
+        kitchenPrinter = (
+          await createPrinter(
+            tx,
+            { locationId: venue.cfg.locationId },
+            { name: `${kitchenName} printer`, transport: "cloud_poll", pollId: randomUUID() },
+          )
+        ).id;
+        await attachPrinterToStation(tx, {
+          locationId: venue.cfg.locationId,
+          stationId: kitchen,
+          printerId: kitchenPrinter,
+        });
         await setStationPrinting(tx, { printHeldWork: true }, [kitchen, screen]);
         await setStationPrinting(tx, { printHeldWork: false }, [bar]);
         return [
@@ -3231,8 +3233,16 @@ describe("moveDishesToStation", () => {
       } finally {
         await inTx(venue, async (tx) => {
           for (const cell of cells) await clearRoutingCell(tx, venue.cfg, cell);
-          for (const row of before)
-            await setStationPrinting(tx, { printHeldWork: row.printHeldWork }, [row.id]);
+          await setStationPrinting(tx, { printHeldWork: barBefore!.printHeldWork }, [bar]);
+          await detachPrinterFromStation(
+            tx,
+            { locationId: venue.cfg.locationId },
+            { stationId: kitchen, printerId: kitchenPrinter },
+          );
+          await tx
+            .update(kitchenStations)
+            .set({ active: false, isDefault: false })
+            .where(inArray(kitchenStations.id, [kitchen, screen]));
         });
       }
     }
@@ -3360,7 +3370,7 @@ describe("moveDishesToStation", () => {
         expect(moved[0]).toContain("From Bar");
         expect(moved[0]).toContain("BURG");
         expect(await reroutes(bar, held.tabId)).toEqual([
-          { kind: "rerouted", lineName: "BURG", reroutedTo: "Kitchen" },
+          { kind: "rerouted", lineName: "BURG", reroutedTo: kitchenName },
         ]);
 
         await held.fire();
@@ -3389,6 +3399,63 @@ describe("moveDishesToStation", () => {
       });
     });
 
+    it("a held dish rerouted at its release from a closed station not recorded for the group gets no correction there, and its notice is as today", async () => {
+      const at = new Date("2026-11-05T18:45:00.000Z");
+      await stations(async () => {
+        const held = await heldGroup();
+        await inTx(venue, async (tx) => {
+          await tx
+            .update(kitchenStations)
+            .set({ isDefault: false })
+            .where(eq(kitchenStations.id, bar));
+          await tx
+            .update(kitchenStations)
+            .set({ isDefault: true })
+            .where(eq(kitchenStations.id, grill));
+          await setStationToday(tx, venue.cfg, bar, "closed", at);
+        });
+        const barBefore = (await jobs(barPrinter)).length;
+        const grillBefore = (await jobs(grillPrinter)).length;
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(at);
+        try {
+          await held.fire();
+        } finally {
+          vi.useRealTimers();
+          await inTx(venue, async (tx) => {
+            await setStationToday(tx, venue.cfg, bar, null, at);
+            await tx
+              .update(kitchenStations)
+              .set({ isDefault: false })
+              .where(eq(kitchenStations.id, grill));
+            await tx
+              .update(kitchenStations)
+              .set({ isDefault: true })
+              .where(eq(kitchenStations.id, bar));
+          });
+        }
+
+        const [item] = await inTx(venue, (tx) =>
+          tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, held.burger)),
+        );
+        expect(item!.stationId).toBe(grill);
+        expect(await paperSince(barPrinter, barBefore)).toEqual([]);
+        const fired = await paperSince(grillPrinter, grillBefore);
+        expect(fired).toHaveLength(1);
+        expect(fired[0]).toContain("From Bar");
+        expect(fired[0]).toContain("BURG");
+        expect(
+          (await noticesAt(bar, at))
+            .filter((notice) => notice.workingOrderId === held.tabId)
+            .map((notice) => ({
+              kind: notice.kind,
+              lineName: notice.lineName,
+              reroutedTo: notice.reroutedTo,
+            })),
+        ).toEqual([{ kind: "rerouted", lineName: "BURG", reroutedTo: "Grill" }]);
+      });
+    });
+
     it("a held dish moved off the screen-only station keeps its reroute notice", async () => {
       await stations(async () => {
         const held = await heldGroup();
@@ -3397,11 +3464,11 @@ describe("moveDishesToStation", () => {
         await held.move(held.flan, kitchen);
 
         expect(await reroutes(screen, held.tabId)).toEqual([
-          { kind: "rerouted", lineName: "FLAN", reroutedTo: "Kitchen" },
+          { kind: "rerouted", lineName: "FLAN", reroutedTo: kitchenName },
         ]);
         const moved = await paperSince(kitchenPrinter, kitchenBefore);
         expect(moved).toHaveLength(1);
-        expect(moved[0]).toContain("From Screen");
+        expect(moved[0]).toContain(`From ${screenName}`);
       });
     });
   });
