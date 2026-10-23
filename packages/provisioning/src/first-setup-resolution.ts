@@ -344,10 +344,24 @@ function pack(originals: readonly FirstSetupOriginal[]) {
   if (Buffer.byteLength(JSON.stringify(manifest)) > LIMIT) invalid();
   return { manifest, chunks };
 }
+type Evidence = {
+  manifest: ReturnType<typeof pack>["manifest"];
+  originals: { name: string; bytes: Buffer | null }[] | null;
+};
+export interface FirstSetupOriginalsCache {
+  entries: Map<string, Promise<Evidence>>;
+  bytesLeft: number;
+}
+export function createFirstSetupOriginalsCache(
+  budget = 16 * 1024 * 1024,
+): FirstSetupOriginalsCache {
+  return { entries: new Map(), bytesLeft: budget };
+}
 export function createFirstSetupResolutionStore(options: {
   stateDir: string;
   venueDir: string;
   coordinator: FirstSetupCoordinator;
+  originalsCache?: FirstSetupOriginalsCache;
 }) {
   const roots = async () => ({
     stateDir: await canonicalFirstSetupDirectory(options.stateDir),
@@ -371,7 +385,24 @@ export function createFirstSetupResolutionStore(options: {
     }
     await writeDurableHostJson(path, value, LIMIT);
   };
-  const originalsAt = async (path: string) => {
+  const evidenceAt = (path: string, sequence: number): Promise<Evidence> => {
+    const cache = options.originalsCache;
+    const cached = cache?.entries.get(path);
+    if (cached !== undefined) return cached;
+    const reading = checkedOriginalsAt(path);
+    if (cache === undefined) return reading;
+    const kept = reading.then(({ manifest, originals }) => {
+      const size = originals.reduce((total, { bytes }) => total + (bytes?.length ?? 0), 0);
+      // A cached call reads a later step's evidence only for its manifest, through `read`.
+      if (sequence !== 1 || size > cache.bytesLeft) return { manifest, originals: null };
+      cache.bytesLeft -= size;
+      return { manifest, originals };
+    });
+    cache.entries.set(path, kept);
+    kept.catch(() => cache.entries.delete(path));
+    return reading;
+  };
+  const checkedOriginalsAt = async (path: string) => {
     await firstSetupDirectory(path);
     const manifest = await readDurableHostJson(join(path, "manifest.json"), LIMIT);
     if (
@@ -448,7 +479,7 @@ export function createFirstSetupResolutionStore(options: {
       )
         invalid();
       if (sequence % 2 === 1) {
-        const { manifest } = await originalsAt(evidenceFolder(path, sequence));
+        const { manifest } = await evidenceAt(evidenceFolder(path, sequence), sequence);
         if (
           record.phase !== "prepared" ||
           record.evidenceDigest !== hash(JSON.stringify(manifest)) ||
@@ -481,7 +512,10 @@ export function createFirstSetupResolutionStore(options: {
     read,
     async readOriginals(id: string, sequence = 1) {
       if (!integer(sequence) || sequence > 127 || sequence % 2 !== 1) invalid();
-      return (await originalsAt(evidenceFolder(await folder(id), sequence))).originals;
+      const path = evidenceFolder(await folder(id), sequence);
+      const originals =
+        (await evidenceAt(path, sequence)).originals ?? (await checkedOriginalsAt(path)).originals;
+      return originals.map((original) => ({ ...original }));
     },
     prepare(input: unknown, originals: readonly FirstSetupOriginal[]): Promise<ResolutionRecord> {
       return options.coordinator.run(async () => {

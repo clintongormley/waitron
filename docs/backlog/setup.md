@@ -304,6 +304,27 @@ It comes after the Demo bar (A246, W36) and A238, whose device and profile model
   same way had no fiscal records and no fiscal alert. The alert is raised in
   `packages/fiscal-verifactu/src/submission-alerts.ts`; why it fires for Demo was not traced.
 
+## Owner decision: should a setup request stop re-checking every old "start again" archive in full?
+
+Left open by A1037. Within one call of an exported reader in `first-setup-workspace.ts`, each
+archive is read and checked once while its decoded files fit the call's 16 MiB budget
+(`createFirstSetupOriginalsCache`); past that, its files are read and checked again each time
+they are needed. Every request still checks every archived file of every retirement and the whole
+retired workspace, so the cost grows with each retirement. Two ways to make it near-flat, both
+weaker than today's check:
+
+- **Check only what the request uses**: the record chain, the manifest's digests and the few small
+  files the callers read (`state/first-setup.json`, `state/first-setup-node-key.json`,
+  `workspace:predecessor`, `outside-file:*`, `state/first-fiscal-documents/*`,
+  `state/module-operation-public.json`, and every entry's name and presence), and hash the
+  retired workspace against the manifest's digests instead of re-reading the archive. The cost:
+  damage to an archived file nobody reads, such as the old `venue.db` copy, would go unnoticed until
+  it is used.
+- **Keep a cache between requests.** It would stop noticing a change on disk between requests.
+
+At three retirements on the owner's Mac, A1037 took a request from about 9,300 file opens and
+1.0 s to about 900 opens and 0.17 s. Not measured on a box.
+
 ## Decisions and deliberate limits
 
 **DECIDED (owner, 2026-10-17): setup, and the demo, start only for a country that has a country

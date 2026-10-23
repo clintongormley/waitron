@@ -5,6 +5,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import * as resolution from "./index.js";
 import * as durable from "./durable-host-json.js";
+import { createFirstSetupOriginalsCache } from "./first-setup-resolution.js";
 vi.mock("./durable-host-json.js", { spy: true });
 
 const dirs: string[] = [];
@@ -451,4 +452,128 @@ it.each([
   await expect(
     f.store.prepare({ ...f.input, authority, action, database, register: null }, f.originals),
   ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+});
+it("a shared originals cache reads each archive file once and hands every caller its own list", async () => {
+  const f = await fixture();
+  const prepared = await f.store.prepare(f.input, f.originals);
+  await f.store.apply(prepared);
+  const originalsCache = createFirstSetupOriginalsCache();
+  const cached = resolution.createFirstSetupResolutionStore({
+    ...f.roots,
+    coordinator: f.coordinator,
+    originalsCache,
+  });
+  const reads = vi.mocked(durable.readDurableHostJson);
+  const before = reads.mock.calls.length;
+  await cached.read(f.input.resolutionId);
+  const first = await cached.readOriginals(f.input.resolutionId);
+  first[0]!.name = "changed by a caller";
+  first.pop();
+  await cached.read(f.input.resolutionId);
+  const again = resolution.createFirstSetupResolutionStore({
+    ...f.roots,
+    coordinator: f.coordinator,
+    originalsCache,
+  });
+  expect(await again.readOriginals(f.input.resolutionId)).toEqual(f.originals);
+  const archived = archiveReads(before);
+  expect(archived.length).toBeGreaterThan(1);
+  expect(new Set(archived).size).toBe(archived.length);
+});
+it("a shared originals cache keeps no refusal, so a repaired archive reads again", async () => {
+  const f = await fixture();
+  await f.store.prepare(f.input, f.originals);
+  const folder = join(f.roots.stateDir, "first-setup-resolutions", f.input.resolutionId);
+  const chunk = join(
+    folder,
+    (await readdir(folder)).find((name) => name.startsWith("original-"))!,
+  );
+  const intact = await readFile(chunk);
+  await writeFile(chunk, '{"bytes":"YWx0ZXJlZA=="}');
+  const originalsCache = createFirstSetupOriginalsCache();
+  const cached = resolution.createFirstSetupResolutionStore({
+    ...f.roots,
+    coordinator: f.coordinator,
+    originalsCache,
+  });
+  await expect(cached.readOriginals(f.input.resolutionId)).rejects.toMatchObject({
+    code: "setup.attempt_invalid",
+  });
+  await writeFile(chunk, intact);
+  expect(await cached.readOriginals(f.input.resolutionId)).toEqual(f.originals);
+});
+function archiveReads(before: number) {
+  return vi
+    .mocked(durable.readDurableHostJson)
+    .mock.calls.slice(before)
+    .map(([path]) => path)
+    .filter((path) => /(manifest|original-\d+-\d+)\.json$/.test(path));
+}
+it("a shared originals cache keeps decoded bytes only up to its budget, and re-reads beyond it", async () => {
+  const f = await fixture();
+  const second = { ...f.input, resolutionId: randomUUID() };
+  await f.store.apply(await f.store.prepare(f.input, f.originals));
+  await f.store.apply(await f.store.prepare(second, f.originals));
+  const size = f.originals.reduce((total, { bytes }) => total + (bytes?.length ?? 0), 0);
+  const cached = resolution.createFirstSetupResolutionStore({
+    ...f.roots,
+    coordinator: f.coordinator,
+    originalsCache: createFirstSetupOriginalsCache(size),
+  });
+  const before = vi.mocked(durable.readDurableHostJson).mock.calls.length;
+  for (const id of [f.input.resolutionId, second.resolutionId]) {
+    await cached.read(id);
+    expect(await cached.readOriginals(id)).toEqual(f.originals);
+    expect(await cached.readOriginals(id)).toEqual(f.originals);
+    await cached.read(id);
+  }
+  const counts = (id: string) =>
+    archiveReads(before)
+      .filter((path) => path.includes(id))
+      .map((path) => path.slice(path.lastIndexOf("/") + 1));
+  expect(counts(f.input.resolutionId).sort()).toEqual([
+    "manifest.json",
+    "original-0-0.json",
+    "original-1-0.json",
+  ]);
+  expect(counts(second.resolutionId).sort()).toEqual([
+    "manifest.json",
+    "manifest.json",
+    "manifest.json",
+    "original-0-0.json",
+    "original-0-0.json",
+    "original-0-0.json",
+    "original-1-0.json",
+    "original-1-0.json",
+    "original-1-0.json",
+  ]);
+});
+it("a shared originals cache keeps only the manifest of a later step's evidence", async () => {
+  const f = await fixture();
+  await f.store.apply(await f.store.prepare(f.input, f.originals));
+  const observed = [{ name: "selection-check", bytes: Buffer.from("fresh observation") }];
+  await f.store.apply(await f.store.prepare({ ...f.input, action: "select-workspace" }, observed));
+  const cached = resolution.createFirstSetupResolutionStore({
+    ...f.roots,
+    coordinator: f.coordinator,
+    originalsCache: createFirstSetupOriginalsCache(),
+  });
+  const before = vi.mocked(durable.readDurableHostJson).mock.calls.length;
+  await cached.read(f.input.resolutionId);
+  await cached.read(f.input.resolutionId);
+  expect(await cached.readOriginals(f.input.resolutionId)).toEqual(f.originals);
+  expect(await cached.readOriginals(f.input.resolutionId, 3)).toEqual(observed);
+  expect(await cached.readOriginals(f.input.resolutionId, 3)).toEqual(observed);
+  const step = archiveReads(before).filter((path) => path.includes("step-000003"));
+  const first = archiveReads(before).filter((path) => !path.includes("step-000003"));
+  expect(first.length).toBe(3);
+  expect(new Set(first).size).toBe(3);
+  expect(step.map((path) => path.slice(path.lastIndexOf("/") + 1)).sort()).toEqual([
+    "manifest.json",
+    "manifest.json",
+    "manifest.json",
+    "original-0-0.json",
+    "original-0-0.json",
+    "original-0-0.json",
+  ]);
 });

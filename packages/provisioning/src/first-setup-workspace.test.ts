@@ -1098,6 +1098,90 @@ it("returns the exact original setup state and retirement record from the select
   ]);
   expect(await provision.readRetiredFirstSetupStates(next.binding)).toEqual([state]);
 });
+it("returns each retirement's verified archived originals beside its state and record", async () => {
+  const f = await fixture();
+  await unlink(join(f.anchor.stateDir, "first-setup.json"));
+  await unlink(join(f.anchor.venueDir, "first-setup-claim.json"));
+  const coordinator = provision.createFirstSetupCoordinator();
+  const store = provision.createFirstSetupStore({ ...f.anchor, coordinator });
+  const owner = createFirstSetupOwner({
+    ...f.anchor,
+    store,
+    coordinator,
+    bootId: "retirement-archives",
+    freeze: async (request, environment, ids) => ({
+      ...ids,
+      sourceId: `first-setup:${ids.attemptId}`,
+      request,
+      environment,
+      modules: [],
+    }),
+  });
+  await owner.claimFirstSetup({ environment: "preproduction", request }, "A".repeat(43));
+  const state = (await store.read())!;
+  const firstOriginals = [
+    {
+      name: "state/first-setup.json",
+      bytes: await readFile(join(f.anchor.stateDir, "first-setup.json")),
+    },
+    {
+      name: "venue/first-setup-claim.json",
+      bytes: await readFile(join(f.anchor.venueDir, "first-setup-claim.json")),
+    },
+    { name: "venue/venue.db", bytes: null },
+  ];
+  const first = await customRetirement(f, firstOriginals);
+  await provision.selectFirstSetupWorkspace(f.anchor, first.applied);
+  const moved = Buffer.from(
+    JSON.stringify({
+      ...state,
+      venueDir: first.binding.venueDir,
+      stateDir: first.binding.stateDir,
+    }),
+  );
+  await writeFile(join(first.binding.stateDir, "first-setup.json"), moved);
+  const resolutionId = randomUUID(),
+    workspaceId = randomUUID();
+  const base = join(f.anchor.stateDir, "first-setup-workspaces", workspaceId);
+  const binding = {
+    ...first.binding,
+    resolutionId,
+    workspaceId,
+    venueDir: join(base, "venue"),
+    stateDir: join(base, "state"),
+    selectionGeneration: first.binding.selectionGeneration + 1,
+  };
+  const secondOriginals = [
+    {
+      name: "workspace:predecessor",
+      bytes: await readFile(join(first.binding.venueDir, "first-setup-workspace.json")),
+    },
+    { name: "state/first-setup.json", bytes: moved },
+    { name: "venue/first-setup-claim.json", bytes: null },
+    { name: "venue/venue.db", bytes: null },
+  ];
+  const second = await f.store.apply(
+    await f.store.prepare(
+      {
+        resolutionId,
+        attemptId: f.prepared.attemptId,
+        observedRevision: f.prepared.observedRevision,
+        observedOwnerGeneration: f.prepared.observedOwnerGeneration,
+        database: f.prepared.database,
+        authority: f.prepared.authority,
+        register: f.prepared.register,
+        action: "retire",
+        nextWorkspace: binding,
+      },
+      secondOriginals,
+    ),
+  );
+  await provision.selectFirstSetupWorkspace(f.anchor, second);
+  const retirements = await provision.readFirstSetupRetirementArchives(binding);
+  expect(retirements.map(({ record }) => record)).toEqual([second, first.applied]);
+  expect(retirements.map(({ originals }) => originals)).toEqual([secondOriginals, firstOriginals]);
+  expect(retirements[1]!.state).toEqual(state);
+});
 
 it("does not invent a retired setup state when its archived original was absent", async () => {
   const f = await fixture();

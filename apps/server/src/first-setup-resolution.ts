@@ -9,7 +9,7 @@ import {
   assertFirstSetupBootTarget,
   firstSetupAnchorFor,
   resolveFirstSetupWorkspace,
-  readFirstSetupRetirements,
+  readFirstSetupRetirementArchives,
   selectFirstSetupWorkspace,
   type RegisterAnswer,
   type WorkspaceBinding,
@@ -239,7 +239,7 @@ export function createFirstSetupResolutionActions(
               ) ||
               (!artifact.name.startsWith("outside-") && artifact.status === "missing"),
           );
-          const retired = await readFirstSetupRetirements(options);
+          const retired = await readFirstSetupRetirementArchives(options);
           const noInheritedRegister = retired.every(
             ({ state, record }) =>
               record.action === "retire" &&
@@ -257,20 +257,11 @@ export function createFirstSetupResolutionActions(
             ((request.register === undefined && emptyWorkspace) ||
               (await firstSetupUnusedAssignment(state, snapshot.originals, host.modules)));
           if (unusedAssignment) {
-            const anchor = await firstSetupAnchorFor(options);
-            const archive = createFirstSetupResolutionStore({
-              ...anchor,
-              coordinator: createFirstSetupCoordinator(),
-            });
             for (const old of retired) {
               if (
                 old.record.database !== "empty-preactivation" ||
                 (!unused(old.state) &&
-                  !(await firstSetupUnusedAssignment(
-                    old.state,
-                    await archive.readOriginals(old.record.resolutionId),
-                    host.modules!,
-                  )))
+                  !(await firstSetupUnusedAssignment(old.state, old.originals, host.modules!)))
               ) {
                 unusedAssignment = false;
                 break;
