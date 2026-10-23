@@ -654,6 +654,65 @@ warning annotation (`::warning title=Slow test file::`), because one file that l
 shard (see "Every CI test job should finish in about 4 minutes" below). In browser mode that time can
 include waiting to be loaded (above). It warns and never fails the job.
 
+### A browser shard reports before its job limit
+
+A job killed at its outer limit can lose its log. On 23 October 2026, main run
+`39898823017`, till shard 2, left no downloadable log (`BlobNotFound`). Its blocked
+operation remains unknown. The six other till test steps took 72–179 seconds.
+In the following successful run `39898884552`, till steps took 87–167 seconds and
+all browser test steps took 26–237 seconds, read from the jobs API's step timestamps.
+
+Browser package test commands run through
+`node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm …`; fiscal-verifactu
+uses 420 seconds. Its later A798 run `39902897605`, job `120248392824`, spent
+332 seconds in the test step and 379 seconds in the job. A six-minute command cap
+would leave only 28 seconds above that test step, so the seven-minute fiscal cap
+leaves 88 seconds. Its runtime above the four-minute target remains
+[separate performance work](../backlog/ci.md#fiscal-coverage-outlasts-the-four-minute-job-target).
+
+These limits leave room under the ten-minute job limit for a two-second process
+snapshot, the five-second termination grace and artifact uploads on those measured
+runs. Setup still consumes the same job budget; the wrapper does not bound a hung install.
+
+The wrapper forwards stdout and stderr and tracks the existing `[file-progress]`
+start/end lines. At expiry it lists files assigned to workers without an end line,
+then runs `ps` with a two-second limit to show process ids, parents, states, elapsed
+time, CPU, memory and command lines. Assignment does not mean a browser has loaded
+the file. An empty file list may indicate a startup or teardown wait. A failed
+snapshot is reported, and the command still fails with exit 124. The existing
+stop signals only the launched POSIX process group. After the command exits, cleanup
+preserves its exit code even if a worker holds a diagnostic pipe open. Pipe draining
+is bounded by the same grace period when a process outside the group retains it.
+
+Run `pnpm exec vitest run scripts/run-with-deadline.test.mjs
+scripts/ci-workflow.test.mjs scripts/root-scope-consumers.test.mjs`. The diagnostic
+CLI control starts `stuck.test.ts [browser]`, finishes a separate file, then blocks
+the child and ignores SIGTERM. With a one-second test limit it exits 124, names only
+the unfinished file and includes the still-running child in its process snapshot.
+Healthy exit codes and both output streams are also asserted. These controls do
+not reproduce the unknown CI hang.
+
+The A1027 review reproduced a pipe-lifetime regression: a command exited 0 or 7
+while a worker kept its captured output pipes open, so cleanup placed on `close`
+waited until the deadline and returned 124. New cases observed both failures before
+cleanup moved to `exit`. A separate-group pipe holder then kept the promise pending
+beyond a three-second control; bounding the pipe drain made that case return 7
+without signalling the separate group. The fixture stops its own recorded worker.
+
+On macOS, Node v26.11.1 and Vitest 4.1.12, the same till shard command
+(`pnpm --filter @waitron/till test:shard --shard=2/7`, with the file-progress
+reporter and separate report paths) passed 74 files and 2,673 cases in each run:
+256.85 seconds without the wrapper, then 249.24 seconds with it. This pair showed
+no slowdown; it does not measure a worst-case overhead. A standalone control using
+the real file-progress reporter and a blocked Node child exited 124 after 6.09
+seconds with a one-second deadline and the normal five-second grace. A separate
+witness process remained alive after that command ended.
+
+The browser-deadline case in `scripts/ci-workflow.test.mjs` is weaker than its name:
+it reads workflow text, never executes a deadline or checks GitHub log retention.
+The runner's explicit browser consumers are in `ROOT_SCOPE_CONSUMERS`; its guard
+recognises the wrapped UI pair and reporters while retaining the earlier checks.
+
 ### The `ci` check passes only when every needed job succeeded or was skipped
 
 The `ci` job has two steps, and each fails unless every needed job ended `success` or `skipped`;

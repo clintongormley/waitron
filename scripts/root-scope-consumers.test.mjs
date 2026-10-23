@@ -25,13 +25,15 @@ import { PNPM_LS_SPAWN_TIMEOUT_MS, workspaceMembers } from "./workspace-members.
 // before their tests. A member counts only on a line where one quoted filter,
 // `pnpm --filter "<name>"`, is followed directly by `test:shard` or `test:coverage`, so a member a
 // job tests only through two filters, an unquoted filter or a variable, or with an option or `run`
-// between the filter and the script name, is attributed no script from that job. It skips
-// full-line comments, but a step an `if:` switches off, or a line inside a heredoc, still counts,
+// between the filter and the script name, is attributed no script from that job.
+// The diagnostic deadline wrapper also counts every literal quoted filter in its test command.
+// It skips full-line comments, but a step an `if:` switches off, or a line inside a heredoc, still counts,
 // and it does not check that the script runs before the tests.
 //
 // The reporter half is weaker than its name as well: it reads ci.yml as TEXT, and counts a script
 // only in a `--reporter=` flag naming `scripts/<file>` (bare or under `$GITHUB_WORKSPACE/`) on a
-// line, continuations joined, that starts `pnpm` and names `test:shard` or `test:coverage`. It
+// line, continuations joined, that starts `pnpm` (optionally under the diagnostic deadline wrapper)
+// and names `test:shard` or `test:coverage`. It
 // never reads a reporter set in a package's vitest config or package.json script.
 
 const REPO_ROOT = join(import.meta.dirname, "..");
@@ -118,7 +120,15 @@ function ciRunReaders(text, members) {
     const code = job.map((line) => line.trim()).filter((line) => !line.startsWith("#"));
     const scripts = code.flatMap((line) => RUNS_ROOT_SCRIPT.exec(line)?.[1] ?? []);
     const dirs = code
-      .flatMap((line) => TESTS_MEMBER.exec(line)?.[1] ?? [])
+      .flatMap((line) => {
+        const wrapped =
+          /^node scripts\/run-with-deadline\.mjs \d+ --diagnostics -- pnpm (.*\btest:(?:shard|coverage)\b)/.exec(
+            line,
+          );
+        return wrapped
+          ? [...wrapped[1].matchAll(/--filter "([^"]+)"/g)].map(([, name]) => name)
+          : (TESTS_MEMBER.exec(line)?.[1] ?? []);
+      })
       .flatMap((name) => members.find((member) => member.name === name)?.dir ?? []);
     for (const script of scripts) {
       for (const dir of dirs) {
@@ -130,7 +140,8 @@ function ciRunReaders(text, members) {
   return sortedListing(readers);
 }
 
-const TEST_COMMAND = /^pnpm .*\btest:(?:shard|coverage)\b/;
+const TEST_COMMAND =
+  /^(?:node scripts\/run-with-deadline\.mjs \d+ --diagnostics -- )?pnpm .*\btest:(?:shard|coverage)\b/;
 const REPORTER_SCRIPT = /--reporter="?(?:\$GITHUB_WORKSPACE\/)?(scripts\/[\w./-]+?)"?(?=\s|$)/g;
 
 /** A job's shell lines with full-line comments dropped and `\` continuations joined. */
@@ -299,6 +310,22 @@ describe("rootScriptReaders", () => {
 });
 
 describe("ciRunReaders", () => {
+  it("attributes the deadline runner to every explicitly selected browser member, including a pair", () => {
+    const text = [
+      "jobs:",
+      "  test-ui:",
+      "    steps:",
+      "      - run: |",
+      '          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" --workspace-concurrency=1 test:coverage',
+    ].join("\n");
+    expect(
+      ciRunReaders(text, [
+        { name: "@waitron/ui", dir: "packages/ui" },
+        { name: "@waitron/ui-core", dir: "packages/ui-core" },
+      ]),
+    ).toEqual(new Map([["scripts/run-with-deadline.mjs", ["packages/ui", "packages/ui-core"]]]));
+  });
+
   const members = [
     { name: "@waitron/server", dir: "apps/server" },
     { name: "@waitron/till", dir: "apps/till" },
@@ -403,6 +430,16 @@ describe("ciRunReaders", () => {
 });
 
 describe("ciReporterScripts", () => {
+  it("reads the file-progress reporter through the deadline wrapper", () => {
+    const text = [
+      "jobs:",
+      "  test-till:",
+      "    steps:",
+      '      - run: node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/till" test:shard --reporter="$GITHUB_WORKSPACE/scripts/progress.mjs"',
+    ].join("\n");
+    expect(ciReporterScripts(text)).toEqual(["scripts/progress.mjs"]);
+  });
+
   const workflow = (...jobLines) =>
     ["on:", "  push:", "    branches: [main]", "jobs:", ...jobLines, ""].join("\n");
   const progress = '--reporter="$GITHUB_WORKSPACE/scripts/progress.mjs"';
