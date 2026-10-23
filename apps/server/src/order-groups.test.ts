@@ -5284,6 +5284,58 @@ describe("advance HOLD tickets (Task 6)", () => {
         ]);
       });
 
+      it("a station with no printer is not recorded for a dish joining there", async () => {
+        const { v, s, screenId, group } = await threeStations(["steak", "fish"]);
+
+        await join(v, s, group, ["flan"]);
+
+        expect(await recorded(group)).toEqual([{ groupId: group, stationId: v.stationId }]);
+        expect(await noticeKinds(v, screenId)).toEqual([{ kind: "changed", direction: "added" }]);
+      });
+
+      it("firing one held dish takes it off the HOLD ticket only at a station recorded for the group", async () => {
+        const { v, s, barPrinter, group } = await threeStations();
+        const steak = await lineOf(s, group, "steak", v);
+        const fish = await lineOf(s, group, "fish", v);
+
+        await inTx(async (tx) =>
+          fireHeldLine(tx, v.cfg, s.partyId, steak.id, await args(s.partyId)),
+        );
+        await inTx(async (tx) =>
+          fireHeldLine(tx, v.cfg, s.partyId, fish.id, await args(s.partyId)),
+        );
+
+        expect((await printedSince(v, 1))[0]).toEqual([
+          "*** HOLD CHANGED ***",
+          ...(await head(v, s)),
+          "GROUP 1",
+          `-1.000 x ${DISHES.steak.kitchen}`,
+        ]);
+        const bar = await paperAt(barPrinter);
+        expect(bar).toHaveLength(1);
+        expect(bar[0]!.join("\n")).not.toContain("***");
+      });
+
+      it("a held edit's quantity change corrects the HOLD ticket only at a station recorded for the group", async () => {
+        const { v, s, barId, barPrinter, group } = await threeStations();
+        const steak = await lineOf(s, group, "steak", v);
+        const fish = await lineOf(s, group, "fish", v);
+
+        await changeLine(v, s.tabId, fish.lineNo, { quantity: "2" }, MIA);
+        await changeLine(v, s.tabId, steak.lineNo, { quantity: "2" }, MIA);
+
+        expect(await printedSince(v, 1)).toEqual([
+          [
+            "*** HOLD CHANGED ***",
+            ...(await head(v, s)),
+            "GROUP 1",
+            `+1.000 x ${DISHES.steak.kitchen}`,
+          ],
+        ]);
+        expect(await paperAt(barPrinter)).toEqual([]);
+        expect(await noticeKinds(v, barId)).toEqual([{ kind: "changed", direction: "added" }]);
+      });
+
       it("a held dish moved into a printed group holding none of a station's held work gets HOLD CHANGED there, and records it", async () => {
         const { v, s, barId, barPrinter, group } = await threeStations();
         const [second] = (

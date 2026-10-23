@@ -11,6 +11,7 @@ import {
   deviceMadeHereStations,
   floorZones,
   kitchenStations,
+  orderGroupHoldStations,
   orderGroups,
   parties,
   printJobs,
@@ -1139,6 +1140,50 @@ describe("made-here route wiring", () => {
     expect(notices.slice(beforeNotices.length)).toEqual([
       { station_id: grillStationId, kind: "changed" },
     ]);
+  });
+  it("a drink made here joining a printed held group does not record its station for the group's HOLD paper", async () => {
+    const party = await seatedWith(venue);
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
+    const held = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${party.partyId}/groups`,
+      {
+        submissionId: randomUUID(),
+        expectedPartyRevision: party.revision,
+        groups: [
+          { lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }], release: "hold" },
+        ],
+      },
+    );
+    expect(held.status).toBe(200);
+    const [group] = await inTx(venue, (tx) =>
+      tx.select().from(orderGroups).where(eq(orderGroups.partyId, party.partyId)),
+    );
+    const joined = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${party.partyId}/groups`,
+      {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(party.partyId),
+        joinGroupId: group!.id,
+        groups: [
+          { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "hold" },
+        ],
+      },
+    );
+    expect(joined.status).toBe(200);
+    expect(
+      await inTx(venue, (tx) =>
+        tx
+          .select({ stationId: orderGroupHoldStations.stationId })
+          .from(orderGroupHoldStations)
+          .where(eq(orderGroupHoldStations.groupId, group!.id)),
+      ),
+    ).toEqual([{ stationId: grillStationId }]);
   });
   it("/api/sales carries the device to a pay-first send", async () => {
     const id = randomUUID();

@@ -159,57 +159,94 @@ export async function rerouteHeldAtRelease(
   return rerouted;
 }
 
-/** A held or fired record may move while queued, with no part served.
- * Made-here records are always fired and ready, and stay at their sending till's station. */
 /**
- * The held groups whose HOLD paper a station receiving their moved dishes gets, each answering
- * whether the station is already recorded for it. A group with HOLD paper elsewhere reaches a
- * station not recorded only when the station prints held work now and holds no other held work of
- * the group, so its paper is complete; otherwise the dish prints there at the fire.
+ * Whether held work arriving at a station gets its group's HOLD paper there, by group then
+ * station: true when the station is already recorded for the group, false when it is not but gets
+ * the paper now, absent when it gets nothing until the fire. A station not recorded gets the paper
+ * only when the group has HOLD paper somewhere, the station prints held work now, and it holds no
+ * other unfired, uncancelled work of the group besides `arrivingLineIds`.
  */
-export async function destinationHoldPaper(
+export async function heldPaperReach(
+  tx: Transaction,
+  arrivals: readonly { groupId: string; stationId: string }[],
+  arrivingLineIds: readonly string[],
+): Promise<Map<string, Map<string, boolean>>> {
+  const reach = new Map<string, Map<string, boolean>>();
+  const set = (groupId: string, stationId: string, recorded: boolean) =>
+    reach.set(groupId, (reach.get(groupId) ?? new Map<string, boolean>()).set(stationId, recorded));
+  if (arrivals.length === 0) return reach;
+  const recorded = await heldPaperStations(
+    tx,
+    arrivals.map((arrival) => arrival.groupId),
+  );
+  const printing = new Set(
+    (
+      await tx
+        .select({ id: kitchenStations.id, printHeldWork: kitchenStations.printHeldWork })
+        .from(kitchenStations)
+        .where(
+          inArray(kitchenStations.id, [...new Set(arrivals.map((arrival) => arrival.stationId))]),
+        )
+    )
+      .filter((station) => station.printHeldWork)
+      .map((station) => station.id),
+  );
+  const candidates: { groupId: string; stationId: string }[] = [];
+  for (const arrival of arrivals) {
+    const stations = recorded.get(arrival.groupId);
+    if (stations === undefined) continue;
+    if (stations.has(arrival.stationId)) set(arrival.groupId, arrival.stationId, true);
+    else if (printing.has(arrival.stationId)) candidates.push(arrival);
+  }
+  if (candidates.length === 0) return reach;
+  const others = await tx
+    .select({
+      groupId: workingOrderLines.groupId,
+      stationId: ticketItems.stationId,
+      lineId: workingOrderLines.id,
+      quantity: workingOrderLines.quantity,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(
+      and(
+        inArray(workingOrderLines.groupId, [...new Set(candidates.map((c) => c.groupId))]),
+        inArray(ticketItems.stationId, [...new Set(candidates.map((c) => c.stationId))]),
+        isNull(ticketItems.firedAt),
+        notInArray(workingOrderLines.id, [...arrivingLineIds]),
+      ),
+    );
+  const cancelled = await readLineCancellations(
+    tx,
+    others.map((row) => row.lineId),
+  );
+  const holding = new Set(
+    others
+      .filter((row) => (cancelled.get(row.lineId) ?? 0) < row.quantity)
+      .map((row) => `${row.groupId}|${row.stationId}`),
+  );
+  for (const { groupId, stationId } of candidates)
+    if (!holding.has(`${groupId}|${stationId}`)) set(groupId, stationId, false);
+  return reach;
+}
+
+/** {@link heldPaperReach} for moved dishes arriving at one station, by group. */
+async function destinationHoldPaper(
   tx: Transaction,
   stationId: string,
   groupIds: readonly string[],
   arrivingLineIds: readonly string[],
 ): Promise<Map<string, boolean>> {
-  const paper = new Map<string, boolean>();
-  if (groupIds.length === 0) return paper;
-  const recorded = await heldPaperStations(tx, groupIds);
-  const [station] = await tx
-    .select({ printHeldWork: kitchenStations.printHeldWork })
-    .from(kitchenStations)
-    .where(eq(kitchenStations.id, stationId));
-  for (const groupId of new Set(groupIds)) {
-    const stations = recorded.get(groupId);
-    if (stations === undefined) continue;
-    if (stations.has(stationId)) {
-      paper.set(groupId, true);
-      continue;
-    }
-    if (!station?.printHeldWork) continue;
-    const others = await tx
-      .select({ lineId: workingOrderLines.id, quantity: workingOrderLines.quantity })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(
-        and(
-          eq(workingOrderLines.groupId, groupId),
-          eq(ticketItems.stationId, stationId),
-          isNull(ticketItems.firedAt),
-          notInArray(workingOrderLines.id, [...arrivingLineIds]),
-        ),
-      );
-    const cancelled = await readLineCancellations(
-      tx,
-      others.map((row) => row.lineId),
-    );
-    if (others.some((row) => (cancelled.get(row.lineId) ?? 0) < row.quantity)) continue;
-    paper.set(groupId, false);
-  }
-  return paper;
+  const reach = await heldPaperReach(
+    tx,
+    groupIds.map((groupId) => ({ groupId, stationId })),
+    arrivingLineIds,
+  );
+  return new Map([...reach].map(([groupId, stations]) => [groupId, stations.get(stationId)!]));
 }
 
+/** A held or fired record may move while queued, with no part served.
+ * Made-here records are always fired and ready, and stay at their sending till's station. */
 export function stillMovable(
   item: { state: TicketState; madeHere: boolean },
   line: { servedAt: string | null; servedQuantity: number },

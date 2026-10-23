@@ -85,7 +85,7 @@ import {
   type TabRoundLine,
 } from "./working-order.js";
 import "./errors.js";
-import { destinationHoldPaper, stillMovable } from "./station-move.js";
+import { heldPaperReach, stillMovable } from "./station-move.js";
 import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
 import { readPartyTables } from "./orders-list.js";
 import { isRecalledDish, refuseRecalledWrite } from "./draft-source.js";
@@ -2149,28 +2149,30 @@ export async function correctHoldTickets(
 }
 
 /**
- * Records each station that held work newly arriving in a group with HOLD paper reaches under
- * {@link destinationHoldPaper}'s rule, when a printer there will take the `+N`. Call before the
- * `+N` is printed, so the station's slip is let through.
+ * Records the stations that get the group's HOLD paper for this arriving held work under
+ * {@link heldPaperReach} and have a printer to print it. Runs before the `+N` is printed, which
+ * reaches only recorded stations.
  */
 export async function recordJoiningStations(
   tx: Transaction,
   arriving: readonly HeldChange[],
 ): Promise<void> {
-  const byStation = new Map<string, HeldChange[]>();
-  for (const change of arriving)
-    byStation.set(change.stationId, [...(byStation.get(change.stationId) ?? []), change]);
-  for (const [stationId, changes] of byStation) {
-    const paper = await destinationHoldPaper(
-      tx,
-      stationId,
-      changes.map((change) => change.groupId),
-      changes.map((change) => change.workingOrderLineId),
-    );
-    const fresh = [...paper].filter(([, recorded]) => !recorded).map(([groupId]) => groupId);
-    if (fresh.length === 0 || (await printerMappings(tx, [stationId])).length === 0) continue;
-    for (const groupId of fresh) await recordHeldPaper(tx, groupId, new Set([stationId]));
-  }
+  const reach = await heldPaperReach(
+    tx,
+    arriving,
+    arriving.map((change) => change.workingOrderLineId),
+  );
+  const fresh = [...reach].flatMap(([groupId, stations]) =>
+    [...stations].flatMap(([stationId, recorded]) => (recorded ? [] : [{ groupId, stationId }])),
+  );
+  if (fresh.length === 0) return;
+  const withPrinter = new Set(
+    (await printerMappings(tx, [...new Set(fresh.map((f) => f.stationId))])).map(
+      (mapping) => mapping.stationId,
+    ),
+  );
+  for (const { groupId, stationId } of fresh)
+    if (withPrinter.has(stationId)) await recordHeldPaper(tx, groupId, new Set([stationId]));
 }
 
 /** All held kitchen records of each named dish and its split-off extras. */
@@ -2202,13 +2204,19 @@ export async function correctJoin(
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       quantity: firedQuantity,
+      firedAt: ticketItems.firedAt,
+      madeHere: ticketItems.madeHere,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .where(onDishesOrTheirExtras(tx, lineIds))
     .orderBy(asc(workingOrderLines.lineNo));
   const changes = joined.map((item) => ({ ...item, groupId, group }));
-  await recordJoiningStations(tx, changes);
+  // Made-here work is fired at once and gets no slip, so it never puts a station on paper.
+  await recordJoiningStations(
+    tx,
+    changes.filter((change) => change.firedAt === null && !change.madeHere),
+  );
   await correctHoldTickets(tx, cfg, changes, { kind: "HOLD CHANGED", direction: "added" });
 }
 
