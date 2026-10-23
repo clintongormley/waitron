@@ -33,8 +33,6 @@ export interface PrepStation {
   /** Null follows the venue's choice. */
   printMovedSlips: boolean | null;
   colour: StationColour;
-  timingDefaults: StationThresholds;
-  timingOverrides: { [Field in keyof StationThresholds]: number | null };
 }
 export interface PrepStationsView {
   routing: RoutingView;
@@ -119,9 +117,8 @@ export class PrepStationsApi {
     id: string,
     input: Partial<
       Pick<StationInput, "name" | "colour"> &
-        Pick<PrepStation, "showsRestOfOrder" | "printMovedSlips"> & {
-          [Field in keyof StationThresholds]: number | null;
-        } & {
+        Pick<PrepStation, "showsRestOfOrder" | "printMovedSlips"> &
+        StationThresholds & {
           /** Needs `printer.manage` as well, and an active station. */
           printerIds: readonly string[];
         }

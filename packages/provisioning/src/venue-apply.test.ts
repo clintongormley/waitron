@@ -61,29 +61,30 @@ it("A725 fresh provisioning starts with one red default kitchen", async () => {
   ).toEqual([{ name: "Cocina", colour: "red", is_default: 1 }]);
 });
 
-it("provisions late-flag defaults once and preserves edits when the venue plan is retried", async () => {
+it("a new venue's first station starts at the default late flags and keeps a station's edit when the plan is retried", async () => {
   const plan = planVenue(request("B10000007"), ALL_MODULES);
   const first = await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
-  const defaults = () =>
+  const stations = () =>
     suite.db.execute<{
-      location_id: string;
+      name: string;
       warm_after_minutes: number;
       overdue_after_minutes: number;
       forgotten_after_minutes: number;
-    }>(sql`select * from kitchen_timing_defaults`);
-  expect((await defaults()).rows).toEqual([
+    }>(sql`select name, warm_after_minutes, overdue_after_minutes, forgotten_after_minutes
+      from kitchen_stations where location_id = ${first.locationId}`);
+  expect((await stations()).rows).toEqual([
     {
-      location_id: first.locationId,
+      name: "Cocina",
       warm_after_minutes: 5,
       overdue_after_minutes: 10,
       forgotten_after_minutes: 15,
     },
   ]);
-  await suite.db.execute(sql`update kitchen_timing_defaults set warm_after_minutes = 3`);
+  await suite.db.execute(sql`update kitchen_stations set warm_after_minutes = 3`);
   await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
-  expect((await defaults()).rows).toEqual([
+  expect((await stations()).rows).toEqual([
     {
-      location_id: first.locationId,
+      name: "Cocina",
       warm_after_minutes: 3,
       overdue_after_minutes: 10,
       forgotten_after_minutes: 15,

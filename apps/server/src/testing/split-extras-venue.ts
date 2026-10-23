@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { kitchenTimingDefaults, locations, workingOrderLines, withTransaction } from "@waitron/db";
+import { locations, workingOrderLines, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -53,7 +53,6 @@ export async function setupVenue(): Promise<Venue> {
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
-  await db.insert(kitchenTimingDefaults).values({ locationId });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const catalogueId = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });

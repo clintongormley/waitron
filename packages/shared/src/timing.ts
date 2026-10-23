@@ -7,6 +7,13 @@ export interface StationThresholds {
   forgottenAfterMinutes: number;
 }
 
+// The kitchen_stations schema's declared defaults; a server test pins that the two agree.
+export const DEFAULT_STATION_THRESHOLDS: Readonly<StationThresholds> = {
+  warmAfterMinutes: 5,
+  overdueAfterMinutes: 10,
+  forgottenAfterMinutes: 15,
+};
+
 export const BAND_RANK: Record<TimingBand, number> = {
   fresh: 0,
   warm: 1,

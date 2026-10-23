@@ -699,7 +699,6 @@ describe("today's routes", () => {
         error: { code: "zone.not_found", params: { zoneId } },
       });
     } finally {
-      // A location with no kitchen timing fails every later floor read (`station.timing_missing`).
       await inTx(v, async (tx) => {
         await tx.delete(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId));
         await tx.delete(floorPlans).where(eq(floorPlans.zoneId, zoneId));

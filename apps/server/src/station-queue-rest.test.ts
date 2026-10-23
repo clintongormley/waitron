@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import {
   kitchenStations,
   locations,
-  kitchenTimingDefaults,
   nowIso,
   ticketItems,
   withTransaction,
@@ -35,7 +34,6 @@ describe("station queue rest of the order", () => {
       invoiceLocales: [LOCALE],
       operationDescription: "Venta en establecimiento",
     });
-    await db.insert(kitchenTimingDefaults).values({ locationId });
     const nodeId = await seedNode(db, brandLocationId(locationId));
     const [{ id: stationId }] = await db
       .insert(kitchenStations)

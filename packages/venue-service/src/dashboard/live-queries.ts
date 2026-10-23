@@ -89,7 +89,6 @@ export const QUERY_DEPENDENCIES = {
     "routing_cells",
     "routing_cell_periods",
     "station_day_states",
-    "kitchen_station_timing",
     "floor_zones",
     "floor_today_tables",
     "floor_today_join_tables",
@@ -117,8 +116,6 @@ export const QUERY_DEPENDENCIES = {
   ],
   "prep-stations-list": ["kitchen_stations"],
   routing: [
-    "kitchen_timing_defaults",
-    "kitchen_station_timing",
     "routing_cells",
     "kitchen_stations",
     "categories",

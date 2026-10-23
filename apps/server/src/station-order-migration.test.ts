@@ -6,8 +6,6 @@ import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   installChangeFeed,
-  kitchenStationTiming,
-  kitchenTimingDefaults,
   locations,
   stationPrinters,
   withTransaction,
@@ -99,7 +97,7 @@ async function populate(db: Database) {
     .returning({ id: locations.id });
   const locationId = brandLocationId(location!.id);
   const nodeId = await seedNode(db, locationId);
-  await db.insert(kitchenTimingDefaults).values({ locationId });
+  await db.execute(sql`insert into kitchen_timing_defaults (location_id) values (${locationId})`);
   const cfg: TillConfig = {
     nodeId,
     locationId,
@@ -112,7 +110,9 @@ async function populate(db: Database) {
   await withTransaction(db, async (tx) => {
     await createStation(tx, cfg, { name: "Bar" });
     await createStation(tx, cfg, { name: "Alpha" });
-    await tx.insert(kitchenStationTiming).values({ stationId, warmAfterMinutes: 3 });
+    await tx.execute(
+      sql`insert into kitchen_station_timing (station_id, warm_after_minutes) values (${stationId}, 3)`,
+    );
     const printer = await createPrinter(
       tx,
       { locationId },

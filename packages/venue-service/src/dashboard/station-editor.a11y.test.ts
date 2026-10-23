@@ -5,21 +5,6 @@ import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helper
 import type { StationEditor } from "./station-editor.js";
 import "./station-editor.js";
 
-// axe does not score a placeholder's contrast, so the placeholder-hinted timings measure their own.
-function contrastRatio(a: string, b: string): number {
-  const luminance = (rgb: string) => {
-    expect(rgb).toMatch(/^rgba?\(/);
-    const [r, g, bl] = rgb
-      .match(/\d+(\.\d+)?/g)!
-      .slice(0, 3)
-      .map((part) => Number(part) / 255)
-      .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-    return 0.2126 * r! + 0.7152 * g! + 0.0722 * bl!;
-  };
-  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (light! + 0.05) / (dark! + 0.05);
-}
-
 afterEach(() => {
   cleanup();
   setLocale("en");
@@ -50,12 +35,9 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       showsRestOfOrder: true,
       printMovedSlips: state === "moved slips own choice" ? false : null,
       printerIds: ["epson"],
-      timingOverrides: {
-        warmAfterMinutes: null,
-        overdueAfterMinutes: 5,
-        forgottenAfterMinutes: null,
-      },
-      timingDefaults: { warmAfterMinutes: 3, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
+      warmAfterMinutes: 3,
+      overdueAfterMinutes: 5,
+      forgottenAfterMinutes: 15,
     };
     el.printers = [
       { id: "epson", name: "Epson" },
@@ -147,13 +129,9 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       );
       const group = el.shadowRoot!.querySelector("fieldset")!;
       expect(group.contains(timing(name))).toBe(true);
-      expect(group.getAttribute("aria-describedby")).toBe("timing-inheritance");
-      expect(el.shadowRoot!.getElementById("timing-inheritance")!.textContent).toBe(
-        "Leave a field blank to use the venue setting",
-      );
-      const placeholder = getComputedStyle(input, "::placeholder").color;
-      const field = getComputedStyle(root.querySelector(".field")!).backgroundColor;
-      expect(contrastRatio(placeholder, field)).toBeGreaterThanOrEqual(4.5);
+      expect(group.hasAttribute("aria-describedby")).toBe(false);
+      expect(el.shadowRoot!.getElementById("timing-inheritance")).toBeNull();
+      expect(timing(name).required).toBe(true);
     }
     await expectNoA11yViolations(host);
   });

@@ -55,6 +55,13 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     expect(columns.map(({ name }) => name)).not.toContain("display_order");
   });
 
+  it("the venue keeps no late flags apart from its stations", async () => {
+    const tables = suite.db.all<{ name: string }>(
+      sql`select name from sqlite_master where name in ('kitchen_timing_defaults', 'kitchen_station_timing')`,
+    );
+    expect(tables).toEqual([]);
+  });
+
   it("deleted station names are reusable under new ids", async () => {
     const name = "Reusable station";
     const oldId = await seedStation(LOCATION_A, name);

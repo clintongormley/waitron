@@ -11,7 +11,6 @@ import {
   deviceMadeHereStations,
   devices,
   kitchenStations,
-  kitchenStationTiming,
   orderDrafts,
   orderDraftLines,
   orderTableLabels,
@@ -116,10 +115,6 @@ async function stationDeleteRules(tx: Transaction, cfg: TillConfig, id: string) 
     .from(deviceMadeHereStations)
     .innerJoin(devices, eq(devices.id, deviceMadeHereStations.deviceId))
     .where(eq(deviceMadeHereStations.stationId, id));
-  const timing = await tx
-    .select({ id: kitchenStationTiming.stationId })
-    .from(kitchenStationTiming)
-    .where(eq(kitchenStationTiming.stationId, id));
   const refusals: DeleteImpact["refusals"] = [];
   if (station.isDefault)
     refusals.push({ code: "station.is_default", params: { stationId: id }, targets: [target] });
@@ -146,7 +141,6 @@ async function stationDeleteRules(tx: Transaction, cfg: TillConfig, id: string) 
     { key: "station_draft_lines", count: drafts.length, targets: [] },
     named("station_printers", mappedPrinters),
     named("station_made_here", madeHere),
-    { key: "station_timing", count: timing.length, targets: [] },
     ...settings.removes,
   ].filter((row) => row.count > 0);
   const impact: DeleteImpact = { target, refusals, ends: [], removes };
@@ -211,7 +205,6 @@ export async function deleteStation(
   }
   await tx.delete(stationPrinters).where(eq(stationPrinters.stationId, id));
   await tx.delete(deviceMadeHereStations).where(eq(deviceMadeHereStations.stationId, id));
-  await tx.delete(kitchenStationTiming).where(eq(kitchenStationTiming.stationId, id));
   await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, id));
   return impact;
 }

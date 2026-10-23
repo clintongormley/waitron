@@ -14,7 +14,6 @@ export * from "./order-draft-recalled-lines.js";
 export * from "./line-service-cancellations.js";
 export * from "./floor-zones.js";
 export * from "./kitchen-stations.js";
-export * from "./kitchen-timing.js";
 export * from "./kitchen-courses.js";
 export * from "./ticket-items.js";
 export * from "./devices.js";

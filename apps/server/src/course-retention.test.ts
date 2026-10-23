@@ -6,7 +6,6 @@ import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
 import {
-  kitchenTimingDefaults,
   locations,
   parties,
   ticketItems,
@@ -71,7 +70,6 @@ async function setup() {
     .values({ name: "Sala", invoiceLocales: ["es-ES"], operationDescription: "Restaurant" })
     .returning();
   const locationId = brandLocationId(loc!.id);
-  await db.insert(kitchenTimingDefaults).values({ locationId });
   const stationId = await seedKitchenStation(db, { locationId });
   const nodeId = await seedNode(db, locationId);
   const cfg: TillConfig = {

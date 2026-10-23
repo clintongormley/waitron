@@ -107,12 +107,6 @@ function stubApi(role = "manager", permissions = ["test.use"]): DashboardApi {
     }),
     listCourses: vi.fn().mockResolvedValue([]),
     getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
-    getKitchenTimingDefaults: vi.fn().mockResolvedValue({
-      warmAfterMinutes: 5,
-      overdueAfterMinutes: 10,
-      forgottenAfterMinutes: 15,
-    }),
-    setKitchenTimingDefaults: vi.fn().mockResolvedValue(undefined),
     getFireControl: vi.fn().mockResolvedValue({ mode: "waiter" }),
   } as unknown as DashboardApi;
 }

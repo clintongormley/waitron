@@ -146,7 +146,6 @@ What is left. The starting decisions are in the plan,
 2026-10-23: A773-1 landed on 2026-10-19 (#1897), so PRs 5–8 are buildable and the #1854 rename
 under Open points is due.
 
-- **PR 5 — late flags on each station.**
 - **PR 6 — identical dishes, held courses and MOVED slips on each station.**
 - **PR 7 — done on the screen on each station.**
 - **PR 8 — changes after sending, three values, on each station.**
@@ -186,6 +185,24 @@ Open points:
   them. Main before #2020 did not check the old venue-wide value either (neither
   `packages/db/src/configuration-transfer.ts` nor `apps/server/src/configuration-transfer.ts`
   names the column at `b85119762`).
+- From PR 5: Add station draws its three minutes as full-width fields, one under another, labelled
+  "Warm after (min)", "Overdue after (min)" and "Forgotten after (min)"; the Edit window draws them
+  as one short row under Late flags (minutes), labelled "Warm", "Overdue" and "Forgotten"
+  (`prep-stations-screen.ts` `#dialog`, `station-editor.ts`). Unchanged by PR 5, whose only change
+  to Add station is reading 5/10/15 from one constant. The owner's one-row decision (A725 below)
+  names the Edit window; ask whether Add should match.
+- From PR 5: A773's picture 10 draws late flags as one "Late after · 5 · 10 · 15 min" dropdown;
+  PR 5 kept A725's three fields (owner, 2026-10-15). Ask the owner whether picture 10 replaces them.
+- From PR 5's look: at 1280 px the Edit window's late-flags row is about 46 px wider than the fields
+  above and below it (it ends at about x 951, the others at about 905, measured in Chromium). The
+  row's grid (`.timing-fields`, `station-editor.ts`) came with A725 (`6a4331b4d`, #1837, by
+  `git blame`) and PR 5 did not change it. At 390 px every field is full width.
+- From PR 5's look: Spanish names the three flags three ways — the Edit window's labels "En demora",
+  "Retrasado", "Olvidado" (`prep.health.*`), the error "Usa minutos enteros con aviso < atraso <
+  olvido." (`prep.threshold_invalid`) and Add station's "Aviso / Atraso / Olvido a partir de (min)"
+  (`prep.warm`, `prep.overdue`, `prep.forgotten`), all in
+  `packages/venue-service/src/dashboard/strings.ts`. English uses warm, overdue and forgotten
+  throughout. PR 5 added no strings.
 
 ## A long word in a routing-grid row name still splits at 390 px
 
@@ -362,13 +379,14 @@ change; check that against the code when PR 8 is picked up.
   shows its colour square.
 - Add and Edit use the shared `wt-colour-chooser`, showing other stations that use a colour.
   The Edit window groups its three late-flag fields in one short row under Late flags (minutes),
-  followed by one instruction to leave a field blank to use the venue setting.
+  followed by one instruction to leave a field blank to use the venue setting. **2026-10-23 (A756
+  PR 5):** the minutes are the station's own and required; the instruction is gone.
 - The Edit switch reads "Also list the order's dishes from other stations", with "On this station's
   tickets and kitchen screen" beneath it. "Print a slip when sent dishes move table" offers
   "Venue setting: Print" or "Venue setting: Don't print", "Print", and "Don't print". Spanish matches.
 - Configuration bundles use version 4. Older exports must be exported again from a compatible
   source; there is no conversion of station-order settings. **2026-10-19:** A757 slice 2 moved the
-  export to version 5. **2026-10-21:** A841 slice 2 moved it to version 6.
+  export to version 5. **2026-10-21:** A841 slice 2 moved it to version 6. **2026-10-23:** A756 PR 5 moved it to version 7.
 
 - **Whole-order kitchen notes (A743, owner 2026-10-15).** You can give the kitchen one
   instruction above a counter order or a table party's dishes, alongside each dish's own note.

@@ -138,7 +138,7 @@ One page, one tab per group. Each tab's settings are set once and left.
   (2026-10-19: A757 slice 1 moved Needs clearing to each department's Service tab,
   `departments.needs_clearing`.)
 - **Adjustment reasons**: the discount and void reasons, and the largest discount on one bill.
-- **Kitchen**: courses; bump mode; fire control; the late-flag defaults (§6.5); the held-course
+- **Kitchen**: courses; bump mode; fire control; the late-flag defaults (§6.5; 2026-10-23, A756 PR 5: gone, each station holds its own); the held-course
   reminder; identical dishes on a ticket; printing held courses; allowing changes after sending.
   Fire control was missing from the list the owner saw; it is the Kitchen page's third setting, so
   it moves with the other two.
@@ -320,14 +320,18 @@ One row per station: the three late flags, **Show the rest of the order**, and *
 goes to** (the default station reads "Never closes").
 
 - **The late flags have venue-wide defaults** in Venue settings › Kitchen. A station may override
-  any of the three; an empty box uses the default, shown in grey.
+  any of the three; an empty box uses the default, shown in grey. (2026-10-23, A756 PR 5: the
+  venue-wide defaults and the overrides are gone; each station's three minutes are its own, set in
+  the station editor and required there.)
 - **They must stay in order** (warm, then overdue, then forgotten), and the check moves from the
   station's own columns to the values the station ends up with:
   - saving a station whose result is out of order is refused, beside the field;
   - changing a venue default that would put some station out of order is refused, and the message
     names the station.
   The database's check on the three columns cannot see the venue default, so it is replaced by
-  these two checks in code; the error codes follow the existing `station.*` codes.
+  these two checks in code; the error codes follow the existing `station.*` codes. (2026-10-23,
+  A756 PR 5: there is no venue default; a station's save is checked against its own stored
+  minutes, and the database's order check on the station's three columns stays.)
 
 ## 7. Hours
 
@@ -420,7 +424,7 @@ Each step is one queue item, with its own plan.
 2. **Departments and zones.** The table (§4), A254 §3's separate settings, the trading name on the
    receipt with the Preview link (§5), and the receipt print mode per department and zone.
 3. **Prep stations tabs.** Stations with the live numbers, Tickets, Watchers and Settings, with the
-   late-flag defaults. The Routing tab holds today's routing screen unchanged until step 4.
+   late-flag defaults (2026-10-23, A756 PR 5: gone, each station holds its own). The Routing tab holds today's routing screen unchanged until step 4.
 4. **The routing grid** (§6.2).
 5. **Hours** (§7): the week grid, special dates and the calendar.
 6. **Public holidays** (§7.1).

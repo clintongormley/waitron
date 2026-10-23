@@ -8,7 +8,6 @@ import {
   catalogues,
   kitchenCourses,
   kitchenStations,
-  kitchenTimingDefaults,
   locations,
   products,
   withTransaction,
@@ -20,6 +19,7 @@ import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   AppError,
+  DEFAULT_STATION_THRESHOLDS,
   STATION_COLOURS,
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -37,7 +37,6 @@ import {
   updateStation,
 } from "./kitchen.js";
 import "./errors.js";
-import { getKitchenTimingDefaults, setKitchenTimingDefaults } from "./kitchen-timing.js";
 
 // The one-default partial unique is pinned in packages/db/src/schema/kitchen-stations.test.ts.
 const LOCALE = "es-ES";
@@ -63,7 +62,6 @@ async function setupVenue(): Promise<TillConfig> {
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
-  await db.insert(kitchenTimingDefaults).values({ locationId });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
     nodeId: brandNodeId(nodeId),
@@ -113,37 +111,6 @@ describe("kitchen-station config", () => {
     } finally {
       await db.execute(sql`pragma reverse_unordered_selects = off`);
     }
-  });
-
-  it("A725 timing refuses the alphabetically first invalid station override", async () => {
-    const cfg = await setupVenue();
-    await asApp(cfg, (tx) =>
-      createStation(tx, cfg, { name: "barra", thresholds: { warmAfterMinutes: 7 } }),
-    );
-    const alpha = await asApp(cfg, (tx) =>
-      createStation(tx, cfg, { name: "Ásador", thresholds: { warmAfterMinutes: 6 } }),
-    );
-    await expect(
-      asApp(cfg, (tx) =>
-        setKitchenTimingDefaults(tx, cfg, {
-          warmAfterMinutes: 2,
-          overdueAfterMinutes: 5,
-          forgottenAfterMinutes: 15,
-        }),
-      ),
-    ).rejects.toMatchObject({
-      code: "station.thresholds_invalid",
-      params: {
-        name: "Ásador",
-        stationId: alpha.id,
-        field: "overdueAfterMinutes",
-      },
-    });
-    expect(await getKitchenTimingDefaults(db, cfg)).toEqual({
-      warmAfterMinutes: 5,
-      overdueAfterMinutes: 10,
-      forgottenAfterMinutes: 15,
-    });
   });
 
   it("A725 gives sequential omitted colours the first unused choices", async () => {
@@ -249,12 +216,6 @@ describe("kitchen-station config", () => {
     await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Barra" }));
     const list = await asApp(cfg, (tx) => listStations(tx, cfg));
     const defaultThresholds = {
-      timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
-      timingOverrides: {
-        warmAfterMinutes: null,
-        overdueAfterMinutes: null,
-        forgottenAfterMinutes: null,
-      },
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
@@ -318,12 +279,6 @@ describe("kitchen-station config", () => {
       {
         id,
         name: "Parrilla",
-        timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
-        timingOverrides: {
-          warmAfterMinutes: null,
-          overdueAfterMinutes: null,
-          forgottenAfterMinutes: null,
-        },
         isDefault: false,
         active: true,
         showsRestOfOrder: false,
@@ -385,84 +340,72 @@ describe("kitchen-station config", () => {
     });
   });
 
-  it("new stations inherit venue defaults and independent overrides retain omitted fields", async () => {
+  async function storedMinutes(id: string) {
+    return (
+      await db
+        .select({
+          warmAfterMinutes: kitchenStations.warmAfterMinutes,
+          overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
+          forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
+        })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.id, id))
+    )[0];
+  }
+
+  it("a station made with no minutes starts at the default late flags, on its own row", async () => {
     const cfg = await setupVenue();
-    await db.execute(sql`update kitchen_timing_defaults set warm_after_minutes = 4,
-      overdue_after_minutes = 9, forgotten_after_minutes = 14 where location_id = ${cfg.locationId}`);
-    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Inherited" }));
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Plain" }));
+    expect(await storedMinutes(id)).toEqual(DEFAULT_STATION_THRESHOLDS);
     expect(
       (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id),
-    ).toMatchObject({
-      warmAfterMinutes: 4,
-      overdueAfterMinutes: 9,
-      forgottenAfterMinutes: 14,
+    ).toMatchObject(DEFAULT_STATION_THRESHOLDS);
+  });
+
+  it("a station row given no minutes takes the schema's defaults, equal to DEFAULT_STATION_THRESHOLDS", async () => {
+    const cfg = await setupVenue();
+    const id = randomUUID();
+    await db.insert(kitchenStations).values({ id, locationId: cfg.locationId, name: "Bare" });
+    expect(await storedMinutes(id)).toEqual(DEFAULT_STATION_THRESHOLDS);
+  });
+
+  it("createStation and updateStation write the station's own row, and an omitted field keeps its value", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) =>
+      createStation(tx, cfg, {
+        name: "Own",
+        thresholds: { warmAfterMinutes: 3, overdueAfterMinutes: 8 },
+      }),
+    );
+    expect(await storedMinutes(id)).toEqual({
+      warmAfterMinutes: 3,
+      overdueAfterMinutes: 8,
+      forgottenAfterMinutes: 15,
     });
-    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { warmAfterMinutes: 2 }));
     await asApp(cfg, (tx) =>
       updateStation(tx, cfg, id, { name: "Renamed", overdueAfterMinutes: 7 }),
     );
+    expect(await storedMinutes(id)).toEqual({
+      warmAfterMinutes: 3,
+      overdueAfterMinutes: 7,
+      forgottenAfterMinutes: 15,
+    });
     expect(
       (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id),
     ).toMatchObject({
       name: "Renamed",
-      warmAfterMinutes: 2,
+      warmAfterMinutes: 3,
       overdueAfterMinutes: 7,
-      forgottenAfterMinutes: 14,
-    });
-  });
-
-  it("lists raw timing overrides separately even when an override equals the venue default", async () => {
-    const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Same minutes" }));
-    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { warmAfterMinutes: 5 }));
-    const station = (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id);
-    expect(station).toMatchObject({
-      warmAfterMinutes: 5,
-      overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
-      timingOverrides: {
-        warmAfterMinutes: 5,
-        overdueAfterMinutes: null,
-        forgottenAfterMinutes: null,
-      },
-      timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
-    });
-    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { warmAfterMinutes: null }));
-    const inherited = (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id);
-    expect(inherited).toMatchObject({
-      warmAfterMinutes: 5,
-      timingOverrides: {
-        warmAfterMinutes: null,
-        overdueAfterMinutes: null,
-        forgottenAfterMinutes: null,
-      },
     });
   });
 
-  it("refuses missing venue defaults rather than fabricating or overwriting them", async () => {
+  it("a station's answer carries only its own minutes", async () => {
     const cfg = await setupVenue();
-    await db.execute(
-      sql`delete from kitchen_timing_defaults where location_id = ${cfg.locationId}`,
-    );
-    await expect(asApp(cfg, (tx) => getKitchenTimingDefaults(tx, cfg))).rejects.toMatchObject({
-      code: "station.timing_missing",
-    });
-    await expect(
-      asApp(cfg, (tx) =>
-        setKitchenTimingDefaults(tx, cfg, {
-          warmAfterMinutes: 3,
-          overdueAfterMinutes: 8,
-          forgottenAfterMinutes: 12,
-        }),
-      ),
-    ).rejects.toMatchObject({ code: "station.timing_missing" });
-    expect(
-      (
-        await db.execute(
-          sql`select * from kitchen_timing_defaults where location_id = ${cfg.locationId}`,
-        )
-      ).rows,
-    ).toEqual([]);
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Only own" }));
+    const station = (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id);
+    expect(station).not.toHaveProperty("timingDefaults");
+    expect(station).not.toHaveProperty("timingOverrides");
   });
 
   it("setDefaultStation throws station.not_found for an absent OR a deleted station", async () => {

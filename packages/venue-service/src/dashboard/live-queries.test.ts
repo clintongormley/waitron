@@ -7,8 +7,6 @@ it("declares no health query: Prep stations reads no live kitchen numbers", () =
 
 it("refreshes the routing grid and the operations screen on a routing cell change", () => {
   expect(QUERY_DEPENDENCIES.routing).toEqual([
-    "kitchen_timing_defaults",
-    "kitchen_station_timing",
     "routing_cells",
     "kitchen_stations",
     "categories",

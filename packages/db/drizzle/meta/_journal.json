@@ -1303,6 +1303,13 @@
       "when": 1792703551398,
       "tag": "0185_settled_order_to_counter",
       "breakpoints": true
+    },
+    {
+      "idx": 186,
+      "version": "6",
+      "when": 1792773515081,
+      "tag": "0186_retire_kitchen_timing_tables",
+      "breakpoints": true
     }
   ]
 }

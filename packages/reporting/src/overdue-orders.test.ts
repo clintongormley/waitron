@@ -2,7 +2,14 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, parties, ticketItems, withTransaction, workingOrders } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  kitchenStations,
+  parties,
+  ticketItems,
+  withTransaction,
+  workingOrders,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedFiredLine,
@@ -74,6 +81,25 @@ describe("computeOverdueOrders", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ orderId, stationName: "Cocina", band: "overdue" });
     expect(rows[0]!.ageMinutes).toBeLessThan(15);
+  });
+  it("reads the line's station's own minutes", async () => {
+    await suite.db
+      .update(kitchenStations)
+      .set({ warmAfterMinutes: 2, overdueAfterMinutes: 4, forgottenAfterMinutes: 6 })
+      .where(eq(kitchenStations.id, stationId));
+    const { orderId } = await seedFiredOrder(
+      suite.db,
+      {
+        deviceId: venue.deviceId,
+        nodeId: venue.nodeId,
+        locationId: venue.locationId,
+        stationId,
+      },
+      { orderNumber: 1, ageMinutes: 5 },
+    );
+    const rows = await run();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ orderId, band: "overdue" });
   });
   it("returns only overdue/forgotten orders, worst-first, with the right station + age; drops fresh and served lines", async () => {
     // Default thresholds (5/10/15): 11 min -> overdue, 16 min -> forgotten, 2 min -> fresh (excluded).

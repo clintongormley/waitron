@@ -20,7 +20,6 @@ import {
   lineServiceCancellations,
   kitchenStations,
   locations,
-  kitchenTimingDefaults,
   orderGroupEvents,
   orderGroups,
   printJobs,
@@ -162,7 +161,6 @@ async function setupVenue(): Promise<Venue> {
     .returning({ id: locations.id });
   const locationId = location!.id;
   const stationId = await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
-  await db.insert(kitchenTimingDefaults).values({ locationId });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),

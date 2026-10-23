@@ -14,10 +14,7 @@ function client() {
   const requests: { path: string; method: string; body: unknown }[] = [];
   const fetchImpl = vi.fn(async (path: string | URL | Request, init?: RequestInit) => {
     requests.push({ path: String(path), method: init?.method ?? "GET", body: init?.body });
-    const value = String(path).endsWith("bump-mode")
-      ? { mode: "ticket" }
-      : { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 };
-    return new Response(JSON.stringify(value), {
+    return new Response(JSON.stringify({ mode: "ticket" }), {
       headers: { "content-type": "application/json" },
     });
   });
@@ -29,14 +26,15 @@ describe("A773 dashboard waiter authority", () => {
     const { api, requests } = client();
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api, readOnly });
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-test=timing-values]")).not.toBeNull(),
+      readOnly
+        ? expect(el.shadowRoot!.textContent).toContain(t("kitchen.bump_ticket"))
+        : expect(
+            el.shadowRoot!.querySelector("[data-test=bump-ticket]")?.getAttribute("variant"),
+          ).toBe("primary"),
     );
-    expect(requests.map(({ path }) => path).sort()).toEqual([
-      "/management-api/bump-mode",
-      "/management-api/kitchen-timing-defaults",
-    ]);
+    expect(requests.map(({ path }) => path).sort()).toEqual(["/management-api/bump-mode"]);
     expect(el.shadowRoot!.querySelector('[data-test^="fire-"]')).toBeNull();
-    expect(el.shadowRoot!.querySelectorAll("section")).toHaveLength(2);
+    expect(el.shadowRoot!.querySelectorAll("section")).toHaveLength(1);
     if (readOnly) {
       expect(el.shadowRoot!.textContent).toContain(t("kitchen.bump_ticket"));
       expect(el.shadowRoot!.querySelector("wt-button")).toBeNull();
@@ -87,14 +85,16 @@ describe.each(["light", "dark"] as const)("A773 dashboard authority (%s)", (them
       theme,
     );
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-test=timing-values]")).not.toBeNull(),
+      expect(el.shadowRoot!.querySelector("[data-test=bump-ticket]")?.getAttribute("variant")).toBe(
+        "primary",
+      ),
     );
     expect(el.shadowRoot!.querySelector('[data-test^="fire-"]')).toBeNull();
     expect(
       [...el.shadowRoot!.querySelectorAll("section")].map(
         (section) => section.getAttribute("aria-label") ?? section.querySelector("h2")?.textContent,
       ),
-    ).toEqual([t("kitchen.bump_mode"), t("kitchen.timing_title")]);
+    ).toEqual([t("kitchen.bump_mode")]);
     for (const button of el.shadowRoot!.querySelectorAll("wt-button")) {
       const native = button.shadowRoot!.querySelector("button")!;
       const box = native.getBoundingClientRect();

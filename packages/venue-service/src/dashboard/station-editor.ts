@@ -24,7 +24,7 @@ import { stationColourChoices, type StationColourUser } from "./station-colour-c
 import { format } from "./hours-view.js";
 import { t } from "./strings.js";
 
-export interface StationEditorStation {
+export type StationEditorStation = {
   id: string;
   name: string;
   colour: StationColour;
@@ -33,10 +33,7 @@ export interface StationEditorStation {
   /** Null follows the venue's choice. */
   printMovedSlips: boolean | null;
   printerIds: readonly string[];
-  /** A null timing follows the venue default. */
-  timingOverrides: { [K in TimingField]: number | null };
-  timingDefaults: StationThresholds;
-}
+} & StationThresholds;
 export interface StationEditorPrinter {
   id: string;
   name: string;
@@ -49,7 +46,7 @@ export type StationEditorSave = {
   printerIds?: string[];
   showsRestOfOrder?: boolean;
   printMovedSlips?: boolean | null;
-} & { [K in TimingField]?: number | null };
+} & Partial<StationThresholds>;
 
 const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
 type TimingField = (typeof TIMING_FIELDS)[number];
@@ -102,17 +99,14 @@ const equal = (a: Draft, b: Draft) =>
   sameSet(a.printerIds, b.printerIds) &&
   TIMING_FIELDS.every((field) => timingText(a[field]) === timingText(b[field]));
 
-/** Each timing's own check, then the order with a blank read as its venue default. */
-function timingErrors(
-  draft: Draft,
-  defaults: StationThresholds,
-): Partial<Record<TimingField, string>> {
+/** Each timing's own check, then the order. */
+function timingErrors(draft: Draft): Partial<Record<TimingField, string>> {
   const errors: Partial<Record<TimingField, string>> = {};
   const minutes: Partial<Record<TimingField, number>> = {};
   for (const field of TIMING_FIELDS) {
     const text = draft[field].trim();
-    const value = text === "" ? defaults[field] : Number(text);
-    if (text !== "" && !(Number.isInteger(value) && value >= 1 && value <= 2_147_483_647))
+    const value = Number(text);
+    if (text === "" || !(Number.isInteger(value) && value >= 1 && value <= 2_147_483_647))
       errors[field] = t("prep.threshold_invalid");
     else minutes[field] = value;
   }
@@ -209,13 +203,10 @@ function movedOptions(venuePrints: boolean) {
   ];
 }
 
-function timingDraft(overrides: StationEditorStation["timingOverrides"]) {
-  return Object.fromEntries(
-    TIMING_FIELDS.map((field) => [
-      field,
-      overrides[field] === null ? "" : String(overrides[field]),
-    ]),
-  ) as { [K in TimingField]: string };
+function timingDraft(station: StationThresholds) {
+  return Object.fromEntries(TIMING_FIELDS.map((field) => [field, String(station[field])])) as {
+    [K in TimingField]: string;
+  };
 }
 
 @customElement("prep-station-editor")
@@ -343,7 +334,7 @@ export class StationEditor extends LitElement {
         printerIds: [...station.printerIds],
         showsRestOfOrder: station.showsRestOfOrder,
         printMovedSlips: station.printMovedSlips,
-        ...timingDraft(station.timingOverrides),
+        ...timingDraft(station),
       };
       this.baseline = copy(this.draft);
       this.attempted = false;
@@ -408,7 +399,7 @@ export class StationEditor extends LitElement {
   private fieldErrors(): Partial<Record<"name" | TimingField, string>> {
     return {
       ...(this.draft.name.trim() === "" ? { name: t("prep.name_required") } : {}),
-      ...timingErrors(this.draft, this.station!.timingDefaults),
+      ...timingErrors(this.draft),
     };
   }
 
@@ -436,7 +427,7 @@ export class StationEditor extends LitElement {
         : {}),
       ...Object.fromEntries(
         TIMING_FIELDS.filter((field) => timingText(draft[field]) !== timingText(base[field])).map(
-          (field) => [field, draft[field].trim() === "" ? null : Number(draft[field].trim())],
+          (field) => [field, Number(draft[field].trim())],
         ),
       ),
     };
@@ -574,7 +565,7 @@ export class StationEditor extends LitElement {
               ? html`<p class="note">${t("prep.printers_need_active")}</p>`
               : nothing
           }
-          <fieldset aria-describedby="timing-inheritance">
+          <fieldset>
             <legend>${t("prep.late_flags")}</legend>
             <div class="timing-fields">
               ${TIMING_FIELDS.map(
@@ -583,7 +574,7 @@ export class StationEditor extends LitElement {
                     name=${field}
                     label=${t(TIMING_LABELS[field])}
                     type="number"
-                    placeholder=${String(this.station!.timingDefaults[field])}
+                    required
                     .value=${this.draft[field]}
                     .error=${errors[field] || (refusedField === field ? fieldMessage : "")}
                     @wt-change=${(event: CustomEvent<{ value: string }>) => {
@@ -599,7 +590,6 @@ export class StationEditor extends LitElement {
                   ></wt-input>`,
               )}
             </div>
-            <p id="timing-inheritance" class="note">${t("prep.timing_inheritance")}</p>
           </fieldset>
           <wt-switch
             name="showsRestOfOrder"

@@ -75,12 +75,6 @@ function stubApi(
         removes: [],
       }),
     ),
-    getKitchenTimingDefaults: vi.fn().mockResolvedValue({
-      warmAfterMinutes: 5,
-      overdueAfterMinutes: 10,
-      forgottenAfterMinutes: 15,
-    }),
-    setKitchenTimingDefaults: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -101,18 +95,21 @@ describe("kitchen-screen", () => {
     expect(q(el, "[data-test=bump-line]")!.getAttribute("variant")).toBe("secondary");
   });
 
-  it("still reads timing when the bump mode cannot be read, and says the read failed", async () => {
+  it("says the read failed when the bump mode cannot be read", async () => {
     const api = stubApi({ getBumpMode: vi.fn().mockRejectedValue({ code: "server.internal" }) });
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
     await flush(el);
-    expect(
-      [...q(el, "[data-test=timing-values]")!.children].map((value) => value.textContent),
-    ).toEqual([
-      `${t("kitchen.station_warm")}: 5`,
-      `${t("kitchen.station_overdue")}: 10`,
-      `${t("kitchen.station_forgotten")}: 15`,
-    ]);
     expect(q(el, "[role=alert]")!.textContent).toContain(codeMessage("server.internal"));
+  });
+
+  it("draws no late flags", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await flush(el);
+    expect(q(el, "[data-test=bump-line]")).not.toBeNull();
+    expect(q(el, "[data-test=timing-values]")).toBeNull();
+    expect(q(el, "[data-test=edit-timing]")).toBeNull();
+    expect(q(el, "wt-input")).toBeNull();
   });
 
   it("draws no h1, no stations panel and no link to Prep stations", async () => {
@@ -164,10 +161,6 @@ describe("kitchen-screen", () => {
     await flush(el);
     const first = el.shadowRoot!.querySelector("section")!;
     expect(first.getBoundingClientRect().top).toBe(el.getBoundingClientRect().top);
-    const second = first.nextElementSibling!;
-    expect(second.getBoundingClientRect().top).toBeGreaterThan(
-      first.getBoundingClientRect().bottom,
-    );
   });
 });
 

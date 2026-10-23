@@ -8,7 +8,6 @@ import {
   deviceProfiles,
   deviceMadeHereStations,
   kitchenStations,
-  kitchenStationTiming,
   stationPrinters,
   printJobs,
   kitchenPrintJobs,
@@ -153,7 +152,6 @@ async function snapshot(v: PartyVenue) {
     const result: Record<string, unknown> = {};
     for (const name of [
       "kitchen_stations",
-      "kitchen_station_timing",
       "station_printers",
       "device_made_here_stations",
       "routing_cells",
@@ -339,7 +337,6 @@ describe("permanent station deletion", () => {
       await tx
         .insert(deviceMadeHereStations)
         .values({ stationId: id, deviceId: v.cfg.origin.deviceId });
-      await tx.insert(kitchenStationTiming).values({ stationId: id, warmAfterMinutes: 2 });
     });
     const [sender] = await inTx(v, (tx) =>
       tx.select().from(devices).where(eq(devices.id, v.cfg.origin.deviceId)),
@@ -354,7 +351,6 @@ describe("permanent station deletion", () => {
         { key: "station_draft_lines", count: 1, targets: [] },
         { key: "station_printers", count: 1, targets: [{ id: printer!.id, name: "Kitchen" }] },
         { key: "station_made_here", count: 1, targets: [{ id: sender!.id, name: sender!.label }] },
-        { key: "station_timing", count: 1, targets: [] },
       ],
     });
     expect(
@@ -405,7 +401,7 @@ describe("permanent station deletion", () => {
       code: "draft.out_of_date",
       params: { draftId: draft.id, revision: draft.revision + 1 },
     });
-    for (const table of [stationPrinters, deviceMadeHereStations, kitchenStationTiming])
+    for (const table of [stationPrinters, deviceMadeHereStations])
       expect(await inTx(v, (tx) => tx.select().from(table))).toEqual([]);
     expect((await inTx(v, (tx) => listStations(tx, v.cfg))).some((row) => row.id === id)).toBe(
       false,
@@ -652,11 +648,33 @@ describe("permanent station deletion", () => {
       ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "active" } });
     },
   );
-  it("rolls back a failure after module/settings removal", async () => {
+  it("keeps a deleted station's late flags on its row", async () => {
     const { v, id } = await fixture();
     await inTx(v, (tx) =>
-      tx.insert(kitchenStationTiming).values({ stationId: id, warmAfterMinutes: 2 }),
+      tx
+        .update(kitchenStations)
+        .set({ warmAfterMinutes: 2, overdueAfterMinutes: 4, forgottenAfterMinutes: 6 })
+        .where(eq(kitchenStations.id, id)),
     );
+    await inTx(v, (tx) => deleteStation(tx, v.cfg, id));
+    expect(
+      await inTx(v, (tx) =>
+        tx
+          .select({
+            active: kitchenStations.active,
+            warmAfterMinutes: kitchenStations.warmAfterMinutes,
+            overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
+            forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
+          })
+          .from(kitchenStations)
+          .where(eq(kitchenStations.id, id)),
+      ),
+    ).toEqual([
+      { active: false, warmAfterMinutes: 2, overdueAfterMinutes: 4, forgottenAfterMinutes: 6 },
+    ]);
+  });
+  it("rolls back a failure after module/settings removal", async () => {
+    const { v, id } = await fixture();
     const before = await snapshot(v);
     await expect(
       inTx(v, async (tx) => {

@@ -7,7 +7,6 @@ import {
   deviceProfiles,
   devices,
   invoiceSeries,
-  kitchenTimingDefaults,
   locations,
   nodes,
   openVenueDatabase,
@@ -156,10 +155,6 @@ async function seedVenue(db: Database): Promise<void> {
       operationDescription: "Hospitality",
     })
     .onConflictDoNothing({ target: locations.id });
-  await db
-    .insert(kitchenTimingDefaults)
-    .values({ locationId: LOCATION })
-    .onConflictDoNothing({ target: kitchenTimingDefaults.locationId });
   for (const node of [NODE_A, NODE_B]) {
     await db
       .insert(nodes)

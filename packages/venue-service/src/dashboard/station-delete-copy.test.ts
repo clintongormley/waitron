@@ -68,11 +68,6 @@ it.each([
     "Quita Hecho aquí de estos dispositivos: Grill, Bar.",
   ],
   [
-    "station_timing",
-    "Remove station timing settings (2).",
-    "Quita los ajustes de tiempos de la estación (2).",
-  ],
-  [
     "station_routing_cells",
     "Remove 2 normal routing rules.",
     "Quita 2 reglas de enrutamiento normal.",

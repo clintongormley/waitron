@@ -93,8 +93,9 @@ on the pass until the order is handed over. Each pass still shows only the stati
 zones assigned to it.
 
 You choose when to request cooking from the till. In **Venue settings**, the **Kitchen** tab
-lets you choose whether to mark preparation ready by line or by whole ticket, and set the default
-late flags. You no longer choose a venue-wide firing mode there.
+lets you choose whether to mark preparation ready by line or by whole ticket; you no longer choose
+a venue-wide firing mode there. Each prep station sets its own late flags when you add it with
+**Add station**, and under **Late flags (minutes)** when you edit it in **Prep stations**.
 
 ## Request cooking from the till {#request-cooking}
 

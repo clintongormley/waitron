@@ -6,7 +6,6 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   deviceProfiles,
   ticketItems,
-  kitchenTimingDefaults,
   locations,
   parties,
   workingOrderLines,
@@ -73,7 +72,6 @@ const suite = useVenueDb({
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
       .returning({ id: locations.id });
-    await db.insert(kitchenTimingDefaults).values({ locationId: loc!.id });
     const locationId = brandLocationId(loc!.id);
     await seedKitchenStation(db, { locationId });
     const nodeId = await seedNode(db, locationId);

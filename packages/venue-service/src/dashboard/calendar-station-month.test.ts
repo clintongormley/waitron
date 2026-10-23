@@ -43,12 +43,6 @@ const STATIONS: PrepStation[] = [
   warmAfterMinutes: 5,
   overdueAfterMinutes: 10,
   forgottenAfterMinutes: 15,
-  timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
-  timingOverrides: {
-    warmAfterMinutes: null,
-    overdueAfterMinutes: null,
-    forgottenAfterMinutes: null,
-  },
 }));
 /** Each month's whole Monday-to-Sunday weeks, as the server reads them. */
 const WEEKS: Record<string, [LocalDate, LocalDate]> = {

@@ -9,7 +9,6 @@ import {
   floorResetTables,
   floorZones,
   floorTodayTables,
-  kitchenTimingDefaults,
   locations,
   partyTables,
 } from "@waitron/db";
@@ -267,7 +266,6 @@ describe("seating one party at several tables", () => {
         invoiceLocales: ["es-ES"],
         operationDescription: "Restaurant",
       });
-      await tx.insert(kitchenTimingDefaults).values({ locationId: elsewhere });
       const [zone] = await tx
         .insert(floorZones)
         .values({ locationId: elsewhere, name: "Other tables" })
