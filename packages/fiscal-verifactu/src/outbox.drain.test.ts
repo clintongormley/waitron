@@ -235,7 +235,7 @@ describe("the drain after a press", () => {
     await drain(deps, at("00:01:00"));
     await drain(deps, at("00:02:00"));
     state.down = false;
-    expect((await drain(deps, at("00:03:00"))).nextDueAt).toBeNull();
+    expect((await drain(deps, at("00:03:00"))).nextDueAt).toEqual(at("00:04:00"));
     for (const id of seeded.registroIds) {
       expect((await envioRow(id)).proximo_intento_en).toBe(at("00:04:00").toISOString());
     }
