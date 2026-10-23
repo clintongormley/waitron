@@ -26,7 +26,7 @@ import { cancelItem } from "./line-cancel.js";
 import { createStation } from "./kitchen.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveBill, moveSettledBillToCounter } from "./move-bill.js";
-import { releaseHeldWorkOf } from "./order-groups.js";
+import { recordHeldPaper, releaseHeldWorkOf } from "./order-groups.js";
 import { seatTable } from "./parties.js";
 import { combineParties } from "./testing/table-action-fixture.js";
 import { createTable } from "./testing/live-table.js";
@@ -114,6 +114,16 @@ async function paidHeld() {
     .update(orderGroups)
     .set({ holdPrintedAt: new Date().toISOString() })
     .where(eq(orderGroups.partyId, p.partyId));
+  await inTx(venue, async (tx) => {
+    const held = await tx
+      .selectDistinct({ groupId: orderGroups.id, stationId: ticketItems.stationId })
+      .from(orderGroups)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.groupId, orderGroups.id))
+      .innerJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+      .where(eq(orderGroups.partyId, p.partyId));
+    for (const { groupId, stationId } of held)
+      await recordHeldPaper(tx, groupId, new Set([stationId!]));
+  });
   await pay(p.billId, "24.00");
   return p;
 }
