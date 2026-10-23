@@ -20,7 +20,6 @@ import {
   isUniqueViolation,
   kitchenCourses,
   kitchenStations,
-  kitchenStationTiming,
   kitchenTimingDefaults,
   locations,
   nowIso,
@@ -6255,12 +6254,10 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       const barra = await createStation(tx, cfg, { name: "Barra" });
       // Distinct thresholds so a per-item mix-up (Barra's item reading Cocina's thresholds, or vice
       // versa) would fail this test rather than passing by coincidence on identical defaults.
-      await tx.insert(kitchenStationTiming).values({
-        stationId: barra.id,
-        warmAfterMinutes: 2,
-        overdueAfterMinutes: 4,
-        forgottenAfterMinutes: 6,
-      });
+      await tx
+        .update(kitchenStations)
+        .set({ warmAfterMinutes: 2, overdueAfterMinutes: 4, forgottenAfterMinutes: 6 })
+        .where(eq(kitchenStations.id, barra.id));
       const soup = await makeProduct(tx, cfg, catalogueId, {}); // → Cocina (default)
       const olives = await makeProduct(tx, cfg, catalogueId, { stationId: barra.id }); // → Barra
 

@@ -2,10 +2,7 @@ import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, sql } from "drizzle-o
 import { alias } from "drizzle-orm/sqlite-core";
 import { parentJoin, parentProducts, staffPresentationName } from "@waitron/catalogue";
 import {
-  assertKitchenTimingPresent,
   kitchenStations,
-  kitchenStationTiming,
-  kitchenTimingDefaults,
   lineServiceCancellations,
   orderGroups,
   products,
@@ -41,7 +38,6 @@ async function readKitchenLines(
   billIds: readonly string[],
 ): Promise<KitchenLine[]> {
   if (billIds.length === 0) return [];
-  await assertKitchenTimingPresent(tx);
   const dish = alias(workingOrderLines, "signal_dish");
   const rows = await tx
     .select({
@@ -57,20 +53,15 @@ async function readKitchenLines(
       dishServedQuantity: dish.servedQuantity,
       dishCancelledQuantity: lineServiceCancellations.quantity,
       dishUnitPrecision: dish.unitPrecision,
-      warmAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.warmAfterMinutes}, ${kitchenTimingDefaults.warmAfterMinutes})`,
-      overdueAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.overdueAfterMinutes}, ${kitchenTimingDefaults.overdueAfterMinutes})`,
-      forgottenAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.forgottenAfterMinutes}, ${kitchenTimingDefaults.forgottenAfterMinutes})`,
+      warmAfterMinutes: kitchenStations.warmAfterMinutes,
+      overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
+      forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .leftJoin(dish, eq(dish.id, workingOrderLines.parentLineId))
     .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, dish.id))
     .innerJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
-    .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
-    .innerJoin(
-      kitchenTimingDefaults,
-      eq(kitchenTimingDefaults.locationId, kitchenStations.locationId),
-    )
     .where(
       and(
         inArray(workingOrderLines.workingOrderId, [...billIds]),

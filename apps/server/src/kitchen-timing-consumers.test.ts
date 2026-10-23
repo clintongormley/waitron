@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { kitchenStations, kitchenTimingDefaults, ticketItems, workingOrders } from "@waitron/db";
+import { kitchenStations, ticketItems } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { computeOverdueOrders } from "@waitron/reporting";
-import { createStation, updateStation } from "./kitchen.js";
-import { getKitchenTimingDefaults, setKitchenTimingDefaults } from "./kitchen-timing.js";
+import { createStation } from "./kitchen.js";
 import { fireGroup } from "./order-groups.js";
 import { readBillSignals } from "./table-signals.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
@@ -20,9 +19,8 @@ import {
   seatWithNoAllergies,
   setupPartyVenue,
 } from "./testing/party-venue.js";
-import { serveLine } from "./testing/serve-line.js";
 import { routeProductTo } from "./testing/zone-offers.js";
-import { listExpoQueue, listStationQueue, listTablesWithState } from "./working-order.js";
+import { listExpoQueue, listStationQueue } from "./working-order.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -30,7 +28,6 @@ const suite = useVenueDb({
 });
 afterEach(() => vi.restoreAllMocks());
 
-// Reading the original station columns instead of effective values must change these bands.
 describe("effective kitchen timing across consumers", () => {
   it.each([
     [1, "fresh", "fresh"],
@@ -39,25 +36,25 @@ describe("effective kitchen timing across consumers", () => {
     [6, "forgotten", "overdue"],
     [7, "forgotten", "forgotten"],
   ] as const)(
-    "classifies age %i consistently, including historical inactive-station work",
+    "classifies age %i by each station's own minutes, including an inactive station's work",
     async (age, inheritedBand, overriddenBand) => {
       const v = await setupPartyVenue(suite.db);
       const now = Date.now();
       vi.spyOn(Date, "now").mockReturnValue(now);
       const { inherited, overridden } = await inTx(v, async (tx) => {
-        await setKitchenTimingDefaults(tx, v.cfg, {
-          warmAfterMinutes: 2,
-          overdueAfterMinutes: 4,
-          forgottenAfterMinutes: 6,
-        });
         const [kitchen] = await tx
           .select({ id: kitchenStations.id })
           .from(kitchenStations)
           .where(eq(kitchenStations.isDefault, true));
-        const bar = await createStation(tx, v.cfg, {
-          name: "Bar",
-          thresholds: { warmAfterMinutes: 3, overdueAfterMinutes: 5, forgottenAfterMinutes: 7 },
-        });
+        await tx
+          .update(kitchenStations)
+          .set({ warmAfterMinutes: 2, overdueAfterMinutes: 4, forgottenAfterMinutes: 6 })
+          .where(eq(kitchenStations.id, kitchen!.id));
+        const bar = await createStation(tx, v.cfg, { name: "Bar" });
+        await tx
+          .update(kitchenStations)
+          .set({ warmAfterMinutes: 3, overdueAfterMinutes: 5, forgottenAfterMinutes: 7 })
+          .where(eq(kitchenStations.id, bar.id));
         await routeProductTo(tx, v.cfg, v.productId("Caña"), bar.id);
         return { inherited: kitchen!.id, overridden: bar.id };
       });
@@ -119,124 +116,53 @@ describe("effective kitchen timing across consumers", () => {
     },
   );
 
-  it("reclassifies inherited fields on a default edit and preserves explicit fields", async () => {
+  it("a change to a station's minutes reclassifies its live work in every reader", async () => {
     const v = await setupPartyVenue(suite.db);
     const now = Date.now();
     vi.spyOn(Date, "now").mockReturnValue(now);
+    const tableId = await v.table("Own minutes");
+    const { tabId } = await seat(v, tableId);
     const [station] = await inTx(v, (tx) =>
       tx
         .select({ id: kitchenStations.id })
         .from(kitchenStations)
         .where(eq(kitchenStations.isDefault, true)),
     );
-    const { tabId } = await seat(v, await v.table("Defaults"));
     await order(v, tabId, "Burger");
-    await inTx(v, async (tx) => {
-      await tx.update(ticketItems).set({ queuedAt: new Date(now - 4 * 60_000).toISOString() });
-      await updateStation(tx, v.cfg, station!.id, { warmAfterMinutes: 3 });
-      expect.soft((await listStationQueue(tx, station!.id))[0]!.items[0]!.band).toBe("warm");
-      await setKitchenTimingDefaults(tx, v.cfg, {
-        warmAfterMinutes: 1,
-        overdueAfterMinutes: 4,
-        forgottenAfterMinutes: 6,
-      });
-      const [queue] = await listStationQueue(tx, station!.id);
-      expect
-        .soft(queue!.thresholds)
-        .toEqual({ warmAfterMinutes: 3, overdueAfterMinutes: 4, forgottenAfterMinutes: 6 });
-      expect.soft(queue!.items[0]!.band).toBe("overdue");
-      await tx.update(ticketItems).set({ madeHere: true });
-      expect.soft(await listStationQueue(tx, station!.id)).toEqual([]);
-      expect.soft(await listExpoQueue(tx, v.cfg)).toEqual([]);
-      expect.soft(await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId })).toEqual([]);
-      expect.soft((await readBillSignals(tx, [tabId], now)).get(tabId)).toEqual([]);
-      await tx.update(ticketItems).set({ madeHere: false });
-      await tx
-        .update(workingOrders)
-        .set({ collectedAt: new Date(now).toISOString() })
-        .where(eq(workingOrders.id, tabId));
-      expect.soft(await listStationQueue(tx, station!.id)).toEqual([]);
-      expect.soft(await listExpoQueue(tx, v.cfg)).toEqual([]);
-      expect.soft(await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId })).toEqual([]);
-    });
-  });
-  it("a venue edit reclassifies inherited live work but leaves a fully overridden station alone", async () => {
-    const v = await setupPartyVenue(suite.db);
-    const now = Date.now();
-    vi.spyOn(Date, "now").mockReturnValue(now);
-    const inheritedTable = await v.table("Inherited edit");
-    const overrideTable = await v.table("Override edit");
-    const a = await seat(v, inheritedTable);
-    const b = await seat(v, overrideTable);
-    const [kitchen] = await inTx(v, (tx) =>
-      tx
-        .select({ id: kitchenStations.id })
-        .from(kitchenStations)
-        .where(eq(kitchenStations.isDefault, true)),
-    );
-    const bar = await inTx(v, async (tx) => {
-      const station = await createStation(tx, v.cfg, {
-        name: "Overrides",
-        thresholds: { warmAfterMinutes: 3, overdueAfterMinutes: 8, forgottenAfterMinutes: 12 },
-      });
-      await routeProductTo(tx, v.cfg, v.productId("Caña"), station.id);
-      return station;
-    });
-    await order(v, a.tabId, "Burger");
-    await order(v, b.tabId, "Caña");
     await inTx(v, (tx) =>
-      tx.update(ticketItems).set({ queuedAt: new Date(now - 5 * 60_000).toISOString() }),
+      tx.update(ticketItems).set({ queuedAt: new Date(now - 6 * 60_000).toISOString() }),
     );
-    const bands = async () => {
-      const readers = await inTx(v, async (tx) => {
-        const queues = [];
-        for (const id of [kitchen!.id, bar.id])
-          queues.push((await listStationQueue(tx, id))[0]!.items[0]!.band);
-        const expo = await listExpoQueue(tx, v.cfg);
-        const signals = await readBillSignals(tx, [a.tabId, b.tabId], now);
-        return {
-          queues,
-          expo: [a.tabId, b.tabId].map((id) => expo.find((row) => row.orderId === id)!.worstBand),
-          signals: [a.tabId, b.tabId].map((id) => signals.get(id)),
-        };
-      });
-      return {
-        ...readers,
-        floor: [
-          (await floorRow(v, inheritedTable)).timingBand,
-          (await floorRow(v, overrideTable)).timingBand,
-        ],
-      };
+    const reads = async () => {
+      const readers = await inTx(v, async (tx) => ({
+        queue: (await listStationQueue(tx, station!.id))[0]!.items[0]!.band,
+        pass: (await listExpoQueue(tx, v.cfg)).find((row) => row.orderId === tabId)!.worstBand,
+        signals: (await readBillSignals(tx, [tabId], now)).get(tabId),
+        overdue: (await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId })).map((row) => ({
+          id: row.orderId,
+          band: row.band,
+        })),
+      }));
+      return { ...readers, floor: (await floorRow(v, tableId)).timingBand };
     };
-    expect(await bands()).toEqual({
-      queues: ["warm", "warm"],
-      expo: ["warm", "warm"],
-      signals: [[{ kind: "long_wait", band: "warm" }], [{ kind: "long_wait", band: "warm" }]],
-      floor: ["warm", "warm"],
+    expect(await reads()).toEqual({
+      queue: "warm",
+      pass: "warm",
+      signals: [{ kind: "long_wait", band: "warm" }],
+      overdue: [],
+      floor: "warm",
     });
     await inTx(v, (tx) =>
-      setKitchenTimingDefaults(tx, v.cfg, {
-        warmAfterMinutes: 1,
-        overdueAfterMinutes: 3,
-        forgottenAfterMinutes: 6,
-      }),
+      tx
+        .update(kitchenStations)
+        .set({ warmAfterMinutes: 2, overdueAfterMinutes: 4, forgottenAfterMinutes: 6 })
+        .where(eq(kitchenStations.id, station!.id)),
     );
-    expect(await bands()).toEqual({
-      queues: ["overdue", "warm"],
-      expo: ["overdue", "warm"],
-      signals: [[{ kind: "long_wait", band: "overdue" }], [{ kind: "long_wait", band: "warm" }]],
-      floor: ["overdue", "warm"],
-    });
-    expect(await inTx(v, (tx) => computeOverdueOrders(tx, { nodeId: v.cfg.nodeId }))).toEqual([
-      expect.objectContaining({ orderId: a.tabId, band: "overdue" }),
-    ]);
-    await inTx(v, (tx) => serveLine(tx, v.cfg, a.tabId, 1));
-    expect((await floorRow(v, inheritedTable)).timingBand).toBe("fresh");
-    expect((await floorRow(v, inheritedTable)).signals).toEqual([]);
-    await inTx(v, async (tx) => {
-      expect((await listExpoQueue(tx, v.cfg)).map((row) => row.orderId)).not.toContain(a.tabId);
-      expect((await readBillSignals(tx, [a.tabId], now)).get(a.tabId)).toEqual([]);
-      expect(await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId })).toEqual([]);
+    expect(await reads()).toEqual({
+      queue: "forgotten",
+      pass: "forgotten",
+      signals: [{ kind: "long_wait", band: "forgotten" }],
+      overdue: [{ id: tabId, band: "forgotten" }],
+      floor: "forgotten",
     });
   });
 
@@ -268,39 +194,4 @@ describe("effective kitchen timing across consumers", () => {
       expect(await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId })).toEqual([]);
     });
   });
-});
-
-// Omitting a defaults guard must refuse rather than turn an incomplete venue into a quiet kitchen.
-describe("missing kitchen timing defaults", () => {
-  it.each(["defaults", "station", "pass", "tables", "signals", "report"] as const)(
-    "refuses the %s read with a named configuration error",
-    async (reader) => {
-      const v = await setupPartyVenue(suite.db);
-      const { tabId } = await seat(v, await v.table("Missing defaults"));
-      await order(v, tabId, "Burger");
-      const [station] = await suite.db.select({ id: kitchenStations.id }).from(kitchenStations);
-      await inTx(v, (tx) => tx.delete(kitchenTimingDefaults));
-      await expect(
-        inTx(v, async (tx) => {
-          switch (reader) {
-            case "defaults":
-              return getKitchenTimingDefaults(tx, v.cfg);
-            case "station":
-              return listStationQueue(tx, station!.id);
-            case "pass":
-              return listExpoQueue(tx, v.cfg);
-            case "tables":
-              return listTablesWithState(tx, v.cfg);
-            case "signals":
-              return readBillSignals(tx, [tabId], Date.now());
-            case "report":
-              return computeOverdueOrders(tx, { nodeId: v.cfg.nodeId });
-          }
-        }),
-      ).rejects.toMatchObject({
-        code: "station.timing_missing",
-        params: { locationId: v.cfg.locationId },
-      });
-    },
-  );
 });
