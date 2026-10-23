@@ -419,7 +419,6 @@ describe("fixes and Undo in Advanced", () => {
   });
 
   it("fixing the blocking colour changes only it, and Undo brings both warnings back", async () => {
-    setLocale("en-GB");
     const { el } = await mountChoices(BLOCKED);
     await openAdvanced(el);
     expect(q(el, "[data-test=fix-all]")).toBeNull();
@@ -438,7 +437,6 @@ describe("fixes and Undo in Advanced", () => {
   });
 
   it("Fix all records only the values it changed", async () => {
-    setLocale("en-GB");
     const { el } = await mountChoices(TWO_FIXES);
     await openAdvanced(el);
     expect(q(el, "[data-test=fix-all]")).not.toBeNull();
@@ -456,6 +454,56 @@ describe("fixes and Undo in Advanced", () => {
     expect(handCode(el, "light", "text").value).toBe("#6a6a6a");
     expect(inAdvanced(el, "hand-warning-light-text")).not.toBeNull();
     expect(inAdvanced(el, "hand-warning-light-surface-sunken")).not.toBeNull();
+  });
+
+  it("a fix's record goes once the value is changed by hand, so Fix all records the new value", async () => {
+    const { el } = await mountChoices(TWO_FIXES);
+    await openAdvanced(el);
+    await press(el, "hand-fix-light-text");
+    expect(words(inAdvanced(el, "hand-fixed-light-text"))).toBe(
+      "Light screens: fixed from #6a6a6a",
+    );
+    await typeHand(el, "light", "text", "#6b6b6b");
+    expect(inAdvanced(el, "hand-fixed-light-text")).toBeNull();
+    await press(el, "fix-all");
+    expect(words(inAdvanced(el, "hand-fixed-light-text"))).toBe(
+      "Light screens: fixed from #6b6b6b",
+    );
+    await press(el, "hand-undo-light-text");
+    expect(handCode(el, "light", "text").value).toBe("#6b6b6b");
+  });
+
+  it("setting the fixed shade again by hand brings back no fixed line", async () => {
+    const { el } = await mountChoices(CREAM_SAGE);
+    await openAdvanced(el);
+    await press(el, "hand-fix-light-text-muted");
+    await typeHand(el, "light", "text-muted", "#8fa898");
+    expect(inAdvanced(el, "hand-fixed-light-text-muted")).toBeNull();
+    await typeHand(el, "light", "text-muted", "#526a5b");
+    expect(handCode(el, "light", "text-muted").value).toBe("#526a5b");
+    expect(inAdvanced(el, "hand-fixed-light-text-muted")).toBeNull();
+    expect(inAdvanced(el, "hand-undo-light-text-muted")).toBeNull();
+  });
+
+  it("Fix all clears a refusal shown under a colour", async () => {
+    const { el, saveTheme } = await mountChoices(TWO_FIXES);
+    await typeHand(el, "light", "bg", "#fafafa");
+    saveTheme.mockRejectedValueOnce({
+      code: "theme.invalid",
+      params: { field: "handSet.light.bg", reason: "bad_value" },
+    });
+    await userEvent.click(button(el, "save"));
+    const dialog = q(el, "dashboard-hard-to-read-dialog")!;
+    const anyway = () =>
+      dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "[data-test=save-anyway]",
+      );
+    await expect.poll(() => dialog.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+    await userEvent.click(anyway()!);
+    await expect.poll(() => handCode(el, "light", "bg").error).toBe(t("appearance.bad_code"));
+    await press(el, "fix-all");
+    expect(handCode(el, "light", "bg").error).toBe("");
+    expect(await bottom(el)).toBe("");
   });
 
   it("Fix and save sends Fix all's choices and closes the editor", async () => {
@@ -490,7 +538,6 @@ describe("fixes and Undo in Advanced", () => {
 
 describe("the kept-colours note", () => {
   it("shows after the brand colour changes while a colour is set by hand, until none is", async () => {
-    setLocale("en-GB");
     const { el } = await mountChoices(CREAM);
     expect(q(el, "[data-test=kept-note]")).toBeNull();
     await userEvent.click(q(el, 'button.swatch[data-color="#b12525"]')!);
@@ -499,6 +546,18 @@ describe("the kept-colours note", () => {
     expect(words(q(el, "[data-test=kept-note]"))).not.toBe("");
     await openAdvanced(el);
     await press(el, "hand-worked-out-light-bg");
+    expect(q(el, "[data-test=kept-note]")).toBeNull();
+  });
+
+  it("does not come back once no colour is set by hand", async () => {
+    const { el } = await mountChoices(CREAM);
+    await userEvent.click(q(el, 'button.swatch[data-color="#b12525"]')!);
+    await settle(el);
+    expect(q(el, "[data-test=kept-note]")).not.toBeNull();
+    await openAdvanced(el);
+    await press(el, "hand-worked-out-light-bg");
+    expect(q(el, "[data-test=kept-note]")).toBeNull();
+    await typeHand(el, "light", "text", "#333333");
     expect(q(el, "[data-test=kept-note]")).toBeNull();
   });
 
@@ -528,7 +587,6 @@ describe("putting every colour back", () => {
   }
 
   it("Use Waitron's look clears colours, fixed lines, the kept note and a refusal", async () => {
-    setLocale("en-GB");
     const { el, saveTheme } = await mountChoices(CREAM_SAGE);
     await openAdvanced(el);
     await press(el, "hand-fix-light-text-muted");
@@ -566,7 +624,6 @@ describe("putting every colour back", () => {
   });
 
   it("Reset all puts every value back to worked out, and Cancel sends nothing", async () => {
-    setLocale("en-GB");
     const { el, saveTheme } = await mountChoices(CREAM_SAGE);
     await openAdvanced(el);
     await press(el, "hand-fix-light-text-muted");

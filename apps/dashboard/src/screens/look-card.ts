@@ -427,10 +427,10 @@ export class LookCard extends LitElement {
     this.draft = after;
     if (code) this.refusedCode = "";
     if (hand && after !== before) this.refusedHand = "";
-    if (
-      (after.choices.brandColor !== before.choices.brandColor ||
-        after.choices.background !== before.choices.background) &&
-      handNames(after.choices).length > 0
+    if (handNames(after.choices).length === 0) this.showKeptNote = false;
+    else if (
+      after.choices.brandColor !== before.choices.brandColor ||
+      after.choices.background !== before.choices.background
     ) {
       this.showKeptNote = true;
     }
@@ -445,11 +445,20 @@ export class LookCard extends LitElement {
     const fixes = this.handFixed;
     switch (action.kind) {
       case "pick":
-        return [setHand(draft, action.mode, action.key, action.colour), fixes];
+        return [
+          setHand(draft, action.mode, action.key, action.colour),
+          withoutField(fixes, `handSet.${action.mode}.${action.key}`),
+        ];
       case "type":
-        return [typeHandCode(draft, action.mode, action.key, action.text), fixes];
+        return [
+          typeHandCode(draft, action.mode, action.key, action.text),
+          withoutField(fixes, `handSet.${action.mode}.${action.key}`),
+        ];
       case "worked-out":
-        return [useWorkedOut(draft, action.mode, action.key), fixes];
+        return [
+          useWorkedOut(draft, action.mode, action.key),
+          withoutField(fixes, `handSet.${action.mode}.${action.key}`),
+        ];
       case "fix": {
         const { mode, key, fix } = action;
         const record = { from: this.#shown(draft, mode, key), to: fix.toLowerCase() };
