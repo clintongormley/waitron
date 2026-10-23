@@ -79,11 +79,12 @@ async function failedTwiceWithAnHoursBackOff() {
 }
 
 describe("the fiscal slot's outbox seat", () => {
-  it("reads an empty outbox through the module's contribution", async () => {
+  it("reads the outbox through the module's contribution", async () => {
+    await seedPendingEnvios(suite.db, { count: 1 });
     const read = FISCAL_SLOT.outbox!.read;
     expect(await withTransaction(suite.db, (tx) => read(tx))).toEqual({
       lastAcceptedAt: null,
-      waiting: 0,
+      waiting: 1,
     });
   });
 });
@@ -205,9 +206,16 @@ describe("the drain after a press", () => {
     const pass = drain(deps, at("00:01:00"));
     await entered;
 
-    for (const id of seeded.registroIds) expect((await envioRow(id)).estado).toBe("enviando");
+    const inFlight = [];
+    for (const id of seeded.registroIds) inFlight.push(await envioRow(id));
+    for (const row of inFlight) expect(row.estado).toBe("enviando");
     expect((await press(at("00:01:01"))).cleared).toBe(0);
     expect((await press(at("00:01:01"))).cleared).toBe(0);
+    const afterPresses = [];
+    for (const id of seeded.registroIds) afterPresses.push(await envioRow(id));
+    expect(afterPresses).toEqual(inFlight);
+    expect((await drain(deps, at("00:01:02"))).batchesSent).toBe(0);
+    expect(state.submits).toBe(1);
 
     release();
     expect((await pass).recordsAccepted).toBe(0);
@@ -221,13 +229,16 @@ describe("the drain after a press", () => {
   });
 
   it("after every wait has ended, clears nothing and the pass after it sends", async () => {
-    await seedPendingEnvios(suite.db, { count: 3 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
     const { state, deps } = harness();
     state.down = true;
     await drain(deps, at("00:01:00"));
     await drain(deps, at("00:02:00"));
     state.down = false;
     expect((await drain(deps, at("00:03:00"))).nextDueAt).toBeNull();
+    for (const id of seeded.registroIds) {
+      expect((await envioRow(id)).proximo_intento_en).toBe(at("00:04:00").toISOString());
+    }
 
     expect(await press(at("00:05:00"))).toEqual({ waiting: 3, cleared: 0 });
     const submitsBefore = state.submits;
@@ -252,9 +263,6 @@ describe("the drain after a press", () => {
     const pass = await drain(deps, at("00:02:01"));
     expect(pass.recordsAccepted).toBe(1);
     expect(state.submits).toBe(2);
-    const rows = await suite.db.execute<Record<string, unknown>>(
-      sql`select estado, codigo_error from envios where registro_id = ${id}`,
-    );
-    expect(rows.rows).toEqual([{ estado: "aceptado", codigo_error: null }]);
+    expect(await envioRow(id)).toMatchObject({ estado: "aceptado", codigo_error: null });
   });
 });
