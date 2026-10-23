@@ -133,15 +133,17 @@ a **Restart payments** button. The proof is one of these:
   of the box's. The [next section](box-status.md#clock-witnesses) explains which devices send their
   clock.
 
-Only proof taken since payments stopped counts, and only for five minutes. A reading taken before a
+Only proof taken since payments stopped counts, and only for five minutes. Proof taken before a
 change to the box's clock does not count either.
 
 The page does not offer a restart, and says why under the **Clock** row, when:
 
 - there is no fresh proof: **There is no fresh proof that the box's clock is right.**
 - two or more devices agree with each other that the box's clock is more than a minute off, or the
-  tax agency has disagreed with it since payments stopped. The box keeps that disagreement only in
-  its memory, so it forgets it if the box itself restarts during the stop: **Other clocks say the
+  tax agency has disagreed with it since the box's clock fell behind the last sale. The box keeps
+  that disagreement only in its memory, so it forgets it if the box itself restarts during the stop;
+  while the tax agency still disagrees, the block comes back at its next answer, which a box that
+  sends records to the tax agency asks for about once a minute during a stop: **Other clocks say the
   box's clock is wrong.**
 - the box's clock is more than 24 hours behind the latest sale: **The box's clock is more than 24
   hours behind the last sale.**

@@ -151,7 +151,7 @@ export const ALERT_MESSAGES: Readonly<
   },
   "clock.disagrees": {
     en: "{count} devices agree that the time is {deviceAt:minute}, but the box's clock reads {boxAt:minute}. Check the box's date and time on the Box status page.",
-    es: "{count} dispositivos coinciden en que son las {deviceAt:minute}, pero el equipo marca {boxAt:minute}. Comprueba la fecha y la hora del equipo en Estado del equipo.",
+    es: "{count} dispositivos coinciden en que marcan {deviceAt:minute}, pero el equipo marca {boxAt:minute}. Comprueba la fecha y la hora del equipo en Estado del equipo.",
   },
   "clock.jump_detected": {
     en: "This device's clock went backwards: it changed by {wallClockDeltaSeconds} seconds. Check its date and time.",
