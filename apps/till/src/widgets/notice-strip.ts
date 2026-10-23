@@ -103,7 +103,9 @@ export class TillNoticeStrip extends LitElement {
         cursor: pointer;
       }
 
-      button.line:focus-visible {
+      /* The strip spans the screen, so a ring drawn outside it would lose its sides. */
+      button.line:focus-visible,
+      ul:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: calc(-1 * var(--wt-focus-offset));
       }

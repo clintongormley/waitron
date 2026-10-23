@@ -5317,7 +5317,8 @@ mode line stay where they are.
   (singular for one). A tap opens a list of every notice, in order, labelled "Notices", in the
   page's flow under the strip, so it pushes the screen down rather than covering the order, and it
   scrolls inside itself past half the screen height, and takes keyboard focus so it can be
-  scrolled from the keyboard. A second tap closes it, and it closes itself
+  scrolled from the keyboard. Its focus ring, like the button's, is drawn inside its edges, because
+  the strip spans the screen. A second tap closes it, and it closes itself
   when one notice or none is left.
 - **Announcing.** In both forms a visually hidden `role="status"` region holds the first notice's
   main words, so a new most-serious notice is announced whether or not the strip is a button.
