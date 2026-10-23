@@ -113,7 +113,7 @@ const strings = {
     select: "Crear las series",
     readings: "Comparación de relojes",
     agreed: "Los relojes coinciden.",
-    box: "Caja",
+    box: "Servidor",
     browser: "Navegador",
     internet: "Internet",
     unavailable: "No disponible",

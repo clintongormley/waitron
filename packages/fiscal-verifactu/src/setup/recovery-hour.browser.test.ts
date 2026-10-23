@@ -1139,3 +1139,14 @@ it("a fiscal refusal that is not about the clock fails without explaining a wait
   expect(text(el)).not.toContain(RESTORE_DO);
   expect(el.readCredentials()).toBeNull();
 });
+it("names the box's own clock reading «Servidor» in Spanish, apart from a till", async () => {
+  const { el } = await mount();
+  el.locale = "es";
+  await el.updateComplete;
+  await ready(el);
+  await compare(el);
+  const labels = [...el.shadowRoot!.querySelectorAll("[data-test=clock-readings] dt")].map((dt) =>
+    dt.textContent!.trim(),
+  );
+  expect(labels).toEqual(["Servidor", "Navegador", "Internet"]);
+});

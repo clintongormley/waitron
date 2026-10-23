@@ -1254,3 +1254,13 @@ it("a missing second clock reported by the server starts the 15-second check", a
     vi.useRealTimers();
   }
 });
+it("names the box's own clock reading «Servidor» in Spanish, apart from a till", async () => {
+  const { el } = await mount({ locale: "es" });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
+  );
+  const labels = [...el.shadowRoot!.querySelectorAll("[data-test=clock-readings] dt")].map((dt) =>
+    dt.textContent!.trim(),
+  );
+  expect(labels).toEqual(["Servidor", "Navegador", "Internet"]);
+});

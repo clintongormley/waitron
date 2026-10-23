@@ -68,7 +68,7 @@ const strings = {
     select: "Crear las series",
     again: "Comprobar otra vez",
     readings: "Comparación de relojes",
-    box: "Caja",
+    box: "Servidor",
     browser: "Navegador",
     internet: "Internet",
     unavailable: "No disponible",
