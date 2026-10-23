@@ -11,6 +11,7 @@ import { claimReminder, reportReminder } from "./certificate-reminders.js";
 import { readCertificateCard } from "./certificate-card.js";
 import { installCertificate } from "./certificate-install.js";
 import { drain as runDrain, resetInFlightClaims } from "./drain.js";
+import { readOutbox } from "./outbox.js";
 import { parseAeatCert, sealAeatSecret, validateSetupAeatCert } from "./provisioning-secret.js";
 import {
   validateLegalName,
@@ -113,4 +114,5 @@ export const FISCAL_SLOT: FiscalContribution = {
     alerts: certificateAlerts,
     reminders: { claim: claimReminder, report: reportReminder },
   },
+  outbox: { read: readOutbox },
 };
