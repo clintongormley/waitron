@@ -4,7 +4,7 @@ import { registrosFacturacion } from "./registros.js";
 
 /**
  * One row per manager's restart of payments while the box's clock read earlier than its latest
- * record. Declared `appendOnly()` in `../classification.ts`; the restart is its only writer.
+ * record. Declared `appendOnly()` in `../classification.ts`. Nothing writes it yet.
  */
 export const clockStopRestarts = table(
   "clock_stop_restarts",
@@ -14,7 +14,7 @@ export const clockStopRestarts = table(
       .notNull()
       .references(() => nodes.id),
     // No foreign key: `persons` is in @waitron/identity's migration set, which this set does not
-    // require.
+    // require. Nothing checks that it names a person.
     personId: id("person_id").notNull(),
     restartedAt: ts("restarted_at").notNull(),
     // The reading the manager accepted.
