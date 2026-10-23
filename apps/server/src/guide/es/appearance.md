@@ -86,8 +86,9 @@ Texto (versión clara)». Mientras haya colores fijados a mano que se leen mal, 
 cuántos, como en «1 fijado a mano: Texto (versión clara) · 1 se lee mal». Pulsa el título para
 abrirla.
 
-Dentro, una fila por cada color del tema da su valor en **Pantallas claras** y en **Pantallas
-oscuras**, cada uno con un selector de color y una casilla para un código de color. Debajo de cada
+Dentro, una fila por cada color del tema da su valor en las pantallas claras y en las oscuras, bajo
+los títulos **Pantallas claras** y **Pantallas oscuras** en una tarjeta ancha, o con la etiqueta
+**Claro** u **Oscuro** en cada valor en una estrecha, cada uno con un selector de color y una casilla para un código de color. Debajo de cada
 valor, un color calculado dice **Calculado**; Botones principales dice **Color de marca**, o
 **Corregido** si se eligió un tono legible para ese tipo de pantalla. Cambiar cualquiera de los dos
 valores, con el selector o escribiendo un código, fija ese valor a mano y deja el del otro tipo de
@@ -105,7 +106,7 @@ Fijar a mano **Botones principales** sustituye el color de marca en ese tipo de 
 se descarta el tono legible que se hubiera elegido allí.
 
 Un código debe ser `#` seguido de seis dígitos o letras de la a a la f. Si no lo es, Guardar te lo
-indica debajo de esa casilla y no guarda nada, y Avanzado se abre para mostrarlo y sigue abierto
+indica debajo de esa casilla y no guarda nada, y Avanzado se abre para mostrarlo y no se puede cerrar
 hasta que corriges el código.
 
 ## Cuando un color se lee mal {#hard-to-read}
@@ -120,7 +121,8 @@ usan ese tono, mientras que las oscuras conservan tu color. La línea pasa a dec
 pantallas claras:» con el tono, y **Deshacer** devuelve tu color.
 
 Un tono que eliges pertenece a su color. Elegir otro color de marca lo descarta, y volver al color
-guardado del tema recupera su tono guardado. Cambiar el fondo o las esquinas lo conserva.
+guardado del tema recupera su tono guardado, salvo en un tipo de pantalla cuyos **Botones
+principales** estén fijados a mano en Avanzado. Cambiar el fondo o las esquinas lo conserva.
 
 Un color fijado a mano en Avanzado también se comprueba. Si se lee mal, un aviso debajo de su fila
 nombra el tipo de pantalla y sobre qué cuesta leerlo, o qué cuesta leer encima. Texto fijado en

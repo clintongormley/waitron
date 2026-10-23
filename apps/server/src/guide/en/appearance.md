@@ -81,8 +81,9 @@ names, such as "2 set by hand: Page (light), Text (light)". While colours set by
 read, the line adds how many, as in "1 set by hand: Text (light) · 1 hard to read". Press the
 heading to open it.
 
-Inside, a row for each of the theme's colours gives its value on **Light screens** and on **Dark
-screens**, each with a colour picker and a box for a colour code. Under each value, a colour that
+Inside, a row for each of the theme's colours gives its value on light screens and on dark
+screens, under the headings **Light screens** and **Dark screens** on a wide card, or each labelled
+**Light** or **Dark** on a narrow one, each with a colour picker and a box for a colour code. Under each value, a colour that
 is worked out reads **Worked out**; Main buttons reads **Brand colour**, or **Fixed** where a
 readable shade was taken for that kind of screen. Changing either value, with the picker or by
 typing a code, sets that value by hand and leaves the other kind of screen's value as it was. A
@@ -99,8 +100,8 @@ Setting **Main buttons** by hand replaces the brand colour on that kind of scree
 shade taken for it there is dropped.
 
 A code must be `#` followed by six digits or letters a to f. When one is not, Save says so under
-that code box and saves nothing, and Advanced opens to show it, staying open until the code is
-fixed.
+that code box and saves nothing, and Advanced opens to show it, and it cannot be closed until the
+code is fixed.
 
 ## When a colour is hard to read {#hard-to-read}
 
@@ -114,7 +115,8 @@ light screens use the shade, while dark screens keep your colour. The line then 
 **Undo** puts your colour back.
 
 A shade you take belongs to its colour. Picking another brand colour drops it, and returning to the
-theme's saved colour brings its saved shade back. Changing the background or the corners keeps it.
+theme's saved colour brings its saved shade back, except on a kind of screen whose **Main buttons**
+is set by hand in Advanced. Changing the background or the corners keeps it.
 
 A colour set by hand in Advanced is checked too. When it is hard to read, a warning under its row
 names the kind of screen and what it is hard to read on, or what is hard to read on it. Text set

@@ -4048,8 +4048,8 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   never stored into. Save stays quiet and disabled until the draft changes in all three.
 - **Save as new theme… is drawn only while editing a stored theme**, in the `secondary` slot
   before Cancel, `variant="secondary"` (D8). It is never quiet-and-disabled for an unchanged draft:
-  it is disabled only while a request is being sent, or after a save attempt while the colour code
-  fails its check. It opens the name dialog with "{name} (copy)", the switch on exactly when the
+  it is disabled only while a request is being sent, or after a save attempt while the brand colour's
+  code or a code in Advanced fails its check. It opens the name dialog with "{name} (copy)", the switch on exactly when the
   edited theme is in use, and leaves the edited theme as it was saved.
 - **The editor lays out by the card's width, never the window's** (container queries): the choices
   and the preview sit side by side when the form is at least 900px wide, and the preview's two
