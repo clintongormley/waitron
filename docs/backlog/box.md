@@ -870,16 +870,6 @@ drain's refusal; for `GET /api/till` it was not isolated
 ([conventions-data.md](../developers/conventions-data.md#a-read-on-a-full-disk-must-not-fail-on-its-own-housekeeping-write)). PIN sign-in is refused on a full disk in every case, with no session
 written.
 
-## Slice 7b: Reintentar ahora, and the Hacienda row's last accepted record
-
-Left open by A798-B slice 7. The page's Hacienda row reads the staff notices and the bell
-(slice 7 decision 1): it shows the unsent count (`fiscal.records_unsent`) and the bell's
-tax-agency alerts (every `fiscal`-area alert but the clock's), and slice 7 added no seat to the
-module contract. 7b adds the Veri\*Factu module's own route for Reintentar ahora to bring
-failed-send retries forward and wake the sending loop. It changes when records reach AEAT, so
-it is parked for the owner. The same slice adds the last accepted record's time, as the module's
-own row on the page.
-
 ## On a box with card payments off, the card-reader battery check may raise alert.source_unavailable on every bell read
 
 Left open by A798-B slice 7. `batteryAlertSource` is registered in `bootServer`'s alert
