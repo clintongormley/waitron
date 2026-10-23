@@ -13,6 +13,7 @@ import {
   latestRecord,
   type LatestRecord,
 } from "./clock-behind.js";
+import { recordDisproofs, recordRestarted } from "./clock-stop-incidents.js";
 import { isBeforeFirstIssueDate, refuseBeforeFirstIssueDate } from "./first-issue-date.js";
 import { clockStopRestarts } from "./schema/clock-stop-restarts.js";
 
@@ -185,7 +186,7 @@ function refuse(params: ErrorParams["clock.restart_refused"]): never {
 /** A manager's restart of payments while the clock reads behind the latest record. Refuses
  * `clock.unusable` for a reading before 28-10-2024, else `clock.restart_refused` unless the Clock
  * row would offer it; a press on a record a restart already names and covers answers that
- * restart. Records no alert. */
+ * restart. A new restart records its `clock.behind_chain_restarted` alert in `tx`. */
 export async function restartAfterClockStop(
   tx: Transaction,
   input: {
@@ -250,15 +251,34 @@ export async function restartAfterClockStop(
       heads: await chainHeads(tx),
     },
   });
-  return {
-    restart: {
-      id,
-      personId: input.personId,
-      restartedAt: input.reading.instant.toISOString(),
-      clockAt: input.reading.instant.toISOString(),
-      lastRecordAt: latest.at.toISOString(),
-      proofKind: kindOf(proof),
-    },
-    replayed: false,
+  const restart: ClockRestart = {
+    id,
+    personId: input.personId,
+    restartedAt: input.reading.instant.toISOString(),
+    clockAt: input.reading.instant.toISOString(),
+    lastRecordAt: latest.at.toISOString(),
+    proofKind: kindOf(proof),
   };
+  await recordRestarted(tx, {
+    recordId: latest.id,
+    detectedAt: input.reading.instant,
+    params: {
+      restartId: id,
+      person: input.personName,
+      clockAt: restart.clockAt,
+      lastRecordAt: restart.lastRecordAt,
+      proof: restart.proofKind,
+    },
+  });
+  return { restart, replayed: false };
+}
+
+/** The clock was proved wrong after `trustedUntil`: by a jump, or by AEAT disagreeing. Records one
+ * `clock.behind_chain_disproved` for each restart then in force that has none yet; `recorded` and
+ * `unused` (no record written under it) list restart ids. */
+export async function noteClockProvedWrong(
+  tx: Transaction,
+  input: { trustedUntil: Date; reason: "jump" | "authority" },
+): Promise<{ recorded: string[]; unused: string[] }> {
+  return recordDisproofs(tx, input.trustedUntil);
 }

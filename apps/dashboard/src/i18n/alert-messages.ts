@@ -137,6 +137,14 @@ export const ALERT_MESSAGES: Readonly<
     en: "The box's clock ({clockAt:minute}) reads earlier than its last sale ({lastRecordAt:minute}), so no payment can be taken. Orders and the kitchen still work. Sort it out on the Box status page.",
     es: "La hora del equipo ({clockAt:minute}) es anterior a la última venta ({lastRecordAt:minute}), así que no se puede cobrar. Los pedidos y la cocina siguen funcionando. Resuélvelo en Estado del equipo.",
   },
+  "clock.behind_chain_restarted": {
+    en: "{person} restarted payments on the box's clock ({clockAt:minute}), earlier than the last sale ({lastRecordAt:minute}). Proof: {proof:clock_restart_proof}.",
+    es: "{person} reanudó los cobros con la hora del equipo ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}). Prueba: {proof:clock_restart_proof}.",
+  },
+  "clock.behind_chain_disproved": {
+    en: "Sales recorded between {from:minute} and {to:minute} were dated by a clock that proved wrong. They stay as recorded; ask your tax adviser.",
+    es: "Las ventas registradas entre {from:minute} y {to:minute} se fecharon con un reloj que resultó estar mal. Quedan como se registraron; consúltalo con tu asesor.",
+  },
   "clock.disagrees": {
     en: "{count} devices agree that the time is {deviceAt:minute}, but the box's clock reads {boxAt:minute}. Check the box's date and time on the Box status page.",
     es: "{count} dispositivos coinciden en que son las {deviceAt:minute}, pero el equipo marca {boxAt:minute}. Comprueba la fecha y la hora del equipo en Estado del equipo.",
@@ -413,5 +421,21 @@ export const ALERT_WORDS: Readonly<
       },
     },
     otherwise: { en: "Contact support.", es: "Contacta con soporte." },
+  },
+  // What showed the box's clock right when a manager restarted payments, by the `proof` param of
+  // `clock.behind_chain_restarted`.
+  clock_restart_proof: {
+    words: {
+      authority: { en: "the tax agency's time", es: "la hora de Hacienda" },
+      devices: {
+        en: "the clocks of two devices or more",
+        es: "la hora de dos dispositivos o más",
+      },
+      authority_and_devices: {
+        en: "the tax agency's time and two devices or more",
+        es: "la hora de Hacienda y de dos dispositivos o más",
+      },
+    },
+    otherwise: { en: "recorded on the box", es: "anotada en el equipo" },
   },
 };

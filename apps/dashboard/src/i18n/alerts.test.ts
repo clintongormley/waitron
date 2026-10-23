@@ -417,3 +417,45 @@ describe("the box's clock reading behind its last sale", () => {
     expect(alertMessage("clock.behind_chain", { clockAt: null }, "en")).toContain("(—)");
   });
 });
+
+describe("a manager's restart of payments on a clock behind the last sale", () => {
+  const clockAt = "2026-10-19T07:10:00.000Z";
+  const lastRecordAt = "2026-10-19T21:40:00.000Z";
+  const en = (proof: string) =>
+    `Ana restarted payments on the box's clock (${formatIsoMinute(clockAt)}), earlier than the last sale (${formatIsoMinute(lastRecordAt)}). Proof: ${proof}.`;
+  const es = (proof: string) =>
+    `Ana reanudó los cobros con la hora del equipo (${formatIsoMinute(clockAt)}), anterior a la última venta (${formatIsoMinute(lastRecordAt)}). Prueba: ${proof}.`;
+
+  it.each([
+    ["authority", "the tax agency's time", "la hora de Hacienda"],
+    ["devices", "the clocks of two devices or more", "la hora de dos dispositivos o más"],
+    [
+      "authority_and_devices",
+      "the tax agency's time and two devices or more",
+      "la hora de Hacienda y de dos dispositivos o más",
+    ],
+    ["something else", "recorded on the box", "anotada en el equipo"],
+  ])("names the proof %s in each language", (proof, inEnglish, inSpanish) => {
+    const params = { person: "Ana", clockAt, lastRecordAt, proof };
+    const english = alertMessage("clock.behind_chain_restarted", params, "en");
+    const spanish = alertMessage("clock.behind_chain_restarted", params, "es");
+    expect(english).toBe(en(inEnglish));
+    expect(spanish).toBe(es(inSpanish));
+    for (const text of [english, spanish]) expect(text).not.toContain("—");
+  });
+});
+
+describe("a restarted clock that later proved wrong", () => {
+  const params = { from: "2026-10-19T07:10:02.000Z", to: "2026-10-19T07:11:30.000Z" };
+
+  it("names the first and last sale times it dated, in each language", () => {
+    const from = formatIsoMinute(params.from);
+    const to = formatIsoMinute(params.to);
+    expect(alertMessage("clock.behind_chain_disproved", params, "en")).toBe(
+      `Sales recorded between ${from} and ${to} were dated by a clock that proved wrong. They stay as recorded; ask your tax adviser.`,
+    );
+    expect(alertMessage("clock.behind_chain_disproved", params, "es")).toBe(
+      `Las ventas registradas entre ${from} y ${to} se fecharon con un reloj que resultó estar mal. Quedan como se registraron; consúltalo con tu asesor.`,
+    );
+  });
+});

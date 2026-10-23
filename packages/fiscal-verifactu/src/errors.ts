@@ -382,5 +382,25 @@ declare module "@waitron/shared" {
     "clock.restart_refused":
       | { reason: "not_stopped" | "record_changed" | "too_far" | "contrary_proof" | "no_proof" }
       | { reason: "stepped_back"; personId: string; restartedAt: string };
+
+    /**
+     * Recorded, never thrown, by `recordRestarted` (./clock-stop-incidents.ts) for each restart of
+     * payments. `person` is the manager's display name when they pressed; `clockAt` and
+     * `lastRecordAt` are ISO 8601 instants; `proof` names what showed the clock right.
+     */
+    "clock.behind_chain_restarted": {
+      restartId: string;
+      person: string;
+      clockAt: string;
+      lastRecordAt: string;
+      proof: "authority" | "devices" | "authority_and_devices";
+    };
+
+    /**
+     * Recorded, never thrown, by `recordDisproofs` (./clock-stop-incidents.ts) once per restart
+     * whose clock later proved wrong. `from` and `to` are the earliest and latest generation times,
+     * ISO 8601, among the records written under that restart.
+     */
+    "clock.behind_chain_disproved": { restartId: string; from: string; to: string };
   }
 }
