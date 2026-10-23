@@ -245,6 +245,13 @@ async function settlePendingBillRefunds(
   deps: BillPaymentsLoopDeps,
   pass: BillPaymentsPass,
 ): Promise<void> {
+  const reading = deps.clock.now();
+  // A completed refund's time places it in a cash-up window, so none is settled by a clock that
+  // reads behind the last sale.
+  const stopped = await withTransaction(deps.db, (tx) =>
+    deps.backend.clockBehindLatestRecord(tx, reading),
+  );
+  if (stopped !== null) return;
   const pending = await withTransaction(deps.db, (tx) =>
     tx
       .select({ refund: billPaymentRefunds, workingOrderId: billPayments.workingOrderId })

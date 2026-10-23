@@ -276,6 +276,23 @@ describe("POST /api/pay when the sale fails for a full disk after the card was c
     expect(answer.json.code).toBe("server.internal");
     expect(charged()).toEqual([]);
   });
+
+  it("passes another coded refusal after the charge through with its own code and status", async () => {
+    const { log, charged } = capturingLog();
+    const params = { clockAt: "2001-01-01T00:00:00.000Z", offsetMinutes: 60 };
+    vi.spyOn(venue.backend, "recordSale").mockRejectedValueOnce(
+      new AppError("clock.unusable", params),
+    );
+    const id = randomUUID();
+    const before = collects();
+
+    const answer = await walkUpPay(id, log);
+
+    expect(answer.status).toBe(409);
+    expect(answer.json).toEqual({ code: "clock.unusable", params });
+    expect(collects()).toBe(before + 1);
+    expect(charged()).toEqual([]);
+  });
 });
 
 /** Lets the next card collect run, then fills the database to a page limit, as a full disk does. */

@@ -78,8 +78,8 @@ to green and parked for the owner; everything else lands itself.
 | 7 | `feat/a798-7-box-status-page` | Box status page and Liberar | auth (`system.manage`) | FULL | no | **lands itself** | 4, 5 |
 | 7b | `feat/a798-7b-retry-now` | Reintentar ahora | fiscal invariants (nudging the drain) | FULL | no | **parked** | 7 |
 | 8 | `feat/a798-8-clock-behind-stop` | The clock-behind stop (§4.8 a, d, e) | fiscal invariants, cross-package contract, migrations | FULL | **yes — the build's one** | **parked** | 4, 6, 7 |
-| 9 | `feat/a798-9-clock-restart` | Devices report their clock, `clock.disagrees`, the minimum-date checks, the restart | fiscal invariants (lifts the stop), auth | FULL | no | **parked** | 7, 8 |
-| 10 | `feat/a798-10-emails-and-install` | Emails, `reader.offline`, the printer notice, `waitron.sh` | none | LIGHT | no | **lands itself** | 5, 6 |
+| 9 | `feat/a798-9-clock-restart` | Devices report their clock, `clock.disagrees`, the minimum-date checks, the restart, and the clock-behind email (moved from 10 by slice 8's plan, revision 2) | fiscal invariants (lifts the stop), auth | FULL | no | **parked** | 7, 8, 10 |
+| 10 | `feat/a798-10-emails-and-install` | Emails (all but the clock-behind one, which is 9's), `reader.offline`, the printer notice, `waitron.sh` | none | LIGHT | no | **lands itself** | 5, 6 |
 
 Why each lands itself or is parked, against the owner's four categories:
 
@@ -114,9 +114,14 @@ Why each lands itself or is parked, against the owner's four categories:
    AEAT with the filing certificate.
 10. **Lands itself.** Emails, an alert, a notice and the install script; nothing fiscal.
 
-Order: the lane builds them one at a time in the table's order. Slice 4 has no dependency on 1–3
-and could go earlier; it stays in §8's order. A parked slice does not block a later slice that does
-not depend on it: 4 to 7 can land while 3 waits, and 10 while 8 and 9 wait for the owner.
+Order: the lane builds them one at a time in the table's order, except that 10 is built before 9.
+Slice 4 has no dependency on 1–3 and could go earlier; it stays in §8's order. **Why 9 takes the
+clock-behind email and waits for 10** (slice 8's plan, revision 2, review finding I7): the email
+asks slice 8's seat (`clockBehindLatestRecord`), so it cannot be built by slice 10, which lands
+itself and must not depend on the parked slice 8. Slice 9 already depends on 8 and parks, so it
+sends that email, through the once-per-episode sender slice 10 builds for its own emails. A parked
+slice does not block a later slice that does not depend on it: 4 to 7 can land while 3 waits, and
+10 while 8 and 9 wait for the owner.
 
 **Two asesor questions** were added with this plan, as design §10 asks:
 [Q51](../../compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21)

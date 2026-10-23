@@ -775,6 +775,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Sale not recorded: the box's clock is wrong. Tell a manager. If you already charged a card on the terminal, refund it there.",
     es: "Venta no registrada: la hora del equipo es incorrecta. Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   },
+  "clock.behind_chain": {
+    en: "Can't be recorded: the box's clock reads earlier than its last sale. Tell a manager.",
+    es: "No se puede registrar: la hora del equipo es anterior a la última venta. Avisa al encargado.",
+  },
   "server.internal": {
     en: "Something went wrong, try again",
     es: "Algo salió mal, inténtalo de nuevo",

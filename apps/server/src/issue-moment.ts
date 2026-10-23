@@ -1,6 +1,6 @@
 import { localCalendarDate, rateLines } from "@waitron/catalogue";
 import type { GrossLines, PricedLines } from "@waitron/catalogue";
-import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import type { FiscalBackend, TrustedClock, TrustedReading } from "@waitron/fiscal";
 
 /** An invoice's lines at the rates of the day it is issued, and the clock that issues it. */
 export interface IssueMoment {
@@ -23,10 +23,14 @@ export function issueMoment(
   fiscal.assertRecordableAt(reading);
   return {
     priced: rateLines(gross, localCalendarDate(reading.instant, reading.offsetMinutes)),
-    clock: {
-      now: () => reading,
-      anchor: (trusted) => clock.anchor(trusted),
-      currentAnchor: () => clock.currentAnchor(),
-    },
+    clock: pinnedAt(clock, reading),
+  };
+}
+
+export function pinnedAt(clock: TrustedClock, reading: TrustedReading): TrustedClock {
+  return {
+    now: () => reading,
+    anchor: (trusted) => clock.anchor(trusted),
+    currentAnchor: () => clock.currentAnchor(),
   };
 }

@@ -291,7 +291,10 @@ declare module "@waitron/shared" {
      * A card was charged on a connected reader and its sale could not be recorded; `reason` says
      * why.
      */
-    "sale.charged_not_recorded": { workingOrderId: string; reason: "disk_full" };
+    "sale.charged_not_recorded": {
+      workingOrderId: string;
+      reason: "disk_full" | "clock_behind_chain";
+    };
     /**
      * A tender method this till does not support. `method` echoes the request so a translator can
      * name what was attempted; it is caller-supplied text, never a secret.

@@ -6,6 +6,7 @@ import {
   registerAlertMessages,
   registerAlertWords,
 } from "./alert-messages.js";
+import { formatIsoMinute } from "./date-format.js";
 
 registerAlertMessages({
   // Placeholder non-English text: dashboard-kit's tests are scanned by the english-only guard.
@@ -167,5 +168,37 @@ describe("alertMessage", () => {
     expect(alertMessage("toString", {}, "es")).toBe("Algo requiere atención");
     expect(hasAlertMessage("toString")).toBe(false);
     expect(hasAlertMessage("test.count")).toBe(true);
+  });
+});
+
+registerAlertMessages({ "test.minute": { en: "At {when:minute}.", es: "ES {when:minute}." } });
+
+describe("a minute placeholder", () => {
+  it("writes an ISO instant as the browser's local YYYY-MM-DD HH:MM, in either language", () => {
+    const when = "2025-03-14T09:12:40.000Z";
+    expect(alertMessage("test.minute", { when }, "en")).toBe(`At ${formatIsoMinute(when)}.`);
+    expect(alertMessage("test.minute", { when }, "es")).toBe(`ES ${formatIsoMinute(when)}.`);
+    expect(formatIsoMinute(when)).toMatch(/^2025-03-1[345] \d\d:\d\d$/);
+  });
+
+  it("shows a dash for a value that is not an instant, never the value", () => {
+    for (const when of [
+      null,
+      undefined,
+      1_741_943_520_000,
+      {},
+      "",
+      "yesterday",
+      "2025-13-14T09:12:00Z",
+      "2025-03-14T25:12:00Z",
+    ]) {
+      expect(alertMessage("test.minute", { when }, "en")).toBe("At —.");
+    }
+  });
+
+  it("shows a dash for a string the date parser reads but that is not an instant as written", () => {
+    for (const when of ["1", "2025-02-30T09:12:00.000Z", "2025-03-14T09:12Z", "2025-03-14"]) {
+      expect(alertMessage("test.minute", { when }, "en")).toBe("At —.");
+    }
   });
 });

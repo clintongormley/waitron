@@ -22,8 +22,21 @@ const pendingConnected = and(
 export async function recoverTenderRefunds(
   deps: TenderRefundDeps,
 ): Promise<{ pending: number; nextDueAt: Date | null }> {
-  const now = deps.clock.now().instant;
+  const reading = deps.clock.now();
+  const now = reading.instant;
   const instant = now.toISOString();
+  // A completed refund's time places it in a cash-up window, so none is settled by a clock that
+  // reads behind the last sale.
+  const stopped = await withTransaction(deps.db, (tx) =>
+    deps.backend.clockBehindLatestRecord(tx, reading),
+  );
+  if (stopped !== null) {
+    const [summary] = await deps.db
+      .select({ pending: sql<number>`count(*)` })
+      .from(tenderRefunds)
+      .where(pendingConnected);
+    return { pending: summary!.pending, nextDueAt: new Date(now.getTime() + RECHECK_MS) };
+  }
   const batch = await deps.db
     .select({ id: tenderRefunds.id })
     .from(tenderRefunds)

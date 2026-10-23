@@ -51,11 +51,6 @@ describe("Orders routes", () => {
   });
 
   it("shows staff unfinished bills at any date and finished bills only from today's business day", async () => {
-    const open = await parked(venue, "Caña");
-    const waiting = await placedIssuedBill(venue, "Caña");
-    const left = (await departed(venue, "Caña")).tabId;
-    const paid = await placedIssuedBill(venue, "Caña");
-    expect((await collect(venue, paid, "3.00")).status).toBe(200);
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
     let oldPaid: string;
@@ -67,6 +62,11 @@ describe("Orders routes", () => {
     } finally {
       vi.useRealTimers();
     }
+    const open = await parked(venue, "Caña");
+    const waiting = await placedIssuedBill(venue, "Caña");
+    const left = (await departed(venue, "Caña")).tabId;
+    const paid = await placedIssuedBill(venue, "Caña");
+    expect((await collect(venue, paid, "3.00")).status).toBe(200);
     const cancelled = await placedIssuedBill(venue, "Caña");
     expect(
       (

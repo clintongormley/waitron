@@ -70,6 +70,62 @@ export function clockUnusableText(clockAt: string, offsetMinutes: number): strin
   return t("sale.clock_unusable").replace("{date}", () => date);
 }
 
+export interface ClockBehind {
+  clockAt: string;
+  offsetMinutes: number;
+  lastRecordAt: string;
+  lastRecordOffsetMinutes: number;
+}
+
+/** A `clock.behind_chain` refusal's two readings, when {@link clockBehindText} can write both. */
+export function clockBehindOf(refusal: {
+  clockAt?: unknown;
+  offsetMinutes?: unknown;
+  lastRecordAt?: unknown;
+  lastRecordOffsetMinutes?: unknown;
+}): ClockBehind | undefined {
+  const clock = clockReadingOf(refusal);
+  const last = clockReadingOf({
+    clockAt: refusal.lastRecordAt,
+    offsetMinutes: refusal.lastRecordOffsetMinutes,
+  });
+  return clock === undefined || last === undefined
+    ? undefined
+    : {
+        ...clock,
+        lastRecordAt: last.clockAt,
+        lastRecordOffsetMinutes: last.offsetMinutes,
+      };
+}
+
+/** Date and time apart and joined with a no-break space, so a narrow screen never wraps between
+ * them: `en-GB`'s combined format puts a comma between. */
+function readingText(at: string, offsetMinutes: number): string {
+  const shifted = new Date(Date.parse(at) + offsetMinutes * 60_000);
+  const date = new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(shifted);
+  const time = new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: "UTC",
+  }).format(shifted);
+  return `${date}\u00a0${time}`;
+}
+
+/** Each reading in its own offset, the one its record carries or would carry. */
+export function clockBehindText(behind: ClockBehind): string {
+  const clockAt = readingText(behind.clockAt, behind.offsetMinutes);
+  const lastRecordAt = readingText(behind.lastRecordAt, behind.lastRecordOffsetMinutes);
+  return t("sale.clock_behind_chain")
+    .replace("{clockAt}", () => clockAt)
+    .replace("{lastRecordAt}", () => lastRecordAt);
+}
+
 export function differentPeopleText(limit: string): string {
   return t("table.confirm_different_people").replace("{amount}", () => formatMoney(limit, locale));
 }

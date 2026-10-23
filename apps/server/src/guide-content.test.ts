@@ -71,6 +71,7 @@ describe("the user guides", () => {
       "rows",
       "free-space",
       "out-of-space",
+      "clock-behind",
     ]);
   });
 

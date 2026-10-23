@@ -19,7 +19,7 @@ import {
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { SUBMIT_RETRY_PAUSE_MS, TillApp } from "./till-app.js";
-import { setLocale, t } from "./i18n/t.js";
+import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import {
   DRAFT_SAVE_DELAY_MS,
@@ -1914,6 +1914,24 @@ describe("till-app: a save the server refuses", () => {
     expect(banner(el)!.textContent).toContain(codeMessage("storage.disk_full"));
   });
 
+  it.each(["en-GB", "es-ES"])(
+    "says a save refused for a clock behind the last sale can't be recorded (%s)",
+    async (locale) => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till(drillFormFactor), locale }),
+        saveDraft: vi.fn().mockRejectedValue({ code: "clock.behind_chain", status: 409 }),
+      });
+      expect(currentLocale()).toBe(locale);
+      await openMesa(el);
+      await tap(el, "Beer");
+
+      await back(el);
+
+      expect(banner(el)!.textContent).toContain(codeMessage("clock.behind_chain", locale));
+      expect(banner(el)!.textContent).not.toContain(codeMessage("server.internal", locale));
+    },
+  );
+
   it("says nothing when the session had already ended", async () => {
     const { el } = await mountApp({
       saveDraft: vi.fn().mockRejectedValue({ code: "session.required", status: 401 }),
@@ -2797,6 +2815,25 @@ describe("till-app: sending the draft", () => {
     expect(api.submitDraft).not.toHaveBeenCalled();
     expect(banner(el)!.textContent).toContain(codeMessage("storage.disk_full"));
   });
+
+  it.each(["en-GB", "es-ES"])(
+    "says a save refused for a clock behind the last sale can't be recorded, and sends nothing (%s)",
+    async (locale) => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till(drillFormFactor), locale }),
+        saveDraft: vi.fn().mockRejectedValue({ code: "clock.behind_chain", status: 409 }),
+      });
+      expect(currentLocale()).toBe(locale);
+      await openMesa(el);
+      await tap(el, "Beer");
+
+      await act(el, "fire-all");
+
+      expect(api.submitDraft).not.toHaveBeenCalled();
+      expect(banner(el)!.textContent).toContain(codeMessage("clock.behind_chain", locale));
+      expect(banner(el)!.textContent).not.toContain(codeMessage("server.internal", locale));
+    },
+  );
 });
 
 /** A request that gets no answer: it rejects only when the signal among its arguments is aborted. */

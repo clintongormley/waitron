@@ -138,6 +138,7 @@ export function mountTenderRefundApi(
   );
   const commandDeps = {
     db: deps.db,
+    backend: deps.backend,
     clock: deps.clock,
     attendance: deps.attendance,
     refundProviderFor: refundProvidersOf({ simulator: deps.cardProvider, pool: deps.pool }),
@@ -274,6 +275,8 @@ export function mountTenderRefundApi(
           },
           async (tx) => {
             const current = await readRefund(tx, id);
+            if (current.state === "pending")
+              await deps.backend.refuseWhileClockBehind(tx, deps.clock.now());
             if (
               current.state === "pending" &&
               current.method === "card" &&

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { alertMessage, hasAlertMessage } from "./alerts.js";
 import { ALERT_MESSAGES, ALERT_WORDS } from "./alert-messages.js";
+import { formatIsoMinute } from "../date-utils.js";
 import { t } from "./t.js";
 
 it("registers the dashboard's alert wording on import", () => {
@@ -262,6 +263,7 @@ it("names only registered word lists in its word-list slots", () => {
             m[1] !== "money" &&
             m[1] !== "date" &&
             m[1] !== "bytes" &&
+            m[1] !== "minute" &&
             !Object.hasOwn(ALERT_WORDS, m[1]!),
         )
         .map((m) => `${code}: ${m[0]}`),
@@ -383,4 +385,35 @@ it("never says the payments check may not look at a payment again", () => {
     expect(en, code).not.toContain("may not check");
     expect(es, code).not.toContain("no vuelva a comprobar");
   }
+});
+
+describe("the box's clock reading behind its last sale", () => {
+  const params = { clockAt: "2025-03-14T09:12:00.000Z", lastRecordAt: "2026-10-22T19:43:00.000Z" };
+
+  it("writes both times as the dashboard writes an instant, and says payments stop, in English", () => {
+    expect(alertMessage("clock.behind_chain", params, "en")).toBe(
+      `The box's clock (${formatIsoMinute(params.clockAt)}) reads earlier than its last sale (${formatIsoMinute(params.lastRecordAt)}), so no payment can be taken. Orders and the kitchen still work. Sort it out on the Box status page.`,
+    );
+  });
+
+  it("fills both times into the Spanish words", () => {
+    expect(alertMessage("clock.behind_chain", params, "es")).toBe(
+      ALERT_MESSAGES["clock.behind_chain"]!.es.replace(
+        "{clockAt:minute}",
+        formatIsoMinute(params.clockAt),
+      ).replace("{lastRecordAt:minute}", formatIsoMinute(params.lastRecordAt)),
+    );
+  });
+
+  it("says it in three sentences in each language, pointing at the Box status page", () => {
+    const { en, es } = ALERT_MESSAGES["clock.behind_chain"]!;
+    for (const text of [en, es]) expect(text.split(/(?<=\.)\s+/).length).toBe(3);
+    expect(es).toContain(t("nav.box_status", "es-ES"));
+    expect(es).toContain("{clockAt:minute}");
+    expect(es).toContain("{lastRecordAt:minute}");
+  });
+
+  it("shows a dash for a time it cannot read", () => {
+    expect(alertMessage("clock.behind_chain", { clockAt: null }, "en")).toContain("(—)");
+  });
 });

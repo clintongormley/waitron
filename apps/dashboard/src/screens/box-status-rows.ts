@@ -45,6 +45,7 @@ const SCREENS: Readonly<Record<PartId, string | null>> = {
 const NOTICE_PARTS: Readonly<Record<string, readonly PartId[]>> = {
   "storage.disk_full": ["sales", "disk"],
   "clock.unusable": ["sales", "clock"],
+  "clock.behind_chain": ["sales", "clock"],
   "storage.space_low": ["disk"],
   "fiscal.records_unsent": ["tax"],
 };
@@ -53,6 +54,7 @@ const NOTICE_PARTS: Readonly<Record<string, readonly PartId[]>> = {
 const STOPPED_WORDS: Readonly<Record<string, StringKey>> = {
   "storage.disk_full": "box_status.notice.disk_full",
   "clock.unusable": "box_status.notice.clock_unusable",
+  "clock.behind_chain": "box_status.notice.clock_behind_chain",
 };
 
 export function partOfAlert(alert: Pick<AlertView, "area" | "code">): PartId | null {
@@ -102,7 +104,7 @@ export function boxStatusRows(
       id,
       state,
       line: lineOf(id, health, notices, stopped, rowAlerts),
-      details: detailsOf(id, health),
+      details: detailsOf(id, health, notices),
       alerts: rowAlerts,
       screen: SCREENS[id],
     };
@@ -123,10 +125,11 @@ function lineOf(
   alerts: readonly AlertView[],
 ): string {
   if (id === "sales") {
-    // A full disk stops everything, so its words win over the clock's.
+    // A full disk stops everything and a wrong clock every sale, so each wins over the payment stop.
     const reason =
       stopped.find((notice) => notice.code === "storage.disk_full") ??
-      stopped.find((notice) => notice.code === "clock.unusable");
+      stopped.find((notice) => notice.code === "clock.unusable") ??
+      stopped.find((notice) => notice.code === "clock.behind_chain");
     return reason === undefined ? t("box_status.sales.ok") : t(STOPPED_WORDS[reason.code]!);
   }
   const words = stopped.find((notice) => Object.hasOwn(STOPPED_WORDS, notice.code));
@@ -209,7 +212,7 @@ function diskLine(disk: BoxHealth["disk"]): string {
   });
 }
 
-function detailsOf(id: PartId, health: BoxHealth): string[] {
+function detailsOf(id: PartId, health: BoxHealth, notices: readonly Notice[]): string[] {
   switch (id) {
     case "sales":
       return [
@@ -227,7 +230,9 @@ function detailsOf(id: PartId, health: BoxHealth): string[] {
     case "readers":
       return names(health.readers!);
     case "clock":
-      return clockDetails(health.clock);
+      return notices.some((notice) => notice.code === "clock.behind_chain")
+        ? [...clockDetails(health.clock), t("box_status.clock.behind_chain_fix")]
+        : clockDetails(health.clock);
     case "disk":
       return diskDetails(health.disk);
     default:

@@ -452,6 +452,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "fiscal.record_invalid": 409,
   "fiscal.fingerprint_mismatch": 409,
   "clock.unusable": 409,
+  "clock.behind_chain": 409,
   "fiscal.foreign_recipient_unsupported": 409,
   // Adding a line refuses a classification snapshot the catalogue's data cannot make valid:
   // permanent until the catalogue is fixed, and not the till's fault.
@@ -1846,7 +1847,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           log,
           attendance: deps.attendance,
           disk: deps.disk,
-          sayCardChargedOnFullDisk: true,
+          sayCardChargedNotRecorded: true,
         },
         saleCfg,
         { ...body, zoneId, guests },

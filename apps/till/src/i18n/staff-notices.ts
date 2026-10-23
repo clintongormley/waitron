@@ -8,6 +8,7 @@ const UNKNOWN = { main: "staff_notice.unknown", hint: TELL_MANAGER } as const;
 const FIXED = {
   "storage.disk_full": "staff_notice.storage.disk_full",
   "clock.unusable": "staff_notice.clock.unusable",
+  "clock.behind_chain": "staff_notice.clock.behind_chain",
   "storage.space_low": "staff_notice.storage.space_low",
 } as const;
 

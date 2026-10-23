@@ -1271,6 +1271,33 @@ describe("till-app table ordering: refused and failed table actions", () => {
     },
   );
 
+  for (const locale of ["en-GB", "es-ES"])
+    it.each([
+      ["join-tables", { tableId: "t9", bills: "merge" }, "joinTables"],
+      [
+        "change-line",
+        { lineNo: 1, lineName: "Coffee", patch: { note: "no sugar" }, revision: 0 },
+        "updateOrderLine",
+      ],
+    ] as const)(
+      `a %s refused for a clock behind the last sale says it can't be recorded (${locale})`,
+      async (type, detail, method) => {
+        const { el } = await mountApp({
+          ...seatedFloor(),
+          [method]: vi.fn().mockRejectedValue({ code: "clock.behind_chain", status: 409 }),
+        });
+        const screen = await toTableOrder(el);
+        setLocale(locale);
+
+        emit(screen, type, detail);
+        await flush(el);
+
+        const shown = banner(el)!.textContent!.trim();
+        expect(shown).toBe(codeMessage("clock.behind_chain", locale));
+        expect(shown).not.toBe(t("table.error"));
+      },
+    );
+
   it.each(["bill.presented", "bill.paid", "bill.other_party", "bill.payments_received"])(
     "a merge refused %s says so in that code's own words",
     async (code) => {

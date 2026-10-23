@@ -17,6 +17,7 @@ import {
 import type { BillEditExpected } from "./order-drafts.js";
 import { readIssuedSales } from "./sale-due.js";
 import type { Logger } from "./logger.js";
+import { pinnedAt } from "./issue-moment.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import { refusePlacedPaymentInFlight, settleIssuedOwingNothing } from "./till-sale.js";
 import {
@@ -77,6 +78,8 @@ export async function recordUnpaidDeparture(
     { sessionId: operator.sessionId, permission: "sale.void", override: req.override },
     operator.attempts,
   );
+  const reading = deps.clock.now();
+  await deps.backend.refuseWhileClockBehind(tx, reading);
   await checkAndBumpParty(tx, partyId, req.expectedPartyRevision, "open");
   await requirePartyClosingEdits(tx, partyId, operator.personId, req.expectedEdits);
 
@@ -113,9 +116,10 @@ export async function recordUnpaidDeparture(
     owing.filter((bill) => bill.status === "placed").map((bill) => bill.workingOrderId),
   );
 
+  const issueClock = pinnedAt(deps.clock, reading);
   const invoices = [];
   for (const bill of toInvoice) {
-    invoices.push(await priceForIssuance(tx, deps.clock, deps.backend, cfg, bill.workingOrderId));
+    invoices.push(await priceForIssuance(tx, issueClock, deps.backend, cfg, bill.workingOrderId));
   }
   const due = new Map<string, Decimal>([
     ...[...invoiced].map(([id, sale]) => [id, sale.amountDue] as const),

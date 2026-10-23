@@ -1076,6 +1076,7 @@ async function beginBillPayment(
   if (earlier.refund !== undefined) {
     throw new AppError("submission.id_reused", { submissionId: req.submissionId });
   }
+  await backend.refuseWhileClockBehind(tx, reading);
 
   await requireOpenBill(tx, workingOrderId);
   await requireOrderBillEditor(tx, workingOrderId, {
@@ -1239,22 +1240,29 @@ export function billPaymentIsLive(db: Database, billPaymentId: string): boolean 
 }
 
 /**
- * Runs work that follows a card charged on a connected reader. When `deps` opts in, a full disk
- * becomes `sale.charged_not_recorded`, so the till can say the card was charged; any other error,
- * and every error when it does not, passes through unchanged.
+ * Runs work that follows a card charged on a connected reader. When `deps` opts in, a full disk or
+ * a clock behind the latest fiscal record becomes `sale.charged_not_recorded`, so the till can say
+ * the card was charged; any other error, and every error when it does not, passes through unchanged.
  */
 export async function afterCardCharged<T>(
-  deps: { sayCardChargedOnFullDisk?: boolean; log?: Logger },
+  deps: { sayCardChargedNotRecorded?: boolean; log?: Logger },
   workingOrderId: string,
   work: () => Promise<T>,
 ): Promise<T> {
-  if (deps.sayCardChargedOnFullDisk !== true) return work();
+  if (deps.sayCardChargedNotRecorded !== true) return work();
   try {
     return await work();
   } catch (error) {
-    if (!diskFullIn(error)) throw error;
-    throw chargedNotRecorded(deps.log, workingOrderId);
+    const reason = notRecordedReason(error);
+    if (reason === null) throw error;
+    throw chargedNotRecorded(deps.log, workingOrderId, reason);
   }
+}
+
+function notRecordedReason(error: unknown): NotRecordedReason | null {
+  if (diskFullIn(error)) return "disk_full";
+  if (error instanceof AppError && error.code === "clock.behind_chain") return "clock_behind_chain";
+  return null;
 }
 
 /**
@@ -1263,20 +1271,26 @@ export async function afterCardCharged<T>(
  * other failure, a full disk before the charge among them, passes through unchanged.
  */
 export function collectFailure(
-  deps: { sayCardChargedOnFullDisk?: boolean; log?: Logger },
+  deps: { sayCardChargedNotRecorded?: boolean; log?: Logger },
   workingOrderId: string,
   error: unknown,
 ): unknown {
-  if (deps.sayCardChargedOnFullDisk !== true || !(error instanceof ChargeNotSavedError)) {
+  if (deps.sayCardChargedNotRecorded !== true || !(error instanceof ChargeNotSavedError)) {
     return error;
   }
-  return chargedNotRecorded(deps.log, workingOrderId);
+  return chargedNotRecorded(deps.log, workingOrderId, "disk_full");
 }
 
+type NotRecordedReason = "disk_full" | "clock_behind_chain";
+
 /** Carries no cause: the error boundary answers `storage.disk_full` for any full disk in the chain. */
-function chargedNotRecorded(log: Logger | undefined, workingOrderId: string): AppError {
+function chargedNotRecorded(
+  log: Logger | undefined,
+  workingOrderId: string,
+  reason: NotRecordedReason,
+): AppError {
   log?.("error", "sale.charged_not_recorded", { workingOrderId });
-  return new AppError("sale.charged_not_recorded", { workingOrderId, reason: "disk_full" });
+  return new AppError("sale.charged_not_recorded", { workingOrderId, reason });
 }
 
 /** {@link takeReaderBillPayment}'s deps: the fiscal ones, and the reader's provider. */
@@ -1289,11 +1303,12 @@ export type ReaderBillPaymentDeps = BillPaymentDeps & {
   /** The chosen reader's `card_readers.id`, passed to `collect`; absent for the simulator. */
   readerId?: string;
   /**
-   * Set by the till's routes: a full disk after `collect` returned a charge, or on the SumUp or
-   * Stripe terminal adapter's own save of one inside it, answers `sale.charged_not_recorded`, so
-   * staff are told not to charge again. Unset, it answers `storage.disk_full`.
+   * Set by the till's routes: a full disk or a clock behind the latest fiscal record after
+   * `collect` returned a charge, or a full disk on the SumUp or Stripe terminal adapter's own save
+   * of one inside it, answers `sale.charged_not_recorded`, so staff are told not to charge again.
+   * Unset, the refusal passes through: `storage.disk_full` or `clock.behind_chain`.
    */
-  sayCardChargedOnFullDisk?: boolean;
+  sayCardChargedNotRecorded?: boolean;
 };
 
 /** Who confirmed a payment's or a refund's outcome by hand, and their note. */

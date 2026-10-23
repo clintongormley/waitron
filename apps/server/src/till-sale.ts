@@ -88,7 +88,7 @@ type TillSaleDeps = BaseTillSaleDeps & {
 import { issuancePass } from "./issuance-pass.js";
 import { refuseForDiskStop, type DiskFullState } from "./disk-full-state.js";
 import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js";
-import { issueMoment } from "./issue-moment.js";
+import { issueMoment, pinnedAt } from "./issue-moment.js";
 import { cashChange, ZERO } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
 import { afterCardCharged, collectFailure, refuseBillWithPayments } from "./bill-payments.js";
@@ -616,12 +616,13 @@ export type IntegratedPayDeps = TillSaleDeps & {
   /** The device profile the route checked the request under, passed to `provider.collect`. */
   deviceProfileId?: string;
   /**
-   * Set by the till's routes: a full disk after a card was charged — after `collect` returned a
-   * charge, while filing a charge an earlier attempt captured, or on the SumUp or Stripe terminal
-   * adapter's own save of the charge inside `collect` — answers `sale.charged_not_recorded`, so
-   * staff are told not to charge again. Unset, it answers `storage.disk_full`.
+   * Set by the till's routes: a full disk, or a clock behind the latest fiscal record, after a card
+   * was charged — after `collect` returned a charge, while filing a charge an earlier attempt
+   * captured, or (full disk only) on the SumUp or Stripe terminal adapter's own save of the charge
+   * inside `collect` — answers `sale.charged_not_recorded`, so staff are told not to charge again.
+   * Unset, the refusal passes through: `storage.disk_full` or `clock.behind_chain`.
    */
-  sayCardChargedOnFullDisk?: boolean;
+  sayCardChargedNotRecorded?: boolean;
 };
 
 /**
@@ -689,8 +690,10 @@ async function runPayWorkingOrder(
           return readSettledTicket(deps.backend, tx, cfg, req.id);
         }
         if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
+        const reading = deps.clock.now();
+        await deps.backend.refuseWhileClockBehind(tx, reading);
 
-        const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
+        const attendanceAt = deps.attendance === undefined ? undefined : reading.instant;
 
         refuseUnavailableInvoiceRequest(req.invoiceType, req.recipient);
 
@@ -742,7 +745,7 @@ async function runPayWorkingOrder(
         // A walk-up is created with no party.
         const ticket = await fireAndFileSale(
           tx,
-          deps,
+          { ...deps, clock: pinnedAt(deps.clock, reading) },
           cfg,
           req.id,
           req.tender,
@@ -1166,6 +1169,8 @@ async function payIntegrated(
         ticket: await readSettledTicket(deps.backend, tx, cfg, req.id),
       };
     }
+    const reading = deps.clock.now();
+    await deps.backend.refuseWhileClockBehind(tx, reading);
 
     if (locked !== undefined && locked.status !== "open" && locked.status !== "placed") {
       throw new AppError("working_order.not_open", { workingOrderId: req.id });
@@ -1280,12 +1285,13 @@ async function payIntegrated(
       // malformed tip when tips are on. A placed order's dishes were sent when it was placed, and a
       // walk-up is created with no party.
       tipOf(cfg, req);
-      const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
+      const attendanceAt = deps.attendance === undefined ? undefined : reading.instant;
+      const issuing = { ...deps, clock: pinnedAt(deps.clock, reading) };
       const ticket = wasPlaced
-        ? await fileImmediateSale(tx, deps, cfg, req.id, null, order, req.guests, operatorId)
+        ? await fileImmediateSale(tx, issuing, cfg, req.id, null, order, req.guests, operatorId)
         : await fireAndFileSale(
             tx,
-            deps,
+            issuing,
             cfg,
             req.id,
             null,
@@ -2139,8 +2145,10 @@ async function runCollectOrder(
         return readSettledTicket(deps.backend, tx, cfg, req.id);
       }
       if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
+      const reading = deps.clock.now();
+      await deps.backend.refuseWhileClockBehind(tx, reading);
 
-      const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
+      const attendanceAt = deps.attendance === undefined ? undefined : reading.instant;
 
       if (locked === undefined || locked.status !== "placed") {
         throw new AppError("working_order.not_placed", { workingOrderId: req.id });
@@ -2165,7 +2173,7 @@ async function runCollectOrder(
           await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
           return ticket;
         }
-        const settledAt = deps.clock.now().instant;
+        const settledAt = reading.instant;
 
         await settleSale(tx, {
           saleId: outstanding.saleId,
@@ -2213,7 +2221,7 @@ async function runCollectOrder(
       const order = await priceStoredOrderForIssuance(tx, req.id);
       const ticket = await fileImmediateSale(
         tx,
-        deps,
+        { ...deps, clock: pinnedAt(deps.clock, reading) },
         cfg,
         req.id,
         req.tender,

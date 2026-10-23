@@ -245,6 +245,8 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
     action?: unknown;
     clockAt?: unknown;
     offsetMinutes?: unknown;
+    lastRecordAt?: unknown;
+    lastRecordOffsetMinutes?: unknown;
     reason?: unknown;
   };
   const unsent = billUnsentOf(error);
@@ -257,6 +259,10 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
     ...(typeof refused.action === "string" ? { action: refused.action } : {}),
     ...(typeof refused.clockAt === "string" ? { clockAt: refused.clockAt } : {}),
     ...(typeof refused.offsetMinutes === "number" ? { offsetMinutes: refused.offsetMinutes } : {}),
+    ...(typeof refused.lastRecordAt === "string" ? { lastRecordAt: refused.lastRecordAt } : {}),
+    ...(typeof refused.lastRecordOffsetMinutes === "number"
+      ? { lastRecordOffsetMinutes: refused.lastRecordOffsetMinutes }
+      : {}),
     ...(typeof refused.reason === "string" ? { reason: refused.reason } : {}),
   };
 }

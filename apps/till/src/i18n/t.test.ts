@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import {
   carriedText,
+  clockBehindText,
   clockTime,
   countText,
   currentLocale,
@@ -154,3 +155,18 @@ it("registers en-GB as a first-class catalogue entry", () => {
   // falls back to the same English base.
   expect(catalogues["en-GB"]).toBe(en);
 });
+
+it.each(["en-GB", "es-ES"])(
+  "keeps each of a clock stop's readings on one line, its date and time joined by a no-break space (%s)",
+  (locale) => {
+    setLocale(locale);
+    const text = clockBehindText({
+      clockAt: "2025-03-14T08:12:00.000Z",
+      offsetMinutes: 60,
+      lastRecordAt: "2026-10-18T21:40:00.000Z",
+      lastRecordOffsetMinutes: 120,
+    });
+    expect(text).toContain("(14/03/2025\u00a009:12)");
+    expect(text).toContain("(18/10/2026\u00a023:40)");
+  },
+);

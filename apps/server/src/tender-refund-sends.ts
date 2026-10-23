@@ -16,7 +16,7 @@ import {
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { AppError, centsToDecimal } from "@waitron/shared";
 import { raiseTenderRefundConflict } from "./bill-refund-alerts.js";
-import { refundOutcome, type RefundEvidence } from "./bill-refunds.js";
+import { clockStopsRefund, refundOutcome, type RefundEvidence } from "./bill-refunds.js";
 import { attestationColumns, type Attestation } from "./bill-payments.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { toTenderRefundView, type TenderRefundDeps } from "./tender-refunds.js";
@@ -145,6 +145,7 @@ async function recordOutcomeIn(
   signal.throwIfAborted();
   const refund = await read(tx, id);
   const outcome = refundOutcome(evidence);
+  const reading = deps.clock.now();
   const providerRef =
     evidence.kind === "answer" && evidence.answer.kind === "outcome"
       ? evidence.answer.providerRefundRef
@@ -153,7 +154,7 @@ async function recordOutcomeIn(
         : null;
   if (refund.state !== "pending") {
     if (outcome !== "pending" && outcome !== refund.state)
-      await raiseTenderRefundConflict(tx, refund, providerRef, deps.clock.now().instant);
+      await raiseTenderRefundConflict(tx, refund, providerRef, reading.instant);
     return refund;
   }
   if (
@@ -161,10 +162,11 @@ async function recordOutcomeIn(
     ((refund.providerRefundRef !== null && refund.providerRefundRef !== providerRef) ||
       (await excludedRefs(tx, refund)).includes(providerRef))
   ) {
-    await raiseTenderRefundConflict(tx, refund, providerRef, deps.clock.now().instant);
+    await raiseTenderRefundConflict(tx, refund, providerRef, reading.instant);
     return refund;
   }
-  const now = deps.clock.now().instant.toISOString();
+  if (outcome !== "pending" && (await clockStopsRefund(tx, deps, evidence, reading))) return refund;
+  const now = reading.instant.toISOString();
   const [saved] = await tx
     .update(tenderRefunds)
     .set({
@@ -313,10 +315,12 @@ async function send(
     signal.throwIfAborted();
     const current = await read(tx, refund.id);
     if (expired()) return null;
+    const reading = deps.clock.now();
+    if (await clockStopsRefund(tx, deps, null, reading)) return null;
     const [row] = await tx
       .update(tenderRefunds)
       .set({
-        sentAt: current.sentAt ?? deps.clock.now().instant.toISOString(),
+        sentAt: current.sentAt ?? reading.instant.toISOString(),
         sendCount: current.sendCount + 1,
         ...(refs === null ? {} : { refsBeforeSend: refs }),
       })

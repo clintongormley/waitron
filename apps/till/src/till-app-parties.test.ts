@@ -8921,6 +8921,28 @@ describe("till-app: recording an unpaid departure", () => {
     expect(tableOrder(el)).not.toBeNull();
   });
 
+  it.each(["en-GB", "es-ES"])(
+    "keeps the dialog open saying the departure can't be recorded when the box's clock is behind its last sale (%s)",
+    async (locale) => {
+      const { el } = await openDeparture({
+        recordUnpaidDeparture: vi.fn().mockRejectedValue({
+          code: "clock.behind_chain",
+          status: 409,
+        }),
+      });
+      setLocale(locale);
+      await typeReason(el, "Ran off");
+      await confirmDeparture(el);
+
+      const bottom = dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        "wt-form-actions",
+      )!;
+      expect(bottom.error).toBe(codeMessage("clock.behind_chain", locale));
+      expect(bottom.error).not.toBe(codeMessage("server.internal", locale));
+      expect(tableOrder(el)).not.toBeNull();
+    },
+  );
+
   it("sends a fresh request on each press, with what the dialog holds then", async () => {
     const recordUnpaidDeparture = vi
       .fn()

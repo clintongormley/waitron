@@ -8,6 +8,7 @@ export const FISCAL_CLASSIFICATION: readonly ClassifiedTable[] = [
   appendOnly("filing_case_events", "ledger", LEDGER),
   appendOnly("fiscal_allocations", "ledger", LEDGER),
   appendOnly("fiscal_reservations", "ledger", LEDGER),
+  appendOnly("clock_stop_restarts", "ledger", LEDGER),
   classify("cadenas", "ledger", LEDGER),
   classify("registro_sif", "ledger", LEDGER),
   classify("envios", "ledger", LEDGER),

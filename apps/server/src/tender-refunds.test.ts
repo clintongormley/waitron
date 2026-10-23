@@ -23,6 +23,7 @@ import {
 import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createTrustedClock } from "@waitron/fiscal";
+import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import {
   createPinThrottle,
   hashPin,
@@ -137,6 +138,7 @@ beforeEach(async () => {
   });
   deps = {
     db,
+    backend: new FakeFiscalBackend(db),
     clock: createTrustedClock({
       deviceId: device.deviceId,
       monotonic: () => 0,
@@ -534,7 +536,7 @@ describe("settled-tender refund command local transaction", () => {
   });
   it("can record a local return without an attendance recorder", async () => {
     const t = await target();
-    const withoutAttendance = { db: deps.db, clock: deps.clock };
+    const withoutAttendance = { db: deps.db, backend: deps.backend, clock: deps.clock };
     expect((await run(t, request(t), withoutAttendance)).state).toBe("completed");
     expect(await store.db.select().from(attendanceOperationFacts)).toEqual([]);
     expect(await store.db.select().from(printJobs)).toHaveLength(1);

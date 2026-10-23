@@ -374,6 +374,17 @@ it("shows distinct pending/completed/failed outcomes and never offers payout aga
   }
 });
 
+it.each(["en", "es"])(
+  "says a refund can't be recorded while the box's clock is behind its last sale (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const el = await mount({ refusal: { code: "clock.behind_chain" } });
+    const shown = root(el).querySelector("wt-form-actions")!.error;
+    expect(shown).toBe(codeMessage("clock.behind_chain", locale));
+    expect(shown).not.toBe(codeMessage("server.internal", locale));
+  },
+);
+
 it("marks the amount when the refund exceeds the cancelled dishes", async () => {
   const el = await mount({ refusal: { code: "tender.refund_exceeds_cancelled" } });
   expect(field(el, "appliedAmount").error).toBe(codeMessage("tender.refund_exceeds_cancelled"));

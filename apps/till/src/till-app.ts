@@ -65,6 +65,9 @@ import {
   toScale,
 } from "@waitron/shared";
 import {
+  type ClockBehind,
+  clockBehindOf,
+  clockBehindText,
   clockReadingOf,
   clockUnusableText,
   countText,
@@ -564,6 +567,7 @@ const TABLE_REFUSALS = new Set([
   "bill.refund_in_progress",
   "working_order.not_open",
   "storage.disk_full",
+  "clock.behind_chain",
 ]);
 
 /** Refusals about the money already on a bill: after one, the party's bills and the shown bill's
@@ -836,6 +840,7 @@ const ACTIONABLE_REFUSALS = new Set([
   "department.operation_description_required",
   "sale.department_missing",
   "storage.disk_full",
+  "clock.behind_chain",
 ]);
 
 /** A refusal for passing the simplified-invoice limit that names the limit, as the server sends it. */
@@ -909,7 +914,8 @@ function discardError(error: unknown): CounterError {
   return code === "fiscal.fingerprint_mismatch" ||
     code === "order.payment_in_flight" ||
     code === "bill.refund_in_progress" ||
-    code === "storage.disk_full"
+    code === "storage.disk_full" ||
+    code === "clock.behind_chain"
     ? { code }
     : "held.stale";
 }
@@ -1282,6 +1288,7 @@ type CounterError =
   /** An order past the simplified-invoice limit, `overLimit` being the limit. */
   | { overLimit: string }
   | { clockUnusable: { clockAt: string; offsetMinutes: number } }
+  | { clockBehind: ClockBehind }
   | { unsentBill: BillUnsent }
   | { takenOver: string; unsent?: true }
   | { partyChanged: PartyChange }
@@ -1387,6 +1394,7 @@ function errorText(
   if ("overLimit" in error) return overLimitText(error.overLimit);
   if ("clockUnusable" in error)
     return clockUnusableText(error.clockUnusable.clockAt, error.clockUnusable.offsetMinutes);
+  if ("clockBehind" in error) return clockBehindText(error.clockBehind);
   if ("billPayments" in error)
     return [
       t("table.bill_to_pay").replace("{amount}", () =>
@@ -1498,19 +1506,32 @@ class ZoneOfferIndex {
   }
 }
 
-/** A sale refused for a full disk, a card charged but not recorded, or a wrong clock, in the money
- * surface's own words. `manualCard`: the tender is a card already charged on a terminal the box does
- * not talk to. */
+/** `manualCard`: the tender is a card already charged on a terminal the box does not talk to. */
 function saleRefusalOf(
   error: unknown,
   tender: { manualCard: boolean },
 ):
-  | Extract<StringKey, "sale.disk_full" | "sale.disk_full_manual_card" | "sale.charged_disk_full">
+  | Extract<
+      StringKey,
+      | "sale.disk_full"
+      | "sale.disk_full_manual_card"
+      | "sale.charged_disk_full"
+      | "sale.charged_clock_behind"
+    >
   | { code: string }
   | { clockUnusable: { clockAt: string; offsetMinutes: number } }
+  | { clockBehind: ClockBehind }
   | undefined {
   const refusal = error as
-    { code?: string; reason?: unknown; clockAt?: unknown; offsetMinutes?: unknown } | undefined;
+    | {
+        code?: string;
+        reason?: unknown;
+        clockAt?: unknown;
+        offsetMinutes?: unknown;
+        lastRecordAt?: unknown;
+        lastRecordOffsetMinutes?: unknown;
+      }
+    | undefined;
   switch (refusal?.code) {
     case "fiscal.fingerprint_mismatch":
       return { code: refusal.code };
@@ -1519,10 +1540,16 @@ function saleRefusalOf(
     case "sale.charged_not_recorded":
       return refusal.reason === "disk_full"
         ? "sale.charged_disk_full"
-        : { code: "sale.charged_not_recorded" };
+        : refusal.reason === "clock_behind_chain"
+          ? "sale.charged_clock_behind"
+          : { code: "sale.charged_not_recorded" };
     case "clock.unusable": {
       const reading = clockReadingOf(refusal);
       return reading === undefined ? { code: "clock.unusable" } : { clockUnusable: reading };
+    }
+    case "clock.behind_chain": {
+      const behind = clockBehindOf(refusal);
+      return behind === undefined ? { code: "clock.behind_chain" } : { clockBehind: behind };
     }
     default:
       return undefined;
@@ -2809,7 +2836,8 @@ export class TillApp extends LitElement {
     | { overLimit: string }
     | { code: string }
     | { unsentBill: BillUnsent }
-    | { clockUnusable: { clockAt: string; offsetMinutes: number } };
+    | { clockUnusable: { clockAt: string; offsetMinutes: number } }
+    | { clockBehind: ClockBehind };
   /** The waiting orders whose hand over is out, each pressed once until it answers. */
   #handingOver = new Set<string>();
   /** Each Pay pressed on a waiting order; only the latest one's answer may load the basket. */

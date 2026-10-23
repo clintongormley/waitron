@@ -435,6 +435,19 @@ describe("till-bill-refund-dialog: the server's refusals", () => {
     expect(actions(el).error).toBe(codeMessage("bill.refund_in_progress"));
   });
 
+  it.each(["en", "es"])(
+    "says a refund can't be recorded while the box's clock is behind its last sale (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mount();
+      el.refusal = { code: "clock.behind_chain" };
+      await el.updateComplete;
+
+      expect(actions(el).error).toBe(codeMessage("clock.behind_chain", locale));
+      expect(actions(el).error).not.toBe(codeMessage("server.internal", locale));
+    },
+  );
+
   it("puts a refusal of the amount under the amount, and of the reason under the reason", async () => {
     const el = await mount();
     await pick(el, "part");

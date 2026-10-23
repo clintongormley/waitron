@@ -1,12 +1,14 @@
 import { formatMoney } from "@waitron/shared";
+import { formatIsoMinute } from "./date-format.js";
 import { currentLocale, pickLocale } from "./i18n.js";
 import { GENERIC_ALERT } from "./strings.js";
 
 /** `{name}` is filled with the param as it is; `{name:money}` writes a decimal-string param as
  * euros, the way the alert's language writes them; `{name:date}` writes a `YYYY-MM-DD` param as
  * that calendar day, the way the alert's language writes it; `{name:bytes}` writes a number of
- * bytes as gigabytes or megabytes, the way the alert's language writes them; `{name:list}` writes
- * the words a registered word list gives the param's value. */
+ * bytes as gigabytes or megabytes, the way the alert's language writes them; `{name:minute}` writes
+ * an instant in `toISOString`'s shape as `YYYY-MM-DD HH:MM` in the browser's zone, in either
+ * language; `{name:list}` writes the words a registered word list gives the param's value. */
 export type AlertMessageTable = Readonly<
   Record<string, { readonly en: string; readonly es: string }>
 >;
@@ -52,6 +54,13 @@ function formatDay(value: unknown, l: string): string {
   }).format(at);
 }
 
+function formatMinute(value: unknown): string {
+  if (typeof value !== "string") return "—";
+  const at = new Date(value);
+  if (Number.isNaN(at.getTime()) || at.toISOString() !== value) return "—";
+  return formatIsoMinute(value);
+}
+
 export function formatBytes(value: unknown, l: string): string {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "—";
   const v = Math.max(0, value);
@@ -93,6 +102,7 @@ export function alertMessage(
       }
       if (kind === "date") return formatDay(value, l);
       if (kind === "bytes") return formatBytes(value, l);
+      if (kind === "minute") return formatMinute(value);
       if (kind === undefined) return formatParam(value);
       if (!Object.hasOwn(wordLists, kind)) return formatParam(null);
       const list = wordLists[kind]!;

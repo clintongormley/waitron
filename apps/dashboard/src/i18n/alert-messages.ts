@@ -130,8 +130,12 @@ export const ALERT_MESSAGES: Readonly<
     es: "La cadena de registros de facturación no ha superado su comprobación de integridad en una venta. Contacta con soporte.",
   },
   "clock.degraded": {
-    en: "This device's clock has not been checked against a trusted time source for {anchorAgeSeconds} seconds. Sales continue.",
-    es: "La hora de este equipo no se ha comprobado con una fuente de hora fiable desde hace {anchorAgeSeconds} segundos. Las ventas continúan.",
+    en: "This device's clock has not been checked against a trusted time source for {anchorAgeSeconds} seconds.",
+    es: "La hora de este equipo no se ha comprobado con una fuente de hora fiable desde hace {anchorAgeSeconds} segundos.",
+  },
+  "clock.behind_chain": {
+    en: "The box's clock ({clockAt:minute}) reads earlier than its last sale ({lastRecordAt:minute}), so no payment can be taken. Orders and the kitchen still work. Sort it out on the Box status page.",
+    es: "La hora del equipo ({clockAt:minute}) es anterior a la última venta ({lastRecordAt:minute}), así que no se puede cobrar. Los pedidos y la cocina siguen funcionando. Resuélvelo en Estado del equipo.",
   },
   "clock.jump_detected": {
     en: "This device's clock went backwards: it changed by {wallClockDeltaSeconds} seconds. Check its date and time.",

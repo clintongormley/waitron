@@ -5344,7 +5344,7 @@ alert list, and holds no staged input.
 - **Dots.** A `--wt-space-3` circle: `--wt-color-success` for fine, `--wt-color-warning` for needs
   attention, `--wt-color-danger` for something can't be saved, with the state's words in visually
   hidden text beside it. Red is a staff notice of severity `error` (`storage.disk_full`,
-  `clock.unusable`); amber is any other notice and any bell alert on that row, whatever the alert's
+  `clock.unusable`, `clock.behind_chain`); amber is any other notice and any bell alert on that row, whatever the alert's
   own severity, because amber means everything still works. The legend says "red: something can't
   be saved", not "nothing", because an unusable clock refuses sales while orders still save.
 - **Under the rows.** A note when a staff-notice check could not be made; a note when the bell's

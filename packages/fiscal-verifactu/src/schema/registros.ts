@@ -124,6 +124,7 @@ export const registrosFacturacion = table(
     ),
     index("registros_sale_idx").on(t.saleId),
     index("registros_node_secuencia_idx").on(t.nodeId, t.secuencia),
+    index("registros_generado_idx").on(t.fechaHoraHusoGenRegistro),
     ...originChecks("registros_facturacion", t.source, t.deviceId),
     check("registros_tipo_registro_ck", sql`${t.tipoRegistro} in ('alta', 'anulacion')`),
     check("registros_tipo_huella_ck", sql`${t.tipoHuella} = '01'`),

@@ -3149,6 +3149,8 @@ export const en = {
   "box_status.sales.none": "No sales yet",
   "box_status.notice.disk_full": "Nothing can be saved: the box is out of disk space",
   "box_status.notice.clock_unusable": "Sales can't be recorded: the box's clock is wrong",
+  "box_status.notice.clock_behind_chain":
+    "Payments stopped: the box's clock reads earlier than its last sale",
   "box_status.tax.ok": "Sent normally",
   "box_status.tax.not_filing": "This box does not send records to the tax agency",
   "box_status.tax.unsent": "{count} records not yet sent · the box retries by itself",
@@ -3169,6 +3171,8 @@ export const en = {
   "box_status.clock.compared": "Compared with the tax agency at {time} · {seconds} s apart",
   "box_status.clock.synced": "Kept in time over the internet",
   "box_status.clock.not_synced": "Not kept in time over the internet",
+  "box_status.clock.behind_chain_fix":
+    "Connect the box to the internet so it can correct its clock, or call whoever installed it.",
   "box_status.disk.free": "{free} free of {total}",
   "box_status.disk.unreadable": "The box can't measure its disk",
   "box_status.disk.database": "Database {size}",
@@ -6389,6 +6393,8 @@ export const es: Record<StringKey, string> = {
   "box_status.notice.disk_full": "No se puede guardar nada: el equipo no tiene espacio en disco",
   "box_status.notice.clock_unusable":
     "No se pueden registrar ventas: la hora del equipo es incorrecta",
+  "box_status.notice.clock_behind_chain":
+    "No se puede cobrar: la hora del equipo es anterior a la última venta",
   "box_status.tax.ok": "Se envían con normalidad",
   "box_status.tax.not_filing": "Este equipo no envía registros a Hacienda",
   "box_status.tax.unsent": "{count} registros sin enviar · el equipo reintenta solo",
@@ -6409,6 +6415,8 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.compared": "Comparado con Hacienda el {time} · diferencia {seconds} s",
   "box_status.clock.synced": "Se pone en hora por internet",
   "box_status.clock.not_synced": "No se pone en hora por internet",
+  "box_status.clock.behind_chain_fix":
+    "Conecta el equipo a internet para que corrija la hora, o llama a quien lo instaló.",
   "box_status.disk.free": "Quedan {free} libres de {total}",
   "box_status.disk.unreadable": "El equipo no puede medir su disco",
   "box_status.disk.database": "Base de datos {size}",

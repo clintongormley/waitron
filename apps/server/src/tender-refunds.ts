@@ -70,7 +70,8 @@ export async function beginSettledTenderRefund(
     request,
     operator,
     async (tx, authorization) => {
-      const createdAt = deps.clock.now().instant.toISOString();
+      const reading = deps.clock.now();
+      const createdAt = reading.instant.toISOString();
       const begun = await reserveTenderRefund(
         tx,
         cfg,
@@ -83,7 +84,12 @@ export async function beginSettledTenderRefund(
         },
         createdAt,
       );
-      if (begun.replayed) return toTenderRefundView(begun.refund);
+      if (begun.replayed) {
+        if (begun.refund.state === "pending")
+          await deps.backend.refuseWhileClockBehind(tx, reading);
+        return toTenderRefundView(begun.refund);
+      }
+      await deps.backend.refuseWhileClockBehind(tx, reading);
       let refund = begun.refund;
       if (refund.method === "card") {
         const capture = (await captureFor(tx, refund))!;

@@ -19,6 +19,7 @@ export type {
 export { emptyDrainResult } from "./backend.js";
 export type {
   AckState,
+  ClockBehindLatestRecord,
   Counterparty,
   DrainResult,
   FiscalBackend,

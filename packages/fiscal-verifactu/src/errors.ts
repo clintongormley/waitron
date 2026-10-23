@@ -358,5 +358,17 @@ declare module "@waitron/shared" {
      * `offsetMinutes` its offset, in which the date was judged.
      */
     "clock.unusable": { clockAt: string; offsetMinutes: number };
+
+    /**
+     * `refuseWhileClockBehind` (./clock-behind.ts): the box's clock reads more than a minute
+     * earlier than the latest record in any chain this database holds. `clockAt` and
+     * `lastRecordAt` are ISO 8601 instants, each with its own offset.
+     */
+    "clock.behind_chain": {
+      clockAt: string;
+      offsetMinutes: number;
+      lastRecordAt: string;
+      lastRecordOffsetMinutes: number;
+    };
   }
 }

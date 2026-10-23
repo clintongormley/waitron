@@ -1272,6 +1272,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Not recorded: the box's clock is wrong.",
     es: "No se ha registrado: la hora del equipo es incorrecta.",
   },
+  "clock.behind_chain": {
+    en: "Not recorded: the box's clock reads earlier than its last sale. Sort it out on the Box status page.",
+    es: "No se ha registrado: la hora del equipo es anterior a la última venta. Resuélvelo en Estado del equipo.",
+  },
   "theme.name_taken": {
     en: "A theme with this name already exists.",
     es: "Ya existe un tema con este nombre.",

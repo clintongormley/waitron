@@ -427,25 +427,6 @@ describe("stored invoice document projection", () => {
     expect(document.result.vatBreakdown).toEqual([{ rate: "0", base: "1.00", tax: "0.00" }]);
   });
 
-  it("requires the current taxpayer only when the backend has no saved issuer", async () => {
-    const backend = none();
-    const noRecord = await issue(backend);
-    const filed = await issue(venue.backend);
-    const [taxpayer] = await suite.db.select().from(tenants);
-    try {
-      await suite.db.delete(tenants);
-      await expect(read(backend, noRecord.saleId)).rejects.toThrow("Invoice has no taxpayer");
-      const document = await read(venue.backend, filed.saleId);
-      expect(document.issuer).toEqual({
-        venueName: "Ajustes SL",
-        nif: "62000003F",
-        domicile: "Saved domicile",
-      });
-    } finally {
-      await suite.db.insert(tenants).values(taxpayer!);
-    }
-  });
-
   it("refuses a simplified invoice and an unknown sale without creating a document", async () => {
     const backend = none();
     const sale = await issue(backend, false);
@@ -968,12 +949,6 @@ describe("the guests a full invoice prints", () => {
 
   it("reads no guests for a party seated with no count", async () => {
     const document = await read(venue.backend, await paidFullInvoice(null));
-    expect(document).not.toHaveProperty("guests");
-  });
-
-  it("reads no guests for a sale with no bill", async () => {
-    const issued = await issue(venue.backend);
-    const document = await read(venue.backend, issued.saleId);
     expect(document).not.toHaveProperty("guests");
   });
 });

@@ -6,6 +6,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { AppError, decimal, readSaleOrigin, sumDecimals } from "@waitron/shared";
 import type { NodeId, SaleId } from "@waitron/shared";
 import type {
+  ClockBehindLatestRecord,
   Counterparty,
   FiscalBackend,
   FiledReceipt,
@@ -38,6 +39,10 @@ import type { Entorno, RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { verifyChain } from "./verify.js";
 import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
+import {
+  clockBehindChain,
+  refuseWhileClockBehind as refuseWhileClockBehindChain,
+} from "./clock-behind.js";
 import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
 import { SOFTWARE_IDENTITY, producerFields, softwareVersion } from "./software-identity.js";
 import type { SoftwareIdentity } from "./software-identity.js";
@@ -154,6 +159,20 @@ export class VerifactuBackend implements FiscalBackend {
 
   assertRecordableAt(reading: { instant: Date; offsetMinutes: number }): void {
     refuseBeforeFirstIssueDate(reading);
+  }
+
+  clockBehindLatestRecord(
+    tx: Transaction,
+    reading: { instant: Date; offsetMinutes: number },
+  ): Promise<ClockBehindLatestRecord | null> {
+    return clockBehindChain(tx, reading);
+  }
+
+  refuseWhileClockBehind(
+    tx: Transaction,
+    reading: { instant: Date; offsetMinutes: number },
+  ): Promise<void> {
+    return refuseWhileClockBehindChain(tx, reading);
   }
 
   /**

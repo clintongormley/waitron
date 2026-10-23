@@ -775,6 +775,16 @@ it("says a booking holds a table back, in both languages", () => {
   ]);
 });
 
+it("says a clock behind the last sale means nothing can be recorded, in both languages", () => {
+  expect([
+    codeMessage("clock.behind_chain", "en-GB"),
+    codeMessage("clock.behind_chain", "es-ES"),
+  ]).toEqual([
+    "Can't be recorded: the box's clock reads earlier than its last sale. Tell a manager.",
+    "No se puede registrar: la hora del equipo es anterior a la última venta. Avisa al encargado.",
+  ]);
+});
+
 it("names a full disk, a card charged but not recorded, and a wrong clock in both languages", () => {
   const cases: [string, string, string][] = [
     [

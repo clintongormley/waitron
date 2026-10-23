@@ -17,7 +17,14 @@ import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { BillLookupRow, Tender } from "../api/client.js";
 import { typedAmount } from "../state/bill-payment.js";
-import { clockUnusableText, currentLocale, overLimitText, t } from "../i18n/t.js";
+import {
+  type ClockBehind,
+  clockBehindText,
+  clockUnusableText,
+  currentLocale,
+  overLimitText,
+  t,
+} from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import { trackDialog } from "./track-dialog.js";
@@ -68,7 +75,8 @@ export class TillFindBillDialog extends LitElement {
     | { overLimit: string }
     | { code: string }
     | { unsentBill: BillUnsent }
-    | { clockUnusable: { clockAt: string; offsetMinutes: number } };
+    | { clockUnusable: { clockAt: string; offsetMinutes: number } }
+    | { clockBehind: ClockBehind };
   @state() private selected: BillLookupRow | null = null;
   @state() private method: "cash" | "card" = "cash";
   @state() private cash = "";
@@ -323,7 +331,9 @@ export class TillFindBillDialog extends LitElement {
                           this.error.clockUnusable.clockAt,
                           this.error.clockUnusable.offsetMinutes,
                         )
-                      : overLimitText(this.error.overLimit)
+                      : "clockBehind" in this.error
+                        ? clockBehindText(this.error.clockBehind)
+                        : overLimitText(this.error.overLimit)
                 : this.cashError
                   ? t("form.fix_fields")
                   : ""

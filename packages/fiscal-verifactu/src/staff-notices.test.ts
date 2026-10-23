@@ -1,12 +1,16 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { recordSale } from "@waitron/core";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
+import { seedTenantWithSif } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { aeatClientResolver, mtlsFetch } from "./aeat-transport.js";
+import { VerifactuBackend } from "./backend.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
 import { clockNotices, FISCAL_STAFF_NOTICES, unsentNotices } from "./staff-notices.js";
@@ -124,6 +128,64 @@ describe("FISCAL_STAFF_NOTICES", () => {
         FISCAL_STAFF_NOTICES[0]!.read({ tx, reading: before, filing: FILING }),
       ),
     ).toEqual([notice("2001-01-01T11:00:00.000Z", 60), unsent(5, 1)]);
+  });
+});
+
+/** Records one sale whose record is generated at `at`, in the given offset. */
+async function sellAt(at: { instant: Date; offsetMinutes: number }): Promise<void> {
+  const { nodeId, seriesId } = await seedTenantWithSif(suite.db);
+  const backend = new VerifactuBackend({
+    deploymentEnvironment: "production",
+    clock: steadyClock,
+    db: suite.db,
+    resolveClient: staticResolver(fakeClient),
+  });
+  const clock = {
+    ...steadyClock,
+    now: () => ({ ...at, confident: true, confidence: "anchored" as const, anchorAgeSeconds: 0 }),
+  };
+  await withTransaction(suite.db, (tx) =>
+    recordSale(tx, backend, saleInput({ nodeId, seriesId, clock })),
+  );
+}
+
+describe("the clock-behind notice", () => {
+  const LAST = reading("2026-10-25T09:00:00.000Z", 60);
+  const read = (r: { instant: Date; offsetMinutes: number }) =>
+    withTransaction(suite.db, (tx) => FISCAL_STAFF_NOTICES[0]!.read({ tx, reading: r }));
+
+  it("a reading more than a minute before the latest record shows the stop", async () => {
+    await sellAt(LAST);
+    const behind = reading("2026-10-25T08:58:59.999Z", 120);
+    expect(await read(behind)).toEqual([
+      {
+        key: "clock.behind_chain",
+        code: "clock.behind_chain",
+        severity: "error",
+        params: {
+          clockAt: "2026-10-25T08:58:59.999Z",
+          offsetMinutes: 120,
+          lastRecordAt: "2026-10-25T09:00:00.000Z",
+          lastRecordOffsetMinutes: 60,
+        },
+      },
+    ]);
+  });
+
+  it("a 2001 reading with records shows only the unusable clock", async () => {
+    await sellAt(LAST);
+    expect(await read(reading("2001-01-01T11:00:00.000Z", 60))).toEqual([
+      notice("2001-01-01T11:00:00.000Z", 60),
+    ]);
+  });
+
+  it("a reading a minute before the latest record shows nothing", async () => {
+    await sellAt(LAST);
+    expect(await read(reading("2026-10-25T08:59:00.000Z", 60))).toEqual([]);
+  });
+
+  it("a database with no records shows nothing", async () => {
+    expect(await read(reading("2025-01-01T00:00:00.000Z", 60))).toEqual([]);
   });
 });
 
