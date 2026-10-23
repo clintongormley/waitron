@@ -275,6 +275,7 @@ export function mountTenderRefundApi(
           },
           async (tx) => {
             const current = await readRefund(tx, id);
+            await deps.backend.refuseWhileClockBehind(tx, deps.clock.now());
             if (
               current.state === "pending" &&
               current.method === "card" &&

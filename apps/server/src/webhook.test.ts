@@ -7,10 +7,12 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { PAYMENTS_MIGRATIONS, insertInitiated } from "@waitron/payments";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, deviceOrigin } from "@waitron/shared";
 import { seedTenant, seedDevice } from "@waitron/db/testing/seed.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { createHealthState, healthApp } from "./health.js";
+import { provisionBillVenue, send, tabWith } from "./testing/bill-venue.js";
 import { hostedWebhookSecretFrom, mountWebhook } from "./webhook.js";
 import type { WebhookDeps } from "./webhook.js";
 import {
@@ -171,6 +173,87 @@ describe("POST /webhooks/stripe — a verified checkout.session.completed", () =
 
     expect(res.status).toBe(200);
     expect(await paymentState(suite.db, seeded.sessionId)).toBe("initiated");
+  });
+});
+
+describe("while the box's clock reads behind its last sale", () => {
+  const venueSuite = useVenueDb({
+    migrations: migrationOptionsFor(manifestSets(), null),
+    timeoutMs: 60_000,
+  });
+
+  it("records a hosted payment while the box's clock reads behind its last sale", async () => {
+    const venue = await provisionBillVenue(venueSuite.db);
+    const sold = await tabWith(venue, "Paella");
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${sold}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "35.00",
+        method: "cash",
+        tendered: "35.00",
+        applied: "35.00",
+        tip: "0.00",
+      },
+    );
+    expect(paid.status).toBe(200);
+    const [record] = venueSuite.db.all<{ at: string; offsetMinutes: number }>(sql`
+      select fecha_hora_huso_gen_registro as at, offset_minutos as offsetMinutes
+      from registros_facturacion order by fecha_hora_huso_gen_registro desc limit 1
+    `);
+    const created = Math.floor(Date.parse(record!.at) / 1000) - 24 * 60 * 60;
+    const eventAt = new Date(created * 1000);
+    // The event's own time is a day before the last sale: a till reading it would be stopped.
+    expect(
+      await withTransaction(venueSuite.db, (tx) =>
+        venue.backend.clockBehindLatestRecord(tx, {
+          instant: eventAt,
+          offsetMinutes: record!.offsetMinutes,
+        }),
+      ),
+    ).not.toBeNull();
+    const sessionId = `cs_${randomUUID()}`;
+    await withTransaction(venueSuite.db, (tx) =>
+      insertInitiated(tx, {
+        origin: deviceOrigin(venue.deviceId),
+        workingOrderId: sold,
+        provider: "stripe",
+        paymentRef: randomUUID(),
+        externalRef: sessionId,
+        amount: decimal("12.10"),
+      }),
+    );
+    await withTransaction(venueSuite.db, (tx) =>
+      putCredential(tx, ring, {
+        purpose: "payments.stripe",
+        value: {
+          secretKey: "sk_test_seed",
+          webhookSecret: "whsec_behind",
+          successUrl: "https://example.test/ok",
+          cancelUrl: "https://example.test/no",
+        },
+      }),
+    );
+    const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];
+    const app = new Hono();
+    mountWebhook(app, deps(venueSuite.db), collect(lines));
+
+    const body = stripeSessionEvent({
+      type: "checkout.session.completed",
+      sessionId,
+      amountTotalMinor: 1210,
+      created,
+    });
+    const res = await post(app, body, signStripeBody(body, "whsec_behind"));
+
+    expect(res.status).toBe(200);
+    expect(await paymentState(venueSuite.db, sessionId)).toBe("captured");
+    expect(await settledAt(venueSuite.db, sessionId)).toBe(eventAt.toISOString());
+    expect(lines.filter((line) => line.event.startsWith("clock."))).toEqual([]);
   });
 });
 
