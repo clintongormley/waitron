@@ -492,8 +492,8 @@ export class DepartmentSettings extends LitElement {
     this.scope?.changed();
     if (saveActionState(this.scope).unchanged) this.failure = "";
   }
-  /** The saved and draft values are offered even when the list lacks them, so the dropdown never
-   * shows another and the saved one can always be picked back. */
+  /** The latest saved value and the draft value are offered even when the list lacks them, so the
+   * dropdown never shows a value it does not list. */
   private releaseReminder(
     saved: number | null,
     minutes: number | null,
