@@ -3,7 +3,9 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { customThemes, deviceProfiles, locations, withTransaction } from "@waitron/db";
 import { loginWithPin } from "@waitron/identity";
-import { readThemeInUse } from "@waitron/layouts";
+import { Hono } from "hono";
+import { readCurrentImage, renderRendition, saveImage, uploadImage } from "@waitron/media";
+import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import type { ThemeChoices } from "@waitron/ui-core/theme";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -11,8 +13,15 @@ import { createServiceZone, setProfileServiceAccess } from "@waitron/venue-servi
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { createCourse, updateCourse } from "./kitchen.js";
+import { drawLogoRasters } from "./receipt-logo.js";
+import { mountThemesApi } from "./themes-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { WAITRON_THEME_ANSWER, forgetVenueTheme, venueThemeAnswer } from "./venue-theme.js";
+import {
+  WAITRON_THEME_ANSWER,
+  forgetVenueTheme,
+  readVenueThemeSource,
+  venueThemeAnswer,
+} from "./venue-theme.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import {
@@ -55,8 +64,39 @@ async function putInUse(id: string): Promise<void> {
 }
 
 async function hashInUse(): Promise<string> {
-  return venueThemeAnswer({ inUse: await withTransaction(suite.db, readThemeInUse), logo: null })
-    .hash;
+  return venueThemeAnswer(await withTransaction(suite.db, readVenueThemeSource)).hash;
+}
+
+async function apiThemeHash(): Promise<unknown> {
+  const app = new Hono();
+  mountThemesApi(app, { db: suite.db }, () => {});
+  const answer = await app.request("/api/theme");
+  expect(answer.status).toBe(200);
+  return ((await answer.json()) as { hash: unknown }).hash;
+}
+
+async function uploadLogo(): Promise<string> {
+  const image = await samplePreparedImage({ width: 40 });
+  return withTransaction(suite.db, async (tx) => {
+    const uploaded = await uploadImage(tx, { image, names: { es: "Logo" } });
+    return uploaded.image.filename;
+  });
+}
+
+async function reframe(filename: string, zoom: number): Promise<void> {
+  const current = await withTransaction(suite.db, (tx) => readCurrentImage(tx, filename));
+  const framing = { x: 5000, y: 5000, zoom };
+  const rasters = await drawLogoRasters(await renderRendition(current!.bytes, "display", framing));
+  await withTransaction(suite.db, (tx) =>
+    saveImage(
+      tx,
+      current!.imageId,
+      { names: { es: "Logo" }, expectedRevision: current!.revision, framing },
+      null,
+      rasters,
+      "en",
+    ),
+  );
 }
 
 let nifCounter = 0;
@@ -232,21 +272,39 @@ describe("the till's setup revision", () => {
     expect(await menuStateRevision(till)).toBe(start.body.setupRevision);
   });
 
-  it.each(["{broken", '{"tokens":{}}'])(
-    "a stored document this release cannot use still answers the start read: %s",
-    async (text) => {
-      const till = await setupTill();
-      await suite.db.run(
-        sql`insert into custom_themes (id, name, name_key, in_use, theme, updated_at)
+  it("reframing the logo's image in the library moves the revision on the next menu-state poll", async () => {
+    const till = await setupTill();
+    const logo = await uploadLogo();
+    await storeTheme("Lemon", { ...LEMON, logo: { light: logo } }, true);
+    const start = await sendAsTill(till, "GET", "/api/till");
+    expect(start.status).toBe(200);
+    expect(start.body.themeHash).toBe(await apiThemeHash());
+    await reframe(logo, 140);
+    const moved = await menuStateRevision(till);
+    expect(moved).not.toBe(start.body.setupRevision);
+    const after = await sendAsTill(till, "GET", "/api/till");
+    expect(after.body.setupRevision).toBe(moved);
+    expect(after.body.themeHash).not.toBe(start.body.themeHash);
+    expect(after.body.themeHash).toBe(await apiThemeHash());
+    expect(await menuStateRevision(till)).toBe(moved);
+  });
+
+  it.each([
+    "{broken",
+    '{"tokens":{}}',
+    '{"brandColor":null,"brandFix":{},"background":"neutral","corners":"standard","handSet":{"light":{},"dark":{}},"logo":"a.webp"}',
+  ])("a stored document this release cannot use still answers the start read: %s", async (text) => {
+    const till = await setupTill();
+    await suite.db.run(
+      sql`insert into custom_themes (id, name, name_key, in_use, theme, updated_at)
             values ('5d9f0a8e-1c2b-4e3d-8f4a-6b7c8d9e0f1a', 'Stored', 'stored', 1, ${text},
                     '2026-10-21T00:00:00.000Z')`,
-      );
-      const start = await sendAsTill(till, "GET", "/api/till");
-      expect(start.status).toBe(200);
-      expect(start.body.themeHash).toBe(WAITRON_THEME_ANSWER.hash);
-      expect(await menuStateRevision(till)).toBe(start.body.setupRevision);
-    },
-  );
+    );
+    const start = await sendAsTill(till, "GET", "/api/till");
+    expect(start.status).toBe(200);
+    expect(start.body.themeHash).toBe(WAITRON_THEME_ANSWER.hash);
+    expect(await menuStateRevision(till)).toBe(start.body.setupRevision);
+  });
 
   it("the lemon brand (#f2d300) in use answers the lemon's hash", async () => {
     const till = await setupTill();

@@ -1533,8 +1533,8 @@ courses, card provider, card readers and the default reader, tips, the simplifie
 limit and full invoices. Every read of the setup is numbered when sent, and an answer is skipped
 once a read sent after it has been applied. A draft line keeps the course it was given, name
 included, after a refresh deletes that course. `themeHash`, the hash `/api/theme` answers for
-the theme in use, is in the answer and moves `setupRevision` when the theme in use changes or is
-saved with new choices. `#applyVenueSetup` hands `themeHash` to `followVenueTheme`
+the theme in use, is in the answer and moves `setupRevision` when the theme in use changes, is
+saved with new choices, or its logo's image is reframed or replaced in the library. `#applyVenueSetup` hands `themeHash` to `followVenueTheme`
 (`packages/ui/src/venue-theme.ts`), which fetches `/api/theme` and replaces the venue's sheet when
 it differs from the one applied, and each poll asks again once, however many zones it reads, so
 a failed fetch is retried on the next poll; pinned by "A841 the till follows the theme in use" in
