@@ -1,3 +1,4 @@
+import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
@@ -157,4 +158,62 @@ it("reports the absolute alert difference for a server behind the authority", as
   expect(await authorityClockAlertSource(monitor.read).read({} as never)).toMatchObject([
     { params: { seconds: 119 } },
   ]);
+});
+
+describe("the drift alert while payments are stopped for the clock", () => {
+  async function warningSource(stopped?: (tx: Transaction, now: Date) => Promise<boolean>) {
+    const { createAuthorityClockStatus, authorityClockAlertSource } =
+      await import("./time-health.js");
+    const monitor = createAuthorityClockStatus();
+    monitor.observe({
+      authorityTimestamp: "2026-10-05T12:00:00Z",
+      sentAt: new Date("2026-10-06T12:00:00Z"),
+      receivedAt: new Date("2026-10-06T12:00:00Z"),
+    });
+    return authorityClockAlertSource(monitor.read, stopped);
+  }
+
+  const DRIFT = [
+    {
+      key: "fiscal.clock_drift",
+      code: "fiscal.clock_drift",
+      params: { seconds: 86400 },
+      severity: "warning",
+      since: "2026-10-06T12:00:00.000Z",
+    },
+  ];
+
+  it("is left out while the stop is on, asked with the read's own transaction and time", async () => {
+    const asked: unknown[] = [];
+    const source = await warningSource(async (tx, now) => {
+      asked.push(tx, now);
+      return true;
+    });
+    const tx = { marker: "tx" } as never;
+    const now = new Date("2026-10-06T12:30:00Z");
+    expect(await source.read({ tx, now })).toEqual([]);
+    expect(asked).toEqual([tx, now]);
+  });
+
+  it("is raised as before while the stop is off", async () => {
+    const source = await warningSource(async () => false);
+    expect(await source.read({ tx: {} as never, now: new Date() })).toEqual(DRIFT);
+  });
+
+  it("is raised as before when nothing says whether the stop is on", async () => {
+    const source = await warningSource();
+    expect(await source.read({ tx: {} as never, now: new Date() })).toEqual(DRIFT);
+  });
+
+  it("does not ask about the stop while there is no drift to raise", async () => {
+    const { createAuthorityClockStatus, authorityClockAlertSource } =
+      await import("./time-health.js");
+    let asked = 0;
+    const source = authorityClockAlertSource(createAuthorityClockStatus().read, async () => {
+      asked += 1;
+      return true;
+    });
+    expect(await source.read({ tx: {} as never, now: new Date() })).toEqual([]);
+    expect(asked).toBe(0);
+  });
 });

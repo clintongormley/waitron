@@ -2181,7 +2181,14 @@ async function bootServer(
     firstStartAlertSource(firstStart),
     appendOnlyRestoredAlertSource(appendOnlyRestored),
     awaitingCertAlertSource(awaitingFiscalCert),
-    authorityClockAlertSource(authorityClock.read),
+    authorityClockAlertSource(
+      authorityClock.read,
+      async (tx, at) =>
+        (await tillBackend.clockBehindLatestRecord(tx, {
+          instant: at,
+          offsetMinutes: tillClock.now().offsetMinutes,
+        })) !== null,
+    ),
     printingAlertSource(),
     contentSuggestionsAlertSource(),
     invoiceDeliveryAlertSource({ testPages }),

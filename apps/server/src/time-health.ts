@@ -1,3 +1,4 @@
+import type { Transaction } from "@waitron/db";
 import type { AlertSource } from "@waitron/module";
 import "./errors.js";
 import { execFile } from "node:child_process";
@@ -99,13 +100,18 @@ export function createAuthorityClockStatus(): {
   };
 }
 
-export function authorityClockAlertSource(read: () => AuthorityClockStatus): AlertSource {
+/** `stopped` answers whether payments are stopped for the clock; while they are, the drift alert's
+ * "you can continue selling" would be false, so it is left out whoever is looking. */
+export function authorityClockAlertSource(
+  read: () => AuthorityClockStatus,
+  stopped?: (tx: Transaction, now: Date) => Promise<boolean>,
+): AlertSource {
   return {
     area: "fiscal",
     permission: "fiscal.view",
-    async read() {
+    async read({ tx, now }) {
       const status = read();
-      return status.state !== "warning"
+      return status.state !== "warning" || (await stopped?.(tx, now)) === true
         ? []
         : [
             {
