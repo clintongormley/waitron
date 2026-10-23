@@ -1,10 +1,17 @@
-import { LitElement } from "lit";
+import { html, LitElement } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { afterEach, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { baseStyles, CATEGORY_PALETTE } from "@waitron/ui";
 import { cleanupWidgets, customSquarePixels, mountWidget } from "./test-helpers.js";
-import { colorField, colorFieldStyles, type ColorFieldOptions } from "./color-field.js";
+import {
+  colorField,
+  colorFieldStyles,
+  colourValueField,
+  colourValueStyles,
+  type ColorFieldOptions,
+  type ColourValueOptions,
+} from "./color-field.js";
 import { t } from "../i18n/t.js";
 
 /** The smallest host the field renders into: it owns the colour and adds the field's styles. */
@@ -332,4 +339,102 @@ it("a code field beside the custom colour", async () => {
     "Enter a colour as # and six digits or letters a–f.",
   );
   expect(inner.getAttribute("aria-invalid")).toBe("true");
+});
+
+/** A host for one colour value, with a probe painted with the base focus ring. */
+@customElement("test-colour-value-host")
+class ColourValueHost extends LitElement {
+  static override styles = [baseStyles, colourValueStyles];
+  @property({ attribute: false }) options!: ColourValueOptions;
+  override render() {
+    return html`${colourValueField(this.options)}<span
+        class="probe"
+        style="outline: var(--wt-focus-ring); outline-offset: var(--wt-focus-offset)"
+        >probe</span
+      >`;
+  }
+}
+declare global {
+  interface HTMLElementTagNameMap {
+    "test-colour-value-host": ColourValueHost;
+  }
+}
+
+describe("colourValueField", () => {
+  const options = (extra: Partial<ColourValueOptions> = {}): ColourValueOptions => ({
+    colour: "#f8f1e1",
+    code: "#f8f1e1",
+    name: "handSet.light.bg",
+    pickerName: "handSetPicker.light.bg",
+    label: "Page, light screens",
+    codeLabel: "Page, light screens, colour code",
+    error: "",
+    busy: false,
+    pick: vi.fn(),
+    type: vi.fn(),
+    ...extra,
+  });
+  const mountValue = (opts: ColourValueOptions) =>
+    mountWidget<ColourValueHost>("test-colour-value-host", { options: opts });
+  const picker = (el: ColourValueHost) =>
+    el.shadowRoot!.querySelector<HTMLInputElement>('input[name="handSetPicker.light.bg"]')!;
+  const codeField = (el: ColourValueHost) =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      'wt-input[name="handSet.light.bg"]',
+    )!;
+
+  it("draws a picker and a hidden-label code field named for the value", async () => {
+    const { el } = await mountValue(options({ code: "#F8F1E", error: "Bad code" }));
+    const input = picker(el);
+    expect(input.getAttribute("type")).toBe("color");
+    expect(input.getAttribute("aria-label")).toBe("Page, light screens");
+    expect(input.value).toBe("#f8f1e1");
+    expect(input.classList.contains("on")).toBe(false);
+    const field = codeField(el);
+    expect(field.hideLabel).toBe(true);
+    expect(field.label).toBe("Page, light screens, colour code");
+    expect(field.value).toBe("#F8F1E");
+    expect(field.error).toBe("Bad code");
+    expect(input.disabled).toBe(false);
+    expect(field.disabled).toBe(false);
+  });
+
+  it("reports a pick once and a typed code, and keeps both events inside", async () => {
+    const opts = options();
+    const { el } = await mountValue(opts);
+    const outerInput = vi.fn();
+    el.addEventListener("input", outerInput);
+    const input = picker(el);
+    input.value = "#123456";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    expect(opts.pick).toHaveBeenCalledTimes(1);
+    expect(opts.pick).toHaveBeenCalledWith("#123456");
+    expect(outerInput).not.toHaveBeenCalled();
+    el.removeEventListener("input", outerInput);
+    const outerChange = vi.fn();
+    el.addEventListener("wt-change", outerChange);
+    const inner = codeField(el).shadowRoot!.querySelector("input")!;
+    await page.elementLocator(inner).fill("#abcdef");
+    expect(opts.type).toHaveBeenLastCalledWith("#abcdef");
+    expect(outerChange).not.toHaveBeenCalled();
+  });
+
+  it("disables both while busy", async () => {
+    const { el } = await mountValue(options({ busy: true }));
+    expect(picker(el).disabled).toBe(true);
+    expect(codeField(el).disabled).toBe(true);
+  });
+
+  it("rings the focused picker with the base focus ring", async () => {
+    const { el } = await mountValue(options());
+    const input = picker(el);
+    expect(getComputedStyle(input).outlineStyle).toBe("none");
+    await userEvent.tab();
+    expect(el.shadowRoot!.activeElement).toBe(input);
+    const probe = getComputedStyle(el.shadowRoot!.querySelector(".probe")!);
+    const ring = getComputedStyle(input);
+    expect(probe.outlineOffset).toBe("2px");
+    expect(ring.outlineColor).toBe(probe.outlineColor);
+    expect(ring.outlineOffset).toBe(probe.outlineOffset);
+  });
 });

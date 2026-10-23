@@ -1,0 +1,235 @@
+import { LitElement, css, html, type TemplateResult } from "lit";
+import { customElement, property } from "lit/decorators.js";
+import { baseStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-disclosure.js";
+import {
+  MODES,
+  THEME_COLOURS,
+  colourToken,
+  type DerivedTheme,
+  type Mode,
+  type ThemeColour,
+} from "@waitron/ui-core/theme";
+import { fill, t } from "../i18n/t.js";
+import { LocaleChangeController } from "../state/locale-controller.js";
+import { colourValueField, colourValueStyles } from "./color-field.js";
+import { anyHandSet, handTouched, type HandField, type LookDraft } from "./look-draft.js";
+import { advancedSummary, themeColourName } from "./theme-words.js";
+
+export interface HandFixed {
+  readonly from: string;
+  readonly to: string;
+}
+
+export type HandAction =
+  | { kind: "pick"; mode: Mode; key: ThemeColour; colour: string }
+  | { kind: "type"; mode: Mode; key: ThemeColour; text: string }
+  | { kind: "worked-out"; mode: Mode; key: ThemeColour }
+  | { kind: "fix"; mode: Mode; key: ThemeColour; fix: string }
+  | { kind: "undo"; mode: Mode; key: ThemeColour }
+  | { kind: "reset-all" };
+
+/** The Look card's Advanced section: every theme colour's light and dark value, set by hand or not. */
+@customElement("dashboard-theme-advanced")
+export class ThemeAdvanced extends LitElement {
+  static override styles = [
+    baseStyles,
+    colourValueStyles,
+    css`
+      :host {
+        display: block;
+        min-width: 0;
+      }
+      .intro {
+        margin: 0 0 var(--wt-space-4);
+        color: var(--wt-color-text-muted);
+      }
+      .table {
+        container-type: inline-size;
+        display: grid;
+        gap: var(--wt-space-4);
+      }
+      .row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--wt-space-2);
+      }
+      .head {
+        display: none;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      .value {
+        display: grid;
+        gap: var(--wt-space-1);
+        min-width: 0;
+      }
+      .value.hand {
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .mode-label {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-normal);
+      }
+      .status {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-normal);
+      }
+      .tag {
+        padding: 0 var(--wt-space-2);
+        border: 1px solid var(--wt-color-primary-text);
+        border-radius: var(--wt-radius-full);
+        color: var(--wt-color-primary-text);
+      }
+      wt-button.link::part(button) {
+        font-weight: var(--wt-font-weight-normal);
+        text-decoration: underline;
+      }
+      .reset {
+        margin: var(--wt-space-5) 0 0;
+      }
+      @container (min-width: 600px) {
+        .row {
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1.5fr);
+          align-items: start;
+          column-gap: var(--wt-space-4);
+        }
+        .head {
+          display: grid;
+        }
+        .mode-label {
+          display: none;
+        }
+      }
+    `,
+  ];
+
+  @property({ attribute: false }) draft!: LookDraft;
+  @property({ attribute: false }) derived!: DerivedTheme;
+  @property({ attribute: false }) errors: Readonly<Partial<Record<HandField, string>>> = {};
+  @property({ attribute: false }) fixed: Readonly<Partial<Record<HandField, HandFixed>>> = {};
+  @property({ type: Boolean }) busy = false;
+
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
+  /** Opens the section and moves focus to that value's code field. */
+  async reveal(mode: Mode, key: ThemeColour): Promise<void> {
+    const disclosure =
+      this.renderRoot.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
+        "[data-test=advanced]",
+      )!;
+    disclosure.open = true;
+    await disclosure.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>(`wt-input[name="handSet.${mode}.${key}"]`)!.focus();
+  }
+
+  #send(detail: HandAction): void {
+    this.dispatchEvent(
+      new CustomEvent<HandAction>("hand-change", { detail, bubbles: true, composed: true }),
+    );
+  }
+
+  #status(mode: Mode, key: ThemeColour): string {
+    if (key !== "primary") return t("appearance.worked_out");
+    return this.draft.choices.brandFix[mode] ? t("appearance.value_fixed") : t("appearance.brand");
+  }
+
+  #value(mode: Mode, key: ThemeColour): TemplateResult {
+    const { choices, handCodes } = this.draft;
+    const hand = handTouched(this.draft, mode, key);
+    const worked = this.derived[mode][colourToken(key)]!;
+    const colour = choices.handSet[mode][key] ?? worked;
+    const value = fill("appearance.hand_value", {
+      name: themeColourName(key),
+      screens: t(`appearance.saved_fix_${mode}`),
+    });
+    return html`<div class="value ${hand ? "hand" : ""}">
+      <span class="mode-label">${t(`theme.${mode}`)}</span>
+      ${colourValueField({
+        colour,
+        code: handCodes[mode][key] ?? colour,
+        name: `handSet.${mode}.${key}`,
+        pickerName: `handSetPicker.${mode}.${key}`,
+        label: value,
+        codeLabel: fill("appearance.hand_code", {
+          name: themeColourName(key),
+          screens: t(`appearance.saved_fix_${mode}`),
+        }),
+        error: this.errors[`handSet.${mode}.${key}`] ?? "",
+        busy: this.busy,
+        pick: (picked) => this.#send({ kind: "pick", mode, key, colour: picked }),
+        type: (text) => this.#send({ kind: "type", mode, key, text }),
+      })}
+      <span class="status"
+        >${
+          hand
+            ? html`<span class="tag" data-test="hand-status-${mode}-${key}"
+                  >${t("appearance.set_by_hand")}</span
+                ><wt-button
+                  data-test="hand-worked-out-${mode}-${key}"
+                  class="link"
+                  variant="ghost"
+                  size="sm"
+                  aria-label=${fill("appearance.hand_action", {
+                    action: t("appearance.use_worked_out"),
+                    value,
+                  })}
+                  ?disabled=${this.busy}
+                  @click=${() => this.#send({ kind: "worked-out", mode, key })}
+                  >${t("appearance.use_worked_out")}</wt-button
+                >`
+            : html`<span data-test="hand-status-${mode}-${key}">${this.#status(mode, key)}</span>`
+        }</span
+      >
+    </div>`;
+  }
+
+  override render() {
+    return html`<wt-disclosure
+      data-test="advanced"
+      heading=${t("appearance.advanced")}
+      summary=${advancedSummary(this.draft.choices, this.derived.warnings)}
+      ?has-error=${Object.keys(this.errors).length > 0}
+    >
+      <p class="intro" data-test="advanced-intro">${t("appearance.advanced_intro")}</p>
+      <div class="table">
+        <div class="row head" aria-hidden="true">
+          <span>${t("appearance.column_colour")}</span>
+          ${MODES.map((mode) => html`<span>${t(`appearance.screens.${mode}`)}</span>`)}
+        </div>
+        ${THEME_COLOURS.map(
+          (key) =>
+            html`<div class="row" data-test="hand-row-${key}">
+              <span class="name">${themeColourName(key)}</span>
+              ${MODES.map((mode) => this.#value(mode, key))}
+            </div>`,
+        )}
+      </div>
+      <p class="reset">
+        <wt-button
+          data-test="reset-all"
+          variant="secondary"
+          ?disabled=${this.busy || !anyHandSet(this.draft)}
+          @click=${() => this.#send({ kind: "reset-all" })}
+          >${t("appearance.reset_all")}</wt-button
+        >
+      </p>
+    </wt-disclosure>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "dashboard-theme-advanced": ThemeAdvanced;
+  }
+}
