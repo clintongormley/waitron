@@ -1490,6 +1490,7 @@ async function bootServer(
   // it: a node without a `fiscal.aeat` cert sells and chains locally, and its drain skips filing.
   const awaitingFiscalCert = { current: false };
   const authorityClock = createAuthorityClockStatus();
+  const clockWitnesses = createClockWitnessStore();
   const isMirror = holders.mode.current === "mirror";
   // The boot-captured read-only posture; the gate's own per-request predicate re-reads `mode` live,
   // so a promotion lifts it without a restart.
@@ -1837,7 +1838,6 @@ async function bootServer(
     // so a restart or a promotion starts SHUT — a node that has just taken over must not inherit an
     // open door.
     const pairingMode = createPairingMode();
-    const clockWitnesses = createClockWitnessStore();
     mountDeviceApi(
       app,
       {

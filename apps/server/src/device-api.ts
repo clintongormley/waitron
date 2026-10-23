@@ -29,6 +29,7 @@ import { requireManagementSession } from "@waitron/server-kit";
 import {
   assertDeviceStillProven,
   assertProfileAction,
+  DEVICE_CLOCK_HEADER,
   parseDeviceCookie,
   readDeviceCookie,
   requireDevice,
@@ -145,8 +146,6 @@ export interface DeviceApiDeps {
 }
 
 const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
-
-const DEVICE_CLOCK_HEADER = "x-waitron-device-clock";
 
 /** Milliseconds since the epoch, written as digits only; anything else is not a reading. */
 function deviceClockOf(value: string | undefined): number | undefined {

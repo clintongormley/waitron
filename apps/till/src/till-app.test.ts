@@ -1962,11 +1962,11 @@ describe("till-app", () => {
     expect(currentLocale()).toBe("en-GB");
   });
 
-  // A kitchen screen never sends its clock, because only the equipment poll carries it.
-  it("never starts the equipment poll on an enrolled kds_station device, and starts it once for a signed-in till", async () => {
+  it("never starts the equipment poll or reads equipment on an enrolled kds_station device, and starts the poll once for a signed-in till", async () => {
     const start = vi.spyOn(EquipmentPoll.prototype, "start");
     try {
       const { el: kds } = await mountApp({
+        getDeviceEquipment: vi.fn().mockResolvedValue({ roles: [], notices: [] }),
         getTill: vi.fn().mockResolvedValue({
           ...till,
           locale: "en-GB",
@@ -2000,6 +2000,7 @@ describe("till-app", () => {
       await flush(kds);
       expect(station(kds)).not.toBeNull();
       expect(start).toHaveBeenCalledTimes(0);
+      expect(currentApi.getDeviceEquipment).not.toHaveBeenCalled();
       kds.remove();
 
       const { el } = await mountApp();
