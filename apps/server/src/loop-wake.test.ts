@@ -194,15 +194,16 @@ describe("createLoopWaker", () => {
   });
 
   it("defaults to performance.now for the clock", async () => {
-    vi.spyOn(performance, "now").mockImplementation(clock);
+    // Twice fake time's rate, which no other clock the fake timers move would read.
+    vi.spyOn(performance, "now").mockImplementation(() => clock() * 2);
     const w = createLoopWaker({ minTickMs: MIN, delay: fakeDelay });
     const sleep = track(w, 60_000);
     await vi.advanceTimersByTimeAsync(1_000);
     w.wake();
-    await vi.advanceTimersByTimeAsync(3_999);
+    await vi.advanceTimersByTimeAsync(2_999);
     expect(sleep.endedAfter).toBeNull();
     await vi.advanceTimersByTimeAsync(1);
-    expect(sleep.endedAfter).toBe(5_000);
+    expect(sleep.endedAfter).toBe(4_000);
   });
 
   it("defaults to the real sleep", async () => {
