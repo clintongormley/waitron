@@ -4224,11 +4224,12 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
   source's five-minute cache shares that in-flight call with reads during its lifetime. Left open
   by the A258 follow-up (the alerts list's battery check has its own deadline, W58, #1176).
 
-- **The alert pop-up can split a written time across two lines.** The Box status page, the bell
-  and the Alerts screen keep each `YYYY-MM-DD HH:MM` whole (`wholeTimes`,
+- **The alert pop-up can split a written time across two lines.** The Box status page's rows and
+  restart proof, the bell and the Alerts screen keep each `YYYY-MM-DD HH:MM` whole (`wholeTimes`,
   `apps/dashboard/src/widgets/alert-format.ts`); the pop-up (`wt-toast`) takes a plain string, so
   keeping times whole there needs `wt-toast` to take more than a string, or no-break characters in
-  the text. Left open by A798-B slice 9 (#…).
+  the text. The page's 'Updated' line does not use `wholeTimes` either. Left open by A798-B slice 9
+  (#…).
 
 ### Working time and staff
 
@@ -4690,6 +4691,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   slice 9 (#…).
   [Detail](backlog/box.md#aeats-time-for-a-restart-comes-from-its-qr-validation-host-not-from-a-consultar-reply)
 
+- **A clock set back before the mail server's certificate start cannot send the clock-stop
+  email.** An inference from slice 10's plan P8, not measured. Left open by A798-B slice 9 (#…).
+
 - **Two devices can fake a restart's proof.** A device's clock reading is whatever it sends; the
   restart still needs a manager's press and a gap of at most 24 hours. Left open by A798-B slice 9
   (#…).
@@ -4718,9 +4722,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   same clock appear in no alert. Whether a disproof should stop payments again is for the owner
   (slice 9 decision 14). Left open by A798-B slice 9 (#…).
 
-- **A malformed restart row covers nothing, for ever.** `clock_stop_restarts` is append-only, so a
-  row whose stored chain heads are wrong cannot be corrected; it lifts no stop (slice 9 decision
-  21). Left open by A798-B slice 9 (#…).
+- **A malformed restart row covers nothing, for ever.** A row of the append-only `clock_stop_restarts`
+  whose chain heads are unreadable, not whole numbers of zero or more, or past the chain's current
+  ones lifts no stop, and every later restart on its record is refused `stepped_back`: only setting
+  the clock clears that stop (slice 9 decision 21). Left open by A798-B slice 9 (#…).
 
 - **The bell's printer check reads every print job.** `EXPLAIN QUERY PLAN` shows `SCAN
   print_jobs`: 0.25 ms with no printed jobs, 3.7 ms with 50 000 (slice 10 plan P4). A redundant
@@ -4790,8 +4795,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **The clock stop's look differs from pictures 8 and 9.** The counter refusal shows in the till's
   top banner, not under the strip; the Clock row's fix advice follows " · " on the comparison line
   rather than on a line of its own; the Box status page shows the alert sentence "Sort it out on the
-  Box status page" while on that page; and the dashboard joins date and time with a plain space, so
-  they can split on a narrow screen. Left open by A798-B slice 8 (#2012).
+  Box status page" while on that page; and the alert pop-up and the Box status page's 'Updated' line join date and
+  time with a plain space, so they can split on a narrow screen. Left open by A798-B slice 8
+  (#2012).
 
 - **'Equipo' names two things in the Spanish dashboard.** The bell's new area for the box is
   'Equipo' (design §4.3), and so is the sidebar's staff group (`nav.group.team`,
