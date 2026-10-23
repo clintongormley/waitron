@@ -1593,6 +1593,45 @@ it("offers Off and 5 to 30 minutes, and keeps a stored value the list does not o
   expect(control.value).toBe("7");
   expect(shownText(control)).toBe("7 minutes");
 });
+it("keeps offering a saved value the list does not offer after another is picked, so picking it back is clean", async () => {
+  const { el, writes } = await mount(reminderView(7));
+  await selectDepartmentTab(el, "service");
+  await chooseReminder(el, "10");
+  await reminder(el).updateComplete;
+  expect(reminder(el).options.map((option) => option.value)).toEqual([
+    "",
+    "5",
+    "7",
+    "10",
+    "15",
+    "20",
+    "30",
+  ]);
+  expect(save(el).disabled).toBe(false);
+  await chooseReminder(el, "7");
+  expect(reminder(el).value).toBe("7");
+  expect(el.hasUnsavedChanges).toBe(false);
+  expect(save(el).disabled).toBe(true);
+  expect(save(el).variant).toBe("secondary");
+  expect(writes).toEqual([]);
+});
+it("offers both the saved value and an unsaved one the list does not offer", async () => {
+  const { el } = await mount(reminderView(7));
+  await chooseReminder(el, "10");
+  el.model = reminderView(25);
+  await el.updateComplete;
+  await reminder(el).updateComplete;
+  expect(reminder(el).value).toBe("10");
+  expect(reminder(el).options.map((option) => option.value)).toEqual([
+    "",
+    "5",
+    "10",
+    "15",
+    "20",
+    "25",
+    "30",
+  ]);
+});
 it("opens quiet on a department with stored minutes", async () => {
   const { el } = await mount(reminderView(25));
   await selectDepartmentTab(el, "service");
@@ -1670,6 +1709,7 @@ it("a refusal naming the reminder, sent while Details shows, brings back Service
   expect(control.error).toBe("This value was not accepted. Change it and save again.");
   expect(control.shadowRoot!.querySelector(".trigger")!.getAttribute("aria-invalid")).toBe("true");
   await expect.poll(() => el.shadowRoot!.activeElement).toBe(control);
+  expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
   expect(save(el).disabled).toBe(false);
 });
 it("follows a reminder another dashboard sets while the form is clean, and keeps a draft while it is not", async () => {

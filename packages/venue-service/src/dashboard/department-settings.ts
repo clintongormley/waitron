@@ -492,13 +492,17 @@ export class DepartmentSettings extends LitElement {
     this.scope?.changed();
     if (saveActionState(this.scope).unchanged) this.failure = "";
   }
-  /** A stored value the list does not offer, which setup can bring in, is offered too so the
-   * dropdown never shows another. */
-  private releaseReminder(minutes: number | null, error: string | undefined, disabled: boolean) {
-    const choices =
-      minutes === null || REMINDER_MINUTES.includes(minutes)
-        ? REMINDER_MINUTES
-        : [...REMINDER_MINUTES, minutes].sort((a, b) => a - b);
+  /** The saved and draft values are offered even when the list lacks them, so the dropdown never
+   * shows another and the saved one can always be picked back. */
+  private releaseReminder(
+    saved: number | null,
+    minutes: number | null,
+    error: string | undefined,
+    disabled: boolean,
+  ) {
+    const choices = [
+      ...new Set([...REMINDER_MINUTES, ...[saved, minutes].filter((m) => m !== null)]),
+    ].sort((a, b) => a - b);
     return html`<wt-combobox
       name="releaseReminderMinutes"
       label=${t("venue.release_reminder")}
@@ -881,7 +885,7 @@ export class DepartmentSettings extends LitElement {
           </section>
           <section aria-label=${t("venue.courses_and_kitchen")}>
             <h3>${t("venue.courses_and_kitchen")}</h3>
-            ${this.releaseReminder(draft.releaseReminderMinutes, errors.releaseReminderMinutes, disabled)}
+            ${this.releaseReminder(this.model!.releaseReminderMinutesByDepartment[row.id] ?? null, draft.releaseReminderMinutes, errors.releaseReminderMinutes, disabled)}
           </section>
           <section aria-label=${t("venue.table_states")}>
             <h3>${t("venue.table_states")}</h3>
