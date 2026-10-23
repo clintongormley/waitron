@@ -604,6 +604,14 @@ and it predates A538-5 too (`placeValidated`, `setAsideExistingIdentity`).
 
 ## 2026-10-23 A799 build authority and history selection
 
+**Cut 2, 23 October 2026:** pure typed facts, issued-F1 coverage declarations,
+keyed record/relationship comparisons and complete schema-definition comparison
+are implemented. Exact reviewed nullable-field, table-rename and schema mappings
+require explicit source/candidate/migration context. The [comparison contract](../../bench/real-upgrade/README.md#compare-original-records-before-making-another-sale)
+describes the accepted shapes and their limits. No database or image is opened by
+these functions. The remaining five cuts, qualifying captures and execution gates
+remain open. The first-cut status below records its earlier checkpoint.
+
 The owner authorised building every published A799 plan cut on 23 October 2026
 with “Go ahead and build.” This supersedes the earlier planning-only authority
 below; runtime, capture, A760 reset, migration, upload, provider and trusted CI

@@ -4608,7 +4608,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **a local maintenance account on each box** — belongs with B3; a discussion record, not an approved spec. Its remote-support half is tracked in Cloud and not approved. [Detail](backlog/box.md#a-local-maintenance-account-on-each-box)
 
 - **A799. Real historical upgrade testing: build authorised; blocking before go-live.**
-  The owner authorised all seven [implementation-plan](superpowers/plans/2026-10-22-a799-real-upgrade-testing.md) cuts on 23 October 2026. Cut 1 adds metadata admission, oldest-supported plus previous-retained selection and pending-migration classification; its qualification index is empty. Exact comparison, archive admission, isolated rigs, historical qualification, continued-sale execution and trusted CI wiring remain open.
+  The owner authorised all seven [implementation-plan](superpowers/plans/2026-10-22-a799-real-upgrade-testing.md) cuts on 23 October 2026. Cuts 1–2 add metadata admission, oldest-supported plus previous-retained selection, pending-migration classification and pure typed record/schema comparison with exact reviewed mappings; the qualification index is empty. Archive admission, isolated rigs, historical qualification, continued-sale execution and trusted CI wiring remain open.
   Runtime, capture, A760 reset, migration, upload, provider and CI activation gates remain. No historical image, issued-F1 preservation or real upgrade is qualified. [Detail and current execution contract](backlog/box.md#2026-10-23-a799-build-authority-and-history-selection).
 - **A1016. Keep every box current and backed up, with no effort from the owner (owner,
   2026-10-22).** "Another super important part of the story especially for on prem is automated
