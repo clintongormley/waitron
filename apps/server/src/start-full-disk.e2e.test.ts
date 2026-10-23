@@ -21,6 +21,7 @@ import { Hono } from "hono";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { devices, locations, openVenueDatabase, withTransaction, type Database } from "@waitron/db";
 import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import {
   hashPin,
   hashSecret,
@@ -244,6 +245,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
               measuredAt: now().toISOString(),
             }),
             timeHealth: async () => ({ synced: true, source: "timedatectl", warn: false }),
+            outbox: { read: FISCAL_SLOT.outbox!.read, awaitingCertificate: () => false },
             disk: diskState,
             space,
             usage: () => readDiskUsage({ venueDir, logDir, backupDirs: [] }),
@@ -321,6 +323,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
         "box:storage.disk_full",
       );
       expect(body.noticesUnavailable).toEqual([]);
+      expect(body.outbox).toEqual({ lastAcceptedAt: null, waiting: 0, awaitingCertificate: false });
       expect(body.disk.stoppedSince).not.toBeNull();
     }
     expect(lastSeen()).toBe(before);
