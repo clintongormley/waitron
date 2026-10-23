@@ -1255,8 +1255,9 @@ outside the worktree, in `/Users/clintongormley/waitron-campaign-c/a756-4-shots/
 
 Planned 2026-10-23, after PR 4 landed (#2020). Branch `feat/a756-5-late-flags-per-station`,
 worktree `/Users/clintongormley/workspace/worktrees/waitron-feat-a756-5-late-flags-per-station`,
-cut from `main` at `d9252ac34`. Ledger: `~/waitron-campaign-c/item-a756-ledger.md`; every task ends
-by updating it (done, changed test checks, next step).
+cut from `main` at `d9252ac34`. Ledger for PR 5: `~/waitron-campaign-c/item-a756-ledger.md`, the
+one PR 4 used (the `docs/handoffs/…` path under Global Constraints was PR 1's); every task ends by
+updating it (done, changed test checks, next step).
 **Review path: FULL** — a migration that drops two tables, a change to what the station routes
 answer (read by venue-service's dashboard), and a new configuration format. Implementers are
 dispatched as `subagent_type: "implementer"`.
@@ -1282,7 +1283,7 @@ own row. The two tables that held the venue value and the overrides are dropped.
 - server: `src/working-order.ts`, `src/table-signals.ts`, `src/kitchen.ts`, `src/kitchen-timing.ts`,
   `src/management-api.ts`, `src/station-delete.ts`, and the tests named in Tasks 19–23 and 26.
 - venue-service dashboard: `station-editor.ts`, `prep-stations-screen.ts`, `routing-client.ts`,
-  `station-delete-copy.ts`, `live-queries.ts`, `strings.ts`, and their tests and fixtures (Task 24).
+  `station-delete-copy.ts`, `live-queries.ts`, `strings.ts`, and their tests and fixtures (Tasks 24a, 24b).
 - dashboard app: `src/screens/kitchen-screen.ts`, `src/api/client.ts`, `src/api/live-queries.ts`,
   `src/i18n/strings.ts`, and their tests and stubs (Tasks 25a, 25b).
 - docs: the guides `apps/server/src/guide/{en,es}/kitchen-service.md`,
@@ -1375,8 +1376,11 @@ own row. The two tables that held the venue value and the overrides are dropped.
    own values, and `timingDefaults` and `timingOverrides` leave the answer (`Station`,
    `apps/server/src/kitchen.ts:29-45`). Their only reader is venue-service's dashboard
    (`git grep -n -E 'timingOverrides|timingDefaults' -- apps packages` outside tests: `kitchen.ts`,
-   `routing-client.ts:36-37`, `prep-stations-screen.ts:756-757`, `station-editor.ts`), which Task 24
-   moves. Between Tasks 20 and 24 the old editor sends `null` for a cleared field and gets the
+   `routing-client.ts:36-37`, `prep-stations-screen.ts:756-757`, `station-editor.ts`), which Task 24a
+   moves. The same `Station` shape also reaches the till through `listStationsToday`
+   (`apps/server/src/till-api.ts:2160`, `apps/server/src/device-api.ts:674`), so the two keys leave
+   those answers too; no till code reads them (`git grep -n -E 'timingOverrides|timingDefaults' -- apps/till`
+   prints nothing). Between Tasks 20 and 24a the old editor sends `null` for a cleared field and gets the
    refusal under it — acceptable inside one pull request; no commit is deployed alone.
 
 5. **Configuration copies carry the station's three minutes and move to format 7.** The two tables
@@ -1413,11 +1417,17 @@ own row. The two tables that held the venue value and the overrides are dropped.
 7. **Hand-kept table lists that name the tables** (`git grep -n -E 'kitchen_station_timing|kitchen_timing_defaults' -- '*.test.ts' 'apps/server/src/testing/*'`):
    `apps/server/src/testing/clear-provision-fixture.ts:49`, `:54` (tables emptied in order);
    `apps/server/src/management-api.station-disable.test.ts:126` and
-   `apps/server/src/station-delete.test.ts:156` (snapshot lists);
-   `apps/server/src/station-order-migration.test.ts:188` and its expected `after` (`:221-226`), and
-   `apps/server/src/canvas-retirement-upgrade.test.ts:499-519`, whose `retained` copies every table
+   `apps/server/src/station-delete.test.ts:156` (snapshot lists); and
+   `apps/server/src/canvas-retirement-upgrade.test.ts:499-519`, which applies every migration
+   (`:478`) and whose `retained` copies every table
    the predecessor had — A841 added `delete retained.tenant_themes;` (`:519`) and A757 slice 2
    `delete retained.table_service_statuses;` (`:518`) for the same reason.
+   `apps/server/src/station-order-migration.test.ts` names `kitchen_station_timing` at `:188` but
+   migrates only up to `0167_retire_station_order` (`setsAsOf("retired", (when) => when <= retirement.when)`,
+   `:68`; the predecessor `:70`), so both tables exist before and after its step and its list and
+   expected `after` (`:221-226`) stay as they are; only its `@waitron/db` imports of the two tables
+   (`:9-10`), used for the predecessor's inserts (`:102`, `:115`), become raw SQL in Task 26
+   (the review's scratch run with 0186 present passed it unchanged).
    `packages/venue-service/src/kitchen-allergy.upgrade.test.ts` applies only venue-service's set
    and lists only venue-service sources (`:217`, `:207`), so a core drop does not reach it — read,
    not run; Task 26 runs it. `packages/db/src/schema/kitchen-timing-upgrade.test.ts` migrates only
@@ -1427,7 +1437,7 @@ own row. The two tables that held the venue value and the overrides are dropped.
 8. **Station delete.** A deleted station keeps its row (`active = false`) and so its minutes;
    nothing is removed for them, so the delete impact's `station_timing` line goes
    (`apps/server/src/station-delete.ts:119-122`, `:149`, `:214`), with its dashboard copy
-   (`station-delete-copy.ts:23`, `prep.delete_station_timing`) and live-query dependency.
+   (`station-delete-copy.ts:23`, `prep.delete_station_timing`) and live-query dependency (Task 24b).
 
 9. **Error codes.** `station.timing_missing` (`packages/db/src/errors.ts:33`) loses both throw
    sites (`kitchen-timing-readiness.ts:16`, `provisioning/src/kitchen-timing.ts:99`) and is deleted:
@@ -1476,7 +1486,7 @@ own row. The two tables that held the venue value and the overrides are dropped.
 5. **Another manager changes a station's minutes while the editor is open**: the editor keeps
    showing the values it opened with (it reloads only for another station, `station-editor.ts:333`),
    and Save sends only the fields this manager changed, so an untouched field is not overwritten.
-   Not changed here; a reviewer confirms it and reports rather than fixes (Task 24).
+   Not changed here; a reviewer confirms it and reports rather than fixes (Task 24a).
 
 ### Task 19: every kitchen reader takes the station's own minutes
 
@@ -1538,8 +1548,8 @@ deleted; nothing else. Setup changed in the `it.each` and in `working-order.test
 
 **Files:**
 - Modify: `packages/shared/src/timing.ts`, `src/index.ts:125`; Test: `src/timing.test.ts`
-- Modify: `packages/provisioning/src/kitchen-timing.ts` (`:9-50`); Test: `src/kitchen-timing.test.ts`
-  (`:53`, `:73`)
+- Modify: `packages/provisioning/src/kitchen-timing.ts` (`:9-50`, and `assertKitchenTimingStations`
+  `:103-124`); Test: `src/kitchen-timing.test.ts` (`:53`, `:73`)
 - Modify: `apps/server/src/kitchen.ts` (`Station` `:29-45`, `createStation` `:79-122`,
   `listStations` `:124-157`, `updateStation` `:175-230`), `apps/server/src/management-api.ts`
   (PATCH body types `:1641-1650`: `number`, not `number | null`)
@@ -1553,10 +1563,17 @@ deleted; nothing else. Setup changed in the `it.each` and in `working-order.test
 - `parseStationTimingPatch(body: Record<string, unknown>): StationTimingPatch` — a present field
   must be a whole number 1–2147483647; anything else, `null` included, `management.request_invalid { field }`.
 - `assertStationTiming(patch: StationTimingPatch, base: StationThresholds, station: { id?: string; name: string }): void`
-  — the patch over `base`; `station.thresholds_invalid { field, stationId?, name }`.
+  — each field read as `patch[field] ?? base[field]` (never a plain spread, so a field present
+  but `undefined` still reads the base); `station.thresholds_invalid { field, stationId?, name }`.
+- `assertKitchenTimingStations` (still alive until Task 22, called by the venue PUT and the
+  configuration import) builds each station's patch from its override row's **non-null** fields
+  before calling `assertStationTiming`, so a null override still means "the venue value" there.
+  Without this the narrower `StationTimingPatch` fails provisioning's type check: the review's run
+  printed `src/kitchen-timing.ts(119,25): error TS2345 … 'number | null' is not assignable to
+  'number | undefined'`.
 - `createStation` checks over `DEFAULT_STATION_THRESHOLDS` and inserts all three
-  (`{ ...DEFAULT_STATION_THRESHOLDS, ...thresholds }`) in the station's own insert; no
-  `kitchen_station_timing` row.
+  (`thresholds?.[field] ?? DEFAULT_STATION_THRESHOLDS[field]` for each) in the station's own
+  insert; no `kitchen_station_timing` row.
 - `updateStation` reads the station's stored three with its name, checks the patch over them, and
   writes the minutes in the same `update kitchen_stations` as the other fields.
 - `listStations` reads the three columns; `Station` loses `timingDefaults` and `timingOverrides`.
@@ -1601,6 +1618,8 @@ deleted; nothing else. Setup changed in the `it.each` and in `working-order.test
       `kitchen_station_timing` directly and the venue PUT still reads it.
   - `provisioning/src/kitchen-timing.test.ts`: `:53` → `"retains omitted fields and refuses null"`;
     `:73` → `"names the station and the field an edit puts out of order over its stored minutes"`.
+    Its venue cases (`:122`, `:150`, `:171`) stay and must still pass: they cover a station with
+    no override row and one with a partial override through `assertKitchenTimingStations`.
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/shared exec vitest run src/timing.test.ts`,
   `pnpm --filter @waitron/provisioning exec vitest run src/kitchen-timing.test.ts`,
@@ -1614,7 +1633,9 @@ deleted; nothing else. Setup changed in the `it.each` and in `working-order.test
   and `timingOverrides` (`:252-257`) and the `:321-327` block likewise.
 - [ ] **Step 4: Run** Step 2's commands without `-t`, plus
   `pnpm --filter @waitron/server exec vitest run src/kitchen-timing-consumers.test.ts src/station-delete.test.ts src/configuration-transfer.test.ts`
-  — PASS (the transfer suite still uses the tables; Task 21 changes it).
+  — PASS (the transfer suite still uses the tables; Task 21 changes it; it and the
+  `"venue late-flag defaults"` describe of `management-api.test.ts` are what catch a plain-spread
+  merge, which refuses a station with no override row).
 - [ ] **Step 5:** typecheck `@waitron/shared`, `@waitron/provisioning`, `@waitron/server`;
   prettier; commit `git commit -s -m "A station's save writes its own late flags (A756 PR 5)"`, then
   update the ledger.
@@ -1628,8 +1649,10 @@ null is refused where it was "follow the venue"; the list answer loses two field
 **Files:**
 - Modify: `packages/db/src/configuration-transfer.ts:26-33` (drop the `omit` and the two entries)
 - Modify: `packages/provisioning/src/configuration-transfer.ts` (`:17`; `:138`, `:172` → `7`;
-  `:483` → `> 7`; `:486` → `!== 7`; the new check right after `validateConfigurationBundle(...)`
-  at `:625`; delete the post-import check `:779-785`)
+  `:483` → `> 7`; `:486` → `!== 7`; the new check right after `const incoming = checkedRows(...)`
+  at `:626`, reading `incoming`'s `kitchen_stations` rows as `stationColours` does (`:627-630`), so
+  a bundle whose `kitchen_stations` is not a list still meets `checkedRows`' refusal first; delete
+  the post-import check `:779-785`)
 - Modify: `packages/provisioning/src/kitchen-timing.ts` (new function)
 - Test: `apps/server/src/configuration-transfer.test.ts` (`:401`, `:2320`, `:4188`, `:4265`,
   `:4524`; its `kitchenStationTiming`/`kitchenTimingDefaults` imports `:68-69` go),
@@ -1731,8 +1754,10 @@ rewritten; `:4265`'s last two checks; `:2320` reads the imported row.
   `pnpm --filter @waitron/provisioning exec vitest run`, `pnpm --filter @waitron/db exec vitest run src/schema`
   — PASS. Then `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/module-seams.test.ts`;
   `git grep -n -E 'station\.timing_missing|assertKitchenTimingPresent|getKitchenTimingDefaults|setKitchenTimingDefaults|assertKitchenTimingStations|kitchen-timing-defaults' -- apps/server packages`
-  prints only `apps/dashboard` (Task 25b), the new 404 case in `management-api.test.ts` and the
-  format-1 JSON fixture.
+  prints only the new 404 case in `management-api.test.ts` (its `/kitchen-timing-defaults` path).
+  On `d9252ac34` the same command lists 17 files, every one changed by Tasks 19–22; the
+  dashboard is outside these paths (Task 25b), and the JSON fixture's underscored keys do not
+  match the pattern.
 - [ ] **Step 5:** typecheck `@waitron/db`, `@waitron/provisioning`, `@waitron/server`; prettier;
   commit `git commit -s -m "The venue-wide late flags leave the server (A756 PR 5)"`, then update the ledger.
 
@@ -1762,17 +1787,23 @@ written for a test venue, and its import, goes. Mechanical; no check changes.
   `pnpm --filter @waitron/server exec vitest run <files>` and `pnpm --filter @waitron/reporting exec vitest run`
   — PASS, each file's count read; then
   `git grep -n -E 'kitchenTimingDefaults|kitchenStationTiming|kitchen_timing_defaults|kitchen_station_timing' -- apps packages ':!**/drizzle/**'`
-  prints only the sites Tasks 25b and 26 remove (the dashboard's two live-query lists, the schema
-  file with its exports and its test, `classification.ts`, the hand-kept lists of Decision 7,
-  `station-order-migration.test.ts`, `venue-apply.test.ts`'s count check), plus
-  `kitchen-timing-upgrade.test.ts` and the format-1 JSON fixture, which stay.
+  lists only these files: for Task 24b, `packages/venue-service/src/dashboard/live-queries.ts`
+  (`:92`, `:120-121`) and its test (`:10-11`); for Task 25b, `apps/dashboard/src/api/live-queries.ts`
+  (`:467`, `:491`), `apps/dashboard/src/api/live-queries.test.ts:1017`,
+  `kitchen-screen.timing.test.ts` and `kitchen-screen.unsaved.test.ts`; for Task 26,
+  `packages/db/src/schema/kitchen-timing.ts`, its test, `schema/kitchen-stations.ts` (the comment),
+  `packages/db/src/index.ts`, `classification.ts`, `clear-provision-fixture.ts`,
+  `management-api.station-disable.test.ts`, `station-delete.test.ts` (`:156`),
+  `station-order-migration.test.ts` and `venue-apply.test.ts` (the count check); and, staying,
+  `configuration-transfer.test.ts` and `configuration-import.test.ts` (Task 21's absent-key and
+  outdated-format checks), `kitchen-timing-upgrade.test.ts` and the format-1 JSON fixture.
 - [ ] **Step 3:** `pnpm --filter @waitron/server typecheck`, `pnpm --filter @waitron/reporting typecheck`;
   prettier; commit `git commit -s -m "Test venues stop writing the venue's late flags (A756 PR 5)"`,
   then update the ledger.
 
 **Assertions changed:** none.
 
-### Task 24: the station editor sets the station's own minutes, all three required
+### Task 24a: the station editor sets the station's own minutes, all three required
 
 **Files:**
 - Modify: `packages/venue-service/src/dashboard/station-editor.ts` (`StationEditorStation` `:27-39`,
@@ -1781,11 +1812,8 @@ written for a test venue, and its import, goes. Mechanical; no check changes.
 - Modify: `routing-client.ts` (`PrepStation` `:24-38` loses `timingDefaults`/`timingOverrides`;
   `updateStation` `:119-131` takes `Partial<StationThresholds>`), `prep-stations-screen.ts`
   (`:756-757` pass the three numbers; `:158-160`, `:792-794` spread `DEFAULT_STATION_THRESHOLDS`),
-  `station-delete-copy.ts:23`, `live-queries.ts` (`"station-delete-impact"` `:67-97` and `routing`
-  `:119-121` lose both tables), `strings.ts` (`prep.timing_inheritance` `:307`, `:1202`;
-  `prep.delete_station_timing` `:355`, `:1250` deleted)
-- Test: `station-editor.test.ts`, `station-editor.a11y.test.ts`, `prep-stations-screen.test.ts`,
-  `live-queries.test.ts`, `station-delete-copy.test.ts:71`, `station-delete-dialog.test.ts:37`
+  `strings.ts` (`prep.timing_inheritance` `:307`, `:1202` deleted)
+- Test: `station-editor.test.ts`, `station-editor.a11y.test.ts`, `prep-stations-screen.test.ts`
 - Modify (fixtures, setup): every station fixture naming `timingDefaults`/`timingOverrides` —
   `git grep -l -E 'timingOverrides|timingDefaults' -- packages/venue-service apps/dashboard` lists
   them (`prep-stations-screen.a11y.test.ts`, `prep-stations-screen.unsaved.test.ts`,
@@ -1793,7 +1821,12 @@ written for a test venue, and its import, goes. Mechanical; no check changes.
   `station-editor.unsaved.test.ts`, `test/station-delete-test-helpers.ts`,
   `apps/dashboard/src/dashboard-app.unsaved-changes.test.ts:991-1000`): the two keys go, and an
   editor fixture gains its three numbers. Several are cast `as never`, so the grep, not typecheck,
-  finds a missed one.
+  finds a missed one. The three editor fixtures that hold an override of overdue 5 over defaults
+  3/10/15 — `station-editor.save-state.test.ts:23-28`, `station-editor.unsaved.test.ts:22-33`,
+  `station-editor.a11y.test.ts:50-58` — become `warmAfterMinutes: 3, overdueAfterMinutes: 5,
+  forgottenAfterMinutes: 15`, so `"05 over an override of 5 stays quiet"` (`save-state.test.ts:113`)
+  and warm 4 (`unsaved.test.ts:194`) stay valid and unchanged. A station-list fixture holding
+  5/10/15 with no overrides simply loses the two keys.
 
 **Interfaces — produces:** `StationEditorStation = { …; } & StationThresholds` (the station's own
 minutes); `StationEditorSave = { … } & Partial<StationThresholds>`; the draft's three strings start
@@ -1823,47 +1856,94 @@ each `wt-input` carries `required`, no `placeholder`; the fieldset has its legen
   venue-default change while open…"`) and `prep-stations-screen.test.ts:873` (`"follows new venue
   defaults…"`); `:472` loses its note line; `:490` mounts `GRILL` with 5/10/15; `:699` selects the
   fieldset by its legend, expects values `["5", "12", "15"]` in place of placeholders, and loses its
-  note line; `station-editor.a11y.test.ts:50-58` fixture; the delete-copy key list and dialog
-  fixture lose `station_timing`; `live-queries.test.ts:9-11` loses the two names. Sweep the fixtures.
+  note line. Three more checks change:
+  - `prep-stations-screen.test.ts:362` (the routing-handover look) expects Warm's placeholder
+    `not.toBe("")`; it becomes Warm's value `not.toBe("")` and `required` true — the station's own
+    minutes are shown in the field.
+  - `station-editor.a11y.test.ts:150-156` checks the fieldset's `aria-describedby` is
+    `timing-inheritance`, the note's text and the placeholder's contrast; after, it checks the
+    fieldset has no `aria-describedby`, `#timing-inheritance` is absent and each field is
+    `required`. The placeholder-contrast check goes with the placeholder, and so do the
+    `contrastRatio` helper and its comment (`:8-21`), whose only use it is (`:156`). The per-field
+    `aria-describedby` check (`:142-147`) stays.
+  - (Task 25b names the Kitchen tab's.)
+  Sweep the fixtures.
 - [ ] **Step 4: Run** `pnpm --filter @waitron/venue-service exec vitest run src/dashboard` (free
   memory first) and `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.unsaved-changes.test.ts`
-  — PASS; `git grep -n -E 'timingOverrides|timingDefaults|timing_inheritance|delete_station_timing|station_timing"' -- apps packages`
+  — PASS; `git grep -n -E 'timingOverrides|timingDefaults|timing_inheritance' -- apps packages`
   prints nothing.
-- [ ] **Step 5:** `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/english-only.test.ts scripts/live-subscriptions.test.ts`;
+- [ ] **Step 5:** `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/english-only.test.ts`;
   typecheck `@waitron/venue-service`, `@waitron/dashboard`; prettier; commit
   `git commit -s -m "The station editor sets the station's own late flags, all three required (A756 PR 5)"`,
   then update the ledger.
 
 **Assertions changed** (A773 §7.1, "Every station setting is set on the station itself"):
 `station-editor.test.ts` `:341`, `:360`, `:409`, `:459` (deleted), `:472`, `:490`, `:699`;
-`prep-stations-screen.test.ts` `:823`, `:873` (deleted); the delete-copy key list; the routing
-dependency list.
+`prep-stations-screen.test.ts` `:362`, `:823`, `:873` (deleted); `station-editor.a11y.test.ts:150-156`.
+The editor fixtures' numbers are setup.
+
+### Task 24b: the delete dialog and the live queries stop naming station timing
+
+Depends only on Task 22 (the delete impact no longer lists `station_timing`, and nothing writes the
+two tables).
+
+**Files:** `packages/venue-service/src/dashboard/station-delete-copy.ts:23` and
+`station-delete-copy.test.ts:71`; `station-delete-dialog.test.ts:37` (fixture);
+`live-queries.ts` (`"station-delete-impact"` `:92` and `routing` `:120-121` lose the tables) and
+`live-queries.test.ts:10-11`; `strings.ts` (`prep.delete_station_timing` `:355`, `:1250` deleted).
+
+- [ ] **Step 1: Change the tests first:** `station-delete-copy.test.ts:71`'s key list and
+  `live-queries.test.ts:10-11`'s expected `routing` list lose the names; the dialog fixture loses
+  `counted("station_timing", 1)`.
+- [ ] **Step 2: Run and watch the two list checks fail.**
+  `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/station-delete-copy.test.ts src/dashboard/live-queries.test.ts src/dashboard/station-delete-dialog.test.ts`
+- [ ] **Step 3: Implement**; run Step 2's command — PASS; then
+  `pnpm exec vitest run scripts/live-subscriptions.test.ts`;
+  `git grep -n -E 'delete_station_timing|"station_timing"|kitchen_station_timing|kitchen_timing_defaults' -- packages/venue-service`
+  prints nothing.
+- [ ] **Step 4:** typecheck `@waitron/venue-service`; prettier; commit
+  `git commit -s -m "The station delete dialog and live queries stop naming station timing (A756 PR 5)"`,
+  then update the ledger.
+
+**Assertions changed** (Decision 8; the tables are dropped): the delete-copy key list and the
+`routing` dependency list.
 
 ### Task 25a: Venue settings' leave-protection cases use the Venue details draft
 
 `apps/dashboard/src/dashboard-app.venue-settings-unsaved.test.ts` uses the Kitchen tab's late-flags
 form as its example draft: the mount helper waits for `[data-test=edit-timing]` (`:126-135`) and
-five cases edit it (`:151`, `:169`, `:187`, `:213`, `:274`, through `editTiming` `:138-149`). The
-behaviour they check is the Venue settings container's (Keep, Discard, Back and Forward, sidebar,
-logout, language, forced expiry, a reverted draft), and the Venue details tab holds a real draft the
-same file already edits (`:284`, `:330`, `:341`). This task moves the five onto that draft **while
+seven cases edit it through `editTiming` (`:138-149`): `:151`, `:169`, `:187`, `:213`, `:260`
+("ignores a repeated tab target…"), `:274` and `:367` ("keyboard tab navigation…") —
+`grep -n editTiming` lists those seven calls. The behaviour they check is the Venue settings
+container's (Keep, Discard, Back and Forward, sidebar, logout, language, forced expiry, a repeated
+target, a reverted draft, keyboard tab navigation), and the Venue details tab holds a real draft the
+same file already edits (`:284`, `:330`, `:341`). This task moves the seven onto that draft **while
 the late-flags form still exists**, so the suite is green before and after.
 
-- [ ] **Step 1:** Add a helper `editVenueDetails(app)` beside the existing Venue details cases'
-  steps; the mount helper waits for the Venue settings screen and, with `venue.configure`, the
-  Kitchen tab's `[data-test=bump-line]`. Each of the five cases keeps its name's behaviour and every
-  check, with "Kitchen timing"/"late flags" in its name changed to "a Venue details draft", the
-  edited field the Venue details field, and the tab it starts on Venue details. Where a case's
-  point was a Kitchen-to-other-tab switch (`:274`), it starts on Venue details and switches to
-  Kitchen.
+- [ ] **Step 1:** Add a helper `editVenueDetails(app)` from the existing Venue details steps (Edit,
+  then fill `addressLine1`, as `:287-292` do); the mount helper stops waiting for `edit-timing` and
+  waits for the opened tab's panel (Venue details' `[data-test=edit]`, or the Kitchen tab's
+  `[data-test=bump-line]`). Each of the seven cases keeps its name's behaviour and every check,
+  with "Kitchen timing"/"late flags" in its name changed to "a Venue details draft" and the edited
+  field the Venue details field. Because the draft now lives on Venue details, the first of the two
+  tabs (`VENUE_SETTINGS_TABS`, `apps/dashboard/src/screens/venue-settings-screen.ts:11`), every
+  case's direction swaps: it starts on Venue details and leaves to Kitchen (`:151`, `:187`, `:213`,
+  `:260`, `:274`), Back and Forward run between the same two the other way (`:169`), and the
+  keyboard case (`:367`) focuses the Venue details tab and presses `{End}` instead of `{Home}`.
+  Each swap is a setup change. Where the Venue details panel ends differently after Discard (it
+  returns to its read view, the behaviour `:341` checks, so the input is gone rather than reset),
+  the check reads that view's stored value (`[data-test=saved-addressLine1]`, as `:310` does)
+  instead of the input's; record each such check as
+  changed, for the reason that the late flags leave the Kitchen tab (A773 §7.1).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.venue-settings-unsaved.test.ts`
   (free memory first) — PASS. Delete the file's `getKitchenTimingDefaults` stub (`:50-54`) only in
   Task 25b.
 - [ ] **Step 3:** prettier; commit
   `git commit -s -m "Venue settings' leave checks use the Venue details draft (A756 PR 5)"`, then update the ledger.
 
-**Assertions changed:** none — setup (which draft is edited) and names only. Recorded in the ledger
-and the PR description as setup changes, with this paragraph's reason.
+**Assertions changed:** only the after-Discard reads Step 1 names, if any; otherwise setup (which
+draft is edited, the swapped directions, `{End}` for `{Home}`) and names only. Recorded in the
+ledger and the PR description, with this task's reason.
 
 ### Task 25b: the Kitchen tab's late-flags panel goes
 
@@ -1890,6 +1970,10 @@ and the PR description as setup changes, with this paragraph's reason.
   - `kitchen-screen.test.ts:104` → `"says the read failed when the bump mode cannot be read"`
     (the timing-values check goes; the alert check stays); add `"draws no late flags"` — no
     `[data-test=timing-values]`, `[data-test=edit-timing]` or `wt-input`.
+  - `kitchen-screen.test.ts:160` (`"starts its first section at its own top inside a grid…"`)
+    reads `first.nextElementSibling` (`:167`), which is the late-flags section and would be null
+    with one section left; it keeps only the first check (the section's top equals the host's top,
+    `:166`) and drops the second-section check.
   - `kitchen-screen.unsaved.test.ts`: delete every timing case (`:91`, `:128`, `:141`, `:154`,
     `:177`, `:201`, `:219`, `:239`, `:261`, `:281`, `:304`, `:362`); keep both
     `"the immediate bump choice stays exempt…"` cases (`:334`), its mount helper losing the timing stubs.
@@ -1906,7 +1990,8 @@ and the PR description as setup changes, with this paragraph's reason.
   `git commit -s -m "The Kitchen tab no longer sets late flags (A756 PR 5)"`, then update the ledger.
 
 **Assertions changed** (A756/A773 §7.1, the late flags leave the Kitchen tab): the three deleted
-files; the timing cases of `kitchen-screen.unsaved.test.ts`; `kitchen-screen.test.ts:104`;
+files; the timing cases of `kitchen-screen.unsaved.test.ts`; `kitchen-screen.test.ts:104` and
+`:160`;
 `waiter-authority.test.ts:28`'s request list and section count; the client case; the dependency list.
 
 ### Task 26: drop the two tables; one migration
@@ -1925,9 +2010,9 @@ files; the timing cases of `kitchen-screen.unsaved.test.ts`; `kitchen-screen.tes
   `:54`; `apps/server/src/management-api.station-disable.test.ts:126`;
   `apps/server/src/station-delete.test.ts:156`; `apps/server/src/canvas-retirement-upgrade.test.ts`
   (after `:519` add `delete retained.kitchen_timing_defaults;` and `delete retained.kitchen_station_timing;`);
-  `apps/server/src/station-order-migration.test.ts` (`:9-10` imports go; `:102` and `:115` become
-  raw `sql` inserts, since the predecessor still has both tables; the expected `after` at `:221-226`
-  is `before` less those two tables, with `kitchen_stations` as now);
+  `apps/server/src/station-order-migration.test.ts` (only the `:9-10` imports go, with `:102` and
+  `:115` becoming raw `sql` inserts; its list at `:188` and expected `after` at `:221-226` stay,
+  because it migrates only up to `0167_retire_station_order`, Decision 7);
   `packages/provisioning/src/venue-apply.test.ts` (Task 22's `count(*) from kitchen_timing_defaults`
   check goes: the table no longer exists, and the new case below covers its absence)
 - Test: `packages/db/src/schema/kitchen-stations.test.ts`
@@ -1953,9 +2038,10 @@ files; the timing cases of `kitchen-screen.unsaved.test.ts`; `kitchen-screen.tes
   `pnpm --filter @waitron/composition exec vitest run`;
   `pnpm --filter @waitron/provisioning exec vitest run src/venue-apply.test.ts`. Then
   `git grep -n -E 'kitchenTimingDefaults|kitchenStationTiming|kitchen_timing_defaults|kitchen_station_timing' -- apps packages scripts ':!**/drizzle/**'`
-  prints only `station-order-migration.test.ts`'s raw predecessor inserts and expected `after`,
-  `canvas-retirement-upgrade.test.ts`'s two `delete` lines, `kitchen-timing-upgrade.test.ts` and
-  the format-1 JSON fixture.
+  prints only `station-order-migration.test.ts` (its raw predecessor inserts and its `:188`
+  list), `canvas-retirement-upgrade.test.ts`'s two `delete` lines, Task 21's absent-key and
+  outdated-format checks in `configuration-transfer.test.ts` and `configuration-import.test.ts`,
+  `kitchen-timing-upgrade.test.ts` and the format-1 JSON fixture.
 - [ ] **Step 5:** typecheck `@waitron/db`, `@waitron/server`, `@waitron/provisioning`,
   `@waitron/reporting`; prettier; commit
   `git commit -s -m "Drop the venue-wide and per-station late-flag tables; one migration (A756 PR 5)"`,
@@ -1963,8 +2049,9 @@ files; the timing cases of `kitchen-screen.unsaved.test.ts`; `kitchen-screen.tes
 
 **Assertions changed** (the tables are dropped, A773 §7.1): `kitchen-timing.test.ts` deleted;
 `venue-apply.test.ts` loses Task 22's count check;
-`canvas-retirement-upgrade.test.ts`'s `retained` and `station-order-migration.test.ts`'s expected
-`after` lose the two tables (the precedent of `:518-519`); the snapshot lists lose the name.
+`canvas-retirement-upgrade.test.ts`'s `retained` loses the two tables (the precedent of
+`:518-519`); the two snapshot lists lose the name. `station-order-migration.test.ts`'s checks do
+not change (setup only: raw inserts for its predecessor).
 
 ### Task 27: a look at the station editor and the Kitchen tab in real Chromium
 
@@ -2118,9 +2205,16 @@ warning) and removing `locations.fire_control` with the Kitchen tab's Fire contr
   trigger-on-drop control were run in a scratch copy or in `node:sqlite`, not reasoned about. Every
   file that names either table (`git grep -l -E 'kitchen_station_timing|kitchen_timing_defaults|kitchenStationTiming|kitchenTimingDefaults' -- ':!docs'`,
   15 product files, 4 test-support files and 36 test files) is assigned to a task, or left with a
-  stated reason (the format-1 JSON fixture, `kitchen-timing-upgrade.test.ts`). Tasks 19–28 each stay
-  one package or one layer; Task 25 is split into 25a (move the leave checks off the late-flags
+  stated reason (the format-1 JSON fixture, `kitchen-timing-upgrade.test.ts`). Tasks 19–28 (with
+  24 and 25 each split in two) each stay
+  one package or one layer; Task 24b (delete dialog and live queries) is apart from 24a (the
+  editor), and Task 25 is split into 25a (move the leave checks off the late-flags
   form while it still exists) and 25b (remove it) so each commit stays green; Task 23 is the
   mechanical setup sweep, kept apart so Task 22 stays small. Task 20 is the largest (one
   provisioning helper file, three server functions, two server suites); its implementer follows
   the handover rule if it runs long.
+- PR 5 fresh-context review (2026-10-23), folded in: Task 20 now covers `assertKitchenTimingStations`
+  and pins `??`; `station-order-migration.test.ts` keeps its checks (it stops at 0167); Task 25a moves
+  seven cases, not five; three more changed checks are named; Task 24 is split; Task 21's check reads
+  `incoming`; Tasks 22 and 23's grep predictions match their commands; Decision 4 names the till
+  answers; the PR 5 ledger is named.
