@@ -115,7 +115,6 @@ Left open:
 - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
   during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
   its final head.
-- **Done (W92a, #1259, 2026-10-05) — a sold-out painted till tile stays readable.**
 - **Done (A292, #1310, 2026-10-06) — W92a's four look points.** A sold-out painted tile's stripe is
   `--wt-space-1` (4px) with a one-pixel `--wt-color-text` line beside it, so in both themes every
   palette colour's stripe either reaches 3:1 against the tile or is edged by a line that does; the
@@ -282,25 +281,12 @@ name, so a reference named otherwise is still unseen.
 Since W72c an imported print agent arrives with no node; the importing box's
 own agent still enrols as a new row beside it, as it did before (read, not run).
 
-W72h (#1247) stopped Chromium logging "ResizeObserver loop completed with undelivered
-notifications" from the Products tree's category name box.
-On 2026-10-05 A261-3 also observed this message while running
-`pnpm --filter @waitron/dashboard exec vitest run src/widgets/folder-made-at.test.ts
-src/widgets/catalogue-browser.test.ts`: both the transition candidate and the previous
-`c41ed54910fece4add9f1475bf18034992545e99` commit in a frozen-installed disposable checkout
-reported 164 passing tests and logged the message. Its cause on that path has not been established.
-On 2026-10-08 A349's six Preview, price-table and navigation suites also logged the message:
-397 tests passed on its candidate; the same command at the preceding checkpoint
-`43c54024eea8149e789163fdac46f3239300365c` in a frozen-installed disposable checkout passed
-390 tests and logged it too. The command selected `src/widgets/menu-preview.test.ts`,
-`menu-preview-top.test.ts`, `menu-preview-navigation.test.ts`, `menu-preview.a11y.test.ts`,
-`menu-prices-table.test.ts` and `src/navigation.test.ts` with the dashboard's Vitest runner.
+On 2026-10-05 A261-3 also observed "ResizeObserver loop completed with undelivered
+notifications" while running `src/widgets/folder-made-at.test.ts` and
+`src/widgets/catalogue-browser.test.ts`. Its cause on that path has not been established.
+A349's Preview, price-table and navigation suites also logged the message.
 That comparison does not establish which observer causes it or its effect on the rendered screen.
-On 2026-10-11 A487a saw it once in every run of
-`pnpm --filter @waitron/ui exec vitest run src/components/wt-tabs` — three plain and three with
-coverage on main `5197ae03599332e540aba80c108c1829c5ae84d9`, and the same on its first candidate,
-`57538cf47aab2038ed2d6e8968da4e51c0de453b`, with every test passing. Which
-test logs it was not looked for.
+A487a also saw it in `src/components/wt-tabs` runs. Which test logs it was not looked for.
 
 ## `joinCustomerPresentationText` passes the requested language where the default belongs — OPEN (found 2026-10-02 by A172, not measured)
 
@@ -821,6 +807,248 @@ decimal unit does — which would change the other readers of the till's `soldBy
 (`apps/till/src/state/working-order.ts`), `countsWholeUnits` and the last-added steps and split
 control (`apps/till/src/screens/till-table-order-screen.ts`), and the price label
 (`apps/till/src/widgets/basket-refresh-dialog.ts`). Read, not run.
+
+## Modifiers' Spanish "Opciones" tab was cut at a 310 px screen on CI's Linux fonts
+
+**Modifiers' Spanish "Opciones" tab was cut at a 310 px screen on CI's Linux fonts** in
+A424 (#1452). A434's macOS Chromium probe measured the whole tab at screen widths 310 and
+390 px (tab 95.67 px; strip 106.42 and 186.42 px). The owner has not ruled on Modifiers;
+reproduce with the Linux fonts before choosing a change. The Printers tab's shorter label
+was the separate A434 ruling.
+
+## A670 — printed menus (owner, 2026-10-14; open, not designed)
+
+**A670 — printed menus (owner, 2026-10-14; open, not designed).** Waitron prints no menu today.
+A printed menu carries each dish's allergen icons after its name and a key on the page naming
+every icon (the regulation wants words, with symbols only in addition — A668's _Sources_). With the
+online menu (A509) it is the written allergen record a customer or inspector is shown, now that the
+till no longer offers a separate Allergens screen.
+
+## The products' made-at read has no screen since A655
+
+**The products' made-at read has no screen since A655** — `GET /management-api/products/made-at`,
+the venue-service seat behind it (`describeMakers`), the dashboard's `listMadeAt`, its `MadeAt`
+type and its live query are read only by tests. `apps/server/src/catalogue-api.test.ts:1731` pins
+the route, `apps/server/src/kitchen-delete.integration.test.ts:271` checks station deletion
+through it, `packages/venue-service/src/routing-store.test.ts` and `service.test.ts` pin the seat
+(declared at `packages/module/src/module.ts:996`), `apps/dashboard/src/api/client.test.ts` and
+`live-queries.test.ts` pin the client side, and several dashboard test files stub `listMadeAt`
+(`catalogue-screen.test.ts:363` asserts it is never called). Delete them together, or give the
+read a screen.
+
+## The data table's columns button has no tooltip
+
+**The data table's columns button has no tooltip** (found by A655's on-screen check, 2026-10-21).
+The icon-only button at the end of a list's search box opens **Customise**, but hovering or
+focusing it shows nothing, while the Filters button beside it shows "Filters"
+(`packages/ui/src/components/wt-data-table.ts`, the columns button near :2965 against the Filters
+button's tooltip near :2791). Give it the same tooltip; the Products guide currently calls it "the
+columns button at the right-hand end of the list's search box".
+
+## The Products tree's hidden counts may be placed against the page at narrow width
+
+**The Products tree's hidden counts may be placed against the page at narrow width** — not
+measured; left open by A453. At 440px or less the tree hides its counts visually
+(`wt-data-table[narrow]::part(count)`, `apps/dashboard/src/widgets/product-list.ts`) as the menu's
+Structure tab does. A453 found the Structure tab's hidden root count was positioned against the
+page, not the table's scroll box, and gave its root label `position: relative`; Products' root
+label has no such rule. **Next action:** measure at phone width with a long name before changing
+anything.
+
+## On a phone, sections nested more than four deep read flat in the Structure tab
+
+**On a phone, sections nested more than four deep read flat in the Structure tab** — left open
+by A453. At narrow width `wt-data-table` stops indenting after four levels
+(`min(var(--tree-depth, 0), 4)`, `packages/ui/src/components/wt-data-table.ts`), and the menu's
+root row now takes one of them. A453's look at 390px wide: level 4, level 5 and a product in
+level 5 all start at the same x. **Next action:** the owner decides whether the phone indent
+should go deeper (a shared table rule, so the Products tree changes too).
+
+## Menu-root enabled-language fallback when content languages are unset (A420 review)
+
+**Menu-root enabled-language fallback when content languages are unset (A420 review).**
+`updateMenuDetails` checks map keys using English as its fallback; section and include-folder
+writers use their supplied venue fallback. Decide whether the menu-root writer should take
+that fallback too. `content-translations.test.ts`, “menu, section and folder writes keep enabled
+maps optional with %s configuration”, retains the unset-configuration difference. Inline saves
+use their resolved venue context.
+
+## A case the content-language decisions leave open, built with the plan's default unless the owner says otherwise
+
+**A case the content-language decisions leave open, built with the plan's default unless the owner
+says otherwise** (plan, "Open points"): receipts outside Catalonia stay free, Spanish by default.
+Left by W109 (#1320, #1322); the decisions are in
+[products.md](../developers/products.md#content-languages-per-region). The other open case, a
+Spanish venue with no known province, is settled (owner, 2026-10-17: Spanish stays enabled
+everywhere; entered customer text is optional).
+
+## A Home page shortcut's bin button stays live while a shortcut reorder or a display setting is being saved
+
+**A Home page shortcut's bin button stays live while a shortcut reorder or a display setting is
+being saved.** It is greyed only while a shortcut is added or removed: `#moveShortcut`
+(`apps/dashboard/src/screens/menus-screen.ts`) leaves the screen's `busy` flag unset so a
+keyboard user's focus stays on the grip, and display saves use their own flag. A815 asked for the
+button "greyed while a save is out"; decide whether a remove during a reorder save should wait,
+be refused, or is fine as it is. Not tried in a browser. Left open by A815 (#1880).
+
+## A switched-off menu's Home page tab would give every hidden shortcut the wrong reason
+
+**A switched-off menu's Home page tab would give every hidden shortcut the wrong reason**: each
+section reads "Not shown: nothing to order in this section" and each product "Not shown: not on
+sale on this menu" (`#hiddenReason`, `apps/dashboard/src/widgets/device-home-preview.ts`),
+measured by finish-branch's worker in a test. Nothing outside tests switches a menu off today
+(`deactivateCatalogue` has no other caller); revisit when something does. Left open by A816
+(#1880).
+
+## The Structure tab's "Edit section" form may stay open when another menu is opened
+
+**The Structure tab's "Edit section" form may stay open when another menu is opened.** Opening
+another menu (`#select`, `apps/dashboard/src/screens/menus-screen.ts`) closes the bulk dialogs and
+the single "Delete section" one (A817, #1885 found the delete dialog acting on the first menu's
+section from the second menu's screen), but does not reset `editingSection`. Not tried: whether
+the form stays open, and whether saving it then writes the first menu's section. Left open by A817
+(#1885).
+
+## "Open <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88)
+
+**"Open <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88).** The
+other items in the tree's row menus are greyed out while a change is out; the link to the included
+menu's own editor is not marked `aria-disabled="true"` then, so it stays live (marked so,
+`wt-row-actions` would grey it out and cancel a click or middle-click on it). (A322 renamed it
+from "Edit <menu>", so that the include's own Edit could sit beside it.)
+
+## Loose ends left by A380 (#1385)
+
+**Loose ends left by A380 (#1385).**
+
+- A configuration import stores a fixed folder name as given, spaces included, where a save
+  through the dialog or the route trims it. A name of spaces only shows as no name either way.
+- After browser Back to another menu with no edits made, the include's Edit dialog stays open
+  over that menu, as the section Edit dialog does: choosing another menu does not close either
+  (read in `menus-screen.ts`, not run).
+
+## Translate all: an Edit translations dialog left open anywhere clears the "Translations ready" notice
+
+**Translate all: an Edit translations dialog left open anywhere clears the "Translations ready"
+notice.** The dialog's live reload reads the suggestions, and that read marks the run opened
+(`apps/server/src/content-suggestions-api.ts`), so a dialog forgotten on another device means
+nobody sees the notice. Seen in the Santet run (A689-21). Working as built; the owner decides
+whether it should change.
+
+## Category authoring serialises across the whole database, and nobody has measured what that costs
+
+**Category authoring serialises across the whole database, and nobody has measured what that
+costs.** `withTransaction` admits one write transaction per venue file
+(`packages/catalogue/src/categories.ts`, above `listCategories`). **Next action:** measure it
+before anyone widens category authoring to more concurrent editors. Left open by product
+categories (#340, [API and integration guide](../developers/product-categories.md)).
+
+## At phone width in a right-to-left layout, a long name in the Products list can run under the pinned Actions column
+
+**At phone width in a right-to-left layout, a long name in the Products list can run under the
+pinned Actions column** (`#fitNames`, `apps/dashboard/src/widgets/product-list.ts`, measures the
+room from the left). Found by A330's Codex review and reproduced by it on `main` before #1354. Not
+fixed; next: a browser test at 390 px with `dir="rtl"` and a long unbroken name. Left open by
+A330 (variant rows show their photo, #1354).
+
+## Loose ends left by A347 (#1392)
+
+**Loose ends left by A347 (#1392).**
+
+- An imported bundle may carry priced menu rows for a product no menu reaches, and adding the
+  product back to a menu revives those prices (found in A347's review, believed to predate it).
+  Options: run `syncMenuOffers` over every menu after an import, or refuse priced rows no menu
+  reaches.
+- A bulk Disable of 500 products could not read the count in A347's review (HTTP 431, because
+  the ids go in the URL), so the dialog says "every menu"; the smallest count that fails was not
+  measured. A435-1 (2026-10-09) renames the action Archive; the request still carries ids in the
+  URL. The earlier 500-product failure has not been remeasured.
+- Deleting a category with its contents says its products come off every menu, with no count.
+
+## A category's naming square does not announce the inherited colour's source
+
+**A category's naming square does not announce the inherited colour's source.** While you add or
+rename a category, its square says only "Choose the colour" even when its dashed border marks an
+inherited colour. The at-rest row names the source. Decide how the naming square should announce
+that source, including a category whose new name has not been saved, and check the English and
+Spanish accessible names. Found in A820's run-it review; the label and inherited fill are checked
+together in `apps/dashboard/src/widgets/product-list.test.ts` ("puts a colour square showing the
+box's colour").
+
+## At 390px the items table is wider than its scrolling box with or without the mark
+
+**At 390px the items table is wider than its scrolling box with or without the mark** — left open
+by A223 (#1098, an extras list's product dropdown greys a product with variants), seen, not
+changed (scroll width 496 in a 356 box), and the mark wraps in the narrow product column, so a
+marked row is about twice as tall as its neighbours. Also left open by A178g (#1021): at 390px the
+extras list form's item table runs past the dialog's edge, its headings cut ("Preselecc…"), seen
+in its LOOK, not changed and not checked against `main` before it (screenshots kept outside the
+repository).
+
+## Loose ends left by A663 Part 2d (#1779)
+
+**Loose ends left by A663 Part 2d (#1779).**
+
+- The dashboard lets a manager attach an extras list to a product sold in a unit with decimals,
+  on a scale or with the measure switch on, and the till then offers no extras for it, with no
+  word to the manager. Refuse it, or say so, in the product editor (`writeProductModifiers`,
+  `packages/catalogue/src/product-modifiers.ts`, checks no unit).
+
+## The combined end-to-end journey has not been walked
+
+**The combined end-to-end journey has not been walked**: creating a unit, a category and the
+extras and options a product carries from inside a dirty product draft, through the actual routes
+against a real database, and taking the result through the till. **Next action:** walk it once
+at the real box with the owner present, alongside **The displays and the printers walked at
+the real box** (_What to work on next_), after the owner is back on 2 November (owner,
+2026-10-17).
+
+## Retire the product editor's required-translation refusal mapping
+
+**Retire the product editor's required-translation refusal mapping.** Customer names are
+optional, but `catalogue-screen.ts` still handles `content.translation_required` through
+`productEditorTranslationField`. Trace the product routes before removing that branch and its
+tests. Media still validates required image names and translates its refusal to
+`image.translation_required` with an explicit `names` field.
+
+## A928. The Courses list may move its rows under a held drag (found by A758-2's review, not tested)
+
+**A928. The Courses list may move its rows under a held drag (found by A758-2's review, not
+tested).** `apps/dashboard/src/widgets/course-list.ts` holds an incoming list only while a move
+is unsaved (`#readDropped = this.#movesOut > 0`), and a pointer drag saves only on drop, so a live
+list arriving mid-drag looks to be applied under the finger. A758-2 fixed the same shape on the
+Voids and comps page by holding the list while `ReorderController.dragging` is true. Write the
+failing test first.
+
+## Loose ends left by A343 (a menu's Price overrides tab tidied, #1368)
+
+**Loose ends left by A343 (a menu's Price overrides tab tidied, #1368).**
+
+- The Price overrides tab's save message comes after the whole table in tab order, so a keyboard
+  user cannot reach Undo from a field within its 5 seconds (decided as built, not tested with a
+  user). Options: a keyboard shortcut for Undo, or a message that waits while focus stays in the
+  field it saved.
+- In Spanish a range's placeholder reads "8.00 – 12.00" with full stops, and a refused field is
+  drawn about 14 px wider than the others (seen in #1368's screenshots). A344 removed the "?" and
+  the Resolve column and keeps each price box on screen at 390 px; the wider refused field and
+  the placeholder's full stops were not re-checked.
+  [Detail](catalogue.md#in-spanish-a-ranges-placeholder-reads-800--1200-with-full-stops-and-a-refused-field-is-drawn-about-14-px-wider-than-the-others)
+
+## Loose ends left by A346 + A348 (a price this menu sets stands out, an Available column, and Edit product, #1408)
+
+**Loose ends left by A346 + A348 (a price this menu sets stands out, an Available column, and
+Edit product, #1408).**
+
+- At a 320px window only "12.50 – 15.00" was measured in a menu's Price overrides tab.
+- In the real dashboard at a 390px window the table is 358px wide (read once in the dashboard's
+  test browser; no test pins it). Whether one-word names keep their line there while no field
+  shows a range has not been measured. Options for more room: less page padding on phones, or a
+  shorter Actions heading.
+  [Detail](catalogue.md#in-the-real-dashboard-at-a-390px-window-the-table-is-358px-wide)
+- On the Structure tab at 390px the tree's own box scrolls sideways under the pinned ⋮, by
+  design (`pinned: "end"`); in Spanish Disponible now sits wholly behind it until the tree is
+  scrolled. Letting long names wrap at narrow widths may free the room; not tried.
+  [Detail](catalogue.md#on-the-structure-tab-at-390px-the-trees-own-box-scrolls-sideways-under-the-pinned-)
 
 ## Decisions and deliberate limits
 

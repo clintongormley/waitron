@@ -748,85 +748,47 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the catalogue
 
-- **Menu prices' narrow-layout CI failure still needs a cause (A613).** The existing
-  assertion failed in main run 38505417966. macOS whole-file, coverage-shard, CPU and delayed-font
-  probes did not reproduce it; the assertion and timeout remain unchanged. On its next failure,
-  read the attached viewport, table/scroll dimensions and font snapshot before choosing a fix.
-  [Investigation](backlog/ci.md#menu-prices-narrow-layout-ci-failure-still-needs-a-cause-a613)
+- **Menu prices' narrow-layout CI failure still needs a cause (A613).**
+  [Detail](backlog/ci.md#menu-prices-narrow-layout-ci-failure-still-needs-a-cause-a613)
 
-- **Modifiers' Spanish "Opciones" tab was cut at a 310 px screen on CI's Linux fonts** in
-  A424 (#1452). A434's macOS Chromium probe measured the whole tab at screen widths 310 and
-  390 px (tab 95.67 px; strip 106.42 and 186.42 px). The owner has not ruled on Modifiers;
-  reproduce with the Linux fonts before choosing a change. The Printers tab's shorter label
-  was the separate A434 ruling.
+- **Modifiers' Spanish "Opciones" tab was cut at a 310 px screen on CI's Linux fonts**. The owner
+  has not ruled on Modifiers; reproduce with the Linux fonts before choosing a change.
+  [Detail](backlog/catalogue.md#modifiers-spanish-opciones-tab-was-cut-at-a-310-px-screen-on-cis-linux-fonts)
 
 - **A884. Deleting an options or extras list leaves it on the published menus until they are
-  republished.** Until then the till cannot add a dish carrying a deleted options list, nor save a
-  change to a parked order that keeps one (`options.label_required`); after a republish, a table's dish carrying an
-  extra from a deleted list cannot have its quantity raised (`extras.invalid`).
+  republished.**
   [Detail](backlog/catalogue.md#a884-deleting-an-options-or-extras-list-leaves-it-on-the-published-menus-until-they-are-republished)
 
-- **A885. Say that lines already on an open order keep their VAT class after a republish.** The
-  VAT help and the Products guide say only that a class change reaches the tills at the next
-  publish. [Detail](backlog/catalogue.md#a885-say-that-lines-already-on-an-open-order-keep-their-vat-class-after-a-republish)
-
-_Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
-
+- **A885. Say that lines already on an open order keep their VAT class after a republish.**
+  [Detail](backlog/catalogue.md#a885-say-that-lines-already-on-an-open-order-keep-their-vat-class-after-a-republish)
 
 - **Repeated allergen kinds from direct callers.** The allergen validator accepts, for example,
   `{ gluten: { kinds: ["wheat", "wheat"] } }`; the dashboard picker and published derivation remove
   repeats. A668-1's Claude probe recorded that result. Decide whether direct declarations should
   be refused or normalised, then check both ingredient and product requests with repeated kinds.
 
-- **A670 — printed menus (owner, 2026-10-14; open, not designed).** Waitron prints no menu today.
-  A printed menu carries each dish's allergen icons after its name and a key on the page naming
-  every icon (the regulation wants words, with symbols only in addition — A668's _Sources_). With the
-  online menu (A509) it is the written allergen record a customer or inspector is shown, now that the
-  till no longer offers a separate Allergens screen.
+- **A670 — printed menus (owner, 2026-10-14; open, not designed).** A printed menu carries each
+  dish's allergen icons after its name and a key on the page naming every icon.
+  [Detail](backlog/catalogue.md#a670--printed-menus-owner-2026-10-14-open-not-designed)
 
+- **The products' made-at read has no screen since A655**
+  [Detail](backlog/catalogue.md#the-products-made-at-read-has-no-screen-since-a655)
 
-- **The products' made-at read has no screen since A655** — `GET /management-api/products/made-at`,
-  the venue-service seat behind it (`describeMakers`), the dashboard's `listMadeAt`, its `MadeAt`
-  type and its live query are read only by tests. `apps/server/src/catalogue-api.test.ts:1731` pins
-  the route, `apps/server/src/kitchen-delete.integration.test.ts:271` checks station deletion
-  through it, `packages/venue-service/src/routing-store.test.ts` and `service.test.ts` pin the seat
-  (declared at `packages/module/src/module.ts:996`), `apps/dashboard/src/api/client.test.ts` and
-  `live-queries.test.ts` pin the client side, and several dashboard test files stub `listMadeAt`
-  (`catalogue-screen.test.ts:363` asserts it is never called). Delete them together, or give the
-  read a screen.
-
-- **The data table's columns button has no tooltip** (found by A655's on-screen check, 2026-10-21).
-  The icon-only button at the end of a list's search box opens **Customise**, but hovering or
-  focusing it shows nothing, while the Filters button beside it shows "Filters"
-  (`packages/ui/src/components/wt-data-table.ts`, the columns button near :2965 against the Filters
-  button's tooltip near :2791). Give it the same tooltip; the Products guide currently calls it "the
-  columns button at the right-hand end of the list's search box".
+- **The data table's columns button has no tooltip**
+  [Detail](backlog/catalogue.md#the-data-tables-columns-button-has-no-tooltip)
 
 - **A product in more than one category (owner 2026-10-10, A461 amendment 4).** Define the
   storage, editor and what Move/Remove do to memberships. Products currently has one category;
   A461 shows existing placements only. This work is not queued.
 
-- **The Products tree's hidden counts may be placed against the page at narrow width** — not
-  measured; left open by A453. At 440px or less the tree hides its counts visually
-  (`wt-data-table[narrow]::part(count)`, `apps/dashboard/src/widgets/product-list.ts`) as the menu's
-  Structure tab does. A453 found the Structure tab's hidden root count was positioned against the
-  page, not the table's scroll box, and gave its root label `position: relative`; Products' root
-  label has no such rule. **Next action:** measure at phone width with a long name before changing
-  anything.
+- **The Products tree's hidden counts may be placed against the page at narrow width** — not measured; left open by A453.
+  [Detail](backlog/catalogue.md#the-products-trees-hidden-counts-may-be-placed-against-the-page-at-narrow-width)
 
-- **On a phone, sections nested more than four deep read flat in the Structure tab** — left open
-  by A453. At narrow width `wt-data-table` stops indenting after four levels
-  (`min(var(--tree-depth, 0), 4)`, `packages/ui/src/components/wt-data-table.ts`), and the menu's
-  root row now takes one of them. A453's look at 390px wide: level 4, level 5 and a product in
-  level 5 all start at the same x. **Next action:** the owner decides whether the phone indent
-  should go deeper (a shared table rule, so the Products tree changes too).
+- **On a phone, sections nested more than four deep read flat in the Structure tab**
+  [Detail](backlog/catalogue.md#on-a-phone-sections-nested-more-than-four-deep-read-flat-in-the-structure-tab)
 
 - **Menu-root enabled-language fallback when content languages are unset (A420 review).**
-  `updateMenuDetails` checks map keys using English as its fallback; section and include-folder
-  writers use their supplied venue fallback. Decide whether the menu-root writer should take
-  that fallback too. `content-translations.test.ts`, “menu, section and folder writes keep enabled
-  maps optional with %s configuration”, retains the unset-configuration difference. Inline saves
-  use their resolved venue context.
+  [Detail](backlog/catalogue.md#menu-root-enabled-language-fallback-when-content-languages-are-unset-a420-review)
 
 - **Translation report excludes image names (C122, #1006).** The media module's
   `contentTranslations` seat supplies only a kind and an id. Showing a name or editor link needs
@@ -864,42 +826,24 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   [Detail](backlog/catalogue.md#test-titles-in-packagescatalogue-a-comments-only-change-cannot-touch)
 
 - **The media library still reads every matching image for search and name sorting, inside the venue
-  write lock** — OPEN (found 2026-09-23, task F1's review wave). The route (`GET /management-api/images`)
-  uses `withTransaction`, the venue's exclusive write lock, so these remaining scans can delay a
-  sale. **Next action:** decide how far to push search ranking into SQL; measure a way to bound name
-  sorting without changing its results.
+  write lock** — OPEN (found 2026-09-23, task F1's review wave).
   [Detail](backlog/catalogue.md#the-media-library-still-reads-every-matching-image-for-search-and-name-sorting-inside-the-venue-write-lock)
 
 - **A negative catalogue price can still be stored by a direct call** — OPEN (left by #487).
-  `createProduct` and `updateProduct` (`packages/catalogue/src/operations.ts`) still accept and
-  store a negative when called directly — a seed, a script or a future caller — and
-  `products.unit_price` carries no `>= 0` check.
   [Detail](backlog/catalogue.md#a-negative-catalogue-price-can-still-be-stored-by-a-direct-call)
 
 - **Two price rules disagree about a value that is not negative** — OPEN (found 2026-09-21, task
-  N4). **Next action:** decide whether one rule should govern every catalogue price, and if so which
-  — and check each dashboard form against it before changing the server, since a server stricter
-  than its own form is the failure #485 met.
+  N4).
   [Detail](backlog/catalogue.md#two-price-rules-disagree-about-a-value-that-is-not-negative)
 
 - **A case the content-language decisions leave open, built with the plan's default unless the owner
-  says otherwise** (plan, "Open points"): receipts outside Catalonia stay free, Spanish by default.
-  Left by W109 (#1320, #1322); the decisions are in
-  [products.md](developers/products.md#content-languages-per-region). The other open case, a
-  Spanish venue with no known province, is settled (owner, 2026-10-17: Spanish stays enabled
-  everywhere; entered customer text is optional).
+  says otherwise**: receipts outside Catalonia stay free, Spanish by default.
+  [Detail](backlog/catalogue.md#a-case-the-content-language-decisions-leave-open-built-with-the-plans-default-unless-the-owner-says-otherwise)
 
 - **Loose ends left by W87 (#1191).**
-  - Between 30rem and 50rem a long menu name can still make the Menus table wider than its box, so
-    the end of the live version's time scrolls under the pinned Actions column; the link and the
-    row menu stay in view.
-
   [Detail](backlog/catalogue.md#menus-list-changes-column-and-top-aligned-rows-w87-1191-left-open)
 
-- **A menu's Structure tab is one tree (W88, #1209): not checked** — in Spanish at 390 px the Type
-  column scrolls partly under the pinned Actions column, which is the table's own sideways scroll;
-  the heading's height with "Checking…" or "Could not be checked" was not measured against the other
-  states.
+- **A menu's Structure tab is one tree (W88, #1209): not checked**
   [Detail](backlog/catalogue.md#a-menus-structure-tab-is-one-tree-w88-1209-not-checked)
 
 - **A547 — Preview tab: "Publish later" sits to the left of "Publish now", and "Scheduled versions"
@@ -907,23 +851,14 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   line, Publish later first; the heading and table drawn only while at least one version is queued.
   [Detail](backlog/catalogue.md#a547--preview-tab-publish-later-sits-to-the-left-of-publish-now-and-scheduled-versions-shows-only-when-something-is-scheduled)
 
-- **Loose ends left by W89 (#1239).**
-  - Not checked: the Price overrides tab on the running dev stack — a real save and the re-read
-    after it, and Undo against the real server (the look in Chromium used mounted widgets only).
-  - A size with its own price decides whether its clash comes from its product by matching the two
-    clashes, which can be misread in a rare setup where they match exactly — telling them apart
-    needs the prices read to say which level a clash came from. Raised in #1239's review and not
-    taken.
-
+- **Loose ends left by W89 (#1239).** Not checked: the Price overrides tab on the running dev stack
+  — a real save and the re-read after it, and Undo against the real server (the look in Chromium
+  used mounted widgets only).
   [Detail](backlog/catalogue.md#a-menus-prices-are-one-editable-price-overrides-field-per-row-w89-1239-left-open)
 
-- **Loose ends left by W92 (#1250).**
-  - In the Structure tree, closing the section form opened from a section's swatch puts focus on
-    the row's ⋮ menu rather than back on the swatch that opened it. No test pins it.
-  - At 390 px the Structure tree clips a long product name under the pinned Actions column, so a
-    long name's swatch needs a sideways scroll to reach; since A294 this no longer applies to
-    sections, and it stays open for products.
-
+- **Loose ends left by W92 (#1250).** In the Structure tree, closing the section form opened from a
+  section's swatch puts focus on the row's ⋮ menu rather than back on the swatch that opened it. No
+  test pins it.
   [Detail](backlog/catalogue.md#a-product-has-one-colour-everywhere-w92-1250-left-open)
 
 - **A339 test-fixture follow-up:** `apps/dashboard/src/api/menu-read-controller.test.ts` and
@@ -932,9 +867,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   [Detail](backlog/catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
 
 - **The Home page tab's Till preview draws the menu at the frame's full width, but on a real till
-  the menu shares the screen with the order**, so the Till preview can show up to about four more
-  columns than the till does. Not changed, because the real width depends on the till screen's
-  layout. Left open by W93 (#1287).
+  the menu shares the screen with the order**
   [Detail](backlog/catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
 
 - **A Home page tab product shortcut reached only through a disabled included menu reads "Not
@@ -943,34 +876,21 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   Left open by A816 (#1880).
 
 - **A Home page shortcut's bin button stays live while a shortcut reorder or a display setting is
-  being saved.** It is greyed only while a shortcut is added or removed: `#moveShortcut`
-  (`apps/dashboard/src/screens/menus-screen.ts`) leaves the screen's `busy` flag unset so a
-  keyboard user's focus stays on the grip, and display saves use their own flag. A815 asked for the
-  button "greyed while a save is out"; decide whether a remove during a reorder save should wait,
-  be refused, or is fine as it is. Not tried in a browser. Left open by A815 (#1880).
+  being saved.**
+  [Detail](backlog/catalogue.md#a-home-page-shortcuts-bin-button-stays-live-while-a-shortcut-reorder-or-a-display-setting-is-being-saved)
 
-- **A switched-off menu's Home page tab would give every hidden shortcut the wrong reason**: each
-  section reads "Not shown: nothing to order in this section" and each product "Not shown: not on
-  sale on this menu" (`#hiddenReason`, `apps/dashboard/src/widgets/device-home-preview.ts`),
-  measured by finish-branch's worker in a test. Nothing outside tests switches a menu off today
-  (`deactivateCatalogue` has no other caller); revisit when something does. Left open by A816
-  (#1880).
+- **A switched-off menu's Home page tab would give every hidden shortcut the wrong reason**
+  [Detail](backlog/catalogue.md#a-switched-off-menus-home-page-tab-would-give-every-hidden-shortcut-the-wrong-reason)
 
-- **The Structure tab's "Edit section" form may stay open when another menu is opened.** Opening
-  another menu (`#select`, `apps/dashboard/src/screens/menus-screen.ts`) closes the bulk dialogs and
-  the single "Delete section" one (A817, #1885 found the delete dialog acting on the first menu's
-  section from the second menu's screen), but does not reset `editingSection`. Not tried: whether
-  the form stays open, and whether saving it then writes the first menu's section. Left open by A817
-  (#1885).
+- **The Structure tab's "Edit section" form may stay open when another menu is opened.** Not tried: whether the form stays open, and whether saving it then writes the first menu's section.
+  [Detail](backlog/catalogue.md#the-structure-tabs-edit-section-form-may-stay-open-when-another-menu-is-opened)
 
 - **Configuration export/import still leaves publications behind.** Reset the venue instead of
   republishing old menus. Left open by A291 (2026-10-06, removed format-2 preview/republication).
   [Detail](backlog/catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
 
 - **The dashboard's Home page preview (`apps/dashboard/src/widgets/device-home-preview.ts`) is a
-  hand copy of the till's menu browser** (`apps/till/src/widgets/menu-browser.ts`). A change to the
-  till's tiles has to be repeated by hand, and no test sees the two drift apart. Proposed follow-up:
-  move the shared logic and CSS beside `arrangeHome` in `packages/catalogue/src/device-home.ts`.
+  hand copy of the till's menu browser**
   [Detail](backlog/catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
 
 - **A Products drag: a category deleted elsewhere before this screen refreshed is still sent**, and
@@ -985,54 +905,30 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   `packages/ui`.
   [Detail](backlog/catalogue.md#the-menus-structure-tree-notices-silent-branch-closure-by-watching-its-table-redraw--open-w88)
 
-- **"Open <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88).** The
-  other items in the tree's row menus are greyed out while a change is out; the link to the included
-  menu's own editor is not marked `aria-disabled="true"` then, so it stays live (marked so,
-  `wt-row-actions` would grey it out and cancel a click or middle-click on it). (A322 renamed it
-  from "Edit <menu>", so that the include's own Edit could sit beside it.)
+- **"Open <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88).**
+  [Detail](backlog/catalogue.md#open-menu-in-an-included-menus--can-be-followed-while-the-tree-is-busy--open-w88)
 
-- **Loose ends left by A322 (#1372, an included menu can show its sections directly).**
-  - A folder's fixed photo shows on the till only in Thumbnails mode, as a section's photo does.
-  - A home shortcut to a menu that is included in two lists of one menu opens the top-level copy,
-    else the copy indexed last.
-  - A fixed value that happens to equal the included menu's value when the dialog opens is saved
-    back as "follow" the next time the dialog is saved: the dialog compares with the included
-    menu's value and cannot tell the two apart.
-  - The live photo triggers for products and sections (media `0005` to `0007`) look up
-    `products.image` and `sections.image`, which no index covers. Its own item: a performance fix
-    with a media migration.
-
+- **Loose ends left by A322 (#1372, an included menu can show its sections directly).** A folder's
+  fixed photo shows on the till only in Thumbnails mode, as a section's photo does.
   [Detail](backlog/catalogue.md#an-included-menu-can-show-its-sections-directly-a322-1372-left-open)
 
-- **Loose ends left by A380 (#1385).**
-  - A configuration import stores a fixed folder name as given, spaces included, where a save
-    through the dialog or the route trims it. A name of spaces only shows as no name either way.
-  - After browser Back to another menu with no edits made, the include's Edit dialog stays open
-    over that menu, as the section Edit dialog does: choosing another menu does not close either
-    (read in `menus-screen.ts`, not run).
+- **Loose ends left by A380 (#1385).** A configuration import stores a fixed folder name as given,
+  spaces included, where a save through the dialog or the route trims it.
+  [Detail](backlog/catalogue.md#loose-ends-left-by-a380-1385)
 
-- **Loose ends left by W83 (#1193).**
-  - A desktop window narrow enough to leave the Products table under 768px gets the full-screen
-    Filters panel — at which window width that happens with the sidebar shown was not measured.
-  - The Products 768px side-panel threshold is tied by hand to token sizes (768 − 7×44 − 12 = 448,
-    just above the table's 440px narrow-tree width). Left open by W83's review, not started.
-
+- **Loose ends left by W83 (#1193).** A desktop window narrow enough to leave the Products table
+  under 768px gets the full-screen Filters panel — at which window width that happens with the
+  sidebar shown was not measured.
   [Detail](backlog/catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
 
 - **Not covered by W85b: while a category is being renamed, its count and asterisk follow the name
   box and are not capped.** Left open by W85b (#1243).
   [Detail](backlog/catalogue.md#products-at-phone-width-a-long-name-runs-under-the-pinned-actions-column-w85b-w85c-w85e-left-open)
 
-- **Products at phone width: what W85e left for the owner** (the owner's answer to W85b's open point
-  was a "maybe"): keep, or undo, either half; hide the folder icon too at phone width so product and
-  category names line up again (since A294 that slot holds the category's colour square, so this now
-  means moving or hiding the square); narrow the indent step. Left open by W85e (#1275).
+- **Products at phone width: what W85e left for the owner**
   [Detail](backlog/catalogue.md#products-at-phone-width-a-long-name-runs-under-the-pinned-actions-column-w85b-w85c-w85e-left-open)
 
-- **Catalogue names (W72): there is no unique index, and no backfill.** A row whose name has not
-  been written since the column was added keeps a null key, and the check does not see it until its
-  name is next written (every product editor save writes it) or the venue is reset. Stored data is
-  not renamed: a venue that already holds duplicates keeps them until someone renames one.
+- **Catalogue names (W72): there is no unique index, and no backfill.**
   [Detail](backlog/catalogue.md#catalogue-no-two-categories-with-one-parent-and-no-two-active-products-share-a-name-w72-to-w72h-left-open)
 
 - **A person who may not read routing sees the "Kitchen routing unavailable" line above the
@@ -1045,10 +941,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
 
 - **Translate all: an Edit translations dialog left open anywhere clears the "Translations ready"
-  notice.** The dialog's live reload reads the suggestions, and that read marks the run opened
-  (`apps/server/src/content-suggestions-api.ts`), so a dialog forgotten on another device means
-  nobody sees the notice. Seen in the Santet run (A689-21). Working as built; the owner decides
-  whether it should change.
+  notice.**
+  [Detail](backlog/catalogue.md#translate-all-an-edit-translations-dialog-left-open-anywhere-clears-the-translations-ready-notice)
 
 - **Cloud services shows Translate all only from the second status check after connecting.** The
   first Refresh status is a lease renewal, and only a configuration request asks for services
@@ -1059,10 +953,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   both sides check would catch drift in CI. A contract change for Cloud's side.
   [Detail](backlog/catalogue.md#translate-all-shared-collect-page-test-vectors)
 
-- **Translate all: a job that ends before any item is accounted for does not count its items as lost.**
-  It keeps the counts of its last progress reading, usually no failures, so the notice for an
-  earlier job's waiting suggestions does not say these items could not be done (A689-21, plan
-  Decision 8's limit).
+- **Translate all: a job that ends before any item is accounted for does not count its items as
+  lost.**
   [Detail](backlog/catalogue.md#translate-all-a-job-that-ends-before-any-item-is-accounted-for-does-not-count-its-items-as-lost)
 
 - **Loose ends left by A689's fifth PR.**
@@ -1075,18 +967,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   job past 20 with 400, which reaches the dialog as `cloud.request_invalid` (ruling W1b, A689's
   second PR). A box-side refusal before any job is built would say what is wrong.
 
-- **Translate all: a job the box ends itself is marked released without a call to Cloud, and
-  Cloud can still hold it.** A submit Cloud accepted whose reply was lost is the worst case: the
-  box never learned Cloud's job id, so it could not release the job even once Cloud finished it.
-  What would fix it is open.
+- **Translate all: a job the box ends itself is marked released without a call to Cloud, and Cloud
+  can still hold it.**
   [Detail](backlog/catalogue.md#translate-all-a-job-the-box-ends-itself-is-marked-released-without-a-call-to-cloud-and-cloud-can-still-hold-it)
 
-- **Translate all: open points from the review of A689's second PR.** (1) A suggestion's
-  out-of-date check starts from the item as it stood when the results were stored, not when the
-  job was sent. (2) A waiting placeholder stops every later run from asking for that item until
-  someone discards it. (3) A variant whose product's staff name is over 500 characters is sent with
-  no product as context. (4) A venue with Valencian (`ca-ES-valencia`) enabled would have every job
-  refused by the fake Cloud. Not run against Cloud.
+- **Translate all: open points from the review of A689's second PR.**
   [Detail](backlog/catalogue.md#translate-all-open-points-from-the-review-of-a689s-second-pr)
 
 - **Translate all: the notice's count can be higher than what the dialog shows.** `waiting`
@@ -1094,18 +979,13 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   suggestion with text, including out-of-date ones, ones for deleted items or switched-off languages,
   and ones left from an earlier run. Opening the dialog clears the notice, which limits the effect.
 
-- **Translate all: three limits the translations dialog accepts for now (A689's fourth PR, 2026-10-15).**
-  A Discard whose delete request never answers keeps Save disabled, across closing and reopening the
-  dialog, until the page is reloaded, and nothing says why: a delete has no time limit (only reads
-  do, `packages/dashboard-kit/src/request.ts`).
+- **Translate all: three limits the translations dialog accepts for now (A689's fourth PR,
+  2026-10-15).**
   [Detail](backlog/catalogue.md#translate-all-three-limits-the-translations-dialog-accepts-for-now-a689s-fourth-pr-2026-10-15)
 
 - **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
-  (found 2026-10-02 by A172, not measured).** The order path freezes the variant's text in the
-  default content language, under every receipt-language key, before it gets there
-  (`defaultLanguageDescriptions`, called by `priceOrderLines` in
-  `apps/server/src/working-order.ts`), so whether any surface shows the difference is unknown;
-  reproduce before fixing. [Detail](backlog/catalogue.md#joincustomerpresentationtext-passes-the-requested-language-where-the-default-belongs--open-found-2026-10-02-by-a172-not-measured)
+  (found 2026-10-02 by A172, not measured).**
+  [Detail](backlog/catalogue.md#joincustomerpresentationtext-passes-the-requested-language-where-the-default-belongs--open-found-2026-10-02-by-a172-not-measured)
 
 - **Language resolution follow-ons** — there is still no single shared rule: the receipt's
   `lineName` (`apps/server/src/receipt-document.ts`) and the kitchen ticket's `ticketName`
@@ -1113,10 +993,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   [Detail](backlog/catalogue.md#language-resolution-follow-ons)
 
 - **Product folders, menus that include menus, and prep station routing: partly built (design
-  approved 2026-09-30).** The
-  [design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) is built in slices. The
-  delete dialog counts the routing cells removed but lists no products whose destination changes,
-  and **Move to…** changes folder ancestry without a routing preview.
+  approved 2026-09-30).**
   [Detail](backlog/catalogue.md#product-folders-menus-that-include-menus-and-prep-station-routing-partly-built-design-approved-2026-09-30)
 
 - **Sales classification and the menus plan — what they left open.** `Product.categoryId` and
@@ -1124,9 +1001,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   [Detail](backlog/catalogue.md#sales-classification-and-the-menus-plan--what-they-left-open)
 
 - **Content languages and the image library (#339, #344) — what is left open.**
-  [Operator guide](../apps/server/src/guide/en/content-and-images.md). **A new picture consumer has to add a real database
-  reference, not just store a filename.** **The online language selector has nothing to select for
-  yet.**
   [Detail](backlog/catalogue.md#content-languages-and-the-image-library-339-344--what-is-left-open)
 
 - **The upload limit is 20 MB (owner decision 2026-09-23).** It bounds how large an upload the
@@ -1134,20 +1008,15 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   phones produce has not been measured. Left open by photos shrunk on upload (#543).
 
 - **Category authoring serialises across the whole database, and nobody has measured what that
-  costs.** `withTransaction` admits one write transaction per venue file
-  (`packages/catalogue/src/categories.ts`, above `listCategories`). **Next action:** measure it
-  before anyone widens category authoring to more concurrent editors. Left open by product
-  categories (#340, [API and integration guide](developers/product-categories.md)).
+  costs.**
+  [Detail](backlog/catalogue.md#category-authoring-serialises-across-the-whole-database-and-nobody-has-measured-what-that-costs)
 
 - **Extras and Options — deliberate limits, and what is left open.**
   [integration contract](developers/modifiers.md).
   [Detail](backlog/catalogue.md#extras-and-options--deliberate-limits-and-what-is-left-open)
 
 - **Image library (#547's review, `packages/media/src/dashboard/image-library.ts` and
-  `image-picker.ts`).** (1) When the picker is handed a new live-data source, the library keeps
-  listening to the first one until its next load. (2) The delete confirmation's Close button has no
-  in-flight check of its own and relies on being drawn disabled. From "Review points left for the
-  owner".
+  `image-picker.ts`).**
   [Detail](backlog/catalogue.md#image-library-547s-review-packagesmediasrcdashboardimage-libraryts-and-image-pickerts)
 
 - **The Price heading reads "Price per portion" also over a row sold by the unit.** Still open from
@@ -1156,57 +1025,31 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   Extras editor shows Portion beside Price, #1194).
 
 - **A name stored under a regional code such as `en-GB` is read by the forms as the plain code
-  first, then its regional ones** (`languageText`, `apps/dashboard/src/widgets/form-fields.ts`). A
-  till or receipt asking for `en-GB` reads `en-GB` before `en`, so a map holding both can show one
-  name in the form and serve the other. Left open by W77 (#1197; W77a #1206).
+  first, then its regional ones**
   [Detail](backlog/catalogue.md#a-name-stored-under-a-regional-code-such-as-en-gb-is-read-by-the-forms-as-the-plain-code-first-then-its-regional-ones)
 
 - **At phone width in a right-to-left layout, a long name in the Products list can run under the
-  pinned Actions column** (`#fitNames`, `apps/dashboard/src/widgets/product-list.ts`, measures the
-  room from the left). Found by A330's Codex review and reproduced by it on `main` before #1354. Not
-  fixed; next: a browser test at 390 px with `dir="rtl"` and a long unbroken name. Left open by
-  A330 (variant rows show their photo, #1354).
+  pinned Actions column**
+  [Detail](backlog/catalogue.md#at-phone-width-in-a-right-to-left-layout-a-long-name-in-the-products-list-can-run-under-the-pinned-actions-column)
 
-- **Loose ends left by A343 (a menu's Price overrides tab tidied, #1368).**
-  - The Price overrides tab's save message comes after the whole table in tab order, so a keyboard
-    user cannot reach Undo from a field within its 5 seconds (decided as built, not tested with a
-    user). Options: a keyboard shortcut for Undo, or a message that waits while focus stays in the
-    field it saved.
-  - In Spanish a range's placeholder reads "8.00 – 12.00" with full stops, and a refused field is
-    drawn about 14 px wider than the others (seen in #1368's screenshots). A344 removed the "?" and
-    the Resolve column and keeps each price box on screen at 390 px; the wider refused field and
-    the placeholder's full stops were not re-checked.
-    [Detail](backlog/catalogue.md#in-spanish-a-ranges-placeholder-reads-800--1200-with-full-stops-and-a-refused-field-is-drawn-about-14-px-wider-than-the-others)
+- **Loose ends left by A343 (a menu's Price overrides tab tidied, #1368).** The Price overrides
+  tab's save message comes after the whole table in tab order, so a keyboard user cannot reach Undo
+  from a field within its 5 seconds (decided as built, not tested with a user).
+  [Detail](backlog/catalogue.md#loose-ends-left-by-a343-a-menus-price-overrides-tab-tidied-1368)
 
 - **A353 — Preview's changes: an "Undo" link that puts one change back to the live version** —
   owner, 2026-10-07; PARKED, not queued — owner 2026-10-08: take it from here when a lane has room.
-  Its work so far is on a LOCAL branch only — `feat/menu-preview-undo` at `e04b3abe7`, in the
-  worktree `waitron-feat-menu-preview-undo` (no push, no pull request).
   [Detail](backlog/catalogue.md#a353--previews-changes-an-undo-link-that-puts-one-change-back-to-the-live-version)
 
-- **Loose ends left by A347 (#1392).**
-  - An imported bundle may carry priced menu rows for a product no menu reaches, and adding the
-    product back to a menu revives those prices (found in A347's review, believed to predate it).
-    Options: run `syncMenuOffers` over every menu after an import, or refuse priced rows no menu
-    reaches.
-  - A bulk Disable of 500 products could not read the count in A347's review (HTTP 431, because
-    the ids go in the URL), so the dialog says "every menu"; the smallest count that fails was not
-    measured. A435-1 (2026-10-09) renames the action Archive; the request still carries ids in the
-    URL. The earlier 500-product failure has not been remeasured.
-  - Deleting a category with its contents says its products come off every menu, with no count.
+- **Loose ends left by A347 (#1392).** An imported bundle may carry priced menu rows for a product
+  no menu reaches, and adding the product back to a menu revives those prices (found in A347's
+  review, believed to predate it).
+  [Detail](backlog/catalogue.md#loose-ends-left-by-a347-1392)
 
-- **Loose ends left by A346 + A348 (a price this menu sets stands out, an Available column, and
-  Edit product, #1408).**
-  - At a 320px window only "12.50 – 15.00" was measured in a menu's Price overrides tab.
-  - In the real dashboard at a 390px window the table is 358px wide (read once in the dashboard's
-    test browser; no test pins it). Whether one-word names keep their line there while no field
-    shows a range has not been measured. Options for more room: less page padding on phones, or a
-    shorter Actions heading.
-    [Detail](backlog/catalogue.md#in-the-real-dashboard-at-a-390px-window-the-table-is-358px-wide)
-  - On the Structure tab at 390px the tree's own box scrolls sideways under the pinned ⋮, by
-    design (`pinned: "end"`); in Spanish Disponible now sits wholly behind it until the tree is
-    scrolled. Letting long names wrap at narrow widths may free the room; not tried.
-    [Detail](backlog/catalogue.md#on-the-structure-tab-at-390px-the-trees-own-box-scrolls-sideways-under-the-pinned-)
+- **Loose ends left by A346 + A348 (a price this menu sets stands out, an Available column, and Edit
+  product, #1408).** At a 320px window only "12.50 – 15.00" was measured in a menu's Price overrides
+  tab.
+  [Detail](backlog/catalogue.md#loose-ends-left-by-a346--a348-a-price-this-menu-sets-stands-out-an-available-column-and-edit-product-1408)
 
 - **The reveal fix corrects only a row left under the headings.** A row revealed at the bottom edge
   is not corrected, and by the same whole-pixel rounding it can sit up to half a pixel past the
@@ -1215,15 +1058,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 - **Loose ends left by A263 (#1151)** — OPEN, unqueued.
   [Detail](backlog/catalogue.md#what-1151-left-open-2026-10-03)
-  - The database still accepts a maximum of 0 — the owner has not asked for it. The CHECK on
-    `extra_lists` allows `max_picks = 0` when `min_picks` is 0, and configuration transfer copies
-    stored lists without the request check, so a stored 0 can still arrive. Refusing it in the
-    database is a table rebuild (CLAUDE.md §3's rebuild rule).
-  - A very long number is cut off in the narrower box. The request check accepts up to 2147483647,
-    which needs about 82px against the 66px between the buttons (measured by #1151's review). Left
-    alone because widening the box would undo the size the owner approved.
-  - At 390px the extras table's Price column runs past its scroll area's right edge until
-    scrolled. (2026-10-04: W75 added a Portion column and widened the table; not re-measured.)
 
 - **In the product editor's Descriptors fold at 390 a long English description fills both of its
   lines** — looked at 2026-10-03, after A200 (#1076): so the Spanish one does not show at all on
@@ -1278,13 +1112,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 - **A refused default colour reuses `category.invalid {field:"color"}`, as the VAT default reuses
   `product.invalid`** — left open by A332 (#1430).
 
-- **A category's naming square does not announce the inherited colour's source.** While you add or
-  rename a category, its square says only "Choose the colour" even when its dashed border marks an
-  inherited colour. The at-rest row names the source. Decide how the naming square should announce
-  that source, including a category whose new name has not been saved, and check the English and
-  Spanish accessible names. Found in A820's run-it review; the label and inherited fill are checked
-  together in `apps/dashboard/src/widgets/product-list.test.ts` ("puts a colour square showing the
-  box's colour").
+- **A category's naming square does not announce the inherited colour's source.**
+  [Detail](backlog/catalogue.md#a-categorys-naming-square-does-not-announce-the-inherited-colours-source)
 
 - **Re-check whether these forms keep an edit’s unsaved state when taken out of the page and
   put back.** Left open after the unit-form fix in A397 part 2 (#1439):
@@ -1299,13 +1128,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   (#1101) (`packages/catalogue/src/configuration-transfer.ts`), so an imported variant can arrive
   with a unit row, which those reads then ignore.
 
-- **At 390px the items table is wider than its scrolling box with or without the mark** — left open
-  by A223 (#1098, an extras list's product dropdown greys a product with variants), seen, not
-  changed (scroll width 496 in a 356 box), and the mark wraps in the narrow product column, so a
-  marked row is about twice as tall as its neighbours. Also left open by A178g (#1021): at 390px the
-  extras list form's item table runs past the dialog's edge, its headings cut ("Preselecc…"), seen
-  in its LOOK, not changed and not checked against `main` before it (screenshots kept outside the
-  repository).
+- **At 390px the items table is wider than its scrolling box with or without the mark**
+  [Detail](backlog/catalogue.md#at-390px-the-items-table-is-wider-than-its-scrolling-box-with-or-without-the-mark)
 
 - **From #541's review, neither blocking:** the product list shows a variant's blank price as its
   parent's with no marking (`apps/dashboard/src/widgets/product-list.ts`) — whether to grey it is
@@ -1323,11 +1147,10 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   (`packages/media/src/dashboard/client.ts`). **Next action:** drop the field, or say what it is
   kept for.
 
-- **Loose ends left by A663 Part 2d (#1779).**
-  - The dashboard lets a manager attach an extras list to a product sold in a unit with decimals,
-    on a scale or with the measure switch on, and the till then offers no extras for it, with no
-    word to the manager. Refuse it, or say so, in the product editor (`writeProductModifiers`,
-    `packages/catalogue/src/product-modifiers.ts`, checks no unit).
+- **Loose ends left by A663 Part 2d (#1779).** The dashboard lets a manager attach an extras list to
+  a product sold in a unit with decimals, on a scale or with the measure switch on, and the till
+  then offers no extras for it, with no word to the manager.
+  [Detail](backlog/catalogue.md#loose-ends-left-by-a663-part-2d-1779)
 
 - **A dish in a measure unit is still rung up one unit per tap** (A821f). A 250 ml line is 1 ml per
   tap, splits into 250 lines and counts as 250 items. Whether a measure should ask its quantity as
@@ -1364,12 +1187,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   till's `product-name.ts` with nothing pinning them equal.
   [Detail](backlog/catalogue.md#createproduct-and-updateproduct-duplicate-the-legacy-pricingunit-fallback)
 
-- **The combined end-to-end journey has not been walked**: creating a unit, a category and the
-  extras and options a product carries from inside a dirty product draft, through the actual routes
-  against a real database, and taking the result through the till. **Next action:** walk it once
-  at the real box with the owner present, alongside **The displays and the printers walked at
-  the real box** (_What to work on next_), after the owner is back on 2 November (owner,
-  2026-10-17).
+- **The combined end-to-end journey has not been walked**
+  [Detail](backlog/catalogue.md#the-combined-end-to-end-journey-has-not-been-walked)
 
 - **The catalogue picker was deleted and nothing replaced it.** `selectedCatalogueId`
   (`catalogue-screen.ts`) takes the first catalogue in the list, which is also the one every new
@@ -1381,11 +1200,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   `extra_lists.name` share the pattern (`packages/catalogue/drizzle/0000_baseline.sql`). **Next
   action:** decide whether the columns want a check constraint and the write paths a domain refusal.
 
-- **Retire the product editor's required-translation refusal mapping.** Customer names are
-  optional, but `catalogue-screen.ts` still handles `content.translation_required` through
-  `productEditorTranslationField`. Trace the product routes before removing that branch and its
-  tests. Media still validates required image names and translates its refusal to
-  `image.translation_required` with an explicit `names` field.
+- **Retire the product editor's required-translation refusal mapping.**
+  [Detail](backlog/catalogue.md#retire-the-product-editors-required-translation-refusal-mapping)
 
 - **Smaller things #379 surfaced and did not take.** The kitchen screens show a kitchen-resolved
   dish name above modifier text resolved in the device's own locale. A joined customer-facing line
@@ -1396,11 +1212,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   editor, the till's buttons and its order list, not to these screens.
 
 - **A928. The Courses list may move its rows under a held drag (found by A758-2's review, not
-  tested).** `apps/dashboard/src/widgets/course-list.ts` holds an incoming list only while a move
-  is unsaved (`#readDropped = this.#movesOut > 0`), and a pointer drag saves only on drop, so a live
-  list arriving mid-drag looks to be applied under the finger. A758-2 fixed the same shape on the
-  Voids and comps page by holding the list while `ReorderController.dragging` is true. Write the
-  failing test first.
+  tested).**
+  [Detail](backlog/catalogue.md#a928-the-courses-list-may-move-its-rows-under-a-held-drag-found-by-a758-2s-review-not-tested)
 
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
