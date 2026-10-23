@@ -2748,6 +2748,12 @@ and the staffing grid's block editor in the A761 entry):
   bytes to free (it then reads "Nothing to free"), on a mirror or a fenced node, and after a press
   until the box is read again; `primary` once it can act, keeping `primary` while its own deletion
   is being sent.
+  A798-B slice 7b brought the same page's Retry now under it. It is drawn on the Tax agency row
+  only while the box's read carries what waits to be sent (`outbox`); once drawn, it is
+  `secondary` and disabled while no record waits to be tried again, while the row has no
+  `fiscal.records_unsent` notice, while the box waits for its tax-agency certificate, and after a
+  press the box answered until the box is read again; `primary` once it can act, keeping `primary`
+  while its own press is being sent.
   A758-6 brought the till's two Refund buttons under it, on a receipt's Refund a payment and on
   Give back a payment: drawn `secondary` while no reason is chosen or the reasons are loading (and,
   on a receipt's refund, while no payment is picked), `primary` once a reason is chosen, keeping
@@ -5412,11 +5418,28 @@ alert list, and holds no staged input.
   nothing it deletes is something the box cannot make again. After a press, "Freed {size}." is
   announced and every open read, the bell's too, is read again. While a backup runs, a line says
   its working files are not counted.
-- **Errors.** A refused press shows its message above the rows; a failed box read shows the read
-  error there, never replacing a press's refusal.
+- **Retry now.** On the Tax agency row, before its Go to buttons, "Retry now" and a help-mode "?"
+  that opens the guide's `retry-now` section. It is drawn only while the box's read carries
+  `outbox`, which is `null` when the box does not send records or reading them failed. Its states
+  follow the button rule (Forms, above): quiet and disabled while no record waits, while the row
+  has no `fiscal.records_unsent` notice, while the box waits for its tax-agency certificate, and
+  after a press the box answered until the box is read again; `primary` with `loading` while its
+  own press is sent. While the box waits for its certificate and the row carries no
+  `fiscal.awaiting_certificate` alert, "Nothing can be sent until the tax agency's certificate is
+  installed." is shown under the row's words. No confirmation. After a press, "{count} records will
+  be tried again as soon as the tax agency allows the next send." (or "1 record …") is announced
+  under the row's words and every open read, the bell's too, is read again; the first box read that
+  shows no record waiting, or shows no `fiscal.records_unsent` notice, takes the sentence away, but
+  a read whose `noticesUnavailable` is not empty does not count as showing the notice gone. "No
+  record was waiting to be tried again." stays until the next press. The Tax agency row's detail is
+  "Last accepted {time}" or "None accepted yet", and nothing while `outbox` is `null`.
+- **Errors.** A refused Free shows its message above the rows, and a refused Retry now under the
+  Tax agency row's words; a failed box read shows the read error above the rows, never replacing a
+  press's refusal.
 
 Cases: `apps/dashboard/src/screens/box-status-screen.test.ts`, its `box-status-screen.a11y.test.ts`,
-and `box-status-rows.test.ts`.
+`box-status-rows.test.ts`, and for Retry now `box-status-screen.retry.test.ts`,
+`box-status-screen.retry.a11y.test.ts` and `box-status-rows.tax.test.ts`.
 
 ### Counter basket and payment space
 
