@@ -866,3 +866,208 @@ it("recognizes a cancelled scratch request that rejects without creating a root"
   await expect(run(s)).rejects.toThrow("fetch.deadline");
   expect(s.roots).toEqual([]);
 });
+
+describe("reviewed custody and HTTP boundaries", () => {
+  it("keeps unresolved allocation ahead of closure and deadline failures", async () => {
+    const s = setup();
+    s.deps.deadlines = { totalMs: 10, cleanupMs: 20 };
+    s.deps.scratch = () => new Promise(() => {});
+    s.deps.transport.close = () => new Promise(() => {});
+    await expect(run(s)).rejects.toThrow("fetch.cleanup");
+  });
+  it("keeps credential residue ahead of parent cancellation", async () => {
+    const s = setup();
+    const controller = new globalThis.AbortController();
+    s.deps.signal = controller.signal;
+    const close = s.deps.credentialScope.close;
+    s.deps.credentialScope.close = async () => {
+      s.surfaces.environment = ["SENTINEL"];
+      controller.abort();
+      return close();
+    };
+    await expect(run(s)).rejects.toThrow("fetch.credentials");
+    expect(s.roots.every((r) => r.disposed)).toBe(true);
+  });
+  it("closes both credential seats after a malformed signal", async () => {
+    const s = setup();
+    s.deps.signal = {};
+    await expect(run(s)).rejects.toThrow("fetch.index");
+    expect(s.events).toEqual([["transport-closed"], ["scope-closed"]]);
+  });
+  it("retries a real transport body reset with a fresh scratch root", async () => {
+    const s = setup();
+    const http = httpSetup();
+    let requests = 0;
+    s.deps.transport = fetcher.createGitHubTransport({
+      credential: "SENTINEL",
+      metadataBytes: 4096,
+      maxRedirects: 2,
+      request: async (url, options) => {
+        if (url.endsWith("/releases/100"))
+          return response(200, {
+            tag_name: "release-1",
+            assets: s.index.fixtures
+              .flatMap((f) => [f.bundle, f.evidence])
+              .map((a) => ({ id: a.assetId, name: a.name, size: a.bytes })),
+          });
+        if (url.includes("/git/ref/"))
+          return response(200, { object: { type: "commit", sha: sha(1) } });
+        requests++;
+        if (requests === 1)
+          return {
+            status: 200,
+            headers: {},
+            body: {
+              [Symbol.asyncIterator]() {
+                let first = true;
+                return {
+                  next() {
+                    if (first) {
+                      first = false;
+                      return Promise.resolve({ done: false, value: s.bytes.subarray(0, 10) });
+                    }
+                    return Promise.reject(
+                      Object.assign(new Error("SENTINEL"), { code: "ECONNRESET" }),
+                    );
+                  },
+                };
+              },
+            },
+          };
+        return http.request(url, options);
+      },
+    });
+    expect((await run(s)).credentialScopeClosed).toBe(true);
+    expect(requests).toBe(5);
+    expect(s.roots[0].disposed).toBe(true);
+  });
+  it("accepts a native Response and Headers at an allowed asset redirect", async () => {
+    const s = httpSetup();
+    const request = s.request;
+    s.request = async (url, options) =>
+      url.endsWith("/assets/1")
+        ? new globalThis.Response(null, {
+            status: 302,
+            headers: { location: "https://release-assets.githubusercontent.com/file" },
+          })
+        : request(url, options);
+    expect(await download(s)).toEqual(s.bytes);
+  });
+  it("bounds all stalled cleanup seats within one fetch-plus-cleanup allowance", async () => {
+    const s = setup();
+    s.deps.deadlines = { totalMs: 20, cleanupMs: 20 };
+    s.deps.transport.close = () => new Promise(() => {});
+    s.deps.credentialScope.close = () => new Promise(() => {});
+    const start = Date.now();
+    await expect(run(s)).rejects.toThrow("fetch.credentials");
+    expect(Date.now() - start).toBeLessThan(70);
+  });
+  it("cancels response bodies on both a redirect and an HTTP refusal", async () => {
+    const s = httpSetup();
+    const request = s.request;
+    const closed = [];
+    const body = (name) => ({
+      [Symbol.asyncIterator]() {
+        return {
+          async next() {
+            return { done: true };
+          },
+          async return() {
+            closed.push(name);
+            return { done: true };
+          },
+        };
+      },
+    });
+    s.request = async (url, options) => {
+      if (url.endsWith("/assets/1"))
+        return {
+          status: 302,
+          headers: { location: "https://objects.githubusercontent.com/file" },
+          body: body("redirect"),
+        };
+      if (url.startsWith("https://objects."))
+        return { status: 404, headers: {}, body: body("refusal") };
+      return request(url, options);
+    };
+    await expect(download(s)).rejects.toThrow("fetch.http_404");
+    expect(closed).toEqual(["redirect", "refusal"]);
+  });
+  it("uses a valid oversized metadata document as its cap control", async () => {
+    const s = httpSetup();
+    const request = s.request;
+    s.request = (url, options) =>
+      url.endsWith("/releases/100")
+        ? response(
+            200,
+            Buffer.from(
+              JSON.stringify({
+                tag_name: "release-1",
+                assets: [{ id: 1, name: "1.a799.gz", size: s.bytes.length }],
+              }) + " ".repeat(4096),
+            ),
+          )
+        : request(url, options);
+    await expect(download(s)).rejects.toThrow("fetch.metadata");
+  });
+});
+
+describe("shared cleanup reserve", () => {
+  it("serializes disposal when a first attempt has not settled", async () => {
+    const s = setup();
+    s.deps.deadlines = { totalMs: 40, cleanupMs: 40 };
+    const scratch = s.deps.scratch;
+    let calls = 0;
+    s.deps.scratch = async (...args) => {
+      const r = await scratch(...args);
+      r.dispose = () => {
+        calls++;
+        return new Promise(() => {});
+      };
+      return r;
+    };
+    s.deps.transport.fetch = () => chunks(s.bytes.subarray(0, -1));
+    await expect(run(s)).rejects.toThrow("fetch.cleanup");
+    expect(calls).toBe(1);
+  });
+  it("shares the outer cleanup deadline across all retained roots and both closures", async () => {
+    const s = setup();
+    s.deps.deadlines = { totalMs: 40, cleanupMs: 40 };
+    const scratch = s.deps.scratch;
+    s.deps.scratch = async (...args) => {
+      const r = await scratch(...args);
+      r.dispose = () => new Promise(() => {});
+      return r;
+    };
+    s.deps.transport.close = () => new Promise(() => {});
+    s.deps.credentialScope.close = () => new Promise(() => {});
+    const start = Date.now();
+    let error;
+    try {
+      await run(s);
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(Error);
+    expect(Date.now() - start).toBeLessThan(180);
+    expect(error.message).toMatch(/^fetch.cleanup:/);
+  });
+});
+
+it("classifies a reset inside release metadata as retryable", async () => {
+  const s = httpSetup();
+  s.request = async () => ({
+    status: 200,
+    headers: {},
+    body: {
+      [Symbol.asyncIterator]() {
+        return {
+          next() {
+            return Promise.reject(Object.assign(new Error("SENTINEL"), { code: "ECONNRESET" }));
+          },
+        };
+      },
+    },
+  });
+  await expect(download(s)).rejects.toThrow("fetch.transient");
+});

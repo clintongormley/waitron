@@ -227,7 +227,7 @@ exclude wildcard sets or excuse an absent target. Descriptor IDs and targets mus
 be unique. Supporting modules keep schema parsing, mapping admission and keyed
 comparison shared between the two public comparison functions. Future execution
 still needs independently reviewed read specifications, actual images and sealed
-facts, containment, issued-F1 history and the remaining five cuts.
+facts, containment, issued-F1 history and the remaining four cuts.
 
 ## Admit sealed archives before candidate access
 
@@ -259,7 +259,8 @@ mode `0700`. All files are treated as private, including evidence. Qualification
 must supply captured modes that meet this restriction; the reader never changes
 original permissions to make them qualify. Paths reject absolute/drive/backslash,
 dot/empty and control-character aliases, trailing dots/spaces and collisions after
-NFC normalization and lowercasing. Every parent directory appears first.
+NFC normalization and upper/lower case folding. Unpaired surrogates and Unicode
+control/format characters are refused. Every parent directory appears first.
 
 `io` supplies `root`, `ownerId`, `signal`, positive `cleanupMs`, optional
 `sourceIdentities: {dev, ino}[]`, and these asynchronous operations:
@@ -270,18 +271,25 @@ NFC normalization and lowercasing. Every parent directory appears first.
 `identity`. The parser checks these reports before and after writing and refuses
 changed/shared inodes or multiply linked files. The future real adapter must use
 exclusive no-follow opens, coordinate path replacement, derive those reports from
-actual handles and entries, and remove only its owned partials. Injected reports
+actual handles and entries, and remove only its owned partials. On cancellation, the parser first waits within
+the cleanup reserve for pending I/O to settle; an unresolved operation reports
+`archive.cleanup` without racing partial removal. The actual adapter must honour
+the signal and fence later writes before disposal can finish. Injected reports
 are not filesystem evidence. The returned handle contains only root, owner ID,
 cloned inventory and compressed archive hash.
 
 `createGitHubTransport({request, credential, metadataBytes, maxRedirects})` uses
-an injected HTTP request adapter. It requests only Waitron's pinned release ID,
+an injected HTTP request adapter returning `{status, headers, body}`. Headers may
+be a native `Headers` object or a plain object; a successful body is an async
+iterable of bytes. A null body is permitted for redirects/refusals. It requests only Waitron's pinned release ID,
 resolves its tag (including up to eight annotated tags) to the frozen source SHA,
 and checks the asset ID/name/size belongs to that release before requesting it.
 Asset redirects are manual and accept only HTTPS on
 `release-assets.githubusercontent.com` or `objects.githubusercontent.com`, with
 no user information, nondefault port or fragment. Redirected requests carry no
-authorization header. `close()` clears its credential and aborts request signals.
+authorization header. Discarded redirect/refusal bodies are cancelled. Connection failures during
+metadata or asset streaming report `fetch.transient`; HTTP 401/403/404 retain
+their distinct refusal codes. `close()` clears its credential and aborts request signals.
 The future real adapter must honour manual redirects and those signals. Existing
 private access and live GitHub responses remain unqualified.
 
@@ -293,15 +301,27 @@ and `deps.candidate`, the committed raw `indexSha256`, a 40-character
 JSON, wrong epochs/cells and missing `facts.json` in an evidence inventory before
 retrieval. It checks exact compressed size and committed hash during streaming.
 Only `fetch.transient` retrieval errors retry, each in a fresh owned root.
-All retained assets are disposed if any required input fails.
+A failed input triggers disposal of all retained assets; unresolved cleanup
+reports `fetch.cleanup`.
 
 `scratch({cellId, kind, signal})` returns `{io, dispose}`. It must honour
 cancellation and settle within the cleanup reserve. A late allocation is collected
-and disposed before failure returns; an unsettled allocation reports
+and disposal is attempted within that reserve; an unsettled allocation reports
 `fetch.cleanup`, never a successful handoff. The future adapter must keep roots
-independent and make disposal idempotent. Each admitted asset gets a distinct root.
+independent, fence in-flight I/O before disposal finishes and make disposal
+idempotent. Disposal calls for one resource share one pending promise. Each
+admitted asset gets a distinct root. The caller must retain its scratch-owner
+registry keyed by root and owner ID: on a successful handoff it releases those
+resources only after the trusted transfer or final consumer finishes. Serialized
+`VerifiedInputs` deliberately carries no functions or credentials. No real
+transfer/release adapter is installed here.
 
-Both transport and credential scope close before return. The scope adapter's
+The outer time bound is `totalMs + cleanupMs`; every cleanup step uses only the
+remaining allowance. Unresolved cleanup takes precedence over credential residue,
+which takes precedence over cancellation/deadline reporting. A malformed parent
+signal is refused inside the closure boundary.
+
+Both transport and credential scope close before successful return. The scope adapter's
 `close()` must return `{closed: true, surfaces}` with empty arrays for
 `environment`, `checkoutConfig`, `credentialHelpers`, `registryLogins`,
 `scratchFiles`, `subprocessArguments`, `history` and `dockerConfig`. Tests refuse

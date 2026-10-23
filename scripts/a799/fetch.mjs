@@ -4,7 +4,12 @@ import { TextDecoder } from "node:util";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
-import { abortable, admitArchive, validateInventory } from "./archive.mjs";
+import {
+  abortable,
+  admitArchive,
+  validateInventory,
+  admissionCode as codeFor,
+} from "./archive.mjs";
 import { fail, parseIndex } from "./contracts.mjs";
 import { selectCells } from "./selection.mjs";
 
@@ -127,18 +132,52 @@ export function createGitHubTransport({ request, credential, metadataBytes, maxR
       if (closed) fail("fetch.closed", "transport is closed");
       fail(signal.aborted ? "fetch.cancelled" : "fetch.transient", "request failed");
     }
-    if (!response || !Number.isInteger(response.status) || !response.body?.[Symbol.asyncIterator])
+    if (
+      !response ||
+      !Number.isInteger(response.status) ||
+      (response.status === 200 && !response.body?.[Symbol.asyncIterator])
+    )
       fail("fetch.transport", "response contract");
     return response;
   }
+  async function closeBody(response, signal) {
+    try {
+      const body = response.body;
+      if (body === null || body === undefined) return;
+      await abortable(
+        Promise.resolve().then(() =>
+          typeof body.cancel === "function"
+            ? body.cancel()
+            : body[Symbol.asyncIterator]().return?.(),
+        ),
+        signal,
+        "fetch.cancelled",
+      );
+    } catch {
+      fail(signal.aborted ? "fetch.cancelled" : "fetch.transport", "response body closure failed");
+    }
+  }
+  async function requireOk(response, signal) {
+    if (response.status !== 200) {
+      await closeBody(response, signal);
+      status(response);
+    }
+  }
+  async function readBody(iterator, signal) {
+    try {
+      return await abortable(iterator.next(), signal, "fetch.cancelled");
+    } catch {
+      fail(signal.aborted ? "fetch.cancelled" : "fetch.transient", "body retrieval failed");
+    }
+  }
   async function metadata(path, signal) {
     const response = await send(`${base}${path}`, "application/vnd.github+json", true, signal);
-    status(response);
+    await requireOk(response, signal);
     const out = [];
     let size = 0;
     const iterator = response.body[Symbol.asyncIterator]();
     for (;;) {
-      const result = await abortable(iterator.next(), signal, "fetch.cancelled");
+      const result = await readBody(iterator, signal);
       if (result.done) break;
       if (!(result.value instanceof Uint8Array)) fail("fetch.metadata", "binary body required");
       size += result.value.byteLength;
@@ -186,10 +225,15 @@ export function createGitHubTransport({ request, credential, metadataBytes, maxR
       for (let redirects = 0; ; redirects++) {
         const response = await send(url, "application/octet-stream", redirects === 0, signal);
         if ([301, 302, 303, 307, 308].includes(response.status)) {
+          await closeBody(response, signal);
           if (redirects >= maxRedirects) fail("fetch.redirect", "redirect budget");
           let target;
           try {
-            target = new globalThis.URL(response.headers?.location);
+            target = new globalThis.URL(
+              typeof response.headers?.get === "function"
+                ? response.headers.get("location")
+                : response.headers?.location,
+            );
           } catch {
             fail("fetch.redirect", "absolute destination required");
           }
@@ -207,10 +251,10 @@ export function createGitHubTransport({ request, credential, metadataBytes, maxR
           url = target.href;
           continue;
         }
-        status(response);
+        await requireOk(response, signal);
         const iterator = response.body[Symbol.asyncIterator]();
         for (;;) {
-          const result = await abortable(iterator.next(), signal, "fetch.cancelled");
+          const result = await readBody(iterator, signal);
           if (result.done) break;
           yield result.value;
         }
@@ -220,10 +264,6 @@ export function createGitHubTransport({ request, credential, metadataBytes, maxR
   };
 }
 
-function codeFor(error, fallback) {
-  const code = error instanceof Error ? error.message.split(":")[0] : "";
-  return /^(fetch\.[a-z_0-9]+|archive\.[a-z_]+)$/.test(code) ? code : fallback;
-}
 export async function fetchInputs(cells, deps) {
   const owned = new Set();
   const usedRoots = new Set();
@@ -231,21 +271,32 @@ export async function fetchInputs(cells, deps) {
   let failure;
   const controller = new globalThis.AbortController();
   let timer;
-  const signal = deps.signal
-    ? globalThis.AbortSignal.any([deps.signal, controller.signal])
-    : controller.signal;
+  let signal = controller.signal;
+  let hardDeadline = Date.now() + 1000;
+  const disposing = new Map();
+  function remember(code, detail) {
+    const rank = (value) =>
+      value === "fetch.cleanup"
+        ? 4
+        : value === "fetch.credentials"
+          ? 3
+          : ["fetch.deadline", "fetch.cancelled"].includes(value)
+            ? 2
+            : 1;
+    if (!failure || rank(code) > rank(codeFor(failure, "fetch.transport")))
+      failure = new Error(`${code}: ${detail}`);
+  }
   function cancelled() {
     if (signal.aborted)
       fail(deps.signal?.aborted ? "fetch.cancelled" : "fetch.deadline", "fetch stopped");
   }
   async function cleanupCall(fn) {
     const cleanup = new globalThis.AbortController();
-    const timeout = setTimeout(
-      () => cleanup.abort(),
-      Number.isSafeInteger(deps.deadlines?.cleanupMs) && deps.deadlines.cleanupMs > 0
-        ? deps.deadlines.cleanupMs
-        : 1000,
+    const remaining = Math.max(
+      0,
+      Math.min(deps.deadlines?.cleanupMs || 1000, hardDeadline - Date.now()),
     );
+    const timeout = setTimeout(() => cleanup.abort(), remaining);
     try {
       return await abortable(Promise.resolve().then(fn), cleanup.signal, "fetch.cleanup");
     } finally {
@@ -253,7 +304,12 @@ export async function fetchInputs(cells, deps) {
     }
   }
   async function dispose(resource) {
-    await cleanupCall(() => resource.dispose());
+    if (!disposing.has(resource))
+      disposing.set(
+        resource,
+        Promise.resolve().then(() => resource.dispose()),
+      );
+    await cleanupCall(() => disposing.get(resource));
     owned.delete(resource);
   }
   try {
@@ -267,6 +323,14 @@ export async function fetchInputs(cells, deps) {
       deps.retrySchedule.some((n) => !Number.isSafeInteger(n) || n < 0)
     )
       fail("fetch.index", "explicit finite budgets required");
+    hardDeadline = Date.now() + deps.deadlines.totalMs + deps.deadlines.cleanupMs;
+    try {
+      signal = deps.signal
+        ? globalThis.AbortSignal.any([deps.signal, controller.signal])
+        : controller.signal;
+    } catch {
+      fail("fetch.index", "AbortSignal required");
+    }
     timer = setTimeout(() => controller.abort(), deps.deadlines.totalMs);
     cancelled();
     if (
@@ -397,14 +461,18 @@ export async function fetchInputs(cells, deps) {
       credentialScopeClosed: true,
     };
   } catch (error) {
-    failure = new Error(
-      `${codeFor(error, "fetch.transport") === "fetch.cleanup" ? "fetch.cleanup" : signal.aborted ? (deps.signal?.aborted ? "fetch.cancelled" : "fetch.deadline") : codeFor(error, "fetch.transport")}: input handoff refused`,
-    );
+    const code = codeFor(error, "fetch.transport");
+    remember(code, "input handoff refused");
+    if (signal.aborted)
+      remember(
+        deps.signal?.aborted ? "fetch.cancelled" : "fetch.deadline",
+        "input handoff stopped",
+      );
   } finally {
     try {
       await cleanupCall(() => deps.transport.close());
     } catch {
-      failure = new Error("fetch.credentials: transport closure failed");
+      remember("fetch.credentials", "transport closure failed");
     }
     try {
       const scope = await cleanupCall(() => deps.credentialScope.close());
@@ -417,11 +485,12 @@ export async function fetchInputs(cells, deps) {
       )
         fail("fetch.credentials", "credential scope residue");
     } catch {
-      failure = new Error("fetch.credentials: credential scope unverified");
+      remember("fetch.credentials", "credential scope unverified");
     }
-    if (signal.aborted && !failure?.message.startsWith("fetch.cleanup:"))
-      failure = new Error(
-        `${deps.signal?.aborted ? "fetch.cancelled" : "fetch.deadline"}: handoff stopped during closure`,
+    if (signal.aborted)
+      remember(
+        deps.signal?.aborted ? "fetch.cancelled" : "fetch.deadline",
+        "handoff stopped during closure",
       );
     clearTimeout(timer);
     controller.abort();
@@ -430,7 +499,7 @@ export async function fetchInputs(cells, deps) {
         try {
           await dispose(resource);
         } catch {
-          failure = new Error("fetch.cleanup: owned scratch unresolved");
+          remember("fetch.cleanup", "owned scratch unresolved");
         }
       }
   }

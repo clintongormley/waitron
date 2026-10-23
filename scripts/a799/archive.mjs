@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { setTimeout, clearTimeout } from "node:timers";
 import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import { createGunzip } from "node:zlib";
@@ -14,7 +15,7 @@ export function checkPath(path) {
     typeof path !== "string" ||
     !path ||
     /[\\:]/.test(path) ||
-    Array.from(path).some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127) ||
+    /[\p{Cc}\p{Cf}\p{Cs}]/u.test(path) ||
     path.split("/").some((p) => !p || p === "." || p === ".." || /[. ]$/.test(p))
   )
     fail("archive.path", "relative canonical path required");
@@ -53,7 +54,7 @@ export function validateInventory(inventory, limits) {
   let bytes = 0;
   for (const entry of inventory) {
     shape(entry);
-    const key = entry.path.normalize("NFC").toLowerCase();
+    const key = entry.path.normalize("NFC").toUpperCase().toLowerCase().normalize("NFC");
     if (seen.has(key)) fail("archive.inventory", "duplicate or aliased path");
     seen.add(key);
     const slash = entry.path.lastIndexOf("/");
@@ -146,13 +147,66 @@ export async function abortable(promise, signal, code) {
     signal.removeEventListener("abort", listener);
   }
 }
-function knownError(error) {
-  return error instanceof Error && /^(archive\.|fetch\.)/.test(error.message);
+export function admissionCode(error, fallback) {
+  const codes = [
+    "path",
+    "inventory",
+    "limit",
+    "entry",
+    "header",
+    "format",
+    "cancelled",
+    "placement",
+    "truncated",
+    "hash",
+    "trailing",
+    "cleanup",
+    "gzip",
+  ]
+    .map((c) => `archive.${c}`)
+    .concat(
+      [
+        "index",
+        "cells",
+        "facts",
+        "transport",
+        "credentials",
+        "scratch",
+        "cleanup",
+        "cancelled",
+        "deadline",
+        "transient",
+        "exhausted",
+        "size",
+        "hash",
+        "asset",
+        "source",
+        "metadata",
+        "redirect",
+        "closed",
+        "http",
+        "http_401",
+        "http_403",
+        "http_404",
+      ].map((c) => `fetch.${c}`),
+    );
+  const code = error instanceof Error ? error.message.split(":")[0] : "";
+  return codes.includes(code) ? code : fallback;
 }
 
 export async function admitArchive(stream, inventory, limits, io) {
   const list = validateInventory(inventory, limits);
   const signal = io.signal;
+  const pending = new Set();
+  async function operation(fn) {
+    const promise = Promise.resolve().then(fn);
+    pending.add(promise);
+    void promise.then(
+      () => pending.delete(promise),
+      () => pending.delete(promise),
+    );
+    return abortable(promise, signal, "archive.cancelled");
+  }
   const hash = createHash("sha256");
   let compressed = 0;
   let unpacked = 0;
@@ -196,7 +250,7 @@ export async function admitArchive(stream, inventory, limits, io) {
   const identities = new Map();
   const used = new Set((io.sourceIdentities ?? []).map((s) => `${s.dev}:${s.ino}`));
   async function inspect(path, kind, mode) {
-    const stat = await abortable(io.inspectEntry(path), signal, "archive.cancelled");
+    const stat = await operation(() => io.inspectEntry(path));
     if (
       !stat ||
       stat.kind !== kind ||
@@ -244,14 +298,10 @@ export async function admitArchive(stream, inventory, limits, io) {
         fail("archive.entry", "header differs from inventory");
       await parents(entry.path);
       if (entry.kind === "directory") {
-        await abortable(io.createDirectory(entry), signal, "archive.cancelled");
+        await operation(() => io.createDirectory(entry));
         await inspect(entry.path, "directory", entry.mode);
       } else {
-        const handle = await abortable(
-          io.openExclusiveNoFollow(entry),
-          signal,
-          "archive.cancelled",
-        );
+        const handle = await operation(() => io.openExclusiveNoFollow(entry));
         const opened = await inspect(entry.path, "file", entry.mode);
         if (
           !handle?.identity ||
@@ -265,12 +315,12 @@ export async function admitArchive(stream, inventory, limits, io) {
           const bytes = await take(Math.min(65536, remaining));
           remaining -= bytes.length;
           contentHash.update(bytes);
-          await abortable(io.writeChunk(handle, bytes), signal, "archive.cancelled");
+          await operation(() => io.writeChunk(handle, bytes));
         }
         if (contentHash.digest("hex") !== entry.sha256) fail("archive.hash", "file checksum");
         await parents(entry.path);
         await inspect(entry.path, "file", entry.mode);
-        await abortable(io.finishVerifiedFile(handle, entry), signal, "archive.cancelled");
+        await operation(() => io.finishVerifiedFile(handle, entry));
         await inspect(entry.path, "file", entry.mode);
       }
     }
@@ -290,15 +340,23 @@ export async function admitArchive(stream, inventory, limits, io) {
     try {
       if (!Number.isSafeInteger(io.cleanupMs) || io.cleanupMs <= 0)
         fail("archive.cleanup", "explicit cleanup budget required");
-      await abortable(
-        Promise.resolve().then(() => io.removeOwnedPartial()),
-        globalThis.AbortSignal.timeout(io.cleanupMs),
-        "archive.cleanup",
-      );
+      const cleanup = new globalThis.AbortController();
+      const timer = setTimeout(() => cleanup.abort(), io.cleanupMs);
+      try {
+        await abortable(Promise.allSettled([...pending]), cleanup.signal, "archive.cleanup");
+        await abortable(
+          Promise.resolve().then(() => io.removeOwnedPartial()),
+          cleanup.signal,
+          "archive.cleanup",
+        );
+      } finally {
+        clearTimeout(timer);
+      }
     } catch {
       fail("archive.cleanup", "owned partials unresolved");
     }
-    if (knownError(error)) throw error;
+    const code = admissionCode(error, null);
+    if (code) fail(code, "admission refused");
     fail(
       error?.code?.startsWith("Z_") || error?.code === "ERR_STREAM_PREMATURE_CLOSE"
         ? "archive.gzip"

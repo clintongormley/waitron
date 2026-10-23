@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
@@ -467,4 +468,139 @@ describe("remaining archive placement boundaries", () => {
       "archive.cleanup",
     );
   });
+});
+
+describe("reviewed archive custody", () => {
+  it("collects a pending directory operation before removing partials", async () => {
+    const controller = new globalThis.AbortController();
+    const io = ioFor();
+    io.signal = controller.signal;
+    const create = io.createDirectory;
+    let pending;
+    io.createDirectory = (entry) => {
+      pending = new Promise((resolve) =>
+        globalThis.setTimeout(async () => {
+          await create(entry);
+          resolve();
+        }, 15),
+      );
+      controller.abort();
+      return pending;
+    };
+    await expect(admit(undefined, inventory(), limits, io)).rejects.toThrow("archive.cancelled");
+    await pending;
+    expect(io.placed.size).toBe(0);
+    expect(io.calls.at(-1)).toEqual(["cleanup"]);
+  });
+  it("sanitizes adapter errors even when they use an admission prefix", async () => {
+    const io = ioFor();
+    io.inspectEntry = () => {
+      throw new Error("archive.placement: SENTINEL-SECRET");
+    };
+    await expect(admit(undefined, inventory(), limits, io)).rejects.toThrow(
+      "archive.placement: admission refused",
+    );
+  });
+  it.each([
+    "state/a\ud800",
+    "state/a\udc00",
+    "state/a\u0085",
+    "state/a\u009b",
+    "state/a\u200b",
+    "state/a\u202e",
+  ])("refuses a noncanonical/control filename %j before I/O", async (path) => {
+    const io = ioFor();
+    await expect(admit(undefined, [directory, { ...file, path }], limits, io)).rejects.toThrow(
+      "archive.path",
+    );
+    expect(io.calls).toEqual([]);
+  });
+  it.each([
+    ["\u017f", "s"],
+    ["\u03c2", "\u03c3"],
+  ])("refuses filesystem case aliases %s/%s", async (a, b) => {
+    const io = ioFor();
+    await expect(
+      admit(
+        undefined,
+        [
+          { ...directory, path: a },
+          { ...directory, path: b },
+        ],
+        limits,
+        io,
+      ),
+    ).rejects.toThrow("archive.inventory");
+    expect(io.calls).toEqual([]);
+  });
+  it("enforces the documented header cap exactly", async () => {
+    const json = JSON.stringify(directory);
+    const cap = Buffer.byteLength(json) * 6;
+    const at = json.slice(0, -1) + " ".repeat(cap - Buffer.byteLength(json)) + "}";
+    expect((await admit(gzipSync(raw([at, file])))).ownerId).toBe("owned");
+    await expect(admit(gzipSync(raw([at.slice(0, -1) + " }", file])))).rejects.toThrow(
+      "archive.header",
+    );
+  });
+  it("checks the file entry again after finishVerifiedFile", async () => {
+    const io = ioFor();
+    io.finishVerifiedFile = async (handle) => {
+      handle.identity.ino = 999;
+    };
+    await expect(admit(undefined, inventory(), limits, io)).rejects.toThrow("archive.placement");
+  });
+  it("checks the earlier file again after the final file has finished", async () => {
+    const io = ioFor();
+    const list = [...inventory(), { ...file, path: "state/second" }];
+    io.finishVerifiedFile = async (handle) => {
+      if (handle.path === "state/second") io.placed.get("state/venue.db").identity.ino = 999;
+    };
+    await expect(
+      admit(
+        gzipSync(raw(list, [Buffer.alloc(0), contents, contents])),
+        list,
+        { ...limits, entries: 3 },
+        io,
+      ),
+    ).rejects.toThrow("archive.placement");
+  });
+});
+
+it("keeps a standalone Node caller alive until its cleanup deadline answers", () => {
+  const source = `import {admitArchive} from ${JSON.stringify(new globalThis.URL("./archive.mjs", import.meta.url).href)};
+    import {gzipSync} from "node:zlib";
+    const inventory=[{path:"state",kind:"directory",mode:448,bytes:0,sha256:null}];
+    const caps={compressedBytes:1024,unpackedBytes:1024,entries:1,perFileBytes:1};
+    const io={root:"/owned",ownerId:"owner",cleanupMs:20,inspectEntry:async()=>({kind:"directory",mode:448,dev:1,ino:1,nlink:1,ownerId:"owner"}),removeOwnedPartial:()=>new Promise(()=>{})};
+    async function* stream(){yield gzipSync("wrong format");}
+    try{await admitArchive(stream(),inventory,caps,io);}catch(error){console.log(error.message);}`;
+  const child = spawnSync(globalThis.process.execPath, ["--input-type=module", "-e", source], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  expect(child.status).toBe(0);
+  expect(child.stdout).toContain("archive.cleanup:");
+  expect(child.stderr).toBe("");
+});
+
+it("does not echo an arbitrary admission-looking error code", async () => {
+  const io = ioFor();
+  io.inspectEntry = () => {
+    throw new Error("fetch.transient SENTINEL-SECRET");
+  };
+  await expect(admit(undefined, inventory(), limits, io)).rejects.toThrow(
+    "archive.placement: admission failed",
+  );
+});
+it("reports an unresolved placement operation without racing partial removal", async () => {
+  const io = ioFor();
+  const controller = new globalThis.AbortController();
+  io.signal = controller.signal;
+  io.cleanupMs = 10;
+  io.createDirectory = () => {
+    controller.abort();
+    return new Promise(() => {});
+  };
+  await expect(admit(undefined, inventory(), limits, io)).rejects.toThrow("archive.cleanup");
+  expect(io.calls.some(([name]) => name === "cleanup")).toBe(false);
 });
