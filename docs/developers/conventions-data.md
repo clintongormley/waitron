@@ -3943,3 +3943,69 @@ cannot establish a target-bound approval. A saved v2 operation still requires it
 at staging, restart and placement. Unknown, duplicate-key or unparseable saved protocol state is
 refused before mutation rather than guessed to be v1. Preserve that state for diagnosis; this
 interface does not provide a reset or erase operation.
+
+
+## Root receipt excerpts moved on 2026-10-23
+
+These passages retain the root instruction receipts moved by A1026. They are excerpts
+from `CLAUDE.md` at `0285925d8c0ff55c1e4b86423a0471e78ab6e9b8`, not new measurements.
+
+### General code is English only
+
+Cost: A758-1's starter reasons «Cambio del cliente» were refused only because «cliente» is a declared fiscal word.
+
+### A command name is declared under `waitron.commands`, never `bin`
+
+Nothing builds at install time, so a `bin` under `dist/` is never linked by the install that reads it.
+
+### A change adding third-party code or a binary to the image carries its licence notices, shipped in `/app/third-party/`
+
+Cost: Litestream shipped without its Go modules' notices.
+
+### A housekeeping write on a read path must not take the read down on a full disk
+
+Cost: the equipment read and every non-passive session-checked read answered 507 on a full disk once a stamp was due (A798-B slice 6).
+
+### A read taken while ANOTHER caller's write transaction is open sees committed rows only
+
+Cost: a concurrent read returned rows a rollback then removed.
+
+### A statement this engine refuses backs out ITSELF, not the transaction around it — except a full disk, which sometimes ends the whole transaction
+
+Cost: a full disk read as `cannot rollback`, and a statement after it committed by itself.
+
+### A full disk is not one error code
+
+Cost: a database refused on a nearly full disk was recorded `unknown`.
+
+### Anything that writes or deletes in `<state>/backup-staging` does it inside the staging turn
+
+Cost: deleting a dump a run reads frees nothing until the run closes it (A798-B slice 7 plan, M3).
+
+### A time stored as text and compared or sorted as text is right only while every writer stores one spelling
+
+Cost: W22 (#1134), a valid shift refused or listed out of order.
+
+### A constraint that lives only in hand-written migration SQL is one regeneration away from gone, and nothing else in the tree notices
+
+Cost: a regeneration dropped 33 foreign keys and 13 unique indexes.
+
+### A drizzle table rebuild on this engine runs with foreign keys ON, so its `DROP TABLE` silently deletes every cascading child's rows, and fails on a `no action` or `restrict` child holding rows
+
+Cost: rebuilds emptied `product_categories` and three menu tables while reporting success.
+
+### A drizzle-kit 0.31.10–0.31.11 generation that rebuilds a table must not also add a column to it
+
+Cost: paid three times.
+
+### Editing a shipped migration file — even only its comments — makes every venue it already migrated refuse to start
+
+Cost: #1036 restored two edited files byte for byte.
+
+### One database per environment
+
+`invoice_series.next_number` carries across and pre-production sales would leave a permanent hole in the production series — which is what Veri\*Factu detects.
+
+### While the box's clock reads more than a minute earlier than the latest fiscal record, no record is written and no route takes or gives back new money
+
+Cost: before the route checks, a probe charged a card on a clock a day behind (A798-B slice 8 plan, E10).

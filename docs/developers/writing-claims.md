@@ -173,3 +173,55 @@ Cost: `CLAUDE.md` is re-read on every step of
 every session and subagent; on 2026-10-07 the always-loaded files were ESTIMATED, not measured, at
 roughly 14% of the campaign lanes' subagent cost (their size times the lanes' step count since
 2026-10-05, at the cache-read price).
+
+
+## Root receipt excerpts moved on 2026-10-23
+
+These passages retain the root instruction receipts moved by A1026. They are excerpts
+from `CLAUDE.md` at `0285925d8c0ff55c1e4b86423a0471e78ab6e9b8`, not new measurements.
+
+### A claim of necessity or impossibility needs a receipt
+
+Cost: three false claims in one day on one file, each one born correcting the last.
+
+Good shape: _"Measured 2026-09-22 on `node:sqlite`, Node v26.7.0, inside one transaction: a duplicate key, a null in a `not null` column and an append-only trigger's `raise(abort)` each left the transaction usable, and the rows written beside them committed."_ — it names the engine, the version, the conditions and what happened, so a reader can re-run it.
+
+### Reading is not verification
+
+Cost: a false "superuser is unavoidable" survived a correction pass, a four-agent simplify, a fresh-context review and Copilot — all of them reading.
+
+### State the experiment, not the conclusion
+
+"I deleted the tenant predicate and the test failed" is checkable; "the guard is proven" is not.
+
+### A measurement taken where both answers look alike measures nothing
+
+Cost: a zero-byte filter reading offered as proof, taken where zero was also the correct answer.
+
+### A sentence about what ANOTHER part of the system does is checked by following the call chain to that part, not by reading the boundary you just edited
+
+The fix can be right and the sentence describing it still too wide: you had one edge open, and you wrote about the whole path.
+
+### The correction is a new claim, and deserves MORE scrutiny than the text it replaces
+
+This is the single most productive source of false claims in the repository's history.
+
+### Before asserting a convention, grep the siblings
+
+Cost: an error code prefixed `payments.` landed beside its `payment.` siblings.
+
+### A behaviour change retires every receipt about the old behaviour — editing a file is not auditing it
+
+Cost: three stale claims in two READMEs, one a documented operator procedure.
+
+### Claims about the outside world need receipts too — and the source's own words
+
+Cost: an API limit of Square's paraphrased into a product limitation.
+
+### A class's representative has to be a value the two sides could treat differently
+
+Cost: a `fast-xml-parser` 4 → 5 probe missed a decoding change because its example was one neither version decodes.
+
+### The code is what matters; comments go stale
+
+Cost: about three in ten non-blank lines of non-test code were comment-only on 2026-09-24.

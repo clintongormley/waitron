@@ -1699,3 +1699,61 @@ Receipt: the receipt-original and completed-ancestor cases in `receipt-print.tes
 were run on 2026-10-22. The focused
 original-request control first failed with three originals where one was expected; the management
 control first offered resend for a completed original.
+
+
+## Root receipt excerpts moved on 2026-10-23
+
+These passages retain the root instruction receipts moved by A1026. They are excerpts
+from `CLAUDE.md` at `0285925d8c0ff55c1e4b86423a0471e78ab6e9b8`, not new measurements.
+
+### A screen does not draw its own form field
+
+Cost: a native dropdown cannot take the approved look (A178).
+
+### Before treating a numeric field as whole numbers, follow its checks and wire conversion and try a fraction
+
+Cost: A284 almost skipped a logout timer because its comment said whole minutes
+
+### Normalising a field while typing preserves the native selection
+
+Cost: A284's decimal-mark conversion moved the cursor to the end during a middle edit.
+
+### A new dashboard dialog or page holding staged input takes a draft scope from `draftScopeFor` (which resolves `leaveCoordinatorFor`) and has a `*.unsaved.test.ts`
+
+Cost: W98's Menu timetable screen reached review without one.
+
+### A replay reports the original transaction facts; side effects are gated separately
+
+Cost: cash change returned as zero on a retry, because displaying change was treated as dispensing it.
+
+### Compare saved selections by values — not by JSON key order, not by the order they were sent, and not by the order they were OFFERED in either
+
+Cost: a quantity-only held-order edit deleted every line and re-priced the dish.
+
+### A one-off reload beside a live subscription keeps a snapshot delivered after the reload began, and both paths apply the same replacement checks
+
+Cost: A413's reopening read hid a newer ask and left its replaced Pair dialog open.
+
+### A value the till takes from its start read either refreshes through `setupRevision` or is listed as fixed until reload
+
+Cost: courses stayed missing from an open table until a reload (A768).
+
+### A device's profile and the signed-in person must both allow what a till does
+
+Cost: W97's per-task review found a bill refund route checking no action.
+
+### Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a CSS class
+
+Cost: the categories screen's swatches and thumbnails never rendered, through review and a green suite.
+
+### Text in the brand colour reads `--wt-color-primary-text`; `--wt-color-primary` paints fills, lines and icons
+
+Cost: Waitron's own blue read 4.33:1 as text on its light page, under 4.5:1 (A841).
+
+### A narrower roll in a wider receipt printer needs an explicit print area before native centring
+
+Cost: a shifted, clipped 58mm receipt.
+
+### The print agent runs under `deploy/apparmor/waitron-print-agent`, named through `WAITRON_PRINT_AGENT_APPARMOR` only after `waitron.sh` has loaded it; a `bluetoothctl` call that sends a bus message the profile does not list is refused until the profile gains a rule for it
+
+Cost: the agent silently listed no Bluetooth printers on the owner's box.

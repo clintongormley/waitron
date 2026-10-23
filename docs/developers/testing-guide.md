@@ -2712,3 +2712,91 @@ holding `1234` failed the same all-storage substring check. Both now check the r
 and every `setItem` call against the full expected non-secret shape. The PIN check includes its JSON
 quotes, which distinguish a complete PIN value from digits inside the UUID. The original request,
 retry, approval and recovery assertions remain.
+
+
+## Root receipt excerpts moved on 2026-10-23
+
+These passages retain the root instruction receipts moved by A1026. They are excerpts
+from `CLAUDE.md` at `0285925d8c0ff55c1e4b86423a0471e78ab6e9b8`, not new measurements.
+
+### A test file whose awaits are all synchronous `node:sqlite` work gives the event loop no timer turn, so the venue watchdog kills its worker once the file outlasts `WATCHDOG_KILL_MS`; `useVenueDb` waits one real timer after every test
+
+Cost: main run 38932759150's venue-service shard 1 lost its worker to the watchdog.
+
+The watchdog's stamp reads `process.hrtime.bigint` and `setInterval` captured when `@waitron/store` loads.
+
+### The stream loop test and the stream pause test need two pinned binaries: without them they are SKIPPED locally and FAIL in CI
+
+A skipped run prints `1 skipped` and nothing else, so a local green run of `apps/server` may not have run them.
+
+### On Vitest 4.1.12 a browser configured inside a project reads `connectTimeout` only from the OUTER config's `test.browser` block
+
+Cost: A527's first forced-failure control passed.
+
+### A test that starts the server in its own process writes to the venue database only before `startServer` or after `close()`
+
+Cost: main run 38430159396 failed `boot.backup-network.test.ts`.
+
+### In a suite whose `useVenueDb` sets `resetPerTest: false`, a port the system hands a test can be one an earlier test's rows still name
+
+Cost: main run 39537349722's `test-server (16)` failed `print-agent-e2e.test.ts`'s discovery check, which a forced port collision reproduces (A945).
+
+### A fiscal record in a test's database must not be dated more than a minute after the clock of a later write that records
+
+Cost: the check turned fiscal and server fixtures red (A798-B slice 8 plan, E8, E9, decision 13).
+
+### Concurrent coverage runs must not share a package's report directory, and an intentional second one belongs OUTSIDE the package
+
+Vitest cleans a shared directory, so two overlapping runs over the same package end in `ENOENT`.
+
+### A `spawnSync` timeout kills only the process it started; the script's own children keep running, so each run of a script keeps its files apart from the next
+
+Cost: lane G's push failed `ci-workflow`'s paging case on a killed run's leftover call (A751).
+
+### A test that changes the screen's global language restores it before the next case
+
+Cost: A284's split test changed the labels in later transfer cases
+
+### A browser test that checks something a screen does on a dialog's `wt-close` waits for that event first, or for the close event the screen sends from it, never for `vi.waitFor`'s one second alone, nor for the dialog's `open` to turn false
+
+Cost: a devices-screen test failed A441's CI (#1477), and a finish-table test failed once in an 18-file till run and in 3 of 42 runs under CPU load (A927).
+
+### A browser test sees whether a push happened by spying on `history.pushState` and `replaceState`, never by counting `history.length`
+
+Cost: A506-12's Times tab check failed beside other files, and the unsaved-changes audit met it first.
+
+### A test waits for a browser grant, such as a Web Lock, by tracking the request until it is answered — never by a fixed sleep
+
+Cost: the Payments screen's reader-status tests failed CI on a late grant, fixed twice — W59 (#1168), then A320 (#1342).
+
+### A click whose outcome depends on whether an update one listener schedules has run before a later listener sees the click is tested with `userEvent.click`, not `element.click()`
+
+Cost: A505's row menu stayed open on the real page while every scripted test closed it.
+
+### A placement check measures a box after the content that sizes it arrives, with room for CI's larger fonts on the side it expects the box
+
+Cost: A771, the check failed 3 of 7 main runs.
+
+### A proof by deletion says nothing about what the guard wrongly REFUSES, and that needs its own case
+
+Cost: a write-queue re-entrancy guard turned every concurrent request in `packages/payments` into a 500.
+
+### Measure the old version in a throwaway worktree, never by swapping files in the working one
+
+Cost: a stash pop that took another session's stash, and edits and test files lost to swaps.
+
+### A fixture no check reads is unverified data, and a green suite resting on it proves nothing
+
+Cost: the shared alta fixture had drifted into a record AEAT would reject, masking a real defect in `recordSale`.
+
+### A page asserted as a STRING, or reached only through its API, has nothing checking that it renders
+
+Cost: a corrupted colour on `/setup/trust`, and an image library that answered 500 to the first person who opened it.
+
+### In `packages/db`, whose Stryker config sets `ignoreStatic`, a test loads a source module with `import()` inside a case only when that case asserts on what the module builds as it loads
+
+Cost: db's mutation score read about 86% (A539).
+
+### The bucket stream never makes a sale wait on the BUCKET and never fails `/health` — but a sale can wait behind Litestream's own local checkpoint, for as long as that checkpoint holds the write lock
+
+While Litestream runs, its own checkpoints restart the side file; when that does not hold it under a size limit, stopping Litestream (`backup.stream_paused`) and folding the file back in the write queue (`checkpointTruncate`, `packages/store/src/index.ts`) bounds it.
