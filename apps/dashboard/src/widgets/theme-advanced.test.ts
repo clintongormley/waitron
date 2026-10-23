@@ -1,12 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { THEME_COLOURS, type ThemeChoices, type ThemeColour } from "@waitron/ui-core/theme";
+import {
+  THEME_COLOURS,
+  WAITRON_CHOICES,
+  type ThemeChoices,
+  type ThemeColour,
+} from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import { es } from "../i18n/strings.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { openDraft, setHand, typeHandCode, type LookDraft } from "./look-draft.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { advancedSummary, themeColourName } from "./theme-words.js";
+import { advancedSummary, handWarningLines, themeColourName } from "./theme-words.js";
 import type { HandAction, ThemeAdvanced } from "./theme-advanced.js";
 import "./theme-advanced.js";
 
@@ -298,5 +303,257 @@ describe("layout", () => {
     const { row, light, dark } = await rowAt(1280, "bg");
     expect(Math.abs(box(light).top - box(dark).top)).toBeLessThanOrEqual(2);
     for (const label of modeLabels(row)) expect(getComputedStyle(label).display).toBe("none");
+  });
+});
+
+const SAGE = setHand(CREAM, "light", "text-muted", "#8fa898");
+const TWO_FIXES = setHand(
+  setHand(openDraft(WAITRON_CHOICES), "light", "text", "#6a6a6a"),
+  "light",
+  "surface-sunken",
+  "#bbbbbb",
+);
+const HOVER = setHand(openDraft(WAITRON_CHOICES), "light", "primary-hover", "#787878");
+const DARK = setHand(
+  setHand(openDraft(WAITRON_CHOICES), "dark", "bg", "#000000"),
+  "dark",
+  "text",
+  "#222222",
+);
+
+const warningLine = (el: ThemeAdvanced, mode: string, key: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-test=hand-warning-${mode}-${key}]`);
+const rowButton = (el: ThemeAdvanced, test: string) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test=${test}]`);
+const innerLabel = (button: HTMLElementTagNameMap["wt-button"]) =>
+  button.shadowRoot!.querySelector("button")!.getAttribute("aria-label");
+const linesOf = (draft: LookDraft, field: string) =>
+  handWarningLines(
+    deriveTheme(draft.choices).warnings.find((warning) => warning.field === field)!,
+    draft.choices,
+  );
+
+describe("warnings under the rows", () => {
+  it("warns under Secondary text with its fix, and under Page with the blocked sentence", async () => {
+    const el = await mount(SAGE);
+    await open(el);
+    const line = warningLine(el, "light", "text-muted")!;
+    const [sage] = linesOf(SAGE, "handSet.light.text-muted");
+    expect(line.textContent!.trim()).toBe(sage);
+    expect(q(el, "[data-test=hand-row-text-muted]").contains(line)).toBe(true);
+    const icon = line.parentElement!.querySelector("wt-icon")!;
+    expect(icon.getAttribute("name")).toBe("warning");
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-warning)";
+    el.shadowRoot!.append(probe);
+    const warningColour = getComputedStyle(probe).color;
+    probe.remove();
+    expect(getComputedStyle(line).color).toBe(warningColour);
+    expect(getComputedStyle(icon).color).toBe(warningColour);
+
+    const fix = rowButton(el, "hand-fix-light-text-muted")!;
+    expect(fix.textContent!.trim()).toBe("Use #526a5b");
+    expect(fix.size).toBe("sm");
+    expect(innerLabel(fix)).toBe("Use #526a5b: Secondary text, light screens");
+    const seen = actions(el);
+    await userEvent.click(fix);
+    expect(seen).toEqual([{ kind: "fix", mode: "light", key: "text-muted", fix: "#526a5b" }]);
+
+    const page = warningLine(el, "light", "bg")!;
+    expect(page.textContent!.trim()).toBe(linesOf(SAGE, "handSet.light.bg")[0]);
+    expect(q(el, "[data-test=hand-row-bg]").contains(page)).toBe(true);
+    expect(rowButton(el, "hand-fix-light-bg")).toBeNull();
+  });
+
+  it("two fixes: warns under Text and Sunken areas, counts them closed, and errs nowhere", async () => {
+    const el = await mount(TWO_FIXES);
+    expect(disclosure(el).summary, disclosure(el).summary).toSatisfy((s: string) =>
+      s.endsWith(" · 2 hard to read"),
+    );
+    expect(disclosure(el).summary.endsWith(" · 2 hard to read")).toBe(true);
+    expect(disclosure(el).hasAttribute("has-error")).toBe(false);
+    await open(el);
+    expect(q(el, "[data-test=hand-row-text]").contains(warningLine(el, "light", "text"))).toBe(
+      true,
+    );
+    expect(
+      q(el, "[data-test=hand-row-surface-sunken]").contains(
+        warningLine(el, "light", "surface-sunken"),
+      ),
+    ).toBe(true);
+    expect(el.shadowRoot!.querySelectorAll("[data-test^=hand-warning-]")).toHaveLength(2);
+    for (const key of ["text", "surface-sunken"])
+      expect(codeField(el, "light", key).error).toBe("");
+    expect(disclosure(el).hasAttribute("has-error")).toBe(false);
+  });
+
+  it("a colour drawn both ways shows both sentences", async () => {
+    const el = await mount(HOVER);
+    await open(el);
+    const lines = linesOf(HOVER, "handSet.light.primary-hover");
+    expect(lines).toHaveLength(2);
+    expect(warningLine(el, "light", "primary-hover")!.textContent!.trim()).toBe(lines.join(" "));
+  });
+
+  it("a dark warning says Dark screens under the right rows", async () => {
+    const el = await mount(DARK);
+    await open(el);
+    for (const key of ["bg", "text"]) {
+      const line = warningLine(el, "dark", key)!;
+      expect(q(el, `[data-test=hand-row-${key}]`).contains(line)).toBe(true);
+      expect(line.textContent!.trim().startsWith("Dark screens: ")).toBe(true);
+      expect(warningLine(el, "light", key)).toBeNull();
+    }
+    expect(rowButton(el, "hand-fix-dark-text")!.textContent!.trim()).toBe("Use #bebebe");
+    expect(rowButton(el, "hand-fix-dark-bg")).toBeNull();
+  });
+});
+
+describe("the fixed line", () => {
+  const FIXED = { "handSet.light.text-muted": { from: "#8fa898", to: "#526a5b" } };
+  const TAKEN = setHand(CREAM, "light", "text-muted", "#526a5b");
+
+  it("says what it was fixed from while the value holds the fix, with Undo", async () => {
+    const el = await mount(TAKEN, { fixed: FIXED });
+    await open(el);
+    const text = q(el, "[data-test=hand-fixed-light-text-muted]");
+    expect(text.textContent!.trim()).toBe("Light screens: fixed from #8fa898");
+    expect(q(el, "[data-test=hand-row-text-muted]").contains(text)).toBe(true);
+    expect(text.nextElementSibling!.textContent!.trim()).toBe("·");
+    const undo = rowButton(el, "hand-undo-light-text-muted")!;
+    expect(undo.textContent!.trim()).toBe("Undo");
+    expect(innerLabel(undo)).toBe("Undo: Secondary text, light screens");
+    const seen = actions(el);
+    await userEvent.click(undo);
+    expect(seen).toEqual([{ kind: "undo", mode: "light", key: "text-muted" }]);
+  });
+
+  it("is gone once the value is anything else", async () => {
+    const other = setHand(CREAM, "light", "text-muted", "#536a5b");
+    const el = await mount(other, { fixed: FIXED });
+    await open(el);
+    expect(el.shadowRoot!.querySelector("[data-test=hand-fixed-light-text-muted]")).toBeNull();
+    expect(rowButton(el, "hand-undo-light-text-muted")).toBeNull();
+  });
+
+  /** Where the fixed line's "·" is: drawn or not, and whether Undo shares the colour's line. */
+  function dotOf(el: ThemeAdvanced) {
+    const span = q(el, "[data-test=hand-fixed-light-text-muted]");
+    const dot = span.nextElementSibling!;
+    const undo = rowButton(el, "hand-undo-light-text-muted")!;
+    const words = document.createRange();
+    words.selectNodeContents(span);
+    const rects = words.getClientRects();
+    const last = rects[rects.length - 1]!;
+    const sameLine = (box: DOMRect) => {
+      const middle = (box.top + box.bottom) / 2;
+      return middle > last.top && middle < last.bottom;
+    };
+    const box = dot.getBoundingClientRect();
+    const hit = el.shadowRoot!.elementFromPoint(
+      (box.left + box.right) / 2,
+      (box.top + box.bottom) / 2,
+    );
+    return {
+      drawn: hit === dot,
+      dotOnColourLine: sameLine(box) && box.left >= last.right - 1,
+      undoOnColourLine: sameLine(undo.getBoundingClientRect()),
+    };
+  }
+
+  async function at(el: ThemeAdvanced, width: number) {
+    el.style.width = `${width}px`;
+    await nextFrame();
+    await nextFrame();
+    // elementFromPoint sees only what is inside the viewport.
+    q(el, "[data-test=hand-fixed-light-text-muted]").scrollIntoView({ block: "center" });
+    return dotOf(el);
+  }
+
+  /** Widths, measured here, at which Undo no longer fits beside the fixed words. */
+  const NARROW = { "en-GB": 250, "es-ES": 320 } as const;
+
+  for (const locale of ["en-GB", "es-ES"] as const) {
+    it(`drops the "·" when Undo wraps to a line of its own (${locale})`, async () => {
+      setLocale(locale);
+      const el = await mount(TAKEN, { fixed: FIXED });
+      await open(el);
+      const narrow = await at(el, NARROW[locale]);
+      expect(narrow.undoOnColourLine, JSON.stringify(narrow)).toBe(false);
+      expect(narrow.drawn, JSON.stringify(narrow)).toBe(false);
+      const wide = await at(el, 1000);
+      expect(wide.undoOnColourLine, JSON.stringify(wide)).toBe(true);
+      expect(wide.drawn, JSON.stringify(wide)).toBe(true);
+      expect(wide.dotOnColourLine, JSON.stringify(wide)).toBe(true);
+    });
+  }
+});
+
+describe("one pick per frame", () => {
+  let frames: FrameRequestCallback[];
+  let cancel: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    frames = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    cancel = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function pick(el: ThemeAdvanced, colour: string) {
+    const input = picker(el, "light", "bg");
+    input.value = colour;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  }
+  const runFrame = (id: number) => frames[id - 1]!(performance.now());
+
+  it("sends the latest pick once, at the frame", async () => {
+    const el = await mount(CREAM);
+    await open(el);
+    const seen = actions(el);
+    const before = frames.length;
+    pick(el, "#111111");
+    pick(el, "#222222");
+    pick(el, "#333333");
+    expect(seen).toEqual([]);
+    expect(frames.length).toBe(before + 1);
+    runFrame(frames.length);
+    expect(seen).toEqual([{ kind: "pick", mode: "light", key: "bg", colour: "#333333" }]);
+    pick(el, "#444444");
+    expect(frames.length).toBe(before + 2);
+  });
+
+  it("sends a waiting pick before any other action, and nothing more at the frame", async () => {
+    const el = await mount(CREAM);
+    await open(el);
+    const seen = actions(el);
+    const before = frames.length;
+    pick(el, "#111111");
+    const id = frames.length;
+    expect(id).toBe(before + 1);
+    // Playwright's click waits on animation frames, which this suite holds back.
+    workedOut(el, "light", "bg")!.click();
+    expect(seen).toEqual([
+      { kind: "pick", mode: "light", key: "bg", colour: "#111111" },
+      { kind: "worked-out", mode: "light", key: "bg" },
+    ]);
+    expect(cancel).toHaveBeenCalledWith(id);
+    runFrame(id);
+    expect(seen).toHaveLength(2);
+  });
+
+  it("cancels a waiting frame when removed", async () => {
+    const el = await mount(CREAM);
+    await open(el);
+    const before = frames.length;
+    pick(el, "#111111");
+    const id = frames.length;
+    expect(id).toBe(before + 1);
+    el.remove();
+    expect(cancel).toHaveBeenCalledWith(id);
   });
 });

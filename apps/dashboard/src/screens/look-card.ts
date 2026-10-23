@@ -34,6 +34,7 @@ import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
 import { colorField, colorFieldStyles } from "../widgets/color-field.js";
+import { fixLineStyles } from "../widgets/fix-line-styles.js";
 import { repaintVenueTheme } from "../widgets/venue-theme-repaint.js";
 import {
   codeInvalid,
@@ -102,6 +103,7 @@ export class LookCard extends LitElement {
     baseStyles,
     settingsCardStyles,
     colorFieldStyles,
+    fixLineStyles,
     css`
       :host {
         display: block;
@@ -118,45 +120,6 @@ export class LookCard extends LitElement {
       }
       .chip:not(:first-child) {
         margin-inline-start: var(--wt-space-1);
-      }
-      .warning {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        margin: var(--wt-space-3) 0 0;
-        color: var(--wt-color-warning);
-      }
-      .warning > wt-icon {
-        flex-shrink: 0;
-      }
-      .fixed {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2);
-        margin: 0;
-      }
-      /* The "·" and Undo never part, and a "·" carried to the start of a line is pulled out past
-         the clip edge, so Undo on a line of its own has no "·" (design: a wrapped link drops it).
-         The clip margin is the focus ring's room. */
-      .undo-line {
-        margin: 0;
-        overflow: clip;
-        overflow-clip-margin: var(--wt-space-1);
-        white-space: nowrap;
-      }
-      .undo-line > .fixed-text {
-        padding-inline-end: var(--wt-space-4);
-        white-space: normal;
-      }
-      .undo-line > .dot {
-        display: inline-block;
-        width: var(--wt-space-4);
-        margin-inline-start: calc(-1 * var(--wt-space-4));
-        text-align: center;
-      }
-      .undo-line > wt-button {
-        vertical-align: middle;
       }
       wt-button.link::part(button) {
         font-weight: var(--wt-font-weight-normal);

@@ -1,8 +1,9 @@
-import { LitElement, css, html, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
+import "@waitron/ui/src/components/wt-icon.js";
 import {
   MODES,
   THEME_COLOURS,
@@ -14,8 +15,15 @@ import {
 import { fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { colourValueField, colourValueStyles } from "./color-field.js";
+import { fixLineStyles } from "./fix-line-styles.js";
 import { anyHandSet, handTouched, type HandField, type LookDraft } from "./look-draft.js";
-import { advancedSummary, themeColourName } from "./theme-words.js";
+import {
+  advancedSummary,
+  handFixLabel,
+  handFixedText,
+  handWarningLines,
+  themeColourName,
+} from "./theme-words.js";
 
 export interface HandFixed {
   readonly from: string;
@@ -36,6 +44,7 @@ export class ThemeAdvanced extends LitElement {
   static override styles = [
     baseStyles,
     colourValueStyles,
+    fixLineStyles,
     css`
       :host {
         display: block;
@@ -92,6 +101,18 @@ export class ThemeAdvanced extends LitElement {
         font-weight: var(--wt-font-weight-normal);
         text-decoration: underline;
       }
+      .notes {
+        grid-column: 1 / -1;
+        display: grid;
+        gap: var(--wt-space-2);
+        min-width: 0;
+      }
+      .notes:empty {
+        display: none;
+      }
+      .notes > .warning {
+        margin: 0;
+      }
       .reset {
         margin: var(--wt-space-5) 0 0;
       }
@@ -117,9 +138,19 @@ export class ThemeAdvanced extends LitElement {
   @property({ attribute: false }) fixed: Readonly<Partial<Record<HandField, HandFixed>>> = {};
   @property({ type: Boolean }) busy = false;
 
+  #waitingPick: { mode: Mode; key: ThemeColour; colour: string } | undefined;
+  #frame: number | undefined;
+
   constructor() {
     super();
     new LocaleChangeController(this);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this.#frame !== undefined) cancelAnimationFrame(this.#frame);
+    this.#frame = undefined;
+    this.#waitingPick = undefined;
   }
 
   /** Opens the section and moves focus to that value's code field. */
@@ -133,7 +164,34 @@ export class ThemeAdvanced extends LitElement {
     this.renderRoot.querySelector<HTMLElement>(`wt-input[name="handSet.${mode}.${key}"]`)!.focus();
   }
 
+  /** A drag fires an input per pointer move; only the latest colour goes out, once a frame. */
+  #pick(mode: Mode, key: ThemeColour, colour: string): void {
+    this.#waitingPick = { mode, key, colour };
+    this.#frame ??= requestAnimationFrame(() => {
+      this.#frame = undefined;
+      this.#sendPick();
+    });
+  }
+
+  #sendPick(): void {
+    const waiting = this.#waitingPick;
+    if (waiting === undefined) return;
+    this.#waitingPick = undefined;
+    this.#dispatch({ kind: "pick", ...waiting });
+  }
+
+  #flushPick(): void {
+    if (this.#frame !== undefined) cancelAnimationFrame(this.#frame);
+    this.#frame = undefined;
+    this.#sendPick();
+  }
+
   #send(detail: HandAction): void {
+    this.#flushPick();
+    this.#dispatch(detail);
+  }
+
+  #dispatch(detail: HandAction): void {
     this.dispatchEvent(
       new CustomEvent<HandAction>("hand-change", { detail, bubbles: true, composed: true }),
     );
@@ -167,7 +225,7 @@ export class ThemeAdvanced extends LitElement {
         }),
         error: this.errors[`handSet.${mode}.${key}`] ?? "",
         busy: this.busy,
-        pick: (picked) => this.#send({ kind: "pick", mode, key, colour: picked }),
+        pick: (picked) => this.#pick(mode, key, picked),
         type: (text) => this.#send({ kind: "type", mode, key, text }),
       })}
       <span class="status"
@@ -194,6 +252,61 @@ export class ThemeAdvanced extends LitElement {
     </div>`;
   }
 
+  #notes(mode: Mode, key: ThemeColour): TemplateResult {
+    const field: HandField = `handSet.${mode}.${key}`;
+    const value = fill("appearance.hand_value", {
+      name: themeColourName(key),
+      screens: t(`appearance.saved_fix_${mode}`),
+    });
+    const warning = this.derived.warnings.find((w) => w.field === field);
+    const fixed = this.fixed[field];
+    return html`${
+      warning === undefined
+        ? nothing
+        : html`<p class="warning">
+              <wt-icon name="warning"></wt-icon
+              ><span data-test="hand-warning-${mode}-${key}"
+                >${handWarningLines(warning, this.draft.choices).join(" ")}</span
+              >
+            </p>
+            ${
+              warning.fix === null
+                ? nothing
+                : html`<p class="fixed">
+                    <wt-button
+                      data-test="hand-fix-${mode}-${key}"
+                      size="sm"
+                      aria-label=${fill("appearance.hand_action", {
+                        action: handFixLabel(warning.fix),
+                        value,
+                      })}
+                      ?disabled=${this.busy}
+                      @click=${() => this.#send({ kind: "fix", mode, key, fix: warning.fix! })}
+                      >${handFixLabel(warning.fix)}</wt-button
+                    >
+                  </p>`
+            }`
+    }${
+      fixed === undefined || this.draft.choices.handSet[mode][key] !== fixed.to
+        ? nothing
+        : html`<p class="undo-line">
+            <span class="fixed-text" data-test="hand-fixed-${mode}-${key}"
+              >${handFixedText(mode, fixed.from)} </span
+            ><span class="dot" aria-hidden="true">· </span
+            ><wt-button
+              data-test="hand-undo-${mode}-${key}"
+              class="link"
+              variant="ghost"
+              size="sm"
+              aria-label=${fill("appearance.hand_action", { action: t("appearance.undo"), value })}
+              ?disabled=${this.busy}
+              @click=${() => this.#send({ kind: "undo", mode, key })}
+              >${t("appearance.undo")}</wt-button
+            >
+          </p>`
+    }`;
+  }
+
   override render() {
     return html`<wt-disclosure
       data-test="advanced"
@@ -212,6 +325,7 @@ export class ThemeAdvanced extends LitElement {
             html`<div class="row" data-test="hand-row-${key}">
               <span class="name">${themeColourName(key)}</span>
               ${MODES.map((mode) => this.#value(mode, key))}
+              <div class="notes">${MODES.map((mode) => this.#notes(mode, key))}</div>
             </div>`,
         )}
       </div>
