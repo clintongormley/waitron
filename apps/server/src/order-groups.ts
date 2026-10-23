@@ -172,8 +172,9 @@ export interface SubmittedGroups {
 /**
  * Put each submitted group's lines on the observed bill,
  * released to the kitchen now (`fire`) or held until {@link fireGroup}. Every line is credited to
- * the operator. A new held group prints its HOLD ticket where the venue prints held work in advance
- * ({@link printHoldTickets}); lines joining a group whose HOLD ticket was queued print `+N` for it.
+ * the operator. A new held group prints its HOLD ticket at the stations that print held work in
+ * advance ({@link printHoldTickets}); lines joining a group print `+N` at the stations that have its
+ * HOLD paper ({@link recordJoiningStations}).
  */
 export async function submitGroups(
   tx: Transaction,
@@ -810,7 +811,7 @@ async function releaseGroup(
   for (const line of active) {
     byOrder.set(line.workingOrderId, [...(byOrder.get(line.workingOrderId) ?? []), line.id]);
   }
-  // The marker, not the setting: a station a HOLD ticket was queued for is fired by a FIRE slip.
+  // The record, not the setting: a station recorded as having the group's HOLD paper gets a FIRE ticket.
   const fire = { heldPaper: (await heldPaperStations(tx, [groupId])).get(groupId) ?? new Set() };
   // Every bill in this group must use the same station snapshot at the release instant.
   await routing();
@@ -973,9 +974,9 @@ export async function unsnoozeReminder(
 /**
  * Move dish lines, or part of one, from held groups into another held group or a new one at the end
  * of the sequence. A line stays on its bill; a part moved splits the row. A group the move empties
- * is removed. What moved prints `-N` for a group it left, and `+N` for one it joined, whose HOLD
- * ticket was queued; a new group prints its own HOLD ticket where the venue prints held work in
- * advance ({@link printHoldTickets}).
+ * is removed. What moved prints `-N` for a group it left, and `+N` for one it joined, at the
+ * stations that have that group's HOLD paper; a new group prints its own HOLD ticket at the stations
+ * that print held work in advance ({@link printHoldTickets}).
  */
 export async function moveLinesToGroup(
   tx: Transaction,
@@ -2065,7 +2066,7 @@ export async function recordHeldPaper(
     });
 }
 
-/** The stations each group's HOLD ticket was queued for; a group with none is absent. */
+/** The stations recorded as having each group's HOLD paper; a group with none is absent. */
 export async function heldPaperStations(
   tx: Transaction,
   groupIds: readonly string[],

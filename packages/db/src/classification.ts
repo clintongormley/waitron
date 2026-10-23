@@ -190,7 +190,7 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify(
     "order_group_hold_stations",
     "state",
-    "the stations a held group's HOLD ticket was queued for; copied to a standby, never drained back",
+    "the stations that have a held group's HOLD paper; copied to a standby, never drained back",
   ),
   appendOnly(
     "order_group_events",

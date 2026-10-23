@@ -5420,8 +5420,8 @@ async function assertProductsSellable(
  *
  * On a party: an added extra takes its dish's group and credit; a fired line's raised quantity
  * goes in a new fired group, and a new dish in a new group fired or held as `newWork` says, both at
- * the end of the sequence and credited to `operatorId`, a held one printing its HOLD ticket where the
- * venue prints held work in advance; the units added to a comped or discounted line the kitchen has
+ * the end of the sequence and credited to `operatorId`, a held one printing its HOLD ticket at the
+ * stations that print held work in advance; the units added to a comped or discounted line the kitchen has
  * not fired go on a new line, priced now, in that line's group and kitchen state (ruling R12), a
  * held one correcting its group's HOLD ticket where one was queued; a held group the edit empties
  * is removed; the party's revision moves on.

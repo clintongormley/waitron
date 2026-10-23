@@ -522,8 +522,9 @@ interface KnownStations {
 /**
  * The kitchen tickets for a set of just-fired lines, routed by {@link routeKitchenTickets} over the
  * involved stations in name order. A `HOLD` ticket's `firedItems` are the held items printed in
- * advance. On a `fire`, a route is marked FIRE when one of its stations is in `heldPaper`. A printer in `papers` prints the rest of the order as its entry says, in place of what
- * its route alone would decide.
+ * advance. On a `fire`, a route is marked FIRE when one of its stations is in `heldPaper`. A printer
+ * in `papers` prints the rest of the order as its entry says, in place of what its route alone would
+ * decide.
  */
 async function planKitchenTickets(
   tx: Transaction,
@@ -1271,7 +1272,7 @@ async function onHeldPaper(
 
 /**
  * The unfired ticket items of `orderIds` whose group is still held and whose HOLD ticket was
- * queued: the held work the kitchen has on paper.
+ * queued.
  */
 async function readOnHoldTickets(tx: Transaction, orderIds: readonly string[]) {
   return tx
@@ -1673,7 +1674,7 @@ interface ReprintPart {
 
 /**
  * What a Reprint of each of `orderIds` prints: every fired item across every round, and the held
- * items of each still-held group whose HOLD ticket was queued, marked HOLD.
+ * items of each still-held group at the stations that have its HOLD paper, marked HOLD.
  */
 async function readReprintParts(
   tx: Transaction,
@@ -1847,10 +1848,10 @@ export interface PrintProblem {
  * ticket is a problem while {@link printJobInTrouble} holds for its job, until a reprint for the same
  * bill and station, on the same printer, queued after it has printed, itself or through a resend
  * ({@link printedOrResent}): only a reprint carries every dish still fired on the bill, and the
- * held dishes of each still-held group whose HOLD ticket was queued, so a later round's ticket
- * printing clears nothing, and another printer's paper says nothing of this one's. It is no problem
- * either once a Reprint of the bill would link nothing on that printer to that station, were the
- * printer switched on ({@link readReprintTargets}), as when its dishes there are voided or the
+ * held dishes of each still-held group at the stations that have its HOLD paper, so a later round's
+ * ticket printing clears nothing, and another printer's paper says nothing of this one's. It is no
+ * problem either once a Reprint of the bill would link nothing on that printer to that station, were
+ * the printer switched on ({@link readReprintTargets}), as when its dishes there are voided or the
  * printer is detached from the station.
  * "After" is the link row's `rowid`, not `created_at`, which two jobs can share to the millisecond:
  * SQLite gives a new row one more than the table's largest `rowid`, and a link row goes only when

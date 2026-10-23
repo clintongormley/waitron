@@ -3,7 +3,7 @@ import { id, table } from "./columns.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { orderGroups } from "./order-groups.js";
 
-/** The stations a held group's HOLD ticket was queued for; held-work paper goes only to them (A756 PR 6). */
+/** The stations that have a held group's HOLD paper; later paper about that held work goes only to them. */
 export const orderGroupHoldStations = table(
   "order_group_hold_stations",
   {

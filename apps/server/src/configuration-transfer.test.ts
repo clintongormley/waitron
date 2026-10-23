@@ -2244,7 +2244,7 @@ it("transfers a station's rest of the order switch", async () => {
   expect(imported).toEqual([{ showsRestOfOrder: true }]);
 });
 
-it("transfers each station's MOVED slips choice, print, don't print or as the venue", async () => {
+it("transfers each station's MOVED slips choice, print, don't print, or never set", async () => {
   const source = await applyVenue(planVenue(venue("B13572469"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
@@ -2253,7 +2253,7 @@ it("transfers each station's MOVED slips choice, print, don't print or as the ve
     tx.insert(kitchenStations).values([
       { locationId: source.locationId, name: "Moved print", printMovedSlips: true },
       { locationId: source.locationId, name: "Moved quiet", printMovedSlips: false },
-      { locationId: source.locationId, name: "Moved venue", printMovedSlips: null },
+      { locationId: source.locationId, name: "Moved unset", printMovedSlips: null },
     ]),
   );
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -2273,12 +2273,12 @@ it("transfers each station's MOVED slips choice, print, don't print or as the ve
   const imported = await targetSuite.db
     .select({ name: kitchenStations.name, printMovedSlips: kitchenStations.printMovedSlips })
     .from(kitchenStations)
-    .where(inArray(kitchenStations.name, ["Moved print", "Moved quiet", "Moved venue"]))
+    .where(inArray(kitchenStations.name, ["Moved print", "Moved quiet", "Moved unset"]))
     .orderBy(kitchenStations.name);
   expect(imported).toEqual([
     { name: "Moved print", printMovedSlips: true },
     { name: "Moved quiet", printMovedSlips: false },
-    { name: "Moved venue", printMovedSlips: null },
+    { name: "Moved unset", printMovedSlips: null },
   ]);
 });
 
