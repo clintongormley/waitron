@@ -174,6 +174,7 @@ import { BOX_EMAIL_CHECK_MS, readBoxEmailContext, startBoxEmailDuty } from "./bo
 import { createTextEmailSender } from "./text-email.js";
 import { mountDeviceApi } from "./device-api.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
+import { clockDisagreesAlertSource } from "./clock-disagrees-alert.js";
 import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
@@ -1489,8 +1490,8 @@ async function bootServer(
   // Shared by reference between the fiscal pass that WRITES it and the box-status read that surfaces
   // it: a node without a `fiscal.aeat` cert sells and chains locally, and its drain skips filing.
   const awaitingFiscalCert = { current: false };
-  const authorityClock = createAuthorityClockStatus();
   const clockWitnesses = createClockWitnessStore();
+  const authorityClock = createAuthorityClockStatus({ onSample: clockWitnesses.noteAuthority });
   const isMirror = holders.mode.current === "mirror";
   // The boot-captured read-only posture; the gate's own per-request predicate re-reads `mode` live,
   // so a promotion lifts it without a restart.
@@ -2228,6 +2229,7 @@ async function bootServer(
           offsetMinutes: tillClock.now().offsetMinutes,
         })) !== null,
     ),
+    clockDisagreesAlertSource(clockWitnesses),
     printingAlertSource(),
     contentSuggestionsAlertSource(),
     invoiceDeliveryAlertSource({ testPages }),

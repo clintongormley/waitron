@@ -2,6 +2,7 @@ import type { Transaction } from "@waitron/db";
 import type { AlertSource } from "@waitron/module";
 import "./errors.js";
 import { execFile } from "node:child_process";
+import type { AuthorityTimeSample } from "./clock-witnesses.js";
 
 /** Whether the system clock is NTP-synchronised. `source: "unavailable"` (never `warn: true`) on a host
  * without systemd's `timedatectl` — dev machines and macOS — so the probe never cries wolf where it
@@ -46,10 +47,17 @@ export async function checkTimeHealth(deps: { run?: CommandRunner } = {}): Promi
 export type AuthorityClockStatus =
   { state: "unknown" } | { state: "ok" | "warning"; driftSeconds: number; measuredAt: string };
 
-export function createAuthorityClockStatus(): {
+/** AEAT's `TimestampPresentacion` is read to the second, so its instant is taken as the middle of
+ * that second, with half a second more uncertainty. */
+const WHOLE_SECOND_MS = 500;
+
+export function createAuthorityClockStatus(
+  deps: { onSample?: (sample: AuthorityTimeSample) => void; monotonic?: () => number } = {},
+): {
   observe(sample: { authorityTimestamp: string | null; sentAt: Date; receivedAt: Date }): void;
   read(): AuthorityClockStatus;
 } {
+  const monotonic = deps.monotonic ?? (() => performance.now());
   let status: AuthorityClockStatus = { state: "unknown" };
   return {
     read: () => status,
@@ -91,11 +99,17 @@ export function createAuthorityClockStatus(): {
       // Use the whole request interval so a slow reply alone cannot produce a drift warning.
       const warning = low > 60_000 || high < -60_000;
       if (!warning && (low < -60_000 || high > 60_000)) return;
+      const midpoint = (sent + received) / 2;
       status = {
         state: warning ? "warning" : "ok",
-        driftSeconds: Math.round(((sent + received) / 2 - authority) / 1000),
+        driftSeconds: Math.round((midpoint - authority) / 1000),
         measuredAt: receivedAt.toISOString(),
       };
+      deps.onSample?.({
+        authorityMs: authority + WHOLE_SECOND_MS,
+        uncertaintyMs: (received - sent) / 2 + WHOLE_SECOND_MS,
+        at: { wallMs: midpoint, monoMs: monotonic() - (received - midpoint) },
+      });
     },
   };
 }

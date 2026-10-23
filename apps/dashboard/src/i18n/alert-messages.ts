@@ -137,6 +137,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "The box's clock ({clockAt:minute}) reads earlier than its last sale ({lastRecordAt:minute}), so no payment can be taken. Orders and the kitchen still work. Sort it out on the Box status page.",
     es: "La hora del equipo ({clockAt:minute}) es anterior a la última venta ({lastRecordAt:minute}), así que no se puede cobrar. Los pedidos y la cocina siguen funcionando. Resuélvelo en Estado del equipo.",
   },
+  "clock.disagrees": {
+    en: "{count} devices agree that the time is {deviceAt:minute}, but the box's clock reads {boxAt:minute}. Check the box's date and time on the Box status page.",
+    es: "{count} dispositivos coinciden en que son las {deviceAt:minute}, pero el equipo marca {boxAt:minute}. Comprueba la fecha y la hora del equipo en Estado del equipo.",
+  },
   "clock.jump_detected": {
     en: "This device's clock went backwards: it changed by {wallClockDeltaSeconds} seconds. Check its date and time.",
     es: "La hora de este equipo ha retrocedido: ha cambiado {wallClockDeltaSeconds} segundos. Revisa su fecha y hora.",
