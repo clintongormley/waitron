@@ -40,6 +40,8 @@ export interface BoxEmailContext {
 
 interface Episode {
   readonly code: BoxEmailCode;
+  /** The module that gave the notice; absent for the disk's episodes. */
+  readonly owner?: string;
   readonly sentTo: Set<string>;
   readonly said: Set<string>;
   readonly logged: Map<string, Set<TextEmailOutcome>>;
@@ -68,10 +70,28 @@ export function startBoxEmailDuty(deps: {
   const timer = deps.timer ?? unrefTimer;
   const episodes = new Map<string, Episode>();
   let stopped = false;
+  let reading: Promise<unknown> | null = null;
 
-  function want(key: string, code: BoxEmailCode, wanted: string[]): void {
+  /** Every read goes through here, so `stop` can wait for the one in flight. */
+  async function read<T>(start: () => Promise<T>): Promise<T> {
+    const pending = start();
+    reading = pending;
+    try {
+      return await pending;
+    } finally {
+      reading = null;
+    }
+  }
+
+  function want(key: string, code: BoxEmailCode, wanted: string[], owner?: string): void {
     if (!episodes.has(key)) {
-      episodes.set(key, { code, sentTo: new Set(), said: new Set(), logged: new Map() });
+      episodes.set(key, {
+        code,
+        ...(owner === undefined ? {} : { owner }),
+        sentTo: new Set(),
+        said: new Set(),
+        logged: new Map(),
+      });
     }
     wanted.push(key);
   }
@@ -99,16 +119,23 @@ export function startBoxEmailDuty(deps: {
       } catch {
         outcome = "unknown";
       }
+      const key = recipientKey(recipient);
       if (outcome === "sent") {
-        episode.sentTo.add(recipientKey(recipient));
+        episode.sentTo.add(key);
         deps.log("info", "box_email.sent", { code: episode.code });
+        continue;
       }
+      const logged = episode.logged.get(key) ?? new Set<TextEmailOutcome>();
+      episode.logged.set(key, logged);
+      if (logged.has(outcome)) continue;
+      logged.add(outcome);
+      deps.log("warn", "box_email.send_failed", { code: episode.code, outcome });
     }
   }
 
   async function check(): Promise<void> {
     try {
-      if (stopped) return;
+      if (stopped || !deps.isPrimary()) return;
       const wanted: string[] = [];
       const full = deps.disk.since() !== null;
       const low = deps.space.current().lowSince !== null;
@@ -122,9 +149,25 @@ export function startBoxEmailDuty(deps: {
           want("storage.space_low", "storage.space_low", wanted);
         }
       }
+      const notices = await read(deps.moduleNotices);
+      if (stopped) return;
+      const moduleWanted = new Set<string>();
+      for (const notice of notices.notices) {
+        if (!isBoxEmailCode(notice.code)) continue;
+        if ((STORAGE_EMAIL_CODES as readonly string[]).includes(notice.code)) continue;
+        const key = `module:${notice.owner}:${notice.key}`;
+        want(key, notice.code, wanted, notice.owner);
+        moduleWanted.add(key);
+      }
+      for (const [key, episode] of episodes) {
+        if (episode.owner === undefined || moduleWanted.has(key)) continue;
+        // While an owner's check fails, its episodes neither start nor end.
+        if (!notices.unavailable.includes(episode.owner)) episodes.delete(key);
+      }
       if (wanted.length === 0) return;
       // Read at every check while an episode lasts, so a manager added during it is found.
-      const ctx = await deps.context();
+      const ctx = await read(deps.context);
+      if (stopped) return;
       for (const key of wanted) {
         if (stopped) return;
         await deliver(episodes.get(key)!, ctx);
@@ -142,6 +185,7 @@ export function startBoxEmailDuty(deps: {
     stop: async () => {
       stopped = true;
       armed.cancel();
+      await reading?.catch(() => undefined);
     },
   };
 }
