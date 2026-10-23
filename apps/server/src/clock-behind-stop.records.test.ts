@@ -131,7 +131,11 @@ const allRecords = () => count("registros_facturacion");
 const salesOf = (billId: string) => count("sales", sql`working_order_id = ${billId}`);
 const ticketItemsOf = (billId: string) => count("ticket_items", sql`working_order_id = ${billId}`);
 const printJobs = () => count("print_jobs");
-const draftRows = (draftId: string) => count("order_drafts", sql`id = ${draftId}`);
+function draftOf(draftId: string) {
+  return venue.db.all<{ state: string; revision: number }>(
+    sql`select state, revision from order_drafts where id = ${draftId}`,
+  );
+}
 const departureRowsOf = (partyId: string) => count("unpaid_departures", sql`party_id = ${partyId}`);
 
 function partyStateOf(partyId: string): string {
@@ -211,7 +215,7 @@ describe("a kitchen send", () => {
 
     expect(answer.status).toBe(409);
     expect(answer.json).toEqual(behindChain(behind));
-    expect(draftRows(draft.id)).toBe(1);
+    expect(draftOf(draft.id)).toEqual([{ state: "open", revision: draft.revision }]);
     expect(ticketItemsOf(party.tabId)).toBe(tickets);
     expect(printJobs()).toBe(jobs);
     expect(salesOf(party.tabId)).toBe(0);
@@ -261,8 +265,8 @@ describe("a line edit", () => {
     });
   }
 
-  /** Two Cañas on a bill with one of them paid, so cutting the line to one completes it. */
-  async function halfPaidCañas(now: number): Promise<string> {
+  /** A bill of two beers with one of them paid, so cutting the line to one completes it. */
+  async function halfPaidBeers(now: number): Promise<string> {
     const billId = await tabWith(venue, "Caña");
     expect((await setQuantity(at(now), billId, "2")).status).toBe(200);
     const paid = await send(
@@ -278,7 +282,7 @@ describe("a line edit", () => {
 
   it("refuses a line edit that would complete a part-paid bill", async () => {
     const now = nowMs();
-    const billId = await halfPaidCañas(now);
+    const billId = await halfPaidBeers(now);
     const before = lineQuantity(billId);
     const behind = now - 10 * MINUTE;
 
@@ -292,7 +296,7 @@ describe("a line edit", () => {
 
   it("takes the same edit a minute inside the last record", async () => {
     const now = nowMs();
-    const billId = await halfPaidCañas(now);
+    const billId = await halfPaidBeers(now);
 
     const answer = await setQuantity(at(now - INSIDE), billId, "1");
 
