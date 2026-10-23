@@ -78,17 +78,15 @@ export async function saveImage(
       .select({ id: departmentReceipts.departmentId })
       .from(departmentReceipts)
       .where(logoMatch);
-    if (users.length && (!rasters?.["58mm"] || !rasters["80mm"]))
+    const themeMatch = sql`${themeLogoName("light")} = ${current.filename}`;
+    const themes = await tx.select({ id: customThemes.id }).from(customThemes).where(themeMatch);
+    if ((users.length || themes.length) && (!rasters?.["58mm"] || !rasters["80mm"]))
       throw new Error("Receipt logo requires both printable pictures");
     if (users.length)
       await tx
         .update(departmentReceipts)
         .set({ logoRasters: rasters!, updatedAt: nowIso() })
         .where(logoMatch);
-    const themeMatch = sql`${themeLogoName("light")} = ${current.filename}`;
-    const themes = await tx.select({ id: customThemes.id }).from(customThemes).where(themeMatch);
-    if (themes.length && (!rasters?.["58mm"] || !rasters["80mm"]))
-      throw new Error("Receipt logo requires both printable pictures");
     if (themes.length)
       await tx
         .update(customThemes)

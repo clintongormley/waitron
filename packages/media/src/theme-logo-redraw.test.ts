@@ -121,6 +121,26 @@ it("refuses a pixel change without dots while a theme's light image is the image
   });
 });
 
+it("refuses a pixel change bringing only the narrow picture while a theme's light image is the image", async () => {
+  const { a, day } = await withTransaction(suite.db, threeThemes);
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      saveImage(
+        tx,
+        a.id,
+        { names: a.names, expectedRevision: a.revision, framing: reframed },
+        null,
+        { "58mm": R2["58mm"] } as ReceiptLogoRasters,
+        "en",
+      ),
+    ),
+  ).rejects.toThrow("Receipt logo requires both printable pictures");
+  await withTransaction(suite.db, async (tx) => {
+    expect((await stored(tx, "Day")).theme).toBe(day);
+    expect((await readImage(tx, a.id)).revision).toBe(a.revision);
+  });
+});
+
 it("saves a pixel change without dots when only a dark logo is the image", async () => {
   await withTransaction(suite.db, async (tx) => {
     const { a, dusk } = await threeThemes(tx);
