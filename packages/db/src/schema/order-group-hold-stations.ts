@@ -3,7 +3,10 @@ import { id, table } from "./columns.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { orderGroups } from "./order-groups.js";
 
-/** The stations that have a held group's HOLD paper; later paper about that held work goes only to them. */
+/**
+ * The stations that have a held group's HOLD paper: corrections, MOVED slips and reprints of its
+ * held work print only at them, and its release is marked FIRE on their tickets.
+ */
 export const orderGroupHoldStations = table(
   "order_group_hold_stations",
   {

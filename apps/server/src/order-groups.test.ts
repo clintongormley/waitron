@@ -5003,7 +5003,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       ]);
     });
 
-    it("is the marker, not the setting: a group whose HOLD ticket was queued still fires with a FIRE slip once the setting is off", async () => {
+    it("is the record, not the setting: a group whose HOLD ticket was queued still fires with a FIRE slip once the setting is off", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
       const s = await specExample(v);

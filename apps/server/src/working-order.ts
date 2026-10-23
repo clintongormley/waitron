@@ -3031,7 +3031,7 @@ export async function removeFromLine(
 
 /**
  * Once an extra is off its dish, tell a kitchen that has the dish which extra to take off: a fired
- * dish, or a held one whose group's HOLD ticket was queued. A dish never sent, held with no HOLD
+ * dish, or a held one at a station that has its group's HOLD paper. A dish never sent, held with no HOLD
  * ticket queued, or going to no station tells it nothing.
  */
 async function tellKitchenOfCancelledExtra(
@@ -3812,7 +3812,7 @@ export async function moveOrderLines(
 /**
  * Give the ticket items of these lines, as they leave order number `fromNumber`, that number as the
  * one they were sent under — only those the kitchen has seen (fired, or in a held group whose HOLD
- * ticket printed), never one made here, and never over a number they already carry. A held item
+ * ticket printed at any station), never one made here, and never over a number they already carry. A held item
  * whose HOLD ticket never printed first prints on the order it is on when it fires.
  */
 async function stampSentOrderNumber(
@@ -5421,10 +5421,10 @@ async function assertProductsSellable(
  * On a party: an added extra takes its dish's group and credit; a fired line's raised quantity
  * goes in a new fired group, and a new dish in a new group fired or held as `newWork` says, both at
  * the end of the sequence and credited to `operatorId`, a held one printing its HOLD ticket at the
- * stations that print held work in advance; the units added to a comped or discounted line the kitchen has
- * not fired go on a new line, priced now, in that line's group and kitchen state (ruling R12), a
- * held one correcting its group's HOLD ticket where one was queued; a held group the edit empties
- * is removed; the party's revision moves on.
+ * stations that print held work in advance; the units added to a comped or discounted line the
+ * kitchen has not fired go on a new line, priced now, in that line's group and kitchen state (ruling
+ * R12), a held one printing `+N` at the stations that have its group's HOLD paper; a held group the
+ * edit empties is removed; the party's revision moves on.
  */
 async function applyLineEdits(
   tx: Transaction,
@@ -6085,7 +6085,7 @@ async function applyLineEdits(
       );
   const heldGroup = newGroups.get("hold");
   if (heldGroup !== undefined) await printHoldTickets(tx, cfg, [heldGroup]);
-  // As a raise of the line itself would: `+N` on its group's queued HOLD ticket, not a new one.
+  // As a raise of the line itself would: `+N` at the stations that have its group's HOLD paper.
   for (const { groupId, lineId } of joinedHeld) await correctJoin(tx, cfg, groupId, [lineId]);
   await refreshKitchenAllergyClashes(
     tx,

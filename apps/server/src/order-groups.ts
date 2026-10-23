@@ -811,7 +811,8 @@ async function releaseGroup(
   for (const line of active) {
     byOrder.set(line.workingOrderId, [...(byOrder.get(line.workingOrderId) ?? []), line.id]);
   }
-  // The record, not the setting: a station recorded as having the group's HOLD paper gets a FIRE ticket.
+  // The record, not the setting: a ticket at a station recorded as having the group's HOLD paper is
+  // marked FIRE.
   const fire = { heldPaper: (await heldPaperStations(tx, [groupId])).get(groupId) ?? new Set() };
   // Every bill in this group must use the same station snapshot at the release instant.
   await routing();
@@ -2190,7 +2191,10 @@ async function heldItemsOf(
   );
 }
 
-/** `+N` on the HOLD ticket of the group these dish lines just joined, where one was queued. */
+/**
+ * `+N` for dish lines that just joined this group, at the stations that have its HOLD paper
+ * ({@link recordJoiningStations}); nothing when its HOLD ticket was never queued.
+ */
 export async function correctJoin(
   tx: Transaction,
   cfg: TillConfig,

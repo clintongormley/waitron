@@ -127,6 +127,8 @@ The latest snapshots enumerate **211 application tables and 1654 columns across 
 | `location_business_day_settings` · `packages/db/drizzle/meta/0161_snapshot.json:9767` | **D**: —<br>**H**: —<br>**S**: —<br>**L**: `location_id`<br>**U**: —<br>**R**: `revision`                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `location_day_cutover_changes` · `packages/db/drizzle/meta/0161_snapshot.json:9810`   | **D**: —<br>**H**: —<br>**S**: —<br>**L**: `location_id`<br>**U**: `day_cutover`<br>**R**: `effective_business_day`                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
+**2026-10-23:** `order_group_hold_stations`, a core table not in the list above, was added (A756 PR 6, core migration 0187): **L**: `group_id`, `station_id`. Out: `group_id` → `order_groups(id)` [no action]; `station_id` → `kitchen_stations(id)` [no action].
+
 ## catalogue (22 tables)
 
 | Table and source block                                                                    | D / H / S / L / U / R: all declared fields                                                                                                                                                                                                                                             |
@@ -203,8 +205,6 @@ The latest snapshots enumerate **211 application tables and 1654 columns across 
 **2026-10-19:** `service_steps`, a venue-service table not in the list above, was added (A757 slice 7, venue-service migration 0062): **L**: `id`, `department_id`, `course_id`; **U**: `name`; **R**: `position`, `start`, `minutes`; retention as `departments` (configuration).
 
 **2026-10-22:** `service_step_completions` (added 2026-10-22, A757 slice 8, venue-service migration 0066): **L**: `id`, `party_id`, `step_id`, `done_by`; **R**: `done_at`; retention as `parties`. Out: `party_id` → `parties(id)` [cascade]; `step_id` → `service_steps(id)` [cascade]; non-FK `done_by` is the person who tapped Done.
-
-**2026-10-23:** `order_group_hold_stations` (added 2026-10-23, A756 PR 6, core migration 0187): **L**: `group_id`, `station_id`. Out: `group_id` → `order_groups(id)` [no action]; `station_id` → `kitchen_stations(id)` [no action].
 
 ## media (2 tables)
 

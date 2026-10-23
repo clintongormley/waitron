@@ -1196,8 +1196,8 @@ async function printCorrectionSlips(
 export interface SentWork {
   places: OrderPlaces;
   /**
-   * Its fired ticket items and its held ones on a HOLD ticket ({@link readOnHoldTickets}); never
-   * empty.
+   * Its fired ticket items and its held ones whose group's HOLD ticket was queued
+   * ({@link readOnHoldTickets}); never empty.
    */
   ticketItemIds: ReadonlySet<string>;
   /** Of {@link ticketItemIds}, the held ones. */
@@ -1213,8 +1213,8 @@ export async function readSentWork(tx: Transaction, orderId: string): Promise<Se
 }
 
 /**
- * The ticket items the kitchen has on paper for each of `orderIds`, keyed by order: its fired ones
- * and its held ones on a HOLD ticket. An order with none is left out.
+ * The ticket items that went to the kitchen for each of `orderIds`, keyed by order: its fired ones
+ * and its held ones whose group's HOLD ticket was queued. An order with none is left out.
  */
 async function readSentItems(
   tx: Transaction,
