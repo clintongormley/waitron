@@ -5618,104 +5618,58 @@ values rather than PIN substrings inside random IDs. See the
   timed out after 20 seconds. A1024 (#2001) adds bounded retries; if it recurs, retain the attempt logs
   and identify whether connection, negotiation or download stalled.
 
-- **The UI showcase overflows a phone and inherits black text in its dark panel.** At a
-  390 px viewport, the panels in `packages/ui/index.html` measured 572 px wide before and after
-  A974's wording cleanup; unstyled dark-panel text resolved to black on `rgb(16, 18, 22)`.
-  Give the showcase a responsive layout and a foreground colour on each theme root, then open
-  both themes at 390 px and 1280 px. Keep the price-format examples and demo interactions.
+- **The UI showcase overflows a phone and inherits black text in its dark panel.**
+  [Detail](backlog/ci.md#the-ui-showcase-overflows-a-phone-and-inherits-black-text-in-its-dark-panel).
 
 - **Find why GitHub created no workflows for A987's main merge (A1022).** The runs API
   returned no runs for `e7ce92a7c`; the cause remains unverified. Recovery and the successful-CI
   baseline do not explain the missing trigger. Retain the after-merge run check.
   [Recovery procedure](developers/ci-and-gates.md#recover-a-main-commit-whose-ci-run-was-never-created).
 
-- **Other `uses:` steps that fetch over the network have no step time limit, and the runner's
-  own action download at job set-up is bounded only by long limits of its own (left open by
-  A935).** Each relies on its job's limit alone, as checkout did; a step `timeout-minutes` cannot
-  reach the set-up download.
-  [Detail](backlog/ci.md#other-uses-steps-that-fetch-over-the-network-have-no-step-time-limit-and-the-runners-own-action-download-at-job-set-up-is-bounded-only-by-long-limits-of-its-own-left-open-by-a935)
+- **Other `uses:` steps that fetch over the network have no step time limit, and the runner's own action download at job set-up is bounded only by long limits of its own (left open by A935).**
+  [Detail](backlog/ci.md#other-uses-steps-that-fetch-over-the-network-have-no-step-time-limit-and-the-runners-own-action-download-at-job-set-up-is-bounded-only-by-long-limits-of-its-own-left-open-by-a935).
 
-- **Whether the 2026-10-20 checkout stalls were a GitHub-side incident was not checked (A935)**,
-  and in which phase they stalled is unknown: the action passes no `--progress`, so its log is
-  silent while it waits. On a recurrence, read the bounded checkout's log: a low-speed failure
-  (`Operation too slow`) means a transfer stall; a step timeout says only that the attempt ran
-  out of time, not in which phase.
+- **Whether the 2026-10-20 checkout stalls were a GitHub-side incident was not checked (A935)**
+  [Detail](backlog/ci.md#whether-the-2026-10-20-checkout-stalls-were-a-github-side-incident-was-not-checked-a935).
 
-- **Profile provisioning's busiest shard after the A679 split.** All six shards and merged
-  coverage pass in run `39380412391`, but shard 1 takes 297 s in Vitest and 330 s overall.
-  Find the slow files or setup cost before changing its distribution; keep every check and
-  coverage threshold. This exceeds the approximate four-minute target without reproducing
-  the former shared light-job timeout.
+- **Profile provisioning's busiest shard after the A679 split.**
+  [Detail](backlog/ci.md#profile-provisionings-busiest-shard-after-the-a679-split).
 
-- **Investigate two full-run till browser failures seen during A669 validation.** On
-  2026-10-20, `pnpm --filter @waitron/till test:coverage` reached a missing `Filters 1`
-  control in `till-find-bill-screen.a11y.test.ts:89`; its failure capture showed three active
-  filters. The unchanged file then passed all four cases alone and in the next full run.
-  After rebasing onto A582 help, the full run passed 12,599 cases but Playwright could not
-  click the split control in `till-app-drafts.test.ts:8160`: the button detached during
-  scrolling. That case passed alone without edits. Retain both captures and reproduce
-  the saved-view and detached-control paths before changing code or tests; neither cause
-  is established, and a passing retry is not a repair. Lane G retains the logs and captures
-  under `resume-a669-land-20261020-090825`.
+- **Investigate two full-run till browser failures seen during A669 validation.**
+  [Detail](backlog/ci.md#investigate-two-full-run-till-browser-failures-seen-during-a669-validation).
 
-- **Decide whether browser tests stop replacing modules (A943 follow-up).** A spy mock of
-  the till's pricing module failed once in CI with its cause not found, and #1934 replaced it
-  with a function the store takes. Its convention reviewer proposed a CLAUDE.md rule against
-  module mocks in browser tests; #1934 did not add one, because one failure with no known
-  cause is thin ground for a house rule. The owner decides.
+- **Decide whether browser tests stop replacing modules (A943 follow-up).**
+  [Detail](backlog/ci.md#decide-whether-browser-tests-stop-replacing-modules-a943-follow-up).
 
 - **Check the older capture suites' viewport cleanup (A669-5 review).**
-  `apps/till/src/screens/zone-keep-open-screens.a11y.test.ts` restores 1280×768 instead of its
-  incoming dimensions. Effects on later cases are unverified. Probe those cases before changing
-  their cleanup; preserve their current behavioral assertions.
+  [Detail](backlog/ci.md#check-the-older-capture-suites-viewport-cleanup-a669-5-review).
 
 For database fixtures filtered by business day, make the boundary explicit and exercise the
 changeover. See the [testing guide](developers/testing-guide.md#a-recent-timestamp-can-belong-to-the-previous-business-day).
 
-- **A902. Say in the testing guide that Vite also prints browser console output under an AI
-  agent.** Its section "Vitest hides a passing test's console output under an AI agent" names only
-  Vitest's reporter. A811 (#1888) found that Vite 8.3.4, when an agent variable such as `AI_AGENT`,
-  `CLAUDECODE` or `CODEX_THREAD_ID` is set, prints a browser test's `console.error`, `console.warn`,
-  uncaught errors and unhandled rejections to the terminal, a passing test's included (seen in
-  `apps/dashboard`, which now sets `server: { forwardConsole: false }`). The other browser packages
-  (`grep -l browser */*/vitest.config.ts`) still forward. Measure one of them with and without an
-  agent variable, then add the receipt to the guide, and decide with the owner whether they should
-  turn forwarding off as the dashboard did.
+- **A902. Say in the testing guide that Vite also prints browser console output under an AI agent.**
+  [Detail](backlog/ci.md#a902-say-in-the-testing-guide-that-vite-also-prints-browser-console-output-under-an-ai-agent).
 
-- **A late move or second finger can overtake the gesture hold timer.** A delayed move is
-  treated as a pan, and a delayed second finger misses hold cancellation. Disposable probes
-  reproduce both on unchanged main `d5230d32d` and A891's candidate. Extend hold recognition
-  to those paths with their own tests; native-device reproduction remains unverified.
-  [Detail](developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
+- **A late move or second finger can overtake the gesture hold timer.**
+  [Detail](backlog/ci.md#a-late-move-or-second-finger-can-overtake-the-gesture-hold-timer).
 
 - **A891: retain input and timer timing if the missing product-information window recurs.**
-  A busy-renderer probe reproduces the original CI symptom, and the gesture now recognizes a
-  held release before its overdue timer. Main run `39180066136` retained no such trace, so its
-  exact cause remains unverified. On recurrence, keep pointer timestamps, hold-callback timing,
-  selection count and the screenshot before retrying.
-  [Reproduction](developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
+  [Detail](backlog/ci.md#a891-retain-input-and-timer-timing-if-the-missing-product-information-window-recurs).
 
 - **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**, a median of 144 s over six
   runs in A938. A938's profile of its slowest test, without coverage, put 95% of the time under `width()`; caching the advance width per string
   is the untried fix. Left open by A801.
   [Detail](backlog/ci.md#the-invoice-pdf-test-took-162-s-on-one-ci-run)
 
-- **`apps/server/src/first-fiscal-hour.e2e.test.ts` sets the floor under its shard** (208 s median
-  and 255 s worst over six runs in A938), since no packing goes below one file: on #1930's run
-  39535880036 (attempt 1) it took 245.1 s and its shard 292 s. A733 has landed (#1929), so it can be
-  split now, or find why each restart test boots the real entry point twice. Left open by A938 (#1930).
-  [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
+- **`apps/server/src/first-fiscal-hour.e2e.test.ts` sets the floor under its shard**
+  [Detail](backlog/ci.md#appsserversrcfirst-fiscal-houre2etestts-sets-the-floor-under-its-shard).
 
 - **The server's duration table is refreshed by hand.** Nothing says when
   `apps/server/test-durations.json` has gone stale. Left open by A938.
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
-- **Fiscal-verifactu's coverage job exceeds the four-minute target.** A850's
-  [run 39595996508](https://github.com/clintongormley/waitron/actions/runs/39595996508)
-  took 385 s, including 322 s running tests; two recent main jobs took 316 and 350 s.
-  Profile the new history, chain and secret checks alongside the existing Node/browser work,
-  then reduce the time without dropping checks or changing coverage bars.
-  [Measurements](backlog/ci.md#fiscal-coverage-outlasts-the-four-minute-job-target)
+- **Fiscal-verifactu's coverage job exceeds the four-minute target.**
+  [Detail](backlog/ci.md#fiscal-coverage-outlasts-the-four-minute-job-target).
 
 - **The other sharded packages still use Vitest's file-count split.** Till, dashboard,
   venue-service, db and provisioning do not pack their shards by measured duration as the server
@@ -5727,42 +5681,24 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   attempts of one run: 878 `[file-progress] end` lines each, no path repeated. A standing check, for example in `test-server-merge` comparing the shards' `end`
   lines with the file list, is open. Left open by A938. [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
-- **Other server test files still hash fixed PINs and passwords on every test.** A801 moved the
-  shared fixtures under `apps/server/src/testing/` and the set-up of five heavy test files onto
-  `fixturePinHash`/`fixturePasswordHash` (`apps/server/src/testing/known-secret-hashes.ts`); other
-  test files and helpers still call `hashPin`/`hashPassword` directly (`rg -l
-  'hashPin\(|hashPassword\(' apps/server -g '*.test.ts' -g '**/testing/**'`), among them the
-  `attendance-*` suites, left alone while lane G's A773-1 was editing them, and the two venue
-  helpers under `apps/server/scripts/` (`testing/venue.ts`, `demo-seed/testing/provision-venue.ts`).
-  Move the set-up ones over; leave any test that is about hashing. Left open by A801.
+- **Other server test files still hash fixed PINs and passwords on every test.**
+  [Detail](backlog/ci.md#other-server-test-files-still-hash-fixed-pins-and-passwords-on-every-test).
 
-- **Tests copy the dashboard shell's link handler instead of calling it.** `#onAppLink`
-  (`apps/dashboard/src/dashboard-app.ts`) has hand-made copies in tests, one of them
-  `packages/venue-service/src/testing/shell-link-capture.ts` (A719); a change to the real handler
-  is not seen by them. Export one function from `@waitron/ui` that both the shell and the tests
-  use. Left open by A719 (#1838).
+- **Tests copy the dashboard shell's link handler instead of calling it.**
+  [Detail](backlog/ci.md#tests-copy-the-dashboard-shells-link-handler-instead-of-calling-it).
 
-- **A999 residual: retain the other allergy-move failure if it recurs.** The original loaded
-  run reported two failing cases without their names or assertion output. The 2026-10-22
-  reproduction identified the corrected-guest case, where a parent render restored a cleared
-  refusal. Capture the exact case and output on any further recurrence before attributing it
-  to the same mechanism. [Receipt](developers/conventions-ui.md#a-parent-render-must-not-restore-a-corrected-request-refusal).
+- **A999 residual: retain the other allergy-move failure if it recurs.**
+  [Detail](backlog/ci.md#a999-residual-retain-the-other-allergy-move-failure-if-it-recurs).
 
 - **Retain failure screenshots for long browser test names.** A failed waiting-list refresh case
   in `apps/till/src/till-app.test.ts` logged `locator.screenshot: ENAMETOOLONG` during A743's
   fixture checks. Bound the generated screenshot filename and keep the complete test name in
   its metadata; verify with a deliberately failing case whose generated name is long.
 
-- **A pnpm setup retry does not identify which command failed.** A746 removes the test fixture's
-  blanket one-second version deadline, with a controlled slow-check regression. The original
-  intermittent A737 retry was not reproduced, and its first failure's cause remains unknown.
-  On recurrence, retain separate install and version-check statuses before assigning a cause.
+- **A pnpm setup retry does not identify which command failed.**
   [Detail](backlog/ci.md#identify-which-pnpm-setup-command-failed).
 
-- **Root guard deadlines under extreme external load (left open by A751).** A994 now selects
-  root workers from a startup estimate of processor and memory headroom. Recheck A751's three-root,
-  eight-spinning-loop workload before closing its five historical failures; A994's simultaneous
-  root-suite measurements do not cover that added external load.
+- **Root guard deadlines under extreme external load (left open by A751).**
   [Detail](backlog/ci.md#at-a-load-average-near-60-more-root-guard-files-fail-on-time).
 
 - **The bundle CLI can return success without creating output through a symlink-spelled path.**
@@ -5770,24 +5706,14 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   Check supported entry paths before changing the production predicate.
   [Detail](backlog/ci.md#the-bundle-clis-entry-predicate-can-skip-a-symlink-spelled-path).
 
-- **`scripts/spawn-timeout-budget.test.ts` never judges `scripts/ci-workflow.test.mjs` or
-  `scripts/migration-upgrade.test.ts`.** Its `budgets()` returns `unreadable: true` for both, on
-  `main` (`b81f1481c`) as on A751's branch, so a wait in either that outgrows its bound passes it.
-  Measured by calling `budgets()` on each file's text; which construct it cannot resolve was not
-  traced.
+- **`scripts/spawn-timeout-budget.test.ts` never judges `scripts/ci-workflow.test.mjs` or `scripts/migration-upgrade.test.ts`.**
+  [Detail](backlog/ci.md#scriptsspawn-timeout-budgettestts-never-judges-scriptsci-workflowtestmjs-or-scriptsmigration-upgradetestts).
 
-- **A624. The upgrade walk cannot step a new set whose first migration names another set's later
-  table.** `scripts/migration-upgrade.test.ts` applies every set's first migration together at its
-  first step, so a set added now whose first migration has a foreign key to a table another set
-  created later fails there. Next: teach the walk to apply a first migration dated after its floor
-  at its own date (a change to how the guard walks, so the owner decides).
-  [Detail](backlog/ci.md#a624-the-upgrade-walk-cannot-step-a-new-set-whose-first-migration-names-another-sets-later-table)
+- **A624. The upgrade walk cannot step a new set whose first migration names another set's later table.**
+  [Detail](backlog/ci.md#a624-the-upgrade-walk-cannot-step-a-new-set-whose-first-migration-names-another-sets-later-table).
 
-- **The step-watch case's A544 pre-push failure is fixed at a likely cause, not a confirmed
-  one.** The failure's message was not kept. On 2026-10-16 (A770) it failed in a third shape,
-  recorded in the detail. Next: if "reports the phase a synchronous call holds the thread in…" fails
-  again, keep its message and compare it with the shapes in the detail.
-  [Detail](backlog/ci.md#the-step-watch-cases-a544-pre-push-failure-is-fixed-at-a-likely-cause-not-a-confirmed-one)
+- **The step-watch case's A544 pre-push failure is fixed at a likely cause, not a confirmed one.**
+  [Detail](backlog/ci.md#the-step-watch-cases-a544-pre-push-failure-is-fixed-at-a-likely-cause-not-a-confirmed-one).
 
 - **Venue-service browser startup remains unexplained (#1557).** CI run `38170156450`
   attempt 1 timed out before any browser test started; attempt 2 passed on the same commit. A527
@@ -5799,13 +5725,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   differ. Next: after a week of nightly runs, read their job durations and set the limit from them
   (docs/developers/ci-and-gates.md, "Every job has a time limit").
 
-- **A419 dashboard CI stall remains unexplained (#1474).** Run `37932573955` left
-  `catalogue-screen.test.ts` unfinished; local focused and full-package runs and diagnostic
-  CI `37936013331` completed. Next: if it recurs, retain per-test progress and locate the waiting
-  operation before changing the browser harness.
-  [Detail](backlog/ci.md#a419-dashboard-ci-stall-remains-unexplained-1474)
-
-_Formerly B9, and the old Track C's development-stack and house-rules items; part of A9._ Detail: [backlog/ci.md](backlog/ci.md).
+- **A419 dashboard CI stall remains unexplained (#1474).**
+  [Detail](backlog/ci.md#a419-dashboard-ci-stall-remains-unexplained-1474).
 
 - **Test-helper debt:** `provisionTestVenue(db, overrides)` for `apps/server`'s sixty-odd suites; the
   duplicated `boot.*.test.ts` helpers into `apps/server/src/testing/` (`freePort` has moved there,
@@ -5830,22 +5751,15 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   keeps the machine's own loopback and can still meet the stall (how often was not measured), and a
   box's restore over a real network was not measured.
 
-- **The upgrade walk's historical runtime variation remains unexplained after reducing setup work
-  (A736, [#1788](https://github.com/clintongormley/waitron/pull/1788)).** The captured 165,500/171,000 ms
-  overruns have not been reproduced on the quieter host. On recurrence, retain the phase report and
-  host state before retrying; compare repeated samples before assigning the variation to CPU
-  scheduling or storage.
-  [Detail](backlog/ci.md#the-upgrade-walks-historical-runtime-variation-remains-unexplained-after-reducing-setup-work-a736-1788)
+- **The upgrade walk's historical runtime variation remains unexplained after reducing setup work (A736, [#1788](https://github.com/clintongormley/waitron/pull/1788)).**
+  [Detail](backlog/ci.md#the-upgrade-walks-historical-runtime-variation-remains-unexplained-after-reducing-setup-work-a736-1788).
 
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full, and on CI's Linux
   runner `scripts/scratch-dir.mjs` measures 83% of branches. Neither is queued. [Detail](backlog/ci.md#what-moving-the-upgrade-tests-scratch-directory-to-devshm-a122-856-left-open)
 
 - **Boot suites that release a port probe before binding still have a race (A80/#740, A907).**
-  The clock boot suite selects ports at the real listener's bind. Other suites still release
-  probes before boot and can lose those ports to another worker or connection. Extend the
-  fix while retaining their real HTTP checks; the frequency of this race remains unmeasured.
-  [Detail](backlog/ci.md#what-the-landing-port-fix-a80-pr-740-left-open)
+  [Detail](backlog/ci.md#what-the-landing-port-fix-a80-pr-740-left-open).
 
 - **`bundle-smoke` builds only the credentials and server bundles**, so a change to
   `scripts/bundle-node.mjs` selects print-agent and provisioning for typecheck and tests (#593,
@@ -5899,28 +5813,8 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   (`packages/venue-service/src/operations.ts`) writes it unchecked. Refuse `""` there, with a case,
   or record why a sale can never carry one. Left open by A810 (#1886).
 
-- **Loose ends left by the comment-pruning pull requests (#559 to #624).** Each was found while
-  pruning comments.
-  - Two `health.test.ts` cases … feed a clean pass, so they check less than their titles say
-    (#624).
-    [Detail](backlog/ci.md#two-healthtestts-cases--feed-a-clean-pass-so-they-check-less-than-their-titles-say)
-  - `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in
-    `.husky/pre-push` beside the same loop; it is not there (#602).
-    [Detail](backlog/ci.md#githubworkflowsciyml-about-line-283-says-the-three-shell-receipt-sits-in-huskypre-push-beside-the-same-loop-it-is-not-there)
-  - The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was
-    measured false (#562, #585). Four identity schema files and six in
-    `packages/fiscal-verifactu/src/schema` keep the ignore pairs with no reason; removing a pair is
-    a code change, for whoever next changes that package's code.
-    [Detail](backlog/ci.md#the-v8-ignore-reason-never-run-by-vitest-run-on-schema-files-extra-config-functions-was-measured-false)
-  - The `schema-conformance.test.ts` headers of `payments`, `workforce`, `media` and
-    `workforce-es` say an unnamed unique constraint reaches the factory's refusal; drizzle-orm
-    0.45.2 names an unnamed `unique()` itself, so nothing reaches it
-    (`packages/db/src/testing/schema-conformance.ts`) (#559).
-  - In `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES
-    ANYTHING" repeats the first case under another name (a test change, not a comment one; #589).
-  - The printing error test overstates its import requirement, and profile-store setup keeps a
-    session across per-test resets (#588; the canvas-store test itself is retired).
-    [Detail](backlog/ci.md#printing-error-test-wording-and-profile-store-session-setup)
+- **Loose ends left by the comment-pruning pull requests (#559 to #624).**
+  [Detail](backlog/ci.md#loose-ends-left-by-the-comment-pruning-pull-requests-559-to-624).
 
 - **`--no-verify`: the docs say "Claude never", the hook says "agents never"** — OWNER'S CALL (found
   2026-10-03 by #1139's review). **Next action:** the owner decides whether the rule covers every
@@ -5940,22 +5834,16 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   `42P18`; on pglite 0.5.9 and 0.5.10 alike.
   [Detail](backlog/ci.md#the-pglite-throughput-bench-fails-while-seeding)
 
-- **`packages/db`'s static mutants are not in its mutation score** — OPEN, left by A539.
-  `"ignoreStatic": true` in `packages/db/stryker.config.json` leaves out every mutant in code that
-  runs when a module loads (322 `Ignored` on run 38256003987, 229 of them in
-  `src/classification.ts`). Stryker runs every test for each static mutant; what measuring them
-  would cost has not been timed. Owner's call.
+- **`packages/db`'s static mutants are not in its mutation score** — OPEN. Owner's call.
+  [Detail](backlog/ci.md#packagesdbs-static-mutants-are-not-in-its-mutation-score).
 
 - **`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests** — left behind by raising
   the `packages/ui` mutation score (#466, 2026-09-20). Adding a third exclusion is the consistent
   move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
   Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position.
 
-- **`mutation.yml` repeats one shard-and-merge job pair three times** — OPEN (left by A841 slice 1,
-  #1927, 2026-10-21). `mutation-ui-core`, `mutation-ui` and `mutation-db` each have their own copied
-  shard job and `-aggregate` job; one reusable workflow would hold them. The root mutation guards
-  also repeat the list of sharded packages. Do it on its own branch.
-  [Detail](backlog/ci.md#packagesuisrcvitest-park-pointerts-is-mutated-and-has-no-tests)
+- **`mutation.yml` repeats one shard-and-merge job pair three times** — OPEN.
+  [Detail](backlog/ci.md#mutationyml-repeats-one-shard-and-merge-job-pair-three-times).
 
 - **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI** — left
   behind by the vite 8 upgrade (#450, 2026-09-19). `bundle-smoke` builds esbuild bundles only. This
@@ -5972,11 +5860,8 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   pinned by `apps/server/src/db-wipe.test.ts`; what is missing is a rejoin-level case with sidecars
   on disk. Left open by SQLite slice 2 Task 5 (#569, `@waitron/stream`).
 
-- **`scripts/changed-packages.mjs runnable` runs before the tests in many packages' jobs, fed from a
-  pipe, so the selection guard does not count it and a change to it alone runs none of those jobs.**
-  Listing it against every member those jobs test would send every change to it through all of them
-  — the owner's call. Left open by SQLite slice 2 Task 10 (#652, the loop test against a real
-  S3-compatible server).
+- **`scripts/changed-packages.mjs runnable` runs before the tests in many packages' jobs, fed from a pipe, so the selection guard does not count it and a change to it alone runs none of those jobs.**
+  [Detail](backlog/ci.md#scriptschanged-packagesmjs-runnable-runs-before-the-tests-in-many-packages-jobs-fed-from-a-pipe-so-the-selection-guard-does-not-count-it-and-a-change-to-it-alone-runs-none-of-those-jobs).
 
 - **The S3 test server's ports (C88, #920).** Fixed in the harness; the mechanism is in
   [testing-guide.md](developers/testing-guide.md), "The S3 test server knows its own server". Left:
@@ -5988,28 +5873,13 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   once the refusal arrived one `setImmediate` later. Left open by #668, #686, A57, A60, #723, A538.
 
 - **Loose ends left by SQLite slice 1 (#490 and the preparation tasks).**
-  - Every `maxWorkers: 1` config whose comment gives the coverage reason, apart from `payments`,
-    which carries its own measurement, still says the pin is needed without having measured it; the
-    same one-worker-against-several coverage comparison would settle each.
-  - P7's leftovers (#533): `no-tenant-column`'s SQL check still passed with one set's SQL dropped,
-    because it checks for an absence and the remaining files clear its floor of eight.
-    [Detail](backlog/ci.md#p7s-leftovers-533)
-  - A few suites still build engine-shaped refusals by hand rather than through `refusalError`
-    (`packages/db/src/testing/refusals.ts`, P10, #527), among them
-    `packages/provisioning/src/cli.test.ts` and `packages/scheduler/src/store.concurrency.test.ts`.
+  [Detail](backlog/ci.md#loose-ends-left-by-sqlite-slice-1-490-and-the-preparation-tasks).
 
-- **After the onboarding wizard provisions, the stack started by `wa-wt onboarding <worktree>`
-  restarted into setup mode**, because the dev launcher (`apps/server/scripts/dev-server.mjs`)
-  looked for `trading.env` only in the state folder `apps/server/.env` names, not the one `wa-wt`
-  passes; the look worked round it with links. Seen during #1320's and #1322's looks (2026-10-07,
-  not checked against `main`).
-  [Detail](backlog/ci.md#the-dev-launcher-looks-for-tradingenv-only-in-the-state-folder-appsserverenv-names)
+- **After the onboarding wizard provisions, the stack started by `wa-wt onboarding <worktree>` restarted into setup mode**
+  [Detail](backlog/ci.md#the-dev-launcher-looks-for-tradingenv-only-in-the-state-folder-appsserverenv-names).
 
-- **Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
-  apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. Make
-  cross-app links reach the other dev server without changing their deployed same-origin paths; this
-  also affects setup's existing links.
-  [Detail](backlog/ci.md#cross-app-links-in-the-split-vite-dev-stack)
+- **Cross-app links in the split Vite dev stack — OPEN, unqueued.**
+  [Detail](backlog/ci.md#cross-app-links-in-the-split-vite-dev-stack).
 
 - **Loose ends left by W92 (#1250).**
   - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
@@ -6019,11 +5889,9 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
 - **The guard W72d added (`scripts/id-columns-are-references.test.ts`) knows an id column only by
   its name**, so a reference named otherwise is still unseen. Left open by W72d (#1238).
 
-- **W72h (#1247) stopped Chromium logging "ResizeObserver loop completed with undelivered
-  notifications" from the Products tree's category name box.** A261-3 (2026-10-05) and A349
-  (2026-10-08) then saw the message in other dashboard suites; that comparison does not establish
-  which observer causes it or its effect on the rendered screen.
-  [Detail](backlog/ci.md#chromiums-resizeobserver-loop-message-in-other-dashboard-suites-after-w72h)
+- **W72h (#1247) stopped Chromium logging "ResizeObserver loop completed with undelivered notifications" from the Products tree's category name box.**
+  A261-3 (2026-10-05) and A349 (2026-10-08) then saw the message in other dashboard suites; that comparison does not establish which observer causes it or its effect on the rendered screen.
+  [Detail](backlog/ci.md#chromiums-resizeobserver-loop-message-in-other-dashboard-suites-after-w72h).
 
 - **Tests that close a dialog and then check after a single `flush` were not searched** (A452,
   #1487). Popovers (combobox, help tooltip, row actions) report their toggle late too, and were not
@@ -6039,11 +5907,8 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   venue-service export as a file. Left open by the reviews of A261 step 5 (Hours, #1298) and by
   A585-4. [Detail](backlog/ci.md#the-browser-purity-guard-checks-only-some-of-venue-services-dashboard-files)
 
-- **Task 2's review found no test that fails when `device_profile_admission_roles` or
-  `device_profile_admission_persons` is left out of
-  `apps/server/src/testing/clear-provision-fixture.ts`** (read, not run); both tables' keys into
-  `device_profiles` cascade on delete (identity `0007_profile_admission.sql`). Left open by W97
-  (#1311).
+- **Task 2's review found no test that fails when `device_profile_admission_roles` or `device_profile_admission_persons` is left out of `apps/server/src/testing/clear-provision-fixture.ts`** (read, not run).
+  [Detail](backlog/ci.md#task-2s-review-found-no-test-that-fails-when-device_profile_admission_roles-or-device_profile_admission_persons-is-left-out-of-appsserversrctestingclear-provision-fixturets).
 
 - **The payments test "refreshes only active reader statuses" failed once locally beside another
   coverage run**, then passed five times alone and in CI; not investigated. Left open by W100
@@ -6059,12 +5924,8 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   `units-reassignment.unsaved.test.ts`. **Next action:** reproduce each under load and fix at the
   root. [Detail](backlog/ci.md#two-browser-tests-failed-once-each-during-a454s-work)
 
-- **The relocated independent department preview needs a load investigation.** The retired
-  `receipts-screen.defaults.test.ts` case failed once during A463 and was not reproduced.
-  A493 moves this behavior into the department receipt editor's language-independent preview cases
-  (`apps/dashboard/src/screens/department-receipt-editor.preview.test.ts`).
-  Reproduce that flow under load before assigning a cause; its retirement does not establish
-  that the original failure is fixed.
+- **The relocated independent department preview needs a load investigation.**
+  [Detail](backlog/ci.md#the-relocated-independent-department-preview-needs-a-load-investigation).
 
 - **A printers-screen test failed once during A435 step 2's review fixes and was not reproduced**:
   "a press after one edit sends the edit and the field as it was read". **Next action:** reproduce
@@ -6083,12 +5944,8 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   `-t` and runs the whole file**; only a bare `--` before it passes it through. **Next action:** add
   it to `CLAUDE.md` §2's trap list, through the normal pull request flow.
 
-- **drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES`
-  on this engine, while its snapshot kept it.** The schema-conformance suite compares declared
-  delete rules with the migrated database for the sets that opt in; [A812's deletion
-  experiment](developers/testing-guide.md#a-missing-delete-rule-fails-the-schema-comparison) caught
-  one omitted rule. The generator omission was observed once by an implementer (five store tests
-  failed with a foreign-key refusal), not independently re-run. Left open by A429 slice 1 (#1493).
+- **drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES` on this engine, while its snapshot kept it.**
+  [Detail](backlog/ci.md#drizzle-kit-03111-left-out-on-delete-when-it-generated-an-alter-table--add--references-on-this-engine-while-its-snapshot-kept-it).
 
 ### Dependency upgrades
 
