@@ -67,6 +67,7 @@ export {
   inspectFirstSetupWorkspaceSelection,
   readRetiredFirstSetupStates,
   readFirstSetupRetirements,
+  readFirstSetupRetirementArchives,
   selectFirstSetupWorkspace,
   resolveFirstSetupWorkspace,
   assertFirstSetupBootTarget,

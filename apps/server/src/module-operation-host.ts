@@ -12,9 +12,7 @@ import {
 import {
   venueFiscalSelection,
   createFirstSetupRuntime,
-  readFirstSetupRetirements,
-  firstSetupAnchorFor,
-  createFirstSetupResolutionStore,
+  readFirstSetupRetirementArchives,
 } from "@waitron/provisioning";
 import {
   createFirstFiscalDelivery,
@@ -50,13 +48,8 @@ export function createFirstSetupModuleHost(options: {
     };
   } = {};
   const readRetiredSetup: NonNullable<ModuleOperationHost["readRetiredSetup"]> = async (name) => {
-    const retired = await readFirstSetupRetirements(options);
-    if (retired.length === 0) return [];
-    const anchor = await firstSetupAnchorFor(options);
-    const archive = createFirstSetupResolutionStore({ ...anchor, coordinator });
     const result: Awaited<ReturnType<typeof readRetiredSetup>>[number][] = [];
-    for (const { state, record } of retired) {
-      const originals = await archive.readOriginals(record.resolutionId);
+    for (const { state, originals } of await readFirstSetupRetirementArchives(options)) {
       const publicEvidence = readFirstFiscalEvidenceSnapshot(name, originals);
       for (const original of originals) {
         if (!original.name.startsWith("outside-file:") || original.bytes === null) continue;

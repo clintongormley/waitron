@@ -573,6 +573,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
     as a promoted mirror (`persistTradingEnv` writes none). The route is mounted only when the
     intent is preparation or live (`apps/server/src/boot.ts`).
 
+- **Owner decision: should a setup request stop re-checking every old "start again" archive in
+  full?** Each request reads and checks every archived file of every retirement, and the retired
+  workspace, so its cost grows with each retirement. Both ways to stop it weaken the check. Left
+  open by A1037. [Detail](backlog/setup.md#owner-decision-should-a-setup-request-stop-re-checking-every-old-start-again-archive-in-full)
+
 - **Bound certificate password-derivation work before opening a file.** PKCS#12 files choose their
   own derivation cost; setup and certificate renewal currently pass it to the synchronous opener.
   Scope a shared limit or an isolated opener with a deadline. Raised by A852's review.

@@ -15,6 +15,8 @@ import {
   firstSetupDirectory,
   validateWorkspaceBinding,
   createFirstSetupResolutionStore,
+  createFirstSetupOriginalsCache,
+  type FirstSetupOriginalsCache,
   type WorkspaceBinding,
   type ResolutionRecord,
 } from "./first-setup-resolution.js";
@@ -34,8 +36,9 @@ export async function inspectFirstSetupWorkspaceSelection(anchorInput: FirstSetu
   retired: FirstSetupAnchor;
 } | null> {
   const anchor = await canonical(anchorInput);
+  const cache = createFirstSetupOriginalsCache();
   try {
-    await resolveFirstSetupWorkspace(anchor);
+    await resolveWorkspace(anchor, cache);
     return null;
   } catch {
     // Only retained retirement witnesses identify an interrupted operation; never scan orphan workspaces.
@@ -74,7 +77,7 @@ export async function inspectFirstSetupWorkspaceSelection(anchorInput: FirstSetu
   );
   const witness = ordered[0]!;
   if (ordered[1]?.binding.selectionGeneration === witness.binding.selectionGeneration) uncertain();
-  const records = await store(anchor).read(witness.binding.resolutionId);
+  const records = await store(anchor, cache).read(witness.binding.resolutionId);
   const record = records[1];
   if (
     record === undefined ||
@@ -82,7 +85,7 @@ export async function inspectFirstSetupWorkspaceSelection(anchorInput: FirstSetu
     witness.evidenceDigest !== record.evidenceDigest
   )
     uncertain();
-  const { binding, retired, predecessor } = await checkedApplied(anchor, record);
+  const { binding, retired, predecessor } = await checkedApplied(anchor, record, cache);
   if (
     !isDeepStrictEqual(binding, witness.binding) ||
     !isDeepStrictEqual(await read(join(retired.venueDir, "first-setup-retirement.json")), witness)
@@ -117,8 +120,13 @@ async function canonical(anchor: FirstSetupAnchor): Promise<FirstSetupAnchor> {
     stateDir: await canonicalFirstSetupDirectory(anchor.stateDir),
   };
 }
-function store(anchor: FirstSetupAnchor) {
-  return createFirstSetupResolutionStore({ ...anchor, coordinator: createFirstSetupCoordinator() });
+// One cache per exported call: one kept across calls would miss a change made on disk between them.
+function store(anchor: FirstSetupAnchor, originalsCache?: FirstSetupOriginalsCache) {
+  return createFirstSetupResolutionStore({
+    ...anchor,
+    coordinator: createFirstSetupCoordinator(),
+    ...(originalsCache === undefined ? {} : { originalsCache }),
+  });
 }
 function checkedWitness(value: unknown): Witness {
   if (
@@ -159,8 +167,9 @@ async function originalsUnchanged(
   record: ResolutionRecord,
   retired: FirstSetupAnchor,
   checkOutside: boolean,
+  cache: FirstSetupOriginalsCache,
 ) {
-  const originals = await store(anchor).readOriginals(record.resolutionId);
+  const originals = await store(anchor, cache).readOriginals(record.resolutionId);
   for (const required of [
     "state/first-setup.json",
     "venue/first-setup-claim.json",
@@ -234,11 +243,12 @@ async function originalsUnchanged(
 async function checkedApplied(
   anchor: FirstSetupAnchor,
   record: ResolutionRecord,
+  cache: FirstSetupOriginalsCache,
   seen = new Set<string>(),
 ): Promise<{ binding: WorkspaceBinding; predecessor: Witness | null; retired: FirstSetupAnchor }> {
   if (seen.has(record.resolutionId) || seen.size >= 64) uncertain();
   seen.add(record.resolutionId);
-  const records = await store(anchor).read(record.resolutionId);
+  const records = await store(anchor, cache).read(record.resolutionId);
   if (
     records.length < 2 ||
     records.length > 4 ||
@@ -264,7 +274,7 @@ async function checkedApplied(
   validateWorkspaceBinding(binding);
   if (binding.anchorVenueDir !== anchor.venueDir || binding.anchorStateDir !== anchor.stateDir)
     uncertain();
-  const originals = await store(anchor).readOriginals(record.resolutionId);
+  const originals = await store(anchor, cache).readOriginals(record.resolutionId);
   const previous = originals.find((original) => original.name === "workspace:predecessor");
   const predecessor =
     previous === undefined
@@ -279,14 +289,19 @@ async function checkedApplied(
       predecessor.binding.anchorStateDir !== anchor.stateDir
     )
       uncertain();
-    await checkedChain(anchor, predecessor, seen);
+    await checkedChain(anchor, predecessor, cache, seen);
     retired = predecessor.binding;
   }
-  await originalsUnchanged(anchor, record, retired, false);
+  await originalsUnchanged(anchor, record, retired, false, cache);
   return { binding, predecessor, retired };
 }
-async function checkedChain(anchor: FirstSetupAnchor, witness: Witness, seen = new Set<string>()) {
-  const records = await store(anchor).read(witness.binding.resolutionId),
+async function checkedChain(
+  anchor: FirstSetupAnchor,
+  witness: Witness,
+  cache: FirstSetupOriginalsCache,
+  seen = new Set<string>(),
+) {
+  const records = await store(anchor, cache).read(witness.binding.resolutionId),
     applied = records[1];
   if (
     records.length !== 4 ||
@@ -295,7 +310,7 @@ async function checkedChain(anchor: FirstSetupAnchor, witness: Witness, seen = n
     witness.evidenceDigest !== applied.evidenceDigest
   )
     uncertain();
-  const checked = await checkedApplied(anchor, applied, seen);
+  const checked = await checkedApplied(anchor, applied, cache, seen);
   if (!isDeepStrictEqual(checked.binding, witness.binding)) uncertain();
   await firstSetupDirectory(checked.binding.venueDir);
   await firstSetupDirectory(checked.binding.stateDir);
@@ -317,8 +332,9 @@ export async function selectFirstSetupWorkspace(
   record: ResolutionRecord,
 ): Promise<WorkspaceBinding> {
   try {
+    const cache = createFirstSetupOriginalsCache();
     const anchor = await canonical(anchorInput),
-      { binding, predecessor, retired } = await checkedApplied(anchor, record);
+      { binding, predecessor, retired } = await checkedApplied(anchor, record, cache);
     const witness: Witness = {
       version: 1,
       binding,
@@ -348,7 +364,7 @@ export async function selectFirstSetupWorkspace(
       await resolveFirstSetupWorkspace(anchor);
       return binding;
     }
-    await originalsUnchanged(anchor, record, retired, true);
+    await originalsUnchanged(anchor, record, retired, true, cache);
     const {
       resolutionId,
       attemptId,
@@ -393,6 +409,12 @@ export async function selectFirstSetupWorkspace(
 export async function resolveFirstSetupWorkspace(
   anchorInput: FirstSetupAnchor,
 ): Promise<FirstSetupBootTarget> {
+  return resolveWorkspace(anchorInput, createFirstSetupOriginalsCache());
+}
+async function resolveWorkspace(
+  anchorInput: FirstSetupAnchor,
+  cache: FirstSetupOriginalsCache,
+): Promise<FirstSetupBootTarget> {
   try {
     const anchor = await canonical(anchorInput);
     const venue = await read(join(anchor.venueDir, "first-setup-selection.json"));
@@ -406,10 +428,10 @@ export async function resolveFirstSetupWorkspace(
       }
       const { binding } = checkedWitness(value);
       if (binding.venueDir !== anchor.venueDir || binding.stateDir !== anchor.stateDir) uncertain();
-      const selected = await resolveFirstSetupWorkspace({
-        venueDir: binding.anchorVenueDir,
-        stateDir: binding.anchorStateDir,
-      });
+      const selected = await resolveWorkspace(
+        { venueDir: binding.anchorVenueDir, stateDir: binding.anchorStateDir },
+        cache,
+      );
       if (!isDeepStrictEqual(selected.binding, binding)) uncertain();
       return selected;
     }
@@ -419,7 +441,7 @@ export async function resolveFirstSetupWorkspace(
       binding = witness.binding;
     if (binding.anchorVenueDir !== anchor.venueDir || binding.anchorStateDir !== anchor.stateDir)
       uncertain();
-    await checkedChain(anchor, witness);
+    await checkedChain(anchor, witness, cache);
     if ((await read(join(binding.venueDir, "first-setup-retirement.json"))) !== null) uncertain();
     return { venueDir: binding.venueDir, stateDir: binding.stateDir, binding };
   } catch {
@@ -451,6 +473,12 @@ export async function assertFirstSetupVenueTarget(venueInput: string): Promise<v
   }
 }
 export async function assertFirstSetupBootTarget(targetInput: FirstSetupAnchor): Promise<void> {
+  await assertBootTarget(targetInput, createFirstSetupOriginalsCache());
+}
+async function assertBootTarget(
+  targetInput: FirstSetupAnchor,
+  cache: FirstSetupOriginalsCache,
+): Promise<void> {
   try {
     const target = await canonical(targetInput);
     if (
@@ -465,10 +493,10 @@ export async function assertFirstSetupBootTarget(targetInput: FirstSetupAnchor):
       return;
     }
     const witness = checkedWitness(backlink);
-    const resolved = await resolveFirstSetupWorkspace({
-      venueDir: witness.binding.anchorVenueDir,
-      stateDir: witness.binding.anchorStateDir,
-    });
+    const resolved = await resolveWorkspace(
+      { venueDir: witness.binding.anchorVenueDir, stateDir: witness.binding.anchorStateDir },
+      cache,
+    );
     if (
       resolved.venueDir !== target.venueDir ||
       resolved.stateDir !== target.stateDir ||
@@ -480,12 +508,17 @@ export async function assertFirstSetupBootTarget(targetInput: FirstSetupAnchor):
   }
 }
 
-export async function readFirstSetupRetirements(
-  targetInput: FirstSetupAnchor,
-): Promise<{ state: FirstSetupState; record: ResolutionRecord }[]> {
+export async function readFirstSetupRetirementArchives(targetInput: FirstSetupAnchor): Promise<
+  {
+    state: FirstSetupState;
+    record: ResolutionRecord;
+    originals: { name: string; bytes: Buffer | null }[];
+  }[]
+> {
   try {
+    const cache = createFirstSetupOriginalsCache();
     const target = await canonical(targetInput);
-    await assertFirstSetupBootTarget(target);
+    await assertBootTarget(target, cache);
     const value = await read(join(target.venueDir, "first-setup-workspace.json"));
     if (value === null) return [];
     let witness: Witness | null = checkedWitness(value);
@@ -493,22 +526,36 @@ export async function readFirstSetupRetirements(
       venueDir: witness.binding.anchorVenueDir,
       stateDir: witness.binding.anchorStateDir,
     };
-    const states: { state: FirstSetupState; record: ResolutionRecord }[] = [];
+    const retirements: {
+      state: FirstSetupState;
+      record: ResolutionRecord;
+      originals: { name: string; bytes: Buffer | null }[];
+    }[] = [];
     while (witness !== null) {
-      const { retired, predecessor, record } = await checkedChain(anchor, witness);
-      const originals = await store(anchor).readOriginals(witness.binding.resolutionId);
+      const { retired, predecessor, record } = await checkedChain(anchor, witness, cache);
+      const originals = await store(anchor, cache).readOriginals(witness.binding.resolutionId);
       const bytes = originals.find((original) => original.name === "state/first-setup.json")?.bytes;
       if (bytes == null) uncertain();
-      states.push({
+      retirements.push({
         state: parseState(JSON.parse(bytes.toString("utf8")), retired.venueDir, retired.stateDir),
         record,
+        originals,
       });
       witness = predecessor;
     }
-    return states;
+    return retirements;
   } catch {
     uncertain();
   }
+}
+
+export async function readFirstSetupRetirements(
+  target: FirstSetupAnchor,
+): Promise<{ state: FirstSetupState; record: ResolutionRecord }[]> {
+  return (await readFirstSetupRetirementArchives(target)).map(({ state, record }) => ({
+    state,
+    record,
+  }));
 }
 
 export async function firstSetupAnchorFor(
