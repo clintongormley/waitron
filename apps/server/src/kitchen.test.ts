@@ -38,7 +38,6 @@ import {
   updateStation,
 } from "./kitchen.js";
 import "./errors.js";
-import { getKitchenTimingDefaults, setKitchenTimingDefaults } from "./kitchen-timing.js";
 
 // The one-default partial unique is pinned in packages/db/src/schema/kitchen-stations.test.ts.
 const LOCALE = "es-ES";
@@ -409,32 +408,6 @@ describe("kitchen-station config", () => {
     const station = (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id);
     expect(station).not.toHaveProperty("timingDefaults");
     expect(station).not.toHaveProperty("timingOverrides");
-  });
-
-  it("refuses missing venue defaults rather than fabricating or overwriting them", async () => {
-    const cfg = await setupVenue();
-    await db.execute(
-      sql`delete from kitchen_timing_defaults where location_id = ${cfg.locationId}`,
-    );
-    await expect(asApp(cfg, (tx) => getKitchenTimingDefaults(tx, cfg))).rejects.toMatchObject({
-      code: "station.timing_missing",
-    });
-    await expect(
-      asApp(cfg, (tx) =>
-        setKitchenTimingDefaults(tx, cfg, {
-          warmAfterMinutes: 3,
-          overdueAfterMinutes: 8,
-          forgottenAfterMinutes: 12,
-        }),
-      ),
-    ).rejects.toMatchObject({ code: "station.timing_missing" });
-    expect(
-      (
-        await db.execute(
-          sql`select * from kitchen_timing_defaults where location_id = ${cfg.locationId}`,
-        )
-      ).rows,
-    ).toEqual([]);
   });
 
   it("setDefaultStation throws station.not_found for an absent OR a deleted station", async () => {

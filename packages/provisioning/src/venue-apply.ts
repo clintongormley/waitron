@@ -3,7 +3,6 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import {
   invoiceSeries,
   kitchenStations,
-  kitchenTimingDefaults,
   locations,
   locationDayCutoverChanges,
   nextStationColour,
@@ -300,7 +299,6 @@ export async function applyVenue(
             timeZone: action.timeZone,
             dayCutover: action.dayCutover,
           });
-          await tx.insert(kitchenTimingDefaults).values({ locationId });
           // A line with no more specific route fires to the default station; with no active
           // default, firing fails with `station.no_default`. So a fresh venue ships one.
           await tx.insert(kitchenStations).values({

@@ -9,11 +9,7 @@ import "./errors.js";
 import "@waitron/printing";
 // The registry of `product.not_found`, which `requireProductId` throws.
 import "@waitron/catalogue";
-import {
-  getKitchenTimingDefaults,
-  setKitchenTimingDefaults,
-  parseStationTimingPatch,
-} from "./kitchen-timing.js";
+import { parseStationTimingPatch } from "./kitchen-timing.js";
 import { stationPrintersDown, stationScreensDark } from "./station-outputs-down.js";
 import type { Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -103,7 +99,7 @@ import type { NarrowedDevice, TableRemoval } from "@waitron/module";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import type { TillConfig } from "./till-config.js";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
-import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
+import { readJsonBody } from "@waitron/server-kit";
 import {
   requireBodyUuid,
   requireEnum,
@@ -1526,26 +1522,6 @@ export function mountManagementApi(
         }),
       );
       return c.json(tables);
-    }),
-  );
-
-  app.get("/management-api/kitchen-timing-defaults", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
-      return c.json(
-        await withVenueReadAuth(deps, sessionId, (tx) => getKitchenTimingDefaults(tx, cfg)),
-      );
-    }),
-  );
-
-  app.put("/management-api/kitchen-timing-defaults", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
-      const body = await readRawJsonBody(c);
-      await withVenueAuth(deps, sessionId, (tx) => setKitchenTimingDefaults(tx, cfg, body));
-      return c.body(null, 204);
     }),
   );
 
