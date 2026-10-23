@@ -1,3 +1,11 @@
+> **AEAT test observation, 2026-10-23 (A1034).** The authorised probe completed in
+> [run 39970201368](https://github.com/waitron-io/verifactu/actions/runs/39970201368).
+> The queued/not-run notes below describe the earlier revision; §6 now records the result.
+> This updates the test evidence only. Cloud agreement, owner design approval, build authority
+> and physical handover qualification remain separate.
+
+---
+
 > **Owner correction, 2026-10-23, after the 15:37 and 15:40 answers.** The owner
 > rejected the filing assignment below: once M2 takes over, **M2 alone handles all
 > AEAT communication in both controlled and emergency handovers**. Returning M1 transfers
@@ -283,11 +291,25 @@ it does not create a new legal conclusion or establish runtime acceptance:
 | [Asesor Q2](../../compliance/asesor-questions.md#q2-may-a-node-other-than-the-till-transmit-the-tills-records-to-aeat) | “the record must carry the **generating till's** `IdSistemaInformatico` and `NumeroInstalacion`, never the relaying node's” | Relay preserves the generating identity. Q2 is closed on primary source, not a new owner or asesor question. |
 | [5 October observation beside Q34](../../compliance/asesor-questions.md#q34-sending-the-old-installations-unsent-records-after-the-switch-added-2026-10-03) | “The fresh-installation probe received `EstadoRegistro: "Correcto"` for each of its two first records” | Run 37286364837 accepted two first records. It did not continue an old chain after a new one started, interleave their tails or resend an old-server-filed record. |
 
-**A1034 is authorised and queued next under the 15:40 “Test it” answer.** Its `handover-tail`
-mode in the verifactu live harness will check old-tail continuation after M2's new chain starts,
-interleaving and duplicates against AEAT's test service. These checks have **not run**; neither
-the owner instruction nor the 5 October observation is their runtime or legal receipt. A947's
-broader ledger transfer and archive/deletion policy still need explicit amendment under §10.
+**Observed in AEAT's preproduction environment, 2026-10-23 (A1034).** In
+[run 39970201368](https://github.com/waitron-io/verifactu/actions/runs/39970201368), A1–A3
+returned `Correcto`; B1/B2 started a separate installation in one batch. Saved A4, then B3,
+then saved A5 also returned `Correcto`. A4/A5 were prepared before B started and retained A's
+installation and their original predecessor links. Resending unchanged A3 returned
+`Incorrecto`, code `3000`, “Registro de facturación duplicado.” and stored state `Correcta`.
+Expanded issuer consulta returned A3 as `Correcto`, with its original fingerprint and generating
+software identity, including installation `CI-HANDOVER-39970201368-A`.
+
+The [saved records and parsed/raw replies](2026-10-23-aeat-handover-tail-evidence.json) come from
+one synthetic run, one certificate and one process with two generating installation identities.
+No physical handover, fencing, missing-history transfer, conflicting tail, production or legal
+acceptance was exercised. The live mode retains record objects and raw response SOAP, not raw
+request SOAP. A947's broader ledger transfer and archive/deletion policy still need explicit
+amendment under §10.
+
+| Test-service source                                                                                                                        | Actual wording                                                                                   | Scope                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [A1034 saved evidence](2026-10-23-aeat-handover-tail-evidence.json), run 39970201368, verifactu `754f6332c1e3308c7f714c94a9803804d2dd9596` | `EstadoRegistro: "Correcto"`; `CodigoErrorRegistro: 3000`; `EstadoRegistroDuplicado: "Correcta"` | The ordered original/tail records were accepted, the unchanged A3 retry was a duplicate, and targeted consulta matched its original fingerprint and generating installation in this run. No physical handover or legal conclusion. |
 
 ## 7. Point 5: who may declare, and simple retry rules
 
@@ -418,7 +440,7 @@ behaviour and adverse controls, meaning deliberately weakening each guard to see
 | After either takeover M2 alone handles all AEAT communication; it files copied and later-returned old originals in their generating identities, and new sales in its own. | Reinstate an emergency predecessor ownership hold or substitute M2's identity in an old original; each must fail. Reboot/reset/retry must keep M1 from filing, consulting or otherwise contacting AEAT. |
 | Controlled M2 files copied M1 records only after source relinquishment; M1 never resumes that queue.                | Lose replies and reboot both machines between relinquishment and assumption; remove the source restriction.                                                       |
 | Tail transfer includes all received outcomes and missing originals; known results, uncertainties, duplicates and conflicts use existing paths without losing evidence. | Re-run A947's amended S2 with its fence-removed and missing-only-batch controls, plus the replay variant. Use real drain/duplicate handling for an earlier copied row, an uncertain send and conflicting outcomes. |
-| A1034 must check old-tail continuation after the new chain starts, interleaving and an old-server-filed record resent by M2 on AEAT's test service. | Retain exact requests/replies and identity comparisons; an accepted first record alone cannot satisfy these checks. Authorised and queued next, not yet run. |
+| A1034 must check old-tail continuation after the new chain starts, interleaving and an old-server-filed record resent by M2 on AEAT's test service. | Retain exact requests/replies and identity comparisons; an accepted first record alone cannot satisfy these checks. Record objects and response SOAP are observed in the 2026-10-23 A1034 receipt above; raw request SOAP was not captured, and physical transfer and fencing remain unrun. |
 | Fiscal-only return produces the dated gap list and retained archive; no business replay or early wipe.              | Include changed orders/payments/cash/stock rows, missing fiscal filing rows and a failed archive/health check.                                                    |
 | Concurrent requests, mid-handover crashes and lost activation replies preserve selected M2 and one filing owner.    | Crash before/after durable copy acceptance and relinquishment, request emergency replacement, lose each reply and remove the respective checkpoint/input binding. |
 | Authorised restore remains usable without hard-stop proof; no silent fallback; PIN alone cannot declare.            | Add a proof requirement, automatic conversion or PIN-only authentication and require the respective check to fail.                                                |
@@ -461,7 +483,7 @@ revised shared contract publication and its acceptance through G/D133.
 
 After G's pinned acceptance, the driver cites [A947 §7.1](2026-10-21-a947-two-box-failover-design.md#71-the-tail-and-the-fix-for-the-failed-prototype-scenario)
 and [asesor Q2](../../compliance/asesor-questions.md#q2-may-a-node-other-than-the-till-transmit-the-tills-records-to-aeat),
-and states that authorised A1034 is queued next, with its test-service checks not yet run.
+and cites the dated A1034 test-service observation in §6 with its physical-handover and legal limits.
 Then ask **one short question**, with §§8–9 and the unchanged proposed defaults available:
 “Do you approve the revised Harbour Kitchen handovers and retained defaults, with M2 alone
 handling AEAT after either takeover and M1 returning only fiscal originals and received outcomes?”

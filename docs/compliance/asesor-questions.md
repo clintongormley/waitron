@@ -3068,6 +3068,19 @@ question remain for the asesor.
 Source: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json)
 and [dated receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1).
 
+**Observed in AEAT's preproduction environment, 2026-10-23 (A1034).** A1–A3 were accepted,
+then B1/B2 started another installation. Saved A4 and A5, prepared before B started and still
+naming A's installation, returned `Correcto` with B3 sent between them. An unchanged retry of
+A3 returned `Incorrecto`, code `3000`, “Registro de facturación duplicado.”, stored state
+`Correcta`. Expanded issuer consulta returned its original fingerprint and generating software
+identity, including installation `CI-HANDOVER-39970201368-A`. See
+[run 39970201368](https://github.com/waitron-io/verifactu/actions/runs/39970201368) and the
+[saved records and parsed/raw replies](../superpowers/specs/2026-10-23-aeat-handover-tail-evidence.json).
+This is one synthetic run from one certificate and one process, with two generating installation
+identities. It does not test a physical handover, fencing, conflicting predecessor contents,
+missing-history transfer or production behaviour. The 5 October limitation above remains the
+scope of those earlier probes. These observations supply no legal answer to Q34 or D5.
+
 This records a question; no enquiry has been sent.
 
 ---

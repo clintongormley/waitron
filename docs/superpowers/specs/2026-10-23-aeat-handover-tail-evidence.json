@@ -1,0 +1,1105 @@
+{
+  "schemaVersion": 1,
+  "item": "A1034",
+  "observedAt": "2026-10-23",
+  "environment": "AEAT preproduction",
+  "harness": {
+    "repository": "waitron-io/verifactu",
+    "pullRequest": "https://github.com/waitron-io/verifactu/pull/147",
+    "commit": "754f6332c1e3308c7f714c94a9803804d2dd9596",
+    "mode": "handover-tail",
+    "workflow": ".github/workflows/live-aeat.yml",
+    "ref": "main"
+  },
+  "run": {
+    "conclusion": "success",
+    "createdAt": "2026-10-23T14:30:24Z",
+    "headSha": "754f6332c1e3308c7f714c94a9803804d2dd9596",
+    "jobs": [
+      {
+        "completedAt": "2026-10-23T14:37:52Z",
+        "conclusion": "success",
+        "databaseId": 120470559415,
+        "name": "live",
+        "startedAt": "2026-10-23T14:30:30Z",
+        "status": "completed",
+        "steps": [
+          {
+            "completedAt": "2026-10-23T14:30:32Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "number": 1,
+            "startedAt": "2026-10-23T14:30:31Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-23T14:30:34Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v7",
+            "number": 2,
+            "startedAt": "2026-10-23T14:30:32Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-23T14:30:38Z",
+            "conclusion": "success",
+            "name": "Run actions/setup-node@v7",
+            "number": 3,
+            "startedAt": "2026-10-23T14:30:34Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-23T14:30:42Z",
+            "conclusion": "success",
+            "name": "Run npm ci",
+            "number": 4,
+            "startedAt": "2026-10-23T14:30:38Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-23T14:30:42Z",
+            "conclusion": "success",
+            "name": "Run npm run build",
+            "number": 5,
+            "startedAt": "2026-10-23T14:30:42Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-23T14:37:49Z",
+            "conclusion": "success",
+            "name": "Call AEAT preproduction",
+            "number": 6,
+            "startedAt": "2026-10-23T14:30:42Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-23T14:37:49Z",
+            "conclusion": "success",
+            "name": "Post Run actions/setup-node@v7",
+            "number": 11,
+            "startedAt": "2026-10-23T14:37:49Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-23T14:37:49Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v7",
+            "number": 12,
+            "startedAt": "2026-10-23T14:37:49Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-23T14:37:49Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "number": 13,
+            "startedAt": "2026-10-23T14:37:49Z",
+            "status": "completed"
+          }
+        ],
+        "url": "https://github.com/waitron-io/verifactu/actions/runs/39970201368/job/120470559415"
+      }
+    ],
+    "status": "completed",
+    "updatedAt": "2026-10-23T14:37:52Z",
+    "url": "https://github.com/waitron-io/verifactu/actions/runs/39970201368"
+  },
+  "failureCriteriaPrintedBeforeSubmission": "A1,A2,A3,B1,B2,A4,B3,A5 must each return one matching Correcto line and Correcto batch without an error; each installation's successor must retain its own predecessor. A3Replay must be the original bytes and return Incorrecto/3000 with stored state Correcta. Expanded issuer lookup must find exactly one A3 with the original identity, fingerprint and generating software NIF/system/installation, state Correcto. Any refusal, warning, unexpected reply, failed wait or transport/lookup error stops the probe. Preproduction only; no legal or fencing conclusion.",
+  "logSha256": "985bdc33c2f0462b23dd68bfe4db5ebece3d67910c7dd18298dad2b17d29fbae",
+  "sourceArtifacts": {
+    "completeEvidenceSha256": "f10832d6822362f3588a5b7bcd8c03c62699e650cda7b1f12d073bb2688349be"
+  },
+  "observed": {
+    "distinctNewRecords": 8,
+    "submissions": 8,
+    "consultations": 1,
+    "newRecordOrder": ["A1", "A2", "A3", "B1", "B2", "A4", "B3", "A5"],
+    "B1B2SameBatch": true,
+    "tailPreparedBeforeB": true,
+    "tailRecordsUnchanged": true,
+    "ownInstallationPredecessorLinksMatch": true,
+    "A3ReplayUnchanged": true,
+    "duplicateCode": 3000,
+    "duplicateDescription": "Registro de facturación duplicado.",
+    "duplicateStoredState": "Correcta",
+    "storedA3Fingerprint": "860570E5A144BBBDCD23EB195484C8659D0C2EC849B30C27994219954B6CB91B",
+    "storedA3Installation": "CI-HANDOVER-39970201368-A"
+  },
+  "limits": [
+    "One synthetic run from one certificate and one process, with two generating installation identities; no physical transfer or second machine was exercised.",
+    "No production, legal, fencing, exclusive-writer, transport-authentication, archive/deletion, missing-history, conflicting-tail, provider or payment-recovery conclusion.",
+    "Configured taxpayer, software and recipient identities are redacted in parsed records and raw SOAP. Matching checks ran before redaction; published placeholders do not independently establish identity equality.",
+    "Saved record objects and response SOAP are retained; raw request SOAP is not captured by this live mode. The offline CLI review compared the A3 and replay request bytes.",
+    "No fiscal record builder, hash, numbering, allocation, Waitron product code, existing assertion or release tag changed."
+  ],
+  "evidence": {
+    "incomplete": false,
+    "A1": {
+      "record": {
+        "IDVersion": "1.0",
+        "IDFactura": {
+          "IDEmisorFactura": "[identity]",
+          "NumSerieFactura": "CI-HANDOVER-A1/20261023/39970201368",
+          "FechaExpedicionFactura": "23-10-2026"
+        },
+        "RefExterna": "CI-HANDOVER-39970201368-A1",
+        "NombreRazonEmisor": "[identity]",
+        "TipoFactura": "F1",
+        "DescripcionOperacion": "Prueba de integración en preproducción",
+        "Destinatarios": {
+          "IDDestinatario": [
+            {
+              "NombreRazon": "[identity]",
+              "NIF": "[identity]"
+            }
+          ]
+        },
+        "Desglose": [
+          {
+            "ClaveRegimen": "01",
+            "TipoImpositivo": "21.00",
+            "BaseImponibleOimporteNoSujeto": "1.00",
+            "CuotaRepercutida": "0.21",
+            "CalificacionOperacion": "S1"
+          }
+        ],
+        "CuotaTotal": "0.21",
+        "ImporteTotal": "1.21",
+        "Encadenamiento": {
+          "PrimerRegistro": "S"
+        },
+        "SistemaInformatico": {
+          "NombreRazon": "[identity]",
+          "NIF": "[identity]",
+          "NombreSistemaInformatico": "Waitron VeriFactu test",
+          "IdSistemaInformatico": "WT",
+          "Version": "0.1.0",
+          "NumeroInstalacion": "CI-HANDOVER-39970201368-A",
+          "TipoUsoPosibleSoloVerifactu": "S",
+          "TipoUsoPosibleMultiOT": "N",
+          "IndicadorMultiplesOT": "N"
+        },
+        "FechaHoraHusoGenRegistro": "2026-10-23T16:30:42+02:00",
+        "TipoHuella": "01",
+        "Huella": "F6A156E8F9052D7F7C42FE70F3DBF35FE310A82D87BE5BCA5977B329DCCDDA9A"
+      },
+      "response": {
+        "CSV": "A-4CMSFFZ73KQ38C",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-23T16:30:44+02:00"
+        },
+        "EstadoEnvio": "Correcto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI-HANDOVER-A1/20261023/39970201368",
+              "FechaExpedicionFactura": "23-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Alta"
+            },
+            "RefExterna": "CI-HANDOVER-39970201368-A1",
+            "EstadoRegistro": "Correcto"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-4CMSFFZ73KQ38C</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-23T16:30:44+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Correcto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI-HANDOVER-A1/20261023/39970201368</tik:NumSerieFactura><tik:FechaExpedicionFactura>23-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion><tikR:RefExterna>CI-HANDOVER-39970201368-A1</tikR:RefExterna><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": true
+    },
+    "A2": {
+      "record": {
+        "IDVersion": "1.0",
+        "IDFactura": {
+          "IDEmisorFactura": "[identity]",
+          "NumSerieFactura": "CI-HANDOVER-A2/20261023/39970201368",
+          "FechaExpedicionFactura": "23-10-2026"
+        },
+        "RefExterna": "CI-HANDOVER-39970201368-A2",
+        "NombreRazonEmisor": "[identity]",
+        "TipoFactura": "F1",
+        "DescripcionOperacion": "Prueba de integración en preproducción",
+        "Destinatarios": {
+          "IDDestinatario": [
+            {
+              "NombreRazon": "[identity]",
+              "NIF": "[identity]"
+            }
+          ]
+        },
+        "Desglose": [
+          {
+            "ClaveRegimen": "01",
+            "TipoImpositivo": "21.00",
+            "BaseImponibleOimporteNoSujeto": "1.00",
+            "CuotaRepercutida": "0.21",
+            "CalificacionOperacion": "S1"
+          }
+        ],
+        "CuotaTotal": "0.21",
+        "ImporteTotal": "1.21",
+        "Encadenamiento": {
+          "RegistroAnterior": {
+            "IDEmisorFactura": "[identity]",
+            "NumSerieFactura": "CI-HANDOVER-A1/20261023/39970201368",
+            "FechaExpedicionFactura": "23-10-2026",
+            "Huella": "F6A156E8F9052D7F7C42FE70F3DBF35FE310A82D87BE5BCA5977B329DCCDDA9A"
+          }
+        },
+        "SistemaInformatico": {
+          "NombreRazon": "[identity]",
+          "NIF": "[identity]",
+          "NombreSistemaInformatico": "Waitron VeriFactu test",
+          "IdSistemaInformatico": "WT",
+          "Version": "0.1.0",
+          "NumeroInstalacion": "CI-HANDOVER-39970201368-A",
+          "TipoUsoPosibleSoloVerifactu": "S",
+          "TipoUsoPosibleMultiOT": "N",
+          "IndicadorMultiplesOT": "N"
+        },
+        "FechaHoraHusoGenRegistro": "2026-10-23T16:31:44+02:00",
+        "TipoHuella": "01",
+        "Huella": "CFF227F646812FB62FA65759A76B1D4B2D7AE2371F04BE335173761C04D22D16"
+      },
+      "response": {
+        "CSV": "A-FEK7ZVRYQ9HSZX",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-23T16:31:45+02:00"
+        },
+        "EstadoEnvio": "Correcto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI-HANDOVER-A2/20261023/39970201368",
+              "FechaExpedicionFactura": "23-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Alta"
+            },
+            "RefExterna": "CI-HANDOVER-39970201368-A2",
+            "EstadoRegistro": "Correcto"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-FEK7ZVRYQ9HSZX</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-23T16:31:45+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Correcto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI-HANDOVER-A2/20261023/39970201368</tik:NumSerieFactura><tik:FechaExpedicionFactura>23-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion><tikR:RefExterna>CI-HANDOVER-39970201368-A2</tikR:RefExterna><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": true
+    },
+    "A3": {
+      "record": {
+        "IDVersion": "1.0",
+        "IDFactura": {
+          "IDEmisorFactura": "[identity]",
+          "NumSerieFactura": "CI-HANDOVER-A3/20261023/39970201368",
+          "FechaExpedicionFactura": "23-10-2026"
+        },
+        "RefExterna": "CI-HANDOVER-39970201368-A3",
+        "NombreRazonEmisor": "[identity]",
+        "TipoFactura": "F1",
+        "DescripcionOperacion": "Prueba de integración en preproducción",
+        "Destinatarios": {
+          "IDDestinatario": [
+            {
+              "NombreRazon": "[identity]",
+              "NIF": "[identity]"
+            }
+          ]
+        },
+        "Desglose": [
+          {
+            "ClaveRegimen": "01",
+            "TipoImpositivo": "21.00",
+            "BaseImponibleOimporteNoSujeto": "1.00",
+            "CuotaRepercutida": "0.21",
+            "CalificacionOperacion": "S1"
+          }
+        ],
+        "CuotaTotal": "0.21",
+        "ImporteTotal": "1.21",
+        "Encadenamiento": {
+          "RegistroAnterior": {
+            "IDEmisorFactura": "[identity]",
+            "NumSerieFactura": "CI-HANDOVER-A2/20261023/39970201368",
+            "FechaExpedicionFactura": "23-10-2026",
+            "Huella": "CFF227F646812FB62FA65759A76B1D4B2D7AE2371F04BE335173761C04D22D16"
+          }
+        },
+        "SistemaInformatico": {
+          "NombreRazon": "[identity]",
+          "NIF": "[identity]",
+          "NombreSistemaInformatico": "Waitron VeriFactu test",
+          "IdSistemaInformatico": "WT",
+          "Version": "0.1.0",
+          "NumeroInstalacion": "CI-HANDOVER-39970201368-A",
+          "TipoUsoPosibleSoloVerifactu": "S",
+          "TipoUsoPosibleMultiOT": "N",
+          "IndicadorMultiplesOT": "N"
+        },
+        "FechaHoraHusoGenRegistro": "2026-10-23T16:32:45+02:00",
+        "TipoHuella": "01",
+        "Huella": "860570E5A144BBBDCD23EB195484C8659D0C2EC849B30C27994219954B6CB91B"
+      },
+      "response": {
+        "CSV": "A-TRHZ37DJMLNHUP",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-23T16:32:45+02:00"
+        },
+        "EstadoEnvio": "Correcto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI-HANDOVER-A3/20261023/39970201368",
+              "FechaExpedicionFactura": "23-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Alta"
+            },
+            "RefExterna": "CI-HANDOVER-39970201368-A3",
+            "EstadoRegistro": "Correcto"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-TRHZ37DJMLNHUP</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-23T16:32:45+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Correcto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI-HANDOVER-A3/20261023/39970201368</tik:NumSerieFactura><tik:FechaExpedicionFactura>23-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion><tikR:RefExterna>CI-HANDOVER-39970201368-A3</tikR:RefExterna><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": true
+    },
+    "tailPrepared": {
+      "A4": {
+        "IDVersion": "1.0",
+        "IDFactura": {
+          "IDEmisorFactura": "[identity]",
+          "NumSerieFactura": "CI-HANDOVER-A4/20261023/39970201368",
+          "FechaExpedicionFactura": "23-10-2026"
+        },
+        "RefExterna": "CI-HANDOVER-39970201368-A4",
+        "NombreRazonEmisor": "[identity]",
+        "TipoFactura": "F1",
+        "DescripcionOperacion": "Prueba de integración en preproducción",
+        "Destinatarios": {
+          "IDDestinatario": [
+            {
+              "NombreRazon": "[identity]",
+              "NIF": "[identity]"
+            }
+          ]
+        },
+        "Desglose": [
+          {
+            "ClaveRegimen": "01",
+            "TipoImpositivo": "21.00",
+            "BaseImponibleOimporteNoSujeto": "1.00",
+            "CuotaRepercutida": "0.21",
+            "CalificacionOperacion": "S1"
+          }
+        ],
+        "CuotaTotal": "0.21",
+        "ImporteTotal": "1.21",
+        "Encadenamiento": {
+          "RegistroAnterior": {
+            "IDEmisorFactura": "[identity]",
+            "NumSerieFactura": "CI-HANDOVER-A3/20261023/39970201368",
+            "FechaExpedicionFactura": "23-10-2026",
+            "Huella": "860570E5A144BBBDCD23EB195484C8659D0C2EC849B30C27994219954B6CB91B"
+          }
+        },
+        "SistemaInformatico": {
+          "NombreRazon": "[identity]",
+          "NIF": "[identity]",
+          "NombreSistemaInformatico": "Waitron VeriFactu test",
+          "IdSistemaInformatico": "WT",
+          "Version": "0.1.0",
+          "NumeroInstalacion": "CI-HANDOVER-39970201368-A",
+          "TipoUsoPosibleSoloVerifactu": "S",
+          "TipoUsoPosibleMultiOT": "N",
+          "IndicadorMultiplesOT": "N"
+        },
+        "FechaHoraHusoGenRegistro": "2026-10-23T16:33:45+02:00",
+        "TipoHuella": "01",
+        "Huella": "2482D18979BC3F6FA0BB27F9410D76722F0144B03CC529AC1DDAEB177C541063"
+      },
+      "A5": {
+        "IDVersion": "1.0",
+        "IDFactura": {
+          "IDEmisorFactura": "[identity]",
+          "NumSerieFactura": "CI-HANDOVER-A5/20261023/39970201368",
+          "FechaExpedicionFactura": "23-10-2026"
+        },
+        "RefExterna": "CI-HANDOVER-39970201368-A5",
+        "NombreRazonEmisor": "[identity]",
+        "TipoFactura": "F1",
+        "DescripcionOperacion": "Prueba de integración en preproducción",
+        "Destinatarios": {
+          "IDDestinatario": [
+            {
+              "NombreRazon": "[identity]",
+              "NIF": "[identity]"
+            }
+          ]
+        },
+        "Desglose": [
+          {
+            "ClaveRegimen": "01",
+            "TipoImpositivo": "21.00",
+            "BaseImponibleOimporteNoSujeto": "1.00",
+            "CuotaRepercutida": "0.21",
+            "CalificacionOperacion": "S1"
+          }
+        ],
+        "CuotaTotal": "0.21",
+        "ImporteTotal": "1.21",
+        "Encadenamiento": {
+          "RegistroAnterior": {
+            "IDEmisorFactura": "[identity]",
+            "NumSerieFactura": "CI-HANDOVER-A4/20261023/39970201368",
+            "FechaExpedicionFactura": "23-10-2026",
+            "Huella": "2482D18979BC3F6FA0BB27F9410D76722F0144B03CC529AC1DDAEB177C541063"
+          }
+        },
+        "SistemaInformatico": {
+          "NombreRazon": "[identity]",
+          "NIF": "[identity]",
+          "NombreSistemaInformatico": "Waitron VeriFactu test",
+          "IdSistemaInformatico": "WT",
+          "Version": "0.1.0",
+          "NumeroInstalacion": "CI-HANDOVER-39970201368-A",
+          "TipoUsoPosibleSoloVerifactu": "S",
+          "TipoUsoPosibleMultiOT": "N",
+          "IndicadorMultiplesOT": "N"
+        },
+        "FechaHoraHusoGenRegistro": "2026-10-23T16:33:45+02:00",
+        "TipoHuella": "01",
+        "Huella": "8159CC6128580A4E5AFDC8C73CA05B93936F8E051DD29B344A1616C1C2278B86"
+      }
+    },
+    "B1B2": {
+      "records": [
+        {
+          "IDVersion": "1.0",
+          "IDFactura": {
+            "IDEmisorFactura": "[identity]",
+            "NumSerieFactura": "CI-HANDOVER-B1/20261023/39970201368",
+            "FechaExpedicionFactura": "23-10-2026"
+          },
+          "RefExterna": "CI-HANDOVER-39970201368-B1",
+          "NombreRazonEmisor": "[identity]",
+          "TipoFactura": "F1",
+          "DescripcionOperacion": "Prueba de integración en preproducción",
+          "Destinatarios": {
+            "IDDestinatario": [
+              {
+                "NombreRazon": "[identity]",
+                "NIF": "[identity]"
+              }
+            ]
+          },
+          "Desglose": [
+            {
+              "ClaveRegimen": "01",
+              "TipoImpositivo": "21.00",
+              "BaseImponibleOimporteNoSujeto": "1.00",
+              "CuotaRepercutida": "0.21",
+              "CalificacionOperacion": "S1"
+            }
+          ],
+          "CuotaTotal": "0.21",
+          "ImporteTotal": "1.21",
+          "Encadenamiento": {
+            "PrimerRegistro": "S"
+          },
+          "SistemaInformatico": {
+            "NombreRazon": "[identity]",
+            "NIF": "[identity]",
+            "NombreSistemaInformatico": "Waitron VeriFactu test",
+            "IdSistemaInformatico": "WT",
+            "Version": "0.1.0",
+            "NumeroInstalacion": "CI-HANDOVER-39970201368-B",
+            "TipoUsoPosibleSoloVerifactu": "S",
+            "TipoUsoPosibleMultiOT": "N",
+            "IndicadorMultiplesOT": "N"
+          },
+          "FechaHoraHusoGenRegistro": "2026-10-23T16:33:45+02:00",
+          "TipoHuella": "01",
+          "Huella": "3402FF09DBB05FEAE94549E5225AC51CA77A895A3B6824539E78852EAA745163"
+        },
+        {
+          "IDVersion": "1.0",
+          "IDFactura": {
+            "IDEmisorFactura": "[identity]",
+            "NumSerieFactura": "CI-HANDOVER-B2/20261023/39970201368",
+            "FechaExpedicionFactura": "23-10-2026"
+          },
+          "RefExterna": "CI-HANDOVER-39970201368-B2",
+          "NombreRazonEmisor": "[identity]",
+          "TipoFactura": "F1",
+          "DescripcionOperacion": "Prueba de integración en preproducción",
+          "Destinatarios": {
+            "IDDestinatario": [
+              {
+                "NombreRazon": "[identity]",
+                "NIF": "[identity]"
+              }
+            ]
+          },
+          "Desglose": [
+            {
+              "ClaveRegimen": "01",
+              "TipoImpositivo": "21.00",
+              "BaseImponibleOimporteNoSujeto": "1.00",
+              "CuotaRepercutida": "0.21",
+              "CalificacionOperacion": "S1"
+            }
+          ],
+          "CuotaTotal": "0.21",
+          "ImporteTotal": "1.21",
+          "Encadenamiento": {
+            "RegistroAnterior": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI-HANDOVER-B1/20261023/39970201368",
+              "FechaExpedicionFactura": "23-10-2026",
+              "Huella": "3402FF09DBB05FEAE94549E5225AC51CA77A895A3B6824539E78852EAA745163"
+            }
+          },
+          "SistemaInformatico": {
+            "NombreRazon": "[identity]",
+            "NIF": "[identity]",
+            "NombreSistemaInformatico": "Waitron VeriFactu test",
+            "IdSistemaInformatico": "WT",
+            "Version": "0.1.0",
+            "NumeroInstalacion": "CI-HANDOVER-39970201368-B",
+            "TipoUsoPosibleSoloVerifactu": "S",
+            "TipoUsoPosibleMultiOT": "N",
+            "IndicadorMultiplesOT": "N"
+          },
+          "FechaHoraHusoGenRegistro": "2026-10-23T16:33:45+02:00",
+          "TipoHuella": "01",
+          "Huella": "2987A25C5C7E1E0E1355DAD48B797FB59CF730102758BD4F24C889DE5E0ED8B5"
+        }
+      ],
+      "response": {
+        "CSV": "A-6S8WZ3TVL5EJPD",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-23T16:33:46+02:00"
+        },
+        "EstadoEnvio": "Correcto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI-HANDOVER-B1/20261023/39970201368",
+              "FechaExpedicionFactura": "23-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Alta"
+            },
+            "RefExterna": "CI-HANDOVER-39970201368-B1",
+            "EstadoRegistro": "Correcto"
+          },
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI-HANDOVER-B2/20261023/39970201368",
+              "FechaExpedicionFactura": "23-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Alta"
+            },
+            "RefExterna": "CI-HANDOVER-39970201368-B2",
+            "EstadoRegistro": "Correcto"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-6S8WZ3TVL5EJPD</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-23T16:33:46+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Correcto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI-HANDOVER-B1/20261023/39970201368</tik:NumSerieFactura><tik:FechaExpedicionFactura>23-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion><tikR:RefExterna>CI-HANDOVER-39970201368-B1</tikR:RefExterna><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI-HANDOVER-B2/20261023/39970201368</tik:NumSerieFactura><tik:FechaExpedicionFactura>23-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion><tikR:RefExterna>CI-HANDOVER-39970201368-B2</tikR:RefExterna><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": true
+    },
+    "A4": {
+      "record": {
+        "IDVersion": "1.0",
+        "IDFactura": {
+          "IDEmisorFactura": "[identity]",
+          "NumSerieFactura": "CI-HANDOVER-A4/20261023/39970201368",
+          "FechaExpedicionFactura": "23-10-2026"
+        },
+        "RefExterna": "CI-HANDOVER-39970201368-A4",
+        "NombreRazonEmisor": "[identity]",
+        "TipoFactura": "F1",
+        "DescripcionOperacion": "Prueba de integración en preproducción",
+        "Destinatarios": {
+          "IDDestinatario": [
+            {
+              "NombreRazon": "[identity]",
+              "NIF": "[identity]"
+            }
+          ]
+        },
+        "Desglose": [
+          {
+            "ClaveRegimen": "01",
+            "TipoImpositivo": "21.00",
+            "BaseImponibleOimporteNoSujeto": "1.00",
+            "CuotaRepercutida": "0.21",
+            "CalificacionOperacion": "S1"
+          }
+        ],
+        "CuotaTotal": "0.21",
+        "ImporteTotal": "1.21",
+        "Encadenamiento": {
+          "RegistroAnterior": {
+            "IDEmisorFactura": "[identity]",
+            "NumSerieFactura": "CI-HANDOVER-A3/20261023/39970201368",
+            "FechaExpedicionFactura": "23-10-2026",
+            "Huella": "860570E5A144BBBDCD23EB195484C8659D0C2EC849B30C27994219954B6CB91B"
+          }
+        },
+        "SistemaInformatico": {
+          "NombreRazon": "[identity]",
+          "NIF": "[identity]",
+          "NombreSistemaInformatico": "Waitron VeriFactu test",
+          "IdSistemaInformatico": "WT",
+          "Version": "0.1.0",
+          "NumeroInstalacion": "CI-HANDOVER-39970201368-A",
+          "TipoUsoPosibleSoloVerifactu": "S",
+          "TipoUsoPosibleMultiOT": "N",
+          "IndicadorMultiplesOT": "N"
+        },
+        "FechaHoraHusoGenRegistro": "2026-10-23T16:33:45+02:00",
+        "TipoHuella": "01",
+        "Huella": "2482D18979BC3F6FA0BB27F9410D76722F0144B03CC529AC1DDAEB177C541063"
+      },
+      "response": {
+        "CSV": "A-NREALRD2TYRCQU",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-23T16:34:46+02:00"
+        },
+        "EstadoEnvio": "Correcto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI-HANDOVER-A4/20261023/39970201368",
+              "FechaExpedicionFactura": "23-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Alta"
+            },
+            "RefExterna": "CI-HANDOVER-39970201368-A4",
+            "EstadoRegistro": "Correcto"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-NREALRD2TYRCQU</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-23T16:34:46+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Correcto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI-HANDOVER-A4/20261023/39970201368</tik:NumSerieFactura><tik:FechaExpedicionFactura>23-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion><tikR:RefExterna>CI-HANDOVER-39970201368-A4</tikR:RefExterna><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": true
+    },
+    "B3": {
+      "record": {
+        "IDVersion": "1.0",
+        "IDFactura": {
+          "IDEmisorFactura": "[identity]",
+          "NumSerieFactura": "CI-HANDOVER-B3/20261023/39970201368",
+          "FechaExpedicionFactura": "23-10-2026"
+        },
+        "RefExterna": "CI-HANDOVER-39970201368-B3",
+        "NombreRazonEmisor": "[identity]",
+        "TipoFactura": "F1",
+        "DescripcionOperacion": "Prueba de integración en preproducción",
+        "Destinatarios": {
+          "IDDestinatario": [
+            {
+              "NombreRazon": "[identity]",
+              "NIF": "[identity]"
+            }
+          ]
+        },
+        "Desglose": [
+          {
+            "ClaveRegimen": "01",
+            "TipoImpositivo": "21.00",
+            "BaseImponibleOimporteNoSujeto": "1.00",
+            "CuotaRepercutida": "0.21",
+            "CalificacionOperacion": "S1"
+          }
+        ],
+        "CuotaTotal": "0.21",
+        "ImporteTotal": "1.21",
+        "Encadenamiento": {
+          "RegistroAnterior": {
+            "IDEmisorFactura": "[identity]",
+            "NumSerieFactura": "CI-HANDOVER-B2/20261023/39970201368",
+            "FechaExpedicionFactura": "23-10-2026",
+            "Huella": "2987A25C5C7E1E0E1355DAD48B797FB59CF730102758BD4F24C889DE5E0ED8B5"
+          }
+        },
+        "SistemaInformatico": {
+          "NombreRazon": "[identity]",
+          "NIF": "[identity]",
+          "NombreSistemaInformatico": "Waitron VeriFactu test",
+          "IdSistemaInformatico": "WT",
+          "Version": "0.1.0",
+          "NumeroInstalacion": "CI-HANDOVER-39970201368-B",
+          "TipoUsoPosibleSoloVerifactu": "S",
+          "TipoUsoPosibleMultiOT": "N",
+          "IndicadorMultiplesOT": "N"
+        },
+        "FechaHoraHusoGenRegistro": "2026-10-23T16:35:47+02:00",
+        "TipoHuella": "01",
+        "Huella": "960C64D37FC4A6C5B65EDFCD4468834E97A30708DAF93584956220E0A65A5BF5"
+      },
+      "response": {
+        "CSV": "A-WG3RXFP6DR6RZ9",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-23T16:35:47+02:00"
+        },
+        "EstadoEnvio": "Correcto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI-HANDOVER-B3/20261023/39970201368",
+              "FechaExpedicionFactura": "23-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Alta"
+            },
+            "RefExterna": "CI-HANDOVER-39970201368-B3",
+            "EstadoRegistro": "Correcto"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-WG3RXFP6DR6RZ9</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-23T16:35:47+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Correcto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI-HANDOVER-B3/20261023/39970201368</tik:NumSerieFactura><tik:FechaExpedicionFactura>23-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion><tikR:RefExterna>CI-HANDOVER-39970201368-B3</tikR:RefExterna><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": true
+    },
+    "A5": {
+      "record": {
+        "IDVersion": "1.0",
+        "IDFactura": {
+          "IDEmisorFactura": "[identity]",
+          "NumSerieFactura": "CI-HANDOVER-A5/20261023/39970201368",
+          "FechaExpedicionFactura": "23-10-2026"
+        },
+        "RefExterna": "CI-HANDOVER-39970201368-A5",
+        "NombreRazonEmisor": "[identity]",
+        "TipoFactura": "F1",
+        "DescripcionOperacion": "Prueba de integración en preproducción",
+        "Destinatarios": {
+          "IDDestinatario": [
+            {
+              "NombreRazon": "[identity]",
+              "NIF": "[identity]"
+            }
+          ]
+        },
+        "Desglose": [
+          {
+            "ClaveRegimen": "01",
+            "TipoImpositivo": "21.00",
+            "BaseImponibleOimporteNoSujeto": "1.00",
+            "CuotaRepercutida": "0.21",
+            "CalificacionOperacion": "S1"
+          }
+        ],
+        "CuotaTotal": "0.21",
+        "ImporteTotal": "1.21",
+        "Encadenamiento": {
+          "RegistroAnterior": {
+            "IDEmisorFactura": "[identity]",
+            "NumSerieFactura": "CI-HANDOVER-A4/20261023/39970201368",
+            "FechaExpedicionFactura": "23-10-2026",
+            "Huella": "2482D18979BC3F6FA0BB27F9410D76722F0144B03CC529AC1DDAEB177C541063"
+          }
+        },
+        "SistemaInformatico": {
+          "NombreRazon": "[identity]",
+          "NIF": "[identity]",
+          "NombreSistemaInformatico": "Waitron VeriFactu test",
+          "IdSistemaInformatico": "WT",
+          "Version": "0.1.0",
+          "NumeroInstalacion": "CI-HANDOVER-39970201368-A",
+          "TipoUsoPosibleSoloVerifactu": "S",
+          "TipoUsoPosibleMultiOT": "N",
+          "IndicadorMultiplesOT": "N"
+        },
+        "FechaHoraHusoGenRegistro": "2026-10-23T16:33:45+02:00",
+        "TipoHuella": "01",
+        "Huella": "8159CC6128580A4E5AFDC8C73CA05B93936F8E051DD29B344A1616C1C2278B86"
+      },
+      "response": {
+        "CSV": "A-NKKEBTS5P6UAH2",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-23T16:36:48+02:00"
+        },
+        "EstadoEnvio": "Correcto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI-HANDOVER-A5/20261023/39970201368",
+              "FechaExpedicionFactura": "23-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Alta"
+            },
+            "RefExterna": "CI-HANDOVER-39970201368-A5",
+            "EstadoRegistro": "Correcto"
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:CSV>A-NKKEBTS5P6UAH2</tikR:CSV><tikR:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-23T16:36:48+02:00</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Correcto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI-HANDOVER-A5/20261023/39970201368</tik:NumSerieFactura><tik:FechaExpedicionFactura>23-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion><tikR:RefExterna>CI-HANDOVER-39970201368-A5</tikR:RefExterna><tikR:EstadoRegistro>Correcto</tikR:EstadoRegistro></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": true
+    },
+    "A3Replay": {
+      "record": {
+        "IDVersion": "1.0",
+        "IDFactura": {
+          "IDEmisorFactura": "[identity]",
+          "NumSerieFactura": "CI-HANDOVER-A3/20261023/39970201368",
+          "FechaExpedicionFactura": "23-10-2026"
+        },
+        "RefExterna": "CI-HANDOVER-39970201368-A3",
+        "NombreRazonEmisor": "[identity]",
+        "TipoFactura": "F1",
+        "DescripcionOperacion": "Prueba de integración en preproducción",
+        "Destinatarios": {
+          "IDDestinatario": [
+            {
+              "NombreRazon": "[identity]",
+              "NIF": "[identity]"
+            }
+          ]
+        },
+        "Desglose": [
+          {
+            "ClaveRegimen": "01",
+            "TipoImpositivo": "21.00",
+            "BaseImponibleOimporteNoSujeto": "1.00",
+            "CuotaRepercutida": "0.21",
+            "CalificacionOperacion": "S1"
+          }
+        ],
+        "CuotaTotal": "0.21",
+        "ImporteTotal": "1.21",
+        "Encadenamiento": {
+          "RegistroAnterior": {
+            "IDEmisorFactura": "[identity]",
+            "NumSerieFactura": "CI-HANDOVER-A2/20261023/39970201368",
+            "FechaExpedicionFactura": "23-10-2026",
+            "Huella": "CFF227F646812FB62FA65759A76B1D4B2D7AE2371F04BE335173761C04D22D16"
+          }
+        },
+        "SistemaInformatico": {
+          "NombreRazon": "[identity]",
+          "NIF": "[identity]",
+          "NombreSistemaInformatico": "Waitron VeriFactu test",
+          "IdSistemaInformatico": "WT",
+          "Version": "0.1.0",
+          "NumeroInstalacion": "CI-HANDOVER-39970201368-A",
+          "TipoUsoPosibleSoloVerifactu": "S",
+          "TipoUsoPosibleMultiOT": "N",
+          "IndicadorMultiplesOT": "N"
+        },
+        "FechaHoraHusoGenRegistro": "2026-10-23T16:32:45+02:00",
+        "TipoHuella": "01",
+        "Huella": "860570E5A144BBBDCD23EB195484C8659D0C2EC849B30C27994219954B6CB91B"
+      },
+      "response": {
+        "EstadoEnvio": "Incorrecto",
+        "TiempoEsperaEnvio": 60,
+        "TiempoEsperaEnvioRaw": "60",
+        "RespuestaLinea": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI-HANDOVER-A3/20261023/39970201368",
+              "FechaExpedicionFactura": "23-10-2026"
+            },
+            "Operacion": {
+              "TipoOperacion": "Alta"
+            },
+            "RefExterna": "CI-HANDOVER-39970201368-A3",
+            "EstadoRegistro": "Incorrecto",
+            "CodigoErrorRegistro": 3000,
+            "DescripcionErrorRegistro": "Registro de facturación duplicado.",
+            "RegistroDuplicado": {
+              "IdPeticionRegistroDuplicado": "20261023163245787017",
+              "EstadoRegistroDuplicado": "Correcta"
+            }
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaSuministro.xsd\" xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\"><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikR:Cabecera><tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Incorrecto</tikR:EstadoEnvio><tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI-HANDOVER-A3/20261023/39970201368</tik:NumSerieFactura><tik:FechaExpedicionFactura>23-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion><tikR:RefExterna>CI-HANDOVER-39970201368-A3</tikR:RefExterna><tikR:EstadoRegistro>Incorrecto</tikR:EstadoRegistro><tikR:CodigoErrorRegistro>3000</tikR:CodigoErrorRegistro><tikR:DescripcionErrorRegistro>Registro de facturación duplicado.</tikR:DescripcionErrorRegistro><tikR:RegistroDuplicado><tik:IdPeticionRegistroDuplicado>20261023163245787017</tik:IdPeticionRegistroDuplicado><tik:EstadoRegistroDuplicado>Correcta</tik:EstadoRegistroDuplicado></tikR:RegistroDuplicado></tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "matchesExpectation": true
+    },
+    "storedA3": {
+      "filter": {
+        "Ejercicio": "2026",
+        "Periodo": "10",
+        "NumSerieFactura": "CI-HANDOVER-A3/20261023/39970201368",
+        "RangoFechaExpedicion": {
+          "Desde": "22-10-2026",
+          "Hasta": "23-10-2026"
+        },
+        "SistemaInformatico": {
+          "NombreRazon": "[identity]",
+          "NIF": "[identity]",
+          "IdSistemaInformatico": "WT",
+          "NombreSistemaInformatico": "Waitron VeriFactu test",
+          "Version": "0.1.0",
+          "NumeroInstalacion": "CI-HANDOVER-39970201368-A",
+          "TipoUsoPosibleSoloVerifactu": "S",
+          "TipoUsoPosibleMultiOT": "N",
+          "IndicadorMultiplesOT": "N"
+        },
+        "RefExterna": "CI-HANDOVER-39970201368-A3",
+        "DatosAdicionalesRespuesta": {
+          "MostrarNombreRazonEmisor": "S",
+          "MostrarSistemaInformatico": "S"
+        }
+      },
+      "response": {
+        "ResultadoConsulta": "ConDatos",
+        "IndicadorPaginacion": "N",
+        "registros": [
+          {
+            "IDFactura": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI-HANDOVER-A3/20261023/39970201368",
+              "FechaExpedicionFactura": "23-10-2026"
+            },
+            "DatosRegistroFacturacion": {
+              "NombreRazonEmisor": "[identity]",
+              "RefExterna": "CI-HANDOVER-39970201368-A3",
+              "TipoFactura": "F1",
+              "DescripcionOperacion": "Prueba de integración en preproducción",
+              "Destinatarios": {
+                "IDDestinatario": {
+                  "NombreRazon": "[identity]",
+                  "NIF": "[identity]"
+                }
+              },
+              "Desglose": {
+                "DetalleDesglose": {
+                  "ClaveRegimen": "01",
+                  "CalificacionOperacion": "S1",
+                  "TipoImpositivo": "21",
+                  "BaseImponibleOimporteNoSujeto": "1",
+                  "CuotaRepercutida": "0.21"
+                }
+              },
+              "CuotaTotal": "0.21",
+              "ImporteTotal": "1.21",
+              "Encadenamiento": {
+                "RegistroAnterior": {
+                  "IDEmisorFactura": "[identity]",
+                  "NumSerieFactura": "CI-HANDOVER-A2/20261023/39970201368",
+                  "FechaExpedicionFactura": "23-10-2026",
+                  "Huella": "CFF227F646812FB62FA65759A76B1D4B2D7AE2371F04BE335173761C04D22D16"
+                }
+              },
+              "SistemaInformatico": {
+                "NombreRazon": "[identity]",
+                "NIF": "[identity]",
+                "NombreSistemaInformatico": "Waitron VeriFactu test",
+                "IdSistemaInformatico": "WT",
+                "Version": "0.1.0",
+                "NumeroInstalacion": "CI-HANDOVER-39970201368-A",
+                "TipoUsoPosibleSoloVerifactu": "S",
+                "TipoUsoPosibleMultiOT": "N",
+                "IndicadorMultiplesOT": "N"
+              },
+              "FechaHoraHusoGenRegistro": "2026-10-23T16:32:45+02:00",
+              "TipoHuella": "01",
+              "Huella": "860570E5A144BBBDCD23EB195484C8659D0C2EC849B30C27994219954B6CB91B"
+            },
+            "TimestampUltimaModificacion": "2026-10-23T16:32:45+02:00",
+            "EstadoRegistro": "Correcto",
+            "DatosPresentacion": {
+              "NIFPresentador": "[identity]",
+              "TimestampPresentacion": "2026-10-23T16:32:45+02:00",
+              "IdPeticion": "20261023163245787017"
+            }
+          }
+        ]
+      },
+      "rawReply": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">\n<env:Header></env:Header>\n<env:Body Id=\"Body\"><tikLRRC:RespuestaConsultaFactuSistemaFacturacion xmlns:tik=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd\" xmlns:tikLRRC=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/RespuestaConsultaLR.xsd\"><tikLRRC:Cabecera><tik:IDVersion>1.0</tik:IDVersion><tik:ObligadoEmision><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tik:ObligadoEmision></tikLRRC:Cabecera><tikLRRC:PeriodoImputacion><tikLRRC:Ejercicio>2026</tikLRRC:Ejercicio><tikLRRC:Periodo>10</tikLRRC:Periodo></tikLRRC:PeriodoImputacion><tikLRRC:IndicadorPaginacion>N</tikLRRC:IndicadorPaginacion><tikLRRC:ResultadoConsulta>ConDatos</tikLRRC:ResultadoConsulta><tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion><tikLRRC:IDFactura><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI-HANDOVER-A3/20261023/39970201368</tik:NumSerieFactura><tik:FechaExpedicionFactura>23-10-2026</tik:FechaExpedicionFactura></tikLRRC:IDFactura><tikLRRC:DatosRegistroFacturacion><tikLRRC:NombreRazonEmisor>[identity]</tikLRRC:NombreRazonEmisor><tikLRRC:RefExterna>CI-HANDOVER-39970201368-A3</tikLRRC:RefExterna><tikLRRC:TipoFactura>F1</tikLRRC:TipoFactura><tikLRRC:DescripcionOperacion>Prueba de integración en preproducción</tikLRRC:DescripcionOperacion><tikLRRC:Destinatarios><tikLRRC:IDDestinatario><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF></tikLRRC:IDDestinatario></tikLRRC:Destinatarios><tikLRRC:Desglose><tik:DetalleDesglose><tik:ClaveRegimen>01</tik:ClaveRegimen><tik:CalificacionOperacion>S1</tik:CalificacionOperacion><tik:TipoImpositivo>21</tik:TipoImpositivo><tik:BaseImponibleOimporteNoSujeto>1</tik:BaseImponibleOimporteNoSujeto><tik:CuotaRepercutida>0.21</tik:CuotaRepercutida></tik:DetalleDesglose></tikLRRC:Desglose><tikLRRC:CuotaTotal>0.21</tikLRRC:CuotaTotal><tikLRRC:ImporteTotal>1.21</tikLRRC:ImporteTotal><tikLRRC:Encadenamiento><tikLRRC:RegistroAnterior><tik:IDEmisorFactura>[identity]</tik:IDEmisorFactura><tik:NumSerieFactura>CI-HANDOVER-A2/20261023/39970201368</tik:NumSerieFactura><tik:FechaExpedicionFactura>23-10-2026</tik:FechaExpedicionFactura><tik:Huella>CFF227F646812FB62FA65759A76B1D4B2D7AE2371F04BE335173761C04D22D16</tik:Huella></tikLRRC:RegistroAnterior></tikLRRC:Encadenamiento><tikLRRC:SistemaInformatico><tik:NombreRazon>[identity]</tik:NombreRazon><tik:NIF>[identity]</tik:NIF><tik:NombreSistemaInformatico>Waitron VeriFactu test</tik:NombreSistemaInformatico><tik:IdSistemaInformatico>WT</tik:IdSistemaInformatico><tik:Version>0.1.0</tik:Version><tik:NumeroInstalacion>CI-HANDOVER-39970201368-A</tik:NumeroInstalacion><tik:TipoUsoPosibleSoloVerifactu>S</tik:TipoUsoPosibleSoloVerifactu><tik:TipoUsoPosibleMultiOT>N</tik:TipoUsoPosibleMultiOT><tik:IndicadorMultiplesOT>N</tik:IndicadorMultiplesOT></tikLRRC:SistemaInformatico><tikLRRC:FechaHoraHusoGenRegistro>2026-10-23T16:32:45+02:00</tikLRRC:FechaHoraHusoGenRegistro><tikLRRC:TipoHuella>01</tikLRRC:TipoHuella><tikLRRC:Huella>860570E5A144BBBDCD23EB195484C8659D0C2EC849B30C27994219954B6CB91B</tikLRRC:Huella></tikLRRC:DatosRegistroFacturacion><tikLRRC:DatosPresentacion><tik:NIFPresentador>[identity]</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-23T16:32:45+02:00</tik:TimestampPresentacion><tik:IdPeticion>20261023163245787017</tik:IdPeticion></tikLRRC:DatosPresentacion><tikLRRC:EstadoRegistro><tikLRRC:TimestampUltimaModificacion>2026-10-23T16:32:45+02:00</tikLRRC:TimestampUltimaModificacion><tikLRRC:EstadoRegistro>Correcto</tikLRRC:EstadoRegistro></tikLRRC:EstadoRegistro></tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion></tikLRRC:RespuestaConsultaFactuSistemaFacturacion>\n</env:Body></env:Envelope>",
+      "record": {
+        "IDFactura": {
+          "IDEmisorFactura": "[identity]",
+          "NumSerieFactura": "CI-HANDOVER-A3/20261023/39970201368",
+          "FechaExpedicionFactura": "23-10-2026"
+        },
+        "DatosRegistroFacturacion": {
+          "NombreRazonEmisor": "[identity]",
+          "RefExterna": "CI-HANDOVER-39970201368-A3",
+          "TipoFactura": "F1",
+          "DescripcionOperacion": "Prueba de integración en preproducción",
+          "Destinatarios": {
+            "IDDestinatario": {
+              "NombreRazon": "[identity]",
+              "NIF": "[identity]"
+            }
+          },
+          "Desglose": {
+            "DetalleDesglose": {
+              "ClaveRegimen": "01",
+              "CalificacionOperacion": "S1",
+              "TipoImpositivo": "21",
+              "BaseImponibleOimporteNoSujeto": "1",
+              "CuotaRepercutida": "0.21"
+            }
+          },
+          "CuotaTotal": "0.21",
+          "ImporteTotal": "1.21",
+          "Encadenamiento": {
+            "RegistroAnterior": {
+              "IDEmisorFactura": "[identity]",
+              "NumSerieFactura": "CI-HANDOVER-A2/20261023/39970201368",
+              "FechaExpedicionFactura": "23-10-2026",
+              "Huella": "CFF227F646812FB62FA65759A76B1D4B2D7AE2371F04BE335173761C04D22D16"
+            }
+          },
+          "SistemaInformatico": {
+            "NombreRazon": "[identity]",
+            "NIF": "[identity]",
+            "NombreSistemaInformatico": "Waitron VeriFactu test",
+            "IdSistemaInformatico": "WT",
+            "Version": "0.1.0",
+            "NumeroInstalacion": "CI-HANDOVER-39970201368-A",
+            "TipoUsoPosibleSoloVerifactu": "S",
+            "TipoUsoPosibleMultiOT": "N",
+            "IndicadorMultiplesOT": "N"
+          },
+          "FechaHoraHusoGenRegistro": "2026-10-23T16:32:45+02:00",
+          "TipoHuella": "01",
+          "Huella": "860570E5A144BBBDCD23EB195484C8659D0C2EC849B30C27994219954B6CB91B"
+        },
+        "TimestampUltimaModificacion": "2026-10-23T16:32:45+02:00",
+        "EstadoRegistro": "Correcto",
+        "DatosPresentacion": {
+          "NIFPresentador": "[identity]",
+          "TimestampPresentacion": "2026-10-23T16:32:45+02:00",
+          "IdPeticion": "20261023163245787017"
+        }
+      },
+      "matchesExpectation": true
+    }
+  }
+}

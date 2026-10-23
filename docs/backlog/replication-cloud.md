@@ -14,8 +14,9 @@ The publication and direction blocks immediately below are historical; their fil
 and next-question status are obsolete. Cloud #312 at `7e3ba8246a6d5dbeb4275ed7c00f2f34124c944a`
 still carries the rejected assignment. G/D133 must amend and pin acceptance before **one short
 revised owner design question**, drafted in the [current design §11](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md#11-future-acceptance-and-the-cloud-agreement).
-A1034 is authorised and queued next; the AEAT test-service old-tail, interleaving and duplicate
-checks have not run. No revised Cloud agreement, legal/runtime receipt or build approval is claimed.
+A1034's [dated synthetic AEAT test-service observation](../superpowers/specs/2026-10-23-aeat-handover-tail-evidence.json)
+records accepted interleaved originals and a duplicate matched by fingerprint and installation.
+No revised Cloud agreement, legal or physical-handover receipt or build approval is claimed.
 
 **Canonical publication update, 2026-10-23:** Cloud's direction agreement is published
 in [PR #312](https://github.com/waitron-io/waitron-cloud/pull/312), at
@@ -86,9 +87,11 @@ requires “the **generating till's** `IdSistemaInformatico` and `NumeroInstalac
 relaying node's”. The [5 October observation beside Q34](../compliance/asesor-questions.md#q34-sending-the-old-installations-unsent-records-after-the-switch-added-2026-10-03)
 reports “`EstadoRegistro: "Correcto"` for each of its two first records”; it does not verify
 old-tail continuation after M2's new chain starts, interleaving or resending an old-server-filed
-record. The 15:40 “Test it” answer authorises A1034, queued next, to check these on AEAT's test
-service; this is not a new owner choice and the checks have not run. The design's source table
-quotes and links the basis and its limits; no new transfer or authentication format is invented.
+record. The authorised A1034 [run 39970201368](https://github.com/waitron-io/verifactu/actions/runs/39970201368)
+now records those synthetic test-service observations, including an unchanged A3 duplicate and
+consulta matching its original fingerprint and generating installation. The [current design §6](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md#6-point-4-m2-alone-communicates-with-aeat-after-takeover) gives the receipt and limits. No physical transfer,
+fencing, conflicting tail, production or legal acceptance is established, and no transfer or
+authentication format is invented.
 
 Old nonfiscal changes stay in a restricted archive, never merged or re-run. Reconciliation
 references are new M2-owned records. No automatic wipe precedes fiscal receipts, matching
