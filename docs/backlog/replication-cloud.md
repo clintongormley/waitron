@@ -5,47 +5,50 @@ their full text.
 
 ## A1018. Agree and build the hosted writer stop-proof contract
 
-**Contract direction agreed, 2026-10-22; owner design approval pending.** Lane G, acting for
-Cloud under the explicit D118 transfer, accepted the
-[Waitron proposal](../superpowers/specs/2026-10-22-a1018-cloud-stop-proof-design.md) at
-`db7cddeb2d38984b284b23e8e391e7ebd7cb9156` against Cloud production pin
-`35af2d396d916223ff4f319d8f44093685d62da5`. Cloud's literal reply says “Cloud accepts the
-pinned proposal's direction” and “no qualified enforcement profile”. Source:
-`/Users/clintongormley/waitron-campaign-e/receipts/reorient-20261022-180435/cloud-agreement.txt`,
-“A1018 / D118”, dated 2026-10-22. This is design-level agreement, with no runtime/provider
-qualification or build approval.
+**Proposed owner-directed revision, 2026-10-23; no build approval.** The owner rejected the
+[old design](../superpowers/specs/2026-10-22-a1018-cloud-stop-proof-design.md) at ~02:25 for
+requiring Cloud and excessive complexity, then supplied five points at ~02:58. The
+[replacement design](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md) has completed fresh builder review
+and awaits agreement with Cloud through Lane G, then **one owner design question**
+containing both Harbour Kitchen examples and the recommended defaults. Keep this item open;
+the original queue start is 2026-10-22 16:14.
 
-Lane E may now ask the owner the design's single question using Harbour Kitchen's worked
-example. Approval would accept the requirement and its availability trade-off: continuation
-waits if retirement or the final data cannot be established. Owner approval remains pending;
-it would not qualify a provider or grant build authority.
+One protocol covers local-to-local, local-to-Cloud, Cloud-to-Cloud and Cloud-to-local. Local
+handover works with no Cloud or internet. Controlled: reachable M1 durably steps down, quiesces
+every business writer, finishes bounded admitted work and transfers complete final state;
+M2 checks its indicator before using its own node identity and fresh fiscal identity, chain and series. Emergency:
+a freshly authenticated authorised person declares M1 shut down and no parallel recovery,
+accepts the last copy's uncertainty, and M2 activates its own fresh chain. Physical power-off
+and provider-console stop are human declarations, not automatic proof. No outside authority,
+supervisor, attestation or periodic lease is required. An isolated old M1 can keep selling until
+it learns of the takeover; tills selecting one machine do not prove one venue writer.
 
-Cloud's canonical
-[A1018 contract section](https://github.com/waitron-io/waitron-cloud/blob/6700d6f2319ff0b62b0ccc27e833487935ad2174/docs/waitron-integration-contract.md#hosted-writer-retirement-a1018-direction-agreed)
-is published at `6700d6f2319ff0b62b0ccc27e833487935ad2174` through
-[D118 PR #300](https://github.com/waitron-io/waitron-cloud/pull/300). It records the direction
-agreement against Waitron `db7cddeb2d38984b284b23e8e391e7ebd7cb9156`; the Cloud pin above
-identifies the reviewed production design. The section says “Neither profile is qualified”
-and “Owner design approval remains pending”. Keep the protocol in that shared home rather
-than maintaining two drifting copies.
+The five points are explicit in the revision: stepdown survives reboot and an uninformed M1
+checks M2 or a till before trading/filing, waiting for an authorised human if neither answers;
+the emergency screen warns about business divergence; only fiscal records return, with a
+recommended reconciliation list rather than imported payment totals; controlled M2 takes
+M1's filing queue, while emergency M1 files on restricted return and M2 holds every predecessor
+chain, including copied records; and the recommended declarant holds `node.promote` with fresh
+passkey or password plus enrolled TOTP, never a till PIN alone. These recommendations await
+approval. Audit the actor, declaration, reason, machines, last copy, time and operation.
 
-Lane D's two wording corrections remain open in the production and hosting designs. They
-clarify that restart/machine-replacement permission exceptions do not waive continuation proof,
-and distinguish continuation from explicitly authorised cold restore in the hosting recovery
-prose and table.
+Old nonfiscal changes stay in a restricted archive, never merged or re-run. Reconciliation
+references are new M2-owned records. No automatic wipe precedes fiscal receipts, matching
+transferred totals, health and verified archive gates. A lost disk leaves an explicit unknown
+gap and the standing consultation/month-end follow-up, not invented fiscal originals or a
+claim that AEAT restores business data. A947 §§6.3/7.1/7.2 and dependent slices need explicit
+amendment for filing ownership, its broader ledger tail and archive/deletion policy.
+Cold restore stays an explicit fresh-chain/data-loss choice with its existing recovery
+source, operation, key and sole-recovery gates, no new hard-stop demand and no silent fallback.
 
-Cold restore remains the owner-accepted separate fresh-chain/data-loss path with no A1018 stop
-proof; preserve its existing recovery operation, key and source/sole-recovery gates. Never silently
-convert failed continuation to cold restore. On-prem A947 slices 4e/5a and tail/return work remain
-separate integration dependencies.
-
-Keep this item open. Lane D's wording corrections, owner design approval, wire schema,
-executable planning, separate build authority, implementations and joint adverse/deletion controls
-remain pending. Runtime and provider qualification are separate acceptance gates; no enforcement
-profile is qualified. The Cloud reply's candidate mechanisms and future requirements supply no
-qualification evidence. If retirement, lasting restart denial or the final data cannot be
-established, refuse hosted continuation and ask. Neither agreement nor publication completes
-implementation or authorises provider work.
+The old Waitron `db7cddeb2d38984b284b23e8e391e7ebd7cb9156` / Cloud
+`6700d6f2319ff0b62b0ccc27e833487935ad2174` direction agreement through Cloud #300 is
+superseded. The shared Cloud contract home remains `docs/waitron-integration-contract.md`
+in the Cloud repository. The revision proposes replacement A1018 text and identifies P6/P7,
+D88 and production §§3/6/9/12 wording to amend through Lane G; no new agreement is asserted.
+Wire details, the node-local inventory, Cloud authorisation mapping, separately authorised
+implementation and joint behavioural/adverse controls remain open. Runtime checks are UNRUN
+for this docs task; no provider work is authorised.
 
 ## A completed provision or adopt operation replayed on a later request still answers 200 without restarting and keeps the setup lock set
 

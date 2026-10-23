@@ -1,3 +1,10 @@
+> **2026-10-23: rejected and superseded.** The owner rejected this proposal at ~02:25 because
+> it requires Cloud and has too many moving parts; the ~02:58 direction settles five points
+> for its replacement. Read the [proposed simple handover revision](2026-10-23-a1018-simple-handover-design.md).
+> The body below, including the `db7cddeb2` / Cloud `6700d6f` agreement and pending question,
+> is historical. That agreement is no longer current; fresh builder review is complete; Lane G agreement
+> and one new owner design question remain pending. No build is approved.
+
 # A1018: prove a hosted writer stopped before its successor starts
 
 > **2026-10-22 publication update:** Cloud's shared contract section is now published at
