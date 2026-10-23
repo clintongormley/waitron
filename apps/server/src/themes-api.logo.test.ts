@@ -612,7 +612,7 @@ describe("GET /api/theme with a logo", () => {
     }
   });
 
-  it("a theme stored before this slice is still served", async () => {
+  it("a stored theme with no logo key is still served", async () => {
     const { logo: _, ...before } = LEMON;
     void _;
     const [row] = await suite.db

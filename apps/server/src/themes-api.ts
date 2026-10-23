@@ -95,8 +95,8 @@ async function saveWithLogo<T>(
     if (logo === null) throw new Error("A theme document naming a logo was read with none");
     return { logo, snapshot: await snapshotThemeLogo(tx, logo, keptPrintedLogo) };
   });
-  // A commented split (D4): sharp must not run holding the write lock; the image's revision is
-  // checked again in the write.
+  // Two transactions on purpose: sharp must not run holding the write lock, so the write checks the
+  // image's id and revision again.
   const printedLogo = await printedLogoFor(snapshot);
   return withTransaction(db, async (tx) => {
     const stored = await write(tx, printedLogo);
@@ -106,8 +106,8 @@ async function saveWithLogo<T>(
 }
 
 export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): void {
-  // Deliberately unauthenticated: the answer is the stylesheet and hash of the theme in use, and
-  // carries no secrets.
+  // Deliberately unauthenticated: the answer is the theme in use's stylesheet, its hash and its
+  // logo's public rendition addresses, and carries no secrets.
   app.get("/api/theme", (c) =>
     run(c, log, async () => {
       const source = await withTransaction(deps.db, (tx) => readVenueThemeSource(tx));

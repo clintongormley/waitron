@@ -1574,8 +1574,9 @@ one across a poll, a profile switch, a change of zones and a server switch. The 
 checked only beside a profile switch. No test checks the refresh of the other values in the list
 above; they ride on the same assignment in `#applyVenueSetup`. On the server,
 `apps/server/src/till-api.setup-revision.test.ts` checks that the revision is the same on both
-reads, stays while nothing changes, and moves when a course is added or renamed and when bump mode
-changes.
+reads, stays while nothing changes, and moves when a course is added or renamed, when bump mode
+changes, when the theme in use is switched or saved with new choices, and when its logo's light
+image is reframed.
 
 Nothing guards a new field: a new `/api/till` field moves the revision, but reaches an open till
 only once someone adds it to `#applyVenueSetup`.

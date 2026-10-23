@@ -87,6 +87,7 @@ export async function saveImage(
         .update(departmentReceipts)
         .set({ logoRasters: rasters!, updatedAt: nowIso() })
         .where(logoMatch);
+    // A theme's updated_at is its last save, which the Themes card reports; a redraw is not a save.
     if (themes.length)
       await tx
         .update(customThemes)

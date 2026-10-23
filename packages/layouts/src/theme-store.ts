@@ -187,8 +187,9 @@ function storedPrintedLogo(text: string | null, light: string): ReceiptLogoRaste
 }
 
 /**
- * Checks a save as `createCustomTheme` (`id: null`) or `saveCustomTheme` would, and answers the
- * stored dots that still fit the sent logo, so the caller draws them only when they do not.
+ * Runs the checks `createCustomTheme` (`id: null`) or `saveCustomTheme` makes before writing, except
+ * a taken name, and answers the stored dots that still fit the sent logo, so the caller draws them
+ * only when they do not.
  */
 export async function prepareThemeSave(
   tx: Transaction,

@@ -600,7 +600,7 @@ describe("a theme logo's printed dots", () => {
     expect(await storedTheme(a.id)).toEqual({ ...LEMON, logo: null });
   });
 
-  it("a theme stored before this slice still reads", async () => {
+  it("a stored theme with no logo key reads as no logo", async () => {
     await setup();
     const id = await insertRaw(JSON.stringify(noLogo), 1);
     expect((await inTx(listCustomThemes)).themes[0]!.choices).toEqual({ ...LEMON, logo: null });

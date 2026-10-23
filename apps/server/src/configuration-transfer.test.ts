@@ -2579,7 +2579,7 @@ describe("custom themes in a configuration copy", () => {
     await expectNothingKept();
   });
 
-  it("imports a theme copied before this slice, with no logo key", async () => {
+  it("imports a copied theme with no logo key", async () => {
     const { transferred, versions } = await themedBundle("B13572486");
     rewriteTheme(transferred, "Lemon Bar", (theme) => {
       delete theme.logo;

@@ -2953,8 +2953,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   library image and an optional one for dark screens — checked on save and on import; the image
   library counts it as a use and refuses to delete it; `/api/theme` serves the images' addresses,
   and its hash, the till's `themeHash` and the dashboard's live read follow a reframed or replaced
-  image; every save that sets or changes the logo, and every library edit of its image, draws its
-  printed dots (`printedLogo`), which nothing prints until slice 9. No screen shows the logo until
+  image; every save that sets or changes its light image, and every library reframe or source
+  replacement of that image, draws its printed dots (`printedLogo`), which nothing prints until slice 9. No screen shows the logo until
   slice 8; the image library lists the use as the theme's name, unlinked, until then. An optional
   key missing from a stored or copied theme document reads as its empty value (`logo` `null`, and
   for slices 10 and 11 `textScale` 100 and `text` `{}`), with no configuration format change.
@@ -3248,6 +3248,12 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **Unpair can come back for a short while after a successful unpairing** — found in C103's review, read, not run. Clearing `pairedAt` when the agent reports a successful unpair, or reports the device unpaired, would end it; the owner was asked (questions.md, C103). [Detail](backlog/printers.md#unpair-can-come-back-for-a-short-while-after-a-successful-unpairing)
 
 - **An agent compares the server's discovery deadline with its own clock** — found in C102, read, not run. An agent on another machine whose clock is out by minutes scans for the wrong span; one on the box shares its clock. [Detail](backlog/printers.md#an-agent-compares-the-servers-discovery-deadline-with-its-own-clock)
+
+- **A department's receipt logo save re-checks only the image's revision, not its id** — found in
+  A841 slice 7's review, read, not run. The theme logo save compares both, because an image deleted
+  and uploaded again under the same name during a save is a different image
+  (`apps/server/src/theme-logo.ts`, `recheckThemeLogo`); `apps/server/src/department-receipt-api.ts`
+  compares `revision` alone.
 
 - Retry spacing is the agent's batch interval rather than a per-job backoff, so a flapping printer
   burns `MAX_DELIVERY_ATTEMPTS` at loop speed — needs a next-attempt column.
