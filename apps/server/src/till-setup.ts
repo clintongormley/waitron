@@ -124,7 +124,10 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
  * the read's transaction has ended.
  */
 export function completeTillSetup(read: TillSetupRead) {
-  return { ...read.setup, themeHash: venueThemeAnswer(read.themeInUse).hash };
+  return {
+    ...read.setup,
+    themeHash: venueThemeAnswer({ inUse: read.themeInUse, logo: null }).hash,
+  };
 }
 
 export type TillSetup = ReturnType<typeof completeTillSetup>;

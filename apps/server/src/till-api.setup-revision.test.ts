@@ -55,7 +55,8 @@ async function putInUse(id: string): Promise<void> {
 }
 
 async function hashInUse(): Promise<string> {
-  return venueThemeAnswer(await withTransaction(suite.db, readThemeInUse)).hash;
+  return venueThemeAnswer({ inUse: await withTransaction(suite.db, readThemeInUse), logo: null })
+    .hash;
 }
 
 let nifCounter = 0;
@@ -252,6 +253,8 @@ describe("the till's setup revision", () => {
     const id = await storeTheme("Lemon", LEMON, true);
     const start = await sendAsTill(till, "GET", "/api/till");
     expect(start.status).toBe(200);
-    expect(start.body.themeHash).toBe(venueThemeAnswer({ id, choices: LEMON }).hash);
+    expect(start.body.themeHash).toBe(
+      venueThemeAnswer({ inUse: { id, choices: LEMON }, logo: null }).hash,
+    );
   });
 });

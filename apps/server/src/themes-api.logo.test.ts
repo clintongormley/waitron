@@ -2,7 +2,7 @@ import sharp from "sharp";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, customThemes, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
@@ -13,7 +13,9 @@ import {
   deleteImage,
   readCurrentImage,
   readCurrentImageMetadata,
+  readImage,
   renderRendition,
+  renditionUrl,
   saveImage,
   uploadImage,
   type PreparedImage,
@@ -25,7 +27,7 @@ import type { ThemeChoices } from "@waitron/ui-core/theme";
 import * as logoModule from "./receipt-logo.js";
 import * as themeLogoModule from "./theme-logo.js";
 import { mountThemesApi } from "./themes-api.js";
-import { forgetVenueTheme } from "./venue-theme.js";
+import { WAITRON_THEME_ANSWER, forgetVenueTheme, venueThemeAnswer } from "./venue-theme.js";
 
 let managerCookie: string;
 let supervisorCookie: string;
@@ -442,5 +444,186 @@ describe("refusals", () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual(refusal("image.changed", { imageId: first.image.id }));
     expect(await themeRows()).toEqual(before);
+  });
+});
+
+async function themeAnswer(): Promise<{ hash: string; css: string; logo: unknown }> {
+  const res = await app().request("/api/theme");
+  expect(res.status).toBe(200);
+  return (await res.json()) as { hash: string; css: string; logo: unknown };
+}
+
+async function displayOf(filename: string): Promise<string> {
+  const image = await withTransaction(suite.db, async (tx) =>
+    readImage(tx, (await readCurrentImageMetadata(tx, filename))!.imageId),
+  );
+  const address = renditionUrl(image.sourceFilename, "display", image.framing);
+  expect(address.startsWith("/media/renditions/v1/")).toBe(true);
+  expect(address).toContain("/display/");
+  return address;
+}
+
+async function inUseWith(logo: ThemeChoices["logo"]): Promise<string> {
+  const res = await create({ name: "Lemon", theme: { ...LEMON, logo } });
+  expect(res.status).toBe(201);
+  const { id } = (await res.json()) as { id: string };
+  await suite.db.execute(sql`update custom_themes set in_use = 1 where id = ${id}`);
+  return id;
+}
+
+async function rowText(id: string): Promise<string> {
+  const { rows } = await suite.db.execute<{ theme: string }>(
+    sql`select theme from custom_themes where id = ${id}`,
+  );
+  return rows[0]!.theme;
+}
+
+function withoutDots(text: string): unknown {
+  return { ...(JSON.parse(text) as Record<string, unknown>), printedLogo: undefined };
+}
+
+async function replaceSource(filename: string, width: number): Promise<void> {
+  const current = await withTransaction(suite.db, (tx) => readCurrentImage(tx, filename));
+  const prepared = await samplePreparedImage({ width });
+  const rasters = await logoModule.drawLogoRasters(
+    await renderRendition(prepared.bytes, "display", current!.framing),
+  );
+  await withTransaction(suite.db, (tx) =>
+    saveImage(
+      tx,
+      current!.imageId,
+      { names: { en: "Logo" }, expectedRevision: current!.revision, framing: current!.framing },
+      prepared,
+      rasters,
+      "en",
+    ),
+  );
+}
+
+describe("GET /api/theme with a logo", () => {
+  it("answers the display addresses of the light and dark images", async () => {
+    const id = await inUseWith({ light: A });
+    const light = await themeAnswer();
+    expect(light.logo).toEqual({ light: await displayOf(A), dark: null });
+
+    const saved = await save(id, { theme: { ...LEMON, logo: { light: A, dark: B } } });
+    expect(saved.status).toBe(200);
+    const both = await themeAnswer();
+    expect(both.logo).toEqual({ light: await displayOf(A), dark: await displayOf(B) });
+    expect(both.css).toBe(light.css);
+  });
+
+  it("two reads with nothing changed answer one hash", async () => {
+    await inUseWith({ light: A, dark: B });
+    expect((await themeAnswer()).hash).toBe((await themeAnswer()).hash);
+  });
+
+  it("the hash moves when the light image is reframed, the theme row untouched but its dots", async () => {
+    const id = await inUseWith({ light: A, dark: B });
+    const before = await themeAnswer();
+    const text = await rowText(id);
+    await reframe(A, 141);
+    const after = await themeAnswer();
+    expect(after.hash).not.toBe(before.hash);
+    expect(after.logo).toEqual({ light: await displayOf(A), dark: await displayOf(B) });
+    expect(withoutDots(await rowText(id))).toEqual(withoutDots(text));
+  });
+
+  it("the hash moves when the light image's source is replaced", async () => {
+    const id = await inUseWith({ light: A });
+    const before = await themeAnswer();
+    const text = await rowText(id);
+    await replaceSource(A, 46);
+    const after = await themeAnswer();
+    expect(after.hash).not.toBe(before.hash);
+    expect(after.logo).toEqual({ light: await displayOf(A), dark: null });
+    expect(after.logo).not.toEqual(before.logo);
+    expect(withoutDots(await rowText(id))).toEqual(withoutDots(text));
+  });
+
+  it("the hash moves when the dark-only image is reframed, the theme row untouched", async () => {
+    const id = await inUseWith({ light: A, dark: B });
+    const before = await themeAnswer();
+    const text = await rowText(id);
+    await reframe(B, 142);
+    const after = await themeAnswer();
+    expect(after.hash).not.toBe(before.hash);
+    expect(after.logo).toEqual({ light: await displayOf(A), dark: await displayOf(B) });
+    expect(await rowText(id)).toBe(text);
+  });
+
+  it("the hash moves when another light image is saved, and when the logo is removed", async () => {
+    const id = await inUseWith({ light: A });
+    const first = await themeAnswer();
+    expect((await save(id, { theme: { ...LEMON, logo: { light: B } } })).status).toBe(200);
+    const second = await themeAnswer();
+    expect(second.logo).toEqual({ light: await displayOf(B), dark: null });
+    expect(second.hash).not.toBe(first.hash);
+    expect((await save(id, { theme: LEMON })).status).toBe(200);
+    const none = await themeAnswer();
+    expect(none.logo).toBeNull();
+    expect(none.hash).not.toBe(second.hash);
+    expect(none.hash).not.toBe(first.hash);
+  });
+
+  it("an image that is gone answers no logo, and a dark one that is gone answers no dark", async () => {
+    const [gone] = await suite.db
+      .insert(customThemes)
+      .values({
+        name: "Gone",
+        nameKey: "gone",
+        inUse: 1,
+        theme: { ...LEMON, logo: { light: ABSENT } },
+      })
+      .returning({ id: customThemes.id });
+    const answer = await themeAnswer();
+    expect(answer.logo).toBeNull();
+    expect(answer.css).toBe(
+      venueThemeAnswer({ inUse: { id: gone!.id, choices: LEMON }, logo: null }).css,
+    );
+    expect(answer.css).not.toBe("");
+
+    await suite.db.execute(sql`delete from custom_themes`);
+    await suite.db.insert(customThemes).values({
+      name: "Dark gone",
+      nameKey: "dark gone",
+      inUse: 1,
+      theme: { ...LEMON, logo: { light: A, dark: ABSENT } },
+    });
+    expect((await themeAnswer()).logo).toEqual({ light: await displayOf(A), dark: null });
+
+    for (const name of ["constructor", "__proto__"]) {
+      await suite.db.execute(sql`delete from custom_themes`);
+      await suite.db.insert(customThemes).values({
+        name: "Inherited",
+        nameKey: "inherited",
+        inUse: 1,
+        theme: { ...LEMON, logo: { light: A, dark: name } },
+      });
+      expect((await themeAnswer()).logo).toEqual({ light: await displayOf(A), dark: null });
+      await suite.db.execute(sql`delete from custom_themes`);
+      await suite.db.insert(customThemes).values({
+        name: "Inherited",
+        nameKey: "inherited",
+        inUse: 1,
+        theme: { ...LEMON, logo: { light: name } },
+      });
+      expect((await themeAnswer()).logo).toBeNull();
+    }
+  });
+
+  it("a theme stored before this slice is still served", async () => {
+    const { logo: _, ...before } = LEMON;
+    void _;
+    const [row] = await suite.db
+      .insert(customThemes)
+      .values({ name: "Old", nameKey: "old", inUse: 1, theme: before as ThemeChoices })
+      .returning({ id: customThemes.id });
+    expect(JSON.parse(await rowText(row!.id))).not.toHaveProperty("logo");
+    const answer = await themeAnswer();
+    expect(answer).toEqual(
+      venueThemeAnswer({ inUse: { id: row!.id, choices: { ...LEMON, logo: null } }, logo: null }),
+    );
+    expect(answer).not.toEqual(WAITRON_THEME_ANSWER);
   });
 });

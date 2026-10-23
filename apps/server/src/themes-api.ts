@@ -7,7 +7,6 @@ import {
   deleteCustomTheme,
   listCustomThemes,
   prepareThemeSave,
-  readThemeInUse,
   renameCustomTheme,
   saveCustomTheme,
   setThemeInUse,
@@ -26,7 +25,7 @@ import { deriveThemeFrom, type ThemeChoices, type ThemeWarning } from "@waitron/
 import type { Logger } from "./logger.js";
 import { SERVER_THEME_DEFAULTS } from "./theme-defaults.js";
 import { printedLogoFor, recheckThemeLogo, snapshotThemeLogo } from "./theme-logo.js";
-import { venueThemeAnswer } from "./venue-theme.js";
+import { readVenueThemeSource, venueThemeAnswer } from "./venue-theme.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -111,8 +110,8 @@ export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): 
   // carries no secrets.
   app.get("/api/theme", (c) =>
     run(c, log, async () => {
-      const inUse = await withTransaction(deps.db, (tx) => readThemeInUse(tx));
-      return c.json(venueThemeAnswer(inUse), 200, { "Cache-Control": "no-store" });
+      const source = await withTransaction(deps.db, (tx) => readVenueThemeSource(tx));
+      return c.json(venueThemeAnswer(source), 200, { "Cache-Control": "no-store" });
     }),
   );
 
