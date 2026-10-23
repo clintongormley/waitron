@@ -285,6 +285,20 @@ describe("box-status-screen Retry now", () => {
         expect(answerOf(el)).toBeNull();
       });
 
+      it("keeps the answer when the read could not check the notices", async () => {
+        const unchecked = health({
+          outbox: outbox({ waiting: 12 }),
+          notices: [],
+          noticesUnavailable: ["fiscal"],
+        });
+        const api = stubApi(ready());
+        vi.mocked(api.getBoxHealth).mockResolvedValueOnce(ready()).mockResolvedValue(unchecked);
+        const { el } = await mount(api);
+        await userEvent.click(retryButton(el)!);
+        await flush(el);
+        expect(text(answerOf(el))).toBe(fill("box_status.retried", { count: "12" }));
+      });
+
       it("keeps the answer while the read still shows records waiting after a failed send", async () => {
         const { el } = await mount(stubApi(ready()));
         await userEvent.click(retryButton(el)!);
@@ -295,7 +309,11 @@ describe("box-status-screen Retry now", () => {
       it("says nothing will be tried when nothing waited by the time the press is answered, staying blue while sent", async () => {
         const pending = deferred<FiscalRetryView>();
         const api = stubApi(ready());
-        vi.mocked(api.getBoxHealth).mockResolvedValueOnce(ready()).mockResolvedValue(sent());
+        // The read after the answer never lands, so only the read taken while sent can drop it.
+        vi.mocked(api.getBoxHealth)
+          .mockResolvedValueOnce(ready())
+          .mockResolvedValueOnce(sent())
+          .mockReturnValue(new Promise<BoxHealth>(() => undefined));
         vi.mocked(api.retryFiscalSubmissions).mockReturnValue(pending.promise);
         const { el } = await mount(api);
         await userEvent.click(retryButton(el)!);

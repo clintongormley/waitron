@@ -163,6 +163,8 @@ export class BoxStatusScreen extends LitElement {
   @state() private retryError: string | null = null;
   /** After a press the waiting count is stale until the box is read again. */
   @state() private awaitingRetryRead = false;
+  /** Whether the latest read left nothing to try again; a press needs it false to start. */
+  #nothingLeftToRetry = false;
   /** The free-space press's refusal; no read clears it. */
   @state() private actionError: string | null = null;
   @state() private freeing = false;
@@ -189,7 +191,8 @@ export class BoxStatusScreen extends LitElement {
         this.health = health;
         this.awaitingFigure = false;
         this.awaitingRetryRead = false;
-        if ((this.retryAnswer?.waiting ?? 0) > 0 && this.#nothingToRetry(health))
+        this.#nothingLeftToRetry = this.#nothingToRetry(health);
+        if ((this.retryAnswer?.waiting ?? 0) > 0 && this.#nothingLeftToRetry)
           this.retryAnswer = null;
         this.#readSucceeded("getBoxHealth");
       })
@@ -316,10 +319,7 @@ export class BoxStatusScreen extends LitElement {
     this.retryAnswer = null;
     try {
       const answer = await this.api.retryFiscalSubmissions();
-      // A read that landed while the press was sent may already show the records gone.
-      const latest = this.health;
-      this.retryAnswer =
-        answer.waiting > 0 && latest !== null && this.#nothingToRetry(latest) ? null : answer;
+      this.retryAnswer = answer.waiting > 0 && this.#nothingLeftToRetry ? null : answer;
       this.awaitingRetryRead = true;
       this.api.liveData.refresh();
     } catch (error) {
@@ -333,7 +333,9 @@ export class BoxStatusScreen extends LitElement {
   #nothingToRetry(health: BoxHealth): boolean {
     return (
       health.outbox?.waiting === 0 ||
-      !health.notices.some((notice) => notice.code === "fiscal.records_unsent")
+      // A read that could not check the notices has not shown the unsent notice gone.
+      (health.noticesUnavailable.length === 0 &&
+        !health.notices.some((notice) => notice.code === "fiscal.records_unsent"))
     );
   }
 
