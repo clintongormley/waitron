@@ -328,7 +328,7 @@ function systemClock(): TrustedClock {
 function deps(db: Database): TillApiDeps {
   return {
     db,
-    // Only the clock check: this suite's `prepay` cfg never files through the fiscal backend.
+    // Only the clock check: every sale this suite makes is refused before it reaches filing.
     backend: {
       clockBehindLatestRecord: async () => null,
       refuseWhileClockBehind: async () => {},

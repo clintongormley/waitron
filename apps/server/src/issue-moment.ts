@@ -27,7 +27,6 @@ export function issueMoment(
   };
 }
 
-/** `clock`, answering `reading` on every `now()`. */
 export function pinnedAt(clock: TrustedClock, reading: TrustedReading): TrustedClock {
   return {
     now: () => reading,

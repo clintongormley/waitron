@@ -3531,9 +3531,9 @@ a bill payment's first row, a completed or failed refund. A pending refund's res
 before it resumes, and the tender-refund retry route checks only a pending refund. The check
 judges the reading the route already takes. Four places date the invoice they issue from that same
 reading, through `pinnedAt` (`apps/server/src/issue-moment.ts`): `runPayWorkingOrder`,
-`runCollectOrder`, `payIntegrated`'s branch for an order that owes nothing, and
-`recordUnpaidDeparture`. Elsewhere, `beginBillPayment` among them, the issue takes its own later
-reading (`issueMoment`, reached through `issueWhenFullyPaid` in `apps/server/src/bill-payments.ts`),
+`runCollectOrder`, `payIntegrated`'s branch for an order whose total is zero, and
+`recordUnpaidDeparture`. Elsewhere the issue takes its own later reading through `issueMoment`
+(`beginBillPayment`'s reached through `issueWhenFullyPaid` in `apps/server/src/bill-payments.ts`),
 which the append's check judges again. The places: `runPayWorkingOrder`, `payIntegrated` and
 `runCollectOrder` (`apps/server/src/till-sale.ts`); `beginBillPayment`
 (`apps/server/src/bill-payments.ts`); `refundBillPayment` (`apps/server/src/bill-refunds.ts`, twice:

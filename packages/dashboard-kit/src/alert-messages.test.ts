@@ -195,4 +195,10 @@ describe("a minute placeholder", () => {
       expect(alertMessage("test.minute", { when }, "en")).toBe("At —.");
     }
   });
+
+  it("shows a dash for a string the date parser reads but that is not an instant as written", () => {
+    for (const when of ["1", "2025-02-30T09:12:00.000Z", "2025-03-14T09:12Z", "2025-03-14"]) {
+      expect(alertMessage("test.minute", { when }, "en")).toBe("At —.");
+    }
+  });
 });

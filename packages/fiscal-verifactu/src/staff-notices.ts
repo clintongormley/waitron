@@ -18,8 +18,6 @@ export function clockNotices(reading: { instant: Date; offsetMinutes: number }):
   ];
 }
 
-/** `clock.unusable` before the first issue date, else `clock.behind_chain` while the reading is
- * more than the margin before the latest record, else nothing. */
 async function clockStopNotices(
   tx: Transaction,
   reading: { instant: Date; offsetMinutes: number },

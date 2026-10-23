@@ -1506,9 +1506,7 @@ class ZoneOfferIndex {
   }
 }
 
-/** A sale refused for a full disk, a card charged but not recorded, a wrong clock, or a clock behind
- * the last sale, in the money surface's own words. `manualCard`: the tender is a card already charged on a terminal the box does
- * not talk to. */
+/** `manualCard`: the tender is a card already charged on a terminal the box does not talk to. */
 function saleRefusalOf(
   error: unknown,
   tender: { manualCard: boolean },

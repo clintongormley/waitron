@@ -47,11 +47,6 @@ function chargeableText(amount: string): string {
   return t("bill_pay.chargeable").replace("{amount}", () => formatMoney(amount, currentLocale()));
 }
 
-/** What a pay sheet says of a refusal: one of the app's own, the most a card can be charged when
- * the venue takes no tips, the till's own sentence for a device not set up for the card reader, for
- * a person who may not take payments, for a full disk, for a card charged but not recorded on a full
- * disk or a clock behind the last sale, for a clock it cannot trust with the date it reads, or for
- * a clock behind the last sale with both times, or the server's code in its own words. */
 export function refusalText(refusal: PayRefusal): string {
   if (refusal.text !== undefined) return refusal.text;
   if (refusal.unsent !== undefined) return billUnsentText(refusal.billLabel);

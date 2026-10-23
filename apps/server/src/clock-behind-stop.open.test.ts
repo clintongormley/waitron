@@ -34,7 +34,8 @@ interface OpenVenue {
   paella: string;
 }
 
-/** A bill venue whose counter offers every dish, and whose first till may print and clock in. */
+/** A bill venue whose counter offers every dish, and whose "Counter till" profile, and so every
+ * device on it, may print and clock in. */
 async function openVenue(db: Database): Promise<OpenVenue> {
   const venue = await provisionBillVenue(db);
   const counter = await inTx(venue, (tx) => offerProducts(tx, venue.cfg));

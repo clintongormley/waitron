@@ -29,15 +29,14 @@ import { systemClock } from "./till-backend.js";
 import "./errors.js";
 
 let venue: BillVenue;
-/** A counter zone whose orders are invoiced before they are paid. */
 let counterZone: string;
 let counterOffer: (name: string) => string;
 
 const ADMIN_PIN = "1234";
 const REASON = "Left without paying";
 
-// Every case reads NOW, the latest record's time, and builds each clock from it. Only the setup
-// and the controls record, and a control records a minute inside NOW, so NOW never moves.
+// Every case reads NOW, the latest record's time, and builds each clock from it. A case records
+// before its request only at NOW, and a control records a minute inside NOW, so NOW never moves.
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),

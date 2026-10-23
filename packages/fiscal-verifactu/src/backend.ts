@@ -39,7 +39,10 @@ import type { Entorno, RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { verifyChain } from "./verify.js";
 import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
-import { clockBehindChain, refuseWhileClockBehind } from "./clock-behind.js";
+import {
+  clockBehindChain,
+  refuseWhileClockBehind as refuseWhileClockBehindChain,
+} from "./clock-behind.js";
 import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
 import { SOFTWARE_IDENTITY, producerFields, softwareVersion } from "./software-identity.js";
 import type { SoftwareIdentity } from "./software-identity.js";
@@ -169,7 +172,7 @@ export class VerifactuBackend implements FiscalBackend {
     tx: Transaction,
     reading: { instant: Date; offsetMinutes: number },
   ): Promise<void> {
-    return refuseWhileClockBehind(tx, reading);
+    return refuseWhileClockBehindChain(tx, reading);
   }
 
   /**
