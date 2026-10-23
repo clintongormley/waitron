@@ -1907,7 +1907,10 @@ describe("the test shards", () => {
       for (const command of logical) {
         // The selection guard (`pnpm … ls | node … runnable test:coverage`) runs no tests.
         if (command.includes(" runnable ")) continue;
-        const script = /^pnpm .*\b(test:coverage|test:shard)\b/.exec(command)?.[1];
+        const script =
+          /^(?:node scripts\/run-with-deadline\.mjs \d+ --diagnostics -- )?pnpm .*\b(test:coverage|test:shard)\b/.exec(
+            command,
+          )?.[1];
         if (script !== undefined) commands.push({ id, script, command });
       }
     }
@@ -2044,6 +2047,23 @@ describe("the image smoke's scoping", () => {
 });
 
 describe("the sharded jobs", () => {
+  it("bound every browser package's shard command and retain deadline diagnostics", () => {
+    const browser = browserPackages();
+    expect(browser.length).toBeGreaterThan(0);
+    for (const pkg of browser) {
+      const shard = shards.find(({ filters }) => filters.includes(pkg));
+      expect(shard, `${pkg} has no shard`).toBeDefined();
+      const step = shardStep(job(shard.id).body)
+        .filter((line) => !line.trim().startsWith("#"))
+        .join("\n")
+        .replace(/\\\n\s*/g, " ");
+      expect(step, shard.id).toMatch(
+        /node scripts\/run-with-deadline\.mjs 360 --diagnostics -- pnpm .*\btest:(?:shard|coverage)\b/,
+      );
+      expect(step, shard.id).toContain("set -euo pipefail");
+    }
+  });
+
   it("were found, and each has a matching merge job", () => {
     expect(shardedJobs.length).toBeGreaterThan(0);
     expect(mergeJobs.length).toBe(shardedJobs.length);

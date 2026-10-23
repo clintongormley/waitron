@@ -1,13 +1,91 @@
+import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
 import { EventEmitter, once } from "node:events";
 import { URL } from "node:url";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { runWithDeadline } from "./run-with-deadline.mjs";
+import { describe, expect, it, vi } from "vitest";
+import * as deadlineRunner from "./run-with-deadline.mjs";
+const { runWithDeadline } = deadlineRunner;
 
 describe("test process deadline", () => {
+  it("prints a real process snapshot through the diagnostic runner's deadline", async () => {
+    const lines = [];
+    const error = vi.spyOn(console, "error").mockImplementation((line) => lines.push(line));
+    try {
+      expect(
+        await runWithDeadline(
+          process.execPath,
+          ["-e", 'console.log("[file-progress] start blocked.test.ts [browser]"); while (true) {}'],
+          { timeoutMs: 1000, graceMs: 100, diagnostics: true },
+        ),
+      ).toBe(124);
+      expect(lines).toContain("  blocked.test.ts [browser]");
+      expect(lines.some((line) => line.includes(String(process.pid)))).toBe(true);
+      expect(lines.some((line) => line.includes("Process snapshot failed:"))).toBe(false);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it("the diagnostic CLI preserves healthy output and success or failure without waiting for its deadline", () => {
+    const script = new URL("./run-with-deadline.mjs", import.meta.url).pathname;
+    for (const code of [0, 7]) {
+      const result = spawnSync(
+        process.execPath,
+        [
+          script,
+          "20",
+          "--diagnostics",
+          "--",
+          process.execPath,
+          "-e",
+          `process.stdout.write("shard output\\n"); process.stderr.write("shard error\\n"); process.exit(${code})`,
+        ],
+        { encoding: "utf8", timeout: 3000 },
+      );
+      expect(result.status).toBe(code);
+      expect(result.stdout).toBe("shard output\n");
+      expect(result.stderr).toBe("shard error\n");
+      expect(result.error).toBeUndefined();
+    }
+  });
+
+  it("the diagnostic CLI names unfinished files and snapshots processes before killing a blocked child", () => {
+    const script = new URL("./run-with-deadline.mjs", import.meta.url).pathname;
+    const result = spawnSync(
+      process.execPath,
+      [
+        script,
+        "1",
+        "--diagnostics",
+        "--",
+        process.execPath,
+        "-e",
+        `
+      console.log("[file-progress] start completed.test.ts [browser]");
+      console.log("[file-progress] end completed.test.ts [browser] passed 0.1s");
+      console.log("[file-progress] start stuck.test.ts [browser]");
+      console.error("stderr from the shard");
+      process.on("SIGTERM", () => {});
+      while (true) {}
+    `,
+        "a1027-stalled-worker",
+      ],
+      { encoding: "utf8", timeout: 9000 },
+    );
+    expect(result.status).toBe(124);
+    expect(result.stdout).toContain("[file-progress] start stuck.test.ts [browser]");
+    expect(result.stderr).toContain("stderr from the shard");
+    const report = result.stderr.slice(result.stderr.indexOf("Unfinished test files:"));
+    expect(report).toContain("  stuck.test.ts [browser]\n");
+    expect(report).not.toContain("  completed.test.ts [browser]\n");
+    expect(report).toContain("Process snapshot (pid, ppid, state, elapsed, cpu, rss, command):");
+    expect(report).toContain("a1027-stalled-worker");
+    expect(result.error).toBeUndefined();
+  }, 12_000);
+
   it("cleans up a surviving worker when the command exits first", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-deadline-"));
     const pidFile = join(dir, "pid");
@@ -156,4 +234,54 @@ describe("test process deadline", () => {
       child.kill("SIGKILL");
     }
   }, 10_000);
+});
+
+describe("deadline diagnostics", () => {
+  it("keeps unfinished files across split UTF-8 lines and independent output streams", () => {
+    expect(deadlineRunner.createDeadlineDiagnostics).toBeTypeOf("function");
+    const lines = [];
+    const report = deadlineRunner.createDeadlineDiagnostics({
+      write: (line) => lines.push(line),
+      snapshot: () => ({ status: 0, stdout: "PID PPID STAT\n42 1 S node\n", stderr: "" }),
+    });
+    const name = Buffer.from("[file-progress] start sale-🧾.test.ts [browser]\n");
+    const split = name.indexOf(Buffer.from("🧾")) + 1;
+    report.observe(name.subarray(0, split), "stdout");
+    report.observe(Buffer.from("[file-progress] start other.test.ts [node]\n"), "stderr");
+    report.observe(name.subarray(split), "stdout");
+    report.observe(
+      Buffer.from(
+        "[file-progress] end other.test.ts [node] passed 0.1s\n[file-progress] still running: sale-🧾.test.ts [browser] 60.0s\n",
+      ),
+      "stderr",
+    );
+    report.report();
+    expect(lines).toContain("  sale-🧾.test.ts [browser]");
+    expect(lines).not.toContain("  other.test.ts [node]");
+    expect(lines).toContain("PID PPID STAT\n42 1 S node\n");
+  });
+
+  it("names a startup or teardown gap and a failed process snapshot", () => {
+    expect(deadlineRunner.createDeadlineDiagnostics).toBeTypeOf("function");
+    for (const snapshot of [
+      () => ({ status: 2, stdout: "", stderr: "ps refused" }),
+      () => ({ status: null, error: new Error("ps timed out"), stdout: "partial", stderr: "" }),
+    ]) {
+      const lines = [];
+      const report = deadlineRunner.createDeadlineDiagnostics({
+        write: (line) => lines.push(line),
+        snapshot,
+      });
+      report.observe(
+        Buffer.from(
+          "unrelated output\n[file-progress] start finished.test.ts [node]\n[file-progress] end finished.test.ts [node] passed",
+        ),
+        "stdout",
+      );
+      report.report();
+      expect(lines).toContain("  No unfinished file reported; startup or teardown may be stalled.");
+      expect(lines.some((line) => line.includes("Process snapshot failed:"))).toBe(true);
+      expect(lines).not.toContain("  finished.test.ts [node]");
+    }
+  });
 });

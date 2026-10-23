@@ -46,6 +46,24 @@ const ROOT_SCOPE_PREFIXES = ["scripts/", ".husky/", ".github/"];
  */
 export const ROOT_SCOPE_CONSUMERS = new Map([
   [
+    "scripts/run-with-deadline.mjs",
+    [
+      "apps/dashboard",
+      "apps/setup",
+      "apps/till",
+      "packages/adjustments",
+      "packages/bookings",
+      "packages/fiscal-verifactu",
+      "packages/media",
+      "packages/payments-stripe",
+      "packages/payments-sumup",
+      "packages/staffing",
+      "packages/ui",
+      "packages/ui-core",
+      "packages/venue-service",
+    ],
+  ],
+  [
     "scripts/bundle-node.mjs",
     [
       "apps/print-agent",

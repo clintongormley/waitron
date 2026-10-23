@@ -856,3 +856,17 @@ fixture command path changed between those probes.
   experiment](../developers/testing-guide.md#a-missing-delete-rule-fails-the-schema-comparison) caught
   one omitted rule. The generator omission was observed once by an implementer (five store tests
   failed with a foreign-key refusal), not independently re-run. Left open by A429 slice 1 (#1493).
+
+## The till shard's blocked operation is unknown (A1027)
+
+Main run `39898823017` at `c76bcdaf3` lost the log for `test-till (2)`, job
+`120235613840`; both the CLI and jobs-logs API could not retrieve it. The job
+started at 04:29:59Z and ended cancelled at 04:44:59Z, while its configuration
+named a ten-minute limit. Those timestamps do not establish where it waited.
+The preceding and following healthy shards do not diagnose the hang.
+
+A1027 adds a six-minute process deadline with unfinished-file and process reports
+to every browser package's test command. The original wait remains unlocated.
+On recurrence, retain the failed step log and use its file list and process state
+to identify the blocked operation. Keep the venue-service startup investigation
+and A419's dashboard stall separate; no shared cause is established.

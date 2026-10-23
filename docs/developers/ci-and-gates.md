@@ -654,6 +654,41 @@ warning annotation (`::warning title=Slow test file::`), because one file that l
 shard (see "Every CI test job should finish in about 4 minutes" below). In browser mode that time can
 include waiting to be loaded (above). It warns and never fails the job.
 
+### A browser shard reports before its job limit
+
+A job killed at its outer limit can lose its log. On 23 October 2026, main run
+`39898823017`, till shard 2, left no downloadable log (`BlobNotFound`). Its blocked
+operation remains unknown. The six other till test steps took 72–179 seconds.
+In the following successful run `39898884552`, till steps took 87–167 seconds and
+all browser test steps took 26–237 seconds, read from the jobs API's step timestamps.
+
+Every browser package's test command now runs through
+`node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm …`. The six-minute
+limit leaves room under the ten-minute job limit for a process snapshot, the
+five-second termination grace and artifact uploads on those measured runs.
+Setup still consumes the same job budget; the wrapper does not bound a hung install.
+
+The wrapper forwards stdout and stderr and tracks the existing `[file-progress]`
+start/end lines. At expiry it lists files assigned to workers without an end line,
+then runs `ps` with a two-second limit to show process ids, parents, states, elapsed
+time, CPU, memory and command lines. Assignment does not mean a browser has loaded
+the file. An empty file list may indicate a startup or teardown wait. A failed
+snapshot is reported, and the command still fails with exit 124. The existing
+process-group stop reaches workers and browsers; other jobs' groups are not signalled.
+
+Run `pnpm exec vitest run scripts/run-with-deadline.test.mjs
+scripts/ci-workflow.test.mjs scripts/root-scope-consumers.test.mjs`. The diagnostic
+CLI control starts `stuck.test.ts [browser]`, finishes a separate file, then blocks
+the child and ignores SIGTERM. With a one-second test limit it exits 124, names only
+the unfinished file and includes the still-running child in its process snapshot.
+Healthy exit codes and both output streams are also asserted. These controls do
+not reproduce the unknown CI hang.
+
+The browser-deadline case in `scripts/ci-workflow.test.mjs` is weaker than its name:
+it reads workflow text, never executes a deadline or checks GitHub log retention.
+The runner's explicit browser consumers are in `ROOT_SCOPE_CONSUMERS`; its guard
+recognises the wrapped UI pair and reporters while retaining the earlier checks.
+
 ### The `ci` check passes only when every needed job succeeded or was skipped
 
 The `ci` job has two steps, and each fails unless every needed job ended `success` or `skipped`;

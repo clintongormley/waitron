@@ -5253,6 +5253,11 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **The step-watch case's A544 pre-push failure is fixed at a likely cause, not a confirmed one.**
   [Detail](backlog/ci.md#the-step-watch-cases-a544-pre-push-failure-is-fixed-at-a-likely-cause-not-a-confirmed-one).
 
+- **A1027 residual: the till shard's blocked operation is unknown.** Main run `39898823017`
+  lost shard 2's log. Browser shards now report unfinished files and processes before their
+  command deadline. On recurrence, retain that report and locate the wait before changing tests.
+  [Detail](backlog/ci.md#the-till-shards-blocked-operation-is-unknown-a1027).
+
 - **Venue-service browser startup remains unexplained (#1557).** CI run `38170156450`
   attempt 1 timed out before any browser test started; attempt 2 passed on the same commit. A527
   did not reproduce it in 100 Linux repeats; a failed shard now keeps its start-up record. Next:

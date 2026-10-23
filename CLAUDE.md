@@ -758,7 +758,8 @@ browser test** — most of these rules exist because a test passed while proving
   the same package end in `ENOENT`.
 - **Locate the unfinished package before diagnosing a silent shard as database contention.** A
   Vitest test timer does not bound a browser whose event loop has stopped; use an outer deadline,
-  and never a retry as proof of repair.
+  and never a retry as proof of repair. Browser shards use the diagnostic deadline wrapper; guard:
+  `scripts/ci-workflow.test.mjs`, weaker than its name — reads text, never runs the deadline.
 - **A recurrent stall needs a retained log and a snapshot of whatever it was waiting on.** Locate
   the stalled operation before assigning its cause to resource contention.
 - **On Vitest 4.1.12 a project's own `maxWorkers` wins, and the outer config's is only the fallback**.

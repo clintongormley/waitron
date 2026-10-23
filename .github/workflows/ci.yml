@@ -1192,7 +1192,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/fiscal-verifactu" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/fiscal-verifactu" test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/fiscal-verifactu" test:coverage \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # packages/ui alone, with its own browser runner.
@@ -1288,7 +1288,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" --workspace-concurrency=1 test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" --workspace-concurrency=1 test:coverage \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
       - run: pnpm --filter @waitron/ui-core test:package
@@ -1363,7 +1363,7 @@ jobs:
       - name: Run the till shard
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/till" test:shard \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/till" test:shard \
             --shard=${{ matrix.shard }}/7 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
@@ -1493,7 +1493,7 @@ jobs:
       - name: Run the dashboard shard
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/dashboard" test:shard \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/dashboard" test:shard \
             --shard=${{ matrix.shard }}/4 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
@@ -1624,7 +1624,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/setup" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/setup" test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/setup" test:coverage \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # Venue service combines server-side configuration tests with a Chromium dashboard project.
@@ -1706,7 +1706,7 @@ jobs:
           VITEST_PW_DEBUG: "1"
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/venue-service" test:shard \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/venue-service" test:shard \
             --shard=${{ matrix.shard }}/4 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs" \
@@ -1845,7 +1845,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/adjustments" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/adjustments" test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/adjustments" test:coverage \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # Staffing has a database project and a Chromium dashboard project, as adjustments does.
@@ -1903,7 +1903,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/staffing" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/staffing" test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/staffing" test:coverage \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # Bookings owns both a browser project and a database project. Its own runner keeps
@@ -1967,7 +1967,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/bookings" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/bookings" test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/bookings" test:coverage \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # Media splits into a database project and a Chromium one, so its runner installs both test
@@ -2031,7 +2031,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/media" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/media" test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/media" test:coverage \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # The Stripe payment module, like bookings, owns both a database-backed node project and a Chromium
@@ -2096,7 +2096,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/payments-stripe" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/payments-stripe" test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/payments-stripe" test:coverage \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # The SumUp payment module, same shape as payments-stripe: a database-backed node project plus a
@@ -2160,7 +2160,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/payments-sumup" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/payments-sumup" test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/payments-sumup" test:coverage \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   test-provisioning:
