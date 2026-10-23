@@ -136,7 +136,7 @@ box's clock is wrong** instead. The way out is the same: set the clock right.
 
 The box emails everyone who can manage the system and has an email address when:
 
-- its disk has less than 2 GB free;
+- its disk has about 2 GB free or less;
 - its disk is full, so nothing can be saved;
 - its clock is set before 28 October 2024, so no sale can be recorded.
 

@@ -146,7 +146,7 @@ hora bien.
 El equipo envía un correo a todas las personas que pueden gestionar el sistema y tienen dirección de
 correo cuando:
 
-- a su disco le quedan menos de 2 GB libres;
+- a su disco le quedan unos 2 GB libres o menos;
 - su disco está lleno, así que no se puede guardar nada;
 - su reloj marca una fecha anterior al 28 de octubre de 2024, así que no se puede registrar ninguna
   venta.

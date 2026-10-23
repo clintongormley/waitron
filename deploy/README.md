@@ -100,7 +100,7 @@ shows them), and says to delete `waitron-noautopair.conf`, then run `systemctl d
 `systemctl restart bluetooth`.
 
 Every `install`, upgrades included, also runs `timedatectl set-ntp true` as root, with a 60-second
-limit, to ask the system to keep its clock in step with internet time, and prints one line either
+limit where `timeout` is installed, to ask the system to keep its clock in step with internet time, and prints one line either
 way. Where that fails, or the system has no `timedatectl`, the line says that unless another time
 service runs on the machine nothing keeps its clock right, and to check the clock and install a
 time service such as `systemd-timesyncd`; `install` carries on. It matters because Waitron stops
@@ -113,7 +113,8 @@ needs before it boots: the venue's databases are files in the `state` volume tha
 password, and every other setting has a default in the image that suits a box reached at
 `waitron.local`. Apart from the AppArmor line above, the only thing that writes `.env` is installing
 a branch or a commit, which records the image tags it built there. So `install` is non-interactive
-and idempotent, and running it again later to update the box does nothing destructive.
+and idempotent, and running it again later to update the box does nothing destructive, apart from deleting the
+images it ran before (see Updating and operating).
 
 It finishes by printing a setup address and QR code, also shown on an attached monitor:
 `http://waitron.local/setup/trust`. Open that guide on the device you will use, install this box's

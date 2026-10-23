@@ -318,7 +318,7 @@ disable_bluetooth_autopair() {
   rm -f "$tmp"
 }
 
-# A box whose clock reads earlier than its last sale stops taking payments, so install asks the host
+# 2d. A box whose clock reads earlier than its last sale stops taking payments, so install asks the host
 # to keep its clock right where it can.
 enable_time_sync() {
   local limit

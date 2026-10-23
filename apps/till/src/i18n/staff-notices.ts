@@ -17,8 +17,7 @@ function unknownText(): { main: string; hint: string } {
 }
 
 /** A notice's words in the till's current language: its main words and the hint after " · ". A
- * code the till has no words for, or an unsent count that is not a whole number above 0, is worded
- * as unknown. */
+ * code the till has no words for, or params it cannot word, is worded as unknown. */
 export function staffNoticeText(notice: Pick<StaffNotice, "code" | "params">): {
   main: string;
   hint: string;

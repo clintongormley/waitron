@@ -10,7 +10,7 @@ Dice qué ocurre y qué hacer. Nunca tapa tu trabajo y nunca tienes que cerrarla
 
 La línea muestra primero el aviso más grave, con su texto principal y, tras " · ", su indicación.
 Por ejemplo, **No se puede guardar nada: el equipo no tiene espacio · Avisa al encargado**. Una
-línea roja significa que algo no se puede guardar, una ámbar que se acerca un problema y una
+línea roja significa que algo no se puede guardar, una ámbar que algo necesita atención pero el trabajo se sigue guardando y una
 azul que es información.
 
 Cuando hay más de un aviso, la línea termina con un número como **+1**. Toca la línea para abrir

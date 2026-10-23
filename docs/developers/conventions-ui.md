@@ -1598,7 +1598,8 @@ devices whose receipts, payment slips or full invoices resolve to it (`printerSt
 `apps/server/src/box-staff-notices.ts`). Logging out clears the till's notices (`#endOperatorSession`), so nothing
 carries from one session to the next. A kitchen display in device mode signs no one in, runs no
 equipment poll and draws no strip. Pinned by `apps/till/src/till-app.notices.test.ts`, under "the
-staff notices an open till keeps", and `apps/till/src/state/staff-notices.test.ts`.
+staff notices an open till keeps", and `apps/till/src/state/staff-notices.test.ts`. The printer source is pinned by
+`apps/server/src/box-staff-notices.test.ts` and `apps/server/src/device-equipment-api.test.ts`.
 
 **A notice code's words.** The till words a notice by its `code` (`staffNoticeText`,
 `apps/till/src/i18n/staff-notices.ts`) from `staff_notice.<code>` in

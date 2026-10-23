@@ -21,7 +21,7 @@
 >    assertion: it is the input the guard words each code with, and it lacks what the printer notice
 >    needs. Adding what a fixture lacks is allowed by the owner's rule, and no expected value
 >    changes. Without it the guard fails on the printer notice even when the till words it (P3).
-> 2. `:65-70`, the `expect.arrayContaining([...])` of "finds the notice codes it is meant to guard",
+> 2. `:70-76`, the `expect.arrayContaining([...])` of "finds the notice codes it is meant to guard",
 >    gains `"printer.jobs_waiting"` (Task 3). A list that pins a whole shape gains one entry and every
 >    existing entry stays: the owner's standing exception (2026-09-27, about 19:10). It also makes the
 >    guard prove it finds the new code.
@@ -358,8 +358,8 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
      notices. The two share one **disk episode**, from the first check that finds the stop on or the
      warning on until a check finds both off. In a disk episode, `storage.disk_full` is emailed once,
      the first time the stop is found on; `storage.space_low` is emailed once, the first time the
-     warning is found on while the stop is off and before any `storage.disk_full` email in that
-     episode. So a disk going from low to full sends both, once each; a box found full and low at
+     warning is found on while the stop is off, to each recipient the episode's `storage.disk_full`
+     email has not reached. So a disk going from low to full sends both, once each; a box found full and low at
      once sends only the full disk; a stop that lifts and returns while space stays under 2.5 GiB
      sends nothing more, which keeps a disk hovering at full from emailing every few minutes (the stop
      lifts at 16 MiB, `boot-failure.ts:47`; the warning clears only at 2.5 GiB). Cost: a free-space
@@ -496,7 +496,8 @@ findings to report, not questions.
 - `waitron.sh install` prints one more line (time synchronisation) and, after an upgrade on the
   classic image store, one per deleted image.
 - New log lines: `box_email.sent`, `box_email.send_failed`, `box_email.not_configured`,
-  `box_email.no_recipients`, `box_email.check_failed` (Tasks 8–9), never once a minute.
+  `box_email.no_recipients` (Tasks 8–9), never once a minute; and `box_email.check_failed`, once
+  for each check that fails.
 
 ---
 
@@ -773,7 +774,7 @@ screen). `printJobInTrouble` itself is not edited.
 - Modify: `apps/server/src/box-staff-notices.test.ts`
 - Modify: `apps/server/src/device-equipment-api.test.ts` (cases in "GET /api/device/equipment's
   notices", `:1434`)
-- Modify: `scripts/staff-notice-codes.test.ts:65-70` (declared change 2, its own commit)
+- Modify: `scripts/staff-notice-codes.test.ts:70-76` (declared change 2, its own commit)
 
 **Interfaces** (`box-staff-notices.ts`):
 ```ts
@@ -874,7 +875,7 @@ and reader as today.
   `pnpm --filter @waitron/server exec vitest run src/box-staff-notices.test.ts src/device-equipment-api.test.ts`
   → FAILS: the new exports do not exist.
 - [ ] **Step 3: Implement** as the Interfaces say. Then add `"printer.jobs_waiting"` to the
-  `arrayContaining` list in `scripts/staff-notice-codes.test.ts:65-70` (declared change 2; committed
+  `arrayContaining` list in `scripts/staff-notice-codes.test.ts:70-76` (declared change 2; committed
   separately in Step 6).
 - [ ] **Step 4: Run and watch them pass; guards; typecheck; format.** The Step 2 command → PASS
   (`box-staff-notices.test.ts` 6 + 6 = 12; `device-equipment-api.test.ts` 85 + 5 = 90).
@@ -884,7 +885,7 @@ and reader as today.
 - [ ] **Step 5: Proofs by deletion**: drop the `stuckSince !== null` filter → cases 2 and 8 FAIL;
   drop the kitchen short-cut (filter every row by the set) → cases 1 and 7 FAIL; drop the set filter →
   cases 3 and 9 FAIL; give each device its own cache → case 6 FAILS; drop `deviceSources` from the
-  GET → cases 7–11 FAIL; delete the till's `staff_notice.printer.jobs_waiting` English line → the
+  GET → cases 7, 8, 9 and 11 FAIL (case 10, a negative case, cannot); delete the till's `staff_notice.printer.jobs_waiting` English line → the
   guard FAILS naming `printer.jobs_waiting`.
 - [ ] **Step 6: Commit** — the code first, then the guard list change in a commit of its own. The
   order matters: the list may name the code only once `box-staff-notices.ts` spells it, or the
@@ -896,7 +897,7 @@ and reader as today.
   git add scripts/staff-notice-codes.test.ts
   git commit -s -m "Changed test checks (A798 slice 10): the staff-notice guard expects to find the printer notice's code
 
-  scripts/staff-notice-codes.test.ts:65-70 — before: arrayContaining the four codes; after: the same
+  scripts/staff-notice-codes.test.ts:70-76 — before: arrayContaining the four codes; after: the same
   four plus \"printer.jobs_waiting\". A list gaining an entry, every existing value unchanged (owner's
   standing exception, 2026-09-27)."
   ```
@@ -1780,7 +1781,7 @@ nothing more (CLAUDE.md §1); the English guide uses English names in its exampl
 ## Pull request notes
 
 The pull request description says, in plain words:
-- The two changed test checks in `scripts/staff-notice-codes.test.ts` (`:49`, `:65-70`), before and
+- The two changed test checks in `scripts/staff-notice-codes.test.ts` (`:49`, `:70-76`), before and
   after, and which owner exception each falls under.
 - That the email about a clock before 28 October 2024 usually cannot leave the box (P8), and why it is
   built anyway (decision 10).

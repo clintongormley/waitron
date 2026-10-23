@@ -9,7 +9,7 @@ It says what is wrong and what to do. It never covers your work, and you never h
 
 The line shows the most serious notice first, in its main words and then its hint after " · ".
 For example, **Nothing can be saved: the box is out of space · Tell a manager**. A red line means
-something cannot be saved, an amber line means a problem is coming, and a blue line is for information.
+something cannot be saved, an amber line means something needs attention but work is still saved, and a blue line is for information.
 
 When more than one notice is showing, the line ends with a count such as **+1**. Tap the line to
 open the list of every notice, most serious first. The list sits under the line and pushes the

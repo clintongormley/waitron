@@ -4648,10 +4648,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   and
   [Q52](compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21).
 
-- **The clock stop's email is slice 9's.** Its subject and body are design §4.8 c's. Slice 9 sends
-  it once per stop through slice 10's once-per-episode sender, so slice 9 depends on 10 too; slice
-  10 does not depend on 8. Slice 10 cannot build it: it lands itself, and the email asks slice 8's
-  seat (`clockBehindLatestRecord`), which landed in #2012. Left open by A798-B slice 8
+- **The clock stop's email is slice 9's.** Its subject and body are design §4.8 c's. Left open by A798-B slice 8
   (#2012). Slice 10's sender (`apps/server/src/box-alert-email.ts`) sends any module notice code
   that has words in `apps/server/src/i18n/box-emails.ts`, but fills only `{venue}`: slice 9 adds
   `clock.behind_chain`'s words there and also carries the notice's values (`{clockAt}`,
@@ -4720,7 +4717,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   does not keep its clock in step with internet time (since A798-B slice 10, `waitron.sh install`
   switches synchronisation on where the system provides it, and says so where it cannot);
   and on one that does, the same advice shows where the clock is right and the latest record's time
-  was wrong — neither half clears the stop. Left open by A798-B slice 8 (#2012).
+  was wrong — neither half clears the stop. The `clock.unusable` email
+  (`apps/server/src/i18n/box-emails.ts`) gives the same advice. Left open by A798-B slice 8 (#2012).
 
 - **The backup verifier does not know `clock_stop_restarts`' links.** Slice 9 adds them with its
   first writer (`packages/fiscal-verifactu/src/backup-verification-history.ts`). Left open by
