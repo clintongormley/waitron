@@ -2975,6 +2975,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   warning text's colour; the preview's colour-rebuild check (`theme-preview.test.ts`); Bar Lucía and
   lemon fixtures repeated across test files.
 
+- **The Look card's Fix all button breaks onto two lines ("Fix / all") on a phone (A841 slice 5).**
+  It sits in the `.warning` line (`apps/dashboard/src/widgets/fix-line-styles.ts`), where nothing
+  stops it shrinking beside the sentence (read, not tried); picture 15 keeps it on one line.
+  Measured on the code slice 6 branched from (`de73c6144`, the Look card test rig, two fixable
+  warnings): two lines in a card 300 px wide or narrower, one from 320 px. Slice 6's visual check
+  saw it at a 390 px window, and slice 6 makes the line more common, since colours set by hand add
+  warnings with fixes.
+
 - **Two icons painted in the brand colour sit, in one state each, on a fill no contrast rule checks
   them against (A841 slice 4).** The till's card-waiting spinner on `--wt-color-surface-sunken`
   (Waitron's light blue is 3.28:1 there by the WCAG formula, `#1f6feb` on `#d6d9e0`,

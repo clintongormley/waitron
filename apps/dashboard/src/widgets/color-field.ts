@@ -310,8 +310,15 @@ export const colourValueStyles = css`
     min-width: 0;
   }
   .colour-value > wt-input {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
+    font-family: var(--wt-font-family-mono);
+    font-size: var(--wt-font-size-sm);
+  }
+  /* A #rrggbb code's seven characters, the field's own padding, and a little room. */
+  .colour-value > wt-input::part(field) {
+    flex: none;
+    width: calc(7ch + 2 * var(--wt-space-3) + var(--wt-space-1));
   }
   .colour-value input[type="color"] {
     flex: none;

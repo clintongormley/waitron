@@ -165,6 +165,15 @@ export class LookCard extends LitElement {
         font-weight: var(--wt-font-weight-normal);
         text-decoration: underline;
       }
+      /* A link starting a line of its own lines its words up with the line above. */
+      wt-button.link.flush::part(button) {
+        padding-inline: 0;
+      }
+      /* The way to pick dark screens' own colour sits right under the line it follows. */
+      .dark-lines {
+        display: grid;
+        min-width: 0;
+      }
       .note {
         margin: var(--wt-space-4) 0 0;
         color: var(--wt-color-text-muted);
@@ -576,7 +585,11 @@ export class LookCard extends LitElement {
           }`,
       ];
     });
-    return [...lines, this.#darkLine(draft, busy)];
+    const last = lines.pop();
+    return [
+      ...lines,
+      html`<div class="dark-lines">${last ?? nothing}${this.#darkLine(draft, busy)}</div>`,
+    ];
   }
   /** The dark version's own Main buttons colour, or the way to pick one (D13). */
   #darkLine(draft: LookDraft, busy: boolean): TemplateResult {
@@ -585,7 +598,7 @@ export class LookCard extends LitElement {
       return html`<p class="fixed">
         <wt-button
           data-test="pick-dark"
-          class="link"
+          class="link flush"
           variant="ghost"
           size="sm"
           ?disabled=${busy}

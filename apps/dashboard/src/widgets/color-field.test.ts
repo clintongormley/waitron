@@ -419,6 +419,21 @@ describe("colourValueField", () => {
     expect(outerChange).not.toHaveBeenCalled();
   });
 
+  it("keeps the code field compact, and an error under it on one line where there is room", async () => {
+    const error = "Type a colour code such as #1e5b3a.";
+    const { el, host } = await mountValue(options({ code: "#F8F1E", error }));
+    host.style.width = "600px";
+    await el.updateComplete;
+    const field = codeField(el);
+    const box = field.shadowRoot!.querySelector("[part=field]")!.getBoundingClientRect();
+    expect(box.width).toBeLessThan(140);
+    const message = field.shadowRoot!.querySelector("[data-error]")!;
+    expect(message.textContent).toBe(error);
+    const range = document.createRange();
+    range.selectNodeContents(message);
+    expect(range.getClientRects()).toHaveLength(1);
+  });
+
   it("disables both while busy", async () => {
     const { el } = await mountValue(options({ busy: true }));
     expect(picker(el).disabled).toBe(true);

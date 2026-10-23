@@ -1129,6 +1129,25 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
     return opened;
   }
 
+  for (const cardWidth of [358, 1000]) {
+    it(`sets Pick a different colour for dark screens flush under the dark-screens line (${cardWidth}px)`, async () => {
+      await onDesk(async () => {
+        setLocale("en-GB");
+        const { el } = await mountEditing(inUse(lucia));
+        await resize(el, cardWidth);
+        const words = q(el, "[data-test=brand-fixed-dark]")!;
+        const link = button(el, "pick-dark");
+        const startOf = (node: Element) => {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          return range.getClientRects()[0]!.left;
+        };
+        expect(Math.abs(startOf(link) - startOf(words))).toBeLessThanOrEqual(1);
+        expect(rect(link).top - rect(words.parentElement!).bottom).toBeLessThanOrEqual(4);
+      });
+    });
+  }
+
   it("keeps the saved warning's icon its full size when the line wraps", async () => {
     await onDesk(async () => {
       setLocale("es-ES");

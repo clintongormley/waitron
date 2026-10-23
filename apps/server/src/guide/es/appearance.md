@@ -88,12 +88,12 @@ abrirla.
 
 Dentro, una fila por cada color del tema da su valor en las pantallas claras y en las oscuras, bajo
 los títulos **Pantallas claras** y **Pantallas oscuras** en una tarjeta ancha, o con la etiqueta
-**Claro** u **Oscuro** en cada valor en una estrecha, cada uno con un selector de color y una casilla para un código de color. Debajo de cada
-valor, un color calculado dice **Calculado**; Botones principales dice **Color de marca**, o
+**Claro** u **Oscuro** en cada valor en una estrecha, cada uno con un selector de color y una casilla para un código de color. Junto al código de
+cada valor, un color calculado dice **Calculado**; Botones principales dice **Color de marca**, o
 **Corregido** si se eligió un tono legible para ese tipo de pantalla. Cambiar cualquiera de los dos
 valores, con el selector o escribiendo un código, fija ese valor a mano y deja el del otro tipo de
 pantalla como estaba. Un valor fijado a mano lleva la marca **Fijado a mano**, con **Usar el color
-calculado** al lado para volver al valor que calcula Waitron. **Volver a calcularlos todos**, al
+calculado** debajo para volver al valor que calcula Waitron. **Volver a calcularlos todos**, al
 final de la sección, devuelve todos los valores a calculados; aparece desactivado mientras no hay
 nada fijado a mano.
 

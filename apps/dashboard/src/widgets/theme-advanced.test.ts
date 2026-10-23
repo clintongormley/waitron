@@ -274,14 +274,23 @@ describe("layout", () => {
   const box = (el: Element) => el.getBoundingClientRect();
   const modeLabels = (row: HTMLElement) => [...row.querySelectorAll<HTMLElement>(".mode-label")];
 
-  async function rowAt(width: number, key: ThemeColour) {
+  async function rowAt(width: number, key: ThemeColour, section?: number) {
     await page.viewport(width, 900);
     const el = await mount(CREAM);
+    if (section !== undefined) el.style.width = `${section}px`;
     await open(el);
+    await nextFrame();
     const row = q(el, `[data-test=hand-row-${key}]`);
     const [light, dark] = [...row.querySelectorAll<HTMLElement>(".value")];
-    return { row, name: row.querySelector<HTMLElement>(".name")!, light: light!, dark: dark! };
+    return { el, row, name: row.querySelector<HTMLElement>(".name")!, light: light!, dark: dark! };
   }
+  const centre = (rect: DOMRect) => (rect.top + rect.bottom) / 2;
+  /** Where a button's words are drawn, not its padded box. */
+  const wordsBox = (button: Element) => {
+    const range = document.createRange();
+    range.selectNodeContents(button);
+    return range.getBoundingClientRect();
+  };
 
   const restore = { width: innerWidth, height: innerHeight };
   afterEach(async () => {
@@ -303,6 +312,59 @@ describe("layout", () => {
     const { row, light, dark } = await rowAt(1280, "bg");
     expect(Math.abs(box(light).top - box(dark).top)).toBeLessThanOrEqual(2);
     for (const label of modeLabels(row)) expect(getComputedStyle(label).display).toBe("none");
+  });
+
+  // On a 390 px phone the Look card leaves Advanced 260 px (measured on the dashboard page), where
+  // a hand-set Light line has about 8 px to spare in macOS's fonts; the status check gets 20 px
+  // more, for CI's wider ones.
+  for (const [width, section] of [
+    [1280, undefined],
+    [390, 260],
+  ] as const) {
+    it(`draws each code field just wide enough for its code, its status beside it (${width} px)`, async () => {
+      const { el } = await rowAt(width, "bg", section && section + 20);
+      for (const mode of ["light", "dark"] as const) {
+        const code = box(codeField(el, mode, "bg"));
+        const inner = codeField(el, mode, "bg").shadowRoot!.querySelector("input")!;
+        expect(code.width, mode).toBeLessThan(140);
+        expect(inner.scrollWidth, mode).toBeLessThanOrEqual(inner.clientWidth);
+        const said = box(q(el, `[data-test=hand-status-${mode}-bg]`));
+        expect(said.left, mode).toBeGreaterThanOrEqual(code.right);
+        expect(Math.abs(centre(said) - centre(code)), mode).toBeLessThanOrEqual(4);
+      }
+    });
+
+    it(`puts Use worked-out colour under its value, flush with the value's start (${width} px)`, async () => {
+      const { el, light } = await rowAt(width, "bg", section);
+      const link = workedOut(el, "light", "bg")!;
+      expect(box(link).top).toBeGreaterThanOrEqual(box(codeField(el, "light", "bg")).bottom);
+      expect(Math.abs(wordsBox(link).left - box(light).left)).toBeLessThanOrEqual(1);
+    });
+
+    it(`draws a line under every row and puts Reset all at the right (${width} px)`, async () => {
+      const { el } = await rowAt(width, "bg", section);
+      for (const row of el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test^=hand-row-]")) {
+        const style = getComputedStyle(row);
+        expect(style.borderBottomStyle, row.dataset.test).toBe("solid");
+        expect(parseFloat(style.borderBottomWidth), row.dataset.test).toBeGreaterThan(0);
+      }
+      const reset = box(q(el, "[data-test=reset-all]"));
+      expect(Math.abs(reset.right - box(q(el, ".table")).right)).toBeLessThanOrEqual(1);
+    });
+  }
+
+  it("names Light and Dark on the line of their value at phone width, under a bold name", async () => {
+    const { el, row, name } = await rowAt(390, "bg", 260);
+    expect(Number(getComputedStyle(name).fontWeight)).toBeGreaterThanOrEqual(600);
+    const [lightLabel, darkLabel] = modeLabels(row);
+    for (const [mode, label] of [
+      ["light", lightLabel!],
+      ["dark", darkLabel!],
+    ] as const) {
+      const chip = box(picker(el, mode, "bg"));
+      expect(box(label).right, mode).toBeLessThanOrEqual(chip.left);
+      expect(Math.abs(centre(box(label)) - centre(chip)), mode).toBeLessThanOrEqual(4);
+    }
   });
 });
 

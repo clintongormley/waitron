@@ -4096,13 +4096,13 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   the "{count} hard to read" count while a hand-set value warns (brand warnings are not counted).
   Inside, one row per theme colour, one flat list until slice 12, each with a Light and a Dark value
   drawn by `colourValueField` (a native colour picker and a code field); column heads show from a
-  600 px section, and narrower each value carries its own Light or Dark label. Under a value, a
-  worked-out one reads "Worked out" (Main buttons: "Brand colour", or "Fixed" while that kind of
-  screen's fix is taken); a hand-set one carries a "Set by hand" tag and a "Use worked-out colour"
-  link. A hand-set value that warns gets a warning line in the warning colour and icon, a "Use
+  600 px section, and narrower each value carries its own Light or Dark label. Beside a value's
+  code field, a worked-out one reads "Worked out" (Main buttons: "Brand colour", or "Fixed" while that kind of
+  screen's fix is taken); a hand-set one carries a "Set by hand" tag, with a "Use worked-out colour"
+  link on the line below. A hand-set value that warns gets a warning line in the warning colour and icon, a "Use
   {colour}" fix button when a shade exists, and after a fix a "{screens}: fixed from {colour} ·
   Undo" line until the value changes or the editor closes. Reset all to worked-out sits at the
-  bottom. While a value shows an error, `has-error` holds the section open; a warning does not open
+  bottom, at the right. While a value shows an error, `has-error` holds the section open; a warning does not open
   it.
 - **Save, or Save as new theme…, with a warning opens the Hard to read dialog**
   (`apps/dashboard/src/widgets/hard-to-read-dialog.ts`) before any name dialog (D7): one line per warning, then Back, Save

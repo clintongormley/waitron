@@ -57,39 +57,48 @@ export class ThemeAdvanced extends LitElement {
       .table {
         container-type: inline-size;
         display: grid;
-        gap: var(--wt-space-4);
       }
       .row {
         display: grid;
         grid-template-columns: minmax(0, 1fr);
-        gap: var(--wt-space-2);
+        gap: var(--wt-space-1);
+        padding-block: var(--wt-space-1);
+        border-bottom: 1px solid var(--wt-color-border);
       }
       .head {
         display: none;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
+      .name {
+        font-weight: var(--wt-font-weight-bold);
+      }
       .value {
         display: grid;
-        gap: var(--wt-space-1);
+        justify-items: start;
         min-width: 0;
       }
       .value.hand wt-input::part(field) {
         font-weight: var(--wt-font-weight-bold);
       }
+      .line {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+        min-width: 0;
+      }
       .mode-label {
+        min-width: var(--wt-space-6);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-normal);
       }
       .status {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-normal);
+        white-space: nowrap;
       }
       .tag {
         padding: 0 var(--wt-space-2);
@@ -100,6 +109,10 @@ export class ThemeAdvanced extends LitElement {
       wt-button.link::part(button) {
         font-weight: var(--wt-font-weight-normal);
         text-decoration: underline;
+      }
+      /* A link starting a line of its own lines its words up with the value above. */
+      wt-button.link.flush::part(button) {
+        padding-inline: 0;
       }
       .notes {
         grid-column: 1 / -1;
@@ -114,6 +127,8 @@ export class ThemeAdvanced extends LitElement {
         margin: 0;
       }
       .reset {
+        display: flex;
+        justify-content: flex-end;
         margin: var(--wt-space-5) 0 0;
       }
       @container (min-width: 600px) {
@@ -124,6 +139,12 @@ export class ThemeAdvanced extends LitElement {
         }
         .head {
           display: grid;
+        }
+        .name {
+          display: flex;
+          align-items: center;
+          min-height: var(--wt-tap-min);
+          font-weight: var(--wt-font-weight-normal);
         }
         .mode-label {
           display: none;
@@ -219,43 +240,47 @@ export class ThemeAdvanced extends LitElement {
       screens: t(`appearance.saved_fix_${mode}`),
     });
     return html`<div class="value ${hand ? "hand" : ""}">
-      <span class="mode-label">${t(`theme.${mode}`)}</span>
-      ${colourValueField({
-        colour,
-        code: handCodes[mode][key] ?? colour,
-        name: `handSet.${mode}.${key}`,
-        pickerName: `handSetPicker.${mode}.${key}`,
-        label: value,
-        codeLabel: fill("appearance.hand_code", {
-          name: themeColourName(key),
-          screens: t(`appearance.saved_fix_${mode}`),
-        }),
-        error: this.errors[`handSet.${mode}.${key}`] ?? "",
-        busy: this.busy,
-        pick: (picked) => this.#pick(mode, key, picked),
-        type: (text) => this.#send({ kind: "type", mode, key, text }),
-      })}
-      <span class="status"
-        >${
+      <span class="line"
+        ><span class="mode-label">${t(`theme.${mode}`)}</span>${colourValueField({
+          colour,
+          code: handCodes[mode][key] ?? colour,
+          name: `handSet.${mode}.${key}`,
+          pickerName: `handSetPicker.${mode}.${key}`,
+          label: value,
+          codeLabel: fill("appearance.hand_code", {
+            name: themeColourName(key),
+            screens: t(`appearance.saved_fix_${mode}`),
+          }),
+          error: this.errors[`handSet.${mode}.${key}`] ?? "",
+          busy: this.busy,
+          pick: (picked) => this.#pick(mode, key, picked),
+          type: (text) => this.#send({ kind: "type", mode, key, text }),
+        })}${
           hand
-            ? html`<span class="tag" data-test="hand-status-${mode}-${key}"
-                  >${t("appearance.set_by_hand")}</span
-                ><wt-button
-                  data-test="hand-worked-out-${mode}-${key}"
-                  class="link"
-                  variant="ghost"
-                  size="sm"
-                  aria-label=${fill("appearance.hand_action", {
-                    action: t("appearance.use_worked_out"),
-                    value,
-                  })}
-                  ?disabled=${this.busy}
-                  @click=${() => this.#send({ kind: "worked-out", mode, key })}
-                  >${t("appearance.use_worked_out")}</wt-button
-                >`
-            : html`<span data-test="hand-status-${mode}-${key}">${this.#status(mode, key)}</span>`
+            ? html`<span class="status tag" data-test="hand-status-${mode}-${key}"
+                >${t("appearance.set_by_hand")}</span
+              >`
+            : html`<span class="status" data-test="hand-status-${mode}-${key}"
+                >${this.#status(mode, key)}</span
+              >`
         }</span
-      >
+      >${
+        hand
+          ? html`<wt-button
+              data-test="hand-worked-out-${mode}-${key}"
+              class="link flush"
+              variant="ghost"
+              size="sm"
+              aria-label=${fill("appearance.hand_action", {
+                action: t("appearance.use_worked_out"),
+                value,
+              })}
+              ?disabled=${this.busy}
+              @click=${() => this.#send({ kind: "worked-out", mode, key })}
+              >${t("appearance.use_worked_out")}</wt-button
+            >`
+          : nothing
+      }
     </div>`;
   }
 

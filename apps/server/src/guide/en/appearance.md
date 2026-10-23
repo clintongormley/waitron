@@ -83,11 +83,11 @@ heading to open it.
 
 Inside, a row for each of the theme's colours gives its value on light screens and on dark
 screens, under the headings **Light screens** and **Dark screens** on a wide card, or each labelled
-**Light** or **Dark** on a narrow one, each with a colour picker and a box for a colour code. Under each value, a colour that
-is worked out reads **Worked out**; Main buttons reads **Brand colour**, or **Fixed** where a
+**Light** or **Dark** on a narrow one, each with a colour picker and a box for a colour code. Beside each value's code, a colour
+that is worked out reads **Worked out**; Main buttons reads **Brand colour**, or **Fixed** where a
 readable shade was taken for that kind of screen. Changing either value, with the picker or by
 typing a code, sets that value by hand and leaves the other kind of screen's value as it was. A
-value set by hand is marked **Set by hand**, with **Use worked-out colour** beside it to go back to
+value set by hand is marked **Set by hand**, with **Use worked-out colour** under it to go back to
 the value Waitron works out. **Reset all to worked-out**, at the bottom of the section, puts every
 value back to worked out; it is greyed out while nothing is set by hand.
 
