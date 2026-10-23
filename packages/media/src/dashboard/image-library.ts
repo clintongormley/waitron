@@ -632,6 +632,8 @@ export class ImageLibrary extends LitElement {
     return resolveEnabledContentText(value, currentLocale(), currentContentLanguages());
   }
   #usage(use: ImageUsage) {
+    // Plain text until the Appearance page can be linked to (slice 8).
+    if (use.kind === "theme_logo") return html`<span>${use.name}</span>`;
     const name = usageName(use);
     const inactive =
       "active" in use && !use.active

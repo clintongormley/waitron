@@ -2113,7 +2113,23 @@ it("keeps a live department receipt usage linked to its editor", async () => {
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
 });
 
-it.each(["department_receipts", "departments"])(
+it("shows a theme's logo use as its name, with no link, and blocks the delete", async () => {
+  const client = api();
+  client.getImage.mockResolvedValue({
+    image: { ...image, usageCount: 1 },
+    uses: [{ kind: "theme_logo", id: "t1", name: "Bar Lucía" }] as ImageUsage[],
+  });
+  await mount(client);
+  click("[data-test=delete-one]");
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("wt-modal li")).toHaveLength(1));
+  const entry = el.shadowRoot!.querySelector("wt-modal li")!;
+  expect(entry.textContent?.trim()).toBe("Bar Lucía");
+  expect(entry.querySelector("a")).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
+  expect(client.deleteImage).not.toHaveBeenCalled();
+});
+
+it.each(["department_receipts", "departments", "custom_themes"])(
   "refreshes image counts passively when %s changes",
   async (type) => {
     const liveData = new LiveData();
