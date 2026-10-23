@@ -120,6 +120,7 @@ describe("collectBoxHealth", () => {
         lowSince: null,
         reclaimable: { bytes: 700_000, backupRunning: false },
       },
+      clockStop: null,
     });
   });
 
