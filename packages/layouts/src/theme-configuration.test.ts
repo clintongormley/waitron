@@ -176,5 +176,37 @@ describe("validateThemeConfiguration", () => {
         params: { field: "custom_themes.theme" },
       });
     });
+
+    // JSON.parse keeps a repeated key's last value and SQLite's json_extract its first.
+    const lightOnly = JSON.stringify({ ...LEMON, logo: { light: L }, printedLogo: PRINTABLE });
+    const escapedLogo = `"\\u006cogo"`;
+    it.each<[string, string]>([
+      ["a logo key given twice", lightOnly.replace('"logo":{', '"logo":null,"logo":{')],
+      ["a light key given twice", lightOnly.replace('"light":"a', `"light":"${D}","light":"a`)],
+      ["a key given twice deep in the dots", lightOnly.replace('"58mm":', '"58mm":null,"58mm":')],
+      [
+        "a logo key given twice, once escaped",
+        lightOnly.replace('"logo":{', `"logo":null,${escapedLogo}:{`),
+      ],
+      [
+        "a logo key given twice in spaced-out text",
+        lightOnly.replace('"logo":{', '"logo" \n:\tnull, "logo"\r\n : {'),
+      ],
+    ])("refuses %s as custom_themes.theme", (_label, theme) => {
+      expect(JSON.parse(theme)).toEqual(JSON.parse(lightOnly));
+      expect(refusal([{ ...row("Lemon", LEMON, null), theme }], images)).toMatchObject({
+        code: "setup.request_invalid",
+        params: { field: "custom_themes.theme" },
+      });
+    });
+
+    it("accepts one key name used once in each of several objects", () => {
+      const theme = JSON.stringify(WITH_LOGO);
+      expect(theme.match(/"light":/g)).toHaveLength(2);
+      expect(theme.match(/"dark":/g)).toHaveLength(2);
+      expect(refusal([{ ...row("Lemon", LEMON, null), theme }], images)).toBeUndefined();
+      const spaced = JSON.stringify(WITH_LOGO, null, "\t");
+      expect(refusal([{ ...row("Lemon", LEMON, null), theme: spaced }], images)).toBeUndefined();
+    });
   });
 });

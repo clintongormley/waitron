@@ -2425,7 +2425,7 @@ describe("custom themes in a configuration copy", () => {
   };
   const darkGreen = { ...lemon, brandColor: "#1e5b3a", background: "tinted" };
 
-  async function themedBundle(taxId: string, withLogo = false) {
+  async function themedBundle(taxId: string, logo: "none" | "stored" | "redrawn" = "none") {
     const source = await applyVenue(planVenue(venue(taxId), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -2434,7 +2434,7 @@ describe("custom themes in a configuration copy", () => {
       { name: "Lemon Bar", nameKey: "lemon bar", inUse: null, theme: lemon },
       { name: "Green Room", nameKey: "green room", inUse: 1, theme: darkGreen },
     ]);
-    if (withLogo) {
+    if (logo !== "none") {
       const photo = await samplePreparedImage({ width: 10 });
       const image = await withTransaction(
         suite.db,
@@ -2449,6 +2449,30 @@ describe("custom themes in a configuration copy", () => {
         inUse: null,
         theme: { ...lemon, logo: { light: image.filename }, printedLogo },
       });
+      if (logo === "redrawn") {
+        const framing = { x: 2500, y: 7500, zoom: 300 };
+        // A plain sample image draws the same dots at any framing, so a wider one stands in.
+        const wider = await samplePreparedImage({ width: 23 });
+        const redrawn = await drawLogoRasters(
+          await renderRendition(wider.bytes, "display", framing),
+        );
+        expect(redrawn).not.toEqual(printedLogo);
+        await withTransaction(suite.db, (tx) =>
+          saveImage(
+            tx,
+            image.id,
+            { names: image.names, framing, expectedRevision: image.revision },
+            null,
+            redrawn,
+            "es",
+          ),
+        );
+        const [stored] = await suite.db
+          .select({ theme: customThemes.theme })
+          .from(customThemes)
+          .where(eq(customThemes.name, "Logo Bar"));
+        expect(stored!.theme).toMatchObject({ printedLogo: redrawn });
+      }
     }
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
     const transferred = await buildConfigurationBundle(
@@ -2534,7 +2558,7 @@ describe("custom themes in a configuration copy", () => {
   }
 
   it("carries a theme's logo and its printed dots", async () => {
-    const { transferred, versions } = await themedBundle("B13572483", true);
+    const { transferred, versions } = await themedBundle("B13572483", "stored");
     await importInto("B97531883", transferred, versions);
     const [source] = await suite.db
       .select({ theme: customThemes.theme })
@@ -2556,7 +2580,7 @@ describe("custom themes in a configuration copy", () => {
   });
 
   it("refuses a copy whose theme names an image it does not carry", async () => {
-    const { transferred, versions } = await themedBundle("B13572484", true);
+    const { transferred, versions } = await themedBundle("B13572484", "stored");
     rewriteTheme(transferred, "Logo Bar", (theme) => {
       theme.logo = { light: "f".repeat(64) + ".webp" };
     });
@@ -2568,7 +2592,7 @@ describe("custom themes in a configuration copy", () => {
   });
 
   it("refuses a copy whose theme names a logo without its printed dots", async () => {
-    const { transferred, versions } = await themedBundle("B13572485", true);
+    const { transferred, versions } = await themedBundle("B13572485", "stored");
     rewriteTheme(transferred, "Logo Bar", (theme) => {
       delete theme.printedLogo;
     });
@@ -2589,6 +2613,53 @@ describe("custom themes in a configuration copy", () => {
     const lemonBar = list.themes.find((theme) => theme.name === "Lemon Bar");
     expect(lemonBar?.choices?.logo).toBeNull();
     expect(lemonBar?.choices).toEqual(lemon);
+  });
+
+  // JSON.parse reads a repeated key's last value, SQLite's json_extract its first: stored, the
+  // venue would show the logo while the image library counted no use of it.
+  it.each<[string, (text: string, carried: string) => string, string, string]>([
+    [
+      "a logo key given twice",
+      (text) => text.replace('"logo":{', '"logo":null,"logo":{'),
+      "B13572487",
+      "B97531887",
+    ],
+    [
+      "a light key given twice",
+      (text, carried) =>
+        text.replace(
+          `"light":"${carried}"`,
+          `"light":"${"f".repeat(64)}.webp","light":"${carried}"`,
+        ),
+      "B13572488",
+      "B97531888",
+    ],
+  ])("refuses a copy whose theme names %s", async (_label, repeat, taxId, targetTaxId) => {
+    const { transferred, versions } = await themedBundle(taxId, "stored");
+    const row = themeRow(transferred, "Logo Bar");
+    const text = row.theme as string;
+    const carried = (JSON.parse(text) as { logo: { light: string } }).logo.light;
+    row.theme = repeat(text, carried);
+    expect(row.theme).not.toBe(text);
+    expect(JSON.parse(row.theme as string)).toEqual(JSON.parse(text));
+    await expect(importInto(targetTaxId, transferred, versions)).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "custom_themes.theme" },
+    });
+    await expectNothingKept();
+  });
+
+  it("carries a theme whose dots the image library redrew", async () => {
+    const { transferred, versions } = await themedBundle("B13572489", "redrawn");
+    const [source] = (
+      await suite.db.execute(sql`select theme from custom_themes where name = 'Logo Bar'`)
+    ).rows as { theme: string }[];
+    expect(themeRow(transferred, "Logo Bar").theme).toBe(source!.theme);
+    await importInto("B97531889", transferred, versions);
+    const [imported] = (
+      await targetSuite.db.execute(sql`select theme from custom_themes where name = 'Logo Bar'`)
+    ).rows as { theme: string }[];
+    expect(imported!.theme).toBe(source!.theme);
   });
 
   it("refuses a copy whose name key is not its name's", async () => {
