@@ -1,3 +1,24 @@
+> **Amended Cloud agreement published, 2026-10-23 (D133).** Cloud
+> [PR #323](https://github.com/waitron-io/waitron-cloud/pull/323) publishes the
+> [accepted correction](https://github.com/waitron-io/waitron-cloud/blob/08a2a0d4290cf7fbd54a87d2493b6d9727f8f7ec/docs/waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018) at
+> `08a2a0d4290cf7fbd54a87d2493b6d9727f8f7ec`. Full shared-contract SHA-256:
+> `157556c31753ccf64cc9f8f0a7144f20683325231d212cd344e259b644366d02`.
+> It accepts this design's M2-only AEAT direction at Waitron
+> `d9252ac34f2b7e946e1154dd5af1a443c2c39ad4`, full-document SHA-256
+> `5fabaad0ff946f410c68fd71f46cffa497c3f562ae7f8776c71f61de96265aa3`.
+> This supersedes every Cloud-agreement/publication wait below, including §11;
+> the earlier blocks retain their dated positions. The single short revised owner
+> design question can now proceed, with §§8–9, the retained proposed defaults and
+> §6's completed A1034 observation and limits. The proposal below is unchanged.
+> Owner design approval, exact formats, compatible A947 amendments, separate build
+> authority and physical runtime acceptance remain pending. Cloud's publication still
+> calls A1034 unrun; §6 records the later completed test-service observation.
+
+| Pinned Cloud source                                                                                                                                                                                             | Actual wording                                                                                                            | What this establishes                                                                                                                                  |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [D133 canonical A1018 section](https://github.com/waitron-io/waitron-cloud/blob/08a2a0d4290cf7fbd54a87d2493b6d9727f8f7ec/docs/waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018) | “Cloud accepts its direction and the boundaries below.”; “After either takeover M2 alone handles all AEAT communication.” | Agreement on the revised direction, including sole M2 filing and fiscal-only return. Publication does not qualify implementation or runtime behaviour. |
+
+---
 > **AEAT test observation, 2026-10-23 (A1034).** The authorised probe completed in
 > [run 39970201368](https://github.com/waitron-io/verifactu/actions/runs/39970201368).
 > The queued/not-run notes below describe the earlier revision; §6 now records the result.

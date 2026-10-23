@@ -5075,7 +5075,7 @@ Not in any track until the standalone primary is done.
 
 - **A1018. Simple controlled and emergency handover, with Cloud only a placement.** M2 handles
   all AEAT communication after either takeover; returning M1 transfers fiscal originals/outcomes only.
-  G/D133 must amend Cloud #312 and pin acceptance before one short revised owner design question.
+  Cloud #323 publishes G/D133’s amended agreement at `08a2a0d4`; next is one short revised owner design question.
   A1034’s synthetic AEAT test-service observation is recorded; retained defaults, exact formats, A947 amendments, build and physical runtime acceptance remain open.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 

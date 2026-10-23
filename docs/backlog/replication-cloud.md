@@ -5,6 +5,22 @@ their full text.
 
 ## A1018. Agree and build the hosted writer stop-proof contract
 
+**Amended Cloud agreement published, 2026-10-23 (D133):**
+[Cloud #323](https://github.com/waitron-io/waitron-cloud/pull/323), signed
+`08a2a0d4290cf7fbd54a87d2493b6d9727f8f7ec`, publishes the
+[canonical correction](https://github.com/waitron-io/waitron-cloud/blob/08a2a0d4290cf7fbd54a87d2493b6d9727f8f7ec/docs/waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018); full shared-contract SHA-256
+`157556c31753ccf64cc9f8f0a7144f20683325231d212cd344e259b644366d02`.
+Cloud accepts the revised direction at Waitron `d9252ac34f2b7e946e1154dd5af1a443c2c39ad4`:
+M2 alone handles AEAT after either takeover, preserving old originals' generating identities;
+returning M1 transfers missing fiscal originals and all received outcomes without AEAT contact.
+This supersedes the agreement/publication waits in the earlier dated blocks below. Next is
+**one short revised owner design question**, with both Harbour Kitchen examples and the retained
+proposed defaults. The [current design](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md)
+pins the source wording and records A1034's completed test-service observation and limits.
+The Cloud publication's A1034-unrun note predates that result. Keep the item open: owner design
+approval, exact formats, compatible A947 amendments, separate build authority and physical runtime
+acceptance remain pending. No protocol recommendation changes in this publication update.
+
 **CURRENT correction, 2026-10-23, after the 15:37 and 15:40 owner answers:** the owner
 rejected emergency filing by returning M1. After either takeover, **M2 alone handles all AEAT
 communication**, filing copied and later-returned originals in their generating fiscal
