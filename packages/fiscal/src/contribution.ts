@@ -105,8 +105,8 @@ export interface FiscalCertificateSeat {
 
 /** What the outbox holds, as the Box status page shows it. */
 export interface FiscalOutboxState {
-  /** When the box last saved an acceptance from the authority, with or without errors, by the
-   * box's own clock; null if it never has. */
+  /** The box's clock at the start of the pass whose send the authority last accepted, with or
+   * without errors; null if it never has. */
   readonly lastAcceptedAt: string | null;
   /** Every unsent record not behind a record held after repeated refusals on its own chain. */
   readonly waiting: number;
