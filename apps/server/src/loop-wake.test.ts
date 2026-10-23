@@ -43,6 +43,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -192,7 +193,19 @@ describe("createLoopWaker", () => {
     expect(sleep.endedAfter).toBe(5_000);
   });
 
-  it("defaults to the real sleep and clock", async () => {
+  it("defaults to performance.now for the clock", async () => {
+    vi.spyOn(performance, "now").mockImplementation(clock);
+    const w = createLoopWaker({ minTickMs: MIN, delay: fakeDelay });
+    const sleep = track(w, 60_000);
+    await vi.advanceTimersByTimeAsync(1_000);
+    w.wake();
+    await vi.advanceTimersByTimeAsync(3_999);
+    expect(sleep.endedAfter).toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(sleep.endedAfter).toBe(5_000);
+  });
+
+  it("defaults to the real sleep", async () => {
     vi.useRealTimers();
     const w = createLoopWaker({ minTickMs: 0 });
     const controller = new AbortController();

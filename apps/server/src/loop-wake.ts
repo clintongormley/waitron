@@ -18,7 +18,6 @@ export function createLoopWaker(deps: {
   const delay = deps.delay ?? realSleep;
   const clock = deps.monotonicMs ?? (() => performance.now());
   let woken = false;
-  // Set for the whole sleep, hold included, so a wake during the hold is spent with that sleep.
   let interrupt: AbortController | undefined;
 
   async function pause(ms: number, signal: AbortSignal, also?: AbortSignal): Promise<void> {
@@ -41,6 +40,7 @@ export function createLoopWaker(deps: {
       const hold = Math.min(ms, deps.minTickMs) - (clock() - startedAt);
       if (hold > 0) await pause(hold, signal);
     } finally {
+      // Cleared after the hold, so a wake given during the hold is spent with this sleep.
       woken = false;
       interrupt = undefined;
     }
