@@ -101,6 +101,16 @@ describe("readReleaseReminderMinutesByZone", () => {
     expect(found.get(a.zoneId)).toBe(10);
   });
 
+  it("still answers for a department that has been made inactive", async () => {
+    const cfg = { locationId: await seedLocation("Reminder inactive department") };
+    const a = await departmentWithZone(cfg, "A");
+    await setMinutes(a.departmentId, 25);
+    await db.execute(sql`update departments set active = 0 where id = ${a.departmentId}`);
+    expect(await scoped((tx) => readReleaseReminderMinutesByZone(tx, [a.zoneId]))).toEqual(
+      new Map([[a.zoneId, 25]]),
+    );
+  });
+
   it("answers an empty list with an empty map", async () => {
     const untouchable = new Proxy({} as Transaction, {
       get(_target, key) {
@@ -124,6 +134,16 @@ describe("listDepartmentReminderMinutes", () => {
     expect(await scoped((tx) => listDepartmentReminderMinutes(tx, cfg))).toEqual({
       [a.departmentId]: 25,
       [b.departmentId]: null,
+    });
+  });
+
+  it("leaves out another location's department", async () => {
+    const cfg = { locationId: await seedLocation("Reminder here") };
+    const other = { locationId: await seedLocation("Reminder elsewhere") };
+    const a = await departmentWithZone(cfg, "A");
+    await departmentWithZone(other, "B");
+    expect(await scoped((tx) => listDepartmentReminderMinutes(tx, cfg))).toEqual({
+      [a.departmentId]: 10,
     });
   });
 
