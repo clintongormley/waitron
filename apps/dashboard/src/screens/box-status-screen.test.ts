@@ -879,19 +879,54 @@ describe("dashboard-box-status-screen's restart of payments", () => {
     expect(restartClockPayments).toHaveBeenCalledTimes(2);
   });
 
-  it("closes the dialog when a read offers a different record, so it never sends the old one", async () => {
+  it("follows a read that offers a different record, so it sends the record it shows", async () => {
     const api = stubApi({ restartClockPayments: vi.fn().mockResolvedValue(undefined) }, stopped());
     const { el } = await mount(api);
     await open(el);
-    vi.mocked(api.getBoxHealth).mockResolvedValue(stopped({ recordId: "rec-43" }));
+    vi.mocked(api.getBoxHealth).mockResolvedValue(
+      stopped({ recordId: "rec-43", lastRecordAt: "2026-10-22T19:40:00.000Z" }),
+    );
     api.liveData.refresh();
     await flush(el);
-    expect(dialog(el).open).toBe(false);
+    expect(dialog(el).open).toBe(true);
+    expect(text(qa(el, "[data-test=restart-dialog] dl > div")[1]!)).toBe(
+      `${t("box_status.clock.restart.last_sale_reads")} ${formatIsoMinute("2026-10-22T19:40:00.000Z")}`,
+    );
 
-    await open(el);
     await userEvent.click(confirm(el));
     await flush(el);
     expect(api.restartClockPayments).toHaveBeenCalledWith("rec-43");
+  });
+
+  it("keeps a record_changed refusal through the read that brings the new record, then sends it", async () => {
+    const restartClockPayments = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "clock.restart_refused",
+        params: { reason: "record_changed" },
+      })
+      .mockResolvedValue(undefined);
+    const api = stubApi(
+      {
+        restartClockPayments,
+        getBoxHealth: vi
+          .fn()
+          .mockResolvedValueOnce(stopped())
+          .mockResolvedValue(stopped({ recordId: "rec-43" })),
+      },
+      stopped(),
+    );
+    const { el } = await mount(api);
+    await open(el);
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(restartClockPayments).toHaveBeenLastCalledWith("rec-42");
+    expect(dialog(el).open).toBe(true);
+    expect(text(footerMessage(el))).toBe(t("box_status.clock.refused.record_changed"));
+
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(restartClockPayments).toHaveBeenLastCalledWith("rec-43");
   });
 
   it("stays open on Escape while the request is sent", async () => {

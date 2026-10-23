@@ -268,13 +268,17 @@ export class BoxStatusScreen extends LitElement {
   }
 
   override willUpdate(changed: Map<PropertyKey, unknown>): void {
-    // A dialog holds only the record the page offers now: once that stop ends or its record
-    // changes, it must not reopen by itself with an old refusal or send the old record.
+    // An open dialog sends the record the page offers now, and keeps its refusal while one is
+    // offered; once none is, it must not reopen by itself at the next stop.
     if (!changed.has("health") && !changed.has("alerts") && !changed.has("restarting")) return;
     const health = this.health;
     if (health === null || this.restarting || this.restartRecord === null) return;
     const { rows } = boxStatusRows(health, this.alerts ?? []);
-    if (rows.some((row) => row.restartRecordId === this.restartRecord)) return;
+    const offered = rows.find((row) => row.restartRecordId !== null)?.restartRecordId ?? null;
+    if (offered !== null) {
+      this.restartRecord = offered;
+      return;
+    }
     this.restartOpen = false;
     this.restartRecord = null;
     this.restartError = "";
