@@ -1,5 +1,5 @@
 import { LitElement, html } from "lit";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
 import type { ThemeChoices } from "@waitron/ui-core/theme";
@@ -49,9 +49,9 @@ afterEach(() => {
   setLocale("en-GB");
 });
 
-async function mount() {
+async function mount(view: ThemeView = lucia) {
   const saveTheme = vi.fn(async (id: string, choices: ThemeChoices) => ({
-    ...lucia,
+    ...view,
     id,
     choices,
   }));
@@ -65,7 +65,7 @@ async function mount() {
   const api = { saveTheme, createTheme, getVenueTheme } as unknown as DashboardApi;
   const { el: app } = await mountWidget<LookLeaveApp>("look-card-leave-test-app", {
     api,
-    list: { themes: [lucia], inUse: lucia.id },
+    list: { themes: [view], inUse: view.id },
   });
   const card = app.shadowRoot!.querySelector("dashboard-look-card")!;
   await card.updateComplete;
@@ -215,4 +215,125 @@ it("after a successful Save as new theme, leaving asks nothing", async () => {
   expect(saveTheme).not.toHaveBeenCalled();
   expect(unload()).toBe(false);
   expect(await leave(app)).toBe("proceeded");
+});
+
+type Advanced = HTMLElementTagNameMap["dashboard-theme-advanced"];
+const advanced = (card: Card) => q(card, "dashboard-theme-advanced") as Advanced;
+const inAdvanced = (card: Card, selector: string) =>
+  advanced(card).shadowRoot!.querySelector<HTMLElement>(selector);
+const disclosure = (card: Card) =>
+  inAdvanced(card, "[data-test=advanced]") as HTMLElementTagNameMap["wt-disclosure"];
+async function settle(card: Card) {
+  await card.updateComplete;
+  await advanced(card).updateComplete;
+}
+async function openAdvanced(card: Card) {
+  if (disclosure(card).open) return;
+  await userEvent.click(disclosure(card).shadowRoot!.querySelector("button.header")!);
+  await disclosure(card).updateComplete;
+}
+async function typeHand(card: Card, mode: string, key: string, value: string) {
+  await openAdvanced(card);
+  const field = inAdvanced(card, `wt-input[name="handSet.${mode}.${key}"]`)!;
+  await page.elementLocator(field.shadowRoot!.querySelector("input")!).fill(value);
+  await settle(card);
+}
+async function pressInAdvanced(card: Card, name: string) {
+  await userEvent.click(inAdvanced(card, `[data-test=${name}]`)!);
+  await settle(card);
+}
+const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+const CREAM = theme("t-cream", "Cream", {
+  ...LUCIA,
+  handSet: { light: { bg: "#f8f1e1" }, dark: {} },
+});
+function theme(id: string, name: string, choices: ThemeChoices): ThemeView {
+  const worked = deriveTheme(choices);
+  return {
+    id,
+    name,
+    updatedAt: "2026-10-21T10:00:00.000Z",
+    choices,
+    light: worked.light,
+    dark: worked.dark,
+    warnings: worked.warnings,
+  };
+}
+
+describe("leaving with Advanced", () => {
+  it("a value set by its picker asks, and Discard returns to the saved rows without a write", async () => {
+    const { app, card, saveTheme } = await mount();
+    await openAdvanced(card);
+    const picker = inAdvanced(
+      card,
+      'input[type=color][name="handSetPicker.light.bg"]',
+    ) as HTMLInputElement;
+    picker.value = "#f8f1e1";
+    picker.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await nextFrame();
+    await settle(card);
+    expect(advanced(card).draft.choices.handSet.light).toEqual({ bg: "#f8f1e1" });
+    expect(unload()).toBe(true);
+    const request = leave(app);
+    await choose(app, "discard");
+    expect(await request).toBe("proceeded");
+    await expect.poll(() => editing(card)).toBe(false);
+    expect(q(card, "[data-test=saved-hand]")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
+      t("appearance.none"),
+    );
+    expect(saveTheme).not.toHaveBeenCalled();
+    expect(unload()).toBe(false);
+  });
+
+  it("a half-typed code alone asks", async () => {
+    const { app, card } = await mount();
+    await typeHand(card, "light", "bg", "#12");
+    expect(advanced(card).draft.choices.handSet).toEqual({ light: {}, dark: {} });
+    expect(unload()).toBe(true);
+    const request = leave(app);
+    await choose(app, "keep");
+    expect(await request).toBe("kept");
+    expect(editing(card)).toBe(true);
+  });
+
+  it("the stored colour typed again in capitals asks nothing", async () => {
+    const { app, card } = await mount(CREAM);
+    await typeHand(card, "light", "bg", "#F8F1E1");
+    expect(save(card).disabled).toBe(true);
+    expect(unload()).toBe(false);
+    expect(await leave(app)).toBe("proceeded");
+  });
+
+  it("Use worked-out colour back to the opened draft leaves without asking", async () => {
+    const { app, card } = await mount();
+    await typeHand(card, "light", "bg", "#f8f1e1");
+    expect(unload()).toBe(true);
+    await pressInAdvanced(card, "hand-worked-out-light-bg");
+    expect(save(card).disabled).toBe(true);
+    expect(unload()).toBe(false);
+    expect(await leave(app)).toBe("proceeded");
+  });
+
+  it("Reset all over a stored colour set by hand asks", async () => {
+    const { app, card, saveTheme } = await mount(CREAM);
+    await openAdvanced(card);
+    await pressInAdvanced(card, "reset-all");
+    expect(advanced(card).draft.choices.handSet).toEqual({ light: {}, dark: {} });
+    expect(unload()).toBe(true);
+    const request = leave(app);
+    await choose(app, "keep");
+    expect(await request).toBe("kept");
+    expect(advanced(card).draft.choices.handSet).toEqual({ light: {}, dark: {} });
+    expect(saveTheme).not.toHaveBeenCalled();
+  });
+
+  it("Pick a different colour for dark screens alone asks nothing", async () => {
+    const { app, card } = await mount();
+    await userEvent.click(q(card, "[data-test=pick-dark]")!);
+    await settle(card);
+    expect(disclosure(card).open).toBe(true);
+    expect(save(card).disabled).toBe(true);
+    expect(unload()).toBe(false);
+    expect(await leave(app)).toBe("proceeded");
+  });
 });

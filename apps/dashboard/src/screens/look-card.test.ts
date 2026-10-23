@@ -1088,7 +1088,6 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
           range.selectNodeContents(words);
           return range.getClientRects().length;
         };
-        // Below the width at which the editor takes two columns, measured in this browser's fonts.
         const oneColumn = 880;
         await at(oneColumn);
         const left = el.getBoundingClientRect().left;

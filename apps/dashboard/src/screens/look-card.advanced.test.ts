@@ -305,6 +305,36 @@ describe("the Look card's Advanced section", () => {
     release();
   });
 
+  it("a hand change that arrives while a save is under way changes nothing", async () => {
+    const { el, saveTheme } = await mountEditing();
+    let release!: () => void;
+    saveTheme.mockImplementationOnce(
+      (id, choices) =>
+        new Promise((resolve) => {
+          release = () => resolve(theme(id, "Bar Lucía", choices));
+        }),
+    );
+    await typeHand(el, "light", "bg", "#f8f1e1");
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    advanced(el).dispatchEvent(
+      new CustomEvent("hand-change", {
+        detail: { kind: "pick", mode: "light", key: "bg", colour: "#000000" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settle(el);
+    expect(advanced(el).draft.choices).toEqual(CREAM);
+    expect(advanced(el).fixed).toEqual({});
+    release();
+    await expect
+      .poll(() => q(el, "section.settings-card")!.hasAttribute("data-editing"))
+      .toBe(false);
+    expect(saveTheme).toHaveBeenCalledTimes(1);
+    expect(saveTheme).toHaveBeenCalledWith("t-lucia", CREAM);
+  });
+
   it("keeps the section's errors while nothing they come from changes", async () => {
     const { el } = await mountEditing();
     await typeHand(el, "light", "bg", "#12");
