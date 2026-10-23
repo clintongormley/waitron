@@ -226,6 +226,7 @@ import type { UnsentDraft } from "./order-drafts.js";
 import {
   correctHoldTickets,
   correctJoin,
+  recordJoiningStations,
   onShownBill,
   printedHeldGroups,
   printHoldTickets,
@@ -2975,6 +2976,7 @@ export async function removeFromLine(
           workingOrderLineId: item.workingOrderLineId,
           stationId: item.stationId,
           quantity: removedQuantity(item),
+          groupId: target.groupId!,
           group,
         }));
       if (target.ticketItemId !== null && target.firedAt === null) {
@@ -2983,6 +2985,7 @@ export async function removeFromLine(
           workingOrderLineId: target.id,
           stationId: target.stationId!,
           quantity: removed ?? target.firedQuantity,
+          groupId: target.groupId,
           group,
         });
       }
@@ -6039,22 +6042,22 @@ async function applyLineEdits(
           (row) => row.id === item.workingOrderLineId && row.parentLineId === parent.id,
         ),
     )?.parent;
-    const group =
-      parent?.groupId === null || parent === undefined
-        ? undefined
-        : printedAdded.get(parent.groupId);
-    return item.firedAt === null && group !== undefined
+    const groupId = parent?.groupId ?? null;
+    const group = groupId === null ? undefined : printedAdded.get(groupId);
+    return item.firedAt === null && groupId !== null && group !== undefined
       ? [
           {
             workingOrderId: orderId,
             workingOrderLineId: item.workingOrderLineId,
             stationId: item.stationId,
             quantity: item.quantity,
+            groupId,
             group,
           },
         ]
       : [];
   });
+  await recordJoiningStations(tx, givenExtras);
   // After the extras a line gains are written: a slip reads the line as it now stands.
   await correctHoldTickets(tx, cfg, [...held.given, ...givenExtras], {
     kind: "HOLD CHANGED",
@@ -6159,6 +6162,7 @@ async function planHeldCorrections(
         workingOrderLineId: part.id,
         stationId: part.ticket.stationId,
         quantity,
+        groupId: parent.groupId!,
         group,
       },
     ];

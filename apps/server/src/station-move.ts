@@ -167,7 +167,7 @@ export async function rerouteHeldAtRelease(
  * station not recorded only when the station prints held work now and holds no other held work of
  * the group, so its paper is complete; otherwise the dish prints there at the fire.
  */
-async function destinationHoldPaper(
+export async function destinationHoldPaper(
   tx: Transaction,
   stationId: string,
   groupIds: readonly string[],

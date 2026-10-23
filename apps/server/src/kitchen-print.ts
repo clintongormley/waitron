@@ -123,7 +123,7 @@ interface PrinterMapping {
  * adds switched-off printers but never a deleted one. The fire and correction paths both resolve
  * printers here without it, so the header's never-block argument covers both.
  */
-async function printerMappings(
+export async function printerMappings(
   tx: Transaction,
   stationIds: string[],
   { switchedOffToo = false }: { switchedOffToo?: boolean } = {},

@@ -203,6 +203,36 @@ describe("editing split-off extras", () => {
     });
   });
 
+  it("an extra added to a held dish prints +N only at a station recorded for the group", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationPrinting(tx, { printHeldWork: true });
+      await setStationPrinting(tx, { printHeldWork: false }, [venue.stations.fryer]);
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [line(venue, "burger", "1", 1)], release: "hold" }],
+      });
+      expect(await slips(tx, venue.printers.grill)).toHaveLength(1);
+      await edit(tx, venue, 1, { extras: line(venue, "burger", "1", 1, 1).extras });
+      const rings = (await state(tx, venue.party.tabId)).lines.find(
+        (row) => row.productId === venue.products.onionRings,
+      )!;
+      expect((await state(tx, venue.party.tabId)).items).toContainEqual(
+        expect.objectContaining({
+          lineId: rings.id,
+          stationId: venue.stations.fryer,
+          firedAt: null,
+        }),
+      );
+      expect(await slips(tx, venue.printers.fryer)).toEqual([]);
+      // Grill, recorded, gets the dish taken off and given back with the rings it gained.
+      const grill = await slips(tx, venue.printers.grill);
+      expect(grill).toHaveLength(3);
+      expect(grill.at(-1)).toContain("HOLD CHANGED");
+      expect(grill.at(-1)).toContain("AROS");
+    });
+  });
+
   it("prints HOLD CHANGED when a prior inline extra gains its first station record on an edit", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {

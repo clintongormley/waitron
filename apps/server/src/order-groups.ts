@@ -51,7 +51,12 @@ import {
   stringToThousandths,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import { enqueueHoldCorrections, enqueueKitchenTickets, firedQuantity } from "./kitchen-print.js";
+import {
+  enqueueHoldCorrections,
+  enqueueKitchenTickets,
+  firedQuantity,
+  printerMappings,
+} from "./kitchen-print.js";
 import type { FiredItem, HoldCorrection, TicketState } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { trimQuantityForDisplay } from "./receipt-lines.js";
@@ -80,7 +85,7 @@ import {
   type TabRoundLine,
 } from "./working-order.js";
 import "./errors.js";
-import { stillMovable } from "./station-move.js";
+import { destinationHoldPaper, stillMovable } from "./station-move.js";
 import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
 import { readPartyTables } from "./orders-list.js";
 import { isRecalledDish, refuseRecalledWrite } from "./draft-source.js";
@@ -541,6 +546,7 @@ export async function fireHeldLine(
             workingOrderLineId: item.workingOrderLineId,
             stationId: item.stationId,
             quantity: item.firedQuantity,
+            groupId: source,
             group: printed,
             numberPartyLabel: labels.get(source),
           })),
@@ -1107,6 +1113,7 @@ export async function moveLinesToGroup(
             taken.push({
               ...change,
               workingOrderLineId: item.workingOrderLineId,
+              groupId: line.groupId!,
               group: from,
               numberPartyLabel: numberLabels.get(line.groupId!),
             });
@@ -1115,6 +1122,7 @@ export async function moveLinesToGroup(
             given.push({
               ...change,
               workingOrderLineId: split ?? item.workingOrderLineId,
+              groupId: targetId,
               group: to,
               numberPartyLabel: numberLabels.get(targetId),
             });
@@ -1122,6 +1130,7 @@ export async function moveLinesToGroup(
         }
       }
       await correctHoldTickets(tx, cfg, taken, { kind: "HOLD CHANGED", direction: "removed" });
+      await recordJoiningStations(tx, given);
       await correctHoldTickets(tx, cfg, given, { kind: "HOLD CHANGED", direction: "added" });
       if (target === "new") await printHoldTickets(tx, cfg, [targetId]);
       await bumpRevision(tx, [...splitsByBill.keys()]);
@@ -2103,6 +2112,8 @@ export interface HeldChange {
   workingOrderLineId: string;
   stationId: string;
   quantity: number;
+  /** The group whose HOLD ticket is corrected. */
+  groupId: string;
   group: number;
   numberPartyLabel?: string;
 }
@@ -2123,16 +2134,42 @@ export async function correctHoldTickets(
       tx,
       cfg,
       orderId,
-      bill.map(({ workingOrderLineId, stationId, quantity, group, numberPartyLabel }) => ({
+      bill.map(({ workingOrderLineId, stationId, quantity, groupId, group, numberPartyLabel }) => ({
         workingOrderLineId,
         stationId,
         quantity,
         wasStarted: false,
+        holdGroupId: groupId,
         group,
         ...(numberPartyLabel === undefined ? {} : { numberPartyLabel }),
       })),
       correction,
     );
+  }
+}
+
+/**
+ * Records each station that held work newly arriving in a group with HOLD paper reaches under
+ * {@link destinationHoldPaper}'s rule, when a printer there will take the `+N`. Call before the
+ * `+N` is printed, so the station's slip is let through.
+ */
+export async function recordJoiningStations(
+  tx: Transaction,
+  arriving: readonly HeldChange[],
+): Promise<void> {
+  const byStation = new Map<string, HeldChange[]>();
+  for (const change of arriving)
+    byStation.set(change.stationId, [...(byStation.get(change.stationId) ?? []), change]);
+  for (const [stationId, changes] of byStation) {
+    const paper = await destinationHoldPaper(
+      tx,
+      stationId,
+      changes.map((change) => change.groupId),
+      changes.map((change) => change.workingOrderLineId),
+    );
+    const fresh = [...paper].filter(([, recorded]) => !recorded).map(([groupId]) => groupId);
+    if (fresh.length === 0 || (await printerMappings(tx, [stationId])).length === 0) continue;
+    for (const groupId of fresh) await recordHeldPaper(tx, groupId, new Set([stationId]));
   }
 }
 
@@ -2170,12 +2207,9 @@ export async function correctJoin(
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .where(onDishesOrTheirExtras(tx, lineIds))
     .orderBy(asc(workingOrderLines.lineNo));
-  await correctHoldTickets(
-    tx,
-    cfg,
-    joined.map((item) => ({ ...item, group })),
-    { kind: "HOLD CHANGED", direction: "added" },
-  );
+  const changes = joined.map((item) => ({ ...item, groupId, group }));
+  await recordJoiningStations(tx, changes);
+  await correctHoldTickets(tx, cfg, changes, { kind: "HOLD CHANGED", direction: "added" });
 }
 
 /** Whether `quantity` is exactly the line's stored quantity; a malformed one is not. */
