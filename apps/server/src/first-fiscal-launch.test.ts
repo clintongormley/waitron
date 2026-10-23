@@ -75,6 +75,16 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
 const dirs: string[] = [];
+// The CLI's environment is named, not inherited: the Stripe SDK bundled into it writes a line to
+// stderr when the caller is a Claude Code session (stripe@23.0.0 esm/stripe.core.js:139), and the
+// test reads stderr whole.
+function callerEnvironment(): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    ["PATH", "HOME", "TMPDIR"].flatMap((key) =>
+      process.env[key] === undefined ? [] : [[key, process.env[key]]],
+    ),
+  );
+}
 function runCli(
   args: string[],
   env: NodeJS.ProcessEnv,
@@ -422,7 +432,7 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     "--yes",
   ];
   const env = {
-    ...process.env,
+    ...callerEnvironment(),
     ...f.base,
     ...f.evidenceEnv,
     WAITRON_INITIAL_VENUE_INPUT: "",
