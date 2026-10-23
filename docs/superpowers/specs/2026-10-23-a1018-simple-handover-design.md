@@ -1,3 +1,17 @@
+> **Canonical publication update, 2026-10-23.** Cloud has published the direction
+> agreement in [PR #312](https://github.com/waitron-io/waitron-cloud/pull/312), at
+> [`7e3ba8246a6d5dbeb4275ed7c00f2f34124c944a`](https://github.com/waitron-io/waitron-cloud/blob/7e3ba8246a6d5dbeb4275ed7c00f2f34124c944a/docs/waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018).
+> Full shared-contract SHA-256:
+> `d0c203622de665f5ebfb8e139e778ee9af19ff36b71c65911e1ad84aaf983d46`.
+> Its wording is “Cloud accepts its direction and the boundaries below.” This supersedes
+> the draft-publication wait recorded below. The next step is the single owner design
+> question with both Harbour Kitchen examples, every proposed default and the explicit
+> venue-to-Cloud actor mapping. The reviewed protocol below is unchanged. Design approval,
+> exact transfer and authentication formats, A947 amendments, separate build authority
+> and all eight runtime combinations remain pending.
+
+---
+
 > **Direction agreement update, 2026-10-23.** Lane G agrees the two-scenario,
 > four-direction proposal in [Cloud draft PR #312](https://github.com/waitron-io/waitron-cloud/pull/312)
 > at `a9399a4a390a62f45e4d4c636635ae6d715c1ecd`. Its replacement

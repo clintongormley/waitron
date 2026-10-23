@@ -5,6 +5,16 @@ their full text.
 
 ## A1018. Agree and build the hosted writer stop-proof contract
 
+**Canonical publication update, 2026-10-23:** Cloud's direction agreement is published
+in [PR #312](https://github.com/waitron-io/waitron-cloud/pull/312), at
+[`7e3ba8246a6d5dbeb4275ed7c00f2f34124c944a`](https://github.com/waitron-io/waitron-cloud/blob/7e3ba8246a6d5dbeb4275ed7c00f2f34124c944a/docs/waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018).
+The [reviewed proposal](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md)
+now pins that publication and its full-document digest. The draft-publication waits below
+are historical. Next is the one combined owner design question with both worked examples,
+the proposed defaults and the explicit Cloud actor mapping. Keep the item open: design
+approval, exact formats, A947 amendments, separate build authority and runtime acceptance
+remain pending. No protocol recommendation changes in this status update.
+
 **Direction update, 2026-10-23:** Lane G agrees the replacement at Cloud draft
 [#312](https://github.com/waitron-io/waitron-cloud/pull/312), commit
 `a9399a4a390a62f45e4d4c636635ae6d715c1ecd`. The shared contract remains on that
