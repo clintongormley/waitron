@@ -1,13 +1,18 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
-import { type ThemeChoices } from "@waitron/ui-core/theme";
-import { deriveTheme } from "@waitron/ui-core/theme/waitron";
+import {
+  WAITRON_CHOICES,
+  fixAll,
+  normaliseChoices,
+  type ThemeChoices,
+} from "@waitron/ui-core/theme";
+import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { advancedSummary } from "../widgets/theme-words.js";
+import { advancedSummary, handNames, keptNote } from "../widgets/theme-words.js";
 import "./look-card.js";
 
 type Card = HTMLElementTagNameMap["dashboard-look-card"];
@@ -49,13 +54,13 @@ afterEach(() => {
   setLocale("en-GB");
 });
 
-async function mountEditing() {
+async function mountEditing(list: ThemeList = LIST) {
   const saveTheme = vi.fn(async (id: string, choices: ThemeChoices) =>
-    theme(id, LIST.themes.find((view) => view.id === id)!.name, choices),
+    theme(id, list.themes.find((view) => view.id === id)!.name, choices),
   );
   const { el } = await mountWidget<Card>("dashboard-look-card", {
     api: { saveTheme } as unknown as DashboardApi,
-    list: LIST,
+    list,
     canEdit: true,
   });
   await userEvent.click(el.shadowRoot!.querySelector("[data-test=edit]")!);
@@ -222,6 +227,8 @@ describe("the Look card's Advanced section", () => {
     expect(disclosure(el).open).toBe(true);
     expect(await bottom(el)).toBe(t("form.fix_fields"));
     expect(button(el, "save").disabled).toBe(false);
+    const inner = handCode(el, "light", "bg").shadowRoot!.querySelector("input");
+    await expect.poll(() => focused(el)).toBe(inner);
 
     await typeHand(el, "dark", "text", "#eeeeee");
     expect(handCode(el, "light", "bg").error).toBe("");
@@ -295,5 +302,280 @@ describe("the Look card's Advanced section", () => {
     expect(fields).toHaveLength(44);
     expect(fields.every((field) => field.disabled)).toBe(true);
     release();
+  });
+
+  it("keeps the section's errors while nothing they come from changes", async () => {
+    const { el } = await mountEditing();
+    await typeHand(el, "light", "bg", "#12");
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => handCode(el, "light", "bg").error).toBe(t("appearance.bad_code"));
+    const errors = advanced(el).errors;
+    const corners = q(
+      el,
+      "wt-segmented-control[name=corners]",
+    ) as HTMLElementTagNameMap["wt-segmented-control"];
+    const square = [...corners.shadowRoot!.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === t("appearance.corners.square"),
+    )!;
+    await userEvent.click(square);
+    await settle(el);
+    expect(corners.value).toBe("square");
+    expect(advanced(el).errors).toBe(errors);
+  });
+
+  describe("Save with a picked colour still waiting for its frame", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("sends the picked colour first", async () => {
+      const { el, saveTheme } = await mountEditing();
+      await typeHand(el, "dark", "text", "#eeeeee");
+      const frames: FrameRequestCallback[] = [];
+      vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+        frames.push(callback);
+        return frames.length;
+      });
+      vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+      const input = picker(el, "light", "bg");
+      input.value = "#f8f1e1";
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      expect(frames).toHaveLength(1);
+      await userEvent.click(button(el, "save"));
+      await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+      expect(saveTheme.mock.calls[0]![1].handSet).toEqual({
+        light: { bg: "#f8f1e1" },
+        dark: { text: "#eeeeee" },
+      });
+    });
+
+    it("asks about a colour hard to read that the waiting pick brings", async () => {
+      const { el, saveTheme } = await mountEditing();
+      await typeHand(el, "dark", "text", "#eeeeee");
+      expect(advanced(el).derived.warnings).toEqual([]);
+      vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 1);
+      vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+      const input = picker(el, "light", "text");
+      input.value = "#ffffff";
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await userEvent.click(button(el, "save"));
+      await el.updateComplete;
+      expect(saveTheme).not.toHaveBeenCalled();
+      const dialog = q(el, "dashboard-hard-to-read-dialog")!;
+      await expect.poll(() => dialog.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+      expect(advanced(el).draft.choices.handSet.light).toEqual({ text: "#ffffff" });
+    });
+  });
+});
+
+const words = (node: Element | null | undefined) =>
+  (node?.textContent ?? "").replace(/\s+/g, " ").trim();
+const inAdvanced = (el: Card, name: string) =>
+  advanced(el).shadowRoot!.querySelector(`[data-test=${name}]`);
+
+function mountChoices(choices: ThemeChoices) {
+  const view = theme("t-hand", "By hand", choices);
+  return mountEditing({ themes: [view], inUse: view.id });
+}
+
+async function press(el: Card, name: string) {
+  const target = inAdvanced(el, name) ?? q(el, `[data-test=${name}]`);
+  expect(target, name).not.toBeNull();
+  await userEvent.click(target!);
+  await settle(el);
+}
+
+const CREAM_SAGE: ThemeChoices = {
+  ...LUCIA,
+  handSet: { light: { bg: "#f8f1e1", "text-muted": "#8fa898" }, dark: {} },
+};
+const BLOCKED: ThemeChoices = {
+  ...WAITRON_CHOICES,
+  handSet: { light: { text: "#555555", "surface-sunken": "#555555" }, dark: {} },
+};
+const TWO_FIXES: ThemeChoices = {
+  ...WAITRON_CHOICES,
+  handSet: { light: { text: "#6a6a6a", "surface-sunken": "#bbbbbb" }, dark: {} },
+};
+
+describe("fixes and Undo in Advanced", () => {
+  it("a row's fix records where it came from, Undo puts it back, and Cancel sends nothing", async () => {
+    const { el, saveTheme } = await mountChoices(CREAM_SAGE);
+    await openAdvanced(el);
+    await press(el, "hand-fix-light-text-muted");
+    expect(handCode(el, "light", "text-muted").value).toBe("#526a5b");
+    expect(words(inAdvanced(el, "hand-fixed-light-text-muted"))).toBe(
+      "Light screens: fixed from #8fa898",
+    );
+    expect(button(el, "save").disabled).toBe(false);
+    await press(el, "hand-undo-light-text-muted");
+    expect(handCode(el, "light", "text-muted").value).toBe("#8fa898");
+    expect(inAdvanced(el, "hand-warning-light-text-muted")).not.toBeNull();
+    expect(inAdvanced(el, "hand-fixed-light-text-muted")).toBeNull();
+    await userEvent.click(button(el, "cancel"));
+    await el.updateComplete;
+    expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(false);
+    expect(saveTheme).not.toHaveBeenCalled();
+  });
+
+  it("fixing the blocking colour changes only it, and Undo brings both warnings back", async () => {
+    setLocale("en-GB");
+    const { el } = await mountChoices(BLOCKED);
+    await openAdvanced(el);
+    expect(q(el, "[data-test=fix-all]")).toBeNull();
+    expect(words(inAdvanced(el, "hand-fix-light-surface-sunken"))).toBe("Use #cacaca");
+    await press(el, "hand-fix-light-surface-sunken");
+    expect(handCode(el, "light", "surface-sunken").value).toBe("#cacaca");
+    expect(words(inAdvanced(el, "hand-fixed-light-surface-sunken"))).toBe(
+      "Light screens: fixed from #555555",
+    );
+    expect(handCode(el, "light", "text").value).toBe("#555555");
+    expect(inAdvanced(el, "hand-warning-light-text")).toBeNull();
+    await press(el, "hand-undo-light-surface-sunken");
+    expect(handCode(el, "light", "surface-sunken").value).toBe("#555555");
+    expect(inAdvanced(el, "hand-warning-light-text")).not.toBeNull();
+    expect(inAdvanced(el, "hand-warning-light-surface-sunken")).not.toBeNull();
+  });
+
+  it("Fix all records only the values it changed", async () => {
+    setLocale("en-GB");
+    const { el } = await mountChoices(TWO_FIXES);
+    await openAdvanced(el);
+    expect(q(el, "[data-test=fix-all]")).not.toBeNull();
+    await press(el, "fix-all");
+    const fixed = fixAll(WAITRON_DEFAULTS, TWO_FIXES);
+    expect(advanced(el).draft.choices).toEqual(fixed);
+    expect(fixed.handSet.light).toEqual({ text: "#4a4a4a", "surface-sunken": "#bbbbbb" });
+    expect(words(inAdvanced(el, "hand-fixed-light-text"))).toBe(
+      "Light screens: fixed from #6a6a6a",
+    );
+    expect(inAdvanced(el, "hand-fixed-light-surface-sunken")).toBeNull();
+    expect(advanced(el).derived.warnings).toEqual([]);
+    expect(inAdvanced(el, "hand-warning-light-text")).toBeNull();
+    await press(el, "hand-undo-light-text");
+    expect(handCode(el, "light", "text").value).toBe("#6a6a6a");
+    expect(inAdvanced(el, "hand-warning-light-text")).not.toBeNull();
+    expect(inAdvanced(el, "hand-warning-light-surface-sunken")).not.toBeNull();
+  });
+
+  it("Fix and save sends Fix all's choices and closes the editor", async () => {
+    const { el, saveTheme } = await mountChoices(CREAM_SAGE);
+    const corners = q(
+      el,
+      "wt-segmented-control[name=corners]",
+    ) as HTMLElementTagNameMap["wt-segmented-control"];
+    await userEvent.click(
+      [...corners.shadowRoot!.querySelectorAll("button")].find(
+        (b) => b.textContent?.trim() === t("appearance.corners.square"),
+      )!,
+    );
+    await settle(el);
+    await userEvent.click(button(el, "save"));
+    const dialog = q(el, "dashboard-hard-to-read-dialog")!;
+    const fixAndSave = () =>
+      dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "[data-test=fix-and-save]",
+      );
+    await expect.poll(() => fixAndSave()).not.toBeNull();
+    await userEvent.click(fixAndSave()!);
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    expect(saveTheme.mock.calls[0]![1]).toEqual(
+      normaliseChoices(fixAll(WAITRON_DEFAULTS, { ...CREAM_SAGE, corners: "square" })),
+    );
+    await expect
+      .poll(() => q(el, "section.settings-card")!.hasAttribute("data-editing"))
+      .toBe(false);
+  });
+});
+
+describe("the kept-colours note", () => {
+  it("shows after the brand colour changes while a colour is set by hand, until none is", async () => {
+    setLocale("en-GB");
+    const { el } = await mountChoices(CREAM);
+    expect(q(el, "[data-test=kept-note]")).toBeNull();
+    await userEvent.click(q(el, 'button.swatch[data-color="#b12525"]')!);
+    await settle(el);
+    expect(words(q(el, "[data-test=kept-note]"))).toBe(keptNote(advanced(el).draft.choices));
+    expect(words(q(el, "[data-test=kept-note]"))).not.toBe("");
+    await openAdvanced(el);
+    await press(el, "hand-worked-out-light-bg");
+    expect(q(el, "[data-test=kept-note]")).toBeNull();
+  });
+
+  it("corners alone raise no note", async () => {
+    const { el } = await mountChoices(CREAM);
+    const corners = q(
+      el,
+      "wt-segmented-control[name=corners]",
+    ) as HTMLElementTagNameMap["wt-segmented-control"];
+    await userEvent.click(
+      [...corners.shadowRoot!.querySelectorAll("button")].find(
+        (b) => b.textContent?.trim() === t("appearance.corners.square"),
+      )!,
+    );
+    await settle(el);
+    expect(corners.value).toBe("square");
+    expect(q(el, "[data-test=kept-note]")).toBeNull();
+  });
+});
+
+describe("putting every colour back", () => {
+  function noneSetByHand(el: Card) {
+    expect(advanced(el).draft.choices.handSet).toEqual({ light: {}, dark: {} });
+    expect(advanced(el).draft.handCodes).toEqual({ light: {}, dark: {} });
+    expect(advanced(el).shadowRoot!.querySelector(".tag")).toBeNull();
+    expect(advanced(el).shadowRoot!.querySelector("[data-test^=hand-fixed-]")).toBeNull();
+  }
+
+  it("Use Waitron's look clears colours, fixed lines, the kept note and a refusal", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountChoices(CREAM_SAGE);
+    await openAdvanced(el);
+    await press(el, "hand-fix-light-text-muted");
+    saveTheme.mockRejectedValueOnce({
+      code: "theme.invalid",
+      params: { field: "handSet.light.bg", reason: "bad_value" },
+    });
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => handCode(el, "light", "bg").error).toBe(t("appearance.bad_code"));
+    await userEvent.click(q(el, 'button.swatch[data-color="#b12525"]')!);
+    await settle(el);
+    expect(q(el, "[data-test=kept-note]")).not.toBeNull();
+    expect(inAdvanced(el, "hand-fixed-light-text-muted")).not.toBeNull();
+    expect(handCode(el, "light", "bg").error).toBe(t("appearance.bad_code"));
+
+    await userEvent.click(button(el, "use-waitron"));
+    await settle(el);
+    noneSetByHand(el);
+    expect(q(el, "[data-test=kept-note]")).toBeNull();
+    expect(handCode(el, "light", "bg").error).toBe("");
+    expect(await bottom(el)).toBe("");
+    expect(button(el, "use-waitron").disabled).toBe(true);
+    expect(disclosure(el).summary).toBe(t("appearance.advanced_none"));
+  });
+
+  it("Use Waitron's look drops a half-typed code", async () => {
+    const { el } = await mountChoices(CREAM);
+    await typeHand(el, "dark", "bg", "#12");
+    expect(handCode(el, "dark", "bg").value).toBe("#12");
+    await userEvent.click(button(el, "use-waitron"));
+    await settle(el);
+    noneSetByHand(el);
+    expect(handCode(el, "dark", "bg").value).not.toBe("#12");
+    expect(button(el, "use-waitron").disabled).toBe(true);
+  });
+
+  it("Reset all puts every value back to worked out, and Cancel sends nothing", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountChoices(CREAM_SAGE);
+    await openAdvanced(el);
+    await press(el, "hand-fix-light-text-muted");
+    await press(el, "reset-all");
+    noneSetByHand(el);
+    await userEvent.click(button(el, "cancel"));
+    await el.updateComplete;
+    expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(false);
+    expect(saveTheme).not.toHaveBeenCalled();
+    expect(words(q(el, "[data-test=saved-hand]"))).toBe(handNames(CREAM_SAGE).join(", "));
   });
 });

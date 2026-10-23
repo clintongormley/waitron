@@ -164,6 +164,11 @@ export class ThemeAdvanced extends LitElement {
     this.renderRoot.querySelector<HTMLElement>(`wt-input[name="handSet.${mode}.${key}"]`)!.focus();
   }
 
+  /** Sends a picked colour still waiting for its animation frame. */
+  flush(): void {
+    this.#flushPick();
+  }
+
   /** A drag fires an input per pointer move; only the latest colour goes out, once a frame. */
   #pick(mode: Mode, key: ThemeColour, colour: string): void {
     const waiting = this.#waitingPick;
