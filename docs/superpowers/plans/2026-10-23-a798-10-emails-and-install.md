@@ -45,6 +45,9 @@
 > claim marked **(read)** comes from reading code, not running it. Nothing was measured on a real
 > box's Linux.
 >
+> **Revision 3 (2026-10-23)** folds in the round-3 check (`~/waitron-campaign-b/a798-10-plan-review/round3.md`,
+> 0 Critical, 3 Important, 7 Minor) as the lane's driver ruled; see "Round 3 findings folded" at the end.
+>
 > **Revision 2 (2026-10-23)** folds in the fresh-context review
 > (`~/waitron-campaign-b/a798-10-plan-review/round1.md`, 0 Critical, 4 Important, 8 Minor) and the
 > claim check (`…/a798-10-plan-review/claim-check.md`, 0 Critical, 2 Important, 5 Minor), as the
@@ -313,7 +316,7 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
    params `{ printer: <name>, since: <the oldest job that makes it stuck, ISO> }`. The till draws
    `staff_notice.printer.jobs_waiting`, "Printer “{printer}” not printing" / "Impresora «{printer}» no
    imprime", then " · " and `staff_notice.since`, "since {time}" / "desde {time}", with the time as
-   the till already writes one (`clockTime`, `apps/till/src/i18n/t.ts:98-100`). The design's example
+   the till already writes one (`clockTime`, `apps/till/src/i18n/t.ts:154`). The design's example
    translated the printer's name ("Kitchen printer not printing" for a printer named "Cocina"); a
    printer's name is the venue's data and is never translated, so the name is quoted the way
    `reader.offline` quotes a reader's (decision 5), which also keeps a printer named "Kitchen printer"
@@ -381,22 +384,27 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
    once per episode; once settings appear during the episode it sends. All of it is in memory (design
    §7), so a restart during an episode can send again. **Cost:** an address the server always refuses
    is tried once a minute for as long as the episode lasts — for a nearly full disk, possibly days —
-   and each failure is logged only once per recipient (decision 8's logging rule, Task 9).
+   and each recipient's failures are logged at most twice per episode, once per kind (decision 8, Task 9).
 8. **The duty's clock and its log.** The first check is one minute after start; each next one is
    armed one minute after the last finished, on an unref'd timer, as the free-space watch does
    (`free-space-watch.ts:66-82`). Why not at once: slice 5's watch takes its first reading at start,
    so the duty's first check sees it; and a start that fails within its first minute emails nothing.
    Only a node that is the primary checks (`holders.singletonRole.current === "primary"`, as the
    certificate reminders gate, `boot.ts:1790`); on any other node the check reads and sends nothing.
-   A failed send is logged (`box_email.send_failed`, `{ code, outcome }`) the first time it fails for
-   that recipient in that episode, and again only when a later failure has the other outcome — never
-   once a minute. No address is ever logged.
+   A failed send is logged (`box_email.send_failed`, `{ code, outcome }`) at most once per outcome
+   per recipient per episode: the first `rejected` and the first `unknown`, so at most two lines per
+   recipient per episode however the outcomes alternate — never once a minute. No address is ever
+   logged.
 9. **Room for slice 9.** The clock-behind email is slice 9's (build plan `:118-122`; backlog
    `:4651-4655`). Slice 8 already gives the `clock.behind_chain` notice from the Veri\*Factu module's
    source, with `params: { ...behind }`; the duty skips it only because `box-emails.ts` has no words
-   for it. Slice 9 adds those words (the design's §4.8 c subject and body, with `{clockAt}` and
-   `{lastRecordAt}`, which needs a placeholder for those params) and the duty sends it with no other
-   change. Nothing in this slice reads slice 8's seat.
+   for it. The design's §4.8 c subject and body name both times (`{clockAt}`, `{lastRecordAt}`,
+   design `:843-856`), and this slice's sender carries no notice values: `boxEmailMessage(code,
+   language, venue)` fills only `{venue}` (Task 7), an episode keeps no params (Task 8), and the duty
+   passes none. So slice 9 adds the words **and** carries the notice's values into them: it keeps the
+   params of the notice that started a module episode, passes them to `boxEmailMessage`, and gives
+   that function the placeholders. This slice does not build that (the lane's driver, round 3).
+   Nothing in this slice reads slice 8's seat.
 10. **The `clock.unusable` email is built though it will usually not arrive.** P8: with the clock
     before 28 October 2024 the box cannot open a TLS mail connection, so the send comes back
     `unknown` each minute, and the episode ends when the clock is fixed, before the mail could go.
@@ -537,7 +545,7 @@ findings to report, not questions.
 1. **The episode rules (decisions 6–8).** A disk hovering at full emails once; low → full emails
    both; a module owner whose check fails neither starts nor ends an episode; every failed send,
    refused or not, is tried the next minute; a recipient who accepted is never sent the same episode
-   again; a failure is logged once per recipient per episode. Tasks 8–9 pin each one.
+   again; failures are logged at most once per kind per recipient per episode. Tasks 8–9 pin each one.
 2. **The full-disk email reads (decision 13).** Task 10's real-disk case answers with a change
    waiting, and its control — the same reads through `withTransaction` — is refused
    `storage.disk_full`.
@@ -853,8 +861,10 @@ and reader as today.
        `choose(venue.cookie2, "receipt", { id: pp }, "list")` (each `200`); first assert the premise:
        `documentPrintersOf(tx, b)` does not contain `fp` (the profile's slip and invoice defaults are
        null in this fixture, `device-equipment-api.test.ts:120-130`, read by the claim check); a queued
-       job on `fp` three minutes old → till A's notices hold `fp`'s, till B's hold no `printers`
-       notice; then `choose(venue.cookie2, "payment_slip", { id: fp }, "list")` → B's hold it too.
+       job on `fp` three minutes old → till A's notices hold one whose `key` is
+       \`printer.jobs_waiting:${fp}\`, till B's hold no `printers` notice. Match by `key` only (or read
+       the name from the database): the fixture names `fp` in Spanish (`:152`), and no new test line
+       may write that name; then `choose(venue.cookie2, "payment_slip", { id: fp }, "list")` → B's hold it too.
     10. `"a ticket under two minutes old shows nothing"`: as 7 with the job one minute old.
     11. `"a failing printer check names only its owner, and the box's notices still come"`:
         `noticeApp([answering("box", notice("box-error", "error"))], { deviceSources: () => [{ owner:
@@ -1173,7 +1183,7 @@ export function startBoxEmailDuty(deps: {
 }): { stop: () => Promise<void> };
 ```
 State, in the closure: `episodes: Map<string, { code: BoxEmailCode; sentTo: Set<string>;
-said: Set<string>; lastFailure: Map<string, TextEmailOutcome> }>`, keyed `storage.space_low`,
+said: Set<string>; logged: Map<string, Set<TextEmailOutcome>> }>`, keyed `storage.space_low`,
 `storage.disk_full`, or `module:<owner>:<key>` (Task 9). One check, in order (this task: steps 1, 2,
 4, 5, 6; Task 9 adds 3, the primary gate and the failure log):
 1. Return (still arming the next timer) if stopped.
@@ -1275,8 +1285,9 @@ said: Set<string>; lastFailure: Map<string, TextEmailOutcome> }>`, keyed `storag
   `stopped`, no `context()`, `moduleNotices()` or `send` is started; a `send` already in flight is not
   awaited by `stop` (it can take 30 s, `smtp-send.ts:85`).
 - **The failure log** (decision 8): when a send for a recipient fails with `outcome`, log
-  `box_email.send_failed` (warn, `{ code, outcome }`) only if that episode's `lastFailure` for the
-  recipient's key is not already `outcome`; then set it. A success clears it.
+  `box_email.send_failed` (warn, `{ code, outcome }`) only if that episode's `logged` set for the
+  recipient's key does not hold `outcome` yet; then add it. Nothing removes from the set within the
+  episode, so a recipient gets at most two such lines per episode.
 
 - [ ] **Step 1: Write the failing tests** (same fakes as Task 8):
   15. `"emails a module's clock notice once, and again in a new episode"`: `moduleNotices` answers
@@ -1296,10 +1307,11 @@ said: Set<string>; lastFailure: Map<string, TextEmailOutcome> }>`, keyed `storag
   20. `"stop during a send sends to no one after it"`: `send` holds its first call (ana's); low; call
       the armed `fn`; once `send` has been called, `stop()`; release ana's send with `"sent"`; two
       `setImmediate` turns → `send` was called once only (ben never), no new timer armed.
-  21. `"logs a failing send once, however many minutes it fails"`: `rejected` for ana on three ticks →
-      exactly one `["warn", "box_email.send_failed", { code: "storage.space_low", outcome:
-      "rejected" }]`; then `unknown` → one more line with `outcome: "unknown"`; then `sent` → one
-      `box_email.sent` for ana.
+  21. `"logs each kind of failed send once per recipient, however the failures alternate"`: for ana,
+      `rejected` on three ticks, then `unknown`, `rejected`, `unknown`, `rejected` on the next four →
+      exactly two `box_email.send_failed` lines for the episode, `["warn", "box_email.send_failed", {
+      code: "storage.space_low", outcome: "rejected" }]` then the same with `outcome: "unknown"`; then
+      `sent` → one `box_email.sent` for ana, and still two failure lines.
 - [ ] **Step 2: Run and watch them fail.** The Task 8 command → cases 15, 16, 18, 19, 20 and 21 FAIL;
   17 passes already (nothing reads module notices yet) — it pins that only worded codes are emailed,
   and Step 5 proves it.
@@ -1308,8 +1320,8 @@ said: Set<string>; lastFailure: Map<string, TextEmailOutcome> }>`, keyed `storag
   prettier as Task 8.
 - [ ] **Step 5: Proofs by deletion**: drop the `unavailable` exemption → case 16 FAILS; drop
   `isBoxEmailCode` → case 17 FAILS; drop the primary gate → case 18 FAILS; make `stop` resolve at once
-  → case 19 FAILS; drop the "stopping if stopped" check in the send loop → case 20 FAILS; log every
-  failure → case 21 FAILS.
+  → case 19 FAILS; drop the "stopping if stopped" check in the send loop → case 20 FAILS; log on
+  every change of outcome (the revision-2 rule) → case 21 FAILS (it logs five lines).
 - [ ] **Step 6: Commit.**
   ```bash
   git add apps/server/src/box-alert-email.ts apps/server/src/box-alert-email.duty.test.ts
@@ -1559,9 +1571,16 @@ before="$(running_images)"`; and the last line becomes
 `cmd_reset` is unchanged. No `prune` of any kind (decision 15).
 
 **The stub** models both stores (P10):
-- `compose up` writes `${WT_LOG}.up` (`: > "${WT_LOG}.up"`) and exits 0 as today.
+- `compose up` writes `${WT_LOG}.up` (`: > "${WT_LOG}.up"`) and `compose down` writes
+  `${WT_LOG}.down` (`: > "${WT_LOG}.down"`); both exit 0 as today. (`up|down) ;;` at `:144` becomes
+  two arms.)
 - `ps -q app` / `ps -q print-agent`: `WT_NO_CONTAINERS=1` answers nothing, as today; the new
-  `WT_NO_CONTAINERS=before` answers nothing until `${WT_LOG}.up` exists (a first install).
+  `WT_NO_CONTAINERS=before` answers nothing until `${WT_LOG}.up` exists (a first install); and both
+  arms answer nothing after a `down` until the next `up` — each echoes its container only when
+  `{ [ ! -e "${WT_LOG}.down" ] || [ -e "${WT_LOG}.up" ]; }` — so the stub models `down` removing the
+  containers. The round-3 check measured this change (`a798-10-plan-check3/scripts/`): with it the
+  "record `before` after the wipe" proof fails case 7, and the whole file passes `Tests 116 passed
+  (116)`; without it that proof left every case green.
 - `inspect -f {{.Image}}`: with `WT_OLD_IMAGES=1` and no `${WT_LOG}.up`, `sha256:old-app` for
   `app-container` and `sha256:old-agent` for `agent-container`; else today's ids.
 - `docker image inspect <id>`: absent when `WT_IMAGE_STORE=containerd` and the id starts
@@ -1573,8 +1592,10 @@ before="$(running_images)"`; and the last line becomes
 - [ ] **Step 1: Write the failing tests**, `describe("waitron.sh install deletes the images the box ran
   before")`:
   1. `"on the classic store, deletes both old images once the new box is healthy, and says so"`:
-     `oldImages: true` → status 0; logged `docker image rm sha256:old-app` and `docker image rm
-     sha256:old-agent`, each after the last `compose ps --format` health probe; `stdout` contains
+     `oldImages: true` → status 0; among the logged calls, a line **equal to** `docker image rm
+     sha256:old-app` and one equal to `docker image rm sha256:old-agent` (whole-line equality, e.g.
+     `loggedCalls(sb).indexOf(…)`, so a `-f` cannot slip in), each after the last `compose ps
+     --format` health probe; `stdout` contains
      `deleted the image this box ran before the upgrade (old-app)`.
   2. `"keeps the old images when the new box does not come up healthy"`: `oldImages: true, dockerPs:
      "unhealthy"` → status not 0; no `docker image rm`.
@@ -1606,7 +1627,8 @@ before="$(running_images)"`; and the last line becomes
   before `wait_healthy` → case 2 FAILS; drop the `grep -qxF` skip → case 3 FAILS; drop `[ -n "$id" ] ||
   continue` → case 4 FAILS (with no containers before and two after, the empty id reaches `docker image
   inspect ""`, which the stub answers as present, and `rm` is logged); drop the `inspect` skip → case
-  5 FAILS (`rm` is logged); record `before` after the wipe block → case 7 FAILS; also call
+  5 FAILS (`rm` is logged); record `before` after the wipe block → case 7 FAILS (only with the stub's `down` marker); add
+  `-f` to the `rm` → case 1 FAILS; also call
   `delete_previous_images` from `cmd_reset` → case 8 FAILS.
 - [ ] **Step 6: Commit.**
   ```bash
@@ -1648,8 +1670,9 @@ nothing more (CLAUDE.md §1); the English guide uses English names in its exampl
   after `{#clock-behind}`: who gets them (people who can manage the system and have an email address);
   when (the disk under 2 GB, the disk full, the clock set before 28 October 2024); one email per
   problem, and if it cannot be sent — no internet, or the mail server refuses it, for example because
-  the email settings have a wrong password — it is tried again each minute until the mail server
-  accepts it, so it arrives once the connection or the settings are fixed; a restart while the problem
+  the email settings have a wrong password — it is tried again each minute while the problem lasts,
+  until the mail server accepts it, so it arrives once the connection or the settings are fixed; if the
+  problem ends first (space freed, clock fixed), the retries stop and nothing is sent; a restart while the problem
   lasts can send it again; nothing is sent while the email settings are empty; and "A box whose clock
   reads before 28 October 2024 usually cannot send its email: with a date that early it cannot check
   the mail server's certificate." (P8). The clock-behind email is not listed: slice 9 adds it.
@@ -1700,9 +1723,11 @@ nothing more (CLAUDE.md §1); the English guide uses English names in its exampl
     this slice closes both.
   - "The clock stop's email is slice 9's" (`:4651-4655`) stays as it is; append one sentence: "Slice
     10's sender (`apps/server/src/box-alert-email.ts`) sends any module notice code that has words in
-    `apps/server/src/i18n/box-emails.ts`, so slice 9 adds `clock.behind_chain`'s words there, with a
-    placeholder for `{clockAt}` and `{lastRecordAt}`; P8 of slice 10's plan applies to a clock far
-    behind too."
+    `apps/server/src/i18n/box-emails.ts`, but fills only `{venue}`: slice 9 adds
+    `clock.behind_chain`'s words there and also carries the notice's values (`{clockAt}`,
+    `{lastRecordAt}`) into them — the episode keeps the notice's params and passes them to
+    `boxEmailMessage`, which gains the placeholders. A clock set earlier than the mail server's
+    certificate start cannot send either (an inference from slice 10's plan P8, not measured)."
   - New entries, each "Left open by A798-B slice 10":
     - "**The bell's printer check reads every print job.** `EXPLAIN QUERY PLAN` shows `SCAN
       print_jobs`: 0.25 ms with no printed jobs, 3.7 ms with 50 000 (slice 10 plan P4). A redundant
@@ -1733,16 +1758,20 @@ nothing more (CLAUDE.md §1); the English guide uses English names in its exampl
   A798-B slice 10's plan measured that an `unreachable` reader status raises nothing (P2), so §2.4's
   `reader.status_unavailable` comes only from a throw or the deadline; that a clock before 28-10-2024
   cannot open a TLS mail connection (P8), so that condition's email rarely leaves the box; and that on
-  Docker's containerd image store an upgrade's old pulled image is freed by Docker itself (P10), so
-  §2.6's 'old Docker images left by upgrades' holds on the classic store only."
+  Docker's containerd image store an upgrade's old pulled image is freed by Docker itself (P10), so on
+  that store the old `app` and `print-agent` images do not pile up; the mail capture's old images stay
+  on both stores."
 - [ ] **Step 7: Check and commit.** `pnpm exec prettier --check deploy/README.md` (and `--file-info`
   on the `docs/` files, which print `"ignored": true`). The guides:
   `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` → PASS (the twins' ids
   match) and `pnpm exec vitest run scripts/guide-links.test.ts` → PASS. `pnpm exec vitest run
   scripts/claude-md-pointers.test.ts` → PASS. Grep the branch's diff for Spanish outside the
-  translation files and the Spanish guides
-  (`git diff origin/main -- ':!**/i18n/**' ':!apps/server/src/guide/es/**' | /usr/bin/grep -n -i -E 'cocina|barra|casa pepe|terraza|impresora|está'`
-  → no added line). Then:
+  translation files and the Spanish guides, over the branch's own commits only, added lines only, whole
+  words only, and outside `docs/` (so this plan's own quotations of the design are not counted):
+  `git diff origin/main...HEAD -- apps packages scripts deploy ':!**/i18n/**' ':!apps/server/src/guide/es/**' | /usr/bin/grep -E '^\+' | /usr/bin/grep -n -i -w -E 'cocina|barra|casa pepe|terraza|impresora|está'`
+  → no line (exit 1). This command came from the round-3 check and was not run against a built
+  branch: when the plan was written the branch held only the plan, so it printed nothing either way.
+  Then:
   ```bash
   git add apps/server/src/guide/en/till-notices.md apps/server/src/guide/es/till-notices.md apps/server/src/guide/en/box-status.md apps/server/src/guide/es/box-status.md deploy/README.md docs/developers/conventions-ui.md docs/developers/design-system.md docs/developers/conventions-data.md docs/backlog.md docs/backlog/box.md docs/superpowers/specs/2026-10-19-a798-degraded-trading-design.md
   git commit -s -m "Guides, the deploy README, developer docs and backlog for the managers' emails, offline readers, the printer notice and the install's new steps"
@@ -1791,7 +1820,7 @@ From `round1.md`:
   and Task 14 Steps 5–6 rewritten for slice 9; Task 14 edits main's A798-B sentence and the `:4683`
   entry, and appends to (rather than duplicates) "The clock stop's email is slice 9's".
 - **I2** (refused sends wait a day): decision 7 — every failure retried the next minute; Task 8 case 7
-  (a refused send retried and sent); Task 9 case 21 (logged once per recipient); the guide says so.
+  (a refused send retried and sent); Task 9 case 21 (logged once per kind per recipient; round 3 tightened it); the guide says so.
 - **I3** (Spanish in tests): English names throughout; Global constraints and Task 14 Step 7's grep.
 - **I4** (notice outlives a printing printer): decision 18 — the design's "goes when the problem goes"
   applied to the notice; `stuckSince` in Task 1 (cases 3–4, both sides), Task 3 cases 2 and 8; bell
@@ -1822,3 +1851,28 @@ From `claim-check.md`:
   :38-78`.
 - **M4** (`smtp-test-message.ts`): added to P9.
 - **M5** (Task 2 case 1's failure): the case now fails on its own `toBeTypeOf("string")` line.
+
+## Round 3 findings folded (revision 3)
+
+From `round3.md`:
+- **I1** (slice 9 "with no other change" was false): decision 9 and Task 14's backlog sentence now say
+  slice 9 must also carry the notice's values (`{clockAt}`, `{lastRecordAt}`) into the email words —
+  keep the starting notice's params on the episode, pass them to `boxEmailMessage`, add the
+  placeholders. Not built here, as ruled.
+- **I2** (failure log repeated on every flip): an episode keeps, per recipient, the set of failure
+  kinds already logged — at most two lines per recipient per episode (decision 8, Task 8's state,
+  Task 9's failure log); case 21 now alternates refused and no-connection and expects exactly two
+  lines; the proof "log on every change of outcome" makes it fail.
+- **I3** (the "record before the wipe" proof did not bite): the stub's `down` writes a marker and the
+  container lookups answer nothing after it until the next `up`, the change the round-3 check measured
+  (`Tests 116 passed`, and the proof then fails case 7).
+- **M1** (the Spanish grep): replaced with the round-3 check's command (the branch's own commits,
+  added lines, whole words, outside `docs/`); the plan says it was not run against a built branch.
+- **M2**: `clockTime` is `apps/till/src/i18n/t.ts:154`.
+- **M3**: the design's §11 note no longer says old images are a classic-store problem only; the mail
+  capture's old images stay on both stores.
+- **M4**: Task 3 case 9 matches the notice by `key` and never writes the fixture's Spanish name.
+- **M5**: Task 13 case 1 compares the whole `docker image rm sha256:old-app` line; proof "add `-f` →
+  case 1 FAILS".
+- **M6**: the guide says the retries stop when the problem ends, and nothing is sent then.
+- **M7**: the far-behind-clock sentence is marked an inference from P8, not measured.
