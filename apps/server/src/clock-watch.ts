@@ -8,7 +8,7 @@ import {
 } from "@waitron/fiscal";
 import { codeOf } from "@waitron/server-kit";
 import { readClockStopState } from "./box-health.js";
-import type { BoxClockReading, ClockWitnessStore } from "./clock-witnesses.js";
+import type { ClockWitnessStore } from "./clock-witnesses.js";
 import type { Logger } from "./logger.js";
 import { unrefTimer, type Timer } from "./unref-timer.js";
 
@@ -40,7 +40,7 @@ export function elapsedClock(): () => number {
       };
     }
   } catch {
-    // No /proc/uptime: not Linux.
+    // Unreadable: fall back to performance.now().
   }
   return () => performance.now();
 }
@@ -73,7 +73,7 @@ export function startClockWatch(deps: {
   const monotonic = deps.monotonic ?? elapsedClock();
   let stopped = false;
   let running: Promise<void> | null = null;
-  let previous: BoxClockReading = { wallMs: wall(), monoMs: monotonic() };
+  let previous = { wallMs: wall(), monoMs: monotonic() };
 
   /** Disproofs not yet recorded, oldest first; each leaves only once its transaction commits. */
   const pending: ClockProvedWrong[] = [];

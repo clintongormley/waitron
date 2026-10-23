@@ -433,7 +433,7 @@ it("still refuses a restart AEAT contradicted after the clock read a date before
   expect(written()).toEqual(pressed);
 });
 
-it("asks AEAT's time at every watch check while a restart is in force, until the clock passes the last sale", async () => {
+it("asks AEAT's time at every watch check while a restart is in force, until the clock reads within a minute of the last sale", async () => {
   const stop = await stoppedBox(10 * MINUTE);
   noteDevice(stop, 0);
   noteDevice(stop, 0);

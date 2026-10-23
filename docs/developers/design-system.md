@@ -5371,7 +5371,8 @@ alert list, and holds no staged input.
   hidden text beside it. Red is a staff notice of severity `error` (`storage.disk_full`,
   `clock.unusable`, `clock.behind_chain`); amber is any other notice and any bell alert on that row,
   whatever the alert's own severity, and the Clock row when a restart names the last sale (the
-  stop's offer is `restarted`) and no red notice is on it, because amber means everything still
+  stop's offer is `restarted`) and no red notice is on it, and the Clock row when the box's own read
+  of AEAT's time is at `warning`, because amber means everything still
   works. The legend says "red: something can't be saved", not "nothing", because an unusable clock
   refuses sales while orders still save.
 - **Under the rows.** A note when a staff-notice check could not be made; a note when the bell's

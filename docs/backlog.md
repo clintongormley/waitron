@@ -4712,8 +4712,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   Left open by A798-B slice 9 (#…).
 
 - **The box sends AEAT's QR host a HEAD at every clock-watch check, about once a minute, while its
-  clock reads more than a minute behind the latest sale** — after a manager restarts payments too,
-  until the clock passes that sale — on a primary that files records; not while the clock reads a
+  clock reads more than a minute behind the latest sale** — after a manager restarts payments too —
+  on a primary that files records; not while the clock reads a
   date before 28-10-2024. Left open by A798-B slice 9 (#…).
 
 - **The clock watch's suspend-aware clock has not been run on Linux.** It reads `/proc/uptime` so

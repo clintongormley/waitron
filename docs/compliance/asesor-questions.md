@@ -3599,8 +3599,8 @@ last five minutes, each within a minute of the box) and only when the box is at 
 behind the last record
 ([design §4.8 b](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#b-who-can-fix-it-and-how)).
 The next record in the chain then carries a generation time earlier than the record before it, by up
-to 24 hours; each later record is held to within a minute of the latest time written since the
-restart. Nothing already recorded is changed. Separately, inside the one-minute margin the box keeps
+to 24 hours; each later record carries a time no more than a minute earlier than the box's clock
+read at the restart, nor than the latest time written since the restart. Nothing already recorded is changed. Separately, inside the one-minute margin the box keeps
 selling with no restart, so a record can already carry a time up to a minute earlier than the one
 before it, as after an automatic time correction.
 
@@ -3626,7 +3626,8 @@ preproduction environment.
 > diferencia) y si la diferencia con el último registro no supera las 24 horas.
 > Desde ese momento, el siguiente registro de la cadena lleva una fecha y hora de generación anterior a
 > la del registro que le precede (hasta 24 horas antes), y cada registro posterior lleva una hora que,
-> como mucho, es un minuto anterior a la más reciente generada desde la reanudación. No se modifica
+> como mucho, es un minuto anterior a la que marcaba el reloj del equipo al reanudar y a la más
+> reciente generada desde la reanudación. No se modifica
 > ningún registro ya generado, ni su huella ni su encadenamiento. Además, dentro del margen de un
 > minuto el sistema sigue facturando sin reanudación, de modo que un registro puede llevar una hora
 > hasta un minuto anterior a la del registro anterior, por ejemplo tras una corrección automática de
@@ -3658,9 +3659,8 @@ This records a question; no enquiry has been sent.
 **Why it matters.** After a manager restarts payments as Q51 describes, the box keeps checking its
 clock: against AEAT's time on the next send and, while the clock still reads more than a minute
 behind the latest record, once a minute from AEAT's QR validation site; and for a jump forward of
-more than a minute beyond the time that has passed (the wall clock against the box's uptime clock,
-which keeps counting while the box sleeps; compared only while the server keeps running). Any of these can prove that the clock the
-restart accepted was wrong. The records generated in between then carry a wrong generation time,
+more than a minute beyond the time that has passed (compared only while the server keeps running).
+Any of these can prove that the clock the restart accepted was wrong. The records generated in between then carry a wrong generation time,
 and their invoices a wrong issue date, because one clock reading dates both
 ([design §2.5](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#25-the-clock)). The
 design's default changes nothing: the managers get an alert, "Sales recorded between {from} and {to}

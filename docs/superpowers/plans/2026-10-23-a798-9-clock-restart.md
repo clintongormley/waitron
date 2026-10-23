@@ -601,7 +601,9 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
     `stop` waiting for a tick in flight — the shape of `box-alert-email.ts:84-235`; on both
     `undoOnFailure` and the close list `boot.ts:2859-2882` **[I3]**):
     - a **jump**: between two ticks the wall clock moved more than 60 000 ms further than the
-      steady clock; `trustedUntil` is the earlier tick's wall time plus the steady time since;
+      steady clock; `trustedUntil` is the earlier tick's wall time plus the steady time since
+      (2026-10-23: the elapsed-time clock is /proc/uptime on Linux, so a resume from suspend is not
+      a jump — `docs/developers/conventions-data.md`, "A jump");
     - **AEAT disagrees**: an AEAT witness that disagrees, noted since the last tick; `trustedUntil`
       is that witness's `boxAt` — the wrong clock's reading when AEAT contradicted it **[I4]**.
     Either calls `noteClockProvedWrong(tx, { trustedUntil, reason })`. For each restart **in force**
