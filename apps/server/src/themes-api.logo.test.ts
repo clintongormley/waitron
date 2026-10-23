@@ -375,4 +375,25 @@ describe("refusals", () => {
     );
     expect(await themeRows()).toEqual(before);
   });
+
+  it("a light image deleted between the read and the write is not found", async () => {
+    const light = await withTransaction(suite.db, async (tx) =>
+      uploadImage(tx, { image: await samplePreparedImage({ width: 42 }), names: { en: "Light" } }),
+    );
+    const { id } = await createdWithLogo();
+    const before = await themeRows();
+    const real = themeLogoModule.printedLogoFor;
+    vi.spyOn(themeLogoModule, "printedLogoFor").mockImplementation(async (snapshot) => {
+      const dots = await real(snapshot);
+      const result = await withTransaction(suite.db, (tx) => deleteImage(tx, light.image.id));
+      expect(result.deleted).toBe(true);
+      return dots;
+    });
+    const res = await save(id, { theme: { ...LEMON, logo: { light: light.image.filename } } });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(
+      refusal("theme.invalid", { field: "logo.light", reason: "image_not_found" }),
+    );
+    expect(await themeRows()).toEqual(before);
+  });
 });
