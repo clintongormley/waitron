@@ -32,6 +32,26 @@ encargado tiene que liberar espacio en el equipo, en la
 La hora del equipo está tan atrasada que no se puede registrar una venta para Hacienda. El
 encargado tiene que corregir la hora.
 
+**No se puede cobrar: la hora del equipo es anterior a la última venta · Avisa al encargado** es
+rojo. El reloj del equipo marca más de un minuto antes que la última venta que registró, y una
+venta registrada ahora llevaría una hora anterior a esa. Por eso, hasta que la hora sea correcta, el
+equipo rechaza todo lo que cobra o devuelve dinero: cobros en efectivo o con tarjeta, en la barra o
+en una mesa, devoluciones y reintentos de devoluciones, una mesa que se va sin pagar, anular un
+pedido que ya tiene factura, y un cambio o un envío a cocina que terminaría de pagar una cuenta ya
+pagada en parte.
+
+Todo lo demás sigue funcionando. Puedes sentar mesas, tomar pedidos, enviarlos a cocina, fichar la
+entrada y la salida, reimprimir un recibo e imprimir una factura que ya estaba hecha. Un cobro
+rechazado deja el pedido abierto.
+
+Cuando se rechaza un cobro, el terminal muestra la hora del equipo y la de la última venta. Si ya
+has cobrado al cliente en otro datáfono, no vuelvas a cobrar: registra el pago cuando se arregle la
+hora. Si un lector de tarjetas cobró la tarjeta justo cuando se pararon los cobros, el terminal dice
+que se ha cobrado pero la venta no se ha registrado. No vuelvas a cobrar. Cuando la hora sea
+correcta, pulsa **Cobrar** en ese pedido: el pago se registra sin cobrar la tarjeta otra vez.
+
+El encargado lo resuelve en la [página Estado del equipo](box-status.md#clock-behind).
+
 **Queda poco espacio en el equipo · Avisa al encargado** es ámbar. El trabajo se sigue guardando,
 pero se está acabando el espacio. El encargado debería liberar espacio antes de que se acabe, en
 la [página Estado del equipo](box-status.md#free-space).

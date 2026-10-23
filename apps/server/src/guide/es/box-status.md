@@ -23,9 +23,9 @@ Cada parte tiene una fila con un punto de color:
 
 - **Verde** significa que la parte está bien.
 - **Ámbar** significa que necesita atención, pero todo sigue funcionando.
-- **Rojo** significa que algo no se puede guardar: el disco está lleno, o la hora del equipo es
-  tan incorrecta que no se puede registrar una venta. Cualquiera de los dos pone también en rojo
-  **Ventas**.
+- **Rojo** significa que algo no se puede guardar: el disco está lleno, la hora del equipo es tan
+  incorrecta que no se puede registrar una venta, o no se puede cobrar porque la hora del equipo es
+  anterior a la última venta. Cualquiera de ellos pone también en rojo **Ventas**.
 
 Cada fila muestra los mismos avisos que la campana para esa parte, con las mismas palabras. Las
 filas **Copia en el bucket**, **Impresoras** y **Lectores de tarjetas** tienen un botón **Ir a …**,
@@ -96,3 +96,37 @@ menos.
 
 Si **Liberar** no libera bastante, sigue la línea del final de la página sobre cómo ganar más
 espacio.
+
+## Cuando se paran los cobros por la hora {#clock-behind}
+
+Cada venta que el equipo registra para Hacienda lleva la hora en que se hizo, y esas horas nunca
+pueden ir hacia atrás. Por eso, cuando el reloj del equipo marca más de un minuto antes que la
+última venta registrada en el equipo, el equipo deja de cobrar y de devolver dinero hasta que la
+hora vuelva a ser correcta. Los pedidos, la cocina y los fichajes siguen funcionando. La [guía de
+avisos del terminal](till-notices.md#notices) explica qué puede y qué no puede hacer el personal
+mientras tanto.
+
+Los terminales muestran **No se puede cobrar: la hora del equipo es anterior a la última venta**. La
+campana de avisos también lo dice, con las dos horas: la del reloj del equipo y la de la última
+venta. En esta página, **Ventas** y **Reloj** se ponen en rojo con las mismas palabras que los
+terminales, y la fila **Reloj** añade qué hacer: **Conecta el equipo a internet para que corrija la
+hora, o llama a quien lo instaló.** Cuando el equipo puede saberlo, la fila dice también si **Se
+pone en hora por internet**.
+
+Hay dos salidas:
+
+- **Poner la hora bien.** En un equipo que se pone en hora por internet, conectarlo a internet le
+  permite corregir la hora por sí solo. Si no, llama a quien instaló el equipo: el equipo no tiene
+  ninguna página para cambiar su hora.
+- **Esperar.** En cuanto la hora real pasa la hora de la última venta, el equipo vuelve a cobrar.
+  Es la única salida cuando la hora es correcta pero la última venta se registró con una hora
+  equivocada, por ejemplo mientras el reloj iba adelantado.
+
+No hace falta reiniciar nada. Cada cobro se comprueba en el momento de hacerlo, así que el primero
+después de corregir la hora ya no se rechaza por la hora. El aviso de los terminales y las filas en
+rojo de esta página desaparecen en unos 15 segundos. La campana, y el aviso de la campana que
+aparece bajo la fila **Reloj**, desaparecen en un minuto, más o menos.
+
+Si el reloj marca una fecha anterior al 28 de octubre de 2024, los terminales muestran en su lugar
+**No se pueden registrar ventas: la hora del equipo es incorrecta**. La salida es la misma: poner la
+hora bien.

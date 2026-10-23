@@ -21,8 +21,9 @@ Each part has a row with a coloured dot:
 
 - **Green** means the part is fine.
 - **Amber** means it needs attention, but everything still works.
-- **Red** means something can't be saved: the disk is full, or the clock is too wrong to record a
-  sale. Either of these also turns **Sales** red.
+- **Red** means something can't be saved: the disk is full, the clock is too wrong to record a
+  sale, or payments have stopped because the clock reads earlier than the last sale. Each of these
+  also turns **Sales** red.
 
 A row shows the alerts the bell shows for that part, in the bell's words. The **Bucket copy**,
 **Printers** and **Card readers** rows have a **Go to …** button, such as **Go to Backups**, that
@@ -91,3 +92,35 @@ straight away. A bell open on another computer catches up within about a minute.
 
 If **Free** does not free enough, follow the line at the bottom of the page about freeing more
 space.
+
+## When payments stop because of the clock {#clock-behind}
+
+Every sale the box records for the tax agency carries the time it was made, and those times must
+never go backwards. So when the box's clock reads more than a minute earlier than the latest sale
+recorded on the box, the box stops taking payments and refunds until the clock is right again.
+Orders, the kitchen and clocking in carry on. The [till notices guide](till-notices.md#notices)
+lists what staff can and cannot do meanwhile.
+
+The tills show **Payments stopped: the box's clock reads earlier than its last sale**. The alerts
+bell says so too, with both times in it: the time on the box's clock and the time of the latest
+sale. On this page, **Sales** and **Clock** turn red with the tills' words, and the **Clock** row
+adds what to do: **Connect the box to the internet so it can correct its clock, or call whoever
+installed it.** Where the box can tell, the row also says whether it is **Kept in time over the
+internet**.
+
+There are two ways out:
+
+- **Set the clock right.** On a box that keeps its clock in time over the internet, connecting it
+  to the internet lets it correct the clock by itself. Otherwise, call whoever installed the box:
+  the box has no page for setting its clock.
+- **Wait.** Once real time passes the time of the latest sale, the box takes payments again. This
+  is the only way out when the clock is right but the latest sale was recorded with a wrong time,
+  for example while the clock was running fast.
+
+Nobody needs to restart anything. Each payment is checked when it is made, so the first one after
+the clock is right is no longer refused for the clock. The tills' notice and this page's red rows
+clear within about 15 seconds. The bell, and the bell's alert shown under the **Clock** row, clear
+within about a minute.
+
+If the clock reads a date before 28 October 2024, the tills show **Sales can't be recorded: the
+box's clock is wrong** instead. The way out is the same: set the clock right.
