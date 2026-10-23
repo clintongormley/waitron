@@ -846,6 +846,54 @@ describe("dashboard-box-status-screen's restart of payments", () => {
     expect(dialog(el).open).toBe(true);
   });
 
+  it("forgets the dialog when its request ends after the stop did, even if the next read fails", async () => {
+    const sent = deferred<void>();
+    const restartClockPayments = vi.fn().mockReturnValueOnce(
+      sent.promise.then(() => {
+        throw { code: "clock.restart_refused", params: { reason: "not_stopped" } };
+      }),
+    );
+    const api = stubApi({ restartClockPayments }, stopped());
+    const { el } = await mount(api);
+    await open(el);
+    await userEvent.click(confirm(el));
+    await el.updateComplete;
+
+    vi.mocked(api.getBoxHealth).mockResolvedValue(health());
+    api.liveData.refresh();
+    await flush(el);
+    vi.mocked(api.getBoxHealth).mockRejectedValue({ code: "server.internal" });
+    sent.resolve();
+    await flush(el);
+
+    vi.mocked(api.getBoxHealth).mockResolvedValue(stopped());
+    api.liveData.refresh();
+    await flush(el);
+    expect(dialog(el).open).toBe(false);
+    expect(footerMessage(el)).toBeNull();
+
+    restartClockPayments.mockResolvedValue(undefined);
+    await open(el);
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(restartClockPayments).toHaveBeenCalledTimes(2);
+  });
+
+  it("closes the dialog when a read offers a different record, so it never sends the old one", async () => {
+    const api = stubApi({ restartClockPayments: vi.fn().mockResolvedValue(undefined) }, stopped());
+    const { el } = await mount(api);
+    await open(el);
+    vi.mocked(api.getBoxHealth).mockResolvedValue(stopped({ recordId: "rec-43" }));
+    api.liveData.refresh();
+    await flush(el);
+    expect(dialog(el).open).toBe(false);
+
+    await open(el);
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(api.restartClockPayments).toHaveBeenCalledWith("rec-43");
+  });
+
   it("stays open on Escape while the request is sent", async () => {
     const sent = deferred<void>();
     const api = stubApi({ restartClockPayments: vi.fn().mockReturnValue(sent.promise) }, stopped());
