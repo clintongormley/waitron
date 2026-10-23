@@ -125,72 +125,78 @@ async function mount(
     return { app, host, logouts: () => logouts, locales };
   }
   await expect
-    .poll(() =>
-      app
-        .shadowRoot!.querySelector("dashboard-venue-settings-screen")
-        ?.shadowRoot?.querySelector("dashboard-kitchen-screen")
-        ?.shadowRoot?.querySelector("[data-test=edit-timing]"),
-    )
+    .poll(() => {
+      const screen = app.shadowRoot!.querySelector("dashboard-venue-settings-screen")?.shadowRoot;
+      return (
+        screen
+          ?.querySelector("dashboard-venue-details-panel")
+          ?.shadowRoot?.querySelector("[data-test=edit]") ??
+        screen
+          ?.querySelector("dashboard-kitchen-screen")
+          ?.shadowRoot?.querySelector("[data-test=bump-line]")
+      );
+    })
     .toBeTruthy();
   return { app, host, logouts: () => logouts, locales };
 }
 
-async function editTiming(app: DashboardApp) {
-  const kitchen = settings(app).shadowRoot!.querySelector("dashboard-kitchen-screen")!;
-  await expect
-    .poll(() => kitchen.shadowRoot?.querySelector("[data-test=edit-timing]"))
-    .toBeTruthy();
-  kitchen.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-timing]")!.click();
-  await kitchen.updateComplete;
-  const input = kitchen.shadowRoot!.querySelector<WtInput>("[name=warmAfterMinutes]")!;
-  await input.updateComplete;
-  await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), "6");
-  return { kitchen, input };
+async function draftVenueDetails(app: DashboardApp) {
+  const { panel, street } = await editVenueDetails(app);
+  await userEvent.fill(
+    page.elementLocator(street.shadowRoot!.querySelector("input")!),
+    "Different street",
+  );
+  return { panel, input: street };
+}
+function savedStreet(panel: HTMLElementTagNameMap["dashboard-venue-details-panel"]) {
+  return panel.shadowRoot!.querySelector("[data-test=saved-addressLine1]")!.textContent!.trim();
 }
 
-it("the actual Kitchen tab keeps late flags through Keep and restores them only after Discard", async () => {
-  const { app } = await mount("/manage/venue-settings/view/kitchen");
-  const { input } = await editTiming(app);
-  await select(app, "venue-details");
+it("the actual Venue details tab keeps a Venue details draft through Keep and restores it only after Discard", async () => {
+  const { app } = await mount("/manage/venue-settings/view/venue-details");
+  const { panel, input } = await draftVenueDetails(app);
+  await select(app, "kitchen");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
-  expect(selected(app)).toBe("kitchen");
+  expect(selected(app)).toBe("venue-details");
   expect(input.checkVisibility()).toBe(true);
-  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
-  await choose(app, "keep");
-  expect(input.value).toBe("6");
-  await select(app, "venue-details");
-  await choose(app, "discard");
-  await expect.poll(() => selected(app)).toBe("venue-details");
   expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
-  expect(input.value).toBe("5");
+  await choose(app, "keep");
+  expect(input.value).toBe("Different street");
+  await select(app, "kitchen");
+  await choose(app, "discard");
+  await expect.poll(() => selected(app)).toBe("kitchen");
+  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+  await panel.updateComplete;
+  expect(savedStreet(panel)).toBe("Calle Mayor 1");
   expect(input.checkVisibility()).toBe(false);
 });
 
-it("real history Back waits for a Kitchen timing decision and Forward restores its accepted baseline", async () => {
-  const { app } = await mount("/manage/venue-settings/view/venue-details");
-  await select(app, "kitchen");
-  const { input } = await editTiming(app);
+it("real history Back waits for a Venue details draft decision and Forward restores its accepted baseline", async () => {
+  const { app } = await mount("/manage/venue-settings/view/kitchen");
+  await select(app, "venue-details");
+  const { panel, input } = await draftVenueDetails(app);
   history.back();
   await choose(app, "keep");
-  expect(selected(app)).toBe("kitchen");
-  expect(input.value).toBe("6");
-  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+  expect(selected(app)).toBe("venue-details");
+  expect(input.value).toBe("Different street");
+  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
   history.back();
   await choose(app, "discard");
-  await expect.poll(() => selected(app)).toBe("venue-details");
-  history.forward();
   await expect.poll(() => selected(app)).toBe("kitchen");
-  expect(input.value).toBe("5");
+  history.forward();
+  await expect.poll(() => selected(app)).toBe("venue-details");
+  await panel.updateComplete;
+  expect(savedStreet(panel)).toBe("Calle Mayor 1");
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
 });
 
-it("Kitchen timing protects sidebar, voluntary logout and language replacement before their actions", async () => {
-  const { app, logouts, locales } = await mount("/manage/venue-settings/view/kitchen");
-  const { input } = await editTiming(app);
+it("a Venue details draft protects sidebar, voluntary logout and language replacement before their actions", async () => {
+  const { app, logouts, locales } = await mount("/manage/venue-settings/view/venue-details");
+  const { input } = await draftVenueDetails(app);
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
   await choose(app, "keep");
-  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
-  expect(input.value).toBe("6");
+  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+  expect(input.value).toBe("Different street");
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]")!.click();
   await choose(app, "keep");
   expect(logouts()).toBe(0);
@@ -203,17 +209,17 @@ it("Kitchen timing protects sidebar, voluntary logout and language replacement b
   );
   await choose(app, "keep");
   expect(locales).toEqual([]);
-  expect(input.value).toBe("6");
+  expect(input.value).toBe("Different street");
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
   await choose(app, "discard");
   await expect.poll(() => location.pathname).toBe("/manage/overview");
   expect(input.isConnected).toBe(false);
 });
 
-it("forced expiry clears a Kitchen timing draft and makes its unanswered Discard inert", async () => {
-  const { app, logouts } = await mount("/manage/venue-settings/view/kitchen");
-  const { kitchen, input } = await editTiming(app);
-  await select(app, "venue-details");
+it("forced expiry clears a Venue details draft and makes its unanswered Discard inert", async () => {
+  const { app, logouts } = await mount("/manage/venue-settings/view/venue-details");
+  const { panel, input } = await draftVenueDetails(app);
+  await select(app, "kitchen");
   const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await expect.poll(() => warning.open).toBe(true);
   await warning.updateComplete;
@@ -221,7 +227,7 @@ it("forced expiry clears a Kitchen timing draft and makes its unanswered Discard
   window.dispatchEvent(
     new CustomEvent("waitron-session-invalid", { detail: { code: "management_session.expired" } }),
   );
-  await expect.poll(() => kitchen.isConnected).toBe(false);
+  await expect.poll(() => panel.isConnected).toBe(false);
   discard.click();
   expect(logouts()).toBe(0);
   expect(input.isConnected).toBe(false);
@@ -258,27 +264,30 @@ async function choose(app: DashboardApp, decision: "keep" | "discard") {
 }
 
 it("ignores a repeated tab target and another leave target while deciding and changes only to the accepted target", async () => {
-  const { app } = await mount();
-  await editTiming(app);
-  await select(app, "venue-details");
+  const { app } = await mount("/manage/venue-settings/view/venue-details");
+  await draftVenueDetails(app);
+  await select(app, "kitchen");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
-  tabs(app).shadowRoot!.querySelector<HTMLButtonElement>("[data-key=venue-details]")!.click();
+  tabs(app).shadowRoot!.querySelector<HTMLButtonElement>("[data-key=kitchen]")!.click();
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
   await tabs(app).updateComplete;
-  expect(selected(app)).toBe("kitchen");
+  expect(selected(app)).toBe("venue-details");
   await choose(app, "discard");
-  await expect.poll(() => selected(app)).toBe("venue-details");
-  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+  await expect.poll(() => selected(app)).toBe("kitchen");
+  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
 });
 
-it("a reverted Kitchen timing lets the real container tab switch without warning", async () => {
-  const { app } = await mount();
-  const { input } = await editTiming(app);
-  await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), "5");
-  await select(app, "venue-details");
-  await expect.poll(() => selected(app)).toBe("venue-details");
+it("a reverted Venue details draft lets the real container tab switch without warning", async () => {
+  const { app } = await mount("/manage/venue-settings/view/venue-details");
+  const { input } = await draftVenueDetails(app);
+  await userEvent.fill(
+    page.elementLocator(input.shadowRoot!.querySelector("input")!),
+    "Calle Mayor 1",
+  );
+  await select(app, "kitchen");
+  await expect.poll(() => selected(app)).toBe("kitchen");
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
 });
 
 it("a real Venue details draft stays visible through its container tab warning", async () => {
@@ -365,15 +374,15 @@ it("a changed Venue details edit survives Keep and ends in view mode after Disca
 });
 
 it("keyboard tab navigation holds the edited panel until Discard", async () => {
-  const { app } = await mount();
-  const { input } = await editTiming(app);
-  tabs(app).shadowRoot!.querySelector<HTMLButtonElement>("[data-key=kitchen]")!.focus();
-  await userEvent.keyboard("{Home}");
+  const { app } = await mount("/manage/venue-settings/view/venue-details");
+  const { input } = await draftVenueDetails(app);
+  tabs(app).shadowRoot!.querySelector<HTMLButtonElement>("[data-key=venue-details]")!.focus();
+  await userEvent.keyboard("{End}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
-  expect(selected(app)).toBe("kitchen");
+  expect(selected(app)).toBe("venue-details");
   expect(input.checkVisibility()).toBe(true);
   await choose(app, "discard");
-  await expect.poll(() => selected(app)).toBe("venue-details");
+  await expect.poll(() => selected(app)).toBe("kitchen");
 });
 
 for (const locale of ["en-GB", "es-ES"]) {
