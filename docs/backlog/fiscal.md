@@ -266,6 +266,13 @@ A275 stays open pending build and acceptance. The reviewed plan includes an expl
 party completion before its retained result, live Bills exclusion, separate delivery/closing actors
 and bounded implementation checkpoints.
 
+## A679's internet time reading came back unavailable against pre-production in each of four runs on 2026-10-23
+
+`observeInternetHourClock` asks the submission host, which answered a certificate-less request with
+a redirect to another site and no `Date` header, and the reading follows only same-origin
+redirects (A798-B slice 9 plan, P1 and P2; production not tried). Found while planning A798-B
+slice 9.
+
 ## Pin the clock's future-finished sample refusal
 
 A679's first final installed review replaced
