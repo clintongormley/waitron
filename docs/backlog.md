@@ -5073,10 +5073,11 @@ _Formerly _Afterwards_ and _Cloud connection integration_._ Detail: [backlog/rep
 
 Not in any track until the standalone primary is done.
 
-- **A1018. Simple controlled and emergency handover, with Cloud only a placement.** The owner
-  rejected the old Cloud-dependent design on 2026-10-23. The reviewed replacement awaits
-  Lane G agreement and one owner question with both Harbour Kitchen examples;
-  no build is approved. Fiscal-only return, filing ownership and A947 amendments remain in scope.
+- **A1018. Simple controlled and emergency handover, with Cloud only a placement.** Lane G
+  agrees the reviewed replacement in Cloud draft #312. Its canonical publication pin still
+  precedes the one owner question with both Harbour Kitchen examples and the explicit venue-to-Cloud
+  permission mapping; no build is approved. Fiscal-only return, filing ownership and A947
+  amendments remain open.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
 - **The till's theme fetch does not follow a server move (A841 slice 3).** The till fetches

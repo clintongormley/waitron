@@ -5,6 +5,18 @@ their full text.
 
 ## A1018. Agree and build the hosted writer stop-proof contract
 
+**Direction update, 2026-10-23:** Lane G agrees the replacement at Cloud draft
+[#312](https://github.com/waitron-io/waitron-cloud/pull/312), commit
+`a9399a4a390a62f45e4d4c636635ae6d715c1ecd`. The shared contract remains on that
+branch; its exact Cloud-main publication pin is still required before the one combined owner
+question. Cloud account, venue and operation authority must explicitly bind to the proposed
+venue `node.promote` actor. Organisation ownership, support, purchase, matching email or a
+provider-resource stop alone grants no venue declaration/activation permission; missing binding
+waits. Local-to-local has no Cloud binding dependency. The authentication bridge's format,
+expiry/revocation/replay checks remain unbuilt and require joint specification and qualification.
+The previous proposal-state wording below is historical. Design approval, build authority and
+runtime acceptance remain pending.
+
 **Proposed owner-directed revision, 2026-10-23; no build approval.** The owner rejected the
 [old design](../superpowers/specs/2026-10-22-a1018-cloud-stop-proof-design.md) at ~02:25 for
 requiring Cloud and excessive complexity, then supplied five points at ~02:58. The

@@ -1,3 +1,23 @@
+> **Direction agreement update, 2026-10-23.** Lane G agrees the two-scenario,
+> four-direction proposal in [Cloud draft PR #312](https://github.com/waitron-io/waitron-cloud/pull/312)
+> at `a9399a4a390a62f45e4d4c636635ae6d715c1ecd`. Its replacement
+> [shared contract](https://github.com/waitron-io/waitron-cloud/blob/a9399a4a390a62f45e4d4c636635ae6d715c1ecd/docs/waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018)
+> is on that draft branch, not published on Cloud main. Wait for its exact publication pin
+> before the one combined owner question. The earlier awaiting-agreement wording below
+> records the proposal's previous state; owner design approval and build authority remain pending.
+>
+> **Actor mapping clarification for that question:** explicitly bind the venue actor's
+> proposed `node.promote` permission to the Cloud account, venue and operation.
+> Organisation ownership, support access, a hosting purchase or matching email alone supplies
+> no venue declaration or activation permission. A separately authorised provider-resource stop
+> supplies neither permission by itself. Missing binding waits. This agrees the boundary, not
+> an existing authentication bridge: its format, expiry, revocation and replay checks still need
+> joint specification and qualification before implementation. Local-to-local needs no Cloud
+> binding or internet. The protocol and recommendations below remain proposed; runtime controls
+> remain **UNRUN**.
+
+---
+
 # A1018: a simple handover between two machines
 
 **2026-10-23 | PROPOSED owner-directed REVISION.** Fresh builder review completed; awaiting Cloud
