@@ -48,6 +48,7 @@ export interface DepartmentSettingsInput extends Pick<
   name: string;
   tradingName: string;
   needsClearing: boolean;
+  releaseReminderMinutes: number | null;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
   serviceSteps?: ServiceStepInput[];
 }

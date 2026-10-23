@@ -510,6 +510,7 @@ it.each(["success", "failure"] as const)(
           paidWhen: "prepay",
           collectionNumber: "none",
           needsClearing: false,
+          releaseReminderMinutes: null,
         },
       ],
     ]);

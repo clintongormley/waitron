@@ -484,6 +484,7 @@ it.each(["tradingName", "receivingProfileId"] as const)(
           paidWhen: "prepay",
           collectionNumber: "none",
           needsClearing: false,
+          releaseReminderMinutes: null,
           transfers: {
             receivingProfileId: kind === "receivingProfileId" ? "p1" : null,
             destinationDepartmentIds: [],
@@ -544,6 +545,7 @@ it.each(["tradingName", "receivingProfileId"] as const)(
           paidWhen: "prepay",
           collectionNumber: "none",
           needsClearing: false,
+          releaseReminderMinutes: null,
           transfers: {
             receivingProfileId: kind === "receivingProfileId" ? "p1" : null,
             destinationDepartmentIds: [],
@@ -617,6 +619,7 @@ it("keeps native edits made during Save dirty against the submitted Settings sna
         paidWhen: "prepay",
         collectionNumber: "none",
         needsClearing: false,
+        releaseReminderMinutes: null,
         transfers: { receivingProfileId: null, destinationDepartmentIds: [] },
       },
     ]);
@@ -703,6 +706,7 @@ it("a native receiving-profile edit during Save retains the submitted baseline a
           paidWhen: "prepay",
           collectionNumber: "none",
           needsClearing: false,
+          releaseReminderMinutes: null,
           transfers: { receivingProfileId: "p1", destinationDepartmentIds: [] },
         },
       ],

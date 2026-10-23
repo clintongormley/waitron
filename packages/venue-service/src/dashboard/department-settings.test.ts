@@ -247,6 +247,7 @@ it("opens quiet with Cancel before Save and sends all settings in one request", 
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
         needsClearing: false,
+        releaseReminderMinutes: null,
         transfers: { receivingProfileId: "p2", destinationDepartmentIds: ["d2"] },
       },
     },
@@ -1437,6 +1438,18 @@ it("switching it on enables Save and saves it with the department", async () => 
   expect(writes[0]!.path).toBe("/management-api/venue-service/departments/d1/settings");
   expect(writes[0]!.body).toMatchObject({ needsClearing: true });
   await expect.poll(() => save(el).disabled).toBe(true);
+});
+it("saving a name change sends the stored minutes unchanged", async () => {
+  const view = structuredClone(model);
+  view.releaseReminderMinutesByDepartment = { d1: 25 };
+  const { el, writes } = await mount(view);
+  await change(el, "name", "Restaurant revised");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.body).toMatchObject({
+    name: "Restaurant revised",
+    releaseReminderMinutes: 25,
+  });
 });
 it("a refusal naming the switch, sent while Details shows, brings back Service and marks it", async () => {
   const { el } = await mount(structuredClone(model), {

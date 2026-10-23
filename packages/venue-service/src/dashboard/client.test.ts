@@ -396,6 +396,7 @@ describe("combined settings requests", () => {
       paidWhen: "ticket_then_pay",
       collectionNumber: "numbered",
       needsClearing: false,
+      releaseReminderMinutes: null,
       transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
     });
     expect(
@@ -415,6 +416,7 @@ describe("combined settings requests", () => {
           paidWhen: "ticket_then_pay",
           collectionNumber: "numbered",
           needsClearing: false,
+          releaseReminderMinutes: null,
           transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
         },
       ],
@@ -435,6 +437,7 @@ describe("combined settings requests", () => {
       paidWhen: "ticket_then_pay",
       collectionNumber: "numbered",
       needsClearing: false,
+      releaseReminderMinutes: null,
       serviceSteps,
     });
     const [[, init]] = fetchImpl.mock.calls as unknown as [string, RequestInit][];

@@ -67,6 +67,7 @@ const fieldTab: Record<Field, DepartmentTab> = {
   paidWhen: "service",
   collectionNumber: "service",
   needsClearing: "service",
+  releaseReminderMinutes: "service",
   serviceSteps: "service",
   transfers: "transfers",
   receivingProfileId: "transfers",
@@ -91,6 +92,7 @@ const equal = (a: DepartmentDraft, b: DepartmentDraft) =>
   a.paidWhen === b.paidWhen &&
   a.collectionNumber === b.collectionNumber &&
   a.needsClearing === b.needsClearing &&
+  a.releaseReminderMinutes === b.releaseReminderMinutes &&
   stepsEqual(a.serviceSteps, b.serviceSteps) &&
   a.transfers?.receivingProfileId === b.transfers?.receivingProfileId &&
   (a.transfers?.destinationDepartmentIds.length ?? 0) ===
@@ -282,6 +284,9 @@ export class DepartmentSettings extends LitElement {
       paidWhen: policy?.paidWhen ?? "prepay",
       collectionNumber: policy?.collectionNumber ?? "none",
       needsClearing: this.model!.needsClearingDepartmentIds.includes(row.id),
+      // One model read lists the departments and keys every active one here, so the fallback only
+      // types the lookup.
+      releaseReminderMinutes: this.model!.releaseReminderMinutesByDepartment[row.id] ?? null,
       serviceSteps: this.modelSteps(row.id),
     };
     if (this.opened !== row.id) {
@@ -580,6 +585,7 @@ export class DepartmentSettings extends LitElement {
       "paidWhen",
       "collectionNumber",
       "needsClearing",
+      "releaseReminderMinutes",
       ...(this.draft?.transfers
         ? (["receivingProfileId", "destinationDepartmentIds"] as const)
         : []),
