@@ -7,7 +7,9 @@ import { AppError, decimal, readSaleOrigin, sumDecimals } from "@waitron/shared"
 import type { NodeId, SaleId } from "@waitron/shared";
 import type {
   ClockBehindLatestRecord,
+  ClockProvedWrong,
   ClockRestart,
+  ClockRestartRequest,
   ClockStopState,
   ClockWitness,
   Counterparty,
@@ -193,21 +195,14 @@ export class VerifactuBackend implements FiscalBackend {
 
   restartAfterClockStop(
     tx: Transaction,
-    input: {
-      reading: { instant: Date; offsetMinutes: number };
-      witnesses: readonly ClockWitness[];
-      personId: string;
-      personName: string;
-      nodeId: string;
-      recordId: string;
-    },
+    input: ClockRestartRequest,
   ): Promise<{ restart: ClockRestart; replayed: boolean }> {
     return restartAfterClockStop(tx, input);
   }
 
   noteClockProvedWrong(
     tx: Transaction,
-    input: { trustedUntil: Date; observedAt: Date; reason: "jump" | "authority" },
+    input: ClockProvedWrong,
   ): Promise<{ recorded: string[]; unused: string[]; held: string[] }> {
     return noteClockProvedWrong(tx, input);
   }

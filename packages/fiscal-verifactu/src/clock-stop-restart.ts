@@ -4,9 +4,11 @@ import { newId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { judgeClockWitnesses } from "@waitron/fiscal";
 import type {
+  ClockProvedWrong,
   ClockRestart,
   ClockRestartOffer,
   ClockRestartProofKind,
+  ClockRestartRequest,
   ClockStopState,
   ClockWitness,
 } from "@waitron/fiscal";
@@ -168,15 +170,7 @@ function refuse(params: ErrorParams["clock.restart_refused"]): never {
  * restart. A new restart records its `clock.behind_chain_restarted` alert in `tx`. */
 export async function restartAfterClockStop(
   tx: Transaction,
-  input: {
-    reading: ClockReading;
-    witnesses: readonly ClockWitness[];
-    personId: string;
-    // For the alert's words; `clock_stop_restarts` keeps only the id.
-    personName: string;
-    nodeId: string;
-    recordId: string;
-  },
+  input: ClockRestartRequest,
 ): Promise<{ restart: ClockRestart; replayed: boolean }> {
   refuseBeforeFirstIssueDate(input.reading);
   const judged = await judge(tx, input.reading, input.witnesses);
@@ -258,7 +252,7 @@ export async function restartAfterClockStop(
  * holds its sale) list restart ids. */
 export async function noteClockProvedWrong(
   tx: Transaction,
-  input: { trustedUntil: Date; observedAt: Date; reason: "jump" | "authority" },
+  input: ClockProvedWrong,
 ): Promise<{ recorded: string[]; unused: string[]; held: string[] }> {
   return recordDisproofs(tx, input);
 }

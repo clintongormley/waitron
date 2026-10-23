@@ -1,4 +1,6 @@
-import { judgeClockWitnesses, type ClockWitness } from "@waitron/fiscal";
+import { judgeClockWitnesses, type AuthorityTimeSample, type ClockWitness } from "@waitron/fiscal";
+
+export type { AuthorityTimeSample };
 
 const FRESH_FOR_MS = 300_000;
 const STEP_TOLERANCE_MS = 1_000;
@@ -8,13 +10,6 @@ const LATEST_DATE_MS = 8.64e15;
 export interface BoxClockReading {
   readonly wallMs: number;
   readonly monoMs: number;
-}
-
-export interface AuthorityTimeSample {
-  readonly authorityMs: number;
-  readonly uncertaintyMs: number;
-  /** The box's clocks at the comparison's midpoint. */
-  readonly at: BoxClockReading;
 }
 
 export interface ClockWitnessStore {

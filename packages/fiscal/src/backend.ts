@@ -204,6 +204,22 @@ export interface ClockRestart {
   proofKind: ClockRestartProofKind;
 }
 
+export interface ClockRestartRequest {
+  reading: Pick<TrustedReading, "instant" | "offsetMinutes">;
+  witnesses: readonly ClockWitness[];
+  personId: string;
+  /** For the alert's words; the restart itself keeps only the id. */
+  personName: string;
+  nodeId: string;
+  recordId: string;
+}
+
+export interface ClockProvedWrong {
+  trustedUntil: Date;
+  observedAt: Date;
+  reason: "jump" | "authority";
+}
+
 /** One reading of the tax authority's time, against the box's wall clock (`Date.now()`) and steady
  * clock (`performance.now()`) read together at the comparison's midpoint. */
 export interface AuthorityTimeSample {
@@ -265,25 +281,19 @@ export interface FiscalBackend {
     witnesses: readonly ClockWitness[],
   ): Promise<ClockStopState | null>;
 
-  /** A manager's restart of payments for the stop `recordId` names; throws this regime's refusal
-   * unless `clockStopState` would offer it. */
+  /** A manager's restart of payments for the stop `recordId` names. A press on a record a restart
+   * already names and still covers answers that restart, `replayed: true`; otherwise throws this
+   * regime's refusal unless `clockStopState` would offer it, or the reading is unusable. */
   restartAfterClockStop?(
     tx: Transaction,
-    input: {
-      reading: Pick<TrustedReading, "instant" | "offsetMinutes">;
-      witnesses: readonly ClockWitness[];
-      personId: string;
-      personName: string;
-      nodeId: string;
-      recordId: string;
-    },
+    input: ClockRestartRequest,
   ): Promise<{ restart: ClockRestart; replayed: boolean }>;
 
   /** The clock was proved wrong after `trustedUntil`, noticed at `observedAt`; answers the restart
    * ids it recorded, those with nothing written under them, and those another open issue holds. */
   noteClockProvedWrong?(
     tx: Transaction,
-    input: { trustedUntil: Date; observedAt: Date; reason: "jump" | "authority" },
+    input: ClockProvedWrong,
   ): Promise<{ recorded: string[]; unused: string[]; held: string[] }>;
 
   registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration>;
