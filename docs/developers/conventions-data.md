@@ -2655,7 +2655,10 @@ answered `ok` there while the same check inside `withTransaction` was refused (M
   permission.
 - **The Box status read opens no `withTransaction`.** Its rows are read in a `withWriteLock` turn
   (`apps/server/src/box-health.ts`) and the staff notices through `readStaffNoticesInTurns`, as the
-  equipment read does above.
+  equipment read does above. The fiscal outbox is read in a `withWriteLock` turn of its own, and a
+  read there that changes a row is refused. Its failure is the outbox's alone: the answer carries
+  `outbox: null` and `fiscal-outbox` in `noticesUnavailable`, and the failure is logged once per
+  spell, as a notice source's is.
 - **Free-space deletion writes nothing to the database.** It deletes files (below), then takes a
   fresh free-space reading so a full-disk stop can lift at once. Dashboard routes are not behind
   the till's full-disk gate (above, "Not gated").

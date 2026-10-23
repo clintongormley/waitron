@@ -107,7 +107,8 @@ describe("collectBoxHealth's outbox", () => {
       outbox: null,
       noticesUnavailable: [...without.noticesUnavailable, "fiscal-outbox"],
     });
-    expect(log).toHaveBeenCalledWith("error", "box_health.outbox_failed", {
+    expect(log).toHaveBeenCalledWith("error", "staff_notice.source_unavailable", {
+      owner: "fiscal-outbox",
       errorCode: "storage.disk_full",
     });
   });
@@ -123,11 +124,67 @@ describe("collectBoxHealth's outbox", () => {
     const health = await collectBoxHealth(suite.db, stubReaders({ outbox }, true, log));
     expect(health.outbox).toBeNull();
     expect(health.noticesUnavailable).toContain("fiscal-outbox");
-    expect(log).toHaveBeenCalledWith("error", "box_health.outbox_failed", {
+    expect(log).toHaveBeenCalledWith("error", "staff_notice.source_unavailable", {
+      owner: "fiscal-outbox",
       errorCode: "box_health.outbox_wrote",
     });
     expect(suite.db.all<{ id: string }>(sql`select id from change_log where id = 'zz2'`)).toEqual(
       [],
     );
+  });
+
+  function failingOutbox() {
+    const log = vi.fn();
+    const state = { failing: true };
+    const outbox = outboxReader(async () => {
+      if (state.failing) throw new AppError("storage.disk_full", {});
+      return STATE;
+    });
+    const readers = stubReaders({ outbox }, true, log);
+    const events = () => log.mock.calls.map(([, event, fields]) => [event, fields]);
+    return { state, readers, events };
+  }
+
+  const FAILED = [
+    "staff_notice.source_unavailable",
+    { owner: "fiscal-outbox", errorCode: "storage.disk_full" },
+  ];
+
+  it("logs an outbox read that keeps failing once", async () => {
+    const { readers, events } = failingOutbox();
+    await collectBoxHealth(suite.db, readers);
+    await collectBoxHealth(suite.db, readers);
+    expect(events()).toEqual([FAILED]);
+  });
+
+  it("logs the outbox's recovery once, on the first read that succeeds", async () => {
+    const { state, readers, events } = failingOutbox();
+    await collectBoxHealth(suite.db, readers);
+    state.failing = false;
+    const health = await collectBoxHealth(suite.db, readers);
+    await collectBoxHealth(suite.db, readers);
+    expect(health.outbox).toEqual({ ...STATE, awaitingCertificate: false });
+    expect(events()).toEqual([
+      FAILED,
+      ["staff_notice.source_recovered", { owner: "fiscal-outbox" }],
+    ]);
+  });
+
+  it("logs no recovery while the box does not file, since nothing read the outbox", async () => {
+    const { state, readers, events } = failingOutbox();
+    const filing = { now: true };
+    const notices = { ...readers.notices, filing: () => filing.now };
+    const reading = { ...readers, notices };
+    await collectBoxHealth(suite.db, reading);
+    filing.now = false;
+    state.failing = false;
+    await collectBoxHealth(suite.db, reading);
+    expect(events()).toEqual([FAILED]);
+    filing.now = true;
+    await collectBoxHealth(suite.db, reading);
+    expect(events()).toEqual([
+      FAILED,
+      ["staff_notice.source_recovered", { owner: "fiscal-outbox" }],
+    ]);
   });
 });

@@ -117,12 +117,12 @@ export async function collectBoxHealth(
     })),
     { reading: readers.notices.clock.now(), log: noticeLog.log },
   );
-  noticeRead.settle(read.unavailable);
 
   const noticesUnavailable = [...read.unavailable];
   let outbox: BoxHealth["outbox"] = null;
   const outboxReader = readers.outbox;
-  if (filing && outboxReader !== undefined) {
+  const readsOutbox = filing && outboxReader !== undefined;
+  if (readsOutbox) {
     const changes = () => db.all<{ n: number }>(sql`select total_changes() as n`)[0]!.n;
     try {
       // Thrown inside the turn, so whatever a writing read changed goes with it.
@@ -135,10 +135,15 @@ export async function collectBoxHealth(
       outbox = { ...state, awaitingCertificate: outboxReader.awaitingCertificate() };
     } catch (error) {
       const errorCode = error === OUTBOX_WROTE ? "box_health.outbox_wrote" : codeOf(error);
-      noticeLog.log("error", "box_health.outbox_failed", { errorCode });
+      noticeLog.log("error", "staff_notice.source_unavailable", {
+        owner: "fiscal-outbox",
+        errorCode,
+      });
       noticesUnavailable.push("fiscal-outbox");
     }
   }
+  // An outbox this read did not try stays failing until a read that tries it succeeds.
+  noticeRead.settle(readsOutbox ? noticesUnavailable : [...noticesUnavailable, "fiscal-outbox"]);
 
   const [usage, free, reclaimable, sync] = await Promise.all([
     readers.usage(),
