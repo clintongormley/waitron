@@ -107,6 +107,31 @@ describe("complete historical schema comparison", () => {
       expect.objectContaining({ field: "columns" }),
     );
     expect(() => schema.compareSchema([old], [next], [mapping])).toThrow("history.mapping");
+    expect(() =>
+      schema.compareSchema(
+        [old],
+        [next],
+        [{ ...mapping, before: { ...old, rawSql: "CREATE TABLE other(id TEXT)" } }],
+        cell,
+      ),
+    ).toThrow("history.mapping");
+    expect(() =>
+      schema.compareSchema(
+        [old],
+        [old],
+        [
+          {
+            ...mapping,
+            object: { subject: "rows", key: "products" },
+            field: "label",
+            before: null,
+            after: { kind: "null" },
+            exactTransform: "add-null-field",
+          },
+        ],
+        cell,
+      ),
+    ).toThrow("history.mapping");
     const protectedOld = { ...old, protection: "fiscal" };
     expect(() =>
       schema.compareSchema([protectedOld], [next], [{ ...mapping, before: protectedOld }], cell),
