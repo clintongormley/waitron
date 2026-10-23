@@ -166,6 +166,8 @@ export class ThemeAdvanced extends LitElement {
 
   /** A drag fires an input per pointer move; only the latest colour goes out, once a frame. */
   #pick(mode: Mode, key: ThemeColour, colour: string): void {
+    const waiting = this.#waitingPick;
+    if (waiting !== undefined && (waiting.mode !== mode || waiting.key !== key)) this.#flushPick();
     this.#waitingPick = { mode, key, colour };
     this.#frame ??= requestAnimationFrame(() => {
       this.#frame = undefined;

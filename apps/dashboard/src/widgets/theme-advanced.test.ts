@@ -10,7 +10,7 @@ import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import { es } from "../i18n/strings.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { openDraft, setHand, typeHandCode, type LookDraft } from "./look-draft.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, computedColour, dotOf, mountWidget } from "./test-helpers.js";
 import { advancedSummary, handWarningLines, themeColourName } from "./theme-words.js";
 import type { HandAction, ThemeAdvanced } from "./theme-advanced.js";
 import "./theme-advanced.js";
@@ -343,11 +343,7 @@ describe("warnings under the rows", () => {
     expect(q(el, "[data-test=hand-row-text-muted]").contains(line)).toBe(true);
     const icon = line.parentElement!.querySelector("wt-icon")!;
     expect(icon.getAttribute("name")).toBe("warning");
-    const probe = document.createElement("span");
-    probe.style.color = "var(--wt-color-warning)";
-    el.shadowRoot!.append(probe);
-    const warningColour = getComputedStyle(probe).color;
-    probe.remove();
+    const warningColour = computedColour(el.shadowRoot!, "var(--wt-color-warning)");
     expect(getComputedStyle(line).color).toBe(warningColour);
     expect(getComputedStyle(icon).color).toBe(warningColour);
 
@@ -367,9 +363,6 @@ describe("warnings under the rows", () => {
 
   it("two fixes: warns under Text and Sunken areas, counts them closed, and errs nowhere", async () => {
     const el = await mount(TWO_FIXES);
-    expect(disclosure(el).summary, disclosure(el).summary).toSatisfy((s: string) =>
-      s.endsWith(" · 2 hard to read"),
-    );
     expect(disclosure(el).summary.endsWith(" · 2 hard to read")).toBe(true);
     expect(disclosure(el).hasAttribute("has-error")).toBe(false);
     await open(el);
@@ -436,49 +429,52 @@ describe("the fixed line", () => {
     expect(rowButton(el, "hand-undo-light-text-muted")).toBeNull();
   });
 
-  /** Where the fixed line's "·" is: drawn or not, and whether Undo shares the colour's line. */
-  function dotOf(el: ThemeAdvanced) {
-    const span = q(el, "[data-test=hand-fixed-light-text-muted]");
-    const dot = span.nextElementSibling!;
-    const undo = rowButton(el, "hand-undo-light-text-muted")!;
-    const words = document.createRange();
-    words.selectNodeContents(span);
-    const rects = words.getClientRects();
-    const last = rects[rects.length - 1]!;
-    const sameLine = (box: DOMRect) => {
-      const middle = (box.top + box.bottom) / 2;
-      return middle > last.top && middle < last.bottom;
-    };
-    const box = dot.getBoundingClientRect();
-    const hit = el.shadowRoot!.elementFromPoint(
-      (box.left + box.right) / 2,
-      (box.top + box.bottom) / 2,
-    );
-    return {
-      drawn: hit === dot,
-      dotOnColourLine: sameLine(box) && box.left >= last.right - 1,
-      undoOnColourLine: sameLine(undo.getBoundingClientRect()),
-    };
-  }
+  const words = (el: ThemeAdvanced) => q(el, "[data-test=hand-fixed-light-text-muted]");
+  const undo = (el: ThemeAdvanced) => rowButton(el, "hand-undo-light-text-muted")!;
 
   async function at(el: ThemeAdvanced, width: number) {
     el.style.width = `${width}px`;
     await nextFrame();
     await nextFrame();
     // elementFromPoint sees only what is inside the viewport.
-    q(el, "[data-test=hand-fixed-light-text-muted]").scrollIntoView({ block: "center" });
-    return dotOf(el);
+    words(el).scrollIntoView({ block: "center" });
+    return dotOf(el.shadowRoot!, words(el), undo(el));
   }
 
-  /** Widths, measured here, at which Undo no longer fits beside the fixed words. */
-  const NARROW = { "en-GB": 250, "es-ES": 320 } as const;
+  const wordLines = (el: ThemeAdvanced) => {
+    const range = document.createRange();
+    range.selectNodeContents(words(el));
+    return range.getClientRects().length;
+  };
+
+  /**
+   * A width at which the fixed words still take one line but Undo no longer fits beside them,
+   * measured in this browser's fonts: between the words' end (their end padding included) and
+   * Undo's end on a wide line, else the first such width found stepping down from wide.
+   */
+  async function narrowWidth(el: ThemeAdvanced): Promise<number> {
+    const wide = 1000;
+    await at(el, wide);
+    const left = el.getBoundingClientRect().left;
+    const slack =
+      el.getBoundingClientRect().right - words(el).parentElement!.getBoundingClientRect().right;
+    const wordsEnd = words(el).getBoundingClientRect().right - left;
+    const undoEnd = undo(el).getBoundingClientRect().right - left;
+    const fits = async (width: number) =>
+      !(await at(el, width)).undoOnColourLine && wordLines(el) === 1;
+    const between = Math.round((wordsEnd + undoEnd) / 2 + slack);
+    if (await fits(between)) return between;
+    for (let width = wide; width > 0; width -= 2) if (await fits(width)) return width;
+    throw new Error("no width puts Undo below one line of fixed words");
+  }
 
   for (const locale of ["en-GB", "es-ES"] as const) {
     it(`drops the "·" when Undo wraps to a line of its own (${locale})`, async () => {
       setLocale(locale);
       const el = await mount(TAKEN, { fixed: FIXED });
       await open(el);
-      const narrow = await at(el, NARROW[locale]);
+      const narrow = await at(el, await narrowWidth(el));
+      expect(wordLines(el)).toBe(1);
       expect(narrow.undoOnColourLine, JSON.stringify(narrow)).toBe(false);
       expect(narrow.drawn, JSON.stringify(narrow)).toBe(false);
       const wide = await at(el, 1000);
@@ -544,6 +540,25 @@ describe("one pick per frame", () => {
     expect(cancel).toHaveBeenCalledWith(id);
     runFrame(id);
     expect(seen).toHaveLength(2);
+  });
+
+  it("sends a waiting pick at once when another colour is picked in the same frame", async () => {
+    const el = await mount(CREAM);
+    await open(el);
+    const seen = actions(el);
+    const before = frames.length;
+    pick(el, "#111111");
+    const other = picker(el, "dark", "surface");
+    other.value = "#223344";
+    other.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    expect(seen).toEqual([{ kind: "pick", mode: "light", key: "bg", colour: "#111111" }]);
+    expect(cancel).toHaveBeenCalledWith(before + 1);
+    expect(frames.length).toBe(before + 2);
+    runFrame(frames.length);
+    expect(seen).toEqual([
+      { kind: "pick", mode: "light", key: "bg", colour: "#111111" },
+      { kind: "pick", mode: "dark", key: "surface", colour: "#223344" },
+    ]);
   });
 
   it("cancels a waiting frame when removed", async () => {

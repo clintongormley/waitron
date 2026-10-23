@@ -14,7 +14,13 @@ import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { es } from "../i18n/strings.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  computedColour,
+  dialogClosed,
+  dotOf,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import "./look-card.js";
 
 type Card = HTMLElementTagNameMap["dashboard-look-card"];
@@ -542,6 +548,9 @@ describe("readability warnings in the editor", () => {
     const warning = q(el, "[data-test=brand-warning-light]")!;
     expect(text(warning)).toBe(t("appearance.brand_warning_light"));
     expect(warning.querySelector("wt-icon")?.getAttribute("name")).toBe("warning");
+    expect(getComputedStyle(warning.querySelector("wt-icon")!).color).toBe(
+      computedColour(el.shadowRoot!, "var(--wt-color-warning)"),
+    );
     expect(text(q(el, "[data-test=brand-fix-light]"))).toBe("Use #9d8a15 on light screens");
     expect(q(el, "[data-test=brand-warning-dark]")).toBeNull();
     expect(preview(el).theme.light["--wt-color-primary"]).toBe("#f2d300");
@@ -995,31 +1004,6 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
     });
   }
 
-  /** Where the fixed line's "·" is: drawn or not, and whether Undo shares the colour's line. */
-  function dotOf(el: Card, mode: "light" | "dark") {
-    const span = q(el, `[data-test=brand-fixed-${mode}]`)!;
-    const dot = span.nextElementSibling!;
-    const undo = button(el, `brand-undo-${mode}`);
-    const words = document.createRange();
-    words.selectNodeContents(span);
-    const rects = words.getClientRects();
-    const last = rects[rects.length - 1]!;
-    const sameLine = (box: DOMRect) => {
-      const middle = (box.top + box.bottom) / 2;
-      return middle > last.top && middle < last.bottom;
-    };
-    const box = rect(dot);
-    const hit = el.shadowRoot!.elementFromPoint(
-      (box.left + box.right) / 2,
-      (box.top + box.bottom) / 2,
-    );
-    return {
-      drawn: hit === dot,
-      dotOnColourLine: sameLine(box) && box.left >= last.right - 1,
-      undoOnColourLine: sameLine(rect(undo)),
-    };
-  }
-
   for (const [locale, cardWidth] of [
     ["es-ES", 358],
     ["en-GB", 358],
@@ -1034,7 +1018,11 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
         for (const mode of ["light", "dark"] as const) {
           const { el } = await fixedLine(mode);
           await resize(el, cardWidth);
-          const found = dotOf(el, mode);
+          const found = dotOf(
+            el.shadowRoot!,
+            q(el, `[data-test=brand-fixed-${mode}]`)!,
+            button(el, `brand-undo-${mode}`),
+          );
           const label = `${mode} ${JSON.stringify(found)}`;
           expect(found.drawn, label).toBe(found.undoOnColourLine);
           if (found.drawn) expect(found.dotOnColourLine, label).toBe(true);
