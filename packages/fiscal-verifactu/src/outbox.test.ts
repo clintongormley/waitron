@@ -178,4 +178,32 @@ describe("retryWaitingRecords", () => {
       proximo_intento_en: now.toISOString(),
     });
   });
+
+  it("counts and clears a waiting record earlier on its chain than a held one", async () => {
+    // A reconcile resubmission can put a record back to `pendiente` before a later held one.
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+    const [earlier, detenido, behind] = seeded.registroIds as [string, string, string];
+    const later = "2026-07-21T05:00:00.000Z";
+    await suite.db.execute(sql`
+      update envios set intentos = 1, incidencia = 1, proximo_intento_en = ${later}
+      where registro_id in (${earlier}, ${behind})
+    `);
+    await suite.db.execute(sql`
+      update envios set estado = 'detenido', incidencia = 1, enviado_en = '2026-07-21T00:00:50.000Z',
+        proximo_intento_en = ${later}
+      where registro_id = ${detenido}
+    `);
+    const behindBefore = await envioRow(behind);
+    const earlierBefore = await envioRow(earlier);
+    const now = new Date("2026-07-21T00:02:00Z");
+
+    expect((await read()).waiting).toBe(1);
+    expect(await press(now)).toEqual({ waiting: 1, cleared: 1 });
+
+    expect(await envioRow(earlier)).toEqual({
+      ...earlierBefore,
+      proximo_intento_en: now.toISOString(),
+    });
+    expect(await envioRow(behind)).toEqual(behindBefore);
+  });
 });
