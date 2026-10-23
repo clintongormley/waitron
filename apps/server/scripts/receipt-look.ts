@@ -107,7 +107,7 @@ FULL.receipt = {
   headerSubtitle: "Thank you for visiting",
   footerMessage: "See you soon",
 };
-FULL.receiptHeader = { ...FULL.receiptHeader, tradingName: "Sample Deli" };
+FULL.receiptHeader = { tradingName: "Sample Deli", printTradingName: true };
 
 FULL.result.lines[0]!.net!.rate = "21.00";
 FULL.result.lines[1]!.net!.rate = "10.00";
