@@ -8,6 +8,7 @@ export const THEME_DOCUMENT_KEYS = [
   "background",
   "corners",
   "handSet",
+  "logo",
 ] as const satisfies readonly (keyof ThemeChoices)[];
 
 export type ThemeRefusalReason =
@@ -17,7 +18,8 @@ export type ThemeRefusalReason =
   | "bad_value"
   | "unknown_colour"
   | "fix_without_brand"
-  | "fix_with_hand_set";
+  | "fix_with_hand_set"
+  | "dark_without_light";
 
 export type ThemeDocumentResult =
   | { readonly ok: true; readonly choices: ThemeChoices }
@@ -98,9 +100,25 @@ function checkFixes(input: Fields): Refusal | null {
   return null;
 }
 
+function checkLogo(value: unknown): Refusal | null {
+  if (value === null) return null;
+  if (!isObject(value)) return refuse("logo", "bad_value");
+  const unknown = unknownKey(value, ["light", "dark"], "logo");
+  if (unknown) return unknown;
+  if (!("light" in value)) {
+    return "dark" in value
+      ? refuse("logo.dark", "dark_without_light")
+      : refuse("logo.light", "missing");
+  }
+  if (typeof value.light !== "string") return refuse("logo.light", "bad_value");
+  if ("dark" in value && typeof value.dark !== "string") return refuse("logo.dark", "bad_value");
+  return null;
+}
+
 /** Checks a theme document sent or stored, answering its first refusal in a fixed order. */
 export function readThemeDocument(input: unknown): ThemeDocumentResult {
   if (!isObject(input)) return refuse("theme", "not_object");
+  const logo = input.logo === undefined ? null : input.logo;
   const refusal =
     unknownKey(input, THEME_DOCUMENT_KEYS, "theme") ??
     (input.brandColor === undefined
@@ -120,7 +138,8 @@ export function readThemeDocument(input: unknown): ThemeDocumentResult {
         ? refuse("corners", "bad_value")
         : null) ??
     checkHandSet(input.handSet) ??
-    checkFixes(input);
+    checkFixes(input) ??
+    checkLogo(logo);
   if (refusal) return refusal;
-  return { ok: true, choices: normaliseChoices(input as unknown as ThemeChoices) };
+  return { ok: true, choices: normaliseChoices({ ...input, logo } as unknown as ThemeChoices) };
 }
