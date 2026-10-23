@@ -118,7 +118,7 @@ jobs:
     needs: mutation-ui-core
     if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - id: checkout
         name: Check out the code
@@ -148,7 +148,7 @@ jobs:
       - id: download
         name: Download every shard report
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         continue-on-error: true
         with:
           pattern: mutation-report-ui-core-shard-*
@@ -162,7 +162,7 @@ jobs:
       - name: Download every shard report, second attempt
         if: steps.download.outcome == 'failure'
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         with:
           pattern: mutation-report-ui-core-shard-*
           path: mutation-reports
@@ -258,7 +258,7 @@ jobs:
     needs: mutation-ui
     if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - id: checkout
         name: Check out the code
@@ -288,7 +288,7 @@ jobs:
       - id: download
         name: Download every shard report
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         continue-on-error: true
         with:
           pattern: mutation-report-ui-shard-*
@@ -302,7 +302,7 @@ jobs:
       - name: Download every shard report, second attempt
         if: steps.download.outcome == 'failure'
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         with:
           pattern: mutation-report-ui-shard-*
           path: mutation-reports
@@ -421,7 +421,7 @@ jobs:
     needs: mutation-db
     if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - id: checkout
         name: Check out the code
@@ -456,7 +456,7 @@ jobs:
       - id: download
         name: Download every shard report
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         continue-on-error: true
         with:
           pattern: mutation-report-db-shard-*
@@ -470,7 +470,7 @@ jobs:
       - name: Download every shard report, second attempt
         if: steps.download.outcome == 'failure'
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         with:
           pattern: mutation-report-db-shard-*
           path: mutation-reports

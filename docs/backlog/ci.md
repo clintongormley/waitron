@@ -563,10 +563,10 @@ not captured. It was not reproduced. **Next action:** reproduce it under load an
 List them with
 
 ```sh
-grep -n -E '^\s*-?\s*uses: (actions/(setup-node|cache|upload-artifact|download-artifact)|docker/|github/codeql-action)' .github/workflows/*.yml
+grep -n -E '^\s*-?\s*uses: (actions/(setup-node|cache|upload-artifact)|docker/|github/codeql-action)' .github/workflows/*.yml
 ```
 
-On 2026-10-20 none of the `setup-node`, `cache`, `upload-artifact`, `download-artifact`,
+On 2026-10-20 none of the `setup-node`, `cache`, `upload-artifact`,
 `docker/*` and `codeql-action` steps carried a step `timeout-minutes`; they rely on their job's
 limit alone, as checkout did. The set-up download ("Download action repository …") is retried by
 the runner, three attempts, each under a 20-minute limit (runner v2.337.0
@@ -574,8 +574,6 @@ the runner, three attempts, each under a 20-minute limit (runner v2.337.0
 `int timeoutSeconds = 20 * 60;`) — longer than most of our jobs' limits, which run from 5 to 50
 minutes (`grep -h -E '^    timeout-minutes:' .github/workflows/*.yml`) — and a step
 `timeout-minutes` cannot reach it. Whether the job's own limit covers set-up was not measured.
-The artifact downloads now have bounded retries (A1028); those steps are outside this remaining
-work. Setup-node, cache, uploads, Docker actions, CodeQL actions and runner set-up remain open.
 Receipt for the checkout half:
 [ci-and-gates.md](../developers/ci-and-gates.md#every-checkout-is-bounded).
 

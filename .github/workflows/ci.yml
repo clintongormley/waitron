@@ -870,7 +870,7 @@ jobs:
       - id: download
         name: Download the db coverage blobs
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         continue-on-error: true
         with:
           pattern: db-blob-*
@@ -885,7 +885,7 @@ jobs:
       - name: Download the db coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         with:
           pattern: db-blob-*
           path: packages/db/.vitest-reports
@@ -1129,7 +1129,7 @@ jobs:
       - id: download
         name: Download the server coverage blobs
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         continue-on-error: true
         with:
           pattern: server-blob-*
@@ -1144,7 +1144,7 @@ jobs:
       - name: Download the server coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         with:
           pattern: server-blob-*
           path: apps/server/.vitest-reports
@@ -1453,7 +1453,7 @@ jobs:
       - id: download
         name: Download the till coverage blobs
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         continue-on-error: true
         with:
           pattern: till-blob-*
@@ -1468,7 +1468,7 @@ jobs:
       - name: Download the till coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         with:
           pattern: till-blob-*
           path: apps/till/.vitest-reports
@@ -1600,7 +1600,7 @@ jobs:
       - id: download
         name: Download the dashboard coverage blobs
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         continue-on-error: true
         with:
           pattern: dashboard-blob-*
@@ -1615,7 +1615,7 @@ jobs:
       - name: Download the dashboard coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         with:
           pattern: dashboard-blob-*
           path: apps/dashboard/.vitest-reports
@@ -1851,7 +1851,7 @@ jobs:
       - id: download
         name: Download the venue-service coverage blobs
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         continue-on-error: true
         with:
           pattern: venue-service-blob-*
@@ -1866,7 +1866,7 @@ jobs:
       - name: Download the venue-service coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         with:
           pattern: venue-service-blob-*
           path: packages/venue-service/.vitest-reports
@@ -2344,7 +2344,7 @@ jobs:
       - id: download
         name: Download the provisioning coverage blobs
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         continue-on-error: true
         with:
           pattern: provisioning-blob-*
@@ -2359,7 +2359,7 @@ jobs:
       - name: Download the provisioning coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         with:
           pattern: provisioning-blob-*
           path: packages/provisioning/.vitest-reports

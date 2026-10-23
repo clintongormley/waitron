@@ -3229,15 +3229,18 @@ A connection reset can leave only part of the shard reports on disk. In main run
 The reason that connection reset is unverified.
 
 Each `actions/download-artifact` site in the workflow files uses two attempts. The first has
-`timeout-minutes: 2` and `continue-on-error: true`. Only its failed outcome runs the next two
+`timeout-minutes: 1` and `continue-on-error: true`. Only its failed outcome runs the next two
 steps: remove that download's directory, then repeat the download with identical inputs and a
-second two-minute limit. The removal has a one-minute limit; its failure and the second download's
-failure fail the job. A healthy first attempt skips both extra steps. The mutation aggregation
-jobs allow ten minutes, leaving room for the two checkout attempts, these download steps and
-scoring. The merge and score commands, shard-count checks and thresholds are unchanged.
+second one-minute limit. The removal has a one-minute limit; its failure and the second download's
+failure fail the job. A healthy first attempt skips both extra steps. The jobs keep their
+five-minute limit. One minute per download leaves room for setup and merging; healthy downloads
+in comparison run `39909983919` took one to two seconds. The job's deadline remains an outer
+limit; stalls in other steps can still consume the time available for recovery. The merge and
+score commands, shard-count checks and thresholds are unchanged.
 
 The artifact-download cases in `scripts/ci-workflow.test.mjs` are weaker than their name: they
-read workflow text, never execute a workflow. They recognise literal action names, step fields and
+read workflow text, never execute a workflow. They also check the cleanup limit and that the job
+budget exceeds the download and cleanup limits combined. They recognise literal action names, step fields and
 relative directory paths, not composite actions, external reusable workflows, expressions naming
 an action, YAML anchors or alternative shell cleanup commands. A matching cleanup string does not
 prove that it ran or removed a file. Runtime controls and timing measurements belong in the PR.

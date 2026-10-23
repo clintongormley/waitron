@@ -3706,6 +3706,7 @@ function downloadAttempts(text) {
         !path.startsWith("/") &&
         !path.split("/").includes("..") &&
         clear?.if === failed &&
+        clear.timeoutMinutes === "1" &&
         clear.continueOnError !== "true" &&
         clear.command.trim() === `rm -rf -- "${path}"` &&
         second?.uses === first.uses &&
@@ -3724,7 +3725,7 @@ describe("the workflows' artifact downloads", () => {
   const workflow = (steps) => `on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n${steps}`;
   const first = `      - id: download
         uses: actions/download-artifact@v8
-        timeout-minutes: 2
+        timeout-minutes: 1
         continue-on-error: true
         with:
           pattern: service-blob-*
@@ -3733,11 +3734,12 @@ describe("the workflows' artifact downloads", () => {
 `;
   const clear = `      - name: Clear partial download
         if: steps.download.outcome == 'failure'
+        timeout-minutes: 1
         run: rm -rf -- "packages/service/.vitest-reports"
 `;
   const second = `      - uses: actions/download-artifact@v8
         if: steps.download.outcome == 'failure'
-        timeout-minutes: 2
+        timeout-minutes: 1
         with:
           pattern: service-blob-*
           path: packages/service/.vitest-reports
@@ -3758,17 +3760,23 @@ describe("the workflows' artifact downloads", () => {
 
   it.each([
     ["no retry", first],
-    ["no first timeout", first.replace("        timeout-minutes: 2\n", "") + clear + second],
-    ["no second timeout", first + clear + second.replace("        timeout-minutes: 2\n", "")],
+    ["no first timeout", first.replace("        timeout-minutes: 1\n", "") + clear + second],
+    ["no second timeout", first + clear + second.replace("        timeout-minutes: 1\n", "")],
     [
       "an excessive timeout",
-      first.replace("timeout-minutes: 2", "timeout-minutes: 10") + clear + second,
+      first.replace("timeout-minutes: 1", "timeout-minutes: 10") + clear + second,
     ],
     [
       "no tolerated first failure",
       first.replace("        continue-on-error: true\n", "") + clear + second,
     ],
     ["no cleanup", first + second],
+    ["unbounded cleanup", first + clear.replace("        timeout-minutes: 1\n", "") + second],
+    ["a different retry version", first + clear + second.replace("@v8", "@v7")],
+    [
+      "an unsafe path",
+      (first + clear + second).replaceAll("packages/service/.vitest-reports", "reports$PART"),
+    ],
     ["cleanup on success", first + clear.replace("== 'failure'", "== 'success'") + second],
     [
       "cleanup of the wrong directory",
@@ -3818,6 +3826,23 @@ describe("the workflows' artifact downloads", () => {
     const attempts = downloadAttempts(workflow(steps));
     expect(attempts.length).toBeGreaterThan(0);
     expect(attempts.every((attempt) => attempt.bounded)).toBe(false);
+  });
+
+  it("leaves job time outside both download attempts and cleanup", () => {
+    const found = workflowFiles.flatMap((name) =>
+      jobBlocks(readFileSync(join(workflowsDir, name), "utf8")).flatMap(({ id, lines }) => {
+        const steps = workflowSteps(lines.join("\n"));
+        const at = steps.findIndex((step) => step.uses?.startsWith("actions/download-artifact@"));
+        if (at === -1) return [];
+        const downloadBudget = steps
+          .slice(at, at + 3)
+          .reduce((sum, step) => sum + Number(step.timeoutMinutes), 0);
+        const jobBudget = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(lines.join("\n"))?.[1]);
+        return [{ workflow: name, job: id, fits: jobBudget > downloadBudget }];
+      }),
+    );
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.filter((entry) => !entry.fits)).toEqual([]);
   });
 
   it("bounds and retries every artifact download in every workflow", () => {
