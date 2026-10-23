@@ -30,7 +30,7 @@ export const WAITRON_THEME_ANSWER: VenueThemeAnswer = {
   logo: null,
 };
 
-/** The addresses name each image's source file and framing, so a library edit misses the cache. */
+/** The addresses name each image's source file and framing, so a reframe or a replaced source misses the cache. */
 function themeCacheKey(id: string, choices: ThemeChoices, logo: VenueLogo | null): string {
   return JSON.stringify([id, choices, logo]);
 }
