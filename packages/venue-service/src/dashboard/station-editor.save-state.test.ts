@@ -20,12 +20,9 @@ async function mount(printerIds = ["epson"]) {
     showsRestOfOrder: false,
     printMovedSlips: null,
     printerIds,
-    timingOverrides: {
-      warmAfterMinutes: null,
-      overdueAfterMinutes: 5,
-      forgottenAfterMinutes: null,
-    },
-    timingDefaults: { warmAfterMinutes: 3, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
+    warmAfterMinutes: 3,
+    overdueAfterMinutes: 5,
+    forgottenAfterMinutes: 15,
   };
   el.printers = [
     { id: "epson", name: "Epson" },

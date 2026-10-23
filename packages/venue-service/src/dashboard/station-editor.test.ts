@@ -24,8 +24,9 @@ const GRILL: StationEditorStation = {
   showsRestOfOrder: false,
   printMovedSlips: null,
   printerIds: ["epson"],
-  timingOverrides: { warmAfterMinutes: null, overdueAfterMinutes: 12, forgottenAfterMinutes: null },
-  timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
+  warmAfterMinutes: 5,
+  overdueAfterMinutes: 12,
+  forgottenAfterMinutes: 15,
 };
 
 const STATIONS = [
@@ -332,44 +333,53 @@ it("keeps a printer choice it can no longer send out of the save when the statio
 });
 
 const TIMINGS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
-const NO_OVERRIDES = {
-  warmAfterMinutes: null,
-  overdueAfterMinutes: null,
-  forgottenAfterMinutes: null,
-};
-
-it("opens each timing empty when inherited, the venue default as its placeholder, and filled when overridden", async () => {
+it("opens on the station's own minutes, each required, with no placeholder and no venue note", async () => {
   const el = await mount();
-  expect(TIMINGS.map((name) => timingField(el, name).value)).toEqual(["", "12", ""]);
-  expect(TIMINGS.map((name) => timingField(el, name).placeholder)).toEqual(["5", "10", "15"]);
+  expect(TIMINGS.map((name) => timingField(el, name).value)).toEqual(["5", "12", "15"]);
+  expect(TIMINGS.map((name) => timingField(el, name).placeholder)).toEqual(["", "", ""]);
   expect(TIMINGS.map((name) => timingField(el, name).label)).toEqual([
     "Warm",
     "Overdue",
     "Forgotten",
   ]);
   for (const name of TIMINGS) {
-    expect(timingField(el, name).required).toBe(false);
+    expect(timingField(el, name).required).toBe(true);
     expect(timingField(el, name).type).toBe("number");
     expect(timingField(el, name).hint).toBe("");
   }
-  expect($(el, "#timing-inheritance")!.textContent).toBe(
-    "Leave a field blank to use the venue setting",
-  );
+  expect($(el, "#timing-inheritance")).toBeNull();
 });
 
-it("sends a typed timing, a cleared override as null, and an override equal to its default", async () => {
+it("a cleared minutes field is marked beside it and at the bottom and sends nothing", async () => {
+  const el = await mount();
+  const seen = saves(el);
+  await setTiming(el, "warmAfterMinutes", "");
+  await save(el);
+  expect(seen).toEqual([]);
+  expect(timingField(el, "warmAfterMinutes").error).toBe(
+    "Use whole minutes with warm < overdue < forgotten.",
+  );
+  expect(formMessage(el)).toBe("Correct the highlighted fields to continue.");
+  expect(saveButton(el).disabled).toBe(true);
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(timingField(el, "warmAfterMinutes"));
+  await setTiming(el, "warmAfterMinutes", "4");
+  await save(el);
+  expect(seen).toEqual([{ warmAfterMinutes: 4 }]);
+});
+
+it("sends a typed minute, and nothing for a minute typed back as its stored value", async () => {
   const el = await mount();
   const seen = saves(el);
   await setTiming(el, "warmAfterMinutes", "3");
   await save(el);
+  expect(seen).toEqual([{ warmAfterMinutes: 3 }]);
   expect(el.saved()).toBe(true);
   const again = await mount();
   const seenAgain = saves(again);
-  await setTiming(again, "overdueAfterMinutes", "");
-  await setTiming(again, "warmAfterMinutes", "5");
+  await setTiming(again, "warmAfterMinutes", "05");
+  expect(saveButton(again).disabled).toBe(true);
   await save(again);
-  expect(seen).toEqual([{ warmAfterMinutes: 3 }]);
-  expect(seenAgain).toEqual([{ warmAfterMinutes: 5, overdueAfterMinutes: null }]);
+  expect(seenAgain).toEqual([]);
 });
 
 it("sends a rename and a timing in one save", async () => {
@@ -406,24 +416,19 @@ it.each(["0", "1.5", "abc", "2147483648"])(
   },
 );
 
-it("holds the timings in order, reading a blank one as its default", async () => {
-  const el = await mount({ ...GRILL, timingOverrides: NO_OVERRIDES });
-  const seen = saves(el);
-  await setTiming(el, "warmAfterMinutes", "9");
-  await save(el);
-  expect(seen).toEqual([{ warmAfterMinutes: 9 }]);
-
-  const warm = await mount({ ...GRILL, timingOverrides: NO_OVERRIDES });
-  await setTiming(warm, "warmAfterMinutes", "10");
+it("holds the timings in order against the station's own minutes", async () => {
+  const warm = await mount();
+  const seen = saves(warm);
+  await setTiming(warm, "warmAfterMinutes", "12");
   await save(warm);
+  expect(seen).toEqual([]);
   expect(timingField(warm, "warmAfterMinutes").error).toBe("");
   expect(timingField(warm, "overdueAfterMinutes").error).toBe(
     "Use whole minutes with warm < overdue < forgotten.",
   );
 
-  const forgotten = await mount({ ...GRILL, timingOverrides: NO_OVERRIDES });
-  await setTiming(forgotten, "overdueAfterMinutes", "11");
-  await setTiming(forgotten, "forgottenAfterMinutes", "10");
+  const forgotten = await mount();
+  await setTiming(forgotten, "overdueAfterMinutes", "16");
   await save(forgotten);
   expect(timingField(forgotten, "overdueAfterMinutes").error).toBe("");
   expect(timingField(forgotten, "forgottenAfterMinutes").error).toBe(
@@ -456,19 +461,6 @@ it("puts a connection failure at the bottom only, marking no timing", async () =
   expect(formMessage(el)).toBe("The change could not be saved.");
 });
 
-it("follows a venue-default change while open and keeps a typed override", async () => {
-  const el = await mount();
-  await setTiming(el, "warmAfterMinutes", "3");
-  el.station = {
-    ...GRILL,
-    timingDefaults: { warmAfterMinutes: 6, overdueAfterMinutes: 11, forgottenAfterMinutes: 30 },
-  };
-  await el.updateComplete;
-  expect(TIMINGS.map((name) => timingField(el, name).placeholder)).toEqual(["6", "11", "30"]);
-  expect(timingField(el, "warmAfterMinutes").value).toBe("3");
-  expect(el.dirty).toBe(true);
-});
-
 it("reads the timings in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
   expect(TIMINGS.map((name) => timingField(el, name).label)).toEqual([
@@ -482,13 +474,13 @@ it("reads the timings in Spanish", async () => {
     "Usa minutos enteros con aviso < atraso < olvido.",
   );
   expect(timingField(el, "warmAfterMinutes").hint).toBe("");
-  expect($(el, "#timing-inheritance")!.textContent).toBe(
-    "Deja un campo vacío para usar el ajuste del local",
-  );
 });
 
 it("explains timings out of order in Spanish beside the field and at the bottom, and sends nothing", async () => {
-  const el = await mount({ ...GRILL, timingOverrides: NO_OVERRIDES }, { locale: "es" });
+  const el = await mount(
+    { ...GRILL, warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
+    { locale: "es" },
+  );
   const seen = saves(el);
   await setTiming(el, "warmAfterMinutes", "10");
   await save(el);
@@ -701,9 +693,10 @@ it.each([390, 1280])("A725 groups late minutes on one row at %ipx", async (width
   try {
     await page.viewport(width, 1100);
     const el = await mount();
-    const group = $(el, "fieldset[aria-describedby=timing-inheritance]");
-    expect(group).not.toBeNull();
-    expect(group!.querySelector("legend")!.textContent).toBe("Late flags (minutes)");
+    const group = [...el.shadowRoot!.querySelectorAll("fieldset")].find(
+      (fieldset) => fieldset.querySelector("legend")?.textContent === "Late flags (minutes)",
+    );
+    expect(group).toBeDefined();
     const fields = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"].map(
       (name) => timingField(el, name),
     );
@@ -711,11 +704,8 @@ it.each([390, 1280])("A725 groups late minutes on one row at %ipx", async (width
     const boxes = fields.map((field) => field.getBoundingClientRect());
     expect(new Set(boxes.map((box) => Math.round(box.top))).size).toBe(1);
     expect(boxes.every((box) => box.width > 0 && box.right <= window.innerWidth)).toBe(true);
-    expect(fields.map((field) => field.placeholder)).toEqual(["5", "10", "15"]);
+    expect(fields.map((field) => field.value)).toEqual(["5", "12", "15"]);
     expect(fields.map((field) => field.hint)).toEqual(["", "", ""]);
-    expect($(el, "#timing-inheritance")!.textContent).toBe(
-      "Leave a field blank to use the venue setting",
-    );
     expect(restSwitch(el).label).toBe("Also list the order's dishes from other stations");
     expect($(el, "[data-test=rest-of-order-hint]")!.textContent).toBe(
       "On this station's tickets and kitchen screen",

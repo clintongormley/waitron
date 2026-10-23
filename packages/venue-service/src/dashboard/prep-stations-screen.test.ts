@@ -71,12 +71,6 @@ const view: PrepStationsView = {
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
-      timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
-      timingOverrides: {
-        warmAfterMinutes: null,
-        overdueAfterMinutes: null,
-        forgottenAfterMinutes: null,
-      },
       showsRestOfOrder: false,
       printMovedSlips: null,
     },
@@ -359,7 +353,8 @@ it.each(
     q(el, '[data-test="edit-bar"]')!.click();
     await settle(el);
     await el.shadowRoot!.querySelector("prep-station-editor")!.updateComplete;
-    expect(timingField(el, "warmAfterMinutes").placeholder).not.toBe("");
+    expect(timingField(el, "warmAfterMinutes").value).not.toBe("");
+    expect(timingField(el, "warmAfterMinutes").required).toBe(true);
     expect(timingField(el, "overdueAfterMinutes")).not.toBeNull();
     expect(timingField(el, "forgottenAfterMinutes")).not.toBeNull();
     await expectNoA11yViolations(el);
@@ -815,21 +810,18 @@ function timingView(): PrepStationsView {
       {
         ...view.stations[0]!,
         warmAfterMinutes: 3,
-        timingOverrides: { ...view.stations[0]!.timingOverrides, warmAfterMinutes: 3 },
       },
     ],
   };
 }
-it("opens a station's timings in its editor and saves all three in one request", async () => {
+it("opens a station's own minutes in its editor and saves all three in one request", async () => {
   const a = api({ load: vi.fn().mockResolvedValue(timingView()) });
   const el = await mount(a);
   q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
   expect(timingField(el, "warmAfterMinutes").value).toBe("3");
-  expect(timingField(el, "overdueAfterMinutes").value).toBe("");
-  expect(timingField(el, "overdueAfterMinutes").placeholder).toBe("10");
-  expect(timingField(el, "forgottenAfterMinutes").value).toBe("");
-  expect(timingField(el, "forgottenAfterMinutes").placeholder).toBe("15");
+  expect(timingField(el, "overdueAfterMinutes").value).toBe("10");
+  expect(timingField(el, "forgottenAfterMinutes").value).toBe("15");
   for (const [field, value] of [
     ["warmAfterMinutes", "4"],
     ["overdueAfterMinutes", "11"],
@@ -870,31 +862,6 @@ it("puts a timing refusal from the editor's save under the field it names and ke
   expect(timingField(el, "forgottenAfterMinutes").error).toBe("");
   expect(el.shadowRoot!.querySelector("prep-station-editor")).not.toBeNull();
 });
-it("follows new venue defaults in an open editor's placeholders and keeps a typed override", async () => {
-  const liveData = new LiveData();
-  const newDefaults = {
-    ...view,
-    stations: [
-      {
-        ...view.stations[0]!,
-        timingDefaults: { warmAfterMinutes: 7, overdueAfterMinutes: 20, forgottenAfterMinutes: 30 },
-      },
-    ],
-  };
-  const load = vi.fn().mockResolvedValueOnce(view).mockResolvedValue(newDefaults);
-  const el = await mount(api({ liveData, load }));
-  q(el, '[data-test="edit-bar"]')!.click();
-  await settle(el);
-  expect(timingField(el, "warmAfterMinutes").placeholder).toBe("5");
-  await editSaveField(el, timingField(el, "overdueAfterMinutes"), "12");
-  liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
-  await vi.waitFor(() => expect(timingField(el, "warmAfterMinutes").placeholder).toBe("7"));
-  await el.shadowRoot!.querySelector("prep-station-editor")!.updateComplete;
-  expect(timingField(el, "overdueAfterMinutes").value).toBe("12");
-  expect(timingField(el, "forgottenAfterMinutes").placeholder).toBe("30");
-  expect(timingField(el, "forgottenAfterMinutes").value).toBe("");
-});
-
 it("edits Show the rest of the order in the station editor and saves only that field", async () => {
   const a = api();
   const el = await mount(a);
@@ -4427,7 +4394,7 @@ describe("Save follows changes", () => {
         ["old"],
         ["next"],
       ],
-      timing: ["edit-bar", "save-station-edit", 'wt-input[name="warmAfterMinutes"]', "", "6"],
+      timing: ["edit-bar", "save-station-edit", 'wt-input[name="warmAfterMinutes"]', "5", "6"],
     } as const;
     const [trigger, save, field, initial, changed] = info[mode];
     query(`[data-test="${trigger}"]`)!.click();
@@ -4539,9 +4506,9 @@ describe("Save follows changes", () => {
     await settle(form.el);
     expect(form.a.updateStation).not.toHaveBeenCalled();
   });
-  it("an explicit default minute value is a change from inheritance, then numeric spelling is ignored", async () => {
+  it("a minute typed back in another spelling is no change, and a cleared one is", async () => {
     const server = structuredClone(ticketView);
-    server.stations[0]!.timingOverrides.warmAfterMinutes = 5;
+    server.stations[0]!.warmAfterMinutes = 5;
     const form = await openSave("timing", { load: vi.fn().mockResolvedValue(server) });
     await form.edit("05");
     await state(form.button(), false);

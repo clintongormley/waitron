@@ -19,16 +19,9 @@ class StationEditorLeaveApp extends LitElement {
           showsRestOfOrder: false,
           printMovedSlips: null,
           printerIds: ["epson"],
-          timingOverrides: {
-            warmAfterMinutes: null,
-            overdueAfterMinutes: 5,
-            forgottenAfterMinutes: null,
-          },
-          timingDefaults: {
-            warmAfterMinutes: 3,
-            overdueAfterMinutes: 10,
-            forgottenAfterMinutes: 15,
-          },
+          warmAfterMinutes: 3,
+          overdueAfterMinutes: 5,
+          forgottenAfterMinutes: 15,
         }}
         .printers=${[
           { id: "epson", name: "Epson" },

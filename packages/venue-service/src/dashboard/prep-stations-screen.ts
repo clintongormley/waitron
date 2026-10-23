@@ -67,7 +67,12 @@ import {
   type StationRefusal,
 } from "./station-editor.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
-import { firstUnusedStationColour, isStationColour, type DeleteImpact } from "@waitron/shared";
+import {
+  DEFAULT_STATION_THRESHOLDS,
+  firstUnusedStationColour,
+  isStationColour,
+  type DeleteImpact,
+} from "@waitron/shared";
 import { stationDeleteCopy, stationDeleteError } from "./station-delete-copy.js";
 
 type StationAction = {
@@ -155,9 +160,7 @@ export class PrepStationsScreen extends LitElement {
   @state() private draft: NewStation = {
     name: "",
     colour: "red",
-    warmAfterMinutes: 5,
-    overdueAfterMinutes: 10,
-    forgottenAfterMinutes: 15,
+    ...DEFAULT_STATION_THRESHOLDS,
     printerIds: [],
   };
   @state() private fieldError: Record<string, string> = {};
@@ -753,8 +756,9 @@ export class PrepStationsScreen extends LitElement {
           showsRestOfOrder: station.showsRestOfOrder,
           printMovedSlips: station.printMovedSlips,
           printerIds: this.#printersOf(station.id),
-          timingOverrides: station.timingOverrides,
-          timingDefaults: station.timingDefaults,
+          warmAfterMinutes: station.warmAfterMinutes,
+          overdueAfterMinutes: station.overdueAfterMinutes,
+          forgottenAfterMinutes: station.forgottenAfterMinutes,
         }}
         .printers=${this.view.printers}
         .stations=${this.#colourUsers()}
@@ -789,9 +793,7 @@ export class PrepStationsScreen extends LitElement {
     this.draft = {
       name: "",
       colour: firstUnusedStationColour(used),
-      warmAfterMinutes: 5,
-      overdueAfterMinutes: 10,
-      forgottenAfterMinutes: 15,
+      ...DEFAULT_STATION_THRESHOLDS,
       printerIds: [],
     };
     this.fieldError = {};
