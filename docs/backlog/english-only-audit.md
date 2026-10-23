@@ -1,5 +1,7 @@
 # A913 — non-English text in general code: the audit
 
+_2026-10-23, A975: the receipt picture tool now uses English sample text and identifiers; its new output test runs in the server suite. Spain's QR caption comes from the unchanged fiscal invoice fixture, and receipt presentation stays Spanish or Basque. The audit below records the earlier sample wording._
+
 _2026-10-23, A974: the certificate-check harness now reads `WAITRON_CERT_CHECK_LEGAL_NAME`.
 See the [current operator instructions](../../apps/server/README.md#installing-or-replacing-the-aeat-certificate-after-setup). The earlier setting name below is historical._
 

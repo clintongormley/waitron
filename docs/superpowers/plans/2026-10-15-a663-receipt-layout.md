@@ -1,5 +1,7 @@
 # A663 — receipts and full invoices that are easier to read — Implementation Plan
 
+_2026-10-23, A975: `apps/server/scripts/receipt-look.ts` now uses English sample text and identifiers, including counted unit `item` and output name `full-set-menu`. Its rendered-output test runs in the server suite. The historical script and checks below describe the earlier Spanish samples; the receipt locales, amounts and tax rates remain unchanged._
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as `subagent_type: "implementer"`.
 
 **Goal:** Print the simplified receipt and the full invoice in the two layouts the owner approved on

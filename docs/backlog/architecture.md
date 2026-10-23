@@ -575,12 +575,14 @@ until A977).
   labels before that guard and passed after it. Qualify the selection path with country-pack
   choices carrying such a code before changing it. Its reachability through an installed pack
   has not been established. `git blame` attributes the selection expression to `082553a65`.
-- **A975 — remaining demo scripts and receipt picture tool.** The `*-demo.ts` scripts and
-  `apps/server/scripts/receipt-look.ts` still carry non-English sample text. Retire the fake-backend
-  demos after moving their useful checks into ordinary English tests. Move the worked VAT-return
-  example in `modelo-303-demo.ts` into Spain's reporting area. The demo seed itself is A972's;
-  the script-suite test fixtures belong to A976 below. Low priority; A977 cannot scan
-  `apps/*/scripts` until this work and the test-fixture cleanup land.
+- **A975 — remaining demo scripts.** The `*-demo.ts` scripts still carry non-English sample
+  text. Retire the fake-backend demos after moving their useful checks into ordinary English
+  tests. Move the worked VAT-return example in `modelo-303-demo.ts` into Spain's reporting area.
+  The receipt picture tool's sample identities, addresses, dishes and units are English; its
+  rendered-output test runs the tool and reads its PDFs. Spanish and Basque receipt presentation
+  stays selected, with the QR caption taken from the existing fiscal invoice fixture. The demo
+  seed itself is A972's; script-suite test fixtures belong to A976 below. Low priority; A977
+  cannot scan `apps/*/scripts` until the remaining demos and test-fixture cleanup land.
 - **A976 — remaining test-venue defaults.** The shared script-suite fixture
   (`apps/server/scripts/testing/venue.ts`) now uses English location, operation, street and
   administrator text (#2004). The demo-test provisioner
