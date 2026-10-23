@@ -154,6 +154,16 @@ function restart(
   );
 }
 
+/** A restart row written past drizzle's encoding, for stored values a correct writer never stores. */
+function insertRawRestart(stored: { proof: string; clockAt?: string; recordAt?: string }) {
+  const clockAt = stored.clockAt ?? new Date(R).toISOString();
+  const recordAt = stored.recordAt ?? new Date(T).toISOString();
+  suite.db.run(sql`insert into clock_stop_restarts
+    (id, node_id, person_id, restarted_at, clock_at, registro_id, record_at, proof)
+    values ('44444444-4444-4444-8444-444444444444', ${nodeId}, ${PERSON},
+      ${new Date(R).toISOString()}, ${clockAt}, ${latestId()}, ${recordAt}, ${stored.proof})`);
+}
+
 function chain() {
   return suite.db.all<{ s: number; at: string; huella: string; anterior: string | null }>(
     sql`select secuencia as s, fecha_hora_huso_gen_registro as at, huella, anterior_huella as anterior
@@ -250,6 +260,7 @@ describe("a restart lifts the stop for one step back", () => {
       "clock.behind_chain",
       "recorded",
     ]);
+    expect(refusals[0]!.params).toEqual(behind(T - 24 * H - S, T));
   });
 
   it("answers the same from the stop, the staff notice and the bell", async () => {
@@ -304,6 +315,7 @@ describe("a restart lifts the stop for one step back", () => {
 
     await restart({ registroId: other });
     expect(await attempt(R + M)).toBe("clock.behind_chain");
+    expect(refusals[0]!.params).toEqual(behind(R + M, T));
     await restart({ registroId: latest!.id });
     expect(await attempt(R + M)).toBe("recorded");
   });
@@ -364,15 +376,50 @@ describe("a restart whose stored heads a correct writer never stores covers noth
 
   it("a proof stored as JSON null", async () => {
     await attempt(T);
-    await withTransaction(suite.db, (tx) =>
-      tx.run(sql`insert into clock_stop_restarts
-        (id, node_id, person_id, restarted_at, clock_at, registro_id, record_at, proof)
-        values ('44444444-4444-4444-8444-444444444444', ${nodeId}, ${PERSON},
-          ${new Date(R).toISOString()}, ${new Date(R).toISOString()}, ${latestId()},
-          ${new Date(T).toISOString()}, 'null')`),
-    );
+    insertRawRestart({ proof: "null" });
     expect(await attempt(R + M)).toBe("clock.behind_chain");
     expect(refusals[0]!.params).toEqual(behind(R + M, T));
+  });
+
+  it("a proof that is not JSON, without throwing from the sale or the staff notice", async () => {
+    await attempt(T);
+    insertRawRestart({ proof: "not json" });
+    expect(await attempt(R + M)).toBe("clock.behind_chain");
+    expect(refusals[0]!.params).toEqual(behind(R + M, T));
+    const reading = { instant: new Date(R + M), offsetMinutes: 60 };
+    expect(
+      await withTransaction(suite.db, (tx) => FISCAL_STAFF_NOTICES[0]!.read({ tx, reading })),
+    ).toEqual([
+      {
+        key: "clock.behind_chain",
+        code: "clock.behind_chain",
+        severity: "error",
+        params: behind(R + M, T),
+      },
+    ]);
+  });
+
+  it.each([
+    ["clock_at", { clockAt: "garbage" }],
+    ["record_at", { recordAt: "garbage" }],
+  ] as const)("an unreadable %s, a reading 30 days back", async (_column, stored) => {
+    await attempt(T);
+    insertRawRestart({ proof: JSON.stringify({ heads: headsNow() }), ...stored });
+    expect(await attempt(T - 30 * 24 * H)).toBe("clock.behind_chain");
+    expect(refusals[0]!.params).toEqual(behind(T - 30 * 24 * H, T));
+  });
+
+  it("control: the same raw row with readable times covers the sale", async () => {
+    await attempt(T);
+    insertRawRestart({ proof: JSON.stringify({ heads: headsNow() }) });
+    expect(await attempt(R + M)).toBe("recorded");
+  });
+
+  it("a record_at other than the named record's own time", async () => {
+    await attempt(T);
+    await restart({ recordMs: T + H });
+    expect(await attempt(R - 30 * M)).toBe("clock.behind_chain");
+    expect(refusals[0]!.params).toEqual(behind(R - 30 * M, T));
   });
 
   it("control: the heads the database holds cover the sale", async () => {
@@ -394,6 +441,7 @@ describe("a restart over two chains", () => {
       "clock.behind_chain",
       "recorded",
     ]);
+    expect(refusals[0]!.params).toEqual(behind(R + 30 * M, R + 10 * H));
     expect(await withTransaction(suite.db, (tx) => chainHeads(tx))).toEqual(headsNow());
     expect(headsNow()).toEqual({ [older.nodeId]: 1, [nodeId]: 3 });
   });
@@ -421,6 +469,7 @@ describe("a restart over two chains", () => {
       "clock.behind_chain",
       "recorded",
     ]);
+    expect(refusals[0]!.params).toEqual(behind(R + 30 * M, R + 10 * H));
   });
 
   it("keeps the stop when heads leave out the older chain", async () => {

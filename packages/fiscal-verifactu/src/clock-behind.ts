@@ -1,8 +1,9 @@
 import "./errors.js";
-import { and, desc, eq, gt, max } from "drizzle-orm";
+import { and, desc, eq, gt, max, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { ClockBehindLatestRecord } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
 import { clockStopRestarts } from "./schema/clock-stop-restarts.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -61,6 +62,16 @@ function headOf(current: Record<string, number>, node: string): number {
   return Object.hasOwn(current, node) ? current[node]! : 0;
 }
 
+/** A stored proof read as text and parsed here, so text that is not JSON reads as null rather than
+ * throwing from the stop. */
+function parsedProof(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 /** The record with the latest generation time among those written after `heads`, any chain; a
  * node `heads` leaves out counts from 0. By time, not write order: a later write can carry an
  * earlier time. */
@@ -81,7 +92,7 @@ export async function latestWrittenAfter(
       .from(registrosFacturacion)
       .where(
         and(
-          eq(registrosFacturacion.nodeId, node as never),
+          eq(registrosFacturacion.nodeId, node as NodeId),
           gt(registrosFacturacion.secuencia, from),
         ),
       )
@@ -104,18 +115,20 @@ async function uncoveredBy(
     .select({
       clockAt: clockStopRestarts.clockAt,
       recordAt: clockStopRestarts.recordAt,
-      proof: clockStopRestarts.proof,
+      proof: sql<string>`${clockStopRestarts.proof}`,
     })
     .from(clockStopRestarts)
     .where(eq(clockStopRestarts.registroId, latest.id));
   if (restart === undefined) return latest;
-  const heads = storedHeads(restart.proof);
+  const heads = storedHeads(parsedProof(restart.proof));
   if (heads === null) return latest;
   const current = await chainHeads(tx);
   for (const [node, head] of heads) if (head > headOf(current, node)) return latest;
+  if (restart.recordAt.getTime() !== latest.at.getTime()) return latest;
   const accepted = restart.recordAt.getTime() - restart.clockAt.getTime();
   const gap = latest.at.getTime() - reading.instant.getTime();
-  if (gap > Math.min(accepted + CLOCK_BEHIND_MARGIN_MS, RESTART_CAP_MS)) return latest;
+  // Negated so that an unreadable stored time (NaN) covers nothing.
+  if (!(gap <= Math.min(accepted + CLOCK_BEHIND_MARGIN_MS, RESTART_CAP_MS))) return latest;
   const under = await latestWrittenAfter(tx, heads, current);
   if (under !== null && reading.instant.getTime() < under.at.getTime() - CLOCK_BEHIND_MARGIN_MS)
     return under;
