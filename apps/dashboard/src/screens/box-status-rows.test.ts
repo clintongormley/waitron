@@ -552,3 +552,72 @@ describe("boxStatusRows", () => {
     expect(other).toBe(0);
   });
 });
+
+describe("payments stopped while the box's clock reads behind its last sale", () => {
+  const CLOCK_BEHIND = notice("clock.behind_chain", "error", {
+    clockAt: "2025-03-14T09:12:00.000Z",
+    offsetMinutes: 60,
+    lastRecordAt: "2026-10-22T19:43:00.000Z",
+    lastRecordOffsetMinutes: 120,
+  });
+  const BELL = alert("clock.behind_chain", "box", {
+    severity: "error",
+    since: null,
+    params: { clockAt: "2025-03-14T09:12:00.000Z", lastRecordAt: "2026-10-22T19:43:00.000Z" },
+  });
+
+  it("colours the Sales and Clock rows", () => {
+    expect(partsOfNotice("clock.behind_chain")).toEqual(["sales", "clock"]);
+  });
+
+  it("stops Sales and Clock alone, worded as the stop, and tells the Clock row what to do", () => {
+    const { rows, other } = boxStatusRows(quietHealth({ notices: [CLOCK_BEHIND] }), [BELL]);
+    expect(rows.map((r) => [r.id, r.state])).toEqual([
+      ["sales", "stopped"],
+      ["tax", "ok"],
+      ["bucket", "ok"],
+      ["printers", "ok"],
+      ["readers", "ok"],
+      ["clock", "stopped"],
+      ["disk", "ok"],
+    ]);
+    expect(other).toBe(0);
+    expect(row(rows, "sales").line).toBe(t("box_status.notice.clock_behind_chain"));
+    expect(row(rows, "clock")).toMatchObject({
+      line: t("box_status.notice.clock_behind_chain"),
+      alerts: [BELL],
+      screen: null,
+    });
+    expect(row(rows, "clock").details).toEqual([
+      fill("box_status.clock.compared", { time: formatIsoMinute(MEASURED), seconds: "2" }),
+      t("box_status.clock.behind_chain_fix"),
+    ]);
+  });
+
+  it("leaves the Clock row's details as they were when the stop is not on", () => {
+    const { rows } = boxStatusRows(quietHealth({ notices: [CLOCK_UNUSABLE] }), []);
+    expect(row(rows, "clock").details).not.toContain(t("box_status.clock.behind_chain_fix"));
+  });
+
+  it("keeps a full disk's words first on Sales", () => {
+    const { rows } = boxStatusRows(quietHealth({ notices: [CLOCK_BEHIND, DISK_FULL] }), []);
+    expect(row(rows, "sales")).toMatchObject({
+      state: "stopped",
+      line: t("box_status.notice.disk_full"),
+    });
+    expect(row(rows, "clock").line).toBe(t("box_status.notice.clock_behind_chain"));
+    expect(row(rows, "disk").state).toBe("stopped");
+  });
+
+  it("puts a wrong clock's words before the stop's on Sales", () => {
+    const { rows } = boxStatusRows(quietHealth({ notices: [CLOCK_BEHIND, CLOCK_UNUSABLE] }), []);
+    expect(row(rows, "sales").line).toBe(t("box_status.notice.clock_unusable"));
+  });
+
+  it("reads the stop's words in Spanish", () => {
+    setLocale("es");
+    const { rows } = boxStatusRows(quietHealth({ notices: [CLOCK_BEHIND] }), []);
+    expect(row(rows, "sales").line).toBe(es["box_status.notice.clock_behind_chain"]);
+    expect(row(rows, "clock").details).toContain(es["box_status.clock.behind_chain_fix"]);
+  });
+});

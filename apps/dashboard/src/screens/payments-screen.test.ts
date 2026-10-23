@@ -1702,6 +1702,30 @@ describe("card payments stuck after a restart", () => {
     );
   });
 
+  it("says a check refused while the box's clock reads behind its last sale is not recorded, and why", async () => {
+    const { el } = await mount(
+      stubApi({
+        listStuckPayments: vi.fn().mockResolvedValue(STUCK),
+        resolveStuckPayment: vi.fn().mockRejectedValue({
+          code: "clock.behind_chain",
+          status: 409,
+          params: {
+            clockAt: "2025-03-14T09:12:00.000Z",
+            offsetMinutes: 60,
+            lastRecordAt: "2026-10-22T19:43:00.000Z",
+            lastRecordOffsetMinutes: 120,
+          },
+        }),
+      }),
+    );
+
+    await confirmResolve(el);
+
+    expect(result(el)!.textContent!.trim()).toBe(
+      "Order 12 · Terrace 3: Not recorded: the box's clock reads earlier than its last sale. Sort it out on the Box status page.",
+    );
+  });
+
   it("keeps the section's generic failure for a check that failed inside the server", async () => {
     const { el } = await mount(
       stubApi({
