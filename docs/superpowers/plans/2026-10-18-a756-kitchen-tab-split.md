@@ -1255,6 +1255,9 @@ outside the worktree, in `/Users/clintongormley/waitron-campaign-c/a756-4-shots/
 
 Each is planned when its blocker lands; these notes are the starting decisions, not tasks.
 
+2026-10-23: A773-1 landed (#1897), so PRs 5–8 no longer wait for it; re-check the line numbers
+below against `main` when each is planned.
+
 **PR 4 — Reminder to fire the next course, per department:** planned 2026-10-23, after A773-1 landed — see [PR 4](#pr-4--the-reminder-to-fire-the-next-course-per-department) above.
 
 **PR 5 — Late flags on each station. Waits for A773-1:** `working-order.ts` imports the timing

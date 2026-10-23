@@ -140,20 +140,16 @@ See [A773's spec §7](../superpowers/specs/2026-10-16-a773-courses-and-groups-de
 [Prep stations](mockups/a756-kitchen-settings/04-prep-stations-every-station.png); the canvas they
 were drawn on is [here](https://claude.ai/artifact/GKV4JTKfn1hpbxxoskbpBT) (owner's account only).
 
-What waits. Each part is planned when its blocker lands; the starting decisions are in the plan,
+What is left. The starting decisions are in the plan,
 `docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md` → "Parts that wait".
 
 2026-10-23: A773-1 landed on 2026-10-19 (#1897), so PRs 5–8 are buildable and the #1854 rename
 under Open points is due.
 
-- **PR 5 — late flags on each station.** Waits for A773-1, which edits `working-order.ts`'s timing
-  imports and many of the files that read or seed the timing tables.
-- **PR 6 — identical dishes, held courses and MOVED slips on each station.** Waits for A773-1, which
-  rewrites `planKitchenTickets`, `printMovedSlips` and `printHoldTickets`.
-- **PR 7 — done on the screen on each station.** Waits for A773-1, which edits the till files the
-  mode travels through (`till-app.ts`, `till-station-screen.ts`, `station-queue.ts`).
-- **PR 8 — changes after sending, three values, on each station.** Waits for A773-1, whose Recall
-  reads `edit_sent_lines` in the meantime.
+- **PR 5 — late flags on each station.**
+- **PR 6 — identical dishes, held courses and MOVED slips on each station.**
+- **PR 7 — done on the screen on each station.**
+- **PR 8 — changes after sending, three values, on each station.**
 - **The Kitchen tab goes** in whichever change removes its last control: after PRs 4–8 only fire
   control is left, which A773-2 removes with `locations.fire_control`.
 
