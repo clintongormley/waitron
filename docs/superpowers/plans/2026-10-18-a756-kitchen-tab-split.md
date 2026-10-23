@@ -620,12 +620,13 @@ commit and hand over; Task 10 is separate on purpose.
 Planned 2026-10-23, after A773-1 (#1897) and A773-2 PR A (#1944) landed. Branch
 `feat/a756-4-reminder-per-department`, worktree
 `/Users/clintongormley/workspace/worktrees/waitron-feat-a756-4-reminder-per-department`, cut from
-`main` at `b85119762`. Ledger: `docs/handoffs/2026-10-23-a756-4-reminder-per-department.md`.
+`main` at `b85119762`. Ledger: `~/waitron-campaign-c/item-a756-ledger.md`; every task ends by
+updating it (done, changed test checks, next step).
 **Review path: FULL** — a migration, and a change to a contract between packages (the venue-service
 seat in `packages/module/src/module.ts`). Implementers are dispatched as
 `subagent_type: "implementer"`.
 
-**Goal.** "Reminder to fire the next group" stops being one venue-wide value and becomes each
+**Goal.** The reminder to fire the next course stops being one venue-wide value and becomes each
 department's own, set on the department dialog's Service tab under a new "Courses and the kitchen"
 section; a party's held group falls due by its own department's minutes. The Kitchen tab loses the
 dropdown. What the till shows (the held chip on the floor and the Held line of the Sent panel) and
@@ -644,8 +645,9 @@ the wire shape it reads (`reminder: ReleaseReminder | null`) do not change.
 - dashboard app: `apps/dashboard/src/dashboard-app.test.ts`,
   `apps/dashboard/src/testing/department-receipt-app-fixture.ts` (fixtures only).
 - docs: the guides `apps/server/src/guide/{en,es}/kitchen-service.md`,
-  `docs/developers/design-system.md`, `docs/backlog.md`, `docs/backlog/kitchen.md`, and the A664
-  audit's two table rows.
+  `docs/developers/design-system.md`, `docs/backlog.md`, `docs/backlog/kitchen.md`,
+  `docs/backlog/dashboard.md` (a dated pointer on one Decisions entry), and the A664 audit's two
+  table rows.
 
 ### PR 4 decisions (each with its receipt)
 
@@ -689,8 +691,8 @@ the wire shape it reads (`reminder: ReleaseReminder | null`) do not change.
    adds the case that shows it.
 
 2. **A party follows the department of its first table — the zone `partyZone` already names.** A
-   held group belongs to a party (`order_groups.party_id`; a bill with no party has no group,
-   `packages/db/src/schema/orders.ts:211-212`), so the reminder is a party's, not a table's. The
+   held group belongs to a party (`order_groups.party_id`, not null,
+   `packages/db/src/schema/order-groups.ts:22`), so the reminder is a party's, not a table's. The
    party's service zone is already defined once: "the service zone of the party's earliest active
    table" (`partyZone` and `partyStateAndZone`, `apps/server/src/parties.ts:201-227`), and it is
    the zone a party's new bill is opened in (`parties.ts:168-173`) and its orders are priced in
@@ -699,12 +701,19 @@ the wire shape it reads (`reminder: ReleaseReminder | null`) do not change.
    table → its zone → that zone's department's minutes. A party at no active table, or whose
    zone has no department, has no reminder — as a table with no department needs no clearing and
    shows no service steps (A757 slice 1, Decision 3; slice 8, Decision 4). `departments.active` is
-   not filtered, as slice 1 did not (`packages/venue-service/src/table-clearing.ts:15-17`).
+   not filtered, as slice 1 did not (`packages/venue-service/src/table-clearing.ts:15-17`). That
+   differs from `resolveZoneContext`, which takes an order only in an active zone of an active
+   department (`packages/venue-service/src/operations.ts:554-555`), and the difference is
+   harmless: deleting a department deactivates its zones in the same step
+   (`packages/venue-service/src/service-delete.ts:343-345`), so a party still seated there takes no
+   new order and keeps the minutes its department last had — read, not run. The seat's doc comment
+   says so.
    **Today a party cannot sit in two zones at once,** so the rule is a guard: joining a table in
    another zone is refused `service_zone.join_mismatch` (`apps/server/src/table-actions.ts:170-176`),
    a floor merge across zones is refused the same way (`apps/server/src/floor-today-merges.ts:175-180`),
    and moving guests takes the party off all its tables (`table-actions.ts:80-125`) — read, not run;
-   Task 13's tests build the two-zone shape by inserting `party_tables` rows directly.
+   Task 13's tests build every unusual shape (two zones, a zone with no department) by direct
+   writes to `party_tables` and `dining_tables`, because no real path builds them.
    **Worked example.** Restaurant has 10 minutes, Terrace 5. A party sits at R4 (Restaurant) at
    20:00; its mains are served at 21:00, so its desserts fall due at 21:10. Were it also holding T2
    (Terrace, joined later), it would still read Restaurant's 10. Moved wholly to T2, it reads
@@ -728,7 +737,7 @@ the wire shape it reads (`reminder: ReleaseReminder | null`) do not change.
    feeding the Sent panel through `GET /api/parties/:id/current-orders`, `apps/server/src/till-api.ts:3173`);
    the seat key list pins its name (`packages/venue-service/src/service.test.ts:90`). The venue
    route's helpers have other callers that go in Task 14: `readReleaseReminderMinutes` at
-   `routes.ts:767` and `:786`, `writeReleaseReminderMinutes` at `routes.ts:852` and in six server
+   `routes.ts:767` and `:786`, `writeReleaseReminderMinutes` at `routes.ts:852` and in five server
    test files (Task 13). No test double implements the seat (`git grep -n 'readPrintMovedSlips[:(]'`
    finds only the real seat and its callers). `readReleaseReminders(tx, partyIds)` and
    `readCurrentOrders(tx, partyId)` keep their signatures, so their test call sites and
@@ -738,7 +747,7 @@ the wire shape it reads (`reminder: ReleaseReminder | null`) do not change.
    `pnpm --filter @waitron/server exec vitest run src/current-orders.test.ts src/draft-recall.test.ts src/line-service-operations.test.ts src/line-service-projections.test.ts src/line-service-removal.test.ts src/order-groups.test.ts src/party-main-bill.test.ts src/table-signals.test.ts src/till-api.groups.test.ts`
    printed `Tests 2 failed | 573 passed (575)` — only `current-orders.test.ts`'s "shows no reminder
    at all while the venue has reminders off" and "measures from the venue's interval…", the two
-   cases that set a value other than 10. With the six files' `writeReleaseReminderMinutes(` swapped
+   cases that set a value other than 10. With the five files' `writeReleaseReminderMinutes(` swapped
    for an every-department helper: `Tests 575 passed (575)`, and filtered to
    `-t "[Rr]emind|interval|due|snooze"` `Tests 52 passed | 97 skipped`. So every party those
    suites seat is in a zone with a department, and no switch call needs moving after a table's
@@ -763,17 +772,28 @@ the wire shape it reads (`reminder: ReleaseReminder | null`) do not change.
    `:340`, `saveActionState` at `:487`, `:619`, `:747`) keeps Save quiet and disabled until it
    changes. `DepartmentSettingsInput` (`client.ts:44-53`) gains a required
    `releaseReminderMinutes: number | null`, so every save sends it, as it sends `needsClearing`.
-   **Product text.** The section heading is the mock-up's: EN `Courses and the kitchen`, ES
-   `Cursos y cocina` (new key `venue.courses_and_kitchen`). The field keeps today's keys and words
-   (`strings.ts:526-530`, `:1425-1429`): "Reminder to fire the next group" / "Aviso para marchar el
-   siguiente grupo", Off / Deshabilitado, "{n} minutes" / "{n} minutos", and its hint. The mock-up's
-   "Remind to send the next course after" was drawn before A773 renamed sending a held course to
-   firing a group; today's label matches the till's own "Time to fire this group" /
-   "Es hora de marchar este grupo" (`apps/till/src/i18n/strings.ts:1092`, `:2814`).
+   **Product text.** Quoted from the owner-approved mock-up 03, with one word changed by a later
+   owner decision. Mock-up 03 (approved 2026-10-16) draws the section `Courses and the kitchen` and
+   the field `Remind to send the next course after`, showing `10 minutes`. A773's "Words used here"
+   (owner brainstorms of 2026-10-16 and 2026-10-17, after the mock-ups: "Every decision in the
+   revision is the owner's", `docs/superpowers/specs/2026-10-16-a773-courses-and-groups-design.md:3-5`,
+   `:70-83`) makes **Send** the step that puts a dish into Held and **Fire** "cook this now"; a held
+   course has already been sent, so "send" would now name the wrong step, and A773 §7.2 calls this
+   setting "the reminder to fire the next course" (`:506-507`). "Course" stays: A773 keeps it in
+   that sentence, so it is not overridden. So: EN section `Courses and the kitchen`, field
+   `Remind to fire the next course after`; ES section `Cursos y cocina`, field
+   `Avisar para marchar el siguiente curso tras` ("marchar" for fire as the till's
+   `table.reminder_due` says, `apps/till/src/i18n/strings.ts:2814`; "curso" as its
+   `table.course_label`, `:2791`). New key `venue.courses_and_kitchen`; the values of
+   `venue.release_reminder` change (`packages/venue-service/src/dashboard/strings.ts:526`, `:1425`).
+   Off / Deshabilitado and "{n} minutes" / "{n} minutos" stay. The hint stays as it is, and stays
+   the dropdown's `hint`, by the owner's decision of 2026-10-17
+   (`docs/backlog/dashboard.md:697-700`). The departures from the mock-up, for the PR description:
+   the one word above, the Off choice (today's), and no "Who sends a held course" buttons (A773 §7.2).
    **The range is not changed.** A773 §3.4 says "N = 0 meaning at once (owner, 2026-10-17)", and
    `releaseReminder` handles 0 (`order-groups.ts:1529-1532`), but the route refuses 0
-   (`routes.ts:277`) and the list offers 5–30. Moving a setting is not the place to widen it; Task
-   18 records the gap in the backlog.
+   (`routes.ts:277`) and the list offers 5–30. This PR does not build it; Task 18 adds it to the
+   backlog as work to do.
 
 5. **Docs.** No user guide describes the reminder today
    (`git grep -n -i -E 'remind|recordatorio' -- apps/server/src/guide` finds only service steps
@@ -782,7 +802,8 @@ the wire shape it reads (`reminder: ReleaseReminder | null`) do not change.
    (`{#request-cooking}`, both languages) saying where each department sets it. design-system.md's
    "Edit department is tabbed" paragraph (`:5458-5461`) gains the section; the A664 audit's
    `departments` and `service_settings` rows (`docs/superpowers/specs/2026-10-16-a664-personal-data-audit.md:162`, `:170`)
-   gain dated pointers as slice 1's did; `docs/backlog.md`'s A756 entry (`:1570-1572`) and its
+   gain dated pointers as slice 1's did; the Decisions entry on the Kitchen panel's two dropdown
+   hints (`docs/backlog/dashboard.md:697-700`) gains a dated pointer, never a deletion; `docs/backlog.md`'s A756 entry (`:1570-1572`) and its
    detail (`docs/backlog/kitchen.md:142-155`) drop PR 4 and keep PRs 5–8.
 
 6. **No live-query or error-code change.** The department dialog's model watch,
@@ -822,7 +843,8 @@ the wire shape it reads (`reminder: ReleaseReminder | null`) do not change.
   `src/service.ts` (list the new seat), `src/service.test.ts` (key list),
   `packages/module/src/module.ts:1449-1450` (the new seat beside the old)
 - Modify: `packages/venue-service/src/operations.ts:224-255` (`updateDepartment` input gains
-  `releaseReminderMinutes?: number | null`), `:752-792` (`DepartmentEditInput`,
+  `releaseReminderMinutes?: number | null`, and its write condition at `:237-241` gains
+  `|| input.releaseReminderMinutes !== undefined`), `:752-792` (`DepartmentEditInput`,
   `saveDepartmentEditSettings` passes it through)
 - Modify: `packages/venue-service/src/routes.ts:747-773` (model field), `:857-905` (PUT body)
 - Test: `packages/venue-service/src/routes.test.ts` (beside the Needs clearing cases, `:590-644`)
@@ -836,7 +858,8 @@ the wire shape it reads (`reminder: ReleaseReminder | null`) do not change.
   — every active department of `cfg.locationId`.
 - module seat, doc comment: "Each of these zones' department's minutes after the work ahead is
   served that a held group falls due; null where that department has reminders off. A zone with no
-  department is absent."
+  department is absent. An inactive department still answers: deleting one deactivates its zones,
+  so a party seated there takes no new order and keeps its department's last minutes."
 - GET `/management-api/venue-service` gains `releaseReminderMinutesByDepartment`.
 - PUT `…/departments/:departmentId/settings` accepts optional `releaseReminderMinutes` (Decision 4);
   `"releaseReminderMinutes"` joins `onlyKeys`.
@@ -853,6 +876,8 @@ the wire shape it reads (`reminder: ReleaseReminder | null`) do not change.
   - `"answers an empty list with an empty map"`.
   - `"lists every active department's minutes"` — A 25, B null, C 5 with `active = 0` →
     `toEqual({ [A]: 25, [B]: null })`.
+  - `"updateDepartment writes a reminder given alone"` — `updateDepartment(tx, cfg, A, { releaseReminderMinutes: 5 })`
+    → the row reads 5 (fails while the write condition leaves the field out).
   In `routes.test.ts` (with `settingsFixture()` and `departmentSettings`):
   - `"saves a department's reminder and lists it in the model"` — PUT
     `{ ...departmentSettings, releaseReminderMinutes: 15 }` → 204, model
@@ -877,7 +902,7 @@ the wire shape it reads (`reminder: ReleaseReminder | null`) do not change.
 - [ ] **Step 6: Guards.** The seven root suites and the two package runs of Decision 1, each
   `Tests` count read; `pnpm --filter @waitron/venue-service typecheck`,
   `pnpm --filter @waitron/module typecheck`, `pnpm exec prettier --check <changed files>`.
-- [ ] **Step 7: Commit** `git commit -s -m "Each department stores its own reminder to fire the next group (A756 PR 4)"`.
+- [ ] **Step 7: Commit** `git commit -s -m "Each department stores its own reminder to fire the next course (A756 PR 4)"`, then update the ledger.
 
 **Assertions changed:** `service.test.ts`'s key list gains one name (the PR adds the seat).
 
@@ -912,30 +937,36 @@ the wire shape it reads (`reminder: ReleaseReminder | null`) do not change.
   `new Error("setReleaseReminderInEveryDepartment: the database has no department yet")` when none
   (as `apps/server/src/testing/needs-clearing.ts` does).
 
-- [ ] **Step 1: Write the failing tests** in `current-orders.test.ts`, using `servedUpToGroupTwo`,
-  `floorReminder` and `currentOrders` from the file and `departmentOf` from
-  `./testing/service-steps.js`; a second department and zone come from `createDepartment` and
-  `createServiceZone` (`@waitron/venue-service`), its table from `createTable`:
-  - `"follows each party's department: Off for one, 10 minutes for another"` — party A at the
-    venue's table, party B at a table in department B; B's minutes set to null by direct
-    `update departments` → A's floor and Current orders reminder due `T(15)`, B's floor reminder
-    and Current orders reminder `toBeNull()`.
+- [ ] **Step 1: Write the failing tests** in `current-orders.test.ts`. Every party is built with
+  `servedUpToGroupTwo(v)` at the venue's own table, so it can take its orders (a zone with no
+  department takes none: `resolveZoneContext` throws `service_zone.not_found`,
+  `packages/venue-service/src/operations.ts:559`). Only then is its table moved, by direct writes:
+  `update dining_tables set zone_id = …`, or a `party_tables` row inserted. No real path builds
+  these shapes (Decision 2); the tests say so in a comment. A second department and its zone come
+  from `createDepartment` and `createServiceZone` (`@waitron/venue-service`); the venue's own
+  department from `departmentOf` (`./testing/service-steps.js`):
+  - `"follows each party's department: Off for one, 10 minutes for another"` — parties A and B each
+    from `servedUpToGroupTwo`; B's table moved into department B's zone, B's minutes set to null by
+    direct `update departments` → A's `floorReminder` and Current orders reminder due `T(15)`; B's
+    both `toBeNull()`.
   - `"reads the department of the party's first table, and the next one's once the first is left"` —
-    A at its table (department A, 10); a `party_tables` row inserted for a department B table
-    (B, 5) with a later `joined_at` → due `T(15)`; then `update party_tables set left_at = …` for
-    the first table → due `T(10)`. (The two-zone shape is inserted directly: no path makes it,
-    Decision 2.)
-  - `"shows no reminder for a party whose table's zone has no department"` — a `floor_zones` row
-    with no policy, a table in it, a party with a held group whose work ahead is served, every
-    department at 10 → `toBeNull()` on the floor and in Current orders.
+    party A from `servedUpToGroupTwo` (department A, 10 → due `T(15)`); a table made in the venue's
+    zone, moved into department B's zone (B at 5), and a `party_tables` row for it with a later
+    `joined_at` → still `T(15)`; then `update party_tables set left_at = …` for the first table →
+    `T(10)`.
+  - `"shows no reminder for a party whose table's zone has no department"` — a party from
+    `servedUpToGroupTwo`, then its table moved into a `floor_zones` row inserted with no
+    `zone_service_policies` row, every department at 10 → `toBeNull()` on the floor and in Current
+    orders.
   - `"asks venue-service once for the whole floor"` — `vi.spyOn(VENUE_SERVICE, "readReleaseReminderMinutesByZone")`
     over `listTablesWithState` with two seated parties: one call.
   In `configuration-transfer.test.ts`, modelled on `"carries a department's Needs clearing switch to the importing venue"`
   (`:2742-2779`): `"carries a department's reminder minutes to the importing venue"` — 25 at the
-  source → 25 imported.
+  source → 25 imported. It is a check that the column travels with no code (Decision 1), not a
+  failing test: it passes as soon as Task 12's column exists.
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/server exec vitest run src/current-orders.test.ts src/configuration-transfer.test.ts -t "department|first table|once for the whole floor"`
-  — the department cases fail (the transfer case may already pass; it pins Decision 1).
+  — the three department cases fail; the transfer check passes already.
 - [ ] **Step 3: Implement** `partyFirstZones`, `partyReminderMinutes`, the two readers and the helper.
 - [ ] **Step 4: Switch the setup of the five files.** Replace
   `writeReleaseReminderMinutes` in their `@waitron/venue-service` imports with
@@ -949,7 +980,8 @@ the wire shape it reads (`reminder: ReleaseReminder | null`) do not change.
   `pnpm --filter @waitron/server exec vitest run src/current-orders.test.ts src/configuration-transfer.test.ts src/draft-recall.test.ts src/line-service-operations.test.ts src/line-service-projections.test.ts src/line-service-removal.test.ts src/order-groups.test.ts src/party-main-bill.test.ts src/table-signals.test.ts src/till-api.groups.test.ts`
   — every file passes; read the count. `git grep -n writeReleaseReminderMinutes -- apps` prints nothing.
 - [ ] **Step 6:** `pnpm --filter @waitron/server typecheck`, `pnpm --filter @waitron/till typecheck`,
-  prettier; commit `git commit -s -m "A party's held group falls due by its own department's reminder (A756 PR 4)"`.
+  prettier; commit `git commit -s -m "A party's held group falls due by its own department's reminder (A756 PR 4)"`,
+  then update the ledger.
 
 **Assertions changed:** none. Setup changed in the five files; two test names reworded.
 
@@ -980,7 +1012,8 @@ the wire shape it reads (`reminder: ReleaseReminder | null`) do not change.
 - [ ] **Step 4: Run.** `pnpm --filter @waitron/venue-service exec vitest run src/kitchen-notices.test.ts src/routes.test.ts src/service.test.ts src/release-reminders.test.ts`
   — PASS. Then the guard runs of Task 12 Step 6, plus `pnpm exec vitest run scripts/module-seams.test.ts`.
 - [ ] **Step 5:** typecheck `@waitron/venue-service`, `@waitron/module`, `@waitron/server`; prettier;
-  commit `git commit -s -m "The venue-wide reminder setting goes; one migration for the move (A756 PR 4)"`.
+  commit `git commit -s -m "The venue-wide reminder setting goes; one migration for the move (A756 PR 4)"`,
+  then update the ledger.
 
 **Assertions changed** (the column and route are removed): `kitchen-notices.test.ts` — the
 `releaseReminderMinutes` key leaves the `serviceSettings` row `toEqual`s at `:1506`, `:1540`,
@@ -991,8 +1024,8 @@ describe at `:2713` go; `service.test.ts` — one key leaves the list.
 
 **Files:**
 - Modify: `packages/venue-service/src/dashboard/service-settings-panel.ts` (delete `REMINDER_MINUTES` `:11`,
-  `#releaseReminder` `:176-216`, the `Field` member `:17` and the call at `:172`; Task 16 builds the
-  dropdown again in the dialog)
+  `#releaseReminder` `:176-216`, the `Field` member `:17` and the call at `:172`; Task 16b builds
+  the dropdown again in the dialog)
 - Modify: `packages/venue-service/src/dashboard/client.ts` (`VenueServiceModel`: replace
   `releaseReminderMinutes` `:106-108` with
   `releaseReminderMinutesByDepartment: Record<string, number | null>`; `VenueServiceSettingsView`
@@ -1009,16 +1042,28 @@ describe at `:2713` go; `service.test.ts` — one key leaves the list.
 - Test: `service-settings-panel.test.ts`, `service-settings-panel.a11y.test.ts`,
   `service-settings-panel.exempt.test.ts`, `client.test.ts` (all in `packages/venue-service/src/dashboard/`)
 
-- [ ] **Step 1: Edit the tests.** Delete `describe("the setting for the reminder to fire the next group")`
-  (`service-settings-panel.test.ts:617-771`; its behaviour moves to Task 16's cases), the reminder
-  half of the read-only case at `:54-73`, the a11y case `"release reminder setting accessibility (%s)"`
-  (`a11y.test.ts:133`), the `releaseReminderMinutes` entry of `exempt.test.ts:126-130` and its API
-  stub `:67-68`, and `client.test.ts`'s `"stores the release reminder's minutes, or none for off"` (`:308`); drop the
-  key from the settings-view fixtures (`:22` and the others the grep shows). Change
-  `"shows the stored value after the held-groups switch and before the reminder"` (`:501-518`) to
-  `"shows the stored value last, after the held-groups switch"` and expect `printMovedSlips` to be
-  the last field. Add `"the Kitchen tab draws no reminder"` —
-  no `wt-combobox[name="releaseReminderMinutes"]`.
+- [ ] **Step 1: Edit the tests.**
+  - Delete `describe("the setting for the reminder to fire the next group")`
+    (`service-settings-panel.test.ts:617-771`). Its behaviours move to Task 16b, each named there:
+    the stored value and default, a stored value the list does not offer, choosing the shown value
+    (`:722`) or Off (`:734`) again saving nothing, the change staying inside its form (`:746`), and
+    Spanish (`:756`). The refused-save and disabled-while-saving cases belong to the panel's
+    save-at-once pattern, which the dialog does not use; the dialog's refusal case replaces them.
+  - `"gives the two kitchen settings' dropdowns their hints"` (`:773-791`) keeps its grouping half
+    and loses its reminder half (search, placeholder, value, hint "marked served", trigger text
+    "Off"), which Task 16b adds at the dialog; rename it `"gives the grouping dropdown its hint"`.
+  - The reminder half of the read-only case (`:54-73`); the a11y case
+    `"release reminder setting accessibility (%s)"` (`a11y.test.ts:133`); the
+    `releaseReminderMinutes` entry of `exempt.test.ts:126-130` and its API stub `:67-68`;
+    `client.test.ts`'s `"stores the release reminder's minutes, or none for off"` (`:308`).
+  - `client.test.ts`: the key leaves the read-only settings fixture at `:187`, which is also the
+    case's expected value; at `:206` the model fixture takes `releaseReminderMinutesByDepartment: {}`;
+    the key leaves the expected `loadSettings` answer at `:218`. The settings-view fixture at
+    `service-settings-panel.test.ts:22` and the others the grep shows lose it.
+  - `"shows the stored value after the held-groups switch and before the reminder"` (`:501-518`)
+    becomes `"shows the stored value last, after the held-groups switch"`, expecting
+    `printMovedSlips` to be the last field.
+  - Add `"the Kitchen tab draws no reminder"` — no `wt-combobox[name="releaseReminderMinutes"]`.
 - [ ] **Step 2: Run and watch the new case fail.**
   `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/service-settings-panel.test.ts src/dashboard/service-settings-panel.a11y.test.ts src/dashboard/service-settings-panel.exempt.test.ts src/dashboard/client.test.ts`
 - [ ] **Step 3: Remove** the dropdown, the field, the client method; change the model type; sweep
@@ -1027,64 +1072,103 @@ describe at `:2713` go; `service.test.ts` — one key leaves the list.
   and `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts` (browser runs;
   check free memory first) — PASS. The grep of Review focus 4 shows no model fixture left.
 - [ ] **Step 5:** typecheck `@waitron/venue-service`, `@waitron/dashboard`; prettier; commit
-  `git commit -s -m "The Kitchen tab no longer sets the reminder to fire the next group (A756 PR 4)"`.
+  `git commit -s -m "The Kitchen tab no longer sets the reminder to fire the next course (A756 PR 4)"`,
+  then update the ledger.
 
-**Assertions changed** (A756 moves the setting off the Kitchen tab): the deleted cases in Step 1,
-and the field-order case, whose last field is now MOVED slips.
+**Assertions changed** (A756 moves the setting off the Kitchen tab): the deleted and moved cases of
+Step 1; the reminder half of `service-settings-panel.test.ts:773`; `client.test.ts:187` and `:218`
+(the key leaves expected values); the field-order case, whose last field is now MOVED slips.
 
-### Task 16: the Service tab sets the department's reminder
+### Task 16a: the department save carries the reminder
 
 **Files:**
 - Modify: `packages/venue-service/src/dashboard/client.ts:44-53` (`DepartmentSettingsInput` gains
   `releaseReminderMinutes: number | null`)
-- Modify: `packages/venue-service/src/dashboard/department-settings.ts` (`fieldTab`
-  `releaseReminderMinutes: "service"`; `equal`; `source` reads
-  `this.model!.releaseReminderMinutesByDepartment[row.id] ?? null`; the refusal field list; the
-  section and combobox of Decision 4 after "Orders and payment", built as the Kitchen tab's was,
-  with `error=${errors.releaseReminderMinutes ?? ""}` and `?disabled=${disabled}`, its change
-  calling `this.changed("releaseReminderMinutes", value === "" ? null : Number(value))`)
-- Modify: `packages/venue-service/src/dashboard/strings.ts` (`venue.courses_and_kitchen`, EN and ES)
+- Modify: `packages/venue-service/src/dashboard/department-settings.ts` — the draft only, no new
+  markup: `fieldTab` `releaseReminderMinutes: "service"`; `equal`; the refusal field list; and
+  `source` reading `this.model!.releaseReminderMinutesByDepartment[row.id] ?? null`, with the
+  one-line comment "One model read lists the departments and keys every active one here, so the
+  fallback only types the lookup."
 - Modify (exact bodies): the department-save expectations that already carry `needsClearing`
   (`client.test.ts`, `department-edit-dialog.test.ts`, `department-settings.test.ts`,
   `department-settings.unsaved.test.ts`, `venue-departments-policy.test.ts`,
   `venue-departments-shell.actions.test.ts` — `git grep -n -E 'needsClearing: (false|true)'`)
   gain `releaseReminderMinutes: null`, the value a `{}` fixture gives
+- Test: `packages/venue-service/src/dashboard/department-settings.test.ts`
+
+**Interfaces — produces:** `DepartmentSettingsInput.releaseReminderMinutes: number | null`, always
+sent; the draft field of the same name, which Task 16b's dropdown changes through
+`this.changed("releaseReminderMinutes", …)`.
+
+- [ ] **Step 1: Write the failing test** in `department-settings.test.ts`:
+  `"saving a name change sends the stored minutes unchanged"` — model
+  `releaseReminderMinutesByDepartment: { d1: 25 }`, edit the name, Save → the write's body
+  `toMatchObject({ name: <new name>, releaseReminderMinutes: 25 })`.
+- [ ] **Step 2: Run and watch it fail.**
+  `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/department-settings.test.ts -t "stored minutes"`
+- [ ] **Step 3: Implement** the type and the draft field.
+- [ ] **Step 4: Run** `pnpm --filter @waitron/venue-service exec vitest run src/dashboard` (free
+  memory first). The failures expected are the exact-body assertions listed above; add only
+  `releaseReminderMinutes: null` to each. Any other red case is a stop. Then
+  `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts` — PASS.
+- [ ] **Step 5:** typecheck `@waitron/venue-service`, `@waitron/dashboard`; prettier; commit
+  `git commit -s -m "The department save carries its reminder to fire the next course (A756 PR 4)"`,
+  then update the ledger.
+
+**Assertions changed:** the exact-body expectations listed gain `releaseReminderMinutes: null`
+(the PR adds the field to the department save); nothing else.
+
+### Task 16b: the Service tab draws the reminder
+
+**Files:**
+- Modify: `packages/venue-service/src/dashboard/department-settings.ts` (the section and dropdown
+  of Decision 4 after "Orders and payment", built as the Kitchen tab's was — `REMINDER_MINUTES`,
+  the stored-value rule, `search="auto"`, `placeholder` Off, the `hint` — with
+  `error=${errors.releaseReminderMinutes ?? ""}`, `?disabled=${disabled}`, and a `wt-change`
+  handler that stops the event and calls
+  `this.changed("releaseReminderMinutes", value === "" ? null : Number(value))`)
+- Modify: `packages/venue-service/src/dashboard/strings.ts` (`venue.courses_and_kitchen`; the new
+  values of `venue.release_reminder`; EN and ES as Decision 4)
 - Test: `department-settings.test.ts`, `department-settings.unsaved.test.ts`,
   `department-settings.a11y.test.ts`
 
 - [ ] **Step 1: Write the failing tests** in `department-settings.test.ts`:
   - `"shows the reminder under Courses and the kitchen, between Orders and payment and Table states"` —
     the Service panel's `h3` texts in order `["Orders and payment", "Courses and the kitchen", "Table states"]`;
-    `wt-combobox[name=releaseReminderMinutes]` labelled "Reminder to fire the next group", value
-    `"10"` for `releaseReminderMinutesByDepartment: { d1: 10 }`, `""` (Off) for `{ d1: null }`.
+    `wt-combobox[name=releaseReminderMinutes]` labelled "Remind to fire the next course after",
+    value `"10"` for `releaseReminderMinutesByDepartment: { d1: 10 }`.
+  - `"gives the reminder dropdown its search, Off and its hint"` (moved from
+    `service-settings-panel.test.ts:773`) — `{ d1: null }` → `[search, placeholder, value]`
+    `toEqual(["auto", "Off", ""])`, `hint` contains "marked served", the `.trigger`'s text "Off".
   - `"offers Off and 5 to 30 minutes, and keeps a stored value the list does not offer"` — `{ d1: 7 }`
-    → option values `["", "5", "7", "10", "15", "20", "30"]`, value `"7"` (moved from
-    `service-settings-panel.test.ts`'s "keeps a stored value the list does not offer").
+    → option values `["", "5", "7", "10", "15", "20", "30"]`, value `"7"`.
   - `"choosing 20 enables Save and saves it with the department"` — Save goes from disabled to
     primary; the write's body `toMatchObject({ releaseReminderMinutes: 20 })`; choosing Off sends `null`.
+  - `"choosing the reminder already shown, or Off when Off is shown, leaves Save quiet"` (moved from
+    `:722` and `:734`) — `clickChosenRow` on each; Save stays disabled and nothing is written.
+  - `"keeps the reminder's change inside the dialog"` (moved from `:746`) — a `wt-change` listener
+    on `document`, as that file's `changesHeardOutside` does, hears nothing when 5 is chosen.
   - `"a refusal naming the reminder, sent while Details shows, brings back Service and marks it"` —
     400 `management.request_invalid` `{ field: "releaseReminderMinutes" }` → tab `service`, marked,
     the combobox's `error` set and its `.trigger` carrying `aria-invalid="true"`, Save not disabled
     by the refusal alone.
   - `"follows a change another dashboard makes while the form is clean, and keeps a draft while it is not"`.
-  - `"reads in Spanish"` — `Cursos y cocina`, `Aviso para marchar el siguiente grupo`, `Deshabilitado`.
+  - `"reads in Spanish"` (moved from `:756`, with the new label) — `Cursos y cocina`,
+    `Avisar para marchar el siguiente curso tras`, options `Deshabilitado`, `5 minutos` … `30 minutos`.
   In `department-settings.unsaved.test.ts`: `"choosing a reminder dirties the form, choosing the stored one again cleans it, and leaving asks only while dirty"`.
   In `department-settings.a11y.test.ts`: axe on the Service tab with the section, light and dark,
   and with the reminder refused.
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/department-settings.test.ts src/dashboard/department-settings.unsaved.test.ts src/dashboard/department-settings.a11y.test.ts`
-- [ ] **Step 3: Implement** the type, the component and the strings.
-- [ ] **Step 4: Run the venue-service dashboard and the dashboard app.**
-  `pnpm --filter @waitron/venue-service exec vitest run src/dashboard` and
-  `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts` (free memory first).
-  The failures expected are the exact-body assertions listed above; add only
-  `releaseReminderMinutes: null` to each. Any other red case is a stop.
+- [ ] **Step 3: Implement** the section, the dropdown and the strings.
+- [ ] **Step 4: Run** Step 2's command — PASS; then `pnpm --filter @waitron/venue-service exec vitest run src/dashboard`
+  (free memory first) — PASS with no other case changed.
 - [ ] **Step 5:** `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/english-only.test.ts scripts/module-seams.test.ts`;
-  typecheck `@waitron/venue-service`, `@waitron/dashboard`; prettier; commit
-  `git commit -s -m "The department dialog's Service tab sets its reminder to fire the next group (A756 PR 4)"`.
+  typecheck `@waitron/venue-service`; prettier; commit
+  `git commit -s -m "The department dialog's Service tab sets its reminder to fire the next course (A756 PR 4)"`,
+  then update the ledger.
 
-**Assertions changed:** the exact-body expectations listed gain `releaseReminderMinutes: null`
-(the PR adds the field to the department save); nothing else.
+**Assertions changed:** none beyond Task 15's moves; the moved behaviours are checked here.
 
 ### Task 17: a look at the Service tab in real Chromium
 
@@ -1094,11 +1178,15 @@ outside the worktree, in `/Users/clintongormley/waitron-campaign-c/a756-4-shots/
 
 - [ ] **Step 1:** Mount the whole dashboard with `mountReceiptApp`
   (`apps/dashboard/src/testing/department-receipt-app-fixture.ts`) at
-  `/manage/venue-operations/department/bar/view/service`, the fixture's model giving `bar` 10
-  minutes. For light and dark and `page.viewport(1280, 900)` and `page.viewport(390, 900)`: a
-  picture as opened (Save quiet) and one with the list open, and one after choosing Off (Save
-  primary). Read `window.innerWidth` inside the test and record it. Then Venue settings → Kitchen
-  tab at 1280, light: no reminder dropdown.
+  `path: "/manage/venue-operations/department/bar/view/service"`. The fixture's own model gives
+  `releaseReminderMinutesByDepartment: {}` after Task 15, so give `bar` 10 minutes through its
+  `respond` option (`:29`, consulted first at `:73`): for a GET of `/management-api/venue-service`,
+  answer `Response.json(model)` with a copy of the fixture's model literal (`:43-70`) holding
+  `releaseReminderMinutesByDepartment: { bar: 10 }`; answer `undefined` for every other request,
+  so PUTs keep the fixture's 204. For light and dark and `page.viewport(1280, 900)` and
+  `page.viewport(390, 900)`: a picture as opened (Save quiet), one with the list open, and one after
+  choosing Off (Save primary). Read `window.innerWidth` inside the test and record it. Then Venue
+  settings → Kitchen tab at 1280, light: no reminder dropdown.
 - [ ] **Step 2:** Look at every picture against mock-up 03
   (`docs/backlog/mockups/a756-kitchen-settings/03-department-service-tab.png`, without its "Who
   sends a held course" buttons): the heading sits between "Orders and payment" and "Table states"
@@ -1106,14 +1194,15 @@ outside the worktree, in `/Users/clintongormley/waitron-campaign-c/a756-4-shots/
   (`document.documentElement.scrollWidth` equals the viewport width); the open list stays inside
   the dialog; dark is readable. A defect found is fixed with a failing test first, in the
   component's own test file, and committed.
-- [ ] **Step 3:** Delete the throwaway test; `git status` shows it gone.
+- [ ] **Step 3:** Delete the throwaway test; `git status` shows it gone. Update the ledger with the
+  look report's path and any defect found.
 
 ### Task 18: guides, design notes, the audit and the backlog
 
 **Files:** `apps/server/src/guide/en/kitchen-service.md`, `apps/server/src/guide/es/kitchen-service.md`,
 `docs/developers/design-system.md:5458-5461`,
 `docs/superpowers/specs/2026-10-16-a664-personal-data-audit.md:162,170`, `docs/backlog.md:1570-1572`,
-`docs/backlog/kitchen.md:142-155`
+`docs/backlog/kitchen.md:142-155`, `docs/backlog/dashboard.md:697-700`
 
 - [ ] **Step 1: The guides.** At the end of "Request cooking from the till" (`{#request-cooking}`),
   EN: "A held group falls due a set number of minutes after the dishes fired before it have been
@@ -1125,25 +1214,40 @@ outside the worktree, in `/Users/clintongormley/waitron-campaign-c/a756-4-shots/
   `pnpm exec vitest run scripts/guide-links.test.ts`.
 - [ ] **Step 2: design-system.md.** "Service holds two sections … “Orders and payment”, … and
   “Table states”, …" → three sections, with "“Courses and the kitchen”, with the reminder to fire
-  the next group," between them.
+  the next course," between them.
 - [ ] **Step 3: The A664 audit** gets dated pointers only: `departments` R gains
   "`release_reminder_minutes` (added 2026-10-23, A756 PR 4)"; `service_settings` R's
   `release_reminder_minutes` gains "(dropped 2026-10-23, A756 PR 4)".
-- [ ] **Step 4: The backlog.** In `docs/backlog/kitchen.md`'s A756 detail delete the PR 4 bullet
-  (finished; PRs 5–8 and the Kitchen tab's removal stay as they are) and add an open point: "A773
-  §3.4 says a reminder of 0 minutes means at once (owner, 2026-10-17); the department's list offers
-  Off and 5–30 minutes and the save refuses 0 (`requireReleaseReminderMinutes`,
-  `packages/venue-service/src/routes.ts`). Offer “At once” or settle that 0 is not wanted." In
+- [ ] **Step 4: The Decisions entry** "The two dropdown explanations on venue service's Kitchen
+  panel stay as hints (owner, 2026-10-17)" (`docs/backlog/dashboard.md:697-700`) is kept whole and
+  gains one dated line: "**2026-10-23 (A756 PR 4):** the reminder's dropdown, with its hint, moved
+  to the department dialog's Service tab, under Courses and the kitchen; it is still a hint."
+- [ ] **Step 5: The backlog.** In `docs/backlog/kitchen.md`'s A756 detail delete the PR 4 bullet
+  (finished; PRs 5–8 and the Kitchen tab's removal stay as they are) and add an open point:
+  "Offer “At once” (0 minutes) in each department's reminder, as A773 §3.4 decided (owner,
+  2026-10-17); the list offers Off and 5–30 minutes and the save refuses 0
+  (`requireReleaseReminderMinutes`, `packages/venue-service/src/routes.ts`)." In
   `docs/backlog.md`'s A756 entry say "Open points from #1852, #1854 and PR 4 are in the detail."
-- [ ] **Step 5: Missed claims.**
-  `git grep -n -i -E 'venue.?wide reminder|venue.s reminder|reminder (setting|minutes)' -- docs/backlog.md docs/backlog docs/developers apps/server/src/guide`
-  — each hit about this reminder is rewritten here or is history in a dated plan or spec (left
-  alone). `pnpm exec prettier --file-info <file>` on each changed doc (`docs/` is ignored whole), and
-  `pnpm exec vitest run scripts/claude-md-pointers.test.ts`.
-- [ ] **Step 6: Commit** `git commit -s -m "Guides and backlog: each department sets its reminder to fire the next group (A756 PR 4)"`,
-  then `/finish-branch` with this plan's path as its note. The PR description says the venue's
-  reminder value is dropped and every department starts at 10 minutes, and that no venue reset is
-  needed.
+- [ ] **Step 6: Missed claims.**
+  `git grep -n -i -E 'venue.?wide reminder|venue.s reminder|reminder (setting|minutes)|release reminder|reminder to fire' -- docs/backlog.md docs/backlog docs/developers apps/server/src/guide`
+  — each hit about this reminder is rewritten here, is the Decisions entry of Step 4, or is history
+  in a dated plan or spec (left alone). `pnpm exec prettier --file-info <file>` on each changed doc
+  (`docs/` is ignored whole), and `pnpm exec vitest run scripts/claude-md-pointers.test.ts`.
+- [ ] **Step 7: The PR description and the ledger** both name:
+  - **every changed test check**, from each task's "Assertions changed": Task 12's seat key list;
+    Task 14's `kitchen-notices.test.ts` row `toEqual`s and deleted describes, `routes.test.ts:2684`
+    and its describe, the seat key list; Task 15's deleted and moved panel cases, the reminder half
+    of `service-settings-panel.test.ts:773`, `client.test.ts:187` and `:218`, the field-order case;
+    Task 16a's exact request bodies gaining `releaseReminderMinutes: null`; and the test renames of
+    Task 13 Step 4;
+  - **the default and reset decision**: every department starts at 10 minutes, the venue's own
+    value is dropped, not copied, and no venue reset is needed (Decision 1);
+  - **the departures from mock-up 03**: "send" → "fire" in the field's label (A773's words), Off
+    kept as a choice, no "Who sends a held course" buttons (A773 §7.2), and the Table states section
+    beneath holding Needs clearing and Service steps as A757 drew it.
+- [ ] **Step 8: Commit** `git commit -s -m "Guides and backlog: each department sets its reminder to fire the next course (A756 PR 4)"`,
+  update the ledger to `Status: done` for PR 4's build, then `/finish-branch` with this plan's
+  path as its note.
 
 ---
 
@@ -1212,5 +1316,5 @@ warning) and removing `locations.fire_control` with the Kitchen tab's Fire contr
 - Task sizes: Tasks 9 and 10 were split from one task so each stays well under ~100 implementer calls.
 - PR 4 (2026-10-23): every file:line in its section was re-read on `b85119762`; the migration's
   SQL, the root guards and the server reminder suites were run in a scratch copy, not reasoned
-  about. Tasks 12–18 each stay one package or one layer, so each is well under ~100 implementer
+  about. Tasks 12–18 (16 split into 16a and 16b) each stay one package or one layer, so each is well under ~100 implementer
   calls; Task 15's fixture sweep is one line per file.
