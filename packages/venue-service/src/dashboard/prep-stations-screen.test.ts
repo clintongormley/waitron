@@ -890,7 +890,14 @@ it("hands the station's printing choices to the editor and saves the station's",
   const a = api({
     load: vi.fn().mockResolvedValue({
       ...view,
-      stations: [{ ...view.stations[0]!, ticketGrouping: "separate", printHeldWork: true }],
+      stations: [
+        {
+          ...view.stations[0]!,
+          printMovedSlips: false,
+          ticketGrouping: "separate",
+          printHeldWork: true,
+        },
+      ],
     }),
   });
   const el = await mount(a);
@@ -904,7 +911,7 @@ it("hands the station's printing choices to the editor and saves the station's",
   const moved = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
     "wt-combobox[name=printMovedSlips]",
   )!;
-  expect(moved.value).toBe("print");
+  expect(moved.value).toBe("dont-print");
   expect(
     editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
       "wt-combobox[name=ticketGrouping]",
@@ -915,11 +922,11 @@ it("hands the station's printing choices to the editor and saves the station's",
       "wt-switch[name=printHeldWork]",
     )!.checked,
   ).toBe(true);
-  moved.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "dont-print" } }));
+  moved.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "print" } }));
   await editor.updateComplete;
   editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
   await settle(el);
-  expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { printMovedSlips: false });
+  expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { printMovedSlips: true });
 });
 function fallbackView(): PrepStationsView {
   return {
