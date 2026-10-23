@@ -69,9 +69,11 @@ describe("withDestinationCall", () => {
     vi.useFakeTimers({ now: 0 });
     const parent = countedParent();
     const settled = { at: null as number | null };
-    const first = withDestinationCall(parent.controller.signal, 100, slowToStop(50, settled)).catch(
-      (error: unknown) => error,
-    );
+    let firstSignal: AbortSignal | undefined;
+    const first = withDestinationCall(parent.controller.signal, 100, (call) => {
+      firstSignal = call.signal;
+      return slowToStop(50, settled)(call);
+    }).catch((error: unknown) => error);
     await vi.advanceTimersByTimeAsync(50);
     let laterSignal: AbortSignal | undefined;
     const later = withDestinationCall(parent.controller.signal, 100, (call) => {
@@ -80,6 +82,7 @@ describe("withDestinationCall", () => {
     });
     await vi.advanceTimersByTimeAsync(50);
     expect(settled.at).toBeNull();
+    expect(firstSignal?.aborted).toBe(true);
     expect(laterSignal?.aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(30);
     expect(await later).toBe("stored");
