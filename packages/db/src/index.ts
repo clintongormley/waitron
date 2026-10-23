@@ -131,7 +131,6 @@ export { orderDraftRecalledLines } from "./schema/order-draft-recalled-lines.js"
 export { lineServiceCancellations } from "./schema/line-service-cancellations.js";
 export { floorZones } from "./schema/floor-zones.js";
 export { kitchenStations } from "./schema/kitchen-stations.js";
-export { kitchenTimingDefaults, kitchenStationTiming } from "./schema/kitchen-timing.js";
 export { kitchenCourses } from "./schema/kitchen-courses.js";
 export { ticketItems, ticketState } from "./schema/ticket-items.js";
 export { devices } from "./schema/devices.js";

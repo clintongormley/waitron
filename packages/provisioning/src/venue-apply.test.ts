@@ -90,10 +90,6 @@ it("a new venue's first station starts at the default late flags and keeps a sta
       forgotten_after_minutes: 15,
     },
   ]);
-  expect(
-    (await suite.db.execute<{ n: number }>(sql`select count(*) as n from kitchen_timing_defaults`))
-      .rows,
-  ).toEqual([{ n: 0 }]);
 });
 
 describe("applyVenue: the one taxpayer row", () => {
