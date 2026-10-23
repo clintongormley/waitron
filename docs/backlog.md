@@ -6456,12 +6456,16 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   the review screen now keeps such an unknown code visible.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A975. Developer tools and demo scripts to English** (`dev-setup.ts`, the `*-demo.ts` scripts,
-  Cloud fixture, receipt pictures and README examples). The developer setup's location examples
-  remain. Low priority; needed before A977 can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+- **A975. Remaining demo scripts and receipt picture tool to English** (the `*-demo.ts` scripts
+  and `receipt-look.ts`). Retire the fake-backend demos after moving their useful checks into
+  English tests. Low priority; needed before A977 can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A976. The server's test venues default to English** — the first test cleanup; later ones go
-  package by package from A977's list. Low priority. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+- **A976. The server's test venues, including script-suite fixtures, default to English** — the
+  first test cleanup; later ones go package by package from A977's list. Low priority. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **Cloud's cost-test fixtures still carry Spanish operation and street examples.** The two
+  backend fixtures need their own English wording change in the Cloud repository.
+  [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A977. Widen the English-only guard to every text file, after A918 and A963–A975.** Accented
   letters too; a shrinking-only list of test folders still to clean. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)

@@ -237,6 +237,18 @@ describe("devSetup against a real venue directory", () => {
     expect(read.records).toEqual([{ issuer: "B00000000", n: read.sales }]);
   });
 
+  it("stores English operation and street examples in a new developer venue", async () => {
+    const rows = await readVenue(async (db) => {
+      const result = await db.execute<{ operation_description: string; address_line1: string }>(
+        sql`select operation_description, address_line1 from locations`,
+      );
+      return result.rows;
+    });
+    expect(rows).toEqual([
+      { operation_description: "In-store sales", address_line1: "1 Main Street" },
+    ]);
+  });
+
   it("gives the developer administrator an English display name", async () => {
     const rows = await readVenue(async (db) => {
       const result = await db.execute<{ display_name: string }>(

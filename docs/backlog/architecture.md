@@ -573,15 +573,21 @@ until A977).
   labels before that guard and passed after it. Qualify the selection path with country-pack
   choices carrying such a code before changing it. Its reachability through an installed pack
   has not been established. `git blame` attributes the selection expression to `082553a65`.
-- **A975 — developer tools and demo scripts.** The location's operation description and street
-  example in `apps/server/scripts/dev-setup.ts`, the `*-demo.ts` scripts,
-  `cloud-integration-fixture.ts`, `receipt-look.ts`, the README's example values
-  (`apps/server/README.md:204–209`). The demo seed itself is A972's. Low priority; A977 cannot scan
-  `apps/*/scripts` until it lands.
-- **A976 — point 7's first step.** The server's test venues default to English, and the tests that
-  then read a screen take their text from the strings file. Accent tests, AEAT names and official
-  text stay. Low priority. The rest of the test cleanup is one low-priority item per package, taken
-  from A977's list.
+- **A975 — remaining demo scripts and receipt picture tool.** The `*-demo.ts` scripts and
+  `apps/server/scripts/receipt-look.ts` still carry non-English sample text. Retire the fake-backend
+  demos after moving their useful checks into ordinary English tests. Move the worked VAT-return
+  example in `modelo-303-demo.ts` into Spain's reporting area. The demo seed itself is A972's;
+  the script-suite test fixtures belong to A976 below. Low priority; A977 cannot scan
+  `apps/*/scripts` until this work and the test-fixture cleanup land.
+- **A976 — point 7's first step.** The server's test venues default to English, including the
+  helpers in `apps/server/scripts/testing/venue.ts` and
+  `apps/server/scripts/demo-seed/testing/provision-venue.ts`. Tests that read a screen take their
+  text from the strings file. Accent tests, AEAT names and official text stay. Low priority. The
+  rest of the test cleanup is one low-priority item per package, taken from A977's list.
+- **Cloud cost-test fixture wording.** The separate Cloud repository's
+  `scripts/cloud-cost/fixtures/remote-browser-backend.mjs` and `remote-waitron-backend.mjs` still
+  carry Spanish operation and street examples. Translate those samples in a Cloud change; the
+  Waitron fixture's wording change does not update those files.
 - **A977 — point 8, after A918 and A963–A975 land.** Widen `scripts/english-only.test.ts` to every
   text file under `packages/` and `apps/`, exempting only the homes (the packages written for Spain,
   `fiscal-verifactu`, translation files), add an accented-letter check, and keep a list of test
