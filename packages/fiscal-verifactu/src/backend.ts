@@ -7,6 +7,9 @@ import { AppError, decimal, readSaleOrigin, sumDecimals } from "@waitron/shared"
 import type { NodeId, SaleId } from "@waitron/shared";
 import type {
   ClockBehindLatestRecord,
+  ClockRestart,
+  ClockStopState,
+  ClockWitness,
   Counterparty,
   FiscalBackend,
   FiledReceipt,
@@ -43,6 +46,11 @@ import {
   clockBehindChain,
   refuseWhileClockBehind as refuseWhileClockBehindChain,
 } from "./clock-behind.js";
+import {
+  clockStopState,
+  noteClockProvedWrong,
+  restartAfterClockStop,
+} from "./clock-stop-restart.js";
 import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
 import { SOFTWARE_IDENTITY, producerFields, softwareVersion } from "./software-identity.js";
 import type { SoftwareIdentity } from "./software-identity.js";
@@ -173,6 +181,35 @@ export class VerifactuBackend implements FiscalBackend {
     reading: { instant: Date; offsetMinutes: number },
   ): Promise<void> {
     return refuseWhileClockBehindChain(tx, reading);
+  }
+
+  clockStopState(
+    tx: Transaction,
+    reading: { instant: Date; offsetMinutes: number },
+    witnesses: readonly ClockWitness[],
+  ): Promise<ClockStopState | null> {
+    return clockStopState(tx, reading, witnesses);
+  }
+
+  restartAfterClockStop(
+    tx: Transaction,
+    input: {
+      reading: { instant: Date; offsetMinutes: number };
+      witnesses: readonly ClockWitness[];
+      personId: string;
+      personName: string;
+      nodeId: string;
+      recordId: string;
+    },
+  ): Promise<{ restart: ClockRestart; replayed: boolean }> {
+    return restartAfterClockStop(tx, input);
+  }
+
+  noteClockProvedWrong(
+    tx: Transaction,
+    input: { trustedUntil: Date; observedAt: Date; reason: "jump" | "authority" },
+  ): Promise<{ recorded: string[]; unused: string[]; held: string[] }> {
+    return noteClockProvedWrong(tx, input);
   }
 
   /**

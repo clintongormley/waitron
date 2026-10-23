@@ -60,6 +60,15 @@ describe("clockBehindLatestRecord and refuseWhileClockBehind", () => {
   });
 });
 
+describe("the clock-stop restart", () => {
+  it("is absent: the fake never stops a clock", () => {
+    const fake: FiscalBackend = backend;
+    expect(fake.clockStopState).toBeUndefined();
+    expect(fake.restartAfterClockStop).toBeUndefined();
+    expect(fake.noteClockProvedWrong).toBeUndefined();
+  });
+});
+
 describe("registration", () => {
   it("records a registration and returns an opaque registration id", () => {
     return suite.db.transaction(async (tx) => {

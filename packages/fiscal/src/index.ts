@@ -21,7 +21,12 @@ export type {
 export { emptyDrainResult } from "./backend.js";
 export type {
   AckState,
+  AuthorityTimeSample,
   ClockBehindLatestRecord,
+  ClockRestart,
+  ClockRestartOffer,
+  ClockRestartProofKind,
+  ClockStopState,
   Counterparty,
   DrainResult,
   FiscalBackend,

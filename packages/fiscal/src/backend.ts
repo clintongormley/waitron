@@ -3,6 +3,7 @@ import type { Decimal, NodeId, SaleId, SaleOrigin, SeriesId } from "@waitron/sha
 import type { Transaction } from "@waitron/db";
 import type { VatBreakdownLine } from "./vat-breakdown.js";
 import type { TrustedReading } from "./clock.js";
+import type { ClockWitness } from "./clock-witnesses.js";
 
 export type { VatBreakdownLine };
 
@@ -173,6 +174,44 @@ export interface ClockBehindLatestRecord {
   readonly lastRecordOffsetMinutes: number;
 }
 
+/** What a restart of payments would meet now, while the clock reads behind the latest record. */
+export type ClockRestartOffer =
+  "offered" | "no_proof" | "contrary_proof" | "too_far" | "stepped_back" | "restarted";
+
+export type ClockRestartProofKind = "authority" | "devices" | "authority_and_devices";
+
+/** A clock reading more than a minute earlier than the latest record, the restart that names that
+ * record if one does, and the witnesses for and against the reading. */
+export interface ClockStopState {
+  clockAt: string;
+  offsetMinutes: number;
+  lastRecordAt: string;
+  lastRecordOffsetMinutes: number;
+  recordId: string;
+  gapMs: number;
+  restart: { personId: string; restartedAt: string; clockAt: string } | null;
+  offer: ClockRestartOffer;
+  proof: { authority: ClockWitness | null; devices: ClockWitness[] };
+  contrary: { authority: ClockWitness | null; devices: ClockWitness[] };
+}
+
+export interface ClockRestart {
+  id: string;
+  personId: string;
+  restartedAt: string;
+  clockAt: string;
+  lastRecordAt: string;
+  proofKind: ClockRestartProofKind;
+}
+
+/** One reading of the tax authority's time, against the box's wall clock (`Date.now()`) and steady
+ * clock (`performance.now()`) read together at the comparison's midpoint. */
+export interface AuthorityTimeSample {
+  readonly authorityMs: number;
+  readonly uncertaintyMs: number;
+  readonly at: { readonly wallMs: number; readonly monoMs: number };
+}
+
 /**
  * The sale-path boundary between the POS and a fiscal regime. It names no regime mechanism; the
  * guard is ./no-regime-vocabulary.test.ts. The submission pass (`drain`) is not on it: that runs
@@ -217,6 +256,35 @@ export interface FiscalBackend {
     tx: Transaction,
     reading: Pick<TrustedReading, "instant" | "offsetMinutes">,
   ): Promise<void>;
+
+  /** What the clock row shows while the reading is behind the latest record; null when it is not.
+   * Absent when the regime never stops a clock. */
+  clockStopState?(
+    tx: Transaction,
+    reading: Pick<TrustedReading, "instant" | "offsetMinutes">,
+    witnesses: readonly ClockWitness[],
+  ): Promise<ClockStopState | null>;
+
+  /** A manager's restart of payments for the stop `recordId` names; throws this regime's refusal
+   * unless `clockStopState` would offer it. */
+  restartAfterClockStop?(
+    tx: Transaction,
+    input: {
+      reading: Pick<TrustedReading, "instant" | "offsetMinutes">;
+      witnesses: readonly ClockWitness[];
+      personId: string;
+      personName: string;
+      nodeId: string;
+      recordId: string;
+    },
+  ): Promise<{ restart: ClockRestart; replayed: boolean }>;
+
+  /** The clock was proved wrong after `trustedUntil`, noticed at `observedAt`; answers the restart
+   * ids it recorded, those with nothing written under them, and those another open issue holds. */
+  noteClockProvedWrong?(
+    tx: Transaction,
+    input: { trustedUntil: Date; observedAt: Date; reason: "jump" | "authority" },
+  ): Promise<{ recorded: string[]; unused: string[]; held: string[] }>;
 
   registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration>;
 

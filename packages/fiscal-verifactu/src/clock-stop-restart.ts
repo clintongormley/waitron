@@ -3,7 +3,13 @@ import { eq, sql } from "drizzle-orm";
 import { newId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { judgeClockWitnesses } from "@waitron/fiscal";
-import type { ClockWitness } from "@waitron/fiscal";
+import type {
+  ClockRestart,
+  ClockRestartOffer,
+  ClockRestartProofKind,
+  ClockStopState,
+  ClockWitness,
+} from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import type { ErrorParams, NodeId } from "@waitron/shared";
 import {
@@ -20,36 +26,9 @@ import { clockStopRestarts } from "./schema/clock-stop-restarts.js";
 /** No restart is offered for a gap wider than this. */
 const RESTART_MAX_GAP_MS = 86_400_000;
 
-export type ClockRestartOffer =
-  "offered" | "no_proof" | "contrary_proof" | "too_far" | "stepped_back" | "restarted";
-
-export type ClockRestartProofKind = "authority" | "devices" | "authority_and_devices";
-
-export interface ClockStopState {
-  clockAt: string;
-  offsetMinutes: number;
-  lastRecordAt: string;
-  lastRecordOffsetMinutes: number;
-  recordId: string;
-  gapMs: number;
-  restart: { personId: string; restartedAt: string; clockAt: string } | null;
-  offer: ClockRestartOffer;
-  proof: { authority: ClockWitness | null; devices: ClockWitness[] };
-  contrary: { authority: ClockWitness | null; devices: ClockWitness[] };
-}
-
 export interface ClockReading {
   instant: Date;
   offsetMinutes: number;
-}
-
-export interface ClockRestart {
-  id: string;
-  personId: string;
-  restartedAt: string;
-  clockAt: string;
-  lastRecordAt: string;
-  proofKind: ClockRestartProofKind;
 }
 
 interface StoredRestart {
