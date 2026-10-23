@@ -494,6 +494,12 @@ describe("scopeForPaths", () => {
     );
   });
 
+  it("builds the image for a release-source generator change in root scope", () => {
+    expect(formatScope(scopeForPaths(["scripts/generate-hour-release.mjs"], workspace()))).toBe(
+      "code=false\nscope=root\npackages=\nroot=true\ndeploy=true",
+    );
+  });
+
   it("does not flag deploy for an ordinary package change", () => {
     expect(scopeForPaths(["packages/db/src/index.ts"], workspace()).deploy).toBe(false);
   });

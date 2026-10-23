@@ -6,6 +6,21 @@ the incident that paid for each one. The one-line rules themselves live in the r
 `CLAUDE.md` point at, beside the stream tests, are here too. Read this before writing or debugging
 a test, especially one that touches a venue database or runs in browser mode.
 
+## Keep assertions outside callbacks that the code retries
+
+If the code under test catches and retries a callback's errors, record the callback's result or
+error and assert after the operation returns. An assertion thrown inside that callback can be
+caught and retried too, hiding the failure you wanted to see.
+
+A1024's first root CI run, `39874647629`, failed the partial-download case in
+`scripts/generate-hour-release.test.mjs`. Its callback expected `ETIMEDOUT`, but the helper had
+exited early. The generator caught that assertion and retried successfully; only the later
+missing-lock assertion failed. Moving the same timeout assertion outside the callback exposed
+Git's `early EOF` error. A 256 KB fixture reproduced that error on macOS and Linux. Keeping the
+paused helper alive with a timer made both probes reach the timeout; removing fresh-repository
+isolation then failed with `shallow.lock: File exists`. The helper's cleanup stops its recorded
+processes.
+
 **Asking for a database**
 
 ## There is one database target, and a helper opens it.

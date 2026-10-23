@@ -102,6 +102,7 @@ export function isRootScopePath(path) {
  */
 const IMAGE_SMOKE_FILES = [
   "scripts/bundle-node.mjs",
+  "scripts/generate-hour-release.mjs",
   "scripts/npm-bundle-notices.mjs",
   "apps/till/vite.config.ts",
   "apps/dashboard/vite.config.ts",
