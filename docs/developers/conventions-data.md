@@ -3498,6 +3498,79 @@ pass, and the case in `apps/server/src/boot.test.ts` that returns a previous run
 to `pendiente` on a start's first pass — weaker than the rule, because nothing checks that a tool
 opening the folder with `exclusive: false` never files.
 
+## While the box's clock reads behind the latest fiscal record, no record is written and no new money moves
+
+**The comparison.** `clockBehindChain` (`packages/fiscal-verifactu/src/clock-behind.ts`) reads the
+latest `fecha_hora_huso_gen_registro` in `registros_facturacion`, across every chain, and answers
+the four params `clockAt`, `offsetMinutes`, `lastRecordAt` and `lastRecordOffsetMinutes` when the
+reading is more than `CLOCK_BEHIND_MARGIN_MS` (60 000 ms) earlier; a database with no record never
+stops. A reading exactly a minute earlier still sells, a millisecond more stops
+(`clock-behind.test.ts`, "sells a reading exactly a minute earlier" and "stops a reading a
+millisecond more than a minute earlier"). `refuseWhileClockBehind` checks the 28-10-2024 rule
+first (`clock.unusable`), then throws `clock.behind_chain` with those params. Only the Veri\*Factu
+module stops: `NoneBackend` (`packages/fiscal-none/src/backend.ts`) and `FakeFiscalBackend`
+(`packages/fiscal/src/testing/fake-backend.ts`) answer `null` and return.
+
+**The index.** `registros_generado_idx` on `fecha_hora_huso_gen_registro`
+(`packages/fiscal-verifactu/src/schema/registros.ts`) serves the read;
+`packages/fiscal-verifactu/src/clock-stop-restarts.test.ts`, "reads the latest record time through
+the index", pins the query plan `SCAN registros_facturacion USING INDEX registros_generado_idx`.
+Measured for the plan (E5, 2026-10-22, macOS, Node v26.11.1, SQLite 3.54.0): with the index
+dropped, the same query read the whole table and sorted it in a temporary tree.
+
+**The append refuses on its own.** `attemptAppend` (`packages/fiscal-verifactu/src/chain.ts`)
+calls `refuseWhileClockBehind` with the record's own time as its first statement, so a sale, a
+correction or an anulación dated more than a minute before the latest record is refused and
+nothing is written (`chain.clock-behind.test.ts`).
+
+**Where a route's named check goes** (plan decision 3). As the first statement after the route's
+replay answer, in the request's first transaction; where a route has no replay
+(`recordUnpaidDeparture`), right after its authorization. So it runs before any card reader, refund
+send or drawer job. A replay answered before the check is one that moves no money: a settled order,
+a bill payment's first row, a completed or failed refund. A pending refund's resend is checked
+before it resumes, and the tender-refund retry route checks only a pending refund. The check
+judges the reading the route already takes, and where the same transaction issues an invoice, the
+issue is dated from that reading. The places: `runPayWorkingOrder`, `payIntegrated` and
+`runCollectOrder` (`apps/server/src/till-sale.ts`); `beginBillPayment`
+(`apps/server/src/bill-payments.ts`); `refundBillPayment` (`apps/server/src/bill-refunds.ts`, twice:
+the pending replay, and every new refund); `beginSettledTenderRefund`
+(`apps/server/src/tender-refunds.ts`, twice the same way); the retry route
+(`apps/server/src/tender-refund-api.ts`); `recordUnpaidDeparture`
+(`apps/server/src/unpaid-departure.ts`); and the eight dashboard resolutions in
+`apps/server/src/payments-api.ts`, first inside each authorized callback.
+
+**The refund recovery loops pause.** `recoverTenderRefunds`
+(`apps/server/src/tender-refund-recovery.ts`) and the refund half of the bill-payments pass
+(`settlePendingBillRefunds`, `apps/server/src/bill-payments-loop.ts`) ask
+`clockBehindLatestRecord` once at their top and, during the stop, touch no refund row and raise no
+unresolved alert, because a completed refund's time places it in a cash-up window
+(`clock-behind-stop.refunds.test.ts`). The pass's payment half (`settlePendingBillPayments`) has no
+check of its own and keeps running; a completion that would file is refused by the append.
+
+**Money that has already moved is still recorded** (plan decision 17). The Stripe webhook records a
+hosted payment during the stop (`apps/server/src/webhook.test.ts`, "records a hosted payment while
+the box's clock reads behind its last sale"). A card charged as the stop begins, after the route's
+check, on an already-invoiced order or as a part payment that leaves a bill part-paid writes no
+record and is recorded, dated by the provider (`clock-behind-stop.charged.test.ts`, "a card charged
+as the stop begins on an already-invoiced order is recorded, dated by the provider" and "a card
+part payment charged as the stop begins is received, dated by the provider"). A card charged as the
+stop begins whose sale would file answers `507 sale.charged_not_recorded` with
+`reason: "clock_behind_chain"` on the till's two card routes, as
+[A full disk stops the till's writes](#a-full-disk-stops-the-tills-writes) says.
+
+**Why the routes need their own check** (plan E10, measured 2026-10-22 with only the append's check
+in place, on `provisionBillVenue`'s venue and its `FakePaymentProvider`, every request on a clock a
+day behind a recorded card sale): a counter card sale on `POST /api/pay` called the provider's
+`collect` once and was then refused `400 clock.behind_chain`; a placed order whose invoice was
+already filed, paid by card on `POST /api/pay`, called `collect` once and answered `200 captured`;
+the same kind of order collected in cash answered `200`. Settling a filed invoice writes no record,
+so the append never saw the last two.
+
+Guards: `apps/server/src/clock-behind-stop.*.test.ts`,
+`apps/server/src/payments-api.clock-behind.test.ts` and
+`packages/fiscal-verifactu/src/chain.clock-behind.test.ts` — weaker than the rule, because they
+cover the routes they name; a new money route is seen by none.
+
 ## An envío to AEAT carries one taxpayer name
 
 The envío's header (`Cabecera`) is built from its first record's name, and a legal-name change

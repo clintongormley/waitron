@@ -751,6 +751,14 @@ browser test** — most of these rules exist because a test passed while proving
   Guard: that file's `portsNoPrinterNames` and pre-discovery row check, weaker than the rule — they
   cover that one test. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-drawn-port-can-be-one-an-earlier-test-in-the-same-database-already-registered).
+- **A fiscal record in a test's database must not be dated more than a minute after the clock of a
+  later write that records**, or the chain refuses that write as `clock.behind_chain`: a fixture
+  dated in the past recorded after a newer record, or a case that records ahead of the real clock
+  before a real-clock write. In a file that shares one database, every write takes its clock from
+  the latest record time, helpers included, or the case gets a database of its own. Cost: the
+  check turned fiscal and server fixtures red (A798-B slice 8 plan, E8, E9, decision 13). Nothing
+  guards it. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#a-fiscal-record-dated-after-a-later-writes-clock-makes-the-chain-refuse-that-write).
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
   `pnpm reap` sweeps these, scoped by ppid 1 AND the shapes vitest leaves in `ps`, never a bare `vitest` match.
 - **Concurrent coverage runs must not share a package's report directory, and an intentional second
@@ -939,6 +947,16 @@ browser test** — most of these rules exist because a test passed while proving
   trigger whose table is still there) and a 10 s check while trading refuse to trade on a missing
   or changed trigger (`apps/server/src/append-only-watch.ts`) — weaker than its name: stored text
   only, and only the tables the start migrated.
+- **While the box's clock reads more than a minute earlier than the latest fiscal record, no record
+  is written and no route takes or gives back new money.** The append refuses on its own
+  (`clock.behind_chain`, `packages/fiscal-verifactu/src/chain.ts`); a money route calls the fiscal
+  seat's `refuseWhileClockBehind` after its replay answer and before any reader, refund or drawer,
+  and both refund recovery loops pause. Money that has already moved is still recorded. Cost: before
+  the route checks, a probe charged a card on a clock a day behind (A798-B slice 8 plan, E10). Guards:
+  `apps/server/src/clock-behind-stop.*.test.ts`, `apps/server/src/payments-api.clock-behind.test.ts`
+  and `packages/fiscal-verifactu/src/chain.clock-behind.test.ts`, weaker than the rule — they cover
+  the routes they name; a new money route is seen by none. Receipt:
+  [conventions-data.md](docs/developers/conventions-data.md#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves).
 - **Never put our own metadata into a hash.** `entorno` is ours, not AEAT's; a test pins that two
   records differing only in it hash identically. In `computeHuella` it would make every chain
   unverifiable under the other environment.
