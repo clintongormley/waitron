@@ -337,6 +337,7 @@ export const ALERT_MESSAGES: Readonly<
     en: "Waitron could not check card reader “{reader}”. Check it on the Payments page.",
     es: "Waitron no ha podido comprobar el lector de tarjetas «{reader}». Revísalo en la página de Pagos.",
   },
+  "reader.offline": { en: "“{reader}” is offline.", es: "«{reader}» está sin conexión." },
   "content.suggestions_ready": {
     en: "Translations ready: {count} suggestions are waiting for review.",
     es: "Traducciones listas: {count} sugerencias pendientes de revisar.",

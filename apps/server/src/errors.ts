@@ -285,6 +285,7 @@ declare module "@waitron/shared" {
      */
     "reader.battery_low": { reader: string; percent: number };
     "reader.status_unavailable": { reader: string };
+    "reader.offline": { reader: string };
     /** The till was asked to ring a sale with no lines; refused before any catalogue read or fiscal write. */
     "sale.empty_basket": Record<string, never>;
     /**

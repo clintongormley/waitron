@@ -25,6 +25,7 @@ import {
   DEMO_READER_ID,
   type CardProviderRuntimeDeps,
   cardReaders,
+  type ReaderStatus,
 } from "@waitron/payments";
 import type { StreamView } from "@waitron/stream";
 import type { BackupStatus } from "./backup-status.js";
@@ -734,13 +735,15 @@ export const BATTERY_ERROR = 10;
 const BATTERY_CHECK_LIMIT_MS = 45_000;
 
 /**
- * The card-reader battery alert source. A reader whose provider reports no battery raises nothing.
- * Readings are cached per reader id so a polling dashboard does not call the provider every time.
+ * The card-reader alert source: a reader its provider reports offline, and a low battery. A reader
+ * whose provider reports no battery raises no battery alert, and a status the provider could not
+ * read (`unreachable`) raises no offline alert. Status answers are cached per reader id so a
+ * polling dashboard does not call the provider every time.
  */
 export function batteryAlertSource(deps: {
   providers: readonly CardProviderContribution[];
   runtimeDeps: () => CardProviderRuntimeDeps;
-  cache: Pick<TtlCache<number | null>, "get">;
+  cache: Pick<TtlCache<ReaderStatus>, "get">;
 }): AlertSource {
   return {
     area: "card_reader",
@@ -760,19 +763,16 @@ export function batteryAlertSource(deps: {
       const deadline = new Promise<void>((resolve) => {
         timer = setTimeout(resolve, BATTERY_CHECK_LIMIT_MS);
       });
-      let results: ({ kind: "reading"; percent: number | null } | { kind: "unavailable" })[];
+      let results: ({ kind: "reading"; status: ReaderStatus } | { kind: "unavailable" })[];
       try {
         // One deadline bounds the whole batch while each reader retains its own result.
         const pending = readers.map((r) => {
           const seat = cardProviderById(deps.providers, r.provider);
           return Promise.race([
             deps.cache
-              .get(r.id, async () => {
-                const status = await seat.readers.status(deps.runtimeDeps(), r.ref);
-                return status.batteryPercent ?? null;
-              })
+              .get(r.id, () => seat.readers.status(deps.runtimeDeps(), r.ref))
               .then(
-                (percent) => ({ kind: "reading" as const, percent }),
+                (status) => ({ kind: "reading" as const, status }),
                 () => ({ kind: "unavailable" as const }),
               ),
             deadline.then(() => ({ kind: "unavailable" as const })),
@@ -796,7 +796,17 @@ export function batteryAlertSource(deps: {
           });
           return;
         }
-        const percent = result.percent;
+        const { status } = result;
+        if (status.online === false && status.unreachable !== true)
+          alerts.push({
+            key: `reader.offline:${r.id}`,
+            code: "reader.offline",
+            params: { reader: r.name },
+            severity: "warning",
+            since: null,
+            screen: "payments",
+          });
+        const percent = status.batteryPercent ?? null;
         if (percent === null || percent > BATTERY_WARN) return;
         alerts.push({
           key: `reader.battery_low:${r.id}`,

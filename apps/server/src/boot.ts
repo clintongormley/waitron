@@ -73,6 +73,7 @@ import {
   type CardProviderContribution,
   type CardProviderRuntimeDeps,
   type PaymentProvider,
+  type ReaderStatus,
 } from "@waitron/payments";
 import { recordIncidentOnce } from "@waitron/core";
 import { CARD_PROVIDERS } from "@waitron/composition";
@@ -2155,10 +2156,10 @@ async function bootServer(
     db,
     ring,
   });
-  // The battery reading is reused for five minutes so an open dashboard's minute-by-minute poll does
+  // The reader status is reused for five minutes so an open dashboard's minute-by-minute poll does
   // not hammer the provider; the backup freshness for one minute.
   const backupCache = createTtlCache<BackupStatus>({ ttlMs: 60_000, now });
-  const batteryCache = createTtlCache<number | null>({ ttlMs: 5 * 60_000, now });
+  const batteryCache = createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now });
   const backupSource = backupAlertSource({
     listStatus: () =>
       backupCache.get("status", () => backupSupervisor.status().then((s) => s.backupStatus)),
