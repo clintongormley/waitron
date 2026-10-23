@@ -483,8 +483,8 @@ const L = `${"a".repeat(64)}.webp`;
 const M = `${"b".repeat(64)}.webp`;
 const D = `${"c".repeat(64)}.webp`;
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const { logo: _, ...noLogo } = LEMON;
+void _;
 
 async function storedTheme(id: string): Promise<unknown> {
   const rows = await suite.db.execute<{ theme: string }>(
@@ -580,6 +580,16 @@ describe("a theme logo's printed dots", () => {
     });
     await saveWithDots(manager, a.id, { ...LEMON, logo: null }, PRINTABLE);
     expect(await storedTheme(a.id)).toEqual(LEMON);
+  });
+
+  it("renaming a theme holding dots reads it as usable without serving the dots", async () => {
+    const { manager } = await setup();
+    const expected = { ...LEMON, logo: { light: L } };
+    const a = await createWithDots(manager, "A", expected, PRINTABLE);
+    const renamed = await rename(manager, a.id, "B");
+    expect(renamed.choices).toEqual(expected);
+    expect(Object.keys(renamed.choices!)).not.toContain("printedLogo");
+    expect(await storedTheme(a.id)).toEqual({ ...expected, printedLogo: PRINTABLE });
   });
 
   it("a document without a logo key saves as no logo", async () => {

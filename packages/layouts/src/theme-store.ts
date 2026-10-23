@@ -61,15 +61,22 @@ function authorize(tx: Transaction, managementSessionId: string) {
   return authorizeManager(tx, { managementSessionId, permission: "layout.configure" });
 }
 
-async function requireTheme(tx: Transaction, id: string): Promise<{ name: string }> {
+async function requireThemeRow<T>(id: string, read: () => Promise<T | undefined>): Promise<T> {
   if (isUuid(id)) {
+    const row = await read();
+    if (row !== undefined) return row;
+  }
+  throw new AppError("theme.not_found", {});
+}
+
+function requireTheme(tx: Transaction, id: string): Promise<{ name: string }> {
+  return requireThemeRow(id, async () => {
     const [row] = await tx
       .select({ name: customThemes.name })
       .from(customThemes)
       .where(eq(customThemes.id, id));
-    if (row !== undefined) return row;
-  }
-  throw new AppError("theme.not_found", {});
+    return row;
+  });
 }
 
 /** The route always supplies dots with a logo, so the row never names a logo it cannot print. */
@@ -166,17 +173,9 @@ export async function saveCustomTheme(
   return { id: input.id, name, choices, updatedAt };
 }
 
-async function storedPrintedLogo(
-  tx: Transaction,
-  id: string,
-  light: string,
-): Promise<ReceiptLogoRasters | null> {
-  const [row] = await tx
-    .select({ theme: STORED_TEXT })
-    .from(customThemes)
-    .where(eq(customThemes.id, id));
+function storedPrintedLogo(text: string | null, light: string): ReceiptLogoRasters | null {
   try {
-    const stored: unknown = JSON.parse(row!.theme!);
+    const stored: unknown = JSON.parse(text!);
     const { logo, printedLogo } = stored as {
       logo?: { light?: unknown } | null;
       printedLogo?: unknown;
@@ -196,14 +195,24 @@ export async function prepareThemeSave(
   input: { managementSessionId: string; id: string | null; name?: string; theme: unknown },
 ): Promise<{ choices: ThemeChoices; keptPrintedLogo: ReceiptLogoRasters | null }> {
   await authorize(tx, input.managementSessionId);
-  if (input.id !== null) await requireTheme(tx, input.id);
+  const { id } = input;
+  const stored =
+    id === null
+      ? null
+      : await requireThemeRow(id, async () => {
+          const [row] = await tx
+            .select({ theme: STORED_TEXT })
+            .from(customThemes)
+            .where(eq(customThemes.id, id));
+          return row;
+        });
   const choices = parseThemeChoices(input.theme);
-  if (input.id === null) {
+  if (stored === null) {
     parseThemeName(input.name ?? "");
     return { choices, keptPrintedLogo: null };
   }
   const keptPrintedLogo =
-    choices.logo === null ? null : await storedPrintedLogo(tx, input.id, choices.logo.light);
+    choices.logo === null ? null : storedPrintedLogo(stored.theme, choices.logo.light);
   return { choices, keptPrintedLogo };
 }
 
