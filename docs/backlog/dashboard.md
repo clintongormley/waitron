@@ -698,6 +698,8 @@ registered as `venue-service:week`, and the others register theirs when they exi
   2026-10-17).** "Applies to new kitchen tickets and to reprints." and the release reminder's are
   each dropdown's `hint` since A178 (#1010 to #1019); a field that always holds a value never shows
   its hint, so only screen readers read them, while the switches beside them keep visible lines.
+  **2026-10-23 (A756 PR 4):** the reminder's dropdown, with its hint, moved to the department
+  dialog's Service tab, under Courses and the kitchen; it is still a hint.
 
 - **A dialog's height is chosen separately from its width (A734, owner 2026-10-15).** `wt-modal`'s
   shorter height is a fixed medium one, not one that follows its content, so a dialog given it does
