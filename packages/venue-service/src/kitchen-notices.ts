@@ -361,25 +361,6 @@ export async function writePrintMovedSlips(tx: Transaction, value: boolean): Pro
     .onConflictDoUpdate({ target: serviceSettings.id, set: { printMovedSlips: value } });
 }
 
-/** Minutes after the work ahead is served that a held group is due; null is off. No row reads 10. */
-export async function readReleaseReminderMinutes(tx: Transaction): Promise<number | null> {
-  const [row] = await tx
-    .select({ releaseReminderMinutes: serviceSettings.releaseReminderMinutes })
-    .from(serviceSettings)
-    .where(eq(serviceSettings.id, 1));
-  return row === undefined ? 10 : row.releaseReminderMinutes;
-}
-
-export async function writeReleaseReminderMinutes(
-  tx: Transaction,
-  value: number | null,
-): Promise<void> {
-  await tx
-    .insert(serviceSettings)
-    .values({ id: 1, releaseReminderMinutes: value })
-    .onConflictDoUpdate({ target: serviceSettings.id, set: { releaseReminderMinutes: value } });
-}
-
 /** How identical dishes print on a kitchen ticket. A venue with no row reads `combined`. */
 export async function readKitchenTicketGrouping(tx: Transaction): Promise<KitchenTicketGrouping> {
   const [row] = await tx

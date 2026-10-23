@@ -40,12 +40,10 @@ import {
   readKitchenTicketGrouping,
   readPrintHeldWork,
   readPrintMovedSlips,
-  readReleaseReminderMinutes,
   writeEditSentLines,
   writeKitchenTicketGrouping,
   writePrintHeldWork,
   writePrintMovedSlips,
-  writeReleaseReminderMinutes,
 } from "./kitchen-notices.js";
 import {
   readOpeningHoursModel,
@@ -765,7 +763,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
           printHeldWork: await readPrintHeldWork(tx),
           printMovedSlips: await readPrintMovedSlips(tx),
-          releaseReminderMinutes: await readReleaseReminderMinutes(tx),
           releaseReminderMinutesByDepartment: await listDepartmentReminderMinutes(tx, ctx.cfg),
           needsClearingDepartmentIds: await listNeedsClearingDepartmentIds(tx, ctx.cfg),
           serviceSteps: await listServiceSteps(tx, ctx.cfg),
@@ -785,7 +782,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
             printHeldWork: await readPrintHeldWork(tx),
             printMovedSlips: await readPrintMovedSlips(tx),
-            releaseReminderMinutes: await readReleaseReminderMinutes(tx),
           };
         });
         return c.json(settings);
@@ -842,16 +838,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           throw new AppError("management.request_invalid", { field: "printMovedSlips" });
         }
         await gated(sessionId, (tx) => writePrintMovedSlips(tx, printMovedSlips));
-        return c.body(null, 204);
-      }),
-    );
-
-    app.put("/management-api/venue-service/settings/release-reminder-minutes", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        const minutes = requireReleaseReminderMinutes(body.releaseReminderMinutes);
-        await gated(sessionId, (tx) => writeReleaseReminderMinutes(tx, minutes));
         return c.body(null, 204);
       }),
     );

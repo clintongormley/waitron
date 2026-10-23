@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "27e7d809-d7b0-4c69-b011-b3756c94c09c",
+  "id": "fcb37acb-c1a8-4eaf-bb1c-2adb49cdd613",
   "prevId": "5b770513-b2a2-41ef-961a-340fc7f2fb0b",
   "tables": {
     "department_sale_policies": {
@@ -890,14 +890,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": true
-        },
-        "release_reminder_minutes": {
-          "name": "release_reminder_minutes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": 10
         }
       },
       "indexes": {},
