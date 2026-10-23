@@ -2949,7 +2949,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   value each, set by hand with a picker or a code, put back one at a time or all at once, with
   warnings and fixes under the rows; Pick a different colour for dark screens gives the dark version
   its own button colour. Until slice 11 its heading and opening line leave out text, and until slice
-  12 it is one flat list. Slice 7 landed 2026-10-2x (#PR): a theme's document names a venue logo — a
+  12 it is one flat list. Slice 7 landed 2026-10-24 (#2029): a theme's document names a venue logo — a
   library image and an optional one for dark screens — checked on save and on import; the image
   library counts it as a use and refuses to delete it; `/api/theme` serves the images' addresses,
   and its hash, the till's `themeHash` and the dashboard's live read follow a reframed or replaced
