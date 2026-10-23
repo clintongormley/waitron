@@ -131,43 +131,60 @@ function behindChain(clockMs: number) {
 
 const attest = (outcome: string) => ({ outcome, note: "Checked at the provider", pin: "1234" });
 
-const ROUTES: { name: string; path: (id: string) => string; body?: Record<string, unknown> }[] = [
-  { name: "stuck resolve", path: (id) => `/management-api/payments/stuck/${id}/resolve` },
+const ROUTES: {
+  name: string;
+  path: (id: string) => string;
+  body?: Record<string, unknown>;
+  /** What the route answers for an unknown id once past the check. */
+  next: { status: number; code: string };
+}[] = [
+  {
+    name: "stuck resolve",
+    path: (id) => `/management-api/payments/stuck/${id}/resolve`,
+    next: { status: 409, code: "payment.not_stuck" },
+  },
   {
     name: "bill payment resolve",
     path: (id) => `/management-api/payments/bill-payments/${id}/resolve`,
+    next: { status: 404, code: "bill.payment_not_found" },
   },
   {
     name: "bill payment attest",
     path: (id) => `/management-api/payments/bill-payments/${id}/attest`,
+    next: { status: 404, code: "bill.payment_not_found" },
     body: attest("received"),
   },
   {
     name: "held outcome",
     path: (id) => `/management-api/payments/held/${id}/outcome`,
+    next: { status: 404, code: "payment.hold_not_found" },
     body: { outcome: "kept", note: "Kept", pin: "1234" },
   },
   {
     name: "bill refund resolve",
     path: (id) => `/management-api/payments/bill-refunds/${id}/resolve`,
+    next: { status: 404, code: "bill.refund_not_found" },
   },
   {
     name: "bill refund attest",
     path: (id) => `/management-api/payments/bill-refunds/${id}/attest`,
+    next: { status: 404, code: "bill.refund_not_found" },
     body: attest("completed"),
   },
   {
     name: "tender refund resolve",
     path: (id) => `/management-api/payments/tender-refunds/${id}/resolve`,
+    next: { status: 404, code: "tender.refund_not_found" },
   },
   {
     name: "tender refund attest",
     path: (id) => `/management-api/payments/tender-refunds/${id}/attest`,
+    next: { status: 404, code: "tender.refund_not_found" },
     body: attest("completed"),
   },
 ];
 
-describe.each(ROUTES)("$name", ({ path, body }) => {
+describe.each(ROUTES)("$name", ({ path, body, next }) => {
   const post = (app: Hono, cookie: string) =>
     send(app, cookie, "POST", path(randomUUID()), body ?? {});
 
@@ -185,8 +202,8 @@ describe.each(ROUTES)("$name", ({ path, body }) => {
 
   it("goes past the check a minute behind the latest record", async () => {
     const answer = await post(paymentsAt(nowMs() - MINUTE), managerCookie);
-    expect(answer.json.code).toBeDefined();
-    expect(answer.json.code).not.toBe("clock.behind_chain");
+    expect(answer.status).toBe(next.status);
+    expect(answer.json.code).toBe(next.code);
   });
 });
 
