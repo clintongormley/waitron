@@ -400,7 +400,7 @@ run the operator harness `src/aeat-certificate-check.preprod.test.ts`. It sends 
 - `WAITRON_CERT_CHECK_KIND`: `sello` or `representante`
 - `WAITRON_CERT_CHECK_ENVIRONMENT`: `preproduction` or `production`
 - `WAITRON_CERT_CHECK_NIF`: the taxpayer's tax ID
-- `WAITRON_CERT_CHECK_NOMBRE`: the taxpayer's legal name
+- `WAITRON_CERT_CHECK_LEGAL_NAME`: the taxpayer's legal name
 - `WAITRON_CERT_CHECK_ADDRESS_KIND` (optional): `sello` or `representante`, to send to that type's
   address instead and see how AEAT answers the wrong type
 

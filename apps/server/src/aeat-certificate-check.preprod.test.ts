@@ -1,21 +1,3 @@
-// Checks a real AEAT certificate with the code an install runs, and prints what it finds. It asks
-// AEAT a read-only `consultar` question and files nothing.
-//
-//   WAITRON_CERT_CHECK_PFX_BASE64   the .p12/.pfx file, base64-encoded
-//   WAITRON_CERT_CHECK_PASSPHRASE   its passphrase
-//   WAITRON_CERT_CHECK_KIND         sello | representante
-//   WAITRON_CERT_CHECK_ENVIRONMENT  preproduction | production
-//   WAITRON_CERT_CHECK_NIF          the taxpayer's tax ID
-//   WAITRON_CERT_CHECK_NOMBRE       the taxpayer's legal name
-//   WAITRON_CERT_CHECK_ADDRESS_KIND optional, sello | representante: send to that type's address
-//                                   instead, to see how AEAT answers the wrong type
-//
-//   pnpm --filter @waitron/server test:preprod --reporter=default src/aeat-certificate-check.preprod.test.ts
-//
-// `--reporter=default` because under an AI agent Vitest hides a passing test's console output,
-// which is all this suite produces.
-//
-// With any required variable unset or empty the suite is skipped and makes no network call.
 import { describe, expect, it } from "vitest";
 import type { DeploymentEnvironment } from "@waitron/db";
 import {
@@ -33,10 +15,10 @@ const passphrase = process.env.WAITRON_CERT_CHECK_PASSPHRASE;
 const kind = process.env.WAITRON_CERT_CHECK_KIND;
 const environment = process.env.WAITRON_CERT_CHECK_ENVIRONMENT;
 const nif = process.env.WAITRON_CERT_CHECK_NIF;
-const nombre = process.env.WAITRON_CERT_CHECK_NOMBRE;
+const legalName = process.env.WAITRON_CERT_CHECK_LEGAL_NAME;
 const addressKind = process.env.WAITRON_CERT_CHECK_ADDRESS_KIND;
 
-const configured = [pfxBase64, passphrase, kind, environment, nif, nombre].every(
+const configured = [pfxBase64, passphrase, kind, environment, nif, legalName].every(
   (value) => !isUnset(value),
 );
 
@@ -83,7 +65,7 @@ describe.runIf(configured)("a real AEAT certificate, checked with the shipped co
     const endpointFor = aeatEndpointFor(env);
     const result = await checkWithAuthority({
       material,
-      taxpayer: { legalName: nombre!, taxId: nif! },
+      taxpayer: { legalName: legalName!, taxId: nif! },
       timeZone: "Europe/Madrid",
       now: new Date(),
       transport: { endpointFor: () => endpointFor(sendTo), fetchFor: mtlsFetch },
