@@ -5,6 +5,18 @@ their full text.
 
 ## A1018. Agree and build the hosted writer stop-proof contract
 
+**CURRENT correction, 2026-10-23, after the 15:37 and 15:40 owner answers:** the owner
+rejected emergency filing by returning M1. After either takeover, **M2 alone handles all AEAT
+communication**, filing copied and later-returned originals in their generating fiscal
+identities; only its new sales use M2's identity. Returning M1 transfers missing fiscal originals
+and all received AEAT outcomes, including those for copied originals, without contacting AEAT.
+The publication and direction blocks immediately below are historical; their filing assignment
+and next-question status are obsolete. Cloud #312 at `7e3ba8246a6d5dbeb4275ed7c00f2f34124c944a`
+still carries the rejected assignment. G/D133 must amend and pin acceptance before **one short
+revised owner design question**, drafted in the [current design §11](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md#11-future-acceptance-and-the-cloud-agreement).
+A1034 is authorised and queued next; the AEAT test-service old-tail, interleaving and duplicate
+checks have not run. No revised Cloud agreement, legal/runtime receipt or build approval is claimed.
+
 **Canonical publication update, 2026-10-23:** Cloud's direction agreement is published
 in [PR #312](https://github.com/waitron-io/waitron-cloud/pull/312), at
 [`7e3ba8246a6d5dbeb4275ed7c00f2f34124c944a`](https://github.com/waitron-io/waitron-cloud/blob/7e3ba8246a6d5dbeb4275ed7c00f2f34124c944a/docs/waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018).
@@ -27,12 +39,13 @@ expiry/revocation/replay checks remain unbuilt and require joint specification a
 The previous proposal-state wording below is historical. Design approval, build authority and
 runtime acceptance remain pending.
 
-**Proposed owner-directed revision, 2026-10-23; no build approval.** The owner rejected the
+**CURRENT proposed owner-directed revision, 2026-10-23; no build approval.** The owner rejected the
 [old design](../superpowers/specs/2026-10-22-a1018-cloud-stop-proof-design.md) at ~02:25 for
 requiring Cloud and excessive complexity, then supplied five points at ~02:58. The
-[replacement design](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md) has completed fresh builder review
-and awaits agreement with Cloud through Lane G, then **one owner design question**
-containing both Harbour Kitchen examples and the recommended defaults. Keep this item open;
+[replacement design](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md) now applies the
+15:37 correction to the preceding reviewed revision. It awaits amended Cloud acceptance through
+G/D133, then **one short owner design question** referring to both Harbour Kitchen examples and
+the retained proposed defaults. Keep this item open;
 the original queue start is 2026-10-22 16:14.
 
 One protocol covers local-to-local, local-to-Cloud, Cloud-to-Cloud and Cloud-to-local. Local
@@ -46,20 +59,45 @@ supervisor, attestation or periodic lease is required. An isolated old M1 can ke
 it learns of the takeover; tills selecting one machine do not prove one venue writer.
 
 The five points are explicit in the revision: stepdown survives reboot and an uninformed M1
-checks M2 or a till before trading/filing, waiting for an authorised human if neither answers;
+checks M2 or a till before trading or AEAT contact, waiting for an authorised human if neither answers;
 the emergency screen warns about business divergence; only fiscal records return, with a
-recommended reconciliation list rather than imported payment totals; controlled M2 takes
-M1's filing queue, while emergency M1 files on restricted return and M2 holds every predecessor
-chain, including copied records; and the recommended declarant holds `node.promote` with fresh
-passkey or password plus enrolled TOTP, never a till PIN alone. These recommendations await
-approval. Audit the actor, declaration, reason, machines, last copy, time and operation.
+recommended reconciliation list rather than imported payment totals; **M2 alone handles all
+AEAT communication after either takeover**, filing old originals it already holds or receives
+later in their original generating identities, and new sales in its own identity; and the
+recommended declarant holds `node.promote` with fresh passkey or password plus enrolled TOTP,
+never a till PIN alone. The other proposed defaults remain as presented; the M2 assignment is
+the owner's direction. Audit the actor, declaration, reason, machines, last copy, time and operation.
+
+Returning M1 stays restricted from business work and all AEAT contact. It transfers missing
+fiscal originals, necessary chain/filing state, every received AEAT outcome even for originals
+already copied, and unresolved request facts. M2 applies known results and handles uncertainty
+and duplicates through existing recovery/filing-case paths, retaining conflicting facts.
+No emergency predecessor ownership hold prohibits M2 from filing copied old records; existing
+domain holds and the temporary filing pause while a return batch applies remain.
+Controlled moves still require complete final-copy acceptance, source relinquishment and
+M2's recorded assumption before activation. Durable restrictions and checkpoints survive
+retries/reboots; unknown possible activation waits on the selected M2. A pre-acceptance crash
+may use the explicit same-M2 emergency replacement only under the design's retained-state
+checks, never as a timeout escape from a possible filing assignment.
+
+This relay accords with [A947 §7.1](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md#71-the-tail-and-the-fix-for-the-failed-prototype-scenario):
+“the receiver files it and AEAT's duplicate handling settles it”. [Asesor Q2](../compliance/asesor-questions.md#q2-may-a-node-other-than-the-till-transmit-the-tills-records-to-aeat)
+requires “the **generating till's** `IdSistemaInformatico` and `NumeroInstalacion`, never the
+relaying node's”. The [5 October observation beside Q34](../compliance/asesor-questions.md#q34-sending-the-old-installations-unsent-records-after-the-switch-added-2026-10-03)
+reports “`EstadoRegistro: "Correcto"` for each of its two first records”; it does not verify
+old-tail continuation after M2's new chain starts, interleaving or resending an old-server-filed
+record. The 15:40 “Test it” answer authorises A1034, queued next, to check these on AEAT's test
+service; this is not a new owner choice and the checks have not run. The design's source table
+quotes and links the basis and its limits; no new transfer or authentication format is invented.
 
 Old nonfiscal changes stay in a restricted archive, never merged or re-run. Reconciliation
 references are new M2-owned records. No automatic wipe precedes fiscal receipts, matching
 transferred totals, health and verified archive gates. A lost disk leaves an explicit unknown
 gap and the standing consultation/month-end follow-up, not invented fiscal originals or a
-claim that AEAT restores business data. A947 §§6.3/7.1/7.2 and dependent slices need explicit
-amendment for filing ownership, its broader ledger tail and archive/deletion policy.
+claim that AEAT restores business data. Preserve A947 §7.1's receiver-files/sender-files-nothing
+direction and S2 full-state/replay controls. A947 §§6.3/7.1/7.2 and dependent slices still need
+explicit amendment for the checkpoints, fiscal-only scope of its broader ledger tail,
+business reconciliation and archive/deletion policy, not a reversal of emergency filing ownership.
 Cold restore stays an explicit fresh-chain/data-loss choice with its existing recovery
 source, operation, key and sole-recovery gates, no new hard-stop demand and no silent fallback.
 
@@ -67,7 +105,9 @@ The old Waitron `db7cddeb2d38984b284b23e8e391e7ebd7cb9156` / Cloud
 `6700d6f2319ff0b62b0ccc27e833487935ad2174` direction agreement through Cloud #300 is
 superseded. The shared Cloud contract home remains `docs/waitron-integration-contract.md`
 in the Cloud repository. The revision proposes replacement A1018 text and identifies P6/P7,
-D88 and production §§3/6/9/12 wording to amend through Lane G; no new agreement is asserted.
+D88 and production §§3/6/9/12 wording to amend through G/D133, including the rejected emergency
+filing assignment in #312. Pin amended canonical acceptance before the one short question;
+no new agreement is asserted.
 Wire details, the node-local inventory, Cloud authorisation mapping, separately authorised
 implementation and joint behavioural/adverse controls remain open. Runtime checks are UNRUN
 for this docs task; no provider work is authorised.

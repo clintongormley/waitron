@@ -5073,10 +5073,10 @@ _Formerly _Afterwards_ and _Cloud connection integration_._ Detail: [backlog/rep
 
 Not in any track until the standalone primary is done.
 
-- **A1018. Simple controlled and emergency handover, with Cloud only a placement.** Cloud's
-  direction agreement is published in #312 and pinned in the reviewed proposal. Next is the
-  one owner design question with both examples, proposed defaults and the explicit Cloud actor
-  mapping. Design approval, exact formats, A947 amendments, build and runtime checks remain open.
+- **A1018. Simple controlled and emergency handover, with Cloud only a placement.** M2 handles
+  all AEAT communication after either takeover; returning M1 transfers fiscal originals/outcomes only.
+  G/D133 must amend Cloud #312 and pin acceptance before one short revised owner design question.
+  A1034 is authorised next; retained defaults, exact formats, A947 amendments, build and runtime acceptance remain open.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
 - **The till's theme fetch does not follow a server move (A841 slice 3).** The till fetches
