@@ -1551,10 +1551,10 @@ async function partyReminderMinutes(
 }
 
 /**
- * Each of these parties' release reminders ({@link releaseReminder}), keyed by party, from two reads
- * of their departments' intervals and one each of the parties' groups and dish lines. A party that is not open has
- * none: it can no longer fire or snooze a group. A line on an abandoned bill is left out, as
- * {@link readCurrentOrders} leaves it out.
+ * Each of these parties' release reminders ({@link releaseReminder}), keyed by party, from two
+ * reads of their departments' intervals and one each of the parties' groups and dish lines. A party
+ * that is not open has none: it can no longer fire or snooze a group. A line on an abandoned bill
+ * is left out, as {@link readCurrentOrders} leaves it out.
  */
 export async function readReleaseReminders(
   tx: Transaction,

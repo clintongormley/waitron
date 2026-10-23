@@ -647,7 +647,7 @@ describe("configuration transfer database path", () => {
     expect(transferred.tables.device_profile_printers!.map((row) => row.page_printer_id)).toContain(
       sourcePagePrinterId,
     );
-    await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
       beforeCommit: (tx, result) =>
@@ -2701,7 +2701,7 @@ it("transfers a device profile's receipt and payment-slip printer lists, in orde
 });
 
 it("leaves a table's clearing state behind", async () => {
-  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+  const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
@@ -2779,7 +2779,7 @@ it("carries a department's Needs clearing switch to the importing venue", async 
 });
 
 it("carries a department's reminder minutes to the importing venue", async () => {
-  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+  const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
@@ -2802,7 +2802,7 @@ it("carries a department's reminder minutes to the importing venue", async () =>
     new Date("2026-10-19T12:00:00Z"),
     versions,
   );
-  await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B86420975"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx, result) =>
@@ -3028,7 +3028,7 @@ it("round-trips missing home slots alongside live tiles with fresh ids and uncha
 });
 
 it("gives each imported product the folded key of its own name, whatever the bundle held", async () => {
-  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+  const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
@@ -3160,7 +3160,7 @@ it("keeps a name that equals another row's id, while the ids that point at rows 
   );
   for (const id of Object.values(sourceIds)) expect(bundleIds.has(id)).toBe(true);
 
-  await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B86420975"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx, result) =>
@@ -3366,7 +3366,7 @@ it("refuses an Inactive product in a menu list and a menu price for an Inactive 
 });
 
 it("counts an exported product with no Active flag as Active, as the column stores it", async () => {
-  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+  const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
@@ -3532,7 +3532,7 @@ async function retireProfile(locationId: string, profileId: string): Promise<voi
 }
 
 it("leaves behind a retired profile that no row uses, and the bundle still imports", async () => {
-  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+  const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
@@ -3550,7 +3550,7 @@ it("leaves behind a retired profile that no row uses, and the bundle still impor
     versions,
   );
   expect(transferred.tables.device_profiles!.map((row) => row.name)).not.toContain("Old till");
-  await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B86420975"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx, result) =>
@@ -4559,7 +4559,7 @@ it("A725 transfers station and department choices", async () => {
 });
 
 it("transfers a department's customer and staff period menus to its zone under new ids", async () => {
-  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+  const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });

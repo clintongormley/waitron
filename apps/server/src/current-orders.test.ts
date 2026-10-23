@@ -714,19 +714,19 @@ describe("the reminder follows the party's department", () => {
   it("reads the department of the party's first table, and the next one's once the first is left", async () => {
     const v = await setupVenue();
     const a = await servedUpToGroupTwo(v);
-    const zoneB = await otherDepartment(v, 5);
-    const second = await inTx(async (tx) => {
+    await moveTable(a.tableId, await otherDepartment(v, 5));
+    // Inserted after the party's own table but joined before it, so only `joined_at` makes it first.
+    const first = await inTx(async (tx) => {
       const { id } = await createTable(tx, v.cfg, {
         label: `C-${randomUUID().slice(0, 6)}`,
         zoneId: v.zoneId,
       });
-      await tx.update(diningTables).set({ zoneId: zoneB }).where(eq(diningTables.id, id));
-      const [first] = await tx
+      const [own] = await tx
         .select({ joinedAt: partyTables.joinedAt })
         .from(partyTables)
         .where(eq(partyTables.partyId, a.partyId));
-      const later = new Date(Date.parse(first!.joinedAt) + 60_000).toISOString();
-      await tx.insert(partyTables).values({ partyId: a.partyId, tableId: id, joinedAt: later });
+      const earlier = new Date(Date.parse(own!.joinedAt) - 60_000).toISOString();
+      await tx.insert(partyTables).values({ partyId: a.partyId, tableId: id, joinedAt: earlier });
       return id;
     });
 
@@ -737,10 +737,10 @@ describe("the reminder follows the party's department", () => {
       tx
         .update(partyTables)
         .set({ leftAt: new Date().toISOString() })
-        .where(and(eq(partyTables.partyId, a.partyId), eq(partyTables.tableId, a.tableId))),
+        .where(and(eq(partyTables.partyId, a.partyId), eq(partyTables.tableId, first))),
     );
 
-    expect(await floorReminder(v, second)).toEqual({ groupId: a.g3.id, dueAt: T(10) });
+    expect(await floorReminder(v, a.tableId)).toEqual({ groupId: a.g3.id, dueAt: T(10) });
     expect((await currentOrders(a.partyId)).reminder).toEqual({ groupId: a.g3.id, dueAt: T(10) });
   });
 
