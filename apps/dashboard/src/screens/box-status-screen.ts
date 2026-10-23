@@ -126,7 +126,8 @@ export class BoxStatusScreen extends LitElement {
           margin-top: var(--wt-space-1);
         }
       }
-      .free {
+      .free,
+      .retry {
         display: flex;
         gap: var(--wt-space-1);
         align-items: center;
@@ -282,6 +283,31 @@ export class BoxStatusScreen extends LitElement {
     </span>`;
   }
 
+  #canRetry(health: BoxHealth): boolean {
+    const outbox = health.outbox;
+    return (
+      outbox !== null &&
+      outbox.waiting > 0 &&
+      !outbox.awaitingCertificate &&
+      health.notices.some((notice) => notice.code === "fiscal.records_unsent")
+    );
+  }
+
+  #retryAction(health: BoxHealth): TemplateResult {
+    const can = this.#canRetry(health);
+    return html`<span class="retry">
+      <wt-button data-test="retry" variant=${can ? "primary" : "secondary"} ?disabled=${!can}
+        >${t("box_status.retry")}</wt-button
+      ><wt-help-tooltip
+        mode="help-mode"
+        aria-label=${t("box_status.retry_help_label")}
+        guide-href=${guideHref("box-status.retry-now")}
+        guide-label=${t("box_status.retry_help_guide")}
+        >${t("box_status.retry_help")}</wt-help-tooltip
+      >
+    </span>`;
+  }
+
   #renderRow(row: PartRow, health: BoxHealth): TemplateResult {
     const sentences = [
       ...new Set(
@@ -289,6 +315,7 @@ export class BoxStatusScreen extends LitElement {
       ),
     ].filter((sentence) => sentence !== row.line);
     const disk = row.id === "disk";
+    const outbox = row.id === "tax" ? health.outbox : null;
     return html`<li data-test="row-${row.id}" data-state=${row.state}>
       <span class="dot ${row.state}"
         ><span class="state-words">${t(`box_status.state.${row.state}` as StringKey)}</span></span
@@ -314,8 +341,17 @@ export class BoxStatusScreen extends LitElement {
             ? html`<p class="aside" data-test="read-only">${t("box_status.free_read_only")}</p>`
             : nothing
         }
+        ${
+          outbox?.awaitingCertificate === true &&
+          !row.alerts.some((alert) => alert.code === "fiscal.awaiting_certificate")
+            ? html`<p class="aside" data-test="awaiting-certificate">
+                ${t("box_status.retry_awaiting_certificate")}
+              </p>`
+            : nothing
+        }
       </div>
       <div class="actions">
+        ${outbox === null ? nothing : this.#retryAction(health)}
         ${this.#screensOf(row).map((screen) => this.#goToButton(screen))}
         ${disk ? this.#freeAction(health) : nothing}
       </div>
