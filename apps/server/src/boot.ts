@@ -280,6 +280,7 @@ import { closeListener } from "./close-listener.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { clockStopReader, collectBoxHealth } from "./box-health.js";
+import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
 import { createSpaceFreer, surveyLeftovers, type LeftoverDeps } from "./free-space-now.js";
@@ -2214,6 +2215,18 @@ async function bootServer(
     log,
   });
   undoOnFailure.push(() => boxEmails.stop());
+  const clockWatch = startClockWatch({
+    backend: tillBackend,
+    store: clockWitnesses,
+    clock: tillClock,
+    read: (fn) => db.withWriteLock(() => fn(db)),
+    transaction: (fn) => withTransaction(db, fn),
+    filesRecords,
+    isPrimary: () => holders.singletonRole.current === "primary",
+    intervalMs: CLOCK_WATCH_MS,
+    log,
+  });
+  undoOnFailure.push(() => clockWatch.stop());
   const serverAlertSources: AlertSource[] = [
     backupSource,
     storageAlertSource({ space: freeSpace, disk: diskFull }),
@@ -2893,6 +2906,7 @@ async function bootServer(
           () => tunnelWorker?.catch(() => {}),
           () => backupSupervisor.stop(),
           () => demoPrinterLoop?.stop(),
+          () => clockWatch.stop(),
           // Litestream writes venue.db, so its stop is awaited before the store closes.
           () => streamHost.stop(),
         ]);
