@@ -684,6 +684,15 @@ the unfinished file and includes the still-running child in its process snapshot
 Healthy exit codes and both output streams are also asserted. These controls do
 not reproduce the unknown CI hang.
 
+On macOS, Node v26.11.1 and Vitest 4.1.12, the same till shard command
+(`pnpm --filter @waitron/till test:shard --shard=2/7`, with the file-progress
+reporter and separate report paths) passed 74 files and 2,673 cases in each run:
+256.85 seconds without the wrapper, then 249.24 seconds with it. This pair showed
+no slowdown; it does not measure a worst-case overhead. A standalone control using
+the real file-progress reporter and a blocked Node child exited 124 after 6.09
+seconds with a one-second deadline and the normal five-second grace. A separate
+witness process remained alive after that command ended.
+
 The browser-deadline case in `scripts/ci-workflow.test.mjs` is weaker than its name:
 it reads workflow text, never executes a deadline or checks GitHub log retention.
 The runner's explicit browser consumers are in `ROOT_SCOPE_CONSUMERS`; its guard
