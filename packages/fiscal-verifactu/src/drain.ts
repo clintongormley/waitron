@@ -171,7 +171,7 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
       result.skipped.push({ errorCode: codeOf(error) });
     }
   } else {
-    bumpNextDue(result, await nextProbeAt(deps.db, now, deps.environment));
+    bumpNextDue(result, await nextClaimOpportunity(deps.db, now, deps.environment));
   }
   // A pass that failed before `drainDue` scheduled anything must still report a future instant,
   // or a long-running host stops polling while a `pendiente` row sits past its art. 16.4 hour.
@@ -422,7 +422,7 @@ async function countDue(tx: Transaction, now: Date, environment: Entorno): Promi
 }
 
 async function nextClaimOpportunity(
-  tx: Transaction,
+  tx: Database | Transaction,
   now: Date,
   environment: Entorno,
 ): Promise<Date | null> {

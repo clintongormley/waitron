@@ -875,8 +875,10 @@ written.
 Left open by A798-B slice 7. The page's Hacienda row reads the staff notices and the bell
 (slice 7 decision 1): it shows the unsent count (`fiscal.records_unsent`) and the bell's
 tax-agency alerts (every `fiscal`-area alert but the clock's), and slice 7 added no seat to the
-module contract. 7b adds the Veri\*Factu module's own route for Reintentar ahora — which changes when records reach AEAT, so it is parked for the owner —
-and, with it, the last accepted record's time, as the module's own row on the page.
+module contract. 7b adds the Veri\*Factu module's own route for Reintentar ahora to bring
+failed-send retries forward and wake the sending loop. It changes when records reach AEAT, so
+it is parked for the owner. The same slice adds the last accepted record's time, as the module's
+own row on the page.
 
 ## On a box with card payments off, the card-reader battery check may raise alert.source_unavailable on every bell read
 
