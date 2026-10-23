@@ -132,11 +132,11 @@ Hay tres salidas:
 Cuando la página tiene una prueba reciente de que la hora del equipo es correcta, la fila **Reloj**
 muestra esa prueba y un botón **Reanudar los cobros**. La prueba es una de estas:
 
-- **Hacienda: coincide (comprobado 21:40)**: durante una parada, un equipo que envía registros a
-  Hacienda le pide su hora cada minuto, y su respuesta estaba a menos de un minuto del reloj del
-  equipo.
-- **Dispositivos: 2 marcan 21:40**: dos o más cajas registradoras o terminales de camarero enviaron
-  una hora a menos de un minuto de la del equipo. La [sección
+- **Hacienda: coincide (comprobado 2026-10-23 21:40)**: durante una parada, un equipo que envía
+  registros a Hacienda le pide su hora cada minuto, y su respuesta estaba a menos de un minuto del
+  reloj del equipo.
+- **Dispositivos: 2 marcan 2026-10-23 21:40**: dos o más cajas registradoras o terminales de
+  camarero enviaron una hora a menos de un minuto de la del equipo. La [sección
   siguiente](box-status.md#clock-witnesses) explica qué dispositivos envían su hora.
 
 Solo cuenta una prueba tomada desde que se pararon los cobros, y solo durante cinco minutos. Tampoco
@@ -147,8 +147,9 @@ La página no ofrece reanudar, y explica por qué bajo la fila **Reloj**, cuando
 - no hay ninguna prueba reciente: **No hay ninguna prueba reciente de que la hora del equipo sea
   correcta.**
 - dos o más dispositivos coinciden entre sí en que el reloj del equipo va desviado más de un minuto,
-  o Hacienda no ha coincidido con él en algún momento de esta parada: **Otros relojes dicen que la
-  hora del equipo está mal.**
+  o Hacienda no ha coincidido con él desde que se pararon los cobros. El equipo solo guarda ese
+  desacuerdo en su memoria, así que lo olvida si el propio equipo se reinicia durante la parada:
+  **Otros relojes dicen que la hora del equipo está mal.**
 - el reloj del equipo va más de 24 horas por detrás de la última venta: **La hora del equipo está
   más de 24 horas por detrás de la última venta.**
 
@@ -160,8 +161,8 @@ a la vez, solo se reanuda una vez, y la segunda persona ve la primera reanudaci�
 Después de reanudar, el equipo vuelve a cobrar en ese momento. No cambia ninguna venta ya
 registrada. La siguiente venta lleva la hora del reloj del equipo, así que se registra con una hora
 anterior a la de la última venta. La fila **Reloj** se pone en ámbar y dice quién reanudó los cobros
-y cuándo, por ejemplo **Cobros reanudados por Ana el 21:42**, y la campana guarda un aviso con el
-nombre de esa persona, las dos horas y la prueba.
+y cuándo, por ejemplo **Cobros reanudados por Ana el 2026-10-23 21:42**, y la campana guarda un
+aviso con el nombre de esa persona, las dos horas y la prueba.
 
 Una reanudación admite un solo paso atrás. Si el reloj del equipo vuelve a retroceder, de modo que
 marca más de un minuto más atrás que cuando se reanudó, o más de un minuto antes que una venta hecha
@@ -172,10 +173,10 @@ hora.**
 
 Si el equipo descubre más tarde que el reloj en el que se confió al reanudar estaba mal, porque la
 hora de Hacienda no coincide con él o el reloj salta hacia delante más de un minuto, y se hicieron
-ventas con esa reanudación, la campana lo dice: **Las ventas registradas entre 21:42 y 22:15 se
-fecharon con un reloj que resultó estar mal. Quedan como se registraron; consúltalo con tu
-asesor.** Las horas de ese aviso se fijan cuando aparece, así que las ventas hechas después no se
-añaden a él.
+ventas con esa reanudación, la campana lo dice: **Las ventas registradas entre 2026-10-23 21:42 y
+2026-10-23 22:15 se fecharon con un reloj que resultó estar mal. Quedan como se registraron;
+consúltalo con tu asesor.** Las horas de ese aviso se fijan cuando aparece, así que las ventas
+hechas después no se añaden a él.
 
 No hace falta reiniciar el equipo ni los terminales. Cada cobro se comprueba en el momento de
 hacerlo, así que en cuanto el reloj marca como mucho un minuto antes que la última venta, el
@@ -202,9 +203,9 @@ no envían la suya.
 
 Cuando dos o más dispositivos coinciden entre sí en que el reloj del equipo va desviado más de un
 minuto, la campana avisa a las personas que pueden gestionar el sistema, estén parados o no los
-cobros: **2 dispositivos coinciden en que son las 21:40, pero el equipo marca 21:10. Comprueba la
-fecha y la hora del equipo en Estado del equipo.** El personal de los terminales no ve nada de
-esto.
+cobros: **2 dispositivos coinciden en que son las 2026-10-23 21:40, pero el equipo marca 2026-10-23
+21:10. Comprueba la fecha y la hora del equipo en Estado del equipo.** El personal de los terminales
+no ve nada de esto.
 
 Esas mismas lecturas son la prueba de los dispositivos que la página necesita antes de ofrecer
 **Reanudar los cobros**, como explica [Cuando se paran los cobros por la

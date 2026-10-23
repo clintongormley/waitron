@@ -126,10 +126,12 @@ There are three ways out:
 When the page has fresh proof that the box's clock is right, the **Clock** row shows that proof and
 a **Restart payments** button. The proof is one of these:
 
-- **Tax agency: matches (checked 21:40)**: during a stop, a box that sends records to the tax agency
-  asks it for its time each minute, and its answer was within a minute of the box's clock.
-- **Devices: 2 read 21:40**: two or more tills or handhelds sent a clock within a minute of the
-  box's. The [next section](box-status.md#clock-witnesses) explains which devices send their clock.
+- **Tax agency: matches (checked 2026-10-23 21:40)**: during a stop, a box that sends records to the
+  tax agency asks it for its time each minute, and its answer was within a minute of the box's
+  clock.
+- **Devices: 2 read 2026-10-23 21:40**: two or more tills or handhelds sent a clock within a minute
+  of the box's. The [next section](box-status.md#clock-witnesses) explains which devices send their
+  clock.
 
 Only proof taken since payments stopped counts, and only for five minutes. A reading taken before a
 change to the box's clock does not count either.
@@ -138,8 +140,9 @@ The page does not offer a restart, and says why under the **Clock** row, when:
 
 - there is no fresh proof: **There is no fresh proof that the box's clock is right.**
 - two or more devices agree with each other that the box's clock is more than a minute off, or the
-  tax agency has disagreed with it at any time during this stop: **Other clocks say the box's clock
-  is wrong.**
+  tax agency has disagreed with it since payments stopped. The box keeps that disagreement only in
+  its memory, so it forgets it if the box itself restarts during the stop: **Other clocks say the
+  box's clock is wrong.**
 - the box's clock is more than 24 hours behind the latest sale: **The box's clock is more than 24
   hours behind the last sale.**
 
@@ -150,8 +153,8 @@ one restart is made, and the second person sees the first one.
 
 After a restart, the box takes payments again straight away. No sale already recorded changes. The
 next sale carries the box's clock, so it is recorded with an earlier time than the latest sale. The
-**Clock** row turns amber and says who restarted payments and when, for example **Payments
-restarted by Ana at 21:42**, and the bell keeps an alert naming that person, both times and the
+**Clock** row turns amber and says who restarted payments and when, for example **Payments restarted
+by Ana at 2026-10-23 21:42**, and the bell keeps an alert naming that person, both times and the
 proof.
 
 A restart allows for one step back only. If the box's clock goes back again, so that it reads more
@@ -162,9 +165,9 @@ already restarted, and the box's clock has gone back since. Get the clock checke
 
 If the box later finds that the clock it trusted at the restart was wrong, because the tax agency's
 time disagrees with it or the clock jumps forward by more than a minute, and sales were made under
-the restart, the bell says so: **Sales recorded between 21:42 and 22:15 were dated by a clock that
-proved wrong. They stay as recorded; ask your tax adviser.** The times in that alert are fixed when
-it is raised, so sales made after it are not added to it.
+the restart, the bell says so: **Sales recorded between 2026-10-23 21:42 and 2026-10-23 22:15 were
+dated by a clock that proved wrong. They stay as recorded; ask your tax adviser.** The times in that
+alert are fixed when it is raised, so sales made after it are not added to it.
 
 You do not need to restart the box or the tills. Each payment is checked when it is made, so once
 the clock reads no more than a minute before the latest sale, the next payment is no longer refused
@@ -187,8 +190,8 @@ them. Kitchen screens do not send theirs.
 
 When two or more devices agree with each other that the box's clock is more than a minute off, the
 bell warns the people who can manage the system, whether or not payments have stopped: **2 devices
-agree that the time is 21:40, but the box's clock reads 21:10. Check the box's date and time on the
-Box status page.** Staff on the tills see nothing for this.
+agree that the time is 2026-10-23 21:40, but the box's clock reads 2026-10-23 21:10. Check the box's
+date and time on the Box status page.** Staff on the tills see nothing for this.
 
 The same readings are the device proof that the page needs before it offers **Restart payments**, as
 [When payments stop because of the clock](box-status.md#clock-behind) explains.
