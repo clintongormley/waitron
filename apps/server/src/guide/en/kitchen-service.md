@@ -56,11 +56,12 @@ sent with that ticket and receives corrections while its work remains unserved. 
 has received no advance ticket takes its first copy when the dish is fired.
 
 A station set to **Print held groups in advance** when a group is held receives its HOLD ticket;
-another station set so may receive it later, when a held dish moves or is added to it. A station
-that received a HOLD ticket keeps getting the group's HOLD paper, its corrections and the ticket
-marked FIRE, even if its switch is turned off. Any other station prints its part unmarked when the
-group is fired, unless it shares a printer with a station that has the HOLD ticket: that printer's
-ticket marked FIRE carries both.
+another station set so may start getting the group's HOLD paper later: a HOLD ticket when a held
+dish is moved to it, or a HOLD CHANGED slip when a held dish is added to the group there. A station
+that has the group's HOLD paper keeps getting it, its corrections and the ticket marked FIRE, even
+if its switch is turned off. Any other station prints its part unmarked when the group is fired,
+unless it shares a printer with a station that has the group's HOLD paper: that printer's ticket
+marked FIRE carries both.
 
 Firing held work at the same station does not duplicate an existing allergy correction. Recalling
 a dish into a draft ends its old kitchen work. Sending that draft again creates a new kitchen copy

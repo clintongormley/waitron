@@ -61,12 +61,14 @@ sin servir. Una estación que no ha recibido un ticket anticipado toma su primer
 envía el plato a preparar.
 
 Una estación con **Imprimir por adelantado los grupos en espera** activado al poner un grupo en
-espera recibe su ticket anticipado de espera; otra estación con el ajuste activado puede recibirlo
-más tarde, cuando se le mueve o añade un plato en espera. Una estación que recibió el ticket
-anticipado de espera sigue recibiendo lo que se imprime en espera del grupo, sus correcciones y la
-comanda marcada FIRE, aunque se desactive su ajuste. Cualquier otra estación imprime su parte sin
-marca cuando se envía el grupo a preparar, salvo si comparte impresora con una estación que tiene
-el ticket anticipado de espera: la comanda marcada FIRE de esa impresora lleva las dos.
+espera recibe su ticket anticipado de espera; otra estación con el ajuste activado puede empezar a
+recibir más tarde lo que se imprime en espera del grupo: un ticket anticipado de espera cuando se le
+mueve un plato en espera, o una comanda HOLD CHANGED cuando se añade al grupo un plato en espera en
+ella. Una estación que tiene lo impreso en espera del grupo sigue recibiéndolo, junto con sus
+correcciones y la comanda marcada FIRE, aunque se desactive su ajuste. Cualquier otra estación
+imprime su parte sin marca cuando se envía el grupo a preparar, salvo si comparte impresora con una
+estación que tiene lo impreso en espera del grupo: la comanda marcada FIRE de esa impresora lleva
+las dos.
 
 Enviar a preparar el trabajo en espera en la misma estación no duplica una corrección de alergia
 existente. Recuperar un plato a un borrador termina su trabajo anterior en cocina. Volver a enviar
