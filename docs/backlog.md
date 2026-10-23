@@ -4711,8 +4711,15 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   mainland Spanish time, the bell can say the clock is before that day where the till does not.
   Left open by A798-B slice 9 (#…).
 
-- **During a stop the box sends AEAT's QR host a HEAD about once a minute**, for as long as the
-  stop lasts, on a primary that files records. Left open by A798-B slice 9 (#…).
+- **The box sends AEAT's QR host a HEAD at every clock-watch check, about once a minute, while its
+  clock reads more than a minute behind the latest sale** — after a manager restarts payments too,
+  until the clock passes that sale — on a primary that files records; not while the clock reads a
+  date before 28-10-2024. Left open by A798-B slice 9 (#…).
+
+- **The clock watch's suspend-aware clock has not been run on Linux.** It reads `/proc/uptime` so
+  that a box waking from sleep is not taken for a clock jumping forward; the tests replace the file,
+  and nobody has watched it across a real suspend or a setting of the wall clock on a Linux box
+  (`docs/developers/conventions-data.md`, "A jump"). Left open by A798-B slice 9 (#…).
 
 - **An AEAT disagreement blocks a restart for the rest of the stop, even after the clock is
   stepped** (it is kept in memory, so restarting the server forgets it). The owner may prefer it to

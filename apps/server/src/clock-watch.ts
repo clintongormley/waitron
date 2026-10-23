@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { Transaction } from "@waitron/db";
 import {
   judgeClockWitnesses,
@@ -15,9 +16,34 @@ export const CLOCK_WATCH_MS = 60_000;
 
 type Reading = ReturnType<TrustedClock["now"]>;
 
-/** How much further the wall clock may move than the steady clock between two checks before the
- * wall clock is taken to have jumped. */
+/** How much further the wall clock may move than the elapsed-time clock between two checks before
+ * the wall clock is taken to have jumped. */
 const JUMP_MS = 60_000;
+
+function uptimeMs(): number {
+  return Number.parseFloat(readFileSync("/proc/uptime", "utf8")) * 1000;
+}
+
+/** Linux's boot-time clock (`/proc/uptime`), which keeps counting while the machine is suspended,
+ * so a resume is not read as a jump; performance.now() stops during a suspend there. Where
+ * `/proc/uptime` gives no number at start, performance.now(). A later read that fails answers NaN,
+ * which no jump compares above. */
+export function elapsedClock(): () => number {
+  try {
+    if (Number.isFinite(uptimeMs())) {
+      return () => {
+        try {
+          return uptimeMs();
+        } catch {
+          return Number.NaN;
+        }
+      };
+    }
+  } catch {
+    // No /proc/uptime: not Linux.
+  }
+  return () => performance.now();
+}
 
 /** A day of minutely checks while every record fails; past it the earliest entries are kept. */
 const PENDING_MAX = 1_440;
@@ -44,7 +70,7 @@ export function startClockWatch(deps: {
 }): { stop: () => Promise<void> } {
   const timer = deps.timer ?? unrefTimer;
   const wall = deps.wall ?? (() => Date.now());
-  const monotonic = deps.monotonic ?? (() => performance.now());
+  const monotonic = deps.monotonic ?? elapsedClock();
   let stopped = false;
   let running: Promise<void> | null = null;
   let previous: BoxClockReading = { wallMs: wall(), monoMs: monotonic() };

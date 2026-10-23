@@ -253,6 +253,42 @@ function noteDevice(stop: Stop, offsetMs: number): void {
   });
 }
 
+/** Runs `checks` checks of a clock watch on the stop's clock and witnesses, with no jump, on the
+ * real fiscal seat except for AEAT's time, which `readAuthorityTime` answers. */
+async function watchChecks(
+  stop: Stop,
+  checks: number,
+  readAuthorityTime: FiscalBackend["readAuthorityTime"] = async () => null,
+): Promise<void> {
+  let fire = (): void => {};
+  let armed = 0;
+  const watch = startClockWatch({
+    backend: Object.create(venue.backend, {
+      readAuthorityTime: { value: readAuthorityTime },
+    }) as FiscalBackend,
+    store: stop.witnesses,
+    clock: stop.clock,
+    wall: () => 0,
+    monotonic: () => 0,
+    read: (fn) => venue.db.withWriteLock(() => fn(venue.db)),
+    transaction: (fn) => withTransaction(venue.db, fn),
+    filesRecords: () => true,
+    isPrimary: () => true,
+    intervalMs: CLOCK_WATCH_MS,
+    log: () => {},
+    timer: (_ms, fn) => {
+      fire = fn;
+      armed += 1;
+      return { cancel: () => {} };
+    },
+  });
+  for (let check = 1; check <= checks; check += 1) {
+    fire();
+    await vi.waitFor(() => expect(armed).toBe(check + 1));
+  }
+  await watch.stop();
+}
+
 function press(app: Hono, cookie: string | undefined, body: unknown) {
   return send(app, cookie ?? "", "POST", "/api/box/clock-restart", body);
 }
@@ -381,29 +417,7 @@ it("still refuses a restart AEAT contradicted after the clock read a date before
   });
 
   stop.setClock(Date.parse("2001-01-01T12:00:00.000Z"));
-  let fire = (): void => {};
-  let armed = 0;
-  const watch = startClockWatch({
-    backend: venue.backend,
-    store: stop.witnesses,
-    clock: stop.clock,
-    wall: () => 0,
-    monotonic: () => 0,
-    read: (fn) => venue.db.withWriteLock(() => fn(venue.db)),
-    transaction: (fn) => withTransaction(venue.db, fn),
-    filesRecords: () => false,
-    isPrimary: () => true,
-    intervalMs: CLOCK_WATCH_MS,
-    log: () => {},
-    timer: (_ms, fn) => {
-      fire = fn;
-      armed += 1;
-      return { cancel: () => {} };
-    },
-  });
-  fire();
-  await vi.waitFor(() => expect(armed).toBe(2));
-  await watch.stop();
+  await watchChecks(stop, 1);
 
   stop.setClock(stop.behind);
   noteDevice(stop, 0);
@@ -417,6 +431,21 @@ it("still refuses a restart AEAT contradicted after the clock read a date before
     params: { reason: "contrary_proof" },
   });
   expect(written()).toEqual(pressed);
+});
+
+it("asks AEAT's time at every watch check while a restart is in force, until the clock passes the last sale", async () => {
+  const stop = await stoppedBox(10 * MINUTE);
+  noteDevice(stop, 0);
+  noteDevice(stop, 0);
+  expect((await press(stop.app, marta.cookie, { recordId: stop.recordId })).status).toBe(200);
+  const readAuthorityTime = vi.fn(async () => null);
+
+  await watchChecks(stop, 2, readAuthorityTime);
+  expect(readAuthorityTime).toHaveBeenCalledTimes(2);
+
+  stop.setClock(latest().at.getTime() - MINUTE);
+  await watchChecks(stop, 1, readAuthorityTime);
+  expect(readAuthorityTime).toHaveBeenCalledTimes(2);
 });
 
 it("answers a second restart of the same record with the first manager's", async () => {

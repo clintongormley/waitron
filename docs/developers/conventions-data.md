@@ -3710,6 +3710,27 @@ record's time — gathered during the stop — and an agreeing one only when tak
 press's reading (`judge`). Proof is AEAT agreeing, or two or more agreeing devices; contrary proof is
 AEAT disagreeing, or a group of two or more devices that all disagree.
 
+**A jump** (decision 14). The clock watch takes the wall clock to have jumped when, between two
+checks, it moved more than 60 000 ms further than an elapsed-time clock; `trustedUntil` is the
+earlier check's wall time plus the elapsed time since. The elapsed-time clock is `elapsedClock`
+(`apps/server/src/clock-watch.ts`): Linux's `/proc/uptime`, and `performance.now()` where that file
+gives no number at start. proc_uptime(5) describes the file's first number as "the uptime of the
+system (including time spent in suspend)"; the kernel fills it from `ktime_get_boottime_ts64`, to the
+hundredth of a second (`fs/proc/uptime.c`), the clock clock_gettime(2) calls `CLOCK_BOOTTIME`, "A
+nonsettable system-wide clock that is identical to CLOCK_MONOTONIC, except that it also includes any
+time that the system is suspended." Those three were read on 2026-10-23, not run. `performance.now()` alone read a resume from suspend as a jump: on Linux it follows
+`CLOCK_MONOTONIC`, which clock_gettime(2) says "does not count time that the system is suspended",
+so an hour asleep looked like the wall clock stepping an hour forward and recorded a
+`clock.behind_chain_disproved` for the sales under a restart (the review's simulated timings; the
+"sleeps an hour" case in `apps/server/src/clock-watch.elapsed.test.ts`, which failed before this).
+Not measured on Linux: what `/proc/uptime` reads across a real suspend or a setting of the wall
+clock — no Linux machine was reachable when this was written; the tests replace the file. On macOS,
+`os.uptime()` was not used: measured 2026-10-23 (Node v26.11.1), it read whole seconds and equalled
+`date +%s` less `sysctl kern.boottime`, so it is derived from the wall clock there. The witness store
+(`clock-witnesses.ts`) still judges freshness by `performance.now()`, so after a suspend it stops
+handing out the device readings and the agreeing AEAT readings taken before it, as it does after a
+step of the wall clock; a device whose equipment poll runs reports every 15 seconds (`apps/till/src/state/equipment-poll.ts`).
+
 **AEAT's time** (decision 1, P3, P5, P11). Two sources feed AEAT witnesses: a submission reply's
 `TimestampPresentacion` (`apps/server/src/time-health.ts`, plus 500 ms, its uncertainty half the
 round trip plus 500 ms), and the `Date` header of an HTTPS `HEAD` to the environment's QR validation
