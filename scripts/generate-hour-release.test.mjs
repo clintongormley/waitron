@@ -225,7 +225,7 @@ describe("release metadata is a build product of a pinned source commit", () => 
 
   it("recovers after a killed partial shallow download leaves its repository locked", () => {
     const { cwd } = fixture();
-    writeFileSync(join(cwd, "download.bin"), randomBytes(512_000));
+    writeFileSync(join(cwd, "download.bin"), randomBytes(256_000));
     git(cwd, ["add", "download.bin"]);
     git(cwd, ["commit", "-s", "-qm", "Large source"], {
       GIT_AUTHOR_DATE: "2026-10-16T12:00:00Z",
@@ -243,6 +243,8 @@ const child = spawn('git-upload-pack', process.argv.slice(2), { stdio: ['pipe', 
 writeFileSync(${JSON.stringify(pidFile)}, JSON.stringify([process.pid, child.pid]));
 process.on('SIGTERM', () => { child.kill(); process.exit(); });
 process.stdin.pipe(child.stdin);
+// Keep the stalled transport alive after upload-pack drains into its pipe.
+setInterval(() => {}, 1000);
 let remaining = 200000;
 child.stdout.on('data', bytes => {
   const prefix = bytes.subarray(0, remaining);
@@ -255,6 +257,7 @@ child.stdout.on('data', bytes => {
     );
     let attempts = 0;
     let locked = false;
+    let firstError;
     const directories = [];
     try {
       const stamp = generateHourRelease({
@@ -274,8 +277,8 @@ child.stdout.on('data', bytes => {
               timeout: 5000,
             });
           } catch (error) {
+            firstError = error;
             locked = existsSync(join(options.cwd, ".git/shallow.lock"));
-            expect(error.code).toBe("ETIMEDOUT");
             throw error;
           }
         },
@@ -285,6 +288,7 @@ child.stdout.on('data', bytes => {
         committedAt: "2026-10-16T12:00:00.000Z",
       });
       expect(attempts).toBe(2);
+      expect(firstError?.code, firstError?.stderr?.toString()).toBe("ETIMEDOUT");
       expect(locked).toBe(true);
     } finally {
       if (existsSync(pidFile))
