@@ -8,9 +8,7 @@ import type { LocationId } from "@waitron/shared";
 
 const fields = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
 
-export type StationTimingPatch = Partial<{
-  [Field in keyof StationThresholds]: number | null;
-}>;
+export type StationTimingPatch = Partial<StationThresholds>;
 
 export function parseStationTimingPatch(body: Record<string, unknown>): StationTimingPatch {
   const patch: StationTimingPatch = {};
@@ -18,8 +16,10 @@ export function parseStationTimingPatch(body: Record<string, unknown>): StationT
     const value = body[field];
     if (value === undefined) continue;
     if (
-      value !== null &&
-      (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 2_147_483_647)
+      typeof value !== "number" ||
+      !Number.isInteger(value) ||
+      value < 1 ||
+      value > 2_147_483_647
     ) {
       throw new AppError("management.request_invalid", { field });
     }
@@ -29,14 +29,14 @@ export function parseStationTimingPatch(body: Record<string, unknown>): StationT
 }
 
 export function assertStationTiming(
-  overrides: StationTimingPatch,
-  defaults: StationThresholds,
+  patch: StationTimingPatch,
+  base: StationThresholds,
   station: { id?: string; name: string },
 ): void {
   const field = invalidTimingField({
-    warmAfterMinutes: overrides.warmAfterMinutes ?? defaults.warmAfterMinutes,
-    overdueAfterMinutes: overrides.overdueAfterMinutes ?? defaults.overdueAfterMinutes,
-    forgottenAfterMinutes: overrides.forgottenAfterMinutes ?? defaults.forgottenAfterMinutes,
+    warmAfterMinutes: patch.warmAfterMinutes ?? base.warmAfterMinutes,
+    overdueAfterMinutes: patch.overdueAfterMinutes ?? base.overdueAfterMinutes,
+    forgottenAfterMinutes: patch.forgottenAfterMinutes ?? base.forgottenAfterMinutes,
   });
   if (field !== undefined) {
     throw new AppError("station.thresholds_invalid", {
@@ -119,7 +119,12 @@ export async function assertKitchenTimingStations(
     .orderBy(kitchenStations.name, kitchenStations.id);
   stations.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
   for (const station of stations) {
-    assertStationTiming(station, defaults, station);
+    const patch: StationTimingPatch = {};
+    for (const field of fields) {
+      const value = station[field];
+      if (value !== null) patch[field] = value;
+    }
+    assertStationTiming(patch, defaults, station);
   }
 }
 

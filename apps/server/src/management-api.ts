@@ -1643,9 +1643,9 @@ export function mountManagementApi(
         showsRestOfOrder?: boolean;
         printMovedSlips?: boolean | null;
         colour?: StationColour;
-        warmAfterMinutes?: number | null;
-        overdueAfterMinutes?: number | null;
-        forgottenAfterMinutes?: number | null;
+        warmAfterMinutes?: number;
+        overdueAfterMinutes?: number;
+        forgottenAfterMinutes?: number;
         printerIds?: string[];
       } = {};
       if (body.name !== undefined) {

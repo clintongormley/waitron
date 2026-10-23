@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BAND_RANK, classifyBand, worstBand } from "./timing.js";
+import { BAND_RANK, DEFAULT_STATION_THRESHOLDS, classifyBand, worstBand } from "./timing.js";
 
 const T = { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 };
 const at = (min: number) => classifyBand(0, min * 60_000, T);
@@ -24,3 +24,11 @@ it("BAND_RANK orders the scale", () =>
   expect([BAND_RANK.fresh, BAND_RANK.warm, BAND_RANK.overdue, BAND_RANK.forgotten]).toEqual([
     0, 1, 2, 3,
   ]));
+
+it("DEFAULT_STATION_THRESHOLDS is 5, 10 and 15", () => {
+  expect(DEFAULT_STATION_THRESHOLDS).toEqual({
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  });
+});

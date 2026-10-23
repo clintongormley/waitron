@@ -122,7 +122,7 @@ export {
 export type { ContentLanguageRules, ContentLanguages } from "./content-languages.js";
 export { capitaliseFirst } from "./capitalise.js";
 export { conjunctionList } from "./list.js";
-export { BAND_RANK, classifyBand, worstBand } from "./timing.js";
+export { BAND_RANK, DEFAULT_STATION_THRESHOLDS, classifyBand, worstBand } from "./timing.js";
 export type { StationThresholds, TimingBand } from "./timing.js";
 export type {
   KitchenSignal,

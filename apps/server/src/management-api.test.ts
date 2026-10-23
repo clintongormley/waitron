@@ -98,6 +98,19 @@ function nextNif(): string {
 
 /** Names are unique and the database is not reset between tests, so every list assertion is a
  *  membership check. */
+async function stationMinutes(id: string) {
+  return (
+    await suite.db
+      .select({
+        warmAfterMinutes: kitchenStations.warmAfterMinutes,
+        overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
+        forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
+      })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.id, id))
+  )[0];
+}
+
 function unique(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }
@@ -1241,7 +1254,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
     }
   });
 
-  it("POST stores timing overrides atomically and rejects an unordered effective set without a row", async () => {
+  it("POST stores the station's minutes on its row and refuses an unordered set without a row", async () => {
     const name = unique("Atomic");
     const created = await req(
       "/stations",
@@ -1264,7 +1277,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       forgotten_after_minutes: number;
     }>(
       sql`select warm_after_minutes, overdue_after_minutes, forgotten_after_minutes
-        from kitchen_station_timing where station_id = ${id}`,
+        from kitchen_stations where id = ${id}`,
     );
     expect(row.rows[0]).toMatchObject({
       warm_after_minutes: 3,
@@ -1292,74 +1305,59 @@ describe("/management-api/stations (KDS-1 config)", () => {
     }
   });
 
-  it("POST accepts partial and null overrides and GET resolves the inherited fields", async () => {
-    for (const thresholds of [
-      { warmAfterMinutes: 2 },
-      { warmAfterMinutes: null, overdueAfterMinutes: 8 },
-    ]) {
-      const created = await req(
-        "/stations",
-        { method: "POST", body: JSON.stringify({ name: unique("Inherit"), ...thresholds }) },
-        managerCookie,
-      );
-      expect(created.status).toBe(201);
-      const { id } = (await created.json()) as { id: string };
-      const stations = (await (
-        await req("/stations", { method: "GET" }, managerCookie)
-      ).json()) as Record<string, unknown>[];
-      expect(stations.find((station) => station.id === id)).toMatchObject({
-        warmAfterMinutes: thresholds.warmAfterMinutes === null ? 5 : 2,
-        overdueAfterMinutes: "overdueAfterMinutes" in thresholds ? 8 : 10,
-        forgottenAfterMinutes: 15,
-      });
-    }
+  it("POST stores an omitted minute at its default and refuses null naming the field", async () => {
+    const created = await req(
+      "/stations",
+      { method: "POST", body: JSON.stringify({ name: unique("Partial"), warmAfterMinutes: 2 }) },
+      managerCookie,
+    );
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    expect(await stationMinutes(id)).toEqual({
+      warmAfterMinutes: 2,
+      overdueAfterMinutes: 10,
+      forgottenAfterMinutes: 15,
+    });
+    const refusedName = unique("Null minutes");
+    const refused = await req(
+      "/stations",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name: refusedName,
+          warmAfterMinutes: null,
+          overdueAfterMinutes: 8,
+        }),
+      },
+      managerCookie,
+    );
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "warmAfterMinutes" } },
+    });
+    expect((await listStations()).some((station) => station.name === refusedName)).toBe(false);
   });
 
-  it("PATCH null inherits one field while omission retains overrides and defaults stay unchanged", async () => {
-    const id = await createStation(unique("Clear override"));
+  it("PATCH refuses null for each minutes field and changes nothing", async () => {
+    const id = await createStation(unique("Null patch"));
     const patch = (body: unknown) =>
       req(`/stations/${id}`, { method: "PATCH", body: JSON.stringify(body) }, managerCookie);
-    const read = async () =>
-      (
-        await suite.db
-          .select()
-          .from(kitchenStationTiming)
-          .where(eq(kitchenStationTiming.stationId, id))
-      )[0];
-    const beforeDefaults = await (
-      await req("/kitchen-timing-defaults", { method: "GET" }, managerCookie)
-    ).json();
     expect(
       (await patch({ warmAfterMinutes: 2, overdueAfterMinutes: 8, forgottenAfterMinutes: 12 }))
         .status,
     ).toBe(204);
-    expect((await patch({ warmAfterMinutes: null })).status).toBe(204);
-    expect(await read()).toEqual({
-      stationId: id,
-      warmAfterMinutes: null,
-      overdueAfterMinutes: 8,
-      forgottenAfterMinutes: 12,
-    });
-    const stations = (await (
-      await req("/stations", { method: "GET" }, managerCookie)
-    ).json()) as Record<string, unknown>[];
-    expect(stations.find((station) => station.id === id)).toMatchObject({
-      warmAfterMinutes: 5,
-      overdueAfterMinutes: 8,
-      forgottenAfterMinutes: 12,
-    });
-    expect((await patch({ overdueAfterMinutes: null, forgottenAfterMinutes: null })).status).toBe(
-      204,
-    );
-    expect(await read()).toEqual({
-      stationId: id,
-      warmAfterMinutes: null,
-      overdueAfterMinutes: null,
-      forgottenAfterMinutes: null,
-    });
-    expect(
-      await (await req("/kitchen-timing-defaults", { method: "GET" }, managerCookie)).json(),
-    ).toEqual(beforeDefaults);
+    for (const field of ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"]) {
+      const response = await patch({ [field]: null });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+      expect(await stationMinutes(id)).toEqual({
+        warmAfterMinutes: 2,
+        overdueAfterMinutes: 8,
+        forgottenAfterMinutes: 12,
+      });
+    }
   });
 
   it.each(["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"])(
@@ -1367,7 +1365,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
     async (field) => {
       const name = unique("Bad override");
       const id = await createStation(name);
-      for (const value of ["3", [3], {}, true, 0, -1, 1.5, 2147483648]) {
+      for (const value of [null, "3", [3], {}, true, 0, -1, 1.5, 2147483648]) {
         const response = await req(
           `/stations/${id}`,
           { method: "PATCH", body: JSON.stringify({ name: "Should not save", [field]: value }) },
@@ -1378,17 +1376,16 @@ describe("/management-api/stations (KDS-1 config)", () => {
           error: { code: "management.request_invalid", params: { field } },
         });
         expect((await listStations()).find((station) => station.id === id)).toMatchObject({ name });
-        expect(
-          await suite.db
-            .select()
-            .from(kitchenStationTiming)
-            .where(eq(kitchenStationTiming.stationId, id)),
-        ).toEqual([]);
+        expect(await stationMinutes(id)).toEqual({
+          warmAfterMinutes: 5,
+          overdueAfterMinutes: 10,
+          forgottenAfterMinutes: 15,
+        });
       }
     },
   );
 
-  it("PATCH refuses inherited order inversions before saving name or overrides, and unknown ids affect no station", async () => {
+  it("PATCH refuses an order inversion against the stored minutes before saving name or minutes, and unknown ids affect no station", async () => {
     const name = unique("Effective order");
     const id = await createStation(name);
     expect(
@@ -1403,15 +1400,12 @@ describe("/management-api/stations (KDS-1 config)", () => {
         )
       ).status,
     ).toBe(204);
-    const before = await suite.db
-      .select()
-      .from(kitchenStationTiming)
-      .where(eq(kitchenStationTiming.stationId, id));
+    const before = await stationMinutes(id);
     const refused = await req(
       `/stations/${id}`,
       {
         method: "PATCH",
-        body: JSON.stringify({ name: "Should not save", warmAfterMinutes: null }),
+        body: JSON.stringify({ name: "Should not save", warmAfterMinutes: 5 }),
       },
       managerCookie,
     );
@@ -1432,18 +1426,12 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect(await unknown.json()).toMatchObject({
       error: { code: "station.not_found", params: { stationId: missing } },
     });
-    expect(
-      await suite.db
-        .select()
-        .from(kitchenStationTiming)
-        .where(eq(kitchenStationTiming.stationId, missing)),
-    ).toEqual([]);
-    expect(
-      await suite.db
-        .select()
-        .from(kitchenStationTiming)
-        .where(eq(kitchenStationTiming.stationId, id)),
-    ).toEqual(before);
+    expect(before).toEqual({
+      warmAfterMinutes: 2,
+      overdueAfterMinutes: 4,
+      forgottenAfterMinutes: 15,
+    });
+    expect(await stationMinutes(id)).toEqual(before);
     expect((await listStations()).find((station) => station.id === id)).toMatchObject({ name });
   });
 
@@ -1815,7 +1803,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       forgotten_after_minutes: number;
     }>(
       sql`select warm_after_minutes, overdue_after_minutes, forgotten_after_minutes
-        from kitchen_station_timing where station_id = ${id}`,
+        from kitchen_stations where id = ${id}`,
     );
     expect(row.rows[0]).toMatchObject({
       warm_after_minutes: 3,
@@ -1876,7 +1864,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       forgotten_after_minutes: number;
     }>(
       sql`select warm_after_minutes, overdue_after_minutes, forgotten_after_minutes
-        from kitchen_station_timing where station_id = ${id}`,
+        from kitchen_stations where id = ${id}`,
     );
     expect(after.rows[0]).toMatchObject({
       warm_after_minutes: 3,
@@ -2053,8 +2041,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
     it("PATCH writes name, timings and printers together or not at all", async () => {
       const original = unique("Atomic");
       const id = await createStation(original);
-      const timing = () =>
-        suite.db.select().from(kitchenStationTiming).where(eq(kitchenStationTiming.stationId, id));
+      const timing = () => stationMinutes(id);
       const missing = randomUUID();
       const refused = await patch(id, {
         name: unique("Atomic refused"),
@@ -2067,7 +2054,11 @@ describe("/management-api/stations (KDS-1 config)", () => {
         error: { code: "printer.not_found", params: { id: missing } },
       });
       expect(await stationName(id)).toBe(original);
-      expect(await timing()).toEqual([]);
+      expect(await timing()).toEqual({
+        warmAfterMinutes: 5,
+        overdueAfterMinutes: 10,
+        forgottenAfterMinutes: 15,
+      });
       expect(await printersOf(id)).toEqual([]);
 
       const printer = await addPrinter();
@@ -2080,14 +2071,11 @@ describe("/management-api/stations (KDS-1 config)", () => {
       });
       expect(saved.status).toBe(204);
       expect(await stationName(id)).toBe(renamed);
-      expect(await timing()).toEqual([
-        {
-          stationId: id,
-          warmAfterMinutes: 3,
-          overdueAfterMinutes: 8,
-          forgottenAfterMinutes: null,
-        },
-      ]);
+      expect(await timing()).toEqual({
+        warmAfterMinutes: 3,
+        overdueAfterMinutes: 8,
+        forgottenAfterMinutes: 15,
+      });
       expect(await printersOf(id)).toEqual([printer]);
     });
 

@@ -50,14 +50,19 @@ async function fixture() {
   return { locationId: locationId(result.locationId) };
 }
 
-it("retains omitted fields and distinguishes null inheritance from explicit values", () => {
+it("retains omitted fields and refuses null", () => {
   expect(parseStationTimingPatch({})).toEqual({});
-  expect(
-    parseStationTimingPatch({ warmAfterMinutes: null, overdueAfterMinutes: 9, ignored: true }),
-  ).toEqual({ warmAfterMinutes: null, overdueAfterMinutes: 9 });
+  expect(parseStationTimingPatch({ overdueAfterMinutes: 9, ignored: true })).toEqual({
+    overdueAfterMinutes: 9,
+  });
   expect(parseStationTimingPatch({ forgottenAfterMinutes: 2_147_483_647 })).toEqual({
     forgottenAfterMinutes: 2_147_483_647,
   });
+  for (const field of fields) {
+    expect(() => parseStationTimingPatch({ [field]: null })).toThrow(
+      expect.objectContaining({ code: "management.request_invalid", params: { field } }),
+    );
+  }
 });
 
 it.each(
@@ -70,7 +75,7 @@ it.each(
   );
 });
 
-it("names the station and effective field that becomes invalid after inheritance", () => {
+it("names the station and the field an edit puts out of order over its stored minutes", () => {
   expect(() =>
     assertStationTiming({ warmAfterMinutes: 7 }, defaults, { id: "station", name: "Grill" }),
   ).toThrow(
@@ -94,7 +99,12 @@ it("names the station and effective field that becomes invalid after inheritance
     }),
   );
   expect(() =>
-    assertStationTiming({ warmAfterMinutes: null }, defaults, { name: "Grill" }),
+    assertStationTiming({ warmAfterMinutes: undefined }, defaults, { name: "Grill" }),
+  ).not.toThrow();
+  expect(() =>
+    assertStationTiming({ warmAfterMinutes: 2, overdueAfterMinutes: 4 }, defaults, {
+      name: "Grill",
+    }),
   ).not.toThrow();
 });
 

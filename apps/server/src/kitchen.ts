@@ -1,23 +1,22 @@
 // Side-effect import: registers the `station.*`/`course.*` codes this file throws (errors.ts).
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
-import { AppError, compareStationNames } from "@waitron/shared";
+import { AppError, DEFAULT_STATION_THRESHOLDS, compareStationNames } from "@waitron/shared";
 import {
   isUniqueViolation,
   kitchenCourses,
   products,
   kitchenStations,
-  kitchenStationTiming,
   nextStationColour,
 } from "@waitron/db";
-import type { StationColour, StationThresholds } from "@waitron/shared";
+import type { StationColour } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { assertProductWritable, productWithId, type ProductScope } from "@waitron/catalogue";
 export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { replaceStationPrinters } from "./station-printers.js";
 import type { TillConfig } from "./till-config.js";
-import { assertStationTiming, getKitchenTimingDefaults } from "./kitchen-timing.js";
+import { assertStationTiming } from "./kitchen-timing.js";
 import type { StationTimingPatch } from "./kitchen-timing.js";
 
 // Nothing here authorizes. The write verbs are called only from the kitchen routes, gated by
@@ -37,8 +36,6 @@ export interface Station {
   /** Null follows the venue-wide MOVED slips choice. */
   printMovedSlips: boolean | null;
   colour: StationColour;
-  timingDefaults: StationThresholds;
-  timingOverrides: { [Field in keyof StationThresholds]: number | null };
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
@@ -88,11 +85,8 @@ export async function createStation(
     printerIds?: readonly string[];
   },
 ): Promise<{ id: string }> {
-  if (input.thresholds !== undefined) {
-    assertStationTiming(input.thresholds, await getKitchenTimingDefaults(tx, cfg), {
-      name: input.name,
-    });
-  }
+  const thresholds = input.thresholds ?? {};
+  assertStationTiming(thresholds, DEFAULT_STATION_THRESHOLDS, { name: input.name });
   if (input.isDefault) {
     await clearDefault(tx, cfg);
   }
@@ -105,11 +99,14 @@ export async function createStation(
         isDefault: input.isDefault ?? false,
         colour:
           input.colour === undefined ? await nextStationColour(tx, cfg.locationId) : input.colour,
+        warmAfterMinutes:
+          thresholds.warmAfterMinutes ?? DEFAULT_STATION_THRESHOLDS.warmAfterMinutes,
+        overdueAfterMinutes:
+          thresholds.overdueAfterMinutes ?? DEFAULT_STATION_THRESHOLDS.overdueAfterMinutes,
+        forgottenAfterMinutes:
+          thresholds.forgottenAfterMinutes ?? DEFAULT_STATION_THRESHOLDS.forgottenAfterMinutes,
       })
       .returning({ id: kitchenStations.id });
-    if (input.thresholds !== undefined && Object.keys(input.thresholds).length > 0) {
-      await tx.insert(kitchenStationTiming).values({ stationId: row!.id, ...input.thresholds });
-    }
     if (input.printerIds !== undefined) {
       await replaceStationPrinters(tx, cfg, row!.id, input.printerIds);
     }
@@ -123,7 +120,6 @@ export async function createStation(
 }
 
 export async function listStations(tx: Transaction, cfg: TillConfig): Promise<Station[]> {
-  const defaults = await getKitchenTimingDefaults(tx, cfg);
   const stations = await tx
     .select({
       id: kitchenStations.id,
@@ -133,28 +129,14 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
       showsRestOfOrder: kitchenStations.showsRestOfOrder,
       printMovedSlips: kitchenStations.printMovedSlips,
       colour: kitchenStations.colour,
-      warmAfterMinutes: kitchenStationTiming.warmAfterMinutes,
-      overdueAfterMinutes: kitchenStationTiming.overdueAfterMinutes,
-      forgottenAfterMinutes: kitchenStationTiming.forgottenAfterMinutes,
+      warmAfterMinutes: kitchenStations.warmAfterMinutes,
+      overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
+      forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
     })
     .from(kitchenStations)
-    .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
     .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
     .orderBy(kitchenStations.name, kitchenStations.id);
-  return stations
-    .sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id))
-    .map((station) => ({
-      ...station,
-      timingDefaults: defaults,
-      timingOverrides: {
-        warmAfterMinutes: station.warmAfterMinutes,
-        overdueAfterMinutes: station.overdueAfterMinutes,
-        forgottenAfterMinutes: station.forgottenAfterMinutes,
-      },
-      warmAfterMinutes: station.warmAfterMinutes ?? defaults.warmAfterMinutes,
-      overdueAfterMinutes: station.overdueAfterMinutes ?? defaults.overdueAfterMinutes,
-      forgottenAfterMinutes: station.forgottenAfterMinutes ?? defaults.forgottenAfterMinutes,
-    }));
+  return stations.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
 }
 
 /** The active stations, each with how it stands today. */
@@ -196,34 +178,28 @@ export async function updateStation(
   if (forgottenAfterMinutes !== undefined)
     timingPatch.forgottenAfterMinutes = forgottenAfterMinutes;
   const [station] = await tx
-    .select({ name: kitchenStations.name, timing: kitchenStationTiming })
+    .select({
+      name: kitchenStations.name,
+      warmAfterMinutes: kitchenStations.warmAfterMinutes,
+      overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
+      forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
+    })
     .from(kitchenStations)
-    .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
     .where(and(eq(kitchenStations.id, id), eq(kitchenStations.locationId, cfg.locationId)));
   if (station === undefined) throw new AppError("station.not_found", { stationId: id });
-  const hasTiming = Object.keys(timingPatch).length > 0;
-  if (hasTiming) {
-    assertStationTiming(
-      { ...station.timing, ...timingPatch },
-      await getKitchenTimingDefaults(tx, cfg),
-      { id, name: station.name },
-    );
+  if (Object.keys(timingPatch).length > 0) {
+    assertStationTiming(timingPatch, station, { id, name: station.name });
   }
+  const changes = { ...set, ...timingPatch };
   try {
-    if (Object.keys(set).length > 0) {
-      await tx.update(kitchenStations).set(set).where(eq(kitchenStations.id, id));
+    if (Object.keys(changes).length > 0) {
+      await tx.update(kitchenStations).set(changes).where(eq(kitchenStations.id, id));
     }
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new AppError("station.name_taken", { name: patch.name! });
     }
     throw error;
-  }
-  if (hasTiming) {
-    await tx
-      .insert(kitchenStationTiming)
-      .values({ stationId: id, ...timingPatch })
-      .onConflictDoUpdate({ target: kitchenStationTiming.stationId, set: timingPatch });
   }
   if (printerIds !== undefined) await replaceStationPrinters(tx, cfg, id, printerIds);
 }
