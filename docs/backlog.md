@@ -4406,6 +4406,14 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 
 ### The box: backups, upgrades and recovery
 
+- **Backup destination failures log no elapsed time or operation phase.**
+  `runOnce` in `apps/server/src/backup-sweep.ts` reports the destination, error code and errno,
+  so a timed-out upload cannot be distinguished from time spent waiting on local filesystem work
+  by those fields. Add non-sensitive phase and elapsed-time diagnostics when investigating real
+  destination timeouts. A1035 reproduced the main test's folder timeout under controlled load;
+  the original CI delay remains unmeasured.
+  [Test timing guidance](developers/testing-guide.md#a-deadline-test-must-separate-timer-ordering-from-filesystem-speed).
+
 - **Public TLS repair refuses linked layouts.** Healthy linked `tls/` folders still serve HTTPS,
   but a damaged linked folder or managed file cannot be repaired through the public guide.
   Decide whether to support links contained within the state folder while retaining archive,

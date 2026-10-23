@@ -1481,6 +1481,24 @@ _"text 946 bytes, answer after 1.50 s; image 38,292 bytes, answer after 1.53 s."
 what it did not measure: _"80 mm paper (576 dots = 1.5× the image bytes); the box's Linux path
 (`apps/print-agent/src/rfcomm-send.py`); a long kitchen ticket; a busy radio."_
 
+## A deadline test must separate timer ordering from filesystem speed
+
+A test that gives a real file copy a short deadline also measures the machine running it.
+Use controlled `setTimeout` and `clearTimeout` callbacks when the question is which destination
+is cancelled. Keep the filesystem real, wait for the destination result, then advance the timer.
+Keep real-time deadline coverage in tests that check cancellation itself.
+
+A1035 reproduced the folder failure from main run `39976326621` with 150 ms of synchronous work
+after both destinations started. Each had its own 100 ms timer: both fired at about 150 ms,
+before the folder's `mkdir` continuation. Without that work, the folder finished in about 3 ms.
+This reproduces the symptom; that CI run recorded no destination timeline, so its exact delay
+was not measured. The unchanged result assertions in `backup-sweep.network.test.ts` now run with
+controlled timers and real files. Its companion `backup-destination-call.test.ts` starts a second
+call 50 ms later and checks that the first timeout leaves the second signal live.
+
+Run `pnpm --filter @waitron/server exec vitest run src/backup-sweep.network.test.ts
+src/backup-destination-call.test.ts`.
+
 **What a test run prints**
 
 ## Vitest hides a passing test's console output under an AI agent

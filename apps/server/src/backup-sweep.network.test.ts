@@ -9,9 +9,15 @@ import { LocalFsBackend } from "./local-fs-backend.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import type { StorageBackend, StorageCall } from "./storage-backend.js";
 
+vi.mock("node:fs/promises", async (original) => {
+  const actual = await original<typeof import("node:fs/promises")>();
+  return { ...actual, rm: vi.fn(actual.rm) };
+});
+
 const dirs: string[] = [];
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  vi.mocked(rm).mockClear();
 });
 
 async function fixture() {
@@ -92,31 +98,52 @@ it("a stalled bucket times out on its own while the folder beside it stores, and
   const results: Result[] = [];
   const outcomes = { failed: new Map<string, { at: string }>() };
   const log = vi.fn();
-  await runOnce({
-    ...deps(f, [bucket, folder]),
-    destinationTimeoutMs: 100,
-    outcomes,
-    log,
-    onDestinationResult: (r: Result) => results.push(r),
-  });
-  expect(bucket.seen).toEqual({ aborted: true, stagedWhenSettled: true, settled: true });
-  expect(results.sort((a, b) => a.id.localeCompare(b.id))).toEqual([
-    {
-      id: "bucket",
-      stored: false,
-      uploadErrorCode: "backup.destination_timed_out",
-      pruneErrorCode: null,
-    },
-    { id: "folder", stored: true, uploadErrorCode: null, pruneErrorCode: null },
-  ]);
-  expect(outcomes.failed.has("bucket")).toBe(true);
-  expect(outcomes.failed.has("folder")).toBe(false);
-  expect(log).toHaveBeenCalledWith(
-    "warn",
-    "backup.destination_failed",
-    expect.objectContaining({ destination: "bucket", errorCode: "backup.destination_timed_out" }),
-  );
-  expect(await readdir(f.stagingDir)).toEqual([]);
+  let folderReported = () => {};
+  const reported = new Promise<void>((resolve) => (folderReported = resolve));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const run = runOnce({
+      ...deps(f, [bucket, folder]),
+      destinationTimeoutMs: 100,
+      outcomes,
+      log,
+      onDestinationResult: (r: Result) => {
+        results.push(r);
+        if (r.id === "folder") folderReported();
+      },
+    });
+    await Promise.all([bucket.entered, reported]);
+    expect(bucket.seen).toEqual({ aborted: false, stagedWhenSettled: false, settled: false });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(bucket.seen).toEqual({ aborted: true, stagedWhenSettled: false, settled: false });
+    expect(await readdir(f.stagingDir)).not.toEqual([]);
+    expect(vi.mocked(rm).mock.calls.some(([path]) => String(path).startsWith(f.stagingDir))).toBe(
+      false,
+    );
+    await vi.advanceTimersByTimeAsync(50);
+    await run;
+    expect(bucket.seen).toEqual({ aborted: true, stagedWhenSettled: true, settled: true });
+    expect(results.sort((a, b) => a.id.localeCompare(b.id))).toEqual([
+      {
+        id: "bucket",
+        stored: false,
+        uploadErrorCode: "backup.destination_timed_out",
+        pruneErrorCode: null,
+      },
+      { id: "folder", stored: true, uploadErrorCode: null, pruneErrorCode: null },
+    ]);
+    expect(outcomes.failed.has("bucket")).toBe(true);
+    expect(outcomes.failed.has("folder")).toBe(false);
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "backup.destination_failed",
+      expect.objectContaining({ destination: "bucket", errorCode: "backup.destination_timed_out" }),
+    );
+    expect(await readdir(f.stagingDir)).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it("a prune failure after a stored upload is reported as a prune failure, not a failed upload", async () => {
