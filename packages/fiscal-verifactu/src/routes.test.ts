@@ -118,6 +118,18 @@ async function waits(): Promise<unknown[]> {
   return rows.rows.map((r) => r.proximo_intento_en);
 }
 
+/** Every row a press or its session check could write. */
+async function snapshot(): Promise<unknown[][]> {
+  const tables = [
+    sql`select * from envios order by registro_id`,
+    sql`select * from management_sessions order by token_hash`,
+    sql`select * from persons order by id`,
+  ];
+  const rows: unknown[][] = [];
+  for (const query of tables) rows.push((await suite.db.execute(query)).rows);
+  return rows;
+}
+
 describe("POST /management-api/fiscal-outbox/retry", () => {
   it("a manager's press clears the waits, wakes the drain once and logs who pressed", async () => {
     await seedWaiting();
@@ -142,12 +154,14 @@ describe("POST /management-api/fiscal-outbox/retry", () => {
 
   it("wakes the drain only after the transaction commits", async () => {
     await seedWaiting();
+    const unchanged = await snapshot();
     const { app, wake } = mount({ db: writeRefusingDb() });
     const res = await press(app, manager.cookie);
     expect(res.status).toBe(507);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
       "storage.disk_full",
     );
+    expect(await snapshot()).toEqual(unchanged);
     expect(wake).not.toHaveBeenCalled();
   });
 
@@ -158,17 +172,20 @@ describe("POST /management-api/fiscal-outbox/retry", () => {
     code: string,
   ) {
     await seedWaiting();
-    const unchanged = await waits();
+    const unchanged = await snapshot();
     const { app, wake } = mount(options);
     const res = await press(app, cookie);
     expect(res.status).toBe(status);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe(code);
-    expect(await waits()).toEqual(unchanged);
+    expect(await snapshot()).toEqual(unchanged);
     expect(wake).not.toHaveBeenCalled();
   }
 
+  // The session checks come before the box's filing state.
+  const NEITHER = { filing: false, awaitingCertificate: true };
+
   it("refuses a request with no session", async () => {
-    await expectRefused({}, undefined, 401, "management_session.required");
+    await expectRefused(NEITHER, undefined, 401, "management_session.required");
   });
 
   it("refuses an expired session", async () => {
@@ -187,11 +204,15 @@ describe("POST /management-api/fiscal-outbox/retry", () => {
   });
 
   it("refuses a supervisor, who may not manage the system", async () => {
-    await expectRefused({}, supervisor.cookie, 403, "authorization.not_permitted");
+    await expectRefused(NEITHER, supervisor.cookie, 403, "authorization.not_permitted");
   });
 
   it("refuses on a box that does not file records now", async () => {
     await expectRefused({ filing: false }, manager.cookie, 409, "fiscal.not_filing");
+  });
+
+  it("names the filing refusal first when both fiscal checks would refuse", async () => {
+    await expectRefused(NEITHER, manager.cookie, 409, "fiscal.not_filing");
   });
 
   it("refuses while the box waits for its tax-agency certificate", async () => {
