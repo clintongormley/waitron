@@ -3622,7 +3622,7 @@ cover the routes they name; a new money route is seen by none.
 
 ### A manager's restart lifts the stop for one step back
 
-Added 2026-10-23 by A798-B slice 9 (PR to come); the decisions and measurements named here are in
+Added 2026-10-23 by A798-B slice 9 (#2025); the decisions and measurements named here are in
 [the slice 9 plan](../superpowers/plans/2026-10-23-a798-9-clock-restart.md).
 Every Q and S label below is a run made for the plan against a PROTOTYPE of `clock-behind.ts` — the
 Q labels against revision 2's, the S labels against revision 3's — in a throwaway worktree, not

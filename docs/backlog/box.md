@@ -910,7 +910,7 @@ Whether a certificate-authenticated `consultar` reply carries a `Date` header is
 added line in its `certificateFetch` wrapper (`:195-223`) writing the raw reply's
 `response.headers.date` to its output would print it. The wrapper hands back a new `Response`
 built without the reply's headers, so reading `date` from what it returns would print nothing.
-The production QR host was not tried either. Left open by A798-B slice 9 (#…).
+The production QR host was not tried either. Left open by A798-B slice 9 (#2025).
 
 ## A box whose first setup was retired into a new workspace keeps that workspace's backup staging through the clean-up before the count
 
