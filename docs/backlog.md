@@ -3731,7 +3731,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 ### Users, sign-in and the dashboard shell
 
-_Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
+Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Spacing for buttons grouped beside Cancel belongs in `wt-form-actions`.** The
   `[Cancel] [Delete…] … [Save]` row (design-system.md → Forms) has each dialog space its own group;
@@ -3739,111 +3739,42 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 
 - **A901. The shared reorder announcement misreads an item name holding `$&` or `{index}` (found in
   A757 slice 7's review, 2026-10-19).**
-  `ReorderController.#announce` (`packages/ui/src/reorder-table.ts:307-310`) fills `{item}`,
-  `{index}` and `{total}` with chained `String.replace`, so on every list that reorders through it
-  a name holding `$&` is read back with the placeholder in its place
-  (`"{item} is now".replace("{item}", "Mains $& x")` prints `Mains {item} x is now`), and a name
-  holding `{index}` takes the position number itself, leaving the announcement's own `{index}`
-  unfilled (`Table 3 is now {index} of 5.`). `git blame` puts these lines in
-  524dbadd5 (2026-09-16) and 5b725d672 (2026-10-01), so I believe it predates A757 slice 7. Fix with
-  a single-pass formatter like `format()` in `packages/venue-service/src/dashboard/hours-view.ts:5`.
+  [Detail](backlog/dashboard.md#a901-the-shared-reorder-announcement-misreads-an-item-name-holding--or-index-found-in-a757-slice-7s-review-2026-10-19)
 
-- **A905. The department dialog can take back another manager's older copy of the venue after a
-  save (found in A757 slice 7's review, 2026-10-19).** The dialog orders the copies it receives by
-  content alone (`willUpdate`, `packages/venue-service/src/dashboard/department-settings.ts`), and
-  the save route answers 204. So when another manager's live change crosses this form's save, a copy
-  from before the save can replace what was just saved: seen in temporary browser tests on slice 7's
-  branch, the name field showed "Restaurant" again after "Restaurant revised" was saved, until the
-  screen's next refresh put it right; and an older copy arriving after the save answered took a
-  just-saved step "Coffee" out of the list, so a later step save would delete that row. The name
-  stays wrong if that refresh fails or is thrown away, or if another field is edited before it lands; the step stays gone until a copy with
-  different steps arrives. `git blame` on the branch's base puts the whole-copy replacement in
-  06772ee25 (2026-10-10), so I believe the name case predates slice 7; not run on `main`. A fix
-  needs the save to return what it stored (the steps' ids) or a version on the venue copy.
+- **A905. The department dialog can take back another manager's older copy of the venue after a save
+  (found in A757 slice 7's review, 2026-10-19).**
+  [Detail](backlog/dashboard.md#a905-the-department-dialog-can-take-back-another-managers-older-copy-of-the-venue-after-a-save-found-in-a757-slice-7s-review-2026-10-19)
 
 - **An off `wt-switch` is hard to see, worst in a dark dialog (seen in A757 slice 1's look,
-  2026-10-19).** The off track is `--wt-color-border` (`packages/ui/src/components/wt-switch.ts:71`)
-  and a dialog's background is `--wt-color-surface-raised` (`packages/ui/src/components/wt-dialog.ts:57`).
-  Computed with the WCAG contrast formula from the values declared in
-  `packages/ui-core/src/tokens/colors.css`: dark `#333945` on `#22262e` is 1.31:1 (1.47:1 on
-  `--wt-color-surface`, `#191c22`); light `#d6d9e0` on `#ffffff` is 1.41:1. WCAG 2.1's non-text
-  contrast criterion (1.4.11) asks 3:1. Not measured on a rendered page. Fix it in the primitive,
-  not per screen.
+  2026-10-19).**
+  [Detail](backlog/dashboard.md#an-off-wt-switch-is-hard-to-see-worst-in-a-dark-dialog-seen-in-a757-slice-1s-look-2026-10-19)
 
 - **A781. One shared panel-placement and arrow-key helper for the `wt-*` pop-up fields (left open by
-  #1828).** `wt-colour-chooser` copies the panel placement (which since A783 also picks two or four
-  columns) and the arrow-key handling that other `wt-*` components (`wt-combobox` among them)
-  each carry their own copy of;
-  `wt-language-chooser` and `wt-theme-chooser` already share theirs through
-  `packages/ui/src/menu-popover.ts`. Move both into shared helpers in `packages/ui` and have every
-  copy use them; each component's own tests and mutation score must hold.
+  #1828).**
+  [Detail](backlog/dashboard.md#a781-one-shared-panel-placement-and-arrow-key-helper-for-the-wt--pop-up-fields-left-open-by-1828)
 
 - **The box's trust page and the favicon still follow the device's setting, not the Theme choice
-  (left open by A681).** The trust page (`apps/server/src/trust-page.ts`, its logo in
-  `trust-page-logo.ts`) is rendered by the server with no script, so it never reads the choice
-  saved in the browser; it is the only server-rendered page under `apps/server/src` that reads the
-  device's setting at all. The favicon (`packages/ui/brand/public/favicon.svg`) is drawn by the
-  browser from the operating system's setting. Open.
+  (left open by A681).**
+  [Detail](backlog/dashboard.md#the-boxs-trust-page-and-the-favicon-still-follow-the-devices-setting-not-the-theme-choice-left-open-by-a681)
 
-- **Five tidy-ups A681's review left for later (#1842, 2026-10-17).** None is a defect; each
-  reshapes working code. (1) Draw the dashboard logo as a token-coloured inline image, as setup's
-  is, instead of swapping two images by `media`. (2) One shared "redraw when this changes" helper
-  for the theme and the language. (3) Move more of the two choosers' repeated open and close steps
-  into `packages/ui/src/menu-popover.ts`. (4) Rename the till's `language-chooser-styles.ts`, which
-  now places the Theme menu too. (5) Handle a theme pick with a plain handler in each app instead
-  of `ThemeChoiceController`'s `applies` option. Take them when next working in those files.
+- **Five tidy-ups A681's review left for later (#1842, 2026-10-17).**
+  [Detail](backlog/dashboard.md#five-tidy-ups-a681s-review-left-for-later-1842-2026-10-17)
 
-- **A653 — every long dashboard table scrolls the same way, with less above it (owner,
-  2026-10-14; open).** Products keeps its toolbar and column headings in view and scrolls its rows
-  inside the table's own box (`wt-data-table`'s `stickyHeader`, set by no other screen); a menu's
-  Structure tab, and the other long tables, scroll the whole page instead. Make them consistent.
-  The cost of Products' way is the height spent above the table, which on a phone leaves few rows;
-  cut that down, phones first.
-  [Detail](backlog/dashboard.md#a653--every-long-dashboard-table-scrolls-the-same-way-with-less-above-it),
-  [screenshots](backlog/mockups/a653-table-scrolling/)
+- **A653 — every long dashboard table scrolls the same way, with less above it (owner, 2026-10-14;
+  open).**
+  [Detail](backlog/dashboard.md#a653--every-long-dashboard-table-scrolls-the-same-way-with-less-above-it)
 
-- **A657 — Cancel leaves without asking (owner, 2026-10-14; open).** A form's own Cancel, in a
-  dialog or on a full page (the floor plan editor's Cancel link), drops the unsaved edits and goes
-  without the "Discard changes?" question. Escape, a click outside, a dialog's ✕, and leaving a page
-  any other way still ask. Reverses the written rule in design-system.md ("Protect an edited dialog
-  before closing it"); change the rule in the same change.
+- **A657 — Cancel leaves without asking (owner, 2026-10-14; open).**
   [Detail](backlog/dashboard.md#a657--cancel-leaves-without-asking)
 
 - **A625. Check whether a row menu still wraps its two-word items after the window is resized to
-  phone width (owner, 2026-10-17: keep as a check).** Seen on the Staff roles page (A585-1's look):
-  after a desktop window was narrowed to 390 px, "Move up" and "Move down" broke onto two centred
-  lines and the menu touched the screen's edge; loaded directly at 390 px it was one line per item,
-  three times out of three. Believed to be the shared `wt-row-actions` popover, not that page; not
-  yet reproduced on another screen. Done by one real-browser run of that resize on `main`: if the
-  items no longer wrap, delete this entry; if they do, fix it. Screenshots kept outside the
-  repository (lane C, `a585-1-shots/11a-…`, `11b-…`, `11c-…`).
+  phone width (owner, 2026-10-17: keep as a check).**
+  [Detail](backlog/dashboard.md#a625-check-whether-a-row-menu-still-wraps-its-two-word-items-after-the-window-is-resized-to-phone-width-owner-2026-10-17-keep-as-a-check)
 
-- **A582. Help mode: a "?" in the top bar marks everything that has help (owner 2026-10-13)** —
-  DESIGNED and approved 2026-10-18
-  ([design](superpowers/specs/2026-10-18-a582-help-mode-design.md), pictures in
-  [mockups/a582-help-mode/](backlog/mockups/a582-help-mode/)). Slice 1 of 5 landed (#1846: the
-  help badge, the help switch's state and the help slots in `packages/ui`), and the shared half of
-  slice 2 landed (#1848: a menu option with a help badge beside it, the help switch button, and
-  help on table columns and tabs, in `packages/ui`); its dashboard half landed (#1851: the
-  "?" in the banner, help on Products and in two menus, the five existing "?" shown only in help
-  mode, and, by the owner's answer B to Q41, the language choices in the account menu when signed
-  in). Slice 3 landed (#1871: the box serves the guides at `/help/<en|es>/<page>`, in English and
-  Spanish, and three Products badges link to their sections). Slice 4a landed (#1907: the "?" on
-  the till's bar, help off on lock, badges in the till's More and person menus). Slice 4b landed
-  (#1911: badges on Counter, Floor and Order, and the guide sheet). Next: slice 5, in the design's
-  §8 order. On the dashboard and on every device — tills, handhelds, and probably the
-  kitchen screens and monitors — a circled "?" in the top bar switches help mode on and off; while
-  on, a small circled "?" appears beside each thing on the page that has help, and clicking one shows
-  the help or opens its page in the documentation. Nothing changes on the page while it is off.
+- **A582. Help mode: a "?" in the top bar marks everything that has help (owner 2026-10-13)** — approved; next: slice 5.
   [Detail](backlog/dashboard.md#a582-help-mode-a--in-the-top-bar-marks-everything-that-has-help-owner-2026-10-13)
 
-- **`wt-combobox` without a search box never exposes `aria-required`**, so a screen reader is not
-  told a required dropdown is required. Found by A506-6's review: a probe showed `required` set gave
-  `aria-required` on nothing, while a combobox with a search box set it on its input. Every screen
-  using a required combobox without search is affected. One way to fix it is moving the trigger to the
-  WAI-ARIA Authoring Practices' select-only combobox (`role="combobox"`, which can carry
-  `aria-required`); A775 kept the button and fixed only its name. The Seasons window's Day and
-  Month (A721) are among them.
+- **`wt-combobox` without a search box never exposes `aria-required`**
   [Detail](backlog/dashboard.md#wt-combobox-without-a-search-box-never-exposes-aria-required)
 
 - **In the Customise dialog, a released column row jumps into its slot instead of sliding.** The
@@ -3852,67 +3783,28 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   `packages/ui/src/components/wt-data-table.ts`). Left open by A499.
 
 - **Loose ends left by signing a dashboard tab out when its box has been reset (A485, #1545).**
-  - After a box reset, the reset page's own banner still shows the old venue's name. By reading,
-    not run: `#returnToLogin` (`apps/dashboard/src/dashboard-app.ts`) never clears the `venueName`
-    that `getMe` set, and the locale read meant to replace it repeats the old name once made, since
-    it is kept for the page's life (`#localesPromise`, `apps/dashboard/src/api/client.ts`).
-  - A dashboard tab that never meets the box in setup mode gets plain sign-in, not the "box was
-    reset" notice — for example one asleep through the reset and the new venue's setup; there is
-    no venue identity to compare.
-  - A sign-in screen already showing when a box reset is found may already have started its passkey
-    autofill, and has started its Google settings read; the switch to the reset notice stops
-    neither. By reading, not run: a tab already on sign-in (sent by the shared session deadline, or
-    by a failed check on coming back into view) switches to the reset notice only when a later
-    request is answered `node.reset`.
+  [Detail](backlog/dashboard.md#loose-ends-left-by-signing-a-dashboard-tab-out-when-its-box-has-been-reset-a485-1545)
 
 - **Loose ends left by A501 (#1552).**
-  - A dashboard tab on the Backup screen learns of a box reset late. Setup mode answers only
-    `/management-api/*` with `node.reset` (`mountSetup`, `apps/server/src/setup-api.ts`); the Backup
-    screen and the content-languages read use `/api/...` paths, which setup mode answers with a 404
-    with no code (or, without the built wizard, the placeholder page), so such a tab shows the reset
-    notice only at its next management request. Measured by A501's Codex review against setup mode.
-    Options: answer those dashboard `/api` paths with `node.reset` too (the boot test pins
-    `/api/staff` answering the placeholder), or move the reads under `/management-api`.
-  - `reportError`'s HTTP status is now unread. `apps/dashboard/src/session-signals.ts` no longer
-    uses it, and the status hand-off in `packages/dashboard-kit/src/request.ts` was added only for
-    the check A501 removed; a small cleanup across both packages.
+  [Detail](backlog/dashboard.md#loose-ends-left-by-a501-1552)
 
 - **A398 — device-profile editor heading remains to align with the sub-page pattern.**
-  The editor repeats the list title and has no parent link above the heading
-  (`apps/dashboard/src/screens/device-profiles-screen.ts`, `#renderEditor`). Deferred from lane E's
-  canvas-heading change because lane A's A366-5A changes that screen. Re-check its landed editor,
-  then apply the parent link and one item-name `h1` while retaining the unsaved-changes check.
+  [Detail](backlog/dashboard.md#a398--device-profile-editor-heading-remains-to-align-with-the-sub-page-pattern)
 
-- **`date-utils.test.ts` has a test titled as guarding "against a vacuous pass"** — found by #612
-  while pruning comments. `catalogues` in `apps/dashboard/src/i18n/strings.ts` is read by nothing
-  but `i18n/t.test.ts` (`t.ts` registers `{ en, es }` with the kit), so that test's "registers
-  en-GB" case tests nothing that runs.
+- **`date-utils.test.ts` has a test titled as guarding "against a vacuous pass"**
   [Detail](backlog/dashboard.md#date-utilstestts-has-a-test-titled-as-guarding-against-a-vacuous-pass)
 
 - **`reorder.test.ts`'s test names say an out-of-range move "clamps"; `reorder()` ignores it.**
   Found by #610 (`apps/dashboard/src/api` + `src/widgets`), not fixable in a comments-only change.
 
 - **`setEmail` in `packages/identity/src/staff.ts`, unlike `updatePersonDetails`, never checks the
-  new email against other people's pending emails** — found by #559 while pruning comments.
-  Identity's coverage reads 99.85 statements / 99.75 branches, not 100: the
-  `management_session.required` throw in `profile.ts`'s `ownSession`, as it stands since #554, is
-  reached by no test.
+  new email against other people's pending emails**
   [Detail](backlog/dashboard.md#setemail-in-packagesidentitysrcstaffts-unlike-updatepersondetails-never-checks-the-new-email-against-other-peoples-pending-emails)
 
-- **Dashboard leftovers from the coverage branch** — OPEN (found 2026-09-23, PR #538). `wt-dialog`
-  re-sends the native dialog's `close` event as `wt-close`
-  (`packages/ui/src/components/wt-dialog.ts`), and the native event arrives a task after the dialog
-  closes — the same mechanism the catalogue screen's nested forms guard against (#741).
-  `staff-screen.ts` and `purchases-screen.ts` have no guard; their tests wait out the late close
-  rather than guard it (`staff-screen.test.ts`, `purchases-screen.test.ts`).
+- **Dashboard leftovers from the coverage branch**
   [Detail](backlog/dashboard.md#dashboard-leftovers-from-the-coverage-branch)
 
-- **A person row written from outside `packages/identity` still folds its key ASCII-only** — OPEN
-  (found 2026-09-23, task F1's review wave). **What is left open:** every remaining writer outside
-  `packages/identity` is a fixture or a seed, each still folding ASCII-only, and the column is still
-  nullable, so nothing at the compiler stops a new writer forgetting it. **Next action:** decide
-  whether the column becomes mandatory — which breaks every fixture at the compiler rather than
-  silently — or whether a guard over the write sites is enough.
+- **A person row written from outside `packages/identity` still folds its key ASCII-only** — OPEN.
   [Detail](backlog/dashboard.md#a-person-row-written-from-outside-packagesidentity-still-folds-its-key-ascii-only)
 
 - **Should an all-archived product selection show Archive greyed out rather than hidden?**
@@ -3920,12 +3812,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 
 - The dashboard's `es-ES` module default still needs the flip the till got in #170.
 
-- **Task 1b** (#554, session cookies stored only as hashes). Nothing fails when the UUID shape
-  screens in `requireSession` and the till logout route are deleted — a non-UUID value hashes to no
-  row, so the screens now only save a lookup. Also open: now that both ends are `state`, the keys
-  #426 dropped could be declared again — `sessions` to `persons`, and `management_sessions`,
-  `totp_enrollments` and `google_oidc_states` to `persons`. Doing so would change what deleting a
-  person does. Left open by SQLite slice 2.
+- **Task 1b** (#554, session cookies stored only as hashes).
   [Detail](backlog/dashboard.md#task-1b-554-session-cookies-stored-only-as-hashes)
 
 - **Quantity-display follow-ups found while tracing A313, OPEN, unqueued:** the Top sellers table
@@ -3934,75 +3821,32 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   are readings, not browser reproductions; reproduce them before changing their displays.
 
 - **Loose ends left by W79 (#1186, the Menus list).**
-  - `docs/developers/design-system.md` still says a list's Add action goes in a menu beside the
-    table heading, while Menus, Staff and Units put a text Add button at the heading row's
-    trailing edge; the doc only names the exceptions, and whether the rule itself changes is the
-    owner's call.
-  - The row-highlight tests focus only the row's own button, so nothing tests that a row
-    highlights while another control in it, such as its Actions menu, has focus.
+  [Detail](backlog/dashboard.md#loose-ends-left-by-w79-1186-the-menus-list)
 
 - **Loose ends left by A629 (#1684).**
-  - The browser's "Open link in new tab" on a link marked `aria-disabled="true"` in a ⋮ menu
-    (`wt-row-actions`) has not been tried. No screen marks one disabled yet; W88's busy-tree point
-    would be the first.
-  - A middle-click on a dashboard link marked `aria-disabled="true"` outside a ⋮ menu may still
-    open it in a new tab — not tried. The dashboard cancels such a link in `#onAppLink`
-    (`apps/dashboard/src/dashboard-app.ts`), which listens for `click` only; in A629's tests a
-    middle-click on a ⋮ menu link opened a new page in Chromium until `auxclick` was cancelled
-    too. Raised by A629's review.
+  [Detail](backlog/dashboard.md#loose-ends-left-by-a629-1684)
 
 - **Loose ends left by W83's review (#1193), not started.**
-  - The table's Customise columns button is icon-only beside Filters and Select but has neither
-    their look nor a tooltip.
-  - The icon button and its tooltip are a stylesheet and a handler each caller wires by hand, not
-    a `wt-icon-button` component — the Products table's Select is a native `<button>` because
-    `wt-button` does not pass `aria-pressed` through, and the Structure tab's Reorder and Select
-    toggles are hand-built icon buttons for the same reason.
-  [Detail](backlog/catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
+  [Detail](backlog/dashboard.md#loose-ends-left-by-w83s-review-1193-not-started)
 
 - **A895. A dialog footer's long form message: the field it hides, its scroll cue and its name.**
-  Left open by A849 (#1882), which moved a `wt-dialog` footer row's message into the footer and
-  lets a message too long for the dialog scroll inside itself. Seen in its LOOK at 390×500 (scratch
-  browser test): a 14-sentence message shrinks the body until the form's only field is cut off; at
-  21 sentences the message scrolls, but the headless browser draws no scrollbar, so the only cue is
-  a half-cut line, and its focus ring sits tight against the text. The message is a Tab stop while
-  it overflows, but what a screen reader announces when it gets there was not checked. Messages
-  are meant to be one sentence, so this needs a long message to show. **Next action:** decide
-  whether the message should get a height cap (so the body keeps room for a field), padding inside
-  its focus ring and an accessible name, then check them in a real browser.
+  [Detail](backlog/dashboard.md#a895-a-dialog-footers-long-form-message-the-field-it-hides-its-scroll-cue-and-its-name)
 
 - **A903. Check that the course list's row menus stay on screen at 390 px (left open by A827).**
-  `apps/dashboard/src/widgets/course-list.ts` also puts a `wt-row-actions` in a plain table. Its
-  390 px cases in `course-list.test.ts` check only that a row's menu sits on the first line of a
-  wrapping name, or level with the rename field, never where the menu ends. Done when it has a
-  390 px case holding every row menu's right edge to the screen's and to the box around its
-  table's.
+  [Detail](backlog/dashboard.md#a903-check-that-the-course-lists-row-menus-stay-on-screen-at-390-px-left-open-by-a827)
 
 - **A904. Correct the list of users in `--wt-cell-name-max-width`'s comment
-  (`packages/ui-core/src/tokens/structure.css`) (left open by A827, #1889).** It names "the modifier
-  form's choices" as a cap and "the options list form" as a floor, but on main `c11e3572c` no
-  modifier form and not `option-list-form.ts` read the token (`grep -rln wt-cell-name-max-width apps
-  packages`), while `orders-screen.ts`, `page-printers-panel.ts` and venue-service's
-  `periods-list.ts`, `routing-grid.ts` and `departments-list.ts` do and are not named. Read each
-  user's rule, then rewrite the list from what they do, or describe the directions without naming
-  users.
+  (`packages/ui-core/src/tokens/structure.css`) (left open by A827, #1889).**
+  [Detail](backlog/dashboard.md#a904-correct-the-list-of-users-in---wt-cell-name-max-widths-comment-packagesui-coresrctokensstructurecss-left-open-by-a827-1889)
 
 - The reasons screen keeps its own copy of the role list and role names (C51 sorts its dropdowns by
-  displayed name, with a separate seniority order for validation) and of the dashboard's
-  placeholder-filling `fill` (`apps/dashboard/src/i18n/t.ts`). **Next action:** move both into
-  `@waitron/dashboard-kit` if a third module screen needs them. Left open by service Task 1 (#706,
-  adjustment reasons).
+  [Detail](backlog/dashboard.md#the-reasons-screen-keeps-its-own-copy-of-the-role-list-and-role-names-c51-sorts-its-dropdowns-by)
 
 - **Override PIN limits (C89, #951), for the owner** — **Next action:** the owner decides whether to
   add the countdown and make the limit required. Left open by service Task 11 (#916).
   [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
 
 - On the dashboard, the account menu (which since A582's slice 2b also holds the signed-in language
-  choices) is a native popover in the top layer, so it paints over the alert pop-up (`.alert-toast` in
-  `apps/dashboard/src/dashboard-app.ts`): where the two overlap, an alert arriving while the menu
-  is open is hidden under it, and its countdown keeps running. Decide whether an arriving alert
-  should close the menu. Left open by C133 (#1045, the till's tabs fit one screen), under service
-  Task 16 (#981).
   [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
 
 - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Why that
@@ -4010,12 +3854,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   billing plan (Task 1's reasons screen).
   [Detail](backlog/dashboard.md#a-keydown-guard-that-cancels-escape-while-a-save-runs-did-not-keep-one-dialog-open)
 
-- **Left in the dashboard Orders plan and spec after #1034 landed beside C126:** their banners still
-  say C126 "is to" credit the bill (it is built); the plan's owner-answers row 7 still says "Task 2,
-  as written" for the dropped mark; its Task 1 voided-bill case still lists `invoiceNotCredited:
-  false` with no pointer to the drop; and #1034 did not write its planned test that a cancelled bill
-  with an invoice shows its credit note. Left open by C126 (cancelling an order whose invoice was
-  issued credits it, #1030).
+- **Left in the dashboard Orders plan and spec after #1034 landed beside C126:**
+  [Detail](backlog/dashboard.md#left-in-the-dashboard-orders-plan-and-spec-after-1034-landed-beside-c126)
 
 - **The dashboard shell restyle (#333) has not been checked on hardware.** It was only ever checked
   in screenshots on a desktop browser; nobody has walked it on the real box or a phone, so the
@@ -4027,16 +3867,10 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#the-older-collapse-only-sidebar-test-still-needs-a-useful-assertion-c35-822--open)
 
 - **What C38 left as it was (a generated display name is the first given name and first surname,
-  #827, owner decision 2026-09-28).** Left as they were, from #827's review: unlike the two staff
-  forms, the profile screen keeps a taken-name message beside the display name when a first- or
-  last-name change regenerates that name (`apps/dashboard/src/screens/profile-screen.ts` drops only
-  the changed field's refusal); and the two staff forms turn the refusal into a field message
-  inside the form, where other dashboard forms receive field messages from their parent screen.
+  #827, owner decision 2026-09-28).**
+  [Detail](backlog/dashboard.md#what-c38-left-as-it-was-a-generated-display-name-is-the-first-given-name-and-first-surname-827-owner-decision-2026-09-28)
 
 - **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
-  (3) nothing checks that a NEW dashboard table offers the chooser; the Devices table still uses
-  `viewKey="devices"` (`apps/dashboard/src/screens/devices-screen.ts:1936`). Next: rename that
-  preference key before go-live, following the prefixed table keys.
   [Detail](backlog/dashboard.md#every-wt-data-table-list-lets-each-person-choose-its-columns-c45-834--left-open)
 
 - **A form's refusal message sits at the bottom of the form, above the buttons (C97, #961) — left
@@ -4050,58 +3884,17 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#a-form-in-a-modal-stops-at---wt-form-max-width-c105-965--left-open)
 
 - **Loose ends left by C47 (#838/#839/#840/#841).**
-  - `wt-form-error-summary` is deleted once nothing uses it. Besides its own files and exports in
-    `packages/ui-core` and `packages/ui`, the `packages/ui` workbench demo
-    (`packages/ui/demo/main.ts`) and the consumer test page `packages/ui-core/test/consumer/main.ts`,
-    which `packages/ui-core/test/package-consumer.test.mjs` loads, still use it.
-  - The profile screen, opened with required details missing, marks those fields at once, before
-    any press (two existing tests pin it), unlike every other form.
-  - The form plumbing is hand-written per form: assembling the bottom message, waiting for the
-    render and then calling `focusFirstInvalid`, and the state that remembers the first press and
-    which refusals the person has since changed, in several different shapes.
-    [Detail](backlog/dashboard.md#the-form-plumbing-is-hand-written-per-form)
-  - The image picker's error message is not read to a screen reader. The Choose image button inside
-    it carries `aria-invalid` and takes focus, so a screen reader hears "invalid" with no reason.
-    Since A200 the product editor's photo button (`apps/dashboard/src/widgets/product-editor.ts`)
-    has the same defect.
-    [Detail](backlog/dashboard.md#the-image-pickers-error-message-is-not-read-to-a-screen-reader)
-  - Found during C47 part 2 and not fixed: a refused save of a venue service setting that saves at
-    once shows twice, beside the control and at the top of the panel (`render`,
-    `packages/venue-service/src/dashboard/service-settings-panel.ts`), and the cases in
-    `packages/venue-service/src/dashboard/service-settings-panel.test.ts` pin both.
-  - Found during C47 part 2 and not fixed: `wt-switch` cannot be marked invalid — a server refusal
-    of an adjustment reason's note-required switch would show its message but move focus nowhere.
-    [Detail](backlog/dashboard.md#what-c47-part-2-found-and-did-not-fix)
-  - Found during C47 part 2 and not fixed: a blue line along the top of a `wt-modal` editor's
-    footer, in a screenshot after a refusal that names no field, which looks like the modal's
-    scrolling body showing a focus ring — not traced, and not checked against `main`. A502 part 2
-    saw the same line above the buttons of the floor plan editor's compact "Delete {name}?"
-    question, opened by a click.
-
-- **A switched-off `wt-switch` may be too faint to see** — seen in A639's screenshots of the Backups
-  screen, not fixed: its track measured roughly 1.3 to 1 against the light page and 1.6 to 1 against
-  the dark one, read from pixel colours in those screenshots, where WCAG 1.4.11 asks 3 to 1 for a
-  control's boundary. Not measured from the component's tokens; `wt-switch` itself was not changed
-  by A639 (last changed by W97, #1311).
+  [Detail](backlog/dashboard.md#loose-ends-left-by-c47-838839840841)
 
 - **Request refusals that still land in the bottom message, or under a field in generic words — OPEN
-  (left by C54, #853).** In the forms C54 surveyed (the dashboard, the setup wizard, and the
-  adjustments, venue-service and media module screens) it kept the action working after a request's
-  refusal and put a refusal naming a shown field under that field. **Next action:** the owner says
-  which of these are worth doing.
+  (left by C54, #853).**
   [Detail](backlog/dashboard.md#request-refusals-that-still-land-in-the-bottom-message-or-under-a-field-in-generic-words--open-left-by-c54-853)
 
-- **Every login failure is one answer (C95, #930, owner decision 2026-09-30)** — the rule is in
-  CLAUDE.md §3 and `docs/developers/conventions-ui.md`. Still open: the membership route, the
-  adjustment approver, the refund override and the manual-refund confirmer have no one-answer test
-  case of their own. Refusals thrown in `apps/server` itself (a malformed id or PIN) carry no
-  `reason`.
+- **Every login failure is one answer (C95, #930, owner decision 2026-09-30)**
   [Detail](backlog/dashboard.md#every-login-failure-is-one-answer-c95-930-owner-decision-2026-09-30)
 
 - **The profile's "Current password" fills the signed-in person's saved password (C98, #934) — still
-  open:** the sign-in page keeps its three inline copies of the hidden username field
-  (`apps/dashboard/src/screens/login-screen.ts`). Also unknown: which browser and address the owner
-  saw the empty field in.
+  open:**
   [Detail](backlog/dashboard.md#the-profiles-current-password-fills-the-signed-in-persons-saved-password-c98-934--still-open)
 
 - **A new passkey is listed under the person's email, with their name as its display name (C99,
@@ -4109,9 +3902,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#a-new-passkey-is-listed-under-the-persons-email-with-their-name-as-its-display-name-c99-939--still-open)
 
 - **The passkey list says when each passkey was last used and which password manager holds it (C100,
-  #945) — known limits:** neither the "Last used" behaviour after a passkey is deleted in the
-  password manager nor the password-manager naming was tried with a real browser (the tests stand in
-  for the WebAuthn library).
+  #945) — known limits:**
   [Detail](backlog/dashboard.md#the-passkey-list-says-when-each-passkey-was-last-used-and-which-password-manager-holds-it-c100-945--known-limits)
 
 - **The browser's password manager is told which passkeys Waitron still accepts (C101, #948) — still
@@ -4119,38 +3910,17 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#the-browsers-password-manager-is-told-which-passkeys-waitron-still-accepts-c101-948--still-open)
 
 - **A403 — sign-in and passkey fixes (owner, 2026-10-08; open; low priority; not queued — owner
-  2026-10-08: take it from here when a lane has room):** **Remove the passkey name field**, and
-  (owner, 2026-10-14) tidy the Profile → Security tab: Add passkey moves from the tab bar into the
-  Passkeys row as a quiet button and stays there when passkeys are listed; the row gets its missing
-  padding; the passkey's date says it is when it was added; the Add passkey dialog's "Save" becomes
-  "Add"; and a message box seen cut off at the window's top-right edge is looked into.
+  2026-10-08: take it from here when a lane has room):**
   [Detail](backlog/dashboard.md#a403--sign-in-and-passkey-fixes-owner-2026-10-08-open-low-priority-not-queued--owner-2026-10-08-take-it-from-here-when-a-lane-has-room)
 
-- **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The
-  review should propose the whole list: which permissions to merge, the names, and which role holds
-  each, and then rename the call sites in one change. **Do it before the editable-roles item below**
-  (owner, 2026-09-26). Since A494 (2026-10-11), `catalogue.manage` gates the catalogue,
-  units and content languages; the "VAT class for new products" default is set under
-  `venue.configure` (owner, 2026-10-16, A755).
+- **Review every permission: fewer, coarser, and consistently named**
   [Detail](backlog/dashboard.md#review-every-permission-fewer-coarser-and-consistently-named)
 
-- **A1002: custom roles and a built-in Admin that holds every privilege.** The
-  [proposed design](superpowers/specs/2026-10-22-a1002-custom-roles-design.md) is awaiting owner
-  approval; no plan or build yet. Settled 2026-10-22 ~08:40: built-in Admin always holds every
-  privilege, future additions included; custom roles keep selected grants, nobody grants what they
-  lack, and each action checks privileges. The single `person.admin` is settled too. First review
-  the proposed Admin protection: rename allowed, immutable key/full grants, undeletable, with a
-  usable active human holder retained. Approval of that policy alone does not approve the complete
-  design. Catalogue/default grants for other roles, attendance, policies, ordinary-role deletion,
-  names and mirrors stay queued one at a time. Complete the approved permission
-  review before editable-role storage. [Remaining work](backlog/dashboard.md#roles-the-admin-can-edit-a7).
+- **A1002: custom roles and a built-in Admin that holds every privilege.** Awaiting owner approval.
   [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
 
 - **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
-  says so** (owner decision 2026-09-12). Still open: `wt-combobox` does not sort its options, and
-  `compareLabels` (`packages/shared/src/compare-labels.ts`, used by `wt-data-table`) sorts in the
-  default language of whatever runs it — in `wt-data-table`, the browser's; it should sort in the
-  signed-in person's chosen language (owner, 2026-10-17).
+  says so**
   [Detail](backlog/dashboard.md#dropdowns-sort-by-the-label-the-person-reads-with-intlcollator-a-list-in-a-lifecycle-order-says-so)
 
 - **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
@@ -4175,17 +3945,11 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   profile.
 
 - **Typed values are only partly checked — a generic phone-format check landed, a country-specific
-  one has not.** Still open: the country-pack seat (`CountryPack.telephone`, filled by
-  `validateSpanishPhone`) is still not called, so a Spanish mobile that fails the national rule but
-  passes the generic one is still accepted.
+  one has not.**
   [Detail](backlog/dashboard.md#typed-values-are-only-partly-checked--a-generic-phone-format-check-landed-a-country-specific-one-has-not)
 
 - Still open from #298/#305/#317, device checks before deployment: passkey reauthentication for a
-  passwordless account; an operator screen for Google provider credentials (now part of A646);
-  native passkey prompts on
-  real hardware; a physical authenticator ceremony; live SMTP through `startServer`; whether an
-  intermediary cache honours `Vary: Accept-Language`. #328's overlapping-dialog state was reached
-  from code only; nobody has shown a real pointer can get there.
+  [Detail](backlog/dashboard.md#still-open-from-298305317-device-checks-before-deployment-passkey-reauthentication-for-a)
 
 - **Three older dashboard screens name languages with their own code rather than
   `languageDisplayName` (`packages/shared`)** — left open by C114 (#1022, a copy printed in another
@@ -4193,11 +3957,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   outside it.
 
 - **Loose ends left by secret checks and the write lock (W1, #1117; #912's review).**
-  - **Secret hashing still blocks the event loop** — left open by W1 (#1117). `hashSecret` derives
-    with `scryptSync` (`packages/identity/src/secret-hash.ts`), so minting a token or setting a PIN
-    or password stops the event loop. The `deriveKey` callers are listed under
-    [The box](backlog/box.md#every-synchronous-derivekey-caller-still-blocks-the-event-loop-while-it-derives).
-  - **`verifySecretAsync` could be renamed `verifySecret` (optional)** — left open by #912's review.
   [Detail](backlog/dashboard.md#secret-checks-and-the-write-lock-the-pin-manager-login-and-profile-checks-moved--done-w1-1117-two-blocking-derivations-and-one-stale-answer-window-remain-open)
 
 - **A refused early dashboard payment authorization may become allowed before the PIN transaction —
@@ -4205,17 +3964,11 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   credential when its read refuses; `pinGated` then opens the transaction without a turn.
   [Detail](backlog/dashboard.md#a-refused-early-dashboard-payment-authorization-may-become-allowed-before-the-pin-transaction--unverified-a530-review)
 
-- **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
-  shared look, and the rules for it live in [design-system.md](developers/design-system.md). The
-  till (`apps/till`) and the setup wizard (`apps/setup`) are separate apps drawing on the same
-  shared components. Whether they follow in this pass or later is open — decide it before the
-  component rules harden around the dashboard alone.
+- **Ongoing — the dashboard UI overhaul, screen by screen.**
   [Detail](backlog/dashboard.md#ongoing--the-dashboard-ui-overhaul-screen-by-screen)
 
 - **Open, and it bites this work first: two documents state the component rules and they have
-  drifted** (found by the #337 review). **Next action:** decide whether the token rule binds views
-  as well as components, then make the guard and both documents agree. Whoever picks up the next
-  screen should settle this first, because every screen after it inherits the answer.
+  drifted**
   [Detail](backlog/dashboard.md#open-and-it-bites-this-work-first-two-documents-state-the-component-rules-and-they-have-drifted)
 
 - **Nothing stops the next screen styling `wt-data-table` cell markup with a class.** A check that
@@ -4224,10 +3977,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   categories (#340).
 
 - **The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25).**
-  Safari was not tried, so what it draws with no colour chosen, and whether the ring and the
-  rim-free fill hold there, is unknown; and whether choosing black in the browser's picker from the
-  no-colour state registers was not run. **Next action:** try the first in Safari or Playwright's
-  WebKit, and the second by hand in Chromium. From "Review points left for the owner".
   [Detail](backlog/dashboard.md#the-colour-fields-custom-square-appsdashboardsrcwidgetscolor-fieldts-left-by-c25)
 
 - **`--wt-cell-name-max-width` is used in three different directions, and is named for one.** Some
@@ -4279,10 +4028,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#empty-state-text-shows-beside-a-failed-read-on-payments-and-cloud-services-a252-seen-2026-10-03-while-checking-lane-as-w18--open)
 
 - **The dashboard's dark wordmark looked nearly black (A253 observation, 2026-10-09) — UNVERIFIED.**
-  **Next action:** measure the browser's media preference and selected `<picture>` source against
-  `data-wt-theme` in the live dashboard before deciding a fix.
-  Seen again 2026-10-20 in A757 slice 2's look pictures
-  (`docs/backlog/mockups/a757-table-states/built-2/venue-settings-*-dark.png`).
   [Detail](backlog/dashboard.md#the-dashboards-dark-wordmark-looked-nearly-black-a253-observation-2026-10-09)
 
 - **`wt-relative-time` also keeps disclosure state from `toggle` and has document listeners**
@@ -4299,16 +4044,12 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   background image or gradient, content too short or not text — passes, so contrast in those
   places is checked by nobody.
 
-- **A deployment that overrides `--wt-color-primary` or `--wt-color-danger` by hand keeps
-  Waitron's default hover, text and disabled colours, and no theme writes the danger ones** — left
-  open by A218 (#1082), A306 and A535. A custom theme (A841 slice 2) works out its own
-  `--wt-color-primary-text`, `-primary-hover` and the two primary disabled colours.
+- **A deployment that overrides `--wt-color-primary` or `--wt-color-danger` by hand keeps Waitron's
+  default hover, text and disabled colours, and no theme writes the danger ones**
   [Detail](backlog/dashboard.md#a-deployment-that-overrides---wt-color-primary-or---wt-color-danger-by-hand-keeps-waitrons-default-hover-text-and-disabled-colours)
 
 - **One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
-  bottom** — left open by A334 (#1416, held reorder drags scroll at the list edge). A 2026-10-09
-  venue-service browser run also missed the Prep stations drag test's 1500 ms bound. The cause
-  remains unverified.
+  bottom**
   [Detail](backlog/dashboard.md#one-earlier-spanish-dark-theme-390-px-demo-probe-reached-its-12-second-deadline-before-the-bottom)
 
 - **A password manager filling the profile's current-password field** — the owner tried Chrome's
@@ -4320,13 +4061,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   instead of pressing the form's button; they pass, but never prove the button works. Left open by
   A331 batch 3a (#1401).
 
-- **A542. An open `wt-dialog` moved in the page stays open but is no longer modal** — OPEN, found
-  by A539's mutation tests, not fixed. Out of modal, a long body grows past the screen
-  (`packages/ui/src/components/wt-dialog.ts`). Seen in the purchase form's tests too: once put back
-  with an edit, keyboard focus is outside the dialog, and Escape neither asks nor closes until
-  focus is back on a field inside the dialog — left open by A397 part 1 (#1429), under A331 batch 5.
-  [Detail](backlog/dashboard.md#a542-an-open-wt-dialog-moved-in-the-page-stays-open-but-is-no-longer-modal),
-  [the purchase form's case](backlog/dashboard.md#once-put-back-with-an-edit-keyboard-focus-is-outside-the-dialog-and-escape-neither-asks-nor-closes)
+- **A542. An open `wt-dialog` moved in the page stays open but is no longer modal** — OPEN.
+  [Detail](backlog/dashboard.md#a542-an-open-wt-dialog-moved-in-the-page-stays-open-but-is-no-longer-modal)
 
 - **In a text field inside a dialog, with the field's text selected, End and Home do not move the
   caret**, so typing replaces the whole text. Seen on the A721 branch in the Seasons window and the
@@ -4338,27 +4074,18 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   borders and the prep stations screen remains unmeasured. Left open by
   A319 (hover contrast after A306, #1347).
 
-- **Text size after A179 (#988).** Open: page headings follow the Typography roles table in
-  `docs/developers/design-system.md` (a page title at `--wt-font-size-xl`) only in part. **Phone
-  check, the owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is widely
-  reported to zoom the page in when a field whose text is under 16px is focused — not yet tried
-  here. [Detail](backlog/dashboard.md#text-size-after-a179-988)
+- **Text size after A179 (#988).**
+  [Detail](backlog/dashboard.md#text-size-after-a179-988)
 
-- **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
-  reorder list (`ReorderController`, `packages/ui/src/reorder-table.ts`) shows a faint
-  line at each cell boundary, most visible in the dark theme, and a row lifted at the bottom of its
-  list has its shadow cut off where the table ends.
+- **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.**
   [Detail](backlog/dashboard.md#dragging-a-row-a180-994-and-1003--two-things-seen-left-as-they-were)
 
 - **Two texts still use the old words.** A hint says "Create" (the Products screen's empty prompt,
   "Create a menu on the Menus screen…"), and the purchase dialog's edit heading reads "Edit
   purchase invoice" while its create heading is now "Add invoice". Left open by A450 (#1484).
 
-- **Opening hours' create texts say "New …" and "+ …"** — `special.new` ("New special day") and
-  `season.add` ("+ Season", the Seasons window's add button) in
-  `packages/venue-service/src/dashboard/strings.ts`, against design-system.md → Wording's
-  "Add …". The "+" label comes from the A506 seasons spec.
-  Seen by A546's review; not changed there.
+- **Opening hours' create texts say "New …" and "+ …"**
+  [Detail](backlog/dashboard.md#opening-hours-create-texts-say-new--and--)
 
 - **An update bar (dashboard or till) added while the tab is hidden is believed to show only its button until the tab
   is seen again**: `wt-banner` puts its message in two animation frames after it joins the page.
@@ -4375,10 +4102,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   (`packages/ui/src/components/wt-data-table.ts`).
 
 - **A890. A tree `wt-data-table` draws a row's activator in its first column even when that column
-  sets `activatesRow: false`** — OPEN, left by A813. A flat table now draws it in the first shown
-  column that does not opt out; tree mode still draws it at `ci === 0`
-  (`packages/ui/src/components/wt-data-table.ts`). No tree table sets the option on its first
-  column today; what a click on that cell's blank space then does was not tested.
+  sets `activatesRow: false`**
+  [Detail](backlog/dashboard.md#a890-a-tree-wt-data-table-draws-a-rows-activator-in-its-first-column-even-when-that-column-sets-activatesrow-false)
 
 ### Interface languages
 
