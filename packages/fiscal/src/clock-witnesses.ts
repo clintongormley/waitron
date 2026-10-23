@@ -12,7 +12,8 @@ export interface ClockWitness {
 }
 
 export interface ClockWitnessVerdict {
-  /** Witnesses that agree with the box, the latest per id. */
+  /** Each device whose latest reading agrees with the box, and the authority's latest agreeing
+   * reading. */
   readonly agreeing: readonly ClockWitness[];
   /** Authority witnesses that disagree, the latest first. */
   readonly authorityDisagrees: readonly ClockWitness[];
@@ -21,45 +22,52 @@ export interface ClockWitnessVerdict {
   readonly devicesDisagreeing: readonly ClockWitness[];
 }
 
-function boxAtMs(witness: ClockWitness): number {
-  return Date.parse(witness.boxAt);
+interface Reading {
+  readonly witness: ClockWitness;
+  readonly boxAtMs: number;
+  readonly differenceMs: number;
 }
 
-function differenceMs(witness: ClockWitness): number {
-  return Date.parse(witness.witnessAt) - boxAtMs(witness);
+function readable(witness: ClockWitness): Reading | undefined {
+  const boxAtMs = Date.parse(witness.boxAt);
+  const differenceMs = Date.parse(witness.witnessAt) - boxAtMs;
+  if (!Number.isFinite(differenceMs)) return undefined;
+  if (!Number.isFinite(witness.uncertaintyMs) || witness.uncertaintyMs < 0) return undefined;
+  return { witness, boxAtMs, differenceMs };
 }
 
-function agrees(witness: ClockWitness): boolean {
-  return Math.abs(differenceMs(witness)) + witness.uncertaintyMs <= CLOCK_WITNESS_MARGIN_MS;
+function agrees(reading: Reading): boolean {
+  return Math.abs(reading.differenceMs) + reading.witness.uncertaintyMs <= CLOCK_WITNESS_MARGIN_MS;
 }
 
-function disagrees(witness: ClockWitness): boolean {
-  return Math.abs(differenceMs(witness)) - witness.uncertaintyMs > CLOCK_WITNESS_MARGIN_MS;
+function disagrees(reading: Reading): boolean {
+  return Math.abs(reading.differenceMs) - reading.witness.uncertaintyMs > CLOCK_WITNESS_MARGIN_MS;
 }
 
-function latestPerId(witnesses: readonly ClockWitness[]): ClockWitness[] {
-  const latest = new Map<string, ClockWitness>();
-  for (const witness of witnesses) {
-    const seen = latest.get(witness.id);
-    if (seen === undefined || boxAtMs(witness) > boxAtMs(seen)) latest.set(witness.id, witness);
+function latestPerId(readings: readonly Reading[]): Reading[] {
+  const latest = new Map<string, Reading>();
+  for (const reading of readings) {
+    const seen = latest.get(reading.witness.id);
+    if (seen === undefined || reading.boxAtMs > seen.boxAtMs)
+      latest.set(reading.witness.id, reading);
   }
   return [...latest.values()];
 }
 
-function newestBoxAtMs(group: readonly ClockWitness[]): number {
-  return Math.max(...group.map(boxAtMs));
+function newestBoxAtMs(group: readonly Reading[]): number {
+  return Math.max(...group.map((reading) => reading.boxAtMs));
 }
 
 /** Differences on one line agree pairwise exactly when the group's spread is within the margin, so
  * the largest groups are runs of the devices sorted by difference. */
-function largestDeviceGroup(devices: readonly ClockWitness[]): ClockWitness[] {
-  const sorted = [...devices].sort((a, b) => differenceMs(a) - differenceMs(b));
-  let best: ClockWitness[] = [];
+function largestDeviceGroup(devices: readonly Reading[]): Reading[] {
+  const sorted = [...devices].sort((a, b) => a.differenceMs - b.differenceMs);
+  let best: Reading[] = [];
   for (const [start, first] of sorted.entries()) {
     let end = start;
     while (
       end + 1 < sorted.length &&
-      differenceMs(sorted[end + 1]!) - differenceMs(first) <= CLOCK_WITNESS_MARGIN_MS
+      sorted[end + 1]!.differenceMs - first.differenceMs <= CLOCK_WITNESS_MARGIN_MS
     ) {
       end++;
     }
@@ -75,12 +83,21 @@ function largestDeviceGroup(devices: readonly ClockWitness[]): ClockWitness[] {
   return best;
 }
 
+function witnessesOf(readings: readonly Reading[]): ClockWitness[] {
+  return readings.map((reading) => reading.witness);
+}
+
+/** A witness whose times are unreadable, or whose uncertainty is negative or not finite, counts
+ * neither way. */
 export function judgeClockWitnesses(witnesses: readonly ClockWitness[]): ClockWitnessVerdict {
-  const devices = latestPerId(witnesses.filter((witness) => witness.kind === "device"));
-  const authorities = witnesses.filter((witness) => witness.kind === "authority");
+  const readings = witnesses.flatMap((witness) => readable(witness) ?? []);
+  const devices = latestPerId(readings.filter((reading) => reading.witness.kind === "device"));
+  const authorities = readings.filter((reading) => reading.witness.kind === "authority");
   return {
-    agreeing: [...devices.filter(agrees), ...latestPerId(authorities.filter(agrees))],
-    authorityDisagrees: authorities.filter(disagrees).sort((a, b) => boxAtMs(b) - boxAtMs(a)),
-    devicesDisagreeing: largestDeviceGroup(devices.filter(disagrees)),
+    agreeing: witnessesOf([...devices.filter(agrees), ...latestPerId(authorities.filter(agrees))]),
+    authorityDisagrees: witnessesOf(
+      authorities.filter(disagrees).sort((a, b) => b.boxAtMs - a.boxAtMs),
+    ),
+    devicesDisagreeing: witnessesOf(largestDeviceGroup(devices.filter(disagrees))),
   };
 }

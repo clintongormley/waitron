@@ -104,6 +104,22 @@ describe("a single witness against the box", () => {
     ]);
   });
 
+  it("keeps an authority's latest AGREEING reading even when a newer one says nothing or disagrees", () => {
+    const agreed = authority(0, 500, -10_000);
+    const vague = authority(59_000, 5_000, 10_000);
+    const contrary = authority(2 * HOUR_MS, 500, 5_000);
+    expect(judgeClockWitnesses([agreed, vague, contrary])).toEqual({
+      agreeing: [agreed],
+      authorityDisagrees: [contrary],
+      devicesDisagreeing: [],
+    });
+  });
+
+  it("drops a device whose LATEST reading says nothing, even though an older one agreed", () => {
+    const verdict = judgeClockWitnesses([device("a", 0, -10_000), device("a", 61_000, 10_000)]);
+    expect(verdict.agreeing).toEqual([]);
+  });
+
   it("keeps only the latest agreeing authority reading", () => {
     const older = authority(0, 500, -10_000);
     const newer = authority(0, 500, 10_000);
@@ -189,6 +205,13 @@ describe("devices that disagree with the box", () => {
     expect(ids(verdict.devicesDisagreeing)).toEqual(["wide-new", "wide-old"]);
   });
 
+  it("among groups of one size with the same newest reading, take the one with the smaller differences", () => {
+    const low = device("low", 2 * HOUR_MS, -20_000);
+    const mid = device("mid", 2 * HOUR_MS + 50_000, 5_000);
+    const high = device("high", 2 * HOUR_MS + 100_000, -10_000);
+    expect(ids(judgeClockWitnesses([high, mid, low]).devicesDisagreeing)).toEqual(["low", "mid"]);
+  });
+
   it("need every pair to agree, and among groups of one size take the one seen latest", () => {
     const low = device("low", 2 * HOUR_MS, -20_000);
     const mid = device("mid", 2 * HOUR_MS + 50_000, -10_000);
@@ -232,6 +255,49 @@ describe("the same device twice", () => {
       expect.arrayContaining([device("a", 2 * HOUR_MS, 30_000), device("b", 2 * HOUR_MS)]),
     );
     expect(verdict.devicesDisagreeing).toHaveLength(2);
+  });
+});
+
+describe("a witness that cannot be judged", () => {
+  const empty = { agreeing: [], authorityDisagrees: [], devicesDisagreeing: [] };
+
+  it("is dropped when its box time is unreadable, so a later valid reading from the device counts", () => {
+    const unreadable = { ...device("a", 0, -30_000), boxAt: "not a time" };
+    const valid = device("a", 0);
+    expect(judgeClockWitnesses([unreadable, valid]).agreeing).toEqual([valid]);
+    expect(judgeClockWitnesses([valid, unreadable]).agreeing).toEqual([valid]);
+  });
+
+  it("is dropped when its own time is unreadable, so an earlier valid reading from the device counts", () => {
+    const valid = device("a", 0, -30_000);
+    const unreadable = { ...device("a", 0), witnessAt: "not a time" };
+    expect(judgeClockWitnesses([valid, unreadable]).agreeing).toEqual([valid]);
+    expect(judgeClockWitnesses([unreadable]).agreeing).toEqual([]);
+  });
+
+  it("is dropped when its uncertainty is negative, rather than turning a disagreement into agreement", () => {
+    expect(judgeClockWitnesses([authority(61_001, -2_000)])).toEqual(empty);
+    expect(judgeClockWitnesses([authority(0, -1)])).toEqual(empty);
+  });
+
+  it("is dropped when its uncertainty is not a finite number", () => {
+    expect(judgeClockWitnesses([authority(0, Number.NaN)])).toEqual(empty);
+    expect(judgeClockWitnesses([authority(0, Number.POSITIVE_INFINITY)])).toEqual(empty);
+  });
+
+  it("still counts an authority with no uncertainty at all", () => {
+    const exact = authority(61_001, 0);
+    expect(judgeClockWitnesses([exact]).authorityDisagrees).toEqual([exact]);
+    const agreed = authority(60_000, 0);
+    expect(judgeClockWitnesses([agreed]).agreeing).toEqual([agreed]);
+  });
+
+  it("does not let a dropped reading replace a valid one from the same device in a group", () => {
+    const valid = device("a", 2 * HOUR_MS, -30_000);
+    const broken = { ...device("a", 0), uncertaintyMs: -1 };
+    expect(
+      ids(judgeClockWitnesses([valid, broken, device("b", 2 * HOUR_MS)]).devicesDisagreeing),
+    ).toEqual(["a", "b"]);
   });
 });
 
