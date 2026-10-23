@@ -951,8 +951,9 @@ browser test** — most of these rules exist because a test passed while proving
   is written and no route takes or gives back new money.** The append refuses on its own
   (`clock.behind_chain`, `packages/fiscal-verifactu/src/chain.ts`); a money route calls the fiscal
   seat's `refuseWhileClockBehind` after its replay answer and before any reader, refund or drawer,
-  and both refund recovery loops pause. Money that has already moved is still recorded. Cost: before
-  the route checks, a probe charged a card on a clock a day behind (A798-B slice 8 plan, E10). Guards:
+  and both refund recovery loops pause. A payment whose money has already moved is still stored.
+  Cost: before the route checks, a probe charged a card on a clock a day behind (A798-B slice 8
+  plan, E10). Guards:
   `apps/server/src/clock-behind-stop.*.test.ts`, `apps/server/src/payments-api.clock-behind.test.ts`
   and `packages/fiscal-verifactu/src/chain.clock-behind.test.ts`, weaker than the rule — they cover
   the routes they name; a new money route is seen by none. Receipt:

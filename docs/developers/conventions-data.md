@@ -3523,14 +3523,18 @@ calls `refuseWhileClockBehind` with the record's own time as its first statement
 correction or an anulación dated more than a minute before the latest record is refused and
 nothing is written (`chain.clock-behind.test.ts`).
 
-**Where a route's named check goes** (plan decision 3). As the first statement after the route's
-replay answer, in the request's first transaction; where a route has no replay
-(`recordUnpaidDeparture`), right after its authorization. So it runs before any card reader, refund
-send or drawer job. A replay answered before the check is one that moves no money: a settled order,
+**Where a route's named check goes** (plan decision 3). After the route's replay answer and before
+any card reader, refund send or drawer job, in the request's first transaction; some routes refuse
+a full disk or a reused submission id first. Where a route has no replay
+(`recordUnpaidDeparture`), it comes right after the route's authorization. A replay answered before the check is one that moves no money: a settled order,
 a bill payment's first row, a completed or failed refund. A pending refund's resend is checked
 before it resumes, and the tender-refund retry route checks only a pending refund. The check
-judges the reading the route already takes, and where the same transaction issues an invoice, the
-issue is dated from that reading. The places: `runPayWorkingOrder`, `payIntegrated` and
+judges the reading the route already takes. Four places date the invoice they issue from that same
+reading, through `pinnedAt` (`apps/server/src/issue-moment.ts`): `runPayWorkingOrder`,
+`runCollectOrder`, `payIntegrated`'s branch for an order that owes nothing, and
+`recordUnpaidDeparture`. Elsewhere, `beginBillPayment` among them, the issue takes its own later
+reading (`issueMoment`, reached through `issueWhenFullyPaid` in `apps/server/src/bill-payments.ts`),
+which the append's check judges again. The places: `runPayWorkingOrder`, `payIntegrated` and
 `runCollectOrder` (`apps/server/src/till-sale.ts`); `beginBillPayment`
 (`apps/server/src/bill-payments.ts`); `refundBillPayment` (`apps/server/src/bill-refunds.ts`, twice:
 the pending replay, and every new refund); `beginSettledTenderRefund`
@@ -3544,14 +3548,17 @@ the pending replay, and every new refund); `beginSettledTenderRefund`
 (`settlePendingBillRefunds`, `apps/server/src/bill-payments-loop.ts`) ask
 `clockBehindLatestRecord` once at their top and, during the stop, touch no refund row and raise no
 unresolved alert, because a completed refund's time places it in a cash-up window
-(`clock-behind-stop.refunds.test.ts`). The pass's payment half (`settlePendingBillPayments`) has no
-check of its own and keeps running; a completion that would file is refused by the append.
+(`clock-behind-stop.refunds.test.ts`). The pass, `settlePendingBillPayments`, runs its payment half
+first and then its refund half; the payment half has no check of its own and keeps running. A
+completion that would file is refused by the append, and the pass then raises
+`payment.bill_settle_failed` for it (plan decision 17; `raiseSettleFailed` in
+`apps/server/src/bill-payments-loop.ts`, reached for any refusal that is not an `IssuanceRefusal`).
 
-**Money that has already moved is still recorded** (plan decision 17). The Stripe webhook records a
+**A payment whose money has already moved is still stored as a payment** (plan decision 17). The Stripe webhook stores a
 hosted payment during the stop (`apps/server/src/webhook.test.ts`, "records a hosted payment while
 the box's clock reads behind its last sale"). A card charged as the stop begins, after the route's
 check, on an already-invoiced order or as a part payment that leaves a bill part-paid writes no
-record and is recorded, dated by the provider (`clock-behind-stop.charged.test.ts`, "a card charged
+fiscal record and is stored as a payment, dated by the provider (`clock-behind-stop.charged.test.ts`, "a card charged
 as the stop begins on an already-invoiced order is recorded, dated by the provider" and "a card
 part payment charged as the stop begins is received, dated by the provider"). A card charged as the
 stop begins whose sale would file answers `507 sale.charged_not_recorded` with
